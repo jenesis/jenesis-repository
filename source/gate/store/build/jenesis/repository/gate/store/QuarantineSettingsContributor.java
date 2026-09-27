@@ -17,7 +17,7 @@ public final class QuarantineSettingsContributor implements SettingsContributor 
                         "Remove gate-decision log rows older than this ISO-8601 duration on the scheduled cleanup "
                                 + "pass; a still-held path keeps its verdict whatever its age. PT0S disables age "
                                 + "pruning.",
-                        Setting.Kind.DURATION, QuarantineRetentionTask.RETENTION.fallbackText(), true).essential(),
+                        Setting.Kind.DURATION, QuarantineRetentionTask.RETENTION.fallbackText(), true).standard(),
                 new Setting("quarantine-log-cap", "Record lifetimes", "Quarantine log cap",
                         "Keep at most this many newest gate-decision log rows; 0 disables the count cap.",
                         Setting.Kind.INTEGER, "0", true).advanced(),

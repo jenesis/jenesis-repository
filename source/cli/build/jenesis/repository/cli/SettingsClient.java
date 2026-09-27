@@ -76,6 +76,42 @@ public final class SettingsClient extends ClientCalls {
                 200, "clear " + name + " for tenant " + tenant);
     }
 
+    /** A repository's settings: each repository setting with the repository's effective value, what it inherits from
+     *  its tenant and the deployment, and whether it set its own. */
+    public List<Setting> repositorySettings(String repository) throws IOException, InterruptedException {
+        HttpResponse<String> response = send("GET", "/api/repository/settings?repo=" + enc(repository), null, null);
+        require(response, 200, "read the settings of repository " + repository);
+        return List.of(JSON.readValue(response.body(), Setting[].class));
+    }
+
+    public void setRepositorySetting(String repository, String name, String value)
+            throws IOException, InterruptedException {
+        require(send("PUT", "/api/repository/settings/" + name + "?repo=" + enc(repository),
+                body(Map.of("value", value)), "application/json"), 200, "set " + name + " for " + repository);
+    }
+
+    public void clearRepositorySetting(String repository, String name) throws IOException, InterruptedException {
+        require(send("DELETE", "/api/repository/settings/" + name + "?repo=" + enc(repository), null, null),
+                200, "clear " + name + " for " + repository);
+    }
+
+    /** A build-cache project's settings, as {@link #repositorySettings} are a repository's. */
+    public List<Setting> projectSettings(String project) throws IOException, InterruptedException {
+        HttpResponse<String> response = send("GET", "/api/cache/projects/" + enc(project) + "/settings", null, null);
+        require(response, 200, "read the settings of project " + project);
+        return List.of(JSON.readValue(response.body(), Setting[].class));
+    }
+
+    public void setProjectSetting(String project, String name, String value) throws IOException, InterruptedException {
+        require(send("PUT", "/api/cache/projects/" + enc(project) + "/settings/" + name,
+                body(Map.of("value", value)), "application/json"), 200, "set " + name + " for project " + project);
+    }
+
+    public void clearProjectSetting(String project, String name) throws IOException, InterruptedException {
+        require(send("DELETE", "/api/cache/projects/" + enc(project) + "/settings/" + name, null, null),
+                200, "clear " + name + " for project " + project);
+    }
+
     /** A tenant's stored settings slice as one JSON bundle, for backup or transfer (SECRET keys excluded, as in the
      *  deployment-wide export). The raw body is returned unparsed so it re-imports byte-identically. */
     public String exportSettings(String tenant) throws IOException, InterruptedException {
@@ -97,7 +133,8 @@ public final class SettingsClient extends ClientCalls {
         return JSON.readValue(response.body(), QuotaView.class);
     }
 
-    /** Set ({@code > 0}) or clear ({@code 0}) the tenant's storage quota in bytes; stored usage is recounted. */
+    /** Set ({@code > 0}) or clear ({@code 0}, so the deployment's applies) the tenant's storage quota in bytes; the
+     *  stored usage is recounted by the next cleanup pass. */
     public void setQuota(long maxBytes) throws IOException, InterruptedException {
         require(send("PUT", "/api/quota", body(Map.of("maxBytes", maxBytes)), "application/json"),
                 200, "set the storage quota");

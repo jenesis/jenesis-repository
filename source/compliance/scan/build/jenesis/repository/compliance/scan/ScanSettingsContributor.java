@@ -33,7 +33,7 @@ public final class ScanSettingsContributor implements SettingsContributor {
         List<Setting> settings = new ArrayList<>(List.of(
                 new Setting("scheduled-scan", "Compliance", "Scheduled scan",
                         "Re-scan every repository's inventory against the advisory feeds on a schedule.",
-                        Setting.Kind.BOOLEAN, "true", true).gate().essential(),
+                        Setting.Kind.BOOLEAN, "true", true).gate().standard(),
                 new Setting(IntervalSetting.SCANS.key(), "Compliance", "Scan interval",
                         "Milliseconds between scheduled scans; each pass hits the upstream feeds.",
                         Setting.Kind.LONG,
@@ -72,7 +72,7 @@ public final class ScanSettingsContributor implements SettingsContributor {
                                 + "catalogue, quarantine it for review (the same hold the gate writes). Only the "
                                 + "narrow, actively-exploited set is held; everything below it stays report-only. An "
                                 + "operator's release of a held artifact sticks. Applies on the next scan.",
-                        Setting.Kind.BOOLEAN, "true", false).essential(),
+                        Setting.Kind.BOOLEAN, "true", false).standard(),
                 new Setting("kev-auto-release", "Compliance", "KEV auto-release",
                         "When a scheduled scan finds a retroactively KEV-held artifact whose CVE is no longer on any "
                                 + "known-exploited catalogue (delisted, or the advisory retracted), automatically "

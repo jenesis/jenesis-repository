@@ -44,14 +44,14 @@ public final class CoreSettingsContributor implements SettingsContributor {
                         Setting.Kind.CHOICE, VERDICTS, CoreDefaults.VULNERABILITY_ACTION, true).essential(),
                 new Setting("deny-list", "Compliance", "Deny list",
                         "Comma-separated coordinates an operator forbids; always refused.",
-                        Setting.Kind.STRING, "", true).essential(),
+                        Setting.Kind.STRING, "", true).standard(),
                 new Setting("deny-list-action", "Compliance", "Deny list action",
                         "Verdict for a coordinate the deny list names. Defaults to REJECT (the secure floor); an "
                                 + "operator softens it to QUARANTINE to hold such coordinates for review.",
-                        Setting.Kind.CHOICE, VERDICTS, CoreDefaults.DENY_LIST_ACTION, true).essential(),
+                        Setting.Kind.CHOICE, VERDICTS, CoreDefaults.DENY_LIST_ACTION, true).standard(),
                 new Setting("proxy-enabled", "Proxy", "Pull-through proxy",
                         "Proxy reads that miss locally from the upstreams, caching and bridging them.",
-                        Setting.Kind.BOOLEAN, CoreDefaults.PROXY_ENABLED, true).essential(),
+                        Setting.Kind.BOOLEAN, CoreDefaults.PROXY_ENABLED, true).standard(),
                 new Setting("immaturity-hold-days", "Proxy", "Immaturity hold",
                         "Quarantine proxied artifacts the upstream published within this many days; 0 disables. "
                                 + "Defaults to 2 (the secure floor): a brand-new upstream version is held for review "
@@ -68,7 +68,7 @@ public final class CoreSettingsContributor implements SettingsContributor {
                                 + "an internal one lets an upstream steer the fetch into this deployment's own network "
                                 + "(SSRF). A deployment-global operator dial - one question, one answer, for every "
                                 + "format - enable only for a trusted internal or plaintext mirror.",
-                        Setting.Kind.BOOLEAN, "false", false).essential(),
+                        Setting.Kind.BOOLEAN, "false", false).standard(),
                 new Setting("cleanup-lease", "Operations", "Maintenance lease",
                         "How long one node holds the background-maintenance lease; keep under the task intervals.",
                         Setting.Kind.DURATION, "PT10M", false).advanced(),
@@ -85,17 +85,17 @@ public final class CoreSettingsContributor implements SettingsContributor {
                                 + "identically on the API and console legs; an operator sets it false to migrate from "
                                 + "or to an internal or plaintext repository - the one dial, covering both, so "
                                 + "neither can be opted out of alone.",
-                        Setting.Kind.BOOLEAN, "true", false).essential(),
+                        Setting.Kind.BOOLEAN, "true", false).standard(),
                 new Setting("trusted-proxies", "Network", "Trusted proxies",
                         "Comma-separated CIDRs of reverse proxies whose X-Forwarded-For, X-Forwarded-Proto and "
                                 + "X-Forwarded-Host are believed.",
-                        Setting.Kind.STRING, "", false).essential(),
+                        Setting.Kind.STRING, "", false).standard(),
                 new Setting("public-url", "Network", "Public URL",
                         "The address clients reach this deployment at (https://repo.example.com), for the absolute "
                                 + "URLs generated indexes carry. Set it behind a front door that rewrites paths or "
                                 + "sends no forwarded headers; unset, the request's own scheme and host are used, or "
                                 + "a trusted proxy's forwarded ones.",
-                        Setting.Kind.STRING, "", false).essential());
+                        Setting.Kind.STRING, "", false).standard());
     }
 
     /** The core's dials are neutral: they render in the catalogue ({@link SettingsContributor#all()}) but stay out of

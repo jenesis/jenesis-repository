@@ -12,8 +12,9 @@ import build.jenesis.repository.walk.WalkConsumer;
 import build.jenesis.repository.walk.WalkPass;
 
 /**
- * Retention as a listener of the walk: each repository's stored policy (or the deployment default from the
- * effective configuration) judges the releases as the inventory rows stream past, coordinate group by coordinate
+ * Retention as a listener of the walk: each repository's policy - its four rules resolved one by one through the
+ * repository's effective configuration, the repository's own value over its tenant's over the deployment's, which the
+ * maintenance pass hands over through {@link #onRepository} - judges the releases as the inventory rows stream past, coordinate group by coordinate
  * group in the order the rows come, and evicts what the policy says - exactly the sweep the hourly cleanup pass
  * ran over a walk of its own. A retention policy is a configuration that runs, so this consumer rides the
  * {@code retention} walk entry by default, daily; a deployment that wants no retention removes the entry.
@@ -30,13 +31,16 @@ public final class RetentionConsumer implements WalkConsumer {
 
     private final Map<Object, Sweep> sweeps = new ConcurrentHashMap<>();
 
+    /** Each walked store's effective configuration, as its driver handed it over, until its sweep is built. */
+    private final Map<Object, UnaryOperator<String>> configurations = new ConcurrentHashMap<>();
+
     private static final class Sweep {
         private final StoreRepositoryInventory inventory;
         private final RetentionPolicy.Planner planner;
 
-        private Sweep(ArtifactStore store) throws IOException {
+        private Sweep(ArtifactStore store, UnaryOperator<String> config) throws IOException {
             this.inventory = new StoreRepositoryInventory(store);
-            RetentionPolicy policy = inventory.readRetention().orElse(RetentionPolicy.fromConfig(Features.settings()));
+            RetentionPolicy policy = RetentionPolicy.fromConfig(config);
             this.planner = policy.planner(Instant.now(), eviction -> inventory.evict(eviction.release()));
         }
     }
@@ -54,12 +58,18 @@ public final class RetentionConsumer implements WalkConsumer {
 
     @Override
     public List<String> settings() {
-        return List.of("retention", "keep-last", "max-age", "prerelease-expiry", "not-downloaded-for");
+        return Stream.concat(Stream.of("retention"), RetentionPolicy.KEYS.stream()).toList();
     }
 
     @Override
     public Set<Family> families() {
         return Set.of(Family.INVENTORY);
+    }
+
+    /** The repository's own configuration, which its rules resolve through. */
+    @Override
+    public void onRepository(ArtifactStore store, UnaryOperator<String> config) {
+        configurations.put(store.identity(), config);
     }
 
     @Override
@@ -81,6 +91,7 @@ public final class RetentionConsumer implements WalkConsumer {
 
     @Override
     public void onPassCompleted(WalkPass pass, ArtifactStore store) {
+        configurations.remove(store.identity());
         Sweep sweep = sweeps.remove(store.identity());
         if (sweep == null) {
             return;
@@ -95,7 +106,8 @@ public final class RetentionConsumer implements WalkConsumer {
     private Sweep sweep(ArtifactStore store) throws IOException {
         Sweep sweep = sweeps.get(store.identity());
         if (sweep == null) {
-            sweep = new Sweep(store);
+            // A driver that knows no repository hands nothing over; the deployment's configuration then judges it.
+            sweep = new Sweep(store, configurations.getOrDefault(store.identity(), Features.settings()));
             sweeps.put(store.identity(), sweep);
         }
         return sweep;

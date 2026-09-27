@@ -18,6 +18,7 @@ import build.jenesis.repository.ui.store.TenantLimits;
 import build.jenesis.repository.cleanup.StoredReport;
 import build.jenesis.repository.ui.BrowseRow;
 import build.jenesis.repository.ui.CurrentTenant;
+import org.springframework.security.core.Authentication;
 import org.springframework.stereotype.Controller;
 import org.springframework.ui.Model;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -78,17 +79,15 @@ public class RepositoryAdminController {
     public String list(Model model) throws IOException {
         List<RepositoryRow> rows = new ArrayList<>();
         List<RepositoryWarning> warnings = new ArrayList<>();
-        // The settings once, not once per row: the deployment's definitions, with this tenant's own over them.
-        Map<String, String> definitions = new LinkedHashMap<>(settings.repositories());
-        if (tenant.name() != null) {
-            definitions.putAll(settings.repositories(tenant.name()));
-        }
+        // The deployment's definitions once, not once per row; each repository's own routing is one point read.
+        Map<String, String> definitions = settings.repositories();
         for (String name : repositories.repositories()) {
             // The parsed shape drives the per-repository badges: writable vs read-only, and per-fallback
             // store/no-store + screen strength, from the one Definition the router routes on. Its valid-but-risky
             // warnings (mixed strength, unscreened, plaintext) feed the non-blocking console banner.
-            String definition = definitions.get(name);
-            SettingsAdmin.RepositoryShape shape = settings.shape(name, definition);
+            SettingsAdmin.Routing routing = settings.routing(tenant.name(), name, definitions);
+            String definition = routing.specification();
+            SettingsAdmin.RepositoryShape shape = routing.shape();
             Optional<RepositoryDocument> document = repositories.document(name);
             String format = document.map(RepositoryDocument::format).orElse(null);
             // Only a repository with no document can be being deleted - deleting takes the document first - so only
@@ -122,9 +121,7 @@ public class RepositoryAdminController {
     @GetMapping("/ui/limits")
     public String limits(Model model) throws IOException {
         model.addAttribute("quota", limits.quota());
-        model.addAttribute("rateLimit", limits.rateLimit());
-        model.addAttribute("deploymentRateLimit", settings.views(List.of("rate-limit")).stream().findFirst()
-                .map(SettingsAdmin.SettingView::value).orElse("0"));
+        model.addAttribute("groups", limits.groups());
         return "limits";
     }
 
@@ -220,43 +217,59 @@ public class RepositoryAdminController {
     }
 
     /**
-     * Route this tenant's repository: store a definition of the tenant's own, which routes the repository over the
-     * deployment's, validated exactly as the deployment's are. A super-admin's act, as the API's is - repointing an
-     * upstream is the operator's decision, not a tenant administrator's.
+     * A repository's settings: every repository setting the catalogue carries, grouped, each with the repository's own
+     * value, what it would inherit from its tenant and the deployment, and a save that stores it through the catalogue
+     * - the inputs the repository wizard asks, edited in place. Its reads are the repository's settings documents and
+     * its tenant's and the deployment's, one object per module each, and nothing that grows with what it holds.
      *
-     * <p>It reads the settings documents - one object per module under a constant prefix, as every settings handler
-     * does - and nothing that grows with the repository.
+     * <p>It reads the tenant's and the deployment's settings documents, which the values it resolves inherit from: one
+     * object per module under a constant prefix, narrow by construction.
      */
-    @PostMapping("/ui/repositories/{repo}/routing")
-    public String route(@PathVariable("repo") String repo, @RequestParam("definition") String definition,
-                        RedirectAttributes redirect) throws IOException {
-        try {
-            settings.setRepository(tenant.name(), repo, definition);
-            redirect.addFlashAttribute("message", "Routed '" + repo + "' for this tenant.");
-        } catch (IllegalArgumentException refused) {
-            redirect.addFlashAttribute("error", refused.getMessage());
-        }
-        return "redirect:/ui/repositories/" + repo;
-    }
-
-    /** Remove this tenant's own definition, after which the repository routes as the deployment defines it. Reads what
-     *  {@link #route} reads. */
-    @PostMapping("/ui/repositories/{repo}/routing/remove")
-    public String unroute(@PathVariable("repo") String repo, RedirectAttributes redirect) throws IOException {
-        settings.removeRepository(tenant.name(), repo);
-        redirect.addFlashAttribute("message", "'" + repo + "' routes as the deployment defines it again.");
-        return "redirect:/ui/repositories/" + repo;
+    @GetMapping("/ui/repositories/{repo}/settings")
+    public String settings(@PathVariable("repo") String repo, Authentication authentication, Model model)
+            throws IOException {
+        model.addAttribute("repo", repo);
+        model.addAttribute("groups", settings.repositoryGroups(tenant.name(), repo, superadmin(authentication)));
+        return "repository-settings";
     }
 
     /**
-     * Delete a repository and everything it holds, and forget the tenant's own definition of it - the deployment's is
-     * every tenant's, so it stays. Only through the deletion
+     * Set or clear one repository setting through the catalogue, from the settings page, the retention page or the
+     * overview's routing, and return there. An operator-only setting - the routing - is refused unless the session is a
+     * super-admin's, whatever the form offered.
+     *
+     * <p>It reads the tenant's and the deployment's settings documents, which the values it resolves inherit from: one
+     * object per module under a constant prefix, narrow by construction.
+     */
+    @PostMapping("/ui/repositories/{repo}/settings/save")
+    public String saveSetting(@PathVariable("repo") String repo, @RequestParam("key") String key,
+                              @RequestParam(name = "value", defaultValue = "") String value,
+                              @RequestParam(name = "return", defaultValue = "") String back,
+                              Authentication authentication, RedirectAttributes redirect) throws IOException {
+        try {
+            settings.saveRepository(tenant.name(), repo, Map.of(key, value), superadmin(authentication));
+            redirect.addFlashAttribute("message", value.isBlank()
+                    ? "'" + key + "' is inherited again for '" + repo + "'."
+                    : "Saved '" + key + "' for '" + repo + "'.");
+        } catch (IllegalArgumentException refused) {
+            redirect.addFlashAttribute("error", refused.getMessage());
+        }
+        return "redirect:" + within(repo, back, "/settings");
+    }
+
+    private static boolean superadmin(Authentication authentication) {
+        return authentication != null && authentication.getAuthorities().stream()
+                .anyMatch(authority -> authority.getAuthority().equals("ROLE_SUPERADMIN"));
+    }
+
+    /**
+     * Delete a repository and everything it holds, its own settings included - the deployment's definition of its name
+     * is every tenant's, so it stays. Only through the deletion
      * dialog: the request must carry the phrase the dialog has the reader type, {@code delete <name>}, so a form
      * posted without it - or for another name - deletes nothing. The objects go off the request path; the list shows
      * the repository as being deleted until they are gone.
      *
-     * <p>Forgetting the definition reads the settings document - one object per module under a constant prefix, as
-     * every settings handler does - and nothing on the request path reads the repository's objects.
+     * <p>Nothing on the request path reads the repository's objects.
      */
     @PostMapping("/ui/repositories/{repo}/delete")
     public String delete(@PathVariable("repo") String name,
@@ -266,10 +279,7 @@ public class RepositoryAdminController {
             redirect.addFlashAttribute("error", "Nothing was deleted: type \"delete " + name + "\" to confirm.");
             return "redirect:/ui/repositories/" + name;
         }
-        // The tenant's own definition goes with its repository; the deployment's is every tenant's and stays.
-        if (tenant.name() != null && settings.repositories(tenant.name()).containsKey(name)) {
-            settings.removeRepository(tenant.name(), name);
-        }
+        // The repository's own settings go with its objects; the deployment's definition of its name stays.
         switch (lifecycle.delete(name)) {
             case ABSENT -> redirect.addFlashAttribute("error", "There is no repository '" + name + "'.");
             case STARTED -> redirect.addFlashAttribute("message", "Deleting repository '" + name
@@ -284,20 +294,19 @@ public class RepositoryAdminController {
         return RepositoryType.offerable();
     }
 
-    @PostMapping("/ui/limits/quota")
-    public String setQuota(@RequestParam(name = "maxBytes", defaultValue = "0") long maxBytes,
-                           RedirectAttributes redirect) throws IOException {
-        limits.setQuota(maxBytes);
-        redirect.addFlashAttribute("message", maxBytes > 0 ? "Storage quota updated." : "Storage quota cleared.");
-        return "redirect:/ui/limits";
-    }
-
-    @PostMapping("/ui/limits/rate-limit")
-    public String setRateLimit(@RequestParam(name = "permitsPerMinute", defaultValue = "0") long permitsPerMinute,
-                               RedirectAttributes redirect) throws IOException {
-        limits.setRateLimit(permitsPerMinute);
-        redirect.addFlashAttribute("message",
-                permitsPerMinute > 0 ? "Rate limit updated." : "Rate limit cleared.");
+    /**
+     * Set or clear one of the tenant's limits - a setting of the Limits group, through the catalogue.
+     *
+     * <p>It reads the tenant's and the deployment's settings documents, which the values it resolves inherit from: one
+     * object per module under a constant prefix, narrow by construction.
+     */
+    @PostMapping("/ui/limits/save")
+    public String saveLimit(@RequestParam("key") String key,
+                            @RequestParam(name = "value", defaultValue = "") String value,
+                            RedirectAttributes redirect) throws IOException {
+        limits.save(key, value);
+        redirect.addFlashAttribute("message", value.isBlank() ? "'" + key + "' follows the deployment again."
+                : "Saved '" + key + "' for this tenant.");
         return "redirect:/ui/limits";
     }
 
@@ -373,13 +382,23 @@ public class RepositoryAdminController {
         return "repository-pins";
     }
 
-    /** The retention policy, and the cleanup it drives: both stored results, the last preview and the last sweep. */
+    /**
+     * The retention policy, and the cleanup it drives: both stored results, the last preview and the last sweep.
+     *
+     * <p>It reads the tenant's and the deployment's settings documents, which the values it resolves inherit from: one
+     * object per module under a constant prefix, narrow by construction.
+     */
     @GetMapping("/ui/repositories/{repo}/retention")
     public String retention(@PathVariable("repo") String repo, Model model) throws IOException {
         RetentionPolicy policy = lifecycle.retention(repo);
         model.addAttribute("repo", repo);
         model.addAttribute("retention", new RetentionView(policy.keepLast(),
                 text(policy.maxAge()), text(policy.prereleaseExpiry()), text(policy.notDownloadedFor())));
+        // The rules are repository settings, edited here with the settings page's own rows and save.
+        model.addAttribute("groups", settings.repositoryGroups(tenant.name(), repo, true).stream()
+                .filter(group -> group.settings().stream()
+                        .anyMatch(setting -> RetentionPolicy.KEYS.contains(setting.key())))
+                .toList());
         model.addAttribute("plan", lifecycle.retentionAvailable() ? lifecycle.plan(repo).orElse(null) : null);
         model.addAttribute("lastCleanup", lifecycle.retentionAvailable() ? lifecycle.lastCleanup(repo).orElse(null)
                 : null);
@@ -658,18 +677,6 @@ public class RepositoryAdminController {
         return "redirect:/ui/repositories/" + repo;
     }
 
-    @PostMapping("/ui/repositories/{repo}/retention")
-    public String setRetention(@PathVariable("repo") String repo,
-                               @RequestParam(name = "keepLast", defaultValue = "0") int keepLast,
-                               @RequestParam(name = "maxAge", defaultValue = "") String maxAge,
-                               @RequestParam(name = "prereleaseExpiry", defaultValue = "") String prereleaseExpiry,
-                               @RequestParam(name = "notDownloadedFor", defaultValue = "") String notDownloadedFor,
-                               RedirectAttributes redirect) throws IOException {
-        lifecycle.setRetention(repo, RetentionPolicy.parse(keepLast, maxAge, prereleaseExpiry, notDownloadedFor));
-        redirect.addFlashAttribute("message", "Retention updated.");
-        return "redirect:/ui/repositories/" + repo + "/retention";
-    }
-
     /** Pin a version - from the Pins page's form, or from the version's own row on a coordinate or artifact page,
      *  which names itself in {@code returnTo} so the reader stays where they pinned. */
     @PostMapping("/ui/repositories/{repo}/pins")
@@ -696,14 +703,14 @@ public class RepositoryAdminController {
         return "redirect:" + within(repo, returnTo, "/pins");
     }
 
-    /** {@code requested} when it is a page of this repository's own console, else its {@code fallback} page: a form
-     *  names where to return, and a return address outside the repository - another host above all - is not
-     *  followed. */
+    /** {@code requested} when it is this repository's overview or another page of its own console, else its
+     *  {@code fallback} page: a form names where to return, and a return address outside the repository - another
+     *  host above all - is not followed. */
     static String within(String repo, String requested, String fallback) {
-        String base = "/ui/repositories/" + repo + "/";
-        return requested.startsWith(base) && !requested.contains("//") && !requested.contains("\\")
-                ? requested
-                : "/ui/repositories/" + repo + fallback;
+        String overview = "/ui/repositories/" + repo;
+        boolean own = requested.equals(overview)
+                || requested.startsWith(overview + "/") && !requested.contains("//") && !requested.contains("\\");
+        return own ? requested : overview + fallback;
     }
 
     @PostMapping("/ui/repositories/{repo}/staging/{id}/promote")
@@ -722,6 +729,10 @@ public class RepositoryAdminController {
         return "redirect:/ui/repositories/" + repo + "/staging";
     }
 
+    /**
+     * It reads the tenant's and the deployment's settings documents, which the values it resolves inherit from: one
+     * object per module under a constant prefix, narrow by construction.
+     */
     @PostMapping("/ui/repositories/{repo}/cleanup")
     public String cleanup(@PathVariable("repo") String repo, RedirectAttributes redirect) throws IOException {
         // The sweep walks every release, so the request starts it and returns; the hub shows the stored result.
@@ -731,6 +742,10 @@ public class RepositoryAdminController {
         return "redirect:/ui/repositories/" + repo + "/retention";
     }
 
+    /**
+     * It reads the tenant's and the deployment's settings documents, which the values it resolves inherit from: one
+     * object per module under a constant prefix, narrow by construction.
+     */
     @PostMapping("/ui/repositories/{repo}/cleanup/preview")
     public String previewCleanup(@PathVariable("repo") String repo, RedirectAttributes redirect) throws IOException {
         redirect.addFlashAttribute("message", lifecycle.previewCleanup(repo)

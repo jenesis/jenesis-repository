@@ -25,7 +25,18 @@ import module java.base;
  */
 public final class Durations {
 
+    /** The word a duration rule that may be inherited takes to be switched off instead: where an unset value means
+     *  "the wider level's", {@code none} means "no rule here". Only a reader that honours it accepts it
+     *  ({@link #parseOrNone}); every other duration dial refuses it like any other word. */
+    public static final String NONE = "none";
+
     private Durations() {
+    }
+
+    /** {@code value} as a duration, or empty for {@link #NONE} - the rule switched off. */
+    public static Optional<Duration> parseOrNone(String value) {
+        Objects.requireNonNull(value, "value");
+        return NONE.equals(value.trim()) ? Optional.empty() : Optional.of(parse(value));
     }
 
     /**

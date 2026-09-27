@@ -100,6 +100,10 @@ public class QuarantineController {
     /** The largest review-queue page served; a caller past it follows {@code next}. */
     private static final int MAX_PAGE = 1000;
 
+    /**
+     * The tenant settings it consults come from the tenant's settings documents, read once per tenant into a cached
+     * snapshot: one object per module under a constant prefix, narrow by construction.
+     */
     @PostMapping("/api/quarantine/release")
     public void releaseQuarantined(@RequestParam("repo") String repo,
                                    @RequestHeader(value = Repositories.KEY, required = false) String key,
@@ -121,7 +125,11 @@ public class QuarantineController {
 
     /** Discard a held path. Answers whether anything was actually held - the same answer the console reports - so a
      *  reviewer who discarded the wrong row, or raced another reviewer, is told nothing happened rather than that the
-     *  discard happened; a stale discard strips nothing and is not an error. */
+     *  discard happened; a stale discard strips nothing and is not an error.
+     *
+     * <p>The tenant settings it consults come from the tenant's settings documents, read once per tenant into a cached
+     * snapshot: one object per module under a constant prefix, narrow by construction.
+     */
     @PostMapping("/api/quarantine/discard")
     @ResponseBody
     public Discarded discardQuarantined(@RequestParam("repo") String repo,

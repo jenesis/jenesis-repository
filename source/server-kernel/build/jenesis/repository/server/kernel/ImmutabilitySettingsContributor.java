@@ -28,6 +28,6 @@ public final class ImmutabilitySettingsContributor implements SettingsContributo
                                 + "dependency-confusion guard. Turn it on to let a release version be overwritten with "
                                 + "different content. Snapshots and mutable channels are always re-deployable and are "
                                 + "unaffected.",
-                        Setting.Kind.BOOLEAN, "false", true, Setting.Scope.TENANT).essential());
+                        Setting.Kind.BOOLEAN, "false", true, Setting.Scope.TENANT).standard());
     }
 }

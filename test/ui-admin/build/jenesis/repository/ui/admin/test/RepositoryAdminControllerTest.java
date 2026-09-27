@@ -7,7 +7,6 @@ import build.jenesis.repository.cleanup.StoredReport;
 import build.jenesis.repository.format.FormatMarks;
 import build.jenesis.repository.inventory.DownloadTracker;
 import build.jenesis.repository.inventory.StoreRepositoryInventory;
-import build.jenesis.repository.server.spi.Authorization;
 import build.jenesis.repository.store.ArtifactStore;
 import build.jenesis.repository.store.ArtifactStoreProvider;
 import build.jenesis.repository.store.Publication;
@@ -23,10 +22,14 @@ import build.jenesis.repository.ui.store.TenantLimits;
 import io.micrometer.observation.ObservationRegistry;
 import org.springframework.beans.factory.support.StaticListableBeanFactory;
 import org.assertj.core.api.InstanceOfAssertFactories;
+import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
+import org.springframework.security.core.Authentication;
+import org.springframework.security.core.authority.SimpleGrantedAuthority;
 import org.springframework.ui.ExtendedModelMap;
 import org.springframework.web.servlet.mvc.support.RedirectAttributesModelMap;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 /**
  * The repository screens of the console, driven over the console's own services on a real store: a repository is
@@ -53,17 +56,31 @@ class RepositoryAdminControllerTest {
         store = ArtifactStoreProvider.resolve("filesystem",
                 key -> "jenreg.filesystem.root".equals(key) ? root.toString() : null);
         settings = new SettingsAdmin(store);
-        limits = new TenantLimits(store, Authorization.enforcing(store), () -> TENANT, ObservationRegistry.NOOP,
-                AuditTrail.none(), () -> "operator");
+        limits = new TenantLimits(store, settings, () -> TENANT, ObservationRegistry.NOOP, AuditTrail.none(),
+                () -> "operator");
         controller = new RepositoryAdminController(
                 new RepositoryAdmin(store, () -> TENANT, ObservationRegistry.NOOP),
                 new RepositoryBrowse(store, () -> TENANT, ObservationRegistry.NOOP), limits,
                 new RepositoryImports(store, () -> TENANT, ObservationRegistry.NOOP, AuditTrail.none(),
                         () -> "operator"),
                 new RepositoryLifecycle(store, () -> TENANT, ObservationRegistry.NOOP, AuditTrail.none(),
-                        () -> "operator"),
+                        () -> "operator", settings),
                 settings, FormatMarks.installed(),
                 new StaticListableBeanFactory().getBeanProvider(DownloadTracker.class), () -> TENANT);
+    }
+
+    /** A super-admin's session - the operator, who alone routes a repository. */
+    private static final Authentication OPERATOR = new UsernamePasswordAuthenticationToken("root", null,
+            List.of(new SimpleGrantedAuthority("ROLE_SUPERADMIN")));
+
+    /** A tenant editor's session. */
+    private static final Authentication EDITOR = new UsernamePasswordAuthenticationToken("ada", null,
+            List.of(new SimpleGrantedAuthority("ROLE_USER")));
+
+    private String route(String repository, String definition, RedirectAttributesModelMap redirect)
+            throws IOException {
+        return controller.saveSetting(repository, "routing", definition, "/ui/repositories/" + repository, OPERATOR,
+                redirect);
     }
 
     private ArtifactStore repository(String name) {
@@ -116,8 +133,7 @@ class RepositoryAdminControllerTest {
     void the_list_names_each_repository_with_its_type_and_the_warnings_its_routing_raises() throws IOException {
         controller.create("files", "raw", "Build outputs", new RedirectAttributesModelMap());
         create("libs", "maven");
-        controller.route("mirror", "fallback https://mirror.example/maven2 unscreened",
-                new RedirectAttributesModelMap());
+        route("mirror", "fallback https://mirror.example/maven2 unscreened", new RedirectAttributesModelMap());
         create("mirror", "maven");
         ExtendedModelMap model = new ExtendedModelMap();
 
@@ -161,27 +177,35 @@ class RepositoryAdminControllerTest {
     }
 
     @Test
-    void a_tenant_routing_is_stored_validated_and_removed() throws IOException {
+    void a_repository_routing_is_its_own_setting_stored_validated_removed_and_the_operators() throws IOException {
         RedirectAttributesModelMap routed = new RedirectAttributesModelMap();
         RedirectAttributesModelMap refused = new RedirectAttributesModelMap();
+        RedirectAttributesModelMap notTheOperator = new RedirectAttributesModelMap();
         RedirectAttributesModelMap removed = new RedirectAttributesModelMap();
+        create("central", "maven");
 
-        controller.route("central", "fallback https://repo1.maven.org/maven2", routed);
-        controller.route("broken", "sometimes maybe", refused);
+        assertThat(route("central", "fallback https://repo1.maven.org/maven2", routed))
+                .isEqualTo("redirect:/ui/repositories/central");
+        route("broken", "sometimes maybe", refused);
+        controller.saveSetting("central", "routing", "writable", "", EDITOR, notTheOperator);
 
-        assertThat(flash(routed, "message")).isEqualTo("Routed 'central' for this tenant.");
+        assertThat(flash(routed, "message")).isEqualTo("Saved 'routing' for 'central'.");
         assertThat(flash(refused, "error")).isNotNull();
-        assertThat(settings.repositories(TENANT)).containsOnlyKeys("central");
+        assertThat(flash(notTheOperator, "error")).asString().contains("operator");
+        assertThat(settings.routing(TENANT, "central").layer()).isEqualTo(SettingsAdmin.Layer.REPOSITORY);
+        assertThat(settings.routing(TENANT, "central").specification())
+                .as("the editor's routing was refused").isEqualTo("fallback https://repo1.maven.org/maven2");
+        assertThat(settings.routing(TENANT, "broken").layer()).isEqualTo(SettingsAdmin.Layer.NONE);
 
-        controller.unroute("central", removed);
-        assertThat(flash(removed, "message")).asString().contains("routes as the deployment defines it again");
-        assertThat(settings.repositories(TENANT)).isEmpty();
+        route("central", "", removed);
+        assertThat(flash(removed, "message")).asString().contains("inherited again");
+        assertThat(settings.routing(TENANT, "central").layer()).isEqualTo(SettingsAdmin.Layer.NONE);
     }
 
     @Test
     void a_repository_is_deleted_only_with_its_typed_confirmation() throws IOException {
         create("files", "raw");
-        controller.route("files", "writable", new RedirectAttributesModelMap());
+        route("files", "writable", new RedirectAttributesModelMap());
         RedirectAttributesModelMap unconfirmed = new RedirectAttributesModelMap();
         RedirectAttributesModelMap confirmed = new RedirectAttributesModelMap();
         RedirectAttributesModelMap absent = new RedirectAttributesModelMap();
@@ -195,28 +219,31 @@ class RepositoryAdminControllerTest {
         assertThat(flash(unconfirmed, "error")).isEqualTo("Nothing was deleted: type \"delete files\" to confirm.");
         assertThat(flash(confirmed, "message")).asString().startsWith("Deleting repository 'files'.");
         assertThat(RepositoryDocument.read(repository("files"))).isEmpty();
-        assertThat(settings.repositories(TENANT)).as("the tenant's own definition goes with it").isEmpty();
         assertThat(flash(absent, "error")).isEqualTo("There is no repository 'nowhere'.");
     }
 
     @Test
-    void the_limits_page_shows_and_sets_the_quota_and_the_rate_ceiling() throws IOException {
+    void the_limits_page_shows_and_sets_the_tenants_limits_through_the_catalogue() throws IOException {
         RedirectAttributesModelMap quota = new RedirectAttributesModelMap();
-        RedirectAttributesModelMap rate = new RedirectAttributesModelMap();
         RedirectAttributesModelMap cleared = new RedirectAttributesModelMap();
 
-        controller.setQuota(4096, quota);
-        controller.setRateLimit(120, rate);
-        controller.setRateLimit(0, cleared);
+        controller.saveLimit("tenant-quota", "4096", quota);
         ExtendedModelMap model = new ExtendedModelMap();
 
         assertThat(controller.limits(model)).isEqualTo("limits");
-        assertThat(flash(quota, "message")).isEqualTo("Storage quota updated.");
-        assertThat(flash(rate, "message")).isEqualTo("Rate limit updated.");
-        assertThat(flash(cleared, "message")).isEqualTo("Rate limit cleared.");
+        assertThat(flash(quota, "message")).isEqualTo("Saved 'tenant-quota' for this tenant.");
         assertThat(model.get("quota")).isEqualTo(new TenantLimits.QuotaView(4096, 0));
-        assertThat(model.get("rateLimit")).isEqualTo(0L);
-        assertThat(model.get("deploymentRateLimit")).isNotNull();
+        assertThat(model.get("groups")).asInstanceOf(InstanceOfAssertFactories.LIST).singleElement()
+                .satisfies(group -> assertThat(((SettingsAdmin.Group) group).settings())
+                        .extracting(SettingsAdmin.SettingView::key).contains("tenant-quota"));
+        assertThatThrownBy(() -> controller.saveLimit("vulnerability-threshold", "LOW",
+                new RedirectAttributesModelMap()))
+                .as("a tenant's other settings are the operator's, not the limits page's")
+                .isInstanceOf(IllegalArgumentException.class);
+
+        controller.saveLimit("tenant-quota", "", cleared);
+        assertThat(flash(cleared, "message")).isEqualTo("'tenant-quota' follows the deployment again.");
+        assertThat(limits.quota().maxBytes()).isZero();
     }
 
     @Test
@@ -371,21 +398,6 @@ class RepositoryAdminControllerTest {
         ExtendedModelMap after = new ExtendedModelMap();
         controller.pins("libs", after);
         assertThat((List<?>) after.get("pins")).isEmpty();
-    }
-
-    @Test
-    void the_retention_page_renders_the_policy_the_form_stored() throws IOException {
-        create("libs", "maven");
-        RedirectAttributesModelMap redirect = new RedirectAttributesModelMap();
-
-        assertThat(controller.setRetention("libs", 5, "P30D", "", "", redirect))
-                .isEqualTo("redirect:/ui/repositories/libs/retention");
-        ExtendedModelMap model = new ExtendedModelMap();
-
-        assertThat(controller.retention("libs", model)).isEqualTo("repository-retention");
-        assertThat(model.get("retention"))
-                .isEqualTo(new RepositoryAdminController.RetentionView(5, "PT720H", "", ""));
-        assertThat(flash(redirect, "message")).isEqualTo("Retention updated.");
     }
 
     @Test

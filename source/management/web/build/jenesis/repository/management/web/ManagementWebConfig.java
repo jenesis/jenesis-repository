@@ -5,6 +5,7 @@ import java.util.Arrays;
 import build.jenesis.repository.audit.AuditTrail;
 import build.jenesis.repository.server.kernel.PinnedSettings;
 import build.jenesis.repository.server.CredentialContext;
+import build.jenesis.repository.server.kernel.LiveConfig;
 import build.jenesis.repository.server.kernel.Repositories;
 import build.jenesis.repository.server.RepositoryRouting;
 import build.jenesis.repository.server.kernel.MaintenanceScheduler;
@@ -37,8 +38,9 @@ public class ManagementWebConfig {
 
     @Bean
     public ManagementController managementController(Repositories repositories, RepositoryRouting routing,
-                                                     Authorization authorization, AuditTrail audit) {
-        return new ManagementController(repositories, routing, authorization, audit);
+                                                     Authorization authorization, AuditTrail audit,
+                                                     LiveConfig live) {
+        return new ManagementController(repositories, routing, authorization, audit, live);
     }
 
 

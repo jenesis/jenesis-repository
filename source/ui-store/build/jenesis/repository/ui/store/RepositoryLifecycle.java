@@ -33,9 +33,14 @@ public class RepositoryLifecycle extends TenantScope {
 
     private static final Logger LOGGER = LoggerFactory.getLogger(RepositoryLifecycle.class);
 
+    private final SettingsAdmin settings;
+
+    /** {@code settings} is how a repository's retention rules are resolved - its own over its tenant's over the
+     *  deployment's - which is the policy a preview, a cleanup and the scheduled sweep all judge by. */
     public RepositoryLifecycle(ArtifactStore repositoryStore, CurrentTenant current, ObservationRegistry observations,
-                               AuditTrail audit, ConsoleActor actor) {
+                               AuditTrail audit, ConsoleActor actor, SettingsAdmin settings) {
         super(repositoryStore, current, observations, audit, actor);
+        this.settings = settings;
     }
 
     /**
@@ -200,21 +205,10 @@ public class RepositoryLifecycle extends TenantScope {
         return StoredReport.read(scope(repository), forgetReport(ecosystem));
     }
 
-    /** A repository's retention policy, or an empty (keep-everything) policy when none is set. */
+    /** The retention policy a repository runs under: each rule resolved through the repository's own settings over
+     *  its tenant's over the deployment's - the chain the scheduled sweep and the API read too. */
     public RetentionPolicy retention(String repository) throws IOException {
-        return inventory(repository).readRetention().orElse(new RetentionPolicy(0));
-    }
-
-    public void setRetention(String repository, RetentionPolicy policy) throws IOException {
-        // Mirrors MaintenanceController's repository.retention event, describing the dials the way the /api leg does.
-        audit(AuditActions.REPOSITORY_RETENTION, repository + " keepLast=" + policy.keepLast()
-                + (policy.maxAge() == null ? "" : " maxAge=" + policy.maxAge())
-                + (policy.prereleaseExpiry() == null ? "" : " prereleaseExpiry=" + policy.prereleaseExpiry())
-                + (policy.notDownloadedFor() == null ? "" : " notDownloadedFor=" + policy.notDownloadedFor()));
-        observe("set-retention", repository, _ -> {
-            inventory(repository).writeRetention(policy);
-            return null;
-        });
+        return RetentionPolicy.fromConfig(settings.repositoryConfig(tenant(), repository));
     }
 
     /** The pinned coordinate versions, decoded into their parts so the form never re-parses a joined string. */
@@ -274,9 +268,9 @@ public class RepositoryLifecycle extends TenantScope {
     public boolean previewCleanup(String repository) throws IOException {
         RetentionSweeper sweeper = sweeper();
         StoreRepositoryInventory inventory = inventory(repository);
+        RetentionPolicy policy = retention(repository);
         return StoredReport.compute(scope(repository), PREVIEW_REPORT, () -> {
-            CleanupPlan plan = sweeper.plan(inventory,
-                    inventory.readRetention().orElse(new RetentionPolicy(0)), Instant.now());
+            CleanupPlan plan = sweeper.plan(inventory, policy, Instant.now());
             return StoredReport.Rows.of(lines(plan));
         });
     }
@@ -307,12 +301,12 @@ public class RepositoryLifecycle extends TenantScope {
         RetentionSweeper sweeper = sweeper();
         StoreRepositoryInventory inventory = inventory(repository);
         ArtifactStore store = scope(repository);
-        Properties settings = settings();
+        Properties deployment = settings();
+        RetentionPolicy policy = retention(repository);
         boolean started = StoredReport.compute(store, CLEANUP_REPORT, () -> observe("cleanup", repository, observation -> {
-            CleanupPlan plan = sweeper.sweep(inventory, inventory.readRetention().orElse(new RetentionPolicy(0)),
-                    Instant.now());
+            CleanupPlan plan = sweeper.sweep(inventory, policy, Instant.now());
             long reclaimed = 0;
-            Optional<GarbageCollector> collector = GarbageCollectorProvider.resolve(settings::getProperty);
+            Optional<GarbageCollector> collector = GarbageCollectorProvider.resolve(deployment::getProperty);
             if (collector.isPresent()) {
                 GcPlan collected = collector.get().collect(store,
                         StoreRepositoryInventory.pointerRoots(store), Instant.now());

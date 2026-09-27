@@ -1,6 +1,8 @@
 package build.jenesis.repository.server.kernel;
 
 import module java.base;
+import build.jenesis.repository.settings.Setting;
+import build.jenesis.repository.settings.SettingsScopes;
 import org.springframework.core.env.ConfigurableEnvironment;
 import org.springframework.core.env.Environment;
 import org.springframework.core.env.PropertySource;
@@ -146,18 +148,33 @@ public final class PinnedSettings {
      * the deployment-wide chain, so a caller with an optional tenant needs no branch of its own.
      */
     public UnaryOperator<String> effective(Settings settings, Environment environment, String tenant) {
+        return effective(settings, environment, tenant, null);
+    }
+
+    /**
+     * The same chain resolved for one repository: pin over the repository's own value over its tenant's over the
+     * deployment's over the environment ({@link Settings#getOrDefault(String, String, String, String)}). A
+     * {@link Setting#localOnly() local} key - which no pin names one repository by - is the repository's own or the
+     * environment's. A {@code null} repository is the tenant's chain.
+     */
+    public UnaryOperator<String> effective(Settings settings, Environment environment, String tenant,
+                                           String repository) {
         Objects.requireNonNull(settings, "settings");
         Objects.requireNonNull(environment, "environment");
         String named = tenant == null ? "" : tenant.strip();
         return key -> {
-            Optional<Pin> pin = pinned(key);
+            boolean local = SettingsScopes.declared(key).map(Setting::localOnly).orElse(false);
+            Optional<Pin> pin = local ? Optional.empty() : pinned(key);
             if (pin.isPresent()) {
                 return pin.get().value();
             }
             String fallback = environment.getProperty(PREFIX + key);
-            return named.isEmpty()
-                    ? settings.getOrDefault(key, fallback)
-                    : settings.getOrDefault(named, key, fallback);
+            if (named.isEmpty()) {
+                return settings.getOrDefault(key, fallback);
+            }
+            return repository == null
+                    ? settings.getOrDefault(named, key, fallback)
+                    : settings.getOrDefault(named, repository, key, fallback);
         };
     }
 

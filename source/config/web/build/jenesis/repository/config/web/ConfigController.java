@@ -58,6 +58,9 @@ public class ConfigController {
     private final UpstreamCredentialSource upstreamCredentials;
     private final AuditTrail audit;
     private final RepositoryRouting routing;
+    /** Whether a presented key is the deployment operator's - an operator-only setting, a repository's routing, is set
+     *  only with one. */
+    private final Predicate<String> operator;
     // The set of settings a deployment's installed modules contribute is static for the JVM, so the catalogue is
     // discovered once rather than re-running the ServiceLoader scan (and re-sorting) on every /api/settings read/write;
     // a setting's live effective value and override state are resolved per request against this fixed template below.
@@ -65,7 +68,8 @@ public class ConfigController {
 
     public ConfigController(Repositories repositories, Settings settings, LiveConfig live,
                             PinnedSettings pinnedSettings, UpstreamCredentialSource upstreamCredentials,
-                            AuditTrail audit, RepositoryRouting routing) {
+                            AuditTrail audit, RepositoryRouting routing, Predicate<String> operator) {
+        this.operator = operator;
         this.repositories = repositories;
         this.settings = settings;
         this.live = live;
@@ -100,6 +104,10 @@ public class ConfigController {
         Map<String, String> overrides = settings.overrides();
         List<SettingView> view = new ArrayList<>();
         for (Setting setting : catalogue()) {
+            if (!setting.settableAt(Setting.Scope.GLOBAL)) {
+                // A local repository or project setting has no deployment value: it is listed per repository.
+                continue;
+            }
             String override = overrides.get(setting.key());
             Optional<PinnedSettings.Pin> pin = pinnedSettings.pinned(setting.key());
             // A pinned key resolves to the operator's pin, not the store: report the pin's value as effective and
@@ -184,7 +192,8 @@ public class ConfigController {
         return new SettingView(setting.key(), setting.kind().name(),
                 secret ? null : effective, secret ? null : baseline, overridden, setting.live(),
                 pin.isPresent(), pin.map(PinnedSettings.Pin::source).orElse(""),
-                setting.group(), setting.label(), setting.description(), setting.tier() == Setting.Tier.ADVANCED);
+                setting.group(), setting.label(), setting.description(), setting.tier() == Setting.Tier.ADVANCED,
+                setting.tier() == null ? "" : setting.tier().name());
     }
 
     /** Set a runtime override for one editable setting; unknown keys are rejected so only the catalogued settings
@@ -215,8 +224,11 @@ public class ConfigController {
             return;
         }
         String value = request == null ? null : request.value();
-        if (value != null && !value.isBlank() && !setting.parses(value)) {
-            response.setStatus(400);
+        Optional<String> refusal = SettingsContributor.refusal(key, value,
+                tenant != null && !tenant.isBlank() ? Setting.Scope.TENANT : Setting.Scope.GLOBAL,
+                other -> live.effective(other, null));
+        if (refusal.isPresent()) {
+            text(response, 400, refusal.get());
             return;
         }
         if (tenant != null && !tenant.isBlank()) {
@@ -445,6 +457,77 @@ public class ConfigController {
         live.validate(combined);
     }
 
+    /**
+     * A repository's settings - every repository setting the catalogue carries, with the repository's effective value,
+     * what it would inherit from its tenant and the deployment ({@code defaultValue}), and whether it set its own. The
+     * tenant is the one the deployment's routing answers for the request. Its reads are the repository's settings
+     * documents - one object per module - and nothing that grows with what the repository holds.
+     *
+     * <p>It reads the tenant's and the deployment's settings documents, which the values it resolves inherit from: one
+     * object per module under a constant prefix, narrow by construction.
+     */
+    @GetMapping("/api/repository/settings")
+    @ResponseBody
+    public List<SettingView> repositorySettings(@RequestParam("repo") String repo, HttpServletRequest http) {
+        String tenant = repositoryTenant(repo, http);
+        Map<String, String> own = settings.overrides(tenant, repo);
+        List<SettingView> view = new ArrayList<>();
+        for (Setting setting : catalogue()) {
+            if (setting.scope() != Setting.Scope.REPOSITORY) {
+                continue;
+            }
+            String inherited = setting.localOnly() ? setting.defaultValue()
+                    : live.effective(tenant, setting.key(), setting.defaultValue());
+            String value = own.get(setting.key());
+            Optional<PinnedSettings.Pin> pin = setting.localOnly() ? Optional.empty()
+                    : pinnedSettings.pinned(setting.key());
+            String effective = pin.map(PinnedSettings.Pin::value).orElse(value != null ? value : inherited);
+            view.add(view(setting, effective, inherited, value != null, pin));
+        }
+        return view;
+    }
+
+    /** Set one repository setting, validated through the catalogue: {@code 400} naming the refusal - an unknown key,
+     *  a value its kind or its module refuses, a pinned key, or an operator-only one without the operator's key - and
+     *  nothing stored. */
+    @PutMapping("/api/repository/settings/{key}")
+    public void setRepositorySetting(@PathVariable("key") String name, @RequestParam("repo") String repo,
+                                     @RequestHeader(value = Repositories.KEY, required = false) String key,
+                                     @RequestBody SettingRequest request, HttpServletRequest http,
+                                     HttpServletResponse response) throws IOException {
+        String value = request == null || request.value() == null ? "" : request.value();
+        writeRepositorySetting(repo, name, value, key, http, response);
+    }
+
+    /** Clear one repository setting, so the repository inherits its tenant's and the deployment's again. */
+    @DeleteMapping("/api/repository/settings/{key}")
+    public void clearRepositorySetting(@PathVariable("key") String name, @RequestParam("repo") String repo,
+                                       @RequestHeader(value = Repositories.KEY, required = false) String key,
+                                       HttpServletRequest http, HttpServletResponse response) throws IOException {
+        writeRepositorySetting(repo, name, "", key, http, response);
+    }
+
+    private void writeRepositorySetting(String repo, String name, String value, String key, HttpServletRequest http,
+                                        HttpServletResponse response) throws IOException {
+        String tenant = repositoryTenant(repo, http);
+        try {
+            live.setRepository(tenant, repo, Map.of(name, value), operator.test(key));
+        } catch (IllegalArgumentException refused) {
+            text(response, 400, refused.getMessage());
+            return;
+        }
+        audit(tenant, key, value.isBlank() ? "setting.clear" : "setting.set", tenant + "/" + repo + "/" + name);
+        response.setStatus(200);
+    }
+
+    /** The tenant a repository operation answers for, once its repository name is a routable one. */
+    private String repositoryTenant(String repo, HttpServletRequest http) {
+        if (!Repositories.valid(repo)) {
+            throw new IllegalArgumentException("Not a routable repository name: " + repo);
+        }
+        return routing.tenant(http);
+    }
+
     /** The repositories defined at runtime ({@code repositories.<name>} in the settings store): each name with its
      *  routing specification (one or more {@code writable} / {@code fallback <source> [options]} clauses). They add to
      *  or override the deployment's file-configured repositories ({@code jenreg.repositories.<name>}) and
@@ -454,8 +537,15 @@ public class ConfigController {
     @GetMapping("/api/repositories")
     @ResponseBody
     public List<NamedValue> repositoryDefinitions(@RequestParam(value = "tenant", required = false) String tenant) {
-        return stored(tenant, SettingsScopes.REPOSITORY_PREFIX);
+        if (tenant != null) {
+            throw new IllegalArgumentException(TENANT_ROUTING);
+        }
+        return stored(null, SettingsScopes.REPOSITORY_PREFIX);
     }
+
+    /** Why a tenant has no repository definitions of its own. */
+    private static final String TENANT_ROUTING = "A tenant has no repository definitions: each repository is routed by "
+            + "its own routing setting, PUT /api/repository/settings/routing?repo=<name>.";
 
     @PutMapping("/api/repositories/{name}")
     public void setRepositoryDefinition(@PathVariable("name") String name,
@@ -464,7 +554,11 @@ public class ConfigController {
                                         @RequestBody NamedValueRequest request,
                                         HttpServletRequest http, HttpServletResponse response) throws IOException {
         String routed = routing.tenant(http);
-        if (!Repositories.valid(name) || request == null || request.value() == null || !tenantName(tenant)) {
+        if (tenant != null) {
+            text(response, 400, TENANT_ROUTING);
+            return;
+        }
+        if (!Repositories.valid(name) || request == null || request.value() == null) {
             response.setStatus(400);
             return;
         }
@@ -500,10 +594,8 @@ public class ConfigController {
                     + "': " + refused + "." + RepositoryDefinition.upstreamRemedy());
             return;
         }
-        // With a tenant, the definition is that tenant's own and routes its repository of this name over the
-        // deployment's; the checks above are the same either way.
-        store(tenant, SettingsScopes.repositoryKey(name), request.value());
-        audit(routed, key, AuditActions.REPOSITORY_SET, scoped(tenant, name));
+        store(null, SettingsScopes.repositoryKey(name), request.value());
+        audit(routed, key, AuditActions.REPOSITORY_SET, name);
         response.setStatus(200);
     }
 
@@ -592,15 +684,14 @@ public class ConfigController {
     }
 
     /**
-     * Delete a repository and everything it holds - {@code DELETE /repository/<tenant>/<name>} - and forget the
-     * tenant's own definition of it (the deployment's is every tenant's, so it stays), through the one removal every
-     * surface makes ({@link RepositoryRemoval}). The repository stops
+     * Delete a repository and everything it holds, its own settings included - {@code DELETE
+     * /repository/<tenant>/<name>} - through the one removal every surface makes ({@link RepositoryRemoval}); the
+     * deployment's definition of its name is every tenant's, so it stays. The repository stops
      * answering before this returns; its objects are removed off the request path, so the answer is {@code 202}, and a
      * repository already being deleted - one a node stopped part way - is resumed. {@code 404} when there is none.
      *
-     * <p>Forgetting the definition reads the settings document - one object per module under a constant prefix, the
-     * read {@code DELETE /api/repositories/{name}} makes - and nothing on the request path reads the repository's
-     * objects: the purge pages its scan on a thread of its own.
+     * <p>Nothing on the request path reads the repository's objects: the purge pages its scan on a thread of its
+     * own.
      */
     @DeleteMapping("/repository/{tenant}/{name}")
     public void deleteRepository(@PathVariable("name") String name,
@@ -617,8 +708,7 @@ public class ConfigController {
             text(response, 404, "There is no repository '" + repository + "'.");
             return;
         }
-        // The tenant's own definition goes with its repository; the deployment's is every tenant's and stays.
-        settings.set(route.tenant(), SettingsScopes.repositoryKey(repository), null);
+        // The repository's own settings go with its objects; the deployment's definition of its name stays.
         RepositoryDocument.forget(repositories.root(), route.tenant(), repository);
         audit(route.tenant(), key, AuditActions.REPOSITORY_DELETE, repository);
         RepositoryRemoval.purgeInBackground(repositories.tenantScope(route.tenant()), repository,
@@ -642,12 +732,12 @@ public class ConfigController {
                                            HttpServletRequest request,
                                            HttpServletResponse response) throws IOException {
         String routed = routing.tenant(request);
-        if (!tenantName(tenant)) {
-            response.setStatus(400);
+        if (tenant != null) {
+            text(response, 400, TENANT_ROUTING);
             return;
         }
-        store(tenant, SettingsScopes.repositoryKey(name), null);
-        audit(routed, key, AuditActions.REPOSITORY_REMOVE, scoped(tenant, name));
+        store(null, SettingsScopes.repositoryKey(name), null);
+        audit(routed, key, AuditActions.REPOSITORY_REMOVE, name);
         response.setStatus(200);
     }
 
@@ -834,12 +924,13 @@ public class ConfigController {
 
     /** One runtime setting for the API: its key, its {@link Setting.Kind kind} (so a client masks a SECRET and picks
      *  the right control), its effective value and its file/env default, whether a stored override is in force,
-     *  whether a change applies live, and whether it is pinned from above the store (with the phrase naming the pin).
+     *  whether a change applies live, whether it is pinned from above the store (with the phrase naming the pin), and
+     *  its {@link Setting.Tier tier} - whether a wizard asks it, a settings screen shows it, or folds it away.
      *  A SECRET's {@code value} and {@code defaultValue} are always {@code null} - the value is write-only and never
      *  read back - while {@code overridden}/{@code pinned} still say whether it is set. */
     public record SettingView(String key, String kind, String value, String defaultValue, boolean overridden,
                               boolean appliesImmediately, boolean pinned, String pinnedBy,
-                              String group, String label, String description, boolean advanced) {
+                              String group, String label, String description, boolean advanced, String tier) {
     }
 
     /** The first-run setup guide as the API serves it: the steps, each with the rows it is about. */

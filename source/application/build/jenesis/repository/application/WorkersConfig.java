@@ -109,7 +109,10 @@ public class WorkersConfig {
                 properties.isReadOnly() ? List.of() : MaintenanceTaskProvider.resolve(config),
                 () -> properties.isReadOnly() ? MaintenanceTaskProvider.Contained.of(List.of())
                         : MaintenanceTaskProvider.resolveContained(config), config,
-                tenantConfig, leaseTtl(properties.getCleanupLease()), meterRegistry);
+                tenantConfig,
+                (tenant, repository, key) -> pinnedSettings.effective(settings, environment, tenant, repository)
+                        .apply(key),
+                leaseTtl(properties.getCleanupLease()), meterRegistry);
         return scheduler;
     }
 

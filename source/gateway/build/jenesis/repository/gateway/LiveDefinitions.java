@@ -2,6 +2,7 @@ package build.jenesis.repository.gateway;
 
 import module java.base;
 import build.jenesis.repository.definitions.RepositoryDefinition;
+import build.jenesis.repository.definitions.RoutingSettingsContributor;
 import build.jenesis.repository.server.kernel.LiveConfig;
 import build.jenesis.repository.server.kernel.RepositoryDefinitions;
 import build.jenesis.repository.server.RepositoryProperties;
@@ -9,10 +10,11 @@ import build.jenesis.repository.server.kernel.Settings;
 import build.jenesis.repository.settings.SettingsScopes;
 
 /**
- * The repository definitions, read live and per tenant: a tenant's own runtime-stored {@code repositories.<name>} over
- * the deployment's, over the file-configured {@code jenreg.repositories.<name>} default, through the same
- * pin-over-store-over-file precedence every other live dial takes ({@link LiveConfig#effective}), so an added or
- * changed definition routes on the next request. The router takes {@link #definition} per request; the kernel takes the
+ * The repository definitions, read live and per repository: a repository's own {@code routing} setting, stored in its
+ * own settings document, over the deployment's runtime-stored {@code repositories.<name>}, over the file-configured
+ * {@code jenreg.repositories.<name>} default - the deployment's through the same pin-over-store-over-file precedence
+ * every other live dial takes ({@link LiveConfig#effective}) - so an added or changed definition routes on the next
+ * request. The router takes {@link #definition} per request; the kernel takes the
  * two answers it needs through {@link RepositoryDefinitions}, which is what lets the kernel not require this module.
  *
  * <p>It is the router's model, so it lives beside the router rather than inside {@code LiveConfig}, which would make
@@ -31,12 +33,13 @@ public final class LiveDefinitions implements RepositoryDefinitions {
         this.defaults = defaults;
     }
 
-    /** The routing definition for a named repository as {@code tenant} sees it, parsed, or {@code null} when neither
-     *  the tenant, the deployment nor the file configuration defines it (the default serve path then applies). A
+    /** The routing definition for a named repository of {@code tenant}, parsed, or {@code null} when neither the
+     *  repository, the deployment nor the file configuration defines it (the default serve path then applies). A
      *  {@code null} tenant reads the deployment's definition alone. */
     public RepositoryDefinition definition(String tenant, String name) {
-        String specification = live.effective(tenant, SettingsScopes.repositoryKey(name),
-                defaults.getRepositories().get(name));
+        String own = tenant == null ? null : live.effective(tenant, name, RoutingSettingsContributor.KEY, null);
+        String specification = own != null && !own.isBlank() ? own
+                : live.effective(SettingsScopes.repositoryKey(name), defaults.getRepositories().get(name));
         return specification == null || specification.isBlank()
                 ? null
                 : RepositoryDefinition.parse(specification);

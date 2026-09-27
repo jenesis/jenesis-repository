@@ -65,18 +65,10 @@ public final class CacheStorageContract {
         /** {@code scope} admits exactly a valid tenant name and rejects everything else, so the tenant segment is
          *  traversal-free by construction rather than by the backend's own path handling. */
         TENANT_NAME_REJECTED,
-        /** A project's {@code cache.properties} round-trips through {@code writeConfig}/{@code readConfig}, an
+        /** A project's own file round-trips through {@code writeConfig}/{@code readConfig}, an
          *  absent project or file reads as an <em>empty</em> {@code Properties}, and a rewrite replaces rather than
          *  merges. {@code createProject} is idempotent. */
         PROJECT_CONFIG_ROUND_TRIP,
-        /** {@code configVersion} is {@code null} while the config is absent, non-null once it exists, unchanged by
-         *  a pure read, and {@code null} again once the project's objects are gone. */
-        CONFIG_VERSION_SENTINEL,
-        /** {@code configVersion} advances on every {@code writeConfig} that changes the policy, however quickly the
-         *  rewrites follow one another - the project-config counterpart of {@code VERSION_TOKEN_OPAQUE}. A token that
-         *  can repeat across a rewrite is one the server's per-project config cache revalidates successfully against
-         *  a policy that no longer exists, so it keeps serving the superseded caps. */
-        CONFIG_VERSION_ADVANCES_ON_REWRITE,
         /** The config-tree writes refuse a path that escapes the scope or a project-config file name carrying a
          *  separator, and write nothing - the object-store half of the same screen the filesystem enforces by
          *  confining its resolved path. */
@@ -203,12 +195,6 @@ public final class CacheStorageContract {
         checks.add(new Check(Property.PROJECT_CONFIG_ROUND_TRIP,
                 "a project config round-trips and an absent one reads as empty",
                 CacheStorageContract::projectConfigRoundTrip));
-        checks.add(new Check(Property.CONFIG_VERSION_SENTINEL,
-                "configVersion is null while absent, non-null once written and null again once gone",
-                CacheStorageContract::configVersionSentinel));
-        checks.add(new Check(Property.CONFIG_VERSION_ADVANCES_ON_REWRITE,
-                "configVersion advances on every rewrite, however quickly they follow one another",
-                CacheStorageContract::configVersionAdvancesOnRewrite));
         checks.add(new Check(Property.CONFIG_PATH_REJECTED,
                 "the config writes refuse a path that escapes the scope and write nothing",
                 CacheStorageContract::configPathRejected));
@@ -322,14 +308,6 @@ public final class CacheStorageContract {
                 CacheStorageMutant.A_CONFIG_THAT_FORGETS_A_KEY,
                 "dropping one property is the round trip failing partially, which is the shape a check that only "
                         + "asserts 'something came back' would miss")));
-        mutations.put(Property.CONFIG_VERSION_SENTINEL, List.of(new Mutation(
-                CacheStorageMutant.A_CONFIG_VERSION_THAT_IS_ALWAYS_PRESENT,
-                "the sentinel IS the null-while-absent rule, so inventing a token for an absent config is the "
-                        + "removal")));
-        mutations.put(Property.CONFIG_VERSION_ADVANCES_ON_REWRITE, List.of(new Mutation(
-                CacheStorageMutant.A_CONFIG_VERSION_THAT_NEVER_MOVES,
-                "a frozen token makes a rewrite indistinguishable from no write, which is the compare-and-set "
-                        + "hazard the property exists for")));
         mutations.put(Property.CONFIG_PATH_REJECTED, List.of(new Mutation(
                 CacheStorageMutant.A_CONFIG_PATH_SCREEN_THAT_PASSES,
                 "the property is the screen; letting an escaping path through is the defect itself")));
@@ -656,68 +634,6 @@ public final class CacheStorageContract {
         // store), so the contract pins only that it is idempotent and silent.
         storage.createProject("provisioned");
         storage.createProject("provisioned");
-    }
-
-    private static void configVersionSentinel(CacheStorage storage) throws Exception {
-        String project = "versioned";
-        equal(storage.configVersion(project), null, "an absent project config carries no version token");
-
-        storage.writeConfig(project, "cache.properties", properties("size", "100"));
-        Object token = storage.configVersion(project);
-        notNull(token, "a stored project config carries a version token the config cache revalidates against");
-
-        // A read never advances the token: the server's per-project config cache would otherwise reload on every
-        // request and the LRU would be pure overhead.
-        storage.readConfig(project, "cache.properties");
-        equal(storage.configVersion(project), token, "a pure read leaves the revalidation token untouched");
-
-        storage.deleteDir(project);
-        equal(storage.configVersion(project), null, "the token is null again once the project's objects are gone");
-    }
-
-    /**
-     * The revalidation token has to move whenever the policy behind it moves, and "whenever" includes two rewrites a
-     * console form-submit apart.
-     *
-     * <p>The filesystem backend's token was the config file's last-modified time, and a kernel's coarse timestamp
-     * advances only once per tick - roughly a millisecond, where a rewrite takes microseconds. {@code writeConfig}
-     * did not force the stamp forward the way {@code writeFileVersioned} explicitly does, so two rewrites inside one
-     * tick left the token identical: the server's per-project config cache revalidated successfully and went on
-     * serving the <em>superseded</em> policy, with the operator's lowered size cap or shortened ttl silently not
-     * applied and nothing anywhere to show for it. The object stores mint an ETag or generation per write and were
-     * always correct here, which is exactly why the property belongs in the shared contract rather than in a
-     * filesystem test: it states what all four owe the config cache.
-     *
-     * <p>The rewrites run back to back in a loop rather than once with a sleep, so the check leans on no timer at
-     * all: whatever a volume's timestamp granularity is, sixteen consecutive rewrites either all move the token or
-     * expose the one that did not. Each rewrite carries different content, because a content-addressed token (an S3
-     * ETag is the body's MD5) legitimately repeats when the body does, and an unchanged policy is not a stale one.
-     *
-     * <p>Honest limitation, and where it is covered: on a volume whose timestamps are finer than the cost of a write
-     * - a current ext4, for one - the filesystem backend's stamp advances on its own and this check cannot manufacture
-     * the collision, so it states the guarantee without being able to witness its absence there. The deterministic
-     * half lives in the filesystem storage tests, which pin the stored stamp ahead of the clock and requires
-     * the rewrite to move past it - the same repair, for the same reason, provable on any machine.
-     */
-    private static void configVersionAdvancesOnRewrite(CacheStorage storage) throws Exception {
-        String project = "revalidated";
-        storage.writeConfig(project, "cache.properties", properties("size", "100"));
-        Object token = storage.configVersion(project);
-        notNull(token, "a stored project config carries a version token");
-
-        for (int rewrite = 1; rewrite <= 16; rewrite++) {
-            storage.writeConfig(project, "cache.properties", properties("size", Integer.toString(100 + rewrite)));
-            Object next = storage.configVersion(project);
-            notNull(next, "the token survives rewrite " + rewrite);
-            if (Objects.equals(token, next)) {
-                throw failure("the project-config version token must differ after a rewrite that changed the policy, "
-                        + "or the server's per-project config cache revalidates against a token that has not moved "
-                        + "and keeps serving the superseded caps - but rewrite " + rewrite + " left it at " + next);
-            }
-            token = next;
-        }
-        equal(storage.readConfig(project, "cache.properties").getProperty("size"), "116",
-                "and the token tracks the policy the store now holds, not one of the sixteen it replaced");
     }
 
     private static void configPathRejected(CacheStorage storage) throws Exception {

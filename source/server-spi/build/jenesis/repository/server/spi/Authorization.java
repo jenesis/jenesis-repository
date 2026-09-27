@@ -26,8 +26,7 @@ import build.jenesis.repository.store.StoreCache;
  *
  * <p>This type holds the credentials and subjects, their grants, and the decisions over them. The rest of the
  * credential space hangs off it, each concern its own type: how long a credential lives ({@link #lifetimes()}), a
- * tenant's ceilings ({@link #quotas()}, {@link #rateLimits()}), its OIDC trusts ({@link #trusts()}), its named roles
- * ({@link #roles()}) and its groups ({@link #groups()}). They are reached through an authorization rather than built
+ * tenant's OIDC trusts ({@link #trusts()}), its named roles ({@link #roles()}) and its groups ({@link #groups()}). They are reached through an authorization rather than built
  * on their own because every one of them reads and writes through the same cache and the same deployment-wide epoch,
  * so a change to any of them reaches every node the way a revocation does.
  */
@@ -64,10 +63,6 @@ public final class Authorization {
 
     private final CredentialLifetimes lifetimes;
 
-    private final TenantCeiling quotas;
-
-    private final TenantCeiling rateLimits;
-
     private final OidcTrusts trusts;
 
     private final Roles roles;
@@ -86,8 +81,6 @@ public final class Authorization {
         this.space = new CredentialSpace(store, store == null ? null : cacheTtl());
         this.anonymous = anonymous;
         this.lifetimes = new CredentialLifetimes(space, defaultLifetime, maxLifetime);
-        this.quotas = TenantCeiling.quota(space);
-        this.rateLimits = TenantCeiling.rateLimit(space);
         this.trusts = new OidcTrusts(space);
         this.roles = new Roles(space);
         this.tenants = new PrincipalTenants(space);
@@ -167,16 +160,6 @@ public final class Authorization {
     /** How long this deployment's credentials live: its default and ceiling, and each tenant's policy under them. */
     public CredentialLifetimes lifetimes() {
         return lifetimes;
-    }
-
-    /** Each tenant's stored-content quota, in bytes; none set is unlimited. */
-    public TenantCeiling quotas() {
-        return quotas;
-    }
-
-    /** Each tenant's request rate ceiling, in permits per minute; none set is the deployment default. */
-    public TenantCeiling rateLimits() {
-        return rateLimits;
     }
 
     /** Each tenant's OIDC trusts, by which an id-token is exchanged for a short-lived credential. */

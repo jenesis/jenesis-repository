@@ -25,6 +25,6 @@ public final class DemoSettingsContributor implements SettingsContributor {
                                 + "by the compliance gate, with a small demo gate config applied. Off by default; a "
                                 + "non-empty repository is never seeded, so this is a no-op in production. Applies on "
                                 + "the next restart.",
-                        Setting.Kind.BOOLEAN, "false", false).essential());
+                        Setting.Kind.BOOLEAN, "false", false).standard());
     }
 }

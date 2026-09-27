@@ -14,6 +14,8 @@ import build.jenesis.repository.compliance.Severity;
 import build.jenesis.repository.compliance.Verdict;
 import build.jenesis.repository.compliance.Vex;
 import build.jenesis.repository.compliance.VulnerabilityPolicy;
+import build.jenesis.repository.settings.Setting;
+import build.jenesis.repository.settings.SettingsContributor;
 import build.jenesis.repository.settings.SettingsScopes;
 
 /**
@@ -280,6 +282,13 @@ public final class LiveConfig {
         return retention;
     }
 
+    /** The retention policy {@code repository} of {@code tenant} runs under: each dial resolved on its own, pin over
+     *  the repository's value over the tenant's over the deployment's over the file default - the chain the scheduled
+     *  sweep, the console and the API all read, so a preview, a cleanup and a scheduled pass judge by one policy. */
+    public RetentionPolicy retention(String tenant, String repository) {
+        return buildRetention((key, fallback) -> effective(tenant, repository, key, fallback));
+    }
+
     /** The {@code allow-redeploy} opt-out key: with it {@code false} (the default), release-version
      *  immutability is ON and the deploy path refuses re-pointing an already-published immutable release
      *  coordinate at different bytes. Declared through {@code ImmutabilitySettingsContributor}. */
@@ -301,10 +310,10 @@ public final class LiveConfig {
         // The one parser in the cleanup contracts builds the policy; this only layers the live settings over the
         // deployment defaults per key.
         return RetentionPolicy.fromConfig(key -> switch (key) {
-            case "keep-last" -> get.apply(key, Integer.toString(defaults.getKeepLast()));
-            case "max-age" -> get.apply(key, defaults.getMaxAge());
-            case "prerelease-expiry" -> get.apply(key, defaults.getPrereleaseExpiry());
-            case "not-downloaded-for" -> get.apply(key, defaults.getNotDownloadedFor());
+            case RetentionPolicy.KEEP_LAST -> get.apply(key, Integer.toString(defaults.getKeepLast()));
+            case RetentionPolicy.MAX_AGE -> get.apply(key, defaults.getMaxAge());
+            case RetentionPolicy.PRERELEASE_EXPIRY -> get.apply(key, defaults.getPrereleaseExpiry());
+            case RetentionPolicy.NOT_DOWNLOADED_FOR -> get.apply(key, defaults.getNotDownloadedFor());
             default -> null;
         });
     }
@@ -375,6 +384,82 @@ public final class LiveConfig {
     public String effective(String tenant, String key, String fallback) {
         Optional<String> pin = pinned.apply(key);
         return pin.isPresent() ? pin.get() : settings.getOrDefault(tenant, key, fallback);
+    }
+
+    /**
+     * Why each of {@code values} cannot be stored at {@code level}, keyed by setting, in key order - empty when every
+     * one may: the catalogue's own refusal ({@link SettingsContributor#refusal(String, String, Setting.Scope,
+     * UnaryOperator)}), a key an operator has pinned above the store (its stored value would be inert), and an
+     * {@link Setting#operatorOnly() operator-only} key when {@code operator} is false. Every write path asks this,
+     * for every value, before it writes any of them.
+     */
+    public SortedMap<String, String> refusals(Setting.Scope level, Map<String, String> values, boolean operator) {
+        SortedMap<String, String> refused = new TreeMap<>();
+        values.forEach((key, value) -> {
+            Optional<String> refusal = SettingsContributor.refusal(key, value, level, other -> effective(other, null));
+            if (refusal.isPresent()) {
+                refused.put(key, refusal.get());
+                return;
+            }
+            boolean local = SettingsScopes.declared(key).map(Setting::localOnly).orElse(false);
+            Optional<String> pin = local ? Optional.empty() : pinned.apply(key);
+            if (pin.isPresent()) {
+                refused.put(key, "Setting '" + key + "' is pinned above the store, so a stored value would be inert.");
+            } else if (!operator && SettingsScopes.operatorOnly(key)) {
+                refused.put(key, "Setting '" + key + "' is the deployment operator's to set.");
+            }
+        });
+        return refused;
+    }
+
+    /**
+     * Store {@code values} for one repository - each non-blank one set, each blank one cleared - once every one of
+     * them passes {@link #refusals}; otherwise nothing is written and the refusals are thrown together, so a caller
+     * learns every value that was refused rather than the first.
+     */
+    public void setRepository(String tenant, String repository, Map<String, String> values, boolean operator)
+            throws IOException {
+        SortedMap<String, String> refused = refusals(Setting.Scope.REPOSITORY, values, operator);
+        if (!refused.isEmpty()) {
+            throw new IllegalArgumentException(String.join(" ", refused.values()));
+        }
+        settings.setRepository(tenant, repository, values);
+    }
+
+    /** The value {@code tenant} set for {@code key} itself, or empty when it inherits the deployment's. */
+    public Optional<String> own(String tenant, String key) {
+        return Optional.ofNullable(settings.overrides(tenant).get(key));
+    }
+
+    /**
+     * Store {@code values} for one tenant - each non-blank one set, each blank one cleared - once every one of them
+     * passes {@link #refusals} and the tenant's gate still resolves with them in place; otherwise nothing is written.
+     */
+    public void setTenant(String tenant, Map<String, String> values, boolean operator) throws IOException {
+        SortedMap<String, String> refused = refusals(Setting.Scope.TENANT, values, operator);
+        if (!refused.isEmpty()) {
+            throw new IllegalArgumentException(String.join(" ", refused.values()));
+        }
+        for (Map.Entry<String, String> value : values.entrySet()) {
+            validateTenant(tenant, value.getKey(), value.getValue());
+        }
+        for (Map.Entry<String, String> value : values.entrySet()) {
+            settings.set(tenant, value.getKey(), value.getValue());
+        }
+    }
+
+    /** {@link #effective(String, String, String)} for one repository: a pin still wins outright, then the repository's
+     *  own stored value where the key is a repository setting, then the tenant's, the deployment's and
+     *  {@code fallback} - except a {@link Setting#localOnly() local} key, which no pin can name one repository by and
+     *  which has no wider value, so it is the repository's own or {@code fallback}. */
+    public String effective(String tenant, String repository, String key, String fallback) {
+        if (!SettingsScopes.declared(key).map(Setting::localOnly).orElse(false)) {
+            Optional<String> pin = pinned.apply(key);
+            if (pin.isPresent()) {
+                return pin.get();
+            }
+        }
+        return settings.getOrDefault(tenant, repository, key, fallback);
     }
 
     private ComplianceGate gate(Severity threshold, Verdict vulnerable, Verdict malware, List<String> denied,

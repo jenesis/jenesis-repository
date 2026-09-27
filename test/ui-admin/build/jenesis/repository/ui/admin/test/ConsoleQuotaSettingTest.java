@@ -3,17 +3,18 @@ package build.jenesis.repository.ui.admin.test;
 import module java.base;
 import module org.junit.jupiter.api;
 import build.jenesis.repository.audit.AuditTrail;
-import build.jenesis.repository.server.spi.Authorization;
 import build.jenesis.repository.store.ArtifactStore;
 import build.jenesis.repository.store.ArtifactStoreProvider;
 import build.jenesis.repository.store.QuotaArtifactStore;
+import build.jenesis.repository.ui.store.SettingsAdmin;
 import build.jenesis.repository.ui.store.TenantLimits;
 import io.micrometer.observation.ObservationRegistry;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
 /**
- * Setting a tenant's quota from the console: the limit is stored, and the usage total is <em>not</em> recomputed.
+ * Setting a tenant's quota from the console: the limit is stored as the tenant's {@code tenant-quota} setting, and
+ * the usage total is <em>not</em> recomputed.
  *
  * <p><b>Setting a limit does not recount.</b> A recount walks every blob of every repository the tenant owns, so
  * running it while the operator waits would make the action's cost grow with the tenant, which a request must not do.
@@ -40,11 +41,14 @@ class ConsoleQuotaSettingTest {
         // A stale counter, deliberately wrong: if setting a quota still recounted, this would be corrected to 11.
         new QuotaArtifactStore(tenant, 0).store(999);
 
-        TenantLimits limits = new TenantLimits(new RefusingStore(filesystem), Authorization.enforcing(filesystem),
-                () -> "acme", ObservationRegistry.NOOP, AuditTrail.none(), () -> "tester");
+        ArtifactStore refusing = new RefusingStore(filesystem);
+        TenantLimits limits = new TenantLimits(refusing, new SettingsAdmin(refusing), () -> "acme",
+                ObservationRegistry.NOOP, AuditTrail.none(), () -> "tester");
 
-        limits.setQuota(4096);
+        limits.save("tenant-quota", "4096");
 
+        assertThat(limits.quota().maxBytes()).as("the tenant's own quota, read back through the catalogue")
+                .isEqualTo(4096);
         assertThat(new QuotaArtifactStore(filesystem.scope("acme"), 0).used())
                 .as("the stale total is left for the pass; setting a limit does not walk the tenant")
                 .isEqualTo(999);

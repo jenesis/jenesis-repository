@@ -36,7 +36,7 @@ import build.jenesis.repository.walk.Traversal;
  *     answer an <em>empty</em> {@link Properties}; {@link #projects}, {@link #entries} and {@link #listDir} deliver
  *     nothing and answer an {@linkplain Traversal.Result#exhausted() exhausted} result, which is the one honest way to say
  *     "there was nothing there" - an absent container is drained, not truncated, so a caller never resumes a cursor
- *     into a space that does not exist; {@link #configVersion} and {@link #fileVersion} answer {@code null} -
+ *     into a space that does not exist; {@link #fileVersion} answers {@code null} -
  *     the one place this SPI does use {@code null} as a sentinel, deliberately, because a version token is opaque
  *     and has no "absent" value of its own. {@link #read} is the exception: streaming an absent entry throws
  *     {@link IOException} rather than producing an empty body a client would cache as a hit.</li>
@@ -69,8 +69,8 @@ import build.jenesis.repository.walk.Traversal;
  *     recency-bearing metadata beyond {@link #stamp}, or reaches outside the backend.</li>
  * <li><b>Staleness.</b> {@link Stored#recency} is the answer to "when was this last used": the newest stamp where the
  *     entry has one and the write time the backend reports where it has none, on every backend alike, so an
- *     eviction policy built on it is least-recently-used everywhere. {@link #configVersion} and
- *     {@link #fileVersion} are the revalidation tokens a cached read compares against.</li>
+ *     eviction policy built on it is least-recently-used everywhere. {@link #fileVersion} is the revalidation token
+ *     a cached read compares against.</li>
  * <li><b>Lifecycle / ownership.</b> The composition owns the instance: {@code CacheStorageProvider.resolve} builds
  *     exactly one, and a backend that holds a client, pool or thread owns it for the life of the application. A
  *     {@link #scope} view borrows the parent's resources and owns nothing, so it needs no closing.</li>
@@ -124,11 +124,9 @@ public interface CacheStorage {
     /** Whether a project container of this name exists. */
     boolean projectExists(String project);
 
-    /** Read a project config file ({@code cache.properties}); empty if absent. */
+    /** Read a project's own file ({@code stats.properties}, the counts a pass records); empty if absent. A project's
+     *  policy is not one: it is the project's settings ({@link ProjectPolicy}). */
     Properties readConfig(String project, String file);
-
-    /** Opaque token capturing the current version of a project's {@code cache.properties}, for the server's config cache. */
-    Object configVersion(String project);
 
     /** Whether the entry blob exists. */
     boolean exists(Entry entry);
@@ -218,7 +216,7 @@ public interface CacheStorage {
     /** Create a project container (a directory on the filesystem; a no-op for object stores). */
     void createProject(String project) throws IOException;
 
-    /** Atomically write a project config file ({@code cache.properties}), so a reader never sees a partial write. */
+    /** Atomically write a project's own file, so a reader never sees a partial write. */
     void writeConfig(String project, String file, Properties properties) throws IOException;
 
     // --- Config files addressed by relative path (the {@code .users/} access tree) ---

@@ -2,16 +2,19 @@ package build.jenesis.repository.ui.store;
 
 import module java.base;
 import build.jenesis.repository.scope.Scopes;
+import build.jenesis.repository.settings.Setting;
 import build.jenesis.repository.settings.SettingsDocuments;
 import build.jenesis.repository.settings.SettingsScopes;
 import build.jenesis.repository.settings.SettingsSecrets;
+import build.jenesis.repository.settings.StoredSettings;
 import build.jenesis.repository.store.ArtifactStore;
 import build.jenesis.repository.store.Retries;
 
 /**
  * The console's read/write of the deployment-wide runtime settings, kept as one JSON document per contributing module
  * ({@code config/settings/<module>.json}, {@link SettingsDocuments}) - the same layout and the same store of truth the
- * repository server's {@code Settings} and the {@code /api/settings} endpoint drive. A read merges every module's
+ * repository server's {@code Settings} and the {@code /api/settings} endpoint drive. A write moves the settings epoch,
+ * so every node's scheduled re-read picks it up. A read merges every module's
  * document into one view; a write compare-and-sets only the key's owning module document, re-reading and retrying a
  * lost race, so a concurrent change to another key is never lost. Shared by {@link SettingsAdmin} and the
  * vulnerability/import lookups in {@code ComplianceReview} and {@link RepositoryImports} so the document format lives
@@ -90,8 +93,8 @@ final class StoredConfig {
     static SortedMap<String, SortedMap<String, String>> exportBundle(ArtifactStore root) throws IOException {
         SortedMap<String, SortedMap<String, String>> bundle = new TreeMap<>(documents(root));
         for (String tenant : configuredTenants(root)) {
-            documents(root.scope(tenant)).forEach((module, values) ->
-                    bundle.put(SettingsDocuments.tenantKey(tenant, module), values));
+            SettingsScopes.settableOnly(documents(root.scope(tenant)), Setting.Scope.TENANT).forEach(
+                    (module, values) -> bundle.put(SettingsDocuments.tenantKey(tenant, module), values));
         }
         return SettingsSecrets.redact(bundle);
     }
@@ -120,6 +123,7 @@ final class StoredConfig {
         for (String tenant : tenants) {
             importTenant(root, tenant, perTenant.getOrDefault(tenant, Map.of()));
         }
+        StoredSettings.changed(root);
     }
 
     /** Restore one tenant's slice - a full restore of the tenant's documents (a document the slice omits is cleared),
@@ -135,6 +139,7 @@ final class StoredConfig {
             }
         });
         importDocuments(root.scope(tenant), documents);
+        StoredSettings.changed(root);
     }
 
     /** Refuse a deployment-wide (global-only) key in a tenant document - a tenant retunes only its own gate policy,
@@ -155,6 +160,7 @@ final class StoredConfig {
         }
         guardTenantScope(Set.of(key));
         put(root.scope(tenant), key, value);
+        StoredSettings.changed(root);
     }
 
     /** Restore an imported bundle: write each module document as a whole, and clear any stored document the bundle

@@ -8,13 +8,18 @@ import build.jenesis.repository.server.RepositoryRouting;
 import build.jenesis.repository.server.kernel.Repositories;
 import build.jenesis.repository.server.kernel.RepositoryRequests;
 import build.jenesis.repository.server.spi.Authorization;
+import build.jenesis.repository.store.ArtifactStore;
 import build.jenesis.repository.ui.store.CacheService;
+import build.jenesis.repository.ui.store.SettingsAdmin;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.ExceptionHandler;
+import org.springframework.web.bind.annotation.RequestBody;
+import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestHeader;
@@ -55,6 +60,7 @@ public class CacheProjectsController {
     private final AuditTrail audit;
     private final RepositoryRouting routing;
     private final CacheService.Passes passes;
+    private final ArtifactStore root;
 
     /**
      * The cache's own segment of the store is wired by the console node, so a repository-only composition does not
@@ -69,8 +75,8 @@ public class CacheProjectsController {
      */
     public CacheProjectsController(@Qualifier("cacheRootStorage") ObjectProvider<CacheStorage> storage,
                                    AuditTrail audit,
-                                   RepositoryRouting routing) {
-        this(storage, audit, routing, CacheService.Passes.BACKGROUND);
+                                   RepositoryRouting routing, ArtifactStore root) {
+        this(storage, audit, routing, root, CacheService.Passes.BACKGROUND);
     }
 
     /**
@@ -81,15 +87,21 @@ public class CacheProjectsController {
      */
     public CacheProjectsController(ObjectProvider<CacheStorage> storage,
                                    AuditTrail audit,
-                                   RepositoryRouting routing,
+                                   RepositoryRouting routing, ArtifactStore root,
                                    CacheService.Passes passes) {
         this.storage = storage;
         this.audit = audit;
         this.routing = routing;
+        this.root = root;
         this.passes = passes;
     }
 
-    /** Every project on the volume with its stored counts and caps - the project set, never the entries behind it. */
+    /**
+     * Every project on the volume with its stored counts and caps - the project set, never the entries behind it.
+     *
+     * <p>It reads the tenant's and the deployment's settings documents, which the values it resolves inherit from: one
+     * object per module under a constant prefix, narrow by construction.
+     */
     @GetMapping("/api/cache/projects")
     public List<CacheService.ProjectSummary> list(@RequestHeader(value = Repositories.KEY, required = false) String key,
                                                   HttpServletRequest request,
@@ -112,6 +124,10 @@ public class CacheProjectsController {
         return Map.of("name", name, "created", true);
     }
 
+    /**
+     * It reads the tenant's and the deployment's settings documents, which the values it resolves inherit from: one
+     * object per module under a constant prefix, narrow by construction.
+     */
     @GetMapping("/api/cache/projects/{name}")
     public CacheService.ProjectDetail detail(@PathVariable("name") String name,
                                              @RequestHeader(value = Repositories.KEY, required = false) String key,
@@ -125,7 +141,12 @@ public class CacheProjectsController {
         return service.project(name);
     }
 
-    /** The well-known cache values; an omitted parameter clears that value rather than leaving the previous one. */
+    /**
+     * The well-known cache values; an omitted parameter clears that value rather than leaving the previous one.
+     *
+     * <p>It reads the tenant's and the deployment's settings documents, which the values it resolves inherit from: one
+     * object per module under a constant prefix, narrow by construction.
+     */
     @PostMapping("/api/cache/projects/{name}/cache")
     public CacheService.ProjectDetail saveCache(@PathVariable("name") String name,
                                                 @RequestParam(name = "size", required = false) String size,
@@ -143,6 +164,90 @@ public class CacheProjectsController {
         return service.project(name);
     }
 
+    /** A project's settings - every project setting the catalogue carries, with the project's effective value, what it
+     *  would inherit from its tenant and the deployment, and whether it set its own.
+     *
+     * <p>It reads the tenant's and the deployment's settings documents, which the values it resolves inherit from: one
+     * object per module under a constant prefix, narrow by construction.
+     */
+    @GetMapping("/api/cache/projects/{name}/settings")
+    public List<SettingView> settings(@PathVariable("name") String name,
+                                      @RequestHeader(value = Repositories.KEY, required = false) String key,
+                                      HttpServletRequest request, HttpServletResponse response) throws IOException {
+        CacheService service = service(key, request, response);
+        if (service == null) {
+            return List.of();
+        }
+        RepositoryRequests.rejectTraversal(name);
+        return service.settings(name).stream().flatMap(group -> group.settings().stream()).map(SettingView::of)
+                .toList();
+    }
+
+    /**
+     * Set one project setting, validated through the catalogue: {@code 400} naming the refusal, nothing stored.
+     *
+     * <p>It reads the tenant's and the deployment's settings documents, which the values it resolves inherit from: one
+     * object per module under a constant prefix, narrow by construction.
+     */
+    @PutMapping("/api/cache/projects/{name}/settings/{setting}")
+    public void setSetting(@PathVariable("name") String name, @PathVariable("setting") String setting,
+                           @RequestBody(required = false) Map<String, String> body,
+                           @RequestHeader(value = Repositories.KEY, required = false) String key,
+                           HttpServletRequest request, HttpServletResponse response) throws IOException {
+        String value = body == null || body.get("value") == null ? "" : body.get("value");
+        writeSetting(name, setting, value, key, request, response);
+    }
+
+    /**
+     * Clear one project setting, so the project inherits its tenant's and the deployment's again.
+     *
+     * <p>It reads the tenant's and the deployment's settings documents, which the values it resolves inherit from: one
+     * object per module under a constant prefix, narrow by construction.
+     */
+    @DeleteMapping("/api/cache/projects/{name}/settings/{setting}")
+    public void clearSetting(@PathVariable("name") String name, @PathVariable("setting") String setting,
+                             @RequestHeader(value = Repositories.KEY, required = false) String key,
+                             HttpServletRequest request, HttpServletResponse response) throws IOException {
+        writeSetting(name, setting, "", key, request, response);
+    }
+
+    private void writeSetting(String name, String setting, String value, String key, HttpServletRequest request,
+                              HttpServletResponse response) throws IOException {
+        CacheService service = service(key, request, response);
+        if (service == null) {
+            return;
+        }
+        RepositoryRequests.rejectTraversal(name);
+        service.saveSetting(name, setting, value);
+        response.setStatus(200);
+    }
+
+    /** A value the catalogue refuses, a missing project or a malformed name is the caller's to fix: {@code 400},
+     *  naming what was refused. */
+    @ExceptionHandler(IllegalArgumentException.class)
+    public void refused(IllegalArgumentException refused, HttpServletResponse response) throws IOException {
+        response.setStatus(400);
+        response.setContentType("text/plain;charset=UTF-8");
+        response.getWriter().write(refused.getMessage() == null ? "refused" : refused.getMessage());
+    }
+
+    /** One project setting as the API answers it - the shape {@code GET /api/settings} lists a setting in, so a client
+     *  reads either the same way. */
+    public record SettingView(String key, String kind, String value, String defaultValue, boolean overridden,
+                              boolean appliesImmediately, boolean pinned, String pinnedBy, String group, String label,
+                              String description, boolean advanced) {
+
+        static SettingView of(SettingsAdmin.SettingView view) {
+            return new SettingView(view.key(), view.kind(), view.value(), view.defaultValue(), view.overridden(),
+                    view.live(), view.pinned(), view.pinnedBy(), view.group(), view.label(), view.description(),
+                    view.advanced());
+        }
+    }
+
+    /**
+     * It reads the tenant's and the deployment's settings documents, which the values it resolves inherit from: one
+     * object per module under a constant prefix, narrow by construction.
+     */
     @PostMapping("/api/cache/projects/{name}/evict/size")
     public Map<String, Object> enforceSizeCap(@PathVariable("name") String name,
                                               @RequestHeader(value = Repositories.KEY, required = false) String key,
@@ -151,6 +256,10 @@ public class CacheProjectsController {
         return pass(name, key, request, response, CacheService::enforceSizeCap);
     }
 
+    /**
+     * It reads the tenant's and the deployment's settings documents, which the values it resolves inherit from: one
+     * object per module under a constant prefix, narrow by construction.
+     */
     @PostMapping("/api/cache/projects/{name}/evict/ttl")
     public Map<String, Object> expireTtl(@PathVariable("name") String name,
                                          @RequestHeader(value = Repositories.KEY, required = false) String key,
@@ -224,6 +333,10 @@ public class CacheProjectsController {
             return null;
         }
         String actor = key == null ? "anonymous" : Authorization.hash(key);
-        return new CacheService(cache.scope(tenant), audit, () -> tenant, () -> actor, passes);
+        // A project's policy is its project settings; the settings are read and written over the same root store the
+        // cache delegates into, validated through the catalogue, and audited as this request's writes.
+        SettingsAdmin settings = new SettingsAdmin(root, _ -> Optional.empty(), List::of, audit, () -> tenant,
+                () -> actor);
+        return new CacheService(cache.scope(tenant), audit, () -> tenant, () -> actor, settings, passes);
     }
 }

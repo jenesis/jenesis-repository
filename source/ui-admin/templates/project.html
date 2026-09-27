@@ -25,31 +25,24 @@
         <button th:replace="~{base :: secondaryButton('Count entries now')}">Count entries now</button>
     </form>
 
-    <article>
-        <h2>Cache settings</h2>
-        <!--/* What a reader who may not change them sees is the values; the form is an editor's. */-->
-        <dl th:unless="${isEditor}">
-            <dt>Size cap</dt><dd th:text="${#strings.isEmpty(project.size)} ? 'none' : ${project.size}">none</dd>
-            <dt>Eviction order</dt>
-            <dd th:text="${project.lru} ? 'least-recently-used first' : 'most-recently-used first'">order</dd>
-            <dt>TTL</dt><dd th:text="${#strings.isEmpty(project.ttl)} ? 'none' : ${project.ttl}">none</dd>
-        </dl>
-        <form th:if="${isEditor}" method="post" th:action="@{'/ui/projects/' + ${project.name} + '/cache'}">
-            <label>Size cap <small>(bytes; blank = no cap)</small>
-                <input name="size" th:value="${project.size}" inputmode="numeric" placeholder="(none)">
-            </label>
-            <label>Eviction order
-                <select name="lru">
-                    <option value="true" th:selected="${project.lru}">least-recently-used first</option>
-                    <option value="false" th:selected="${!project.lru}">most-recently-used first</option>
-                </select>
-            </label>
-            <label>TTL <small>(ISO-8601 duration, e.g. P30D or PT12H; blank = none)</small>
-                <input name="ttl" th:value="${project.ttl}" placeholder="P30D">
-            </label>
-            <button th:replace="~{base :: primaryButton('Save settings')}">Save settings</button>
-        </form>
-    </article>
+    <!--/* The project's policy is its project settings, rendered as every settings screen renders them: the
+         project's own value where it set one, else its tenant's, else the deployment's. An editor edits them; anyone
+         else reads the values. */-->
+    <th:block th:if="${isEditor}" th:each="g : ${groups}">
+        <article th:replace="~{fragments :: settingGroup(${g}, '/ui/projects/' + ${project.name} + '/settings/save',
+                null, 'project value', 'inherited', 'the inherited value', ' for this project')}"></article>
+    </th:block>
+    <th:block th:unless="${isEditor}" th:each="g : ${groups}">
+        <article class="setting-group">
+            <h2 th:text="${g.name}">Group</h2>
+            <dl>
+                <th:block th:each="s : ${g.settings}">
+                    <dt th:text="${s.label}">Label</dt>
+                    <dd th:text="${s.effectiveDisplay()}">value</dd>
+                </th:block>
+            </dl>
+        </article>
+    </th:block>
 
     <article>
         <h2>Access</h2>

@@ -199,13 +199,13 @@ final class LifecycleCommands {
                         + "[--prerelease-expiry D] [--not-downloaded-for D]");
             }
             String repo = args[2];
-            int keepLast = 0;
+            String keepLast = null;
             String maxAge = null;
             String prereleaseExpiry = null;
             String notDownloadedFor = null;
             for (int i = 3; i < args.length; i++) {
                 switch (args[i]) {
-                    case "--keep-last" -> keepLast = Integer.parseInt(CliSupport.flag(args, ++i));
+                    case "--keep-last" -> keepLast = CliSupport.flag(args, ++i);
                     case "--max-age" -> maxAge = CliSupport.flag(args, ++i);
                     case "--prerelease-expiry" -> prereleaseExpiry = CliSupport.flag(args, ++i);
                     case "--not-downloaded-for" -> notDownloadedFor = CliSupport.flag(args, ++i);
@@ -216,7 +216,7 @@ final class LifecycleCommands {
                 System.out.println("Retention is not installed on this deployment.");
                 return 1;
             }
-            System.out.println("Set the retention policy of " + repo + ".");
+            System.out.println("Set the given retention rules of " + repo + "; the rest are as they were.");
             return 0;
         }
         LifecycleClient.RetentionView view = client.lifecycle().retention(args[1]);

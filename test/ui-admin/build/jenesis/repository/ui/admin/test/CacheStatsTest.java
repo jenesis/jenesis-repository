@@ -6,7 +6,9 @@ import module java.base;
 import build.jenesis.repository.audit.AuditTrail;
 import build.jenesis.repository.cache.storage.CacheStorage;
 import build.jenesis.repository.cache.storage.testkit.CacheStorages;
+import build.jenesis.repository.store.ArtifactStoreProvider;
 import build.jenesis.repository.ui.store.CacheService;
+import build.jenesis.repository.ui.store.SettingsAdmin;
 import org.junit.jupiter.api.io.TempDir;
 import static org.assertj.core.api.Assertions.assertThat;
 
@@ -27,7 +29,13 @@ class CacheStatsTest {
     void setUp() throws IOException {
         storage = CacheStorages.filesystem(cacheRoot);
         storage.createProject("libs");
-        service = new CacheService(storage, AuditTrail.none(), () -> "acme", () -> "octo");
+        service = new CacheService(storage, AuditTrail.none(), () -> "acme", () -> "octo", settings());
+    }
+
+    /** The projects' settings, over the store the cache keeps them in. */
+    private SettingsAdmin settings() {
+        return new SettingsAdmin(ArtifactStoreProvider.resolve("filesystem",
+                key -> "jenreg.filesystem.root".equals(key) ? cacheRoot.toString() : null));
     }
 
     @Test
@@ -75,7 +83,7 @@ class CacheStatsTest {
                 new ByteArrayInputStream("abc".getBytes(StandardCharsets.UTF_8)));
         storage.createProject("keep");
         CacheService deleting = new CacheService(storage, AuditTrail.none(), () -> "acme", () -> "octo",
-                CacheService.Passes.CALLING_THREAD);
+                settings(), CacheService.Passes.CALLING_THREAD);
 
         assertThat(deleting.deleteProject("libs")).isTrue();
 
@@ -89,7 +97,7 @@ class CacheStatsTest {
     void a_deletion_is_refused_while_a_pass_runs() throws Exception {
         CountDownLatch release = new CountDownLatch(1);
         CacheService held = new CacheService(storage, AuditTrail.none(), () -> "acme", () -> "octo",
-                (name, pass) -> Thread.ofVirtual().name(name).start(() -> {
+                settings(), (name, pass) -> Thread.ofVirtual().name(name).start(() -> {
                     try {
                         release.await();
                     } catch (InterruptedException interrupted) {

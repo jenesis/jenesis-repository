@@ -167,11 +167,6 @@ public class EvictionTest {
         }
 
         @Override
-        public Object configVersion(String project) {
-            throw new UnsupportedOperationException();
-        }
-
-        @Override
         public boolean exists(Entry entry) {
             throw new UnsupportedOperationException();
         }
@@ -308,11 +303,6 @@ public class EvictionTest {
 
         @Override
         public Properties readConfig(String project, String file) {
-            throw new UnsupportedOperationException();
-        }
-
-        @Override
-        public Object configVersion(String project) {
             throw new UnsupportedOperationException();
         }
 

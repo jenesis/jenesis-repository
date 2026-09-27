@@ -71,6 +71,16 @@ public class RepositoryAuthorizationScopeTest {
     }
 
     @Test
+    public void a_repositorys_settings_are_the_administration_of_that_repository() {
+        // Where a repository fetches from and how long it keeps what it holds are decided by an administrator of the
+        // repository, not by a key that may publish into it.
+        assertThat(RepositoryAuthorizationManager.classify("/api/repository/settings/routing", "repo=releases"))
+                .isEqualTo(new Target("releases", null, true));
+        assertThat(RepositoryAuthorizationManager.classify("/api/repository/settings", "repo=releases"))
+                .isEqualTo(new Target("releases", null, true));
+    }
+
+    @Test
     public void an_operation_naming_no_single_repository_is_a_deployment_surface() {
         // With no repo, or with two, the handler would act on something other than what was authorized, so the
         // request falls back to the management scope a repository key does not hold.

@@ -41,16 +41,17 @@
             <div th:replace="~{base :: empty('Nothing published or cached yet.')}"></div>
         </th:block>
     </article>
-    <!--/* How the repository is routed for this tenant, and where that comes from: the tenant's own definition, the
-         deployment's, which every tenant inherits, or none. A super-admin routes it for this tenant here - the
-         operator's decision on every surface - and the deployment's definitions stay on Upstreams. */-->
+    <!--/* How the repository is routed, and where that comes from: its own routing setting, the deployment's definition
+         of its name, which every tenant's repository of that name inherits, or none. A super-admin routes it here -
+         the operator's decision on every surface - through the repository's routing setting, and the deployment's
+         definitions stay on Upstreams. */-->
     <article th:if="${shape.configured() or isSuperadmin}" id="shape">
         <h2>Routing</h2>
         <p><small>Whether this repository accepts uploads, and its ordered fallbacks with each one's copy and screening
             policy.</small></p>
         <p th:if="${shape.configured()}"><span th:replace="~{fragments :: shapeBadges(${shape})}"></span></p>
         <p><small th:switch="${routing.layer().name()}">
-            <span th:case="'TENANT'">Set for this tenant, over the deployment's definition.</span>
+            <span th:case="'REPOSITORY'">Set for this repository, over the deployment's definition.</span>
             <span th:case="'DEPLOYMENT'">Inherited from the deployment's definition<span th:if="${isSuperadmin}">
                 on <a th:href="@{/ui/settings/upstreams}">Upstreams</a></span>, which every tenant shares.</span>
             <span th:case="*"><th:block th:if="${formatUpstream == null}">Not defined: a hosted repository that
@@ -63,19 +64,24 @@
             <li th:each="w : ${shape.warnings()}">⚑ <span th:text="${w}">warning</span></li>
         </ul>
         <details th:if="${isSuperadmin}">
-            <summary th:text="${routing.layer().name() == 'TENANT'} ? 'Edit the routing for this tenant' : 'Route for this tenant'">Route for this tenant</summary>
-            <form method="post" th:action="@{'/ui/repositories/' + ${repo} + '/routing'}">
+            <summary th:text="${routing.layer().name() == 'REPOSITORY'} ? 'Edit the routing of this repository' : 'Route this repository'">Route this repository</summary>
+            <form method="post" th:action="@{'/ui/repositories/' + ${repo} + '/settings/save'}">
+                <input type="hidden" name="key" value="routing">
+                <input type="hidden" name="return" th:value="'/ui/repositories/' + ${repo}">
                 <label>Definition <small>(writable, fallback &lt;url&gt; [nocache] [harden] [unscreened], fallback
                     &lt;repository&gt;)</small>
-                    <input name="definition" required placeholder="fallback https://repo1.maven.org/maven2/"
-                           th:value="${routing.layer().name() == 'TENANT'} ? ${routing.specification()} : ''">
+                    <input name="value" required placeholder="fallback https://repo1.maven.org/maven2/"
+                           th:value="${routing.layer().name() == 'REPOSITORY'} ? ${routing.specification()} : ''">
                 </label>
-                <button th:replace="~{base :: primaryButton('Save for this tenant')}">Save for this tenant</button>
+                <button th:replace="~{base :: primaryButton('Save routing')}">Save routing</button>
             </form>
         </details>
-        <form th:if="${isSuperadmin and routing.layer().name() == 'TENANT'}" method="post"
-              th:action="@{'/ui/repositories/' + ${repo} + '/routing/remove'}">
-            <button th:replace="~{base :: dangerButton('Use the deployment routing', 'Remove this tenant routing? The repository routes as the deployment defines it again.')}">Use the deployment routing</button>
+        <form th:if="${isSuperadmin and routing.layer().name() == 'REPOSITORY'}" method="post"
+              th:action="@{'/ui/repositories/' + ${repo} + '/settings/save'}">
+            <input type="hidden" name="key" value="routing">
+            <input type="hidden" name="value" value="">
+            <input type="hidden" name="return" th:value="'/ui/repositories/' + ${repo}">
+            <button th:replace="~{base :: dangerButton('Use the deployment routing', 'Remove the routing of this repository? It routes as the deployment defines its name again.')}">Use the deployment routing</button>
         </form>
     </article>
 

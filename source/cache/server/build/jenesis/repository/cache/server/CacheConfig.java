@@ -3,6 +3,7 @@ package build.jenesis.repository.cache.server;
 import module java.base;
 import module org.slf4j;
 import build.jenesis.repository.cache.storage.CacheStorageProvider;
+import build.jenesis.repository.settings.StoredSettings;
 import build.jenesis.repository.store.StoreCache;
 import build.jenesis.repository.server.spi.Authorization;
 import build.jenesis.repository.store.metering.MeteringArtifactStore;
@@ -88,6 +89,9 @@ public class CacheConfig {
         // A project's policy is trusted for the same window as the credential a request is authorised against.
         Duration policyInterval = StoreCache.configuredTtl();
         cache.policyInterval(policyInterval);
+        // A project's policy is its project settings, read from the store it and its tenant and the deployment keep
+        // them in - the same documents the console and the API write.
+        cache.policies((tenant, project) -> StoredSettings.projectChain(artifactStore, tenant, project));
         cache.start();
         LOGGER.info("jenesis-cache ready (storage {}, project cache {}, reaper {}, touch window {}, policy window {}, "
                         + "min free {}B/{}%, project {}, keys {})",

@@ -23,7 +23,7 @@ public final class HardeningSettingsContributor implements SettingsContributor {
                                 + "records the digest-pinned verdict, and evicts any that re-screen non-ALLOW so a "
                                 + "subsequent request re-fetches through the hardened leg. A converged pass re-screens "
                                 + "nothing.",
-                        Setting.Kind.BOOLEAN, "false", true).gate().essential(),
+                        Setting.Kind.BOOLEAN, "false", true).gate().standard(),
                 new Setting(MigrationRescreenTaskProvider.INTERVAL.key(), "Hardening proxy",
                         "Migration re-screen interval",
                         "How often the migration re-screen sweep runs, as an ISO-8601 duration. Daily by default: "

@@ -17,7 +17,10 @@ module build.jenesis.repository.cache.storage.delegating {
     requires build.jenesis.repository.cache.storage;
     requires build.jenesis.repository.store;
     requires build.jenesis.repository.walk;
+    requires build.jenesis.repository.settings;
     provides build.jenesis.repository.cache.storage.CacheStorageProvider with
             build.jenesis.repository.cache.storage.delegating.DelegatingCacheStorageProvider;
+    provides build.jenesis.repository.settings.SettingsContributor with
+            build.jenesis.repository.cache.storage.delegating.ProjectSettingsContributor;
     exports build.jenesis.repository.cache.storage.delegating;
 }

@@ -5,11 +5,11 @@ import build.jenesis.repository.cleanup.RetentionPolicy;
 import build.jenesis.repository.store.ArtifactStore;
 
 /**
- * The retention-policy storage subsystem extracted from {@link StoreRepositoryInventory}: this repository's
- * {@link RetentionPolicy} persisted as a small {@link #KEY} properties object. A stored policy that cannot
- * be parsed fails loudly rather than reading as "no policy" - silence around a deletion policy is exactly what an
- * operator must never get. The facade owns the seam - {@code readRetention}/{@code writeRetention} delegate here - and
- * this class shares the facade's compare-and-set {@code writeVersioned}.
+ * The retention policy a repository stored before its rules were repository settings: a small {@link #KEY}
+ * properties object nothing writes any more. The one-time move of each such policy into its repository's settings
+ * reads it through here ({@code StoreRepositoryInventory.formerRetention}) and leaves it in place - nothing deletes
+ * data automatically. A stored policy that cannot be parsed fails loudly rather than reading as "no policy" - silence
+ * around a deletion policy is exactly what an operator must never get.
  *
  * <p><strong>The key sits at repository scope, where the data does.</strong> Spelled under {@code config/} - the
  * name of the deployment-global reserved root - it would read like a shared claim while being nothing of the kind,
@@ -23,11 +23,9 @@ final class InventoryRetention {
     /** The per-repository key this policy is stored under, relative to the repository-scoped store. */
     static final String KEY = "retention";
 
-    private final StoreRepositoryInventory inventory;
     private final ArtifactStore store;
 
-    InventoryRetention(StoreRepositoryInventory inventory, ArtifactStore store) {
-        this.inventory = inventory;
+    InventoryRetention(ArtifactStore store) {
         this.store = store;
     }
 
@@ -46,23 +44,5 @@ final class InventoryRetention {
         } catch (RuntimeException e) {
             throw new IOException("corrupt retention policy at " + KEY, e);
         }
-    }
-
-    /** Store this repository's retention policy. */
-    void writeRetention(RetentionPolicy policy) throws IOException {
-        Properties values = new Properties();
-        values.setProperty("keepLast", Integer.toString(policy.keepLast()));
-        if (policy.maxAge() != null) {
-            values.setProperty("maxAge", policy.maxAge().toString());
-        }
-        if (policy.prereleaseExpiry() != null) {
-            values.setProperty("prereleaseExpiry", policy.prereleaseExpiry().toString());
-        }
-        if (policy.notDownloadedFor() != null) {
-            values.setProperty("notDownloadedFor", policy.notDownloadedFor().toString());
-        }
-        ByteArrayOutputStream bytes = new ByteArrayOutputStream();
-        values.store(bytes, null);
-        inventory.writeVersioned(KEY, bytes.toByteArray());
     }
 }

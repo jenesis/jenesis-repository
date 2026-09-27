@@ -4,6 +4,7 @@ import module java.base;
 
 import build.jenesis.repository.ui.CurrentTenant;
 import build.jenesis.repository.cache.storage.CacheStorage;
+import build.jenesis.repository.cache.storage.ProjectPolicy;
 import build.jenesis.repository.cache.storage.Names;
 import build.jenesis.repository.audit.AuditTrail;
 import build.jenesis.repository.walk.Traversal;
@@ -12,8 +13,8 @@ import build.jenesis.repository.walk.Traversal;
  * Orchestrates the project operations the controllers need on top of the {@link CacheStorage} SPI.
  * The injected storage is the primary {@code tenantStorage} view, already confined to the session's
  * selected tenant, so this service simply lists projects with their stats, creates a project, edits
- * its {@code cache.properties} (size / lru / ttl), and runs per-project eviction - all within that one
- * tenant. Access control is not per project: credentials live under {@code .users/} and grant projects
+ * its policy settings (size cap, sweep order, unused-entry lifetime), and runs per-project eviction - all within that
+ * one tenant. Access control is not per project: credentials live under {@code .users/} and grant projects
  * by role. Cross-tenant disk reclaim is a super-admin concern and lives in {@link VolumeReclaim}.
  */
 public class CacheService {
@@ -23,6 +24,7 @@ public class CacheService {
     private final CurrentTenant current;
     private final ConsoleActor actor;
     private final Passes passes;
+    private final SettingsAdmin settings;
 
     /**
      * How a background pass is started.
@@ -53,12 +55,16 @@ public class CacheService {
         Passes CALLING_THREAD = (name, pass) -> pass.run();
     }
 
-    public CacheService(CacheStorage storage, AuditTrail audit, CurrentTenant current, ConsoleActor actor) {
-        this(storage, audit, current, actor, Passes.BACKGROUND);
+    public CacheService(CacheStorage storage, AuditTrail audit, CurrentTenant current, ConsoleActor actor,
+                        SettingsAdmin settings) {
+        this(storage, audit, current, actor, settings, Passes.BACKGROUND);
     }
 
+    /** {@code settings} reads and writes a project's policy - its project settings, validated through the settings
+     *  catalogue - which is what a size cap or expiry sweep started here applies. */
     public CacheService(CacheStorage storage, AuditTrail audit, CurrentTenant current, ConsoleActor actor,
-                        Passes passes) {
+                        SettingsAdmin settings, Passes passes) {
+        this.settings = settings;
         this.passes = passes;
         this.storage = storage;
         this.audit = audit;
@@ -228,40 +234,75 @@ public class CacheService {
             cursor = page.cursor().orElseThrow();
         }
         names.sort(Comparator.naturalOrder());
+        SettingsAdmin.ProjectConfigs configs = unchecked(() -> settings.projectConfigs(current.name()));
         for (String name : names) {
-            Properties cache = storage.readConfig(name, CacheConfig.FILE);
+            UnaryOperator<String> config = unchecked(() -> configs.of(name));
             Stats stats = stats(name);                      // the stored figure, never a sweep per row
             summaries.add(new ProjectSummary(name, stats.entryCount(), stats.totalBytes(),
-                    CacheConfig.size(cache), CacheConfig.ttl(cache), stats));
+                    orEmpty(config.apply(ProjectPolicy.SIZE)), orEmpty(config.apply(ProjectPolicy.TTL)), stats));
         }
         return summaries;
     }
 
     public ProjectDetail project(String name) {
         requireProject(name);
-        Properties cache = storage.readConfig(name, CacheConfig.FILE);
+        UnaryOperator<String> config = unchecked(() -> settings.projectConfig(current.name(), name));
         Stats stats = stats(name);
-        return new ProjectDetail(name, CacheConfig.size(cache), CacheConfig.lru(cache), CacheConfig.ttl(cache),
+        return new ProjectDetail(name, orEmpty(config.apply(ProjectPolicy.SIZE)),
+                ProjectPolicy.lru(config.apply(ProjectPolicy.LRU)), orEmpty(config.apply(ProjectPolicy.TTL)),
                 stats.entryCount(), stats.totalBytes(), stats);
     }
 
-    /** Create a project and seed a default cache.properties (no access is granted here - see credentials). */
+    private static String orEmpty(String value) {
+        return value == null ? "" : value.trim();
+    }
+
+    /** A read of the settings a render cannot recover from - an unreadable store - raised unchecked, as the storage
+     *  reads beside it are. */
+    private static <T> T unchecked(Read<T> read) {
+        try {
+            return read.get();
+        } catch (IOException unreadable) {
+            throw new UncheckedIOException(unreadable);
+        }
+    }
+
+    @FunctionalInterface
+    private interface Read<T> {
+        T get() throws IOException;
+    }
+
+    /** Create a project (no access is granted here - see credentials); its policy is whatever its tenant's and the
+     *  deployment's project settings say until it is given its own. */
     public void createProject(String name) throws IOException {
         String validated = validateName(name);
         if (storage.projectExists(validated)) {
             throw new IllegalArgumentException("Project already exists: " + name);
         }
         storage.createProject(validated);
-        Properties cache = new Properties();
-        CacheConfig.apply(cache, "", "true", "");
-        storage.writeConfig(validated, CacheConfig.FILE, cache);
     }
 
+    /** A project's settings, grouped for its screen - see {@link SettingsAdmin#projectGroups}. */
+    public List<SettingsAdmin.Group> settings(String name) throws IOException {
+        requireProject(name);
+        return settings.projectGroups(current.name(), name);
+    }
+
+    /** Set or clear one of a project's settings through the catalogue. */
+    public void saveSetting(String name, String key, String value) throws IOException {
+        requireProject(name);
+        settings.saveProject(current.name(), name, Map.of(key, value));
+    }
+
+    /** Set a project's three policy settings - each given value set, each omitted ({@code null} or blank) one
+     *  cleared, so the project inherits its tenant's and the deployment's - through the settings catalogue. */
     public void saveCacheConfig(String name, String size, String lru, String ttl) throws IOException {
         requireProject(name);
-        Properties cache = storage.readConfig(name, CacheConfig.FILE);
-        CacheConfig.apply(cache, size, lru, ttl);
-        storage.writeConfig(name, CacheConfig.FILE, cache);
+        Map<String, String> values = new LinkedHashMap<>();
+        values.put(ProjectPolicy.SIZE, size == null ? "" : size);
+        values.put(ProjectPolicy.LRU, lru == null ? "" : lru);
+        values.put(ProjectPolicy.TTL, ttl == null ? "" : ttl);
+        settings.saveProject(current.name(), name, values);
     }
 
     /** Start the size-cap sweep in the background; whether it was started (not while another pass runs). Audited
@@ -289,14 +330,18 @@ public class CacheService {
     /** The sweeps themselves - what the background passes run, and the test seam. */
     public Eviction.Result enforceSizeCapNow(String name) {
         requireProject(name);
-        Properties cache = storage.readConfig(name, CacheConfig.FILE);
-        return Eviction.enforceSizeCap(storage, name, CacheConfig.sizeBytes(cache), CacheConfig.lru(cache));
+        ProjectPolicy policy = policy(name);
+        return Eviction.enforceSizeCap(storage, name, policy.size(), policy.lru());
     }
 
     public Eviction.Result expireTtlNow(String name) {
         requireProject(name);
-        Properties cache = storage.readConfig(name, CacheConfig.FILE);
-        return Eviction.expireTtl(storage, name, CacheConfig.ttlDuration(cache));
+        return Eviction.expireTtl(storage, name, policy(name).ttl());
+    }
+
+    /** The policy a sweep started here applies: the project's effective settings, parsed as the cache parses them. */
+    private ProjectPolicy policy(String name) {
+        return ProjectPolicy.of(unchecked(() -> settings.projectConfig(current.name(), name)));
     }
 
     public Eviction.Result clearAllNow(String name) {

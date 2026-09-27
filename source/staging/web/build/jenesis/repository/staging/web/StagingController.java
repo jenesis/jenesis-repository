@@ -53,6 +53,10 @@ public class StagingController {
         this.audit = audit;
     }
 
+    /**
+     * The tenant settings it consults come from the tenant's settings documents, read once per tenant into a cached
+     * snapshot: one object per module under a constant prefix, narrow by construction.
+     */
     @PutMapping("/staging/{tenant}/{repo}/{id}/**")
     public void stage(@PathVariable("repo") String repo, @PathVariable("id") String id,
                       @RequestHeader(value = Repositories.KEY, required = false) String key,
@@ -80,6 +84,10 @@ public class StagingController {
         response.setStatus(201);
     }
 
+    /**
+     * The tenant settings it consults come from the tenant's settings documents, read once per tenant into a cached
+     * snapshot: one object per module under a constant prefix, narrow by construction.
+     */
     @PostMapping("/api/repository/staging/{id}/promote")
     public void promote(@RequestParam("repo") String repo, @PathVariable("id") String id,
                         @RequestHeader(value = Repositories.KEY, required = false) String key,
@@ -98,6 +106,10 @@ public class StagingController {
         response.setStatus(200);
     }
 
+    /**
+     * The tenant settings it consults come from the tenant's settings documents, read once per tenant into a cached
+     * snapshot: one object per module under a constant prefix, narrow by construction.
+     */
     @PostMapping("/api/repository/staging/{id}/drop")
     public void drop(@RequestParam("repo") String repo, @PathVariable("id") String id,
                      @RequestHeader(value = Repositories.KEY, required = false) String key,
@@ -115,6 +127,10 @@ public class StagingController {
         response.setStatus(200);
     }
 
+    /**
+     * The tenant settings it consults come from the tenant's settings documents, read once per tenant into a cached
+     * snapshot: one object per module under a constant prefix, narrow by construction.
+     */
     @GetMapping("/api/repository/staging")
     @ResponseBody
     public StagingList stagingList(@RequestParam("repo") String repo,

@@ -129,33 +129,6 @@ public enum CacheStorageMutant {
         }
     },
 
-    /** The absence sentinel: a version token is answered for a config that does not exist. */
-    A_CONFIG_VERSION_THAT_IS_ALWAYS_PRESENT("the absence sentinel - an absent config still answers a token") {
-        @Override
-        public CacheStorage decorate(CacheStorage delegate) {
-            return new Forwarding(delegate, this) {
-                @Override
-                public Object configVersion(String project) {
-                    Object token = delegate.configVersion(project);
-                    return token == null ? "invented" : token;
-                }
-            };
-        }
-    },
-
-    /** The advance: the token is one constant, so a rewrite is indistinguishable from no write. */
-    A_CONFIG_VERSION_THAT_NEVER_MOVES("the advance - the config token is one constant") {
-        @Override
-        public CacheStorage decorate(CacheStorage delegate) {
-            return new Forwarding(delegate, this) {
-                @Override
-                public Object configVersion(String project) {
-                    return delegate.configVersion(project) == null ? null : "frozen";
-                }
-            };
-        }
-    },
-
     /** The config-path screen: a path that escapes the scope, or a hostile file name, is written anyway. */
     A_CONFIG_PATH_SCREEN_THAT_PASSES("the config-path screen - an escaping path is written") {
         @Override
@@ -416,11 +389,6 @@ public enum CacheStorageMutant {
         @Override
         public Properties readConfig(String project, String file) {
             return delegate.readConfig(project, file);
-        }
-
-        @Override
-        public Object configVersion(String project) {
-            return delegate.configVersion(project);
         }
 
         @Override

@@ -433,28 +433,6 @@ class AuthorizationTest {
     }
 
     @Test
-    void a_tenant_storage_quota_is_stored_set_and_cleared() throws IOException {
-        assertThat(authorization.quotas().of("acme")).as("none set is unlimited").isZero();
-
-        authorization.quotas().set("acme", 1_099_511_627_776L);
-        assertThat(authorization.quotas().of("acme")).isEqualTo(1_099_511_627_776L);
-
-        authorization.quotas().set("acme", 0);
-        assertThat(authorization.quotas().of("acme")).as("zero clears it").isZero();
-    }
-
-    @Test
-    void a_tenant_rate_limit_is_stored_set_and_cleared() throws IOException {
-        assertThat(authorization.rateLimits().of("acme")).as("none set is the deployment default").isZero();
-
-        authorization.rateLimits().set("acme", 600);
-        assertThat(authorization.rateLimits().of("acme")).isEqualTo(600);
-
-        authorization.rateLimits().set("acme", 0);
-        assertThat(authorization.rateLimits().of("acme")).as("zero clears it").isZero();
-    }
-
-    @Test
     void a_concurrent_use_flush_is_merged_not_silently_overwritten() throws IOException {
         String key = Authorization.mint("acme");
         String hash = Authorization.hash(key);

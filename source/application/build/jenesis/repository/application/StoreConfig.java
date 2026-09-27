@@ -32,6 +32,8 @@ import build.jenesis.repository.store.Tenants;
 import build.jenesis.repository.store.TenantsProvider;
 import build.jenesis.repository.gateway.LiveDefinitions;
 import build.jenesis.repository.server.ArtifactStoreDecorator;
+import build.jenesis.repository.server.kernel.SettingsScopeMove;
+import build.jenesis.repository.inventory.StoreRepositoryInventory;
 import org.springframework.context.annotation.Bean;
 import org.springframework.boot.ApplicationRunner;
 import org.springframework.core.annotation.Order;
@@ -175,6 +177,25 @@ public class StoreConfig {
         // variable.
         UnaryOperator<String> config = Features.namespaced(environment::getProperty);
         return new Settings(store, SecretCipher.of(config.apply("secrets-key")));
+    }
+
+    /**
+     * The one-time move of the configuration kept outside the settings catalogue into its tenant, repository and
+     * project settings ({@link SettingsScopeMove}), run as this node starts and before it serves, since what it moves
+     * decides how a request is answered. A read-only node moves nothing: it writes nothing, and a writing node of the
+     * same deployment makes the move.
+     */
+    @Bean
+    public SettingsScopeMove.Moved settingsScopeMove(ArtifactStore store, Settings settings,
+                                                    RepositoryProperties properties) throws IOException {
+        if (properties.isReadOnly()) {
+            return new SettingsScopeMove.Moved(new TreeMap<>());
+        }
+        SettingsScopeMove.Moved moved = new SettingsScopeMove(store,
+                repository -> new StoreRepositoryInventory(repository).formerRetention()).run();
+        // Anything this node read before the move is read again.
+        settings.refresh();
+        return moved;
     }
 
     @Bean

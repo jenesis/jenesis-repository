@@ -52,7 +52,7 @@ public final class WebhookSettingsContributor implements SettingsContributor {
                                 + "'jenreg.webhook.unsigned' gauge counts this tenant's endpoints that have none. "
                                 + "Write-only: stored as a secret, so it is redacted on read-back and kept out of the "
                                 + "settings export bundle.",
-                        Setting.Kind.SECRET, "", false, Setting.Scope.TENANT).essential(),
+                        Setting.Kind.SECRET, "", false, Setting.Scope.TENANT).standard(),
                 new Setting(WebhookDeliveryTaskProvider.INTERVAL.key(), "Webhooks", "Webhook drain interval",
                         "How often the webhook outbox is drained.",
                         Setting.Kind.DURATION, WebhookDeliveryTaskProvider.INTERVAL.fallbackText(), false).advanced(),
@@ -66,6 +66,6 @@ public final class WebhookSettingsContributor implements SettingsContributor {
                                 + "event metadata on the wire in cleartext; a deployment-global operator dial (the "
                                 + "same one the forwarding leg uses for its own targets), enable only for a trusted "
                                 + "internal receiver.",
-                        Setting.Kind.BOOLEAN, "false", false).essential());
+                        Setting.Kind.BOOLEAN, "false", false).standard());
     }
 }

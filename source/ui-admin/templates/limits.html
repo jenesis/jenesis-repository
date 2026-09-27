@@ -7,42 +7,34 @@
     <div th:replace="~{fragments :: messages}"></div>
     <header th:replace="~{base :: pageHeader('Limits')}"></header>
     <p><small>What this tenant's repositories may use together: each limit applies to all of them at once, never to
-        one.</small></p>
-    <div class="app-panels">
-        <article>
-            <h2>Storage quota</h2>
-            <p><small>A cap on what all repositories store together; a publish that would exceed it is
-                refused.</small></p>
-            <!--/* The meter runs only under a limit: without one, the store passes writes through uncounted, so a
-                 count here would read zero whatever is stored. */-->
-            <p th:if="${quota.maxBytes > 0}"><small>Storing <strong th:text="${quota.usedBytes}">0</strong> of
-                <strong th:text="${quota.maxBytes}">0</strong> bytes, as last counted; the cleanup pass recounts what is
-                stored.</small></p>
-            <p th:if="${quota.maxBytes == 0}"><small>No limit is set, so nothing is metered. Setting one counts what
-                is already stored on the next cleanup pass.</small></p>
-            <form th:if="${isAdmin}" method="post" th:action="@{/ui/limits/quota}">
-                <label>Maximum bytes (0 = unlimited)
-                    <input type="number" name="maxBytes" min="0" th:value="${quota.maxBytes}"></label>
-                <button th:replace="~{base :: primaryButton('Save quota')}">Save quota</button>
-            </form>
+        one. Each is a tenant setting: the deployment's value applies until this tenant sets its own.</small></p>
+    <article>
+        <h2>Storage used</h2>
+        <!--/* The meter runs only under a limit: without one, the store passes writes through uncounted, so a count
+             here would read zero whatever is stored. */-->
+        <p th:if="${quota.maxBytes > 0}"><small>Storing <strong th:text="${quota.usedBytes}">0</strong> of
+            <strong th:text="${quota.maxBytes}">0</strong> bytes, as last counted; the cleanup pass recounts what is
+            stored.</small></p>
+        <p th:if="${quota.maxBytes == 0}"><small>No quota applies, so nothing is metered. Setting one counts what is
+            already stored on the next cleanup pass.</small></p>
+    </article>
+    <!--/* The ceilings are the catalogue's own settings of the Limits group, rendered as every settings screen renders
+         them; an administrator edits them, anyone else reads them. */-->
+    <th:block th:if="${isAdmin}" th:each="g : ${groups}">
+        <article th:replace="~{fragments :: settingGroup(${g}, '/ui/limits/save', null, 'tenant override',
+                'deployment', 'the deployment value', ' for this tenant')}"></article>
+    </th:block>
+    <th:block th:unless="${isAdmin}" th:each="g : ${groups}">
+        <article class="setting-group">
+            <h2 th:text="${g.name}">Limits</h2>
+            <dl>
+                <th:block th:each="s : ${g.settings}">
+                    <dt th:text="${s.label}">Label</dt>
+                    <dd th:text="${s.effectiveDisplay()}">value</dd>
+                </th:block>
+            </dl>
         </article>
-        <article th:if="${capabilities.rateLimit()}">
-            <h2>Rate limit</h2>
-            <p><small>A ceiling on the request rate across all repositories; excess requests are answered
-                <code>429 Too Many Requests</code>.
-                <span th:if="${rateLimit > 0}">Currently <strong th:text="${rateLimit}">0</strong> permits per
-                    minute.</span>
-                <span th:if="${rateLimit == 0}">Currently the deployment's <strong
-                        th:text="${deploymentRateLimit == '0'} ? 'no limit' : ${deploymentRateLimit} + ' permits per minute'">6000
-                    permits per minute</strong><th:block th:if="${isSuperadmin}">, set as <a
-                        th:href="@{/ui/settings(q='rate-limit')}">Rate limit</a> on the Settings screen</th:block>.</span></small></p>
-            <form th:if="${isAdmin}" method="post" th:action="@{/ui/limits/rate-limit}">
-                <label>Permits per minute (0 = the deployment's)
-                    <input type="number" name="permitsPerMinute" min="0" th:value="${rateLimit}"></label>
-                <button th:replace="~{base :: primaryButton('Save rate limit')}">Save rate limit</button>
-            </form>
-        </article>
-    </div>
+    </th:block>
 </main>
 </body>
 </html>

@@ -248,6 +248,7 @@ public class GlobalControllerAdvice {
         pages.add(new RepositoryPage("Import", "/import", Topic.CONTENTS, "import"));
         pages.add(new RepositoryPage("Retention & cleanup", "/retention", Topic.LIFECYCLE, "retention"));
         pages.add(new RepositoryPage("Pins", "/pins", Topic.LIFECYCLE));
+        pages.add(new RepositoryPage("Settings", "/settings", Topic.LIFECYCLE));
         pages.addAll(capabilities.moduleRepositoryPages());
         String path = request.getRequestURI().substring(request.getContextPath().length());
         // Until a tenant is chosen there is nothing tenant-scoped to open: the reader sees what belongs to the

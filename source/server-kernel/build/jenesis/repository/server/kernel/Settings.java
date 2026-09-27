@@ -6,7 +6,9 @@ import build.jenesis.repository.scope.Scopes;
 import build.jenesis.repository.settings.SecretCipher;
 import build.jenesis.repository.settings.SettingsDocuments;
 import build.jenesis.repository.settings.SettingsScopes;
+import build.jenesis.repository.settings.Setting;
 import build.jenesis.repository.settings.SettingsSecrets;
+import build.jenesis.repository.settings.StoredSettings;
 import build.jenesis.repository.store.ArtifactStore;
 import build.jenesis.repository.store.Epoch;
 import build.jenesis.repository.store.Retries;
@@ -38,6 +40,11 @@ import build.jenesis.repository.store.Retries;
  * and always resolves deployment-wide. Gate policies, deny lists and forward targets can therefore differ per tenant
  * while deployment-wide knobs stay uniform. Each tenant's merged overrides are cached in the same way as the global
  * snapshot, lazily loaded and invalidated on a write or the scheduled re-read.
+ *
+ * <p><b>Per-repository scope.</b> A repository setting ({@link Setting.Scope#REPOSITORY}) is stored in the
+ * repository's own documents ({@link StoredSettings#repository}) and resolves over the tenant's and deployment's chain
+ * ({@link #getOrDefault(String, String, String, String)}); a local one - a repository's routing - has no wider value.
+ * A repository's values are cached like a tenant's.
  */
 public final class Settings {
 
@@ -48,12 +55,20 @@ public final class Settings {
     /** Bumped by every write, read by the refresh: one point read that says whether the documents changed, so the
      *  thirty-second refresh lists and re-reads every settings document only when another node wrote one. */
     private final Epoch epoch;
-    /** Beside the documents under {@code .system/config}: a key at the root would make {@code config} a tenant to
-     *  every pass that enumerates them, and its file a repository no pass can write under. */
-    static final String EPOCH = Scopes.space(Scopes.CONFIG) + "/settings-epoch";
+    /** The settings epoch's key ({@link SettingsDocuments#EPOCH}). */
+    static final String EPOCH = SettingsDocuments.EPOCH;
     /** Per-tenant merged overrides, lazily loaded and dropped on a write to that tenant or the scheduled refresh, so a
      *  tenant's effective values are served from memory like the global snapshot without a storage round-trip. */
     private final Map<String, Properties> tenantSnapshots = new ConcurrentHashMap<>();
+
+    /** Per-repository stored values, keyed {@code <tenant>/<repository>}, lazily loaded and dropped on a write to that
+     *  repository or the scheduled refresh - the repository counterpart of {@link #tenantSnapshots}, since the router
+     *  resolves a repository's routing per request. */
+    private final Map<String, Map<String, String>> repositorySnapshots = new ConcurrentHashMap<>();
+
+    /** How many repositories' snapshots are held; past this many a repository that holds no settings is read and not
+     *  cached, as {@link #TENANT_SNAPSHOTS} bounds the tenant map against invented names. */
+    private static final int REPOSITORY_SNAPSHOTS = 10_000;
 
     /** How many tenants' snapshots are held, empty ones included: past this many, a tenant that holds no settings is
      *  read and not cached, so a flood of invented tenant names on an anonymous deployment cannot grow the map. The
@@ -138,6 +153,48 @@ public final class Settings {
         return tenantValue != null ? fromStore(key, tenantValue) : getOrDefault(key, fallback);
     }
 
+    /**
+     * The effective value of a key for one repository: the repository's own value where the key is a repository
+     * setting and the repository set one, otherwise the tenant's and deployment's chain
+     * ({@link #getOrDefault(String, String, String)}) - unless the key is {@link Setting#localOnly() local}, which has
+     * no wider value and falls straight to {@code fallback}. A key that is not a repository setting resolves as it
+     * does for the tenant, so a caller holding a repository reads every key through here.
+     */
+    public String getOrDefault(String tenant, String repository, String key, String fallback) {
+        if (tenant == null || tenant.isBlank() || repository == null || repository.isBlank()
+                || !SettingsScopes.settableAt(key, Setting.Scope.REPOSITORY)) {
+            return getOrDefault(tenant, key, fallback);
+        }
+        String own = repositorySnapshot(tenant, repository).get(key);
+        if (own != null) {
+            return own;
+        }
+        return SettingsScopes.settableAt(key, Setting.Scope.TENANT) ? getOrDefault(tenant, key, fallback) : fallback;
+    }
+
+    /** A repository's own stored values, sorted - its layer over its tenant's and the deployment's. */
+    public SortedMap<String, String> overrides(String tenant, String repository) {
+        return new TreeMap<>(repositorySnapshot(tenant, repository));
+    }
+
+    /**
+     * Set each non-blank value and clear each blank one in a repository's own documents, refusing - before anything
+     * is written - a key that is not a repository setting. One compare-and-set per owning module's document; the
+     * repository's cached snapshot is dropped so the writing node sees the change at once, and the epoch is bumped so
+     * every other node re-reads on its next refresh. The caller has validated the values
+     * ({@code SettingsContributor.refusal}).
+     */
+    public void setRepository(String tenant, String repository, Map<String, String> values) throws IOException {
+        for (String key : values.keySet()) {
+            if (!SettingsScopes.settableAt(key, Setting.Scope.REPOSITORY)) {
+                throw new IllegalArgumentException("Setting '" + key + "' cannot be set for a repository");
+            }
+        }
+        StoredSettings.write(StoredSettings.repository(root, tenant, repository), values);
+        repositorySnapshots.remove(tenant + "/" + repository);
+        epoch.bump();
+    }
+
     /** Every stored override, sorted; a surface renders these over the file defaults it already knows. */
     public SortedMap<String, String> overrides() {
         Properties current = snapshot;
@@ -160,6 +217,10 @@ public final class Settings {
      *  key's owning module document is compare-and-set, re-read and retried on a lost race, so a concurrent change to
      *  another key (in the same or another module) is never lost. */
     public void set(String key, String value) throws IOException {
+        if (!SettingsScopes.settableAt(key, Setting.Scope.GLOBAL)) {
+            throw new IllegalArgumentException("Setting '" + key + "' has no deployment-wide value: it is set for "
+                    + "each repository or project on its own");
+        }
         writeInto(root, key, value);
         snapshot = load();
     }
@@ -218,7 +279,8 @@ public final class Settings {
         if (!SettingsDocuments.validTenant(tenant)) {
             throw new IllegalArgumentException("Not a tenant name: " + tenant);
         }
-        return SettingsSecrets.redact(documentsOf(root.scope(tenant)));
+        return SettingsSecrets.redact(SettingsScopes.settableOnly(documentsOf(root.scope(tenant)),
+                Setting.Scope.TENANT));
     }
 
     /** Every stored settings document under a store scope, module name to that module's overrides, sorted so a
@@ -252,8 +314,8 @@ public final class Settings {
     public SortedMap<String, SortedMap<String, String>> exportBundle() throws IOException {
         SortedMap<String, SortedMap<String, String>> bundle = new TreeMap<>(documents());
         for (String tenant : configuredTenants()) {
-            documentsOf(root.scope(tenant)).forEach((module, values) ->
-                    bundle.put(SettingsDocuments.tenantKey(tenant, module), values));
+            SettingsScopes.settableOnly(documentsOf(root.scope(tenant)), Setting.Scope.TENANT).forEach(
+                    (module, values) -> bundle.put(SettingsDocuments.tenantKey(tenant, module), values));
         }
         return SettingsSecrets.redact(bundle);
     }
@@ -325,6 +387,12 @@ public final class Settings {
                 }
                 perTenant.computeIfAbsent(parsed[0], _ -> new LinkedHashMap<>()).put(parsed[1], values);
             } else {
+                for (String setting : values.keySet()) {
+                    if (!SettingsScopes.settableAt(setting, Setting.Scope.GLOBAL)) {
+                        throw new IllegalArgumentException("Setting '" + setting
+                                + "' has no deployment-wide value and cannot appear in a deployment document");
+                    }
+                }
                 global.put(key, values);
             }
         });
@@ -481,6 +549,7 @@ public final class Settings {
         try {
             snapshot = load();
             tenantSnapshots.clear();
+            repositorySnapshots.clear();
         } catch (IOException e) {
             throw new UncheckedIOException("Failed to refresh runtime settings", e);
         }
@@ -507,6 +576,30 @@ public final class Settings {
         // TENANT_SNAPSHOTS entries an empty snapshot is answered and not kept.
         if (!loaded.isEmpty() || tenantSnapshots.size() < TENANT_SNAPSHOTS) {
             Properties raced = tenantSnapshots.putIfAbsent(tenant, loaded);
+            return raced != null ? raced : loaded;
+        }
+        return loaded;
+    }
+
+    /** A repository's own stored values, loaded once and cached until a write to it or the scheduled refresh. */
+    private Map<String, String> repositorySnapshot(String tenant, String repository) {
+        String cacheKey = tenant + "/" + repository;
+        Map<String, String> cached = repositorySnapshots.get(cacheKey);
+        if (cached != null) {
+            return cached;
+        }
+        Map<String, String> loaded;
+        try {
+            loaded = Map.copyOf(StoredSettings.read(StoredSettings.repository(root, tenant, repository),
+                    Setting.Scope.REPOSITORY));
+        } catch (IOException e) {
+            throw new UncheckedIOException("Failed to read the settings of repository '" + cacheKey + "'", e);
+        } catch (IllegalArgumentException invalid) {
+            // Not a repository a request could name, so nothing is stored for it.
+            return Map.of();
+        }
+        if (!loaded.isEmpty() || repositorySnapshots.size() < REPOSITORY_SNAPSHOTS) {
+            Map<String, String> raced = repositorySnapshots.putIfAbsent(cacheKey, loaded);
             return raced != null ? raced : loaded;
         }
         return loaded;

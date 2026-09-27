@@ -1,8 +1,12 @@
 package build.jenesis.repository.config.web;
 
+import java.io.IOException;
+
 import build.jenesis.repository.audit.AuditTrail;
 import build.jenesis.repository.server.RepositoryRouting;
 import build.jenesis.repository.server.kernel.LiveConfig;
+import build.jenesis.repository.server.spi.Authorization;
+import build.jenesis.repository.server.RepositoryProperties;
 import build.jenesis.repository.server.kernel.PinnedSettings;
 import build.jenesis.repository.server.kernel.Repositories;
 import build.jenesis.repository.server.kernel.Settings;
@@ -26,8 +30,27 @@ public class ConfigWebConfig {
     public ConfigController configController(Repositories repositories, Settings settings, LiveConfig live,
                                              PinnedSettings pinnedSettings,
                                              UpstreamCredentialSource upstreamCredentials, AuditTrail audit,
-                                             RepositoryRouting routing) {
+                                             RepositoryRouting routing, Authorization authorization,
+                                             RepositoryProperties properties) {
+        String operatorTenant = properties.operatorTenantOrDefault();
         return new ConfigController(repositories, settings, live, pinnedSettings, upstreamCredentials, audit,
-                routing);
+                routing, key -> operator(authorization, operatorTenant, key));
+    }
+
+    /** Whether {@code key} is the deployment operator's: every caller is on a deployment that enforces no
+     *  authorization, and otherwise a key of the operator tenant holding the manage right over every repository -
+     *  the one a route reading or writing the whole deployment takes. */
+    static boolean operator(Authorization authorization, String operatorTenant, String key) {
+        if (!authorization.enforced()) {
+            return true;
+        }
+        if (key == null || !operatorTenant.equals(Authorization.tenantOf(key))) {
+            return false;
+        }
+        try {
+            return authorization.authorize(key, "*", Authorization.MANAGE_WRITE) == Authorization.Decision.ALLOWED;
+        } catch (IOException unreadable) {
+            return false;
+        }
     }
 }

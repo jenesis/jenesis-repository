@@ -13,6 +13,7 @@
 open module build.jenesis.repository.cache.server.contract.test {
     requires build.jenesis.repository.cache.server;
     requires build.jenesis.repository.cache.storage;
+    requires build.jenesis.repository.settings;
     requires build.jenesis.repository.cache.storage.testkit;
     requires build.jenesis.repository.cache.storage.delegating;
     requires build.jenesis.repository.scope;

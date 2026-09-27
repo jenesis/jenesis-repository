@@ -3,6 +3,7 @@ package build.jenesis.repository.gateway;
 import module java.base;
 import module org.slf4j;
 import build.jenesis.repository.definitions.RepositoryDefinition;
+import build.jenesis.repository.definitions.RoutingSettingsContributor;
 import build.jenesis.repository.compliance.ComplianceGate;
 import build.jenesis.repository.compliance.GatePolicyProvider;
 import build.jenesis.repository.compliance.QualityInspector;
@@ -224,14 +225,14 @@ public final class MigrationRescreenTask implements MaintenanceTask {
                 Map.of("tenant", context.tenant(), "repository", context.repository()), evicted[0]);
     }
 
-    /** Whether {@code repository} is a hardened proxy with pre-harden cached bytes to back-fill. The definition string
-     *  is read from the live effective config under {@code repositories.<name>} (the same key {@code LiveConfig.definition}
-     *  resolves); the key is assembled in a local rather than passed as a literal, so it is a runtime-resolved
-     *  definition, not a stranded static config key. A malformed definition is treated as not-hardened rather than
-     *  throwing the pass. */
+    /** Whether {@code repository} is a hardened proxy with pre-harden cached bytes to back-fill. The definition is
+     *  what {@link LiveDefinitions#definition} routes on: the repository's own {@code routing}, read through the pass's
+     *  repository configuration, else the deployment's {@code repositories.<name>}. A malformed definition is treated
+     *  as not-hardened rather than throwing the pass. */
     private static boolean hardened(UnaryOperator<String> config, String repository) {
-        String definitionKey = SettingsScopes.repositoryKey(repository);
-        String specification = config.apply(definitionKey);
+        String own = config.apply(RoutingSettingsContributor.KEY);
+        String specification = own != null && !own.isBlank() ? own
+                : config.apply(SettingsScopes.repositoryKey(repository));
         if (specification == null || specification.isBlank()) {
             return false;
         }

@@ -48,22 +48,36 @@ final class AdminCommands {
     }
 
     static int settings(String[] args, Path home) throws Exception {
-        // A `--tenant <name>` flag (anywhere in the line) scopes the whole verb to one tenant's overridable slice - the
-        // same per-tenant view the console shows; without it the verb reads and writes the deployment-wide settings.
+        // One of `--tenant <name>`, `--repository <name>` or `--project <name>` (anywhere in the line) scopes the verb
+        // to that level's settings - the same per-level views the console shows; without one the verb reads and
+        // writes the deployment-wide settings.
         String tenant = null;
+        String repository = null;
+        String project = null;
         List<String> rest = new ArrayList<>();
         for (int i = 1; i < args.length; i++) {
             if (args[i].equals("--tenant") && i + 1 < args.length) {
                 tenant = args[++i];
+            } else if (args[i].equals("--repository") && i + 1 < args.length) {
+                repository = args[++i];
+            } else if (args[i].equals("--project") && i + 1 < args.length) {
+                project = args[++i];
             } else {
                 rest.add(args[i]);
             }
         }
-        String scope = tenant == null ? "deployment" : "tenant " + tenant;
+        if ((tenant != null ? 1 : 0) + (repository != null ? 1 : 0) + (project != null ? 1 : 0) > 1) {
+            throw new IllegalArgumentException("Name one of --tenant, --repository and --project.");
+        }
+        String scope = tenant != null ? "tenant " + tenant : repository != null ? "repository " + repository
+                : project != null ? "project " + project : "deployment";
         RepositoryClient client = CliSupport.client(home);
         if (rest.isEmpty()) {
-            for (SettingsClient.Setting setting : tenant == null
-                    ? client.settings().settings() : client.settings().settings(tenant)) {
+            List<SettingsClient.Setting> listed = tenant != null ? client.settings().settings(tenant)
+                    : repository != null ? client.settings().repositorySettings(repository)
+                    : project != null ? client.settings().projectSettings(project)
+                    : client.settings().settings();
+            for (SettingsClient.Setting setting : listed) {
                 // A pinned key is fixed above the store (env var, -D, command line or a config file), so its stored
                 // value is inert and a `settings set` would be refused; name what pins it instead of "override".
                 String state = setting.pinned() ? "pinned by " + setting.pinnedBy()
@@ -78,29 +92,53 @@ final class AdminCommands {
             }
             return 0;
         }
+        String usage = " [--tenant <name> | --repository <name> | --project <name>]";
         switch (rest.get(0)) {
             case "set" -> {
                 if (rest.size() < 3) {
-                    throw new IllegalArgumentException("Usage: settings set <key> <value> [--tenant <name>]");
+                    throw new IllegalArgumentException("Usage: settings set <key> <value>" + usage);
                 }
-                if (tenant == null) {
-                    client.settings().setSetting(rest.get(1), rest.get(2));
-                } else {
+                if (tenant != null) {
                     client.settings().setSetting(tenant, rest.get(1), rest.get(2));
+                } else if (repository != null) {
+                    client.settings().setRepositorySetting(repository, rest.get(1), rest.get(2));
+                } else if (project != null) {
+                    client.settings().setProjectSetting(project, rest.get(1), rest.get(2));
+                } else {
+                    client.settings().setSetting(rest.get(1), rest.get(2));
                 }
                 System.out.println("Set " + rest.get(1) + " (" + scope + ").");
             }
             case "clear" -> {
                 if (rest.size() < 2) {
-                    throw new IllegalArgumentException("Usage: settings clear <key> [--tenant <name>]");
+                    throw new IllegalArgumentException("Usage: settings clear <key>" + usage);
                 }
-                if (tenant == null) {
-                    client.settings().clearSetting(rest.get(1));
-                } else {
+                if (tenant != null) {
                     client.settings().clearSetting(tenant, rest.get(1));
+                } else if (repository != null) {
+                    client.settings().clearRepositorySetting(repository, rest.get(1));
+                } else if (project != null) {
+                    client.settings().clearProjectSetting(project, rest.get(1));
+                } else {
+                    client.settings().clearSetting(rest.get(1));
                 }
-                System.out.println("Cleared " + rest.get(1) + " (" + scope + "); reverted to its default.");
+                System.out.println("Cleared " + rest.get(1) + " (" + scope + "); it inherits the wider value again.");
             }
+            case "export", "import" -> {
+                if (repository != null || project != null) {
+                    throw new IllegalArgumentException("A bundle is the deployment's or one tenant's settings; a "
+                            + "repository's and a project's settings live with them.");
+                }
+                exchange(client, rest, tenant, scope);
+            }
+            default -> throw new IllegalArgumentException("Unknown settings command '" + rest.get(0) + "'");
+        }
+        return 0;
+    }
+
+    private static void exchange(RepositoryClient client, List<String> rest, String tenant, String scope)
+            throws Exception {
+        switch (rest.get(0)) {
             case "export" -> {
                 // The bundle prints to stdout (redirect to a file); a path argument writes it there instead.
                 String bundle = tenant == null
@@ -126,7 +164,6 @@ final class AdminCommands {
             }
             default -> throw new IllegalArgumentException("Unknown settings command '" + rest.get(0) + "'");
         }
-        return 0;
     }
 
     /**
@@ -138,7 +175,8 @@ final class AdminCommands {
         RepositoryClient client = CliSupport.client(home);
         if (args.length > 1 && args[1].equals("set")) {
             if (args.length != 4 || !(args[2].equals("quota") || args[2].equals("rate"))) {
-                throw new IllegalArgumentException("Usage: limits set quota <bytes>  (0 clears the quota)\n"
+                throw new IllegalArgumentException("Usage: limits set quota <bytes>  (0 falls back to the "
+                        + "deployment's)\n"
                         + "       limits set rate <permits-per-minute>  (0 falls back to the deployment's)");
             }
             if (args[2].equals("quota")) {
@@ -604,6 +642,8 @@ final class AdminCommands {
         String tenant = scoped.tenant();
         RepositoryClient client = CliSupport.client(home);
         if (args.length == 1) {
+            // The deployment's definitions: a tenant has none, its repositories route themselves (settings --repository).
+            scoped.unscoped("repos");
             List<SettingsClient.NamedValue> repos = client.settings().repositories(tenant);
             for (SettingsClient.NamedValue repo : repos) {
                 System.out.printf("%-20s %s%n", repo.name(), repo.value());
@@ -649,15 +689,17 @@ final class AdminCommands {
                 System.out.println(client.settings().deleteRepository(name));
             }
             case "set" -> {
+                scoped.unscoped("repos set <name> <definition>");
                 if (args.length < 4) {
-                    throw new IllegalArgumentException("Usage: repos set <name> <definition> [--tenant N]");
+                    throw new IllegalArgumentException("Usage: repos set <name> <definition>");
                 }
                 client.settings().setRepository(tenant, args[2], args[3]);
                 System.out.println("Saved repository " + args[2] + ".");
             }
             case "remove" -> {
+                scoped.unscoped("repos remove <name>");
                 if (args.length < 3) {
-                    throw new IllegalArgumentException("Usage: repos remove <name> [--tenant N]");
+                    throw new IllegalArgumentException("Usage: repos remove <name>");
                 }
                 client.settings().removeRepository(tenant, args[2]);
                 System.out.println("Removed repository " + args[2] + ".");

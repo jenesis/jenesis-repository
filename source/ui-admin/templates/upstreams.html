@@ -204,14 +204,10 @@
                 </form>
             </article>
             <article>
-                <h3>Repositories routed for this tenant</h3>
-                <ul th:if="${!tenantRepositories.isEmpty()}">
-                    <li th:each="e : ${tenantRepositories}"><a th:href="@{'/ui/repositories/' + ${e.key}}"
-                            th:text="${e.key}">name</a> <code th:text="${e.value}">spec</code></li>
-                </ul>
-                <p th:if="${tenantRepositories.isEmpty()}"><small>None: every repository routes as the deployment
-                    defines it.</small></p>
-                <p><small>A repository's routing for this tenant is set on the repository's own page.</small></p>
+                <h3>Repositories routed on their own</h3>
+                <p><small>A repository that sets its own routing routes by it over the deployment's definitions here;
+                    it is set on the repository's own page, and its routing badge shows it in the repositories
+                    list.</small></p>
             </article>
         </div>
     </section>

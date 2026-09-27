@@ -3,6 +3,7 @@ package build.jenesis.repository.cache.server;
 import module java.base;
 import build.jenesis.repository.cache.storage.CacheStorage;
 import build.jenesis.repository.cache.storage.Names;
+import build.jenesis.repository.cache.storage.ProjectPolicy;
 import build.jenesis.repository.server.spi.Authorization;
 import build.jenesis.repository.server.spi.KeyUsageTracker;
 import build.jenesis.repository.walk.Traversal;
@@ -15,13 +16,13 @@ import io.micrometer.core.instrument.MeterRegistry;
 /**
  * The build-cache logic, independent of any HTTP framework so it can be driven by {@link CacheController}
  * (Spring MVC) and tested directly. It is multi-tenant: the storage root holds one folder per tenant,
- * each a self-contained space of projects (configured by their own {@code cache.properties}). A request
+ * each a self-contained space of projects (configured by their project settings, {@link ProjectPolicy}). A request
  * carries its project in a header and its key as {@code jenk_<tenant>.<secret>}, so a key is bound to one
  * tenant and only ever checked against that tenant's space. Authorisation is delegated to a shared
  * {@link Authorization}: it reads the per-credential grants on each request (so a revoked grant takes
  * effect at once) against the {@code cache:read}/{@code cache:write} surface, and an anonymous
- * authorization (or a configured trial bootstrap key) lets every request through. Project configs are
- * held in a version-revalidated LRU cache. A write triggers immediate per-project size-cap eviction; the
+ * authorization (or a configured trial bootstrap key) lets every request through. Project policies are
+ * held in an LRU cache and read again past the policy window. A write triggers immediate per-project size-cap eviction; the
  * periodic reaper additionally re-applies the size cap, the ttl and the global free-space target across
  * every tenant and project by re-scanning the store, so an over-cap project that is idle - its cap lowered
  * after the writes landed, or the cache enabled over a store that already held entries from before it
@@ -54,12 +55,24 @@ public class Cache {
     public record Rejected(int status) implements Resolution {
     }
 
-    /** A project's read policy as last read from its {@code cache.properties}, and when this node last read or
-     *  confirmed it ({@link #policyInterval}). */
-    record Project(String name, long size, boolean lru, Object version, Instant verified) {
-        Project verifiedAt(Instant at) {
-            return new Project(name, size, lru, version, at);
-        }
+    /** A project's policy as last read from its effective settings, and when this node read it
+     *  ({@link #policyInterval}). */
+    record Project(String name, long size, boolean lru, Instant verified) {
+    }
+
+    /**
+     * Where a project's policy comes from: its effective settings - the project's own over its tenant's over the
+     * deployment's ({@code StoredSettings.projectChain}) - read when this node has not read them within the policy
+     * window. {@link #NONE} - nothing configured - is what a cache built without a store answers.
+     */
+    @FunctionalInterface
+    public interface Policies {
+
+        /** Nothing configured for any project: no cap, least recently used first, kept for ever. */
+        Policies NONE = (_, _) -> _ -> null;
+
+        /** The effective settings of {@code project} of {@code tenant}, {@code null} for an unset key. */
+        UnaryOperator<String> of(String tenant, String project) throws IOException;
     }
 
     /** What this node remembers of an entry's recency: the instant of the stamp it last wrote or read, or of the
@@ -96,6 +109,7 @@ public class Cache {
     private volatile Duration touchInterval;
     private volatile Map<String, Known> touched;
     private volatile Duration policyInterval;
+    private volatile Policies policies = Policies.NONE;
     private volatile InstantSource clock = InstantSource.system();
     private volatile boolean reaping;
     private Thread reaperThread;
@@ -148,16 +162,22 @@ public class Cache {
     }
 
     /**
-     * How long a project's read policy - the size cap and sweep order its {@code cache.properties} sets - is trusted
-     * before a request asks the store whether it changed; {@code null} or zero asks on every request. The check is
-     * one version probe of the policy document, a round trip per hit on an object store and otherwise the only store
-     * call a hit pays, recency being kept in the touch window; so the node remembers when it last read or confirmed a
-     * project's policy and asks again only past the window. The window is the deployment's {@code jenreg.cache.ttl},
-     * as it is for the credential the same request was authorised against: another node's edit of a project's cap
-     * shows here within it, and an operator who wants every request to see an edit at once sets it to zero.
+     * How long a project's policy - the size cap and sweep order its settings set - is trusted before a request reads
+     * it again; {@code null} or zero reads it on every request. Reading it is the settings documents of the project, its
+     * tenant and the deployment - otherwise the only store calls a hit pays, recency being kept in the touch window -
+     * so the node remembers when it last read a project's policy and reads it again only past the window. The window
+     * is the deployment's {@code jenreg.cache.ttl}, as it is for the credential the same request was authorised
+     * against: another node's edit of a project's cap shows here within it, and an operator who wants every request
+     * to see an edit at once sets it to zero.
      */
     public Cache policyInterval(Duration interval) {
         policyInterval = interval == null || interval.isZero() || interval.isNegative() ? null : interval;
+        return this;
+    }
+
+    /** Where every project's policy is read from - see {@link Policies}. */
+    public Cache policies(Policies policies) {
+        this.policies = Objects.requireNonNull(policies, "policies");
         return this;
     }
 
@@ -276,7 +296,7 @@ public class Cache {
         // The tenant's storage view is resolved only for an authorized request, so a forged key cannot grow the
         // scope map with made-up tenant names.
         CacheStorage scoped = scope(tenant);
-        return new Allowed(metric, scoped, project(scoped, metric, name), new CacheStorage.Entry(name, step, inputs));
+        return new Allowed(metric, scoped, project(metric, tenant, name), new CacheStorage.Entry(name, step, inputs));
     }
 
     public boolean exists(Allowed allowed) {
@@ -445,24 +465,30 @@ public class Cache {
         }
     }
 
-    private Project project(CacheStorage store, String cacheKey, String name) {
+    private Project project(String cacheKey, String tenant, String name) {
         Project cached = projects.get(cacheKey);
         Instant now = clock.instant();
         Duration window = policyInterval;
         if (cached != null && window != null && now.isBefore(cached.verified().plus(window))) {
-            return cached;      // read or confirmed within the window: the store is not asked
+            return cached;      // read within the window: the store is not asked
         }
-        Object version = store.configVersion(name);
-        if (cached != null && Objects.equals(cached.version(), version)) {
-            Project confirmed = cached.verifiedAt(now);
-            projects.put(cacheKey, confirmed);
-            return confirmed;
-        }
-        Properties cache = store.readConfig(name, "cache.properties");
-        boolean lru = !"false".equalsIgnoreCase(cache.getProperty("lru", "true").trim());
-        Project loaded = new Project(name, parseSize(cache.getProperty("size"), cacheKey), lru, version, now);
+        UnaryOperator<String> config = policy(tenant, name);
+        Project loaded = new Project(name, size(config, cacheKey), ProjectPolicy.lru(config.apply(ProjectPolicy.LRU)),
+                now);
         projects.put(cacheKey, loaded);
         return loaded;
+    }
+
+    /** A project's effective settings, or none when they cannot be read - a cache that cannot read its policy keeps
+     *  serving uncapped rather than failing the build that asked, and says so. */
+    private UnaryOperator<String> policy(String tenant, String project) {
+        try {
+            return policies.of(tenant, project);
+        } catch (IOException | RuntimeException unreadable) {
+            LOGGER.log(System.Logger.Level.WARNING, "the settings of cache project " + tenant + "/" + project
+                    + " could not be read; it is served without a size cap or expiry until they can", unreadable);
+            return _ -> null;
+        }
     }
 
     private void scheduleEviction(String key, CacheStorage store, Project project) {
@@ -663,7 +689,7 @@ public class Cache {
                 if (!Names.isProject(name)) {
                     continue;
                 }
-                Properties config = store.readConfig(name, "cache.properties");
+                UnaryOperator<String> config = policy(tenant, name);
                 Duration ttl = ttl(config, name);
                 if (ttl != null) {
                     expire(store, name, ttl);
@@ -673,10 +699,10 @@ public class Cache {
                 // write that may never come - the cap was lowered after the writes landed, or the cache was enabled
                 // over a store that already held entries from before it existed. Like the ttl and free-space sweeps,
                 // it reconstructs the policy over pre-existing data by re-scanning the store, not from live writes.
-                long limit = parseSize(config.getProperty("size"), name);
+                long limit = size(config, name);
                 if (limit > 0) {
-                    boolean lru = !"false".equalsIgnoreCase(config.getProperty("lru", "true").trim());
-                    evict(store, new Project(name, limit, lru, store.configVersion(name), clock.instant()));
+                    evict(store, new Project(name, limit, ProjectPolicy.lru(config.apply(ProjectPolicy.LRU)),
+                            clock.instant()));
                 }
             }
         }
@@ -691,38 +717,27 @@ public class Cache {
         });
     }
 
-    private static Duration ttl(Properties cache, String project) {
-        String value = cache.getProperty("ttl");
-        if (value == null || value.isBlank()) {
-            return null;
-        }
-        Duration duration;
+    private static Duration ttl(UnaryOperator<String> config, String project) {
         try {
-            duration = Durations.parse(value);
-        } catch (RuntimeException _) {
-            duration = null;
-        }
-        if (duration == null || duration.isZero() || duration.isNegative()) {
-            // As a malformed size: the reaper sweeps every project in one pass, so one project's typo is said out
-            // loud and that project's expiry is skipped, rather than read as "no ttl" in silence.
-            LOGGER.log(System.Logger.Level.WARNING, "unparseable ttl '" + value + "' for cache project " + project
+            return ProjectPolicy.ttl(config.apply(ProjectPolicy.TTL));
+        } catch (IllegalArgumentException malformed) {
+            // As a malformed size: the reaper sweeps every project in one pass, so one project's bad value is said out
+            // loud and that project's expiry is skipped, rather than read as "no ttl" in silence. The catalogue
+            // refuses such a value on every write path; this guards one written into the store by hand.
+            LOGGER.log(System.Logger.Level.WARNING, malformed.getMessage() + " for cache project " + project
                     + "; stale entries are not expired until the value is fixed");
             return null;
         }
-        return duration;
     }
 
-    private static long parseSize(String value, String project) {
-        if (value == null || value.isBlank()) {
-            return 0;
-        }
+    private static long size(UnaryOperator<String> config, String project) {
         try {
-            return Long.parseLong(value.trim());
-        } catch (NumberFormatException _) {
-            // A typo ("size=2gb") must not read as "unlimited" in silence: the misconfigured project would just
-            // grow unbounded. It still parses as no-cap (fail-open keeps the cache serving), but says so.
-            LOGGER.log(System.Logger.Level.WARNING, "unparseable size '" + value + "' for cache project "
-                    + project + "; the size cap is disabled until the value is fixed");
+            return ProjectPolicy.size(config.apply(ProjectPolicy.SIZE));
+        } catch (IllegalArgumentException malformed) {
+            // A typo must not read as "unlimited" in silence: the misconfigured project would just grow unbounded. It
+            // still parses as no-cap (fail-open keeps the cache serving), but says so.
+            LOGGER.log(System.Logger.Level.WARNING, malformed.getMessage() + " for cache project " + project
+                    + "; the size cap is disabled until the value is fixed");
             return 0;
         }
     }

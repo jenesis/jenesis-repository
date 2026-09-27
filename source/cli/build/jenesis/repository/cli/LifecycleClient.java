@@ -90,20 +90,23 @@ public final class LifecycleClient extends ClientCalls {
         return JSON.readValue(response.body(), RetentionView.class);
     }
 
-    /** Set a repository's retention policy (a blank duration clears that rule); {@code false} when retention is not
-     *  installed (HTTP 501). The durations are ISO-8601 (e.g. {@code P30D}). */
-    public boolean setRetention(String repo, int keepLast, String maxAge, String prereleaseExpiry,
+    /** Set the given rules of a repository's retention - each a repository setting: a value sets it, a blank one
+     *  clears it so the repository inherits, {@code none} switches a duration rule off, and a {@code null} one is left
+     *  as it is; {@code false} when retention is not installed (HTTP 501). */
+    public boolean setRetention(String repo, String keepLast, String maxAge, String prereleaseExpiry,
                                 String notDownloadedFor) throws IOException, InterruptedException {
-        String query = "&keepLast=" + keepLast
-                + "&maxAge=" + enc(blankIfNull(maxAge))
-                + "&prereleaseExpiry=" + enc(blankIfNull(prereleaseExpiry))
-                + "&notDownloadedFor=" + enc(blankIfNull(notDownloadedFor));
+        String query = given("keepLast", keepLast) + given("maxAge", maxAge)
+                + given("prereleaseExpiry", prereleaseExpiry) + given("notDownloadedFor", notDownloadedFor);
         HttpResponse<String> response = send("PUT", "/api/repository/retention?repo=" + enc(repo) + query, null, null);
         if (response.statusCode() == 501) {
             return false;
         }
         require(response, 200, "set the retention policy of " + repo);
         return true;
+    }
+
+    private static String given(String parameter, String value) {
+        return value == null ? "" : "&" + parameter + "=" + enc(value);
     }
 
     /** A repository's pinned coordinates ({@code ecosystem:coordinate:version}), which the sweep never reclaims. */
@@ -161,10 +164,6 @@ public final class LifecycleClient extends ClientCalls {
         }
         require(response, 200, "read export job " + job);
         return JSON.readValue(response.body(), ExportStatus.class);
-    }
-
-    private static String blankIfNull(String value) {
-        return value == null ? "" : value;
     }
 
     /** Recent outbound webhook deliveries and their state. */

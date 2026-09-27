@@ -58,12 +58,66 @@ import module java.base;
  * <li><b>Ordering / determinism.</b> Results never depend on module-path order: {@link #all()} sorts by group then
  *     key, {@link #modules()} by module name, and the two maps are keyed. Within one module, {@link #settings()}
  *     order is the render order inside a group.</li>
+ * <li><b>Value refusal.</b> {@link #refusal(Setting, String, UnaryOperator)} is the one place a value its kind
+ *     accepts but its reader would refuse - a repository routing that does not parse, a zero retention age, a
+ *     negative ceiling - is named, so every write path (the settings screen, the API, the CLI, a creation wizard,
+ *     an atomic create) refuses it before anything is stored rather than each re-implementing the reader's parse.
+ *     It is pure: it reads nothing but its arguments, never the store, and answers the same for the same input. A
+ *     blank value clears the setting and is never passed to it.</li>
  * </ol>
  */
 public interface SettingsContributor {
 
     /** The settings this module contributes, in the order they should render within their groups. */
     List<Setting> settings();
+
+    /**
+     * Why {@code value} - non-blank, and one {@code setting}'s kind already accepts - cannot be stored for one of this
+     * contributor's settings, or empty when it can. {@code deployment} answers another key's deployment-wide
+     * effective value ({@code null} when unset), for a refusal that depends on a deployment dial. Empty by default:
+     * most settings are whatever their kind accepts.
+     */
+    default Optional<String> refusal(Setting setting, String value, UnaryOperator<String> deployment) {
+        return Optional.empty();
+    }
+
+    /**
+     * Why {@code value} cannot be stored for {@code key} at {@code level} - the question every write path asks,
+     * before it writes anything, and the only answer it takes: a key no installed contributor declares, a level the
+     * key may not be set at ({@link SettingsScopes#settableAt}), a value its kind does not parse, or one its declaring
+     * contributor refuses ({@link #refusal(Setting, String, UnaryOperator)}). A blank value clears the key and is
+     * refused only for the key and the level. Empty when the write may go ahead.
+     */
+    static Optional<String> refusal(String key, String value, Setting.Scope level,
+                                    UnaryOperator<String> deployment) {
+        for (SettingsContributor contributor : declared()) {
+            for (Setting setting : contributor.settings()) {
+                if (setting.key().equals(key)) {
+                    if (!SettingsScopes.settableAt(key, level)) {
+                        return Optional.of("Setting '" + key + "' cannot be set " + where(level) + ".");
+                    }
+                    if (value == null || value.isBlank()) {
+                        return Optional.empty();
+                    }
+                    if (!setting.parses(value)) {
+                        return Optional.of("'" + value + "' is not a valid value for setting '" + key + "'.");
+                    }
+                    return contributor.refusal(setting, value.trim(), deployment)
+                            .map(reason -> "'" + value + "' is not a valid value for setting '" + key + "': " + reason);
+                }
+            }
+        }
+        return Optional.of("Unknown setting '" + key + "'.");
+    }
+
+    private static String where(Setting.Scope level) {
+        return switch (level) {
+            case GLOBAL -> "deployment-wide";
+            case TENANT -> "for a tenant";
+            case REPOSITORY -> "for a repository";
+            case PROJECT -> "for a build-cache project";
+        };
+    }
 
     /**
      * The keys this module reads that the catalogue deliberately leaves out, each as its full property name

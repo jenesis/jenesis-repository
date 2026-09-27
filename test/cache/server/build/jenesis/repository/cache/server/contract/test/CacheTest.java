@@ -8,6 +8,9 @@ import build.jenesis.repository.cache.server.Cache.Outcome;
 import build.jenesis.repository.cache.server.Cache.Rejected;
 import build.jenesis.repository.cache.server.Cache.Resolution;
 import build.jenesis.repository.cache.storage.CacheStorage;
+import build.jenesis.repository.cache.storage.ProjectPolicy;
+import build.jenesis.repository.settings.StoredSettings;
+import build.jenesis.repository.store.ArtifactStore;
 import build.jenesis.repository.scope.Scopes;
 import build.jenesis.repository.cache.storage.testkit.CacheStorages;
 import build.jenesis.repository.server.spi.Authorization;
@@ -57,7 +60,18 @@ public class CacheTest {
     }
 
     private Cache cache(MeterRegistry registry) {
-        return new Cache(CacheStorages.filesystem(root), authorization(), 1L << 31, 256, null, 0, 0, "default", false, null, "default", registry);
+        return new Cache(CacheStorages.filesystem(root), authorization(), 1L << 31, 256, null, 0, 0, "default", false, null, "default", registry)
+                .policies(policies());
+    }
+
+    /** Each project's policy, read as the composed cache reads it: its settings over its tenant's over the
+     *  deployment's, from the store the cache delegates into. */
+    private Cache.Policies policies() {
+        return (tenant, project) -> StoredSettings.projectChain(store(), tenant, project);
+    }
+
+    private ArtifactStore store() {
+        return ArtifactStoreProvider.resolve("filesystem", key -> "jenreg.filesystem.root".equals(key) ? root.toString() : null);
     }
 
     private static double count(MeterRegistry registry, String outcome) {
@@ -287,7 +301,8 @@ public class CacheTest {
     public void reaper_evicts_entries_idle_longer_than_ttl() throws Exception {
         Path project = project("acme", "reaped", "ttl=PT10S\n");
         credential("acme", ACME_RW, "*=cache:read,cache:write");
-        Cache reaped = new Cache(CacheStorages.filesystem(root), authorization(), 1L << 31, 256, Duration.ofMillis(100), 0, 0, "default", false, null, "default", new SimpleMeterRegistry());
+        Cache reaped = new Cache(CacheStorages.filesystem(root), authorization(), 1L << 31, 256, Duration.ofMillis(100), 0, 0, "default", false, null, "default", new SimpleMeterRegistry())
+                .policies(policies());
         reaped.start();
         try {
             put(reaped, "reaped", ACME_RW, "aa", "01", new byte[]{1});
@@ -310,7 +325,8 @@ public class CacheTest {
         // cap: the self-healing bar - convergence over pre-existing/idle data, on the reaper's own clock.
         Path project = project("acme", "sized", "size=100000\n");
         credential("acme", ACME_RW, "*=cache:read,cache:write");
-        Cache reaped = new Cache(CacheStorages.filesystem(root), authorization(), 1L << 31, 256, Duration.ofMillis(100), 0, 0, "default", false, null, "default", new SimpleMeterRegistry());
+        Cache reaped = new Cache(CacheStorages.filesystem(root), authorization(), 1L << 31, 256, Duration.ofMillis(100), 0, 0, "default", false, null, "default", new SimpleMeterRegistry())
+                .policies(policies());
         reaped.start();
         try {
             put(reaped, "sized", ACME_RW, "aa", "01", new byte[1000]);
@@ -320,7 +336,7 @@ public class CacheTest {
             Files.setLastModifiedTime(project.resolve("aa").resolve("02"), FileTime.from(Instant.now().minusSeconds(200)));
             Files.setLastModifiedTime(project.resolve("aa").resolve("03"), FileTime.from(Instant.now().minusSeconds(100)));
             assertThat(project.resolve("aa").resolve("01")).as("all three fit under the generous cap").isRegularFile();
-            Files.writeString(project.resolve("cache.properties"), "size=2500\n");     // lowered, with no further write
+            policy("acme", "sized", "size=2500\n");     // lowered, with no further write
             await("the reaper to trim the idle project back under its lowered cap",
                     () -> !Files.exists(project.resolve("aa").resolve("01")));
             assertThat(project.resolve("aa").resolve("01")).as("the reaper trims the idle over-cap project").doesNotExist();
@@ -533,7 +549,7 @@ public class CacheTest {
         Path good = project("acme", "expires", "ttl=PT10S\n");
         credential("acme", ACME_RW, "*=cache:read,cache:write");
         Cache reaped = new Cache(CacheStorages.filesystem(root), authorization(), 1L << 31, 256, Duration.ofMillis(100),
-                0, 0, "default", false, null, "default", new SimpleMeterRegistry());
+                0, 0, "default", false, null, "default", new SimpleMeterRegistry()).policies(policies());
         reaped.start();
         try {
             put(reaped, "noexpiry", ACME_RW, "aa", "01", new byte[]{1});
@@ -553,7 +569,7 @@ public class CacheTest {
     @Test
     public void the_union_across_projects_enumerates_exactly_the_hex_named_entries() throws Exception {
         // The free-space sweep's input, on the hermetic filesystem backend: every hex-named entry across every
-        // project, and nothing else (a project's cache.properties config file is not an entry). The SPI offers no
+        // project, and nothing else (a project's own file is not an entry). The SPI offers no
         // whole-store sweep to ask for it - the union is composed here out of the two bounded enumerations, exactly
         // the way Eviction.reclaim composes it, so a backend that lost an entry to a page boundary shows up here.
         CacheStorage storage = CacheStorages.filesystem(root).scope("acme");
@@ -562,7 +578,7 @@ public class CacheTest {
         storage.store(new CacheStorage.Entry("two", "cc", "03"), new ByteArrayInputStream(new byte[]{3, 3, 3}));
         Properties config = new Properties();
         config.setProperty("size", "100");
-        storage.writeConfig("one", "cache.properties", config);          // non-hex-named: never an entry
+        storage.writeConfig("one", "stats.properties", config);          // non-hex-named: never an entry
 
         List<CacheStorage.Stored> all = new ArrayList<>();
         for (String project : allProjects(storage)) {
@@ -671,10 +687,22 @@ public class CacheTest {
         authorization().setGrant(tenant, Authorization.hash(key), grants.substring(0, eq), grants.substring(eq + 1));
     }
 
-    private Path project(String tenant, String name, String cacheProperties) throws IOException {
+    /** A project directory with the policy {@code policy} names ({@code size=}, {@code lru=}, {@code ttl=}), stored
+     *  as the project's settings. */
+    private Path project(String tenant, String name, String policy) throws IOException {
         Path project = Files.createDirectories(cached().resolve(tenant).resolve(name));
-        Files.writeString(project.resolve("cache.properties"), cacheProperties);
+        policy(tenant, name, policy);
         return project;
+    }
+
+    private void policy(String tenant, String name, String policy) throws IOException {
+        Properties values = new Properties();
+        values.load(new StringReader(policy));
+        Map<String, String> settings = new LinkedHashMap<>();
+        settings.put(ProjectPolicy.SIZE, values.getProperty("size", ""));
+        settings.put(ProjectPolicy.LRU, values.getProperty("lru", ""));
+        settings.put(ProjectPolicy.TTL, values.getProperty("ttl", ""));
+        StoredSettings.write(StoredSettings.project(store(), tenant, name), settings);
     }
 
     /** Re-read until {@code condition} holds, bounded by {@link #READS} attempts and loud when they run out, so an
@@ -807,7 +835,7 @@ public class CacheTest {
         AtomicReference<Instant> clock = new AtomicReference<>(Instant.now());
         Cache cache = new Cache(new StampingStorage(CacheStorages.filesystem(root), stamps), authorization(),
                 1L << 31, 256, null, 0, 0, "default", false, null, "default", new SimpleMeterRegistry())
-                .clock(clock::get);
+                .clock(clock::get).policies(counted(stamps));
         credential("acme", ACME_RW, "*=cache:read,cache:write");
         put(cache, "demo", ACME_RW, "aa", "01", new byte[]{1});
         assertThat(stamps.policies).as("the first request reads the policy").isEqualTo(1);
@@ -818,7 +846,7 @@ public class CacheTest {
         assertThat(get(cache, "demo", ACME_RW, "aa", "01")).isEqualTo(200);
         assertThat(stamps.policies).as("past the window the store is asked once more").isEqualTo(2);
         assertThat(get(cache, "demo", ACME_RW, "aa", "01")).isEqualTo(200);
-        assertThat(stamps.policies).as("and the confirmation opens a new window").isEqualTo(2);
+        assertThat(stamps.policies).as("and the read opens a new window").isEqualTo(2);
     }
 
     @Test
@@ -838,12 +866,21 @@ public class CacheTest {
         Stamps stamps = new Stamps();
         Cache cache = new Cache(new StampingStorage(CacheStorages.filesystem(root), stamps), authorization(),
                 1L << 31, 256, null, 0, 0, "default", false, null, "default", new SimpleMeterRegistry())
-                .policyInterval(Duration.ZERO);
+                .policyInterval(Duration.ZERO).policies(counted(stamps));
         credential("acme", ACME_RW, "*=cache:read,cache:write");
         put(cache, "demo", ACME_RW, "aa", "01", new byte[]{1});
         assertThat(get(cache, "demo", ACME_RW, "aa", "01")).isEqualTo(200);
         assertThat(head(cache, "demo", ACME_RW, "aa", "01")).isEqualTo(200);
-        assertThat(stamps.policies).as("every request asks whether the policy changed").isEqualTo(3);
+        assertThat(stamps.policies).as("every request reads the policy again").isEqualTo(3);
+    }
+
+    /** The project policies, each read counted. */
+    private Cache.Policies counted(Stamps stamps) {
+        Cache.Policies policies = policies();
+        return (tenant, project) -> {
+            stamps.policies++;
+            return policies.of(tenant, project);
+        };
     }
 
     /** What the cache asked the storage about recency and policy, shared across the tenant scopes it resolves. */
@@ -883,12 +920,6 @@ public class CacheTest {
             return Optional.ofNullable(stamps.recency).map(at -> new CacheStorage.Recency(at, true))
                     .or(() -> delegate.recency(entry));
         }
-
-        @Override
-        public Object configVersion(String project) {
-            stamps.policies++;
-            return delegate.configVersion(project);
-        }
     }
 
     /** A {@link CacheStorage} decorator that records which thread runs an entry enumeration, so a test can assert the
@@ -923,11 +954,6 @@ public class CacheTest {
         @Override
         public Properties readConfig(String project, String file) {
             return delegate.readConfig(project, file);
-        }
-
-        @Override
-        public Object configVersion(String project) {
-            return delegate.configVersion(project);
         }
 
         @Override

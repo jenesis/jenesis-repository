@@ -1,6 +1,7 @@
 package build.jenesis.repository.cleanup.task;
 
 import module java.base;
+import build.jenesis.repository.cleanup.RetentionPolicy;
 import build.jenesis.repository.settings.Setting;
 import build.jenesis.repository.settings.SettingsContributor;
 
@@ -15,6 +16,26 @@ import build.jenesis.repository.settings.SettingsContributor;
  */
 public final class RetentionSettingsContributor implements SettingsContributor {
 
+    /** A value the kind accepts but a retention policy does not: a negative count, or a zero or negative age - which
+     *  would invert the rule and evict everything but each coordinate's newest version on the next sweep. The policy's
+     *  own parse decides, so this refuses exactly what a sweep would. */
+    @Override
+    public Optional<String> refusal(Setting setting, String value, UnaryOperator<String> deployment) {
+        try {
+            switch (setting.key()) {
+                case RetentionPolicy.KEEP_LAST -> RetentionPolicy.parse(value, null, null, null);
+                case RetentionPolicy.MAX_AGE -> RetentionPolicy.parse(null, value, null, null);
+                case RetentionPolicy.PRERELEASE_EXPIRY -> RetentionPolicy.parse(null, null, value, null);
+                case RetentionPolicy.NOT_DOWNLOADED_FOR -> RetentionPolicy.parse(null, null, null, value);
+                default -> {
+                }
+            }
+            return Optional.empty();
+        } catch (IllegalArgumentException refused) {
+            return Optional.of(refused.getMessage());
+        }
+    }
+
     @Override
     public List<Setting> settings() {
         return List.of(
@@ -23,24 +44,30 @@ public final class RetentionSettingsContributor implements SettingsContributor {
                                 + "than one enabled engine needs this setting to disambiguate them. A named "
                                 + "selection that no installed engine answers to fails fast rather than silently "
                                 + "degrading to no retention.",
-                        Setting.Kind.STRING, "", true).essential(),
-                new Setting("keep-last", "Retention", "Keep last",
-                        "Keep at most this many newest versions per coordinate; 0 disables the count cap.",
-                        Setting.Kind.INTEGER, "0", true).essential(),
-                new Setting("max-age", "Retention", "Maximum age",
-                        "Evict versions older than this ISO-8601 duration; empty disables age eviction.",
-                        Setting.Kind.DURATION, "", true).essential(),
-                new Setting("prerelease-expiry", "Retention", "Prerelease expiry",
-                        "Evict prereleases older than this ISO-8601 duration; empty disables.",
-                        Setting.Kind.DURATION, "", true).essential(),
-                new Setting("not-downloaded-for", "Retention", "Not downloaded for",
-                        "Evict versions not downloaded within this ISO-8601 duration; needs download tracking.",
-                        Setting.Kind.DURATION, "", true).essential(),
+                        Setting.Kind.STRING, "", true).standard(),
+                new Setting(RetentionPolicy.KEEP_LAST, "Retention", "Keep last",
+                        "Keep at most this many newest versions per coordinate; 0 disables the count cap. Set for "
+                                + "one repository, for a tenant's repositories or for every repository; the "
+                                + "narrowest value wins.",
+                        Setting.Kind.INTEGER, "0", true, Setting.Scope.REPOSITORY).essential(),
+                new Setting(RetentionPolicy.MAX_AGE, "Retention", "Maximum age",
+                        "Evict versions older than this duration (P30D, 30d); unset inherits the tenant's or the "
+                                + "deployment's rule, none switches the rule off for this repository.",
+                        Setting.Kind.DURATION_OR_NONE, "", true, Setting.Scope.REPOSITORY).essential(),
+                new Setting(RetentionPolicy.PRERELEASE_EXPIRY, "Retention", "Prerelease expiry",
+                        "Evict prereleases older than this duration; unset inherits the tenant's or the "
+                                + "deployment's rule, none switches the rule off for this repository.",
+                        Setting.Kind.DURATION_OR_NONE, "", true, Setting.Scope.REPOSITORY).essential(),
+                new Setting(RetentionPolicy.NOT_DOWNLOADED_FOR, "Retention", "Not downloaded for",
+                        "Evict versions not downloaded within this duration - it needs download tracking; unset "
+                                + "inherits the tenant's or the deployment's rule, none switches the rule off for "
+                                + "this repository.",
+                        Setting.Kind.DURATION_OR_NONE, "", true, Setting.Scope.REPOSITORY).essential(),
                 new Setting("scheduled-cleanup", "Retention", "Scheduled cleanup",
                         "Run the scheduled reaps: finished import jobs past their time-to-live and a quota'd "
                                 + "tenant's usage recount. Retention, garbage collection and the folder-size "
                                 + "roll-up ride the walks setting's retention entry instead.",
-                        Setting.Kind.BOOLEAN, "true", true).gate().essential(),
+                        Setting.Kind.BOOLEAN, "true", true).gate().standard(),
                 new Setting(CleanupTaskProvider.INTERVAL.key(), "Retention", "Cleanup interval",
                         "How often the scheduled reaps run.",
                         Setting.Kind.DURATION, CleanupTaskProvider.INTERVAL.fallbackText(), true).advanced(),

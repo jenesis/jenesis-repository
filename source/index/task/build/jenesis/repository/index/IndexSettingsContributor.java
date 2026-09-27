@@ -22,7 +22,7 @@ public final class IndexSettingsContributor implements SettingsContributor {
                 new Setting("index", "Index", "Published index",
                         "Publish an incremental, resumable repository index (Zstandard seekable chunks + descriptor) "
                                 + "on the background sweep.",
-                        Setting.Kind.BOOLEAN, "false", false).essential(),
+                        Setting.Kind.BOOLEAN, "false", false).standard(),
                 new Setting(PublishedIndexTaskProvider.INTERVAL.key(), "Index", "Index interval",
                         "How often an incremental index chunk is published.",
                         Setting.Kind.DURATION, PublishedIndexTaskProvider.INTERVAL.fallbackText(), false).advanced(),

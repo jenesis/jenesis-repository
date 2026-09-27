@@ -63,12 +63,11 @@ public class SettingsController {
     public String upstreams(Model model) throws IOException {
         model.addAttribute("repositories", settings.repositories());
         model.addAttribute("upstreams", settings.upstreams());
-        // The selected tenant's own layer over these, when a tenant is selected: its upstreams and the repositories it
-        // routes itself, each of which the repository's own overview edits.
+        // The selected tenant's own layer over these, when a tenant is selected: its upstreams. A repository that routes
+        // itself does so through its own routing setting, which its overview edits.
         String tenant = current.name();
         model.addAttribute("routedTenant", tenant);
         model.addAttribute("tenantUpstreams", tenant == null ? Map.of() : settings.upstreams(tenant));
-        model.addAttribute("tenantRepositories", tenant == null ? Map.of() : settings.repositories(tenant));
         model.addAttribute("suggestedUpstreams", settings.suggestedUpstreams());
         model.addAttribute("upstreamAuthHosts", settings.upstreamCredentialHosts());
         return "upstreams";
@@ -115,6 +114,10 @@ public class SettingsController {
      *  other {@code return} lands here - a redirect target is never taken from the request unvetted. */
     private static final Set<String> RETURNS = Set.of("/ui/settings", "/ui/setup");
 
+    /**
+     * It reads the tenant's and the deployment's settings documents, which the values it resolves inherit from: one
+     * object per module under a constant prefix, narrow by construction.
+     */
     @PostMapping("/ui/settings/save")
     public String save(@RequestParam("key") String key,
                        @RequestParam(name = "value", defaultValue = "") String value,

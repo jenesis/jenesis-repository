@@ -4,6 +4,8 @@ import module java.base;
 import build.jenesis.repository.audit.AuditActions;
 import build.jenesis.repository.audit.AuditTrail;
 import build.jenesis.repository.server.RepositoryRouting;
+import build.jenesis.repository.server.kernel.LiveConfig;
+import build.jenesis.repository.server.kernel.QuotaSettingsContributor;
 import build.jenesis.repository.server.kernel.Repositories;
 import build.jenesis.repository.server.spi.Authorization;
 import build.jenesis.repository.server.spi.CredentialLifetimes;
@@ -43,15 +45,17 @@ public class ManagementController {
     private final RepositoryRouting routing;
     private final Authorization authorization;
     private final AuditTrail audit;
+    private final LiveConfig live;
     // Module presence is static for a JVM; resolved once so the rate-limit surface can say "not installed".
     private final boolean rateLimiting = RateLimiterProvider.resolve(key -> null) != RateLimiter.NONE;
 
     public ManagementController(Repositories repositories, RepositoryRouting routing, Authorization authorization,
-                                AuditTrail audit) {
+                                AuditTrail audit, LiveConfig live) {
         this.repositories = repositories;
         this.routing = routing;
         this.authorization = authorization;
         this.audit = audit;
+        this.live = live;
     }
 
     private void audit(String tenant, String key, String action, String target) {
@@ -85,7 +89,12 @@ public class ManagementController {
         response.setStatus(200);
     }
 
-    /** The tenant's storage quota: the byte ceiling ({@code 0} when unlimited) and the bytes currently stored. */
+    /**
+     * The tenant's storage quota: the byte ceiling ({@code 0} when unlimited) and the bytes currently stored.
+     *
+     * <p>It reads the tenant's and the deployment's settings documents, which the values it resolves inherit from: one
+     * object per module under a constant prefix, narrow by construction.
+     */
     @GetMapping("/api/quota")
     @ResponseBody
     public QuotaView quota(HttpServletRequest http) throws IOException {
@@ -93,14 +102,20 @@ public class ManagementController {
         return new QuotaView(repositories.quotaLimit(tenant), repositories.quotaUsed(tenant));
     }
 
-    /** Set ({@code > 0}) or clear ({@code 0}) the tenant's storage quota in bytes, then recount stored usage so the
-     *  new ceiling starts from the truth. */
+    /** Set ({@code > 0}) or clear ({@code 0}, so the deployment's applies) the tenant's own storage quota in bytes -
+     *  its {@code tenant-quota} setting, validated and stored through the settings catalogue.
+     *
+     * <p>It reads the tenant's and the deployment's settings documents, which the values it resolves inherit from: one
+     * object per module under a constant prefix, narrow by construction.
+     */
     @PutMapping("/api/quota")
     public void setQuota(@RequestHeader(value = Repositories.KEY, required = false) String key,
                          @RequestBody QuotaRequest request,
                          HttpServletRequest http, HttpServletResponse response) throws IOException {
         String tenant = routing.tenant(http);
-        authorization.quotas().set(tenant, request == null ? 0L : request.maxBytes());
+        long maxBytes = request == null ? 0L : request.maxBytes();
+        live.setTenant(tenant, Map.of(QuotaSettingsContributor.KEY, maxBytes == 0 ? "" : Long.toString(maxBytes)),
+                false);
         // The usage total is NOT recomputed here: that walks every blob of every repository the tenant owns while
         // the caller waits - so the cost of setting a limit would grow with the tenant, which is the one thing a
         // request must not do. The cleanup pass already recomputes it for any tenant that has
@@ -111,7 +126,12 @@ public class ManagementController {
         response.setStatus(200);
     }
 
-    /** The tenant's request rate ceiling in permits per minute ({@code 0} when it falls back to the deployment default). */
+    /**
+     * The tenant's request rate ceiling in permits per minute ({@code 0} when it falls back to the deployment default).
+     *
+     * <p>It reads the tenant's and the deployment's settings documents, which the values it resolves inherit from: one
+     * object per module under a constant prefix, narrow by construction.
+     */
     @GetMapping("/api/rate-limit")
     @ResponseBody
     public RateLimitView rateLimit(HttpServletRequest http, HttpServletResponse response) throws IOException {
@@ -119,10 +139,19 @@ public class ManagementController {
             respondRateLimitNotInstalled(response);
             return null;
         }
-        return new RateLimitView(authorization.rateLimits().of(routing.tenant(http)));
+        return new RateLimitView(live.own(routing.tenant(http), RATE_LIMIT).map(own -> Long.parseLong(own.trim()))
+                .orElse(0L));
     }
 
-    /** Set ({@code > 0}) or clear ({@code 0}) the tenant's request rate ceiling in permits per minute. */
+    /** The rate ceiling's setting key, spelled here because the limiter module that declares it is optional. */
+    private static final String RATE_LIMIT = "rate-limit";
+
+    /** Set ({@code > 0}) or clear ({@code 0}, so the deployment's applies) the tenant's own request rate ceiling in
+     *  permits per minute - its {@code rate-limit} setting, validated and stored through the settings catalogue.
+     *
+     * <p>It reads the tenant's and the deployment's settings documents, which the values it resolves inherit from: one
+     * object per module under a constant prefix, narrow by construction.
+     */
     @PutMapping("/api/rate-limit")
     public void setRateLimit(@RequestHeader(value = Repositories.KEY, required = false) String key,
                              @RequestBody RateLimitRequest request, HttpServletRequest http,
@@ -133,7 +162,8 @@ public class ManagementController {
         }
         long permitsPerMinute = request == null ? 0L : request.permitsPerMinute();
         String tenant = routing.tenant(http);
-        authorization.rateLimits().set(tenant, permitsPerMinute);
+        live.setTenant(tenant, Map.of(RATE_LIMIT, permitsPerMinute == 0 ? "" : Long.toString(permitsPerMinute)),
+                false);
         audit(tenant, key, "rate-limit.set", Long.toString(permitsPerMinute));
         response.setStatus(200);
     }

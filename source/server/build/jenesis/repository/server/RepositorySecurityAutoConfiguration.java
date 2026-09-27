@@ -98,11 +98,12 @@ public class RepositorySecurityAutoConfiguration {
 
     @Bean
     @ConditionalOnMissingBean
-    public RateLimitFilter rateLimitFilter(RateLimiter rateLimiter, Authorization authorization,
-                                           RepositoryProperties properties) {
+    public RateLimitFilter rateLimitFilter(RateLimiter rateLimiter, RepositoryProperties properties) {
         // A bean (not an inline filter) so a metrics layer can scrape the same instance the chain sheds load with.
-        // The default ceiling is read live, so the rate-limit setting an operator writes at runtime is honoured.
-        return new RateLimitFilter(rateLimiter, authorization, RateLimitFilter.liveDefault(Features.lookup(), properties.getRateLimit()));
+        // The ceiling is read live, so the rate-limit setting an operator writes at runtime is honoured; a shell
+        // without the stored settings has no tenant's value to read, so every tenant meters at the deployment's.
+        return new RateLimitFilter(rateLimiter,
+                RateLimitFilter.liveCeiling(_ -> Features.lookup(), properties.getRateLimit()));
     }
 
     /**

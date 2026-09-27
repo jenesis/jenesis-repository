@@ -12,8 +12,8 @@ import org.springframework.web.filter.OncePerRequestFilter;
 
 /**
  * Sheds excess load before the request reaches the repository: each request is metered against its tenant's rate
- * ceiling (the per-tenant {@link Authorization#rateLimits()} when set, otherwise the deployment default), and one that
- * exhausts the tenant's {@link RateLimiter} bucket is answered {@code 429 Too Many Requests} with a {@code
+ * ceiling (the {@code rate-limit} setting as that tenant resolves it - its own value, else the deployment's), and
+ * one that exhausts the tenant's {@link RateLimiter} bucket is answered {@code 429 Too Many Requests} with a {@code
  * Retry-After}. The tenant is read from the presented key ({@link PresentedKey}) when it is
  * {@link Authorization#wellFormed well-formed}, but that check is only a CRC32 typo guard, not a signature: this
  * pre-auth filter cannot afford the store lookup that would tell a genuine key from a fabricated one, so the tenant
@@ -26,10 +26,10 @@ import org.springframework.web.filter.OncePerRequestFilter;
  * probes are unaffected. The effective ceiling is cached briefly per bucket so the limiter, not a store read, is on
  * the hot path. A ceiling of zero (nothing configured) is unlimited - the filter is then a no-op.
  *
- * <p>The deployment default is read live, through the lookup the runtime settings resolve against
- * ({@link #liveDefault}), so an operator who lowers, raises or zeroes {@code rate-limit} through the settings API
- * sees it take effect within the cache's ten seconds of the lookup seeing it rather than at the next boot. The boot
- * property stays the fallback for a deployment that never set it at runtime.
+ * <p>The ceiling is read live, through the lookup the runtime settings resolve against for the tenant
+ * ({@link #liveCeiling}), so an operator who lowers, raises or zeroes {@code rate-limit} - deployment-wide or for one
+ * tenant - through the settings API sees it take effect within the cache's ten seconds of the lookup seeing it rather
+ * than at the next boot. The boot property stays the fallback for a deployment that never set it at runtime.
  */
 public class RateLimitFilter extends OncePerRequestFilter {
 
@@ -40,34 +40,36 @@ public class RateLimitFilter extends OncePerRequestFilter {
     static final int MAX_TRACKED_TENANTS = 50_000;
 
     private final RateLimiter limiter;
-    private final Authorization authorization;
-    private final LongSupplier defaultPermitsPerMinute;
+    private final ToLongFunction<String> ceilingOf;
     private final BoundedTenantBuckets buckets = new BoundedTenantBuckets(MAX_TRACKED_TENANTS);
     private final ConcurrentHashMap<String, long[]> ceilings = new ConcurrentHashMap<>();
     private final AtomicLong rejected = new AtomicLong();
     private final ConcurrentHashMap<String, AtomicLong> rejectedByTenant = new ConcurrentHashMap<>();
 
-    public RateLimitFilter(RateLimiter limiter, Authorization authorization, long defaultPermitsPerMinute) {
-        this(limiter, authorization, () -> defaultPermitsPerMinute);
+    /** One fixed ceiling for every tenant. */
+    public RateLimitFilter(RateLimiter limiter, long permitsPerMinute) {
+        this(limiter, _ -> permitsPerMinute);
     }
 
-    public RateLimitFilter(RateLimiter limiter, Authorization authorization, LongSupplier defaultPermitsPerMinute) {
+    /** {@code ceilingOf} answers a tenant's ceiling - {@code null} for a keyless request, or a tenant past the
+     *  tracked cap, which meter against the deployment's. */
+    public RateLimitFilter(RateLimiter limiter, ToLongFunction<String> ceilingOf) {
         this.limiter = limiter;
-        this.authorization = authorization;
-        this.defaultPermitsPerMinute = defaultPermitsPerMinute;
+        this.ceilingOf = ceilingOf;
     }
 
     /**
-     * The deployment default as the runtime settings currently resolve it: the {@code rate-limit} setting when an
-     * operator has written one - whatever {@code lookup} answers for {@code jenreg.rate-limit}, which is
-     * {@link Features#lookup()} on the shell and the store-backed chain (pin over stored override over
-     * environment) on a shell that has one - otherwise {@code fallback}, the boot property's value. A value that does
-     * not parse as a non-negative number is ignored in favour of the fallback rather than turning every request
-     * into an error: the settings API validates the setting's kind on write, so this only guards a hand-edited store.
+     * The ceiling as the runtime settings currently resolve it for a tenant: whatever {@code lookup} - given the
+     * tenant, {@code null} for the deployment's - answers for {@code jenreg.rate-limit}, which is
+     * {@link Features#lookup()} on the shell and the store-backed chain (pin over the tenant's stored value over the
+     * deployment's over the environment) on a shell that has one - otherwise {@code fallback}, the boot property's
+     * value. A value that does not parse as a non-negative number is ignored in favour of the fallback rather than
+     * turning every request into an error: the settings API validates the setting on write, so this only guards a
+     * hand-edited store.
      */
-    public static LongSupplier liveDefault(UnaryOperator<String> lookup, long fallback) {
-        return () -> {
-            String configured = lookup.apply("jenreg.rate-limit");
+    public static ToLongFunction<String> liveCeiling(Function<String, UnaryOperator<String>> lookup, long fallback) {
+        return tenant -> {
+            String configured = lookup.apply(tenant).apply("jenreg.rate-limit");
             if (configured == null || configured.isBlank()) {
                 return fallback;
             }
@@ -122,17 +124,7 @@ public class RateLimitFilter extends OncePerRequestFilter {
         if (cached != null && cached[1] > now) {
             return cached[0];
         }
-        long ceiling = defaultPermitsPerMinute.getAsLong();
-        if (tenant != null) {
-            try {
-                long override = authorization.rateLimits().of(tenant);
-                if (override > 0) {
-                    ceiling = override;
-                }
-            } catch (IOException e) {
-                // best-effort: fall back to the deployment default
-            }
-        }
+        long ceiling = ceilingOf.applyAsLong(tenant);
         ceilings.put(bucket, new long[]{ceiling, now + CACHE_TTL_NANOS});
         return ceiling;
     }

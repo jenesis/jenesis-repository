@@ -19,8 +19,8 @@ import org.springframework.web.servlet.mvc.support.RedirectAttributes;
 import build.jenesis.repository.ui.ConsoleScreen;
 
 /**
- * Lists the projects on the volume, creates new ones, and edits a project's cache.properties (the well-known size /
- * lru / ttl values) through a typed form. A super-admin also sees the volume the projects of every tenant share and
+ * Lists the projects on the volume, creates new ones, and edits a project's settings - its size cap, sweep order and
+ * unused-entry lifetime - through the settings catalogue. A super-admin also sees the volume the projects of every tenant share and
  * runs the reclaim across them: it acts on build-cache entries, so it lives with the projects rather than on the
  * tenant chooser. Binding names are given explicitly because the Jenesis javac step does not emit
  * {@code -parameters}.
@@ -44,6 +44,10 @@ public class ProjectsController {
         this.volumeReclaim = volumeReclaim;
     }
 
+    /**
+     * It reads the tenant's and the deployment's settings documents, which the values it resolves inherit from: one
+     * object per module under a constant prefix, narrow by construction.
+     */
     @GetMapping("/ui/projects")
     public String list(Authentication authentication, Model model) throws IOException {
         model.addAttribute("projects", service.listProjects());
@@ -87,20 +91,35 @@ public class ProjectsController {
         return "redirect:/ui/projects/" + name;
     }
 
+    /**
+     * It reads the tenant's and the deployment's settings documents, which the values it resolves inherit from: one
+     * object per module under a constant prefix, narrow by construction.
+     */
     @GetMapping("/ui/projects/{name}")
     public String detail(@PathVariable("name") String name, Model model) throws IOException {
         model.addAttribute("project", service.project(name));
+        model.addAttribute("groups", service.settings(name));
         return "project";
     }
 
-    @PostMapping("/ui/projects/{name}/cache")
-    public String saveCache(@PathVariable("name") String name,
-                            @RequestParam(name = "size", required = false) String size,
-                            @RequestParam(name = "lru", required = false) String lru,
-                            @RequestParam(name = "ttl", required = false) String ttl,
-                            RedirectAttributes redirect) throws IOException {
-        service.saveCacheConfig(name, size, lru, ttl);
-        redirect.addFlashAttribute("message", "Saved cache settings for '" + name + "'.");
+    /**
+     * Set or clear one of the project's settings through the catalogue.
+     *
+     * <p>It reads the tenant's and the deployment's settings documents, which the values it resolves inherit from: one
+     * object per module under a constant prefix, narrow by construction.
+     */
+    @PostMapping("/ui/projects/{name}/settings/save")
+    public String saveSetting(@PathVariable("name") String name, @RequestParam("key") String key,
+                              @RequestParam(name = "value", defaultValue = "") String value,
+                              RedirectAttributes redirect) throws IOException {
+        try {
+            service.saveSetting(name, key, value);
+            redirect.addFlashAttribute("message", value.isBlank()
+                    ? "'" + key + "' is inherited again for '" + name + "'."
+                    : "Saved '" + key + "' for '" + name + "'.");
+        } catch (IllegalArgumentException refused) {
+            redirect.addFlashAttribute("error", refused.getMessage());
+        }
         return "redirect:/ui/projects/" + name;
     }
 

@@ -51,11 +51,16 @@ class ConfigControllerTest {
     }
 
     private ConfigController controller(UpstreamCredentialSource credentials) throws IOException {
+        return controller(credentials, true);
+    }
+
+    /** A controller whose callers are the deployment's operator, or are not. */
+    private ConfigController controller(UpstreamCredentialSource credentials, boolean operator) throws IOException {
         settings = new Settings(store);
         LiveConfig live = new LiveConfig(settings, new RepositoryProperties(), AdvisorySource.none(), _ -> null);
         return new ConfigController(repositories, settings, live,
                 Web.pins(Web.environment(Map.of("jenreg." + PINNED, "REJECT"))), credentials, audit,
-                Web.routing(store, repositories));
+                Web.routing(store, repositories), _ -> operator);
     }
 
     /** An {@code /api} call, which names no tenant: the routing answers the one this deployment serves. */
@@ -251,20 +256,49 @@ class ConfigControllerTest {
     }
 
     @Test
-    void a_tenant_routes_its_own_repository_over_the_deployment() throws IOException {
+    void a_repository_routes_itself_through_its_own_setting_and_a_tenant_has_no_definitions() throws IOException {
+        Servlets.Response routed = Servlets.response();
+        controller.setRepositorySetting("routing", "releases", null, new ConfigController.SettingRequest("writable"),
+                request(), routed.servlet());
+        Servlets.Response tenantDefinition = Servlets.response();
         controller.setRepositoryDefinition("releases", null, "acme",
-                new ConfigController.NamedValueRequest("writable"), request(), Servlets.response().servlet());
-        Servlets.Response badTenant = Servlets.response();
-        controller.setRepositoryDefinition("releases", null, "not a tenant",
-                new ConfigController.NamedValueRequest("writable"), request(), badTenant.servlet());
+                new ConfigController.NamedValueRequest("writable"), request(), tenantDefinition.servlet());
 
-        assertThat(controller.repositoryDefinitions("acme"))
-                .containsExactly(new ConfigController.NamedValue("releases", "writable"));
-        assertThat(controller.repositoryDefinitions(null)).isEmpty();
-        assertThat(controller.repositoryDefinitions("not a tenant")).isEmpty();
-        assertThat(badTenant.status()).isEqualTo(400);
+        assertThat(routed.status()).isEqualTo(200);
+        ConfigController.SettingView routing = row(controller.repositorySettings("releases", request()), "routing");
+        assertThat(routing.value()).isEqualTo("writable");
+        assertThat(routing.overridden()).as("the repository set its own").isTrue();
+        assertThat(controller.repositoryDefinitions(null)).as("the deployment's definitions are untouched").isEmpty();
+        assertThat(tenantDefinition.status())
+                .as("a tenant definition is refused: a repository is routed by its own setting").isEqualTo(400);
         assertThat(audit.rows()).singleElement()
-                .satisfies(event -> assertThat(event.target()).isEqualTo("acme/releases"));
+                .satisfies(event -> assertThat(event.target()).endsWith("/releases/routing"));
+    }
+
+    @Test
+    void a_repository_routing_is_validated_through_the_catalogue_and_is_the_operators_to_set() throws IOException {
+        Servlets.Response plaintext = Servlets.response();
+        controller.setRepositorySetting("routing", "mirror", null,
+                new ConfigController.SettingRequest("fallback http://mirror.example/maven2"), request(),
+                plaintext.servlet());
+        Servlets.Response nonsense = Servlets.response();
+        controller.setRepositorySetting("routing", "mirror", null,
+                new ConfigController.SettingRequest("sometimes maybe"), request(), nonsense.servlet());
+        Servlets.Response tenantWide = Servlets.response();
+        controller.setSetting("routing", null, "acme", new ConfigController.SettingRequest("writable"), request(),
+                tenantWide.servlet());
+        Servlets.Response notTheOperator = Servlets.response();
+        controller(UpstreamCredentialSource.NONE, false).setRepositorySetting("routing", "mirror", null,
+                new ConfigController.SettingRequest("writable"), request(), notTheOperator.servlet());
+
+        assertThat(plaintext.status()).as("a plaintext upstream is refused, as every write surface refuses it")
+                .isEqualTo(400);
+        assertThat(nonsense.status()).as("a definition the parser refuses").isEqualTo(400);
+        assertThat(tenantWide.status()).as("a routing has no tenant-wide value").isEqualTo(400);
+        assertThat(notTheOperator.status()).as("a routing is the deployment operator's to set").isEqualTo(400);
+        assertThat(row(controller.repositorySettings("mirror", request()), "routing").overridden())
+                .as("nothing refused was stored").isFalse();
+        assertThat(audit.rows()).isEmpty();
     }
 
     @Test

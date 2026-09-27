@@ -23,4 +23,6 @@ module build.jenesis.repository.definitions {
     requires build.jenesis.repository.settings;
     requires org.slf4j;
     exports build.jenesis.repository.definitions;
+    provides build.jenesis.repository.settings.SettingsContributor
+            with build.jenesis.repository.definitions.RoutingSettingsContributor;
 }

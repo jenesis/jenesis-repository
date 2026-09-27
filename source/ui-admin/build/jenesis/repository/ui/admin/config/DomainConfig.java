@@ -69,10 +69,12 @@ public class DomainConfig {
 
     @Bean
     public CacheService cacheService(@Qualifier("cacheTenantStorage") CacheStorage cacheTenantStorage,
-                                     AuditTrail audit, CurrentTenant currentTenant, ConsoleActor actor) {
+                                     AuditTrail audit, CurrentTenant currentTenant, ConsoleActor actor,
+                                     SettingsAdmin settingsAdmin) {
         // The cache screens manage cached build output, which lives in the cache's own segment of the store - not
-        // beside the console's documents at the deployment root, which is what the primary tenantStorage sees.
-        return new CacheService(cacheTenantStorage, audit, currentTenant, actor);
+        // beside the console's documents at the deployment root, which is what the primary tenantStorage sees. A
+        // project's policy is its project settings, read and written through the settings catalogue.
+        return new CacheService(cacheTenantStorage, audit, currentTenant, actor, settingsAdmin);
     }
 
     @Bean
@@ -212,10 +214,10 @@ public class DomainConfig {
 
 
     @Bean
-    public TenantLimits tenantLimits(ArtifactStore repositoryStore, Authorization authorization,
+    public TenantLimits tenantLimits(ArtifactStore repositoryStore, SettingsAdmin settingsAdmin,
                                      CurrentTenant currentTenant, ObservationRegistry observations,
                                      AuditTrail audit, ConsoleActor actor) {
-        return new TenantLimits(repositoryStore, authorization, currentTenant, observations, audit, actor);
+        return new TenantLimits(repositoryStore, settingsAdmin, currentTenant, observations, audit, actor);
     }
 
     @Bean
@@ -227,8 +229,8 @@ public class DomainConfig {
     @Bean
     public RepositoryLifecycle repositoryLifecycle(ArtifactStore repositoryStore, CurrentTenant currentTenant,
                                                    ObservationRegistry observations, AuditTrail audit,
-                                                   ConsoleActor actor) {
-        return new RepositoryLifecycle(repositoryStore, currentTenant, observations, audit, actor);
+                                                   ConsoleActor actor, SettingsAdmin settingsAdmin) {
+        return new RepositoryLifecycle(repositoryStore, currentTenant, observations, audit, actor, settingsAdmin);
     }
 
     @Bean

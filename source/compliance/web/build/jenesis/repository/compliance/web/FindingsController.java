@@ -101,6 +101,10 @@ public class FindingsController {
     /** A scanner's name as a report gives it and the ledger records it: short, lower-case, and safe as a label. */
     private static final Pattern SOURCE = Pattern.compile("[a-z0-9][a-z0-9._-]{0,63}");
 
+    /**
+     * The tenant settings it consults come from the tenant's settings documents, read once per tenant into a cached
+     * snapshot: one object per module under a constant prefix, narrow by construction.
+     */
     @PostMapping("/api/findings/report")
     @ResponseBody
     public ReportAnswer report(@RequestParam("repo") String repo,

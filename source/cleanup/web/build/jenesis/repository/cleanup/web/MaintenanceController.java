@@ -88,6 +88,10 @@ public class MaintenanceController {
         audit.record(tenant, key == null ? "anonymous" : Authorization.hash(key), action, detail);
     }
 
+    /**
+     * It reads the tenant's and the deployment's settings documents, which the values it resolves inherit from: one
+     * object per module under a constant prefix, narrow by construction.
+     */
     @PostMapping("/api/repository/cleanup")
     @ResponseBody
     public CleanupReport cleanup(@RequestParam("repo") String repo,
@@ -172,6 +176,10 @@ public class MaintenanceController {
         return Map.of("ecosystem", ecosystem, "removed", removed);
     }
 
+    /**
+     * It reads the tenant's and the deployment's settings documents, which the values it resolves inherit from: one
+     * object per module under a constant prefix, narrow by construction.
+     */
     @GetMapping("/api/repository/cleanup/plan")
     @ResponseBody
     public CleanupReport cleanupPlan(@RequestParam("repo") String repo,
@@ -202,6 +210,10 @@ public class MaintenanceController {
         return new CleanupReport(0, evicted(inventory, plan), plan.evictions().size(), gc);
     }
 
+    /**
+     * It reads the tenant's and the deployment's settings documents, which the values it resolves inherit from: one
+     * object per module under a constant prefix, narrow by construction.
+     */
     @GetMapping("/api/repository/retention")
     @ResponseBody
     public RetentionView retention(@RequestParam("repo") String repo,
@@ -219,12 +231,19 @@ public class MaintenanceController {
                 policy.notDownloadedFor() == null ? "" : policy.notDownloadedFor().toString());
     }
 
+    /**
+     * Set a repository's retention rules - each one given, as its repository setting: a value sets the rule for this
+     * repository, an empty one clears it so the repository inherits its tenant's and the deployment's, {@code none}
+     * on a duration rule switches it off here; a rule not given is left as it is. Every given value is validated
+     * through the settings catalogue before any is stored, so a malformed or non-positive rule is a {@code 400} and
+     * never reaches a sweep.
+     */
     @PutMapping("/api/repository/retention")
     public void setRetention(@RequestParam("repo") String repo,
-                             @RequestParam(value = "keepLast", defaultValue = "0") int keepLast,
-                             @RequestParam(value = "maxAge", defaultValue = "") String maxAge,
-                             @RequestParam(value = "prereleaseExpiry", defaultValue = "") String prereleaseExpiry,
-                             @RequestParam(value = "notDownloadedFor", defaultValue = "") String notDownloadedFor,
+                             @RequestParam(value = "keepLast", required = false) String keepLast,
+                             @RequestParam(value = "maxAge", required = false) String maxAge,
+                             @RequestParam(value = "prereleaseExpiry", required = false) String prereleaseExpiry,
+                             @RequestParam(value = "notDownloadedFor", required = false) String notDownloadedFor,
                              @RequestHeader(value = Repositories.KEY, required = false) String key,
                              HttpServletRequest request, HttpServletResponse response) throws IOException {
         String tenant = tenant(repo, request);
@@ -232,23 +251,32 @@ public class MaintenanceController {
             respondRetentionNotInstalled(response);
             return;
         }
-        RetentionPolicy policy;
+        Map<String, String> rules = new LinkedHashMap<>();
+        given(rules, RetentionPolicy.KEEP_LAST, keepLast);
+        given(rules, RetentionPolicy.MAX_AGE, maxAge);
+        given(rules, RetentionPolicy.PRERELEASE_EXPIRY, prereleaseExpiry);
+        given(rules, RetentionPolicy.NOT_DOWNLOADED_FOR, notDownloadedFor);
         try {
-            policy = RetentionPolicy.parse(keepLast, maxAge, prereleaseExpiry, notDownloadedFor);
+            live.setRepository(tenant, repo, rules, false);
         } catch (IllegalArgumentException e) {
             // A malformed or non-positive dial is the caller's error (400), never a 500 - and never stored, since a
-            // stored bad policy would fail (or, inverted, mass-delete) at sweep time instead of at the operator's desk.
+            // stored bad rule would fail (or, inverted, mass-delete) at sweep time instead of at the operator's desk.
             response.setStatus(400);
             response.setContentType("text/plain;charset=UTF-8");
             response.getWriter().write(e.getMessage() == null ? "invalid retention policy" : e.getMessage());
             return;
         }
-        new StoreRepositoryInventory(repositories.store(tenant, repo)).writeRetention(policy);
-        audited(tenant, key, AuditActions.REPOSITORY_RETENTION, repo + " keepLast=" + keepLast
-                + (maxAge.isBlank() ? "" : " maxAge=" + maxAge)
-                + (prereleaseExpiry.isBlank() ? "" : " prereleaseExpiry=" + prereleaseExpiry)
-                + (notDownloadedFor.isBlank() ? "" : " notDownloadedFor=" + notDownloadedFor));
+        StringBuilder detail = new StringBuilder(repo);
+        rules.forEach((rule, value) -> detail.append(' ').append(rule).append('=')
+                .append(value.isEmpty() ? "(inherited)" : value));
+        audited(tenant, key, AuditActions.REPOSITORY_RETENTION, detail.toString());
         response.setStatus(200);
+    }
+
+    private static void given(Map<String, String> rules, String rule, String value) {
+        if (value != null) {
+            rules.put(rule, value.trim());
+        }
     }
 
     @PostMapping("/api/repository/pin")
@@ -376,9 +404,9 @@ public class MaintenanceController {
 
     public record PinsView(List<String> pinned) {
     }
-    /** The repository's stored retention policy, or the deployment's live default where none was written - the
-     *  retention surface's own read. */
-    private RetentionPolicy retention(String tenant, String repo) throws IOException {
-        return new StoreRepositoryInventory(repositories.store(tenant, repo)).readRetention().orElse(live.retention());
+    /** The policy the repository runs under - its rules resolved through its own settings over its tenant's and the
+     *  deployment's, the chain the scheduled sweep and the console read too. */
+    private RetentionPolicy retention(String tenant, String repo) {
+        return live.retention(tenant, repo);
     }
 }

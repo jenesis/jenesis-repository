@@ -148,9 +148,26 @@ public final class Repositories {
         return Optional.of(staging.get().over(writable(tenant, repository)));
     }
 
-    /** The tenant's configured storage quota in bytes, or {@code 0} when unlimited. */
+    /** The live configuration this resolver answers a tenant's quota and a repository's definition through. */
+    public LiveConfig live() {
+        return live;
+    }
+
+    /** The tenant's configured storage quota in bytes, or {@code 0} when unlimited: its {@code tenant-quota}
+     *  setting, the tenant's own over the deployment's. */
     public long quotaLimit(String tenant) throws IOException {
-        return authorization.quotas().of(tenant);
+        if (live == null) {
+            return 0L;
+        }
+        String configured = live.effective(tenant, QuotaSettingsContributor.KEY, "0");
+        try {
+            return Math.max(0L, Long.parseLong(configured.trim()));
+        } catch (NumberFormatException unparsable) {
+            // The catalogue refuses such a value on every write path; one written into the store by hand is a
+            // misconfiguration that fails the publish loudly rather than reading as unlimited.
+            throw new IOException("Tenant '" + tenant + "' has an unparsable " + QuotaSettingsContributor.KEY
+                    + " '" + configured + "'", unparsable);
+        }
     }
 
     /** The tenant's currently counted stored-content bytes (across its repositories). */
@@ -189,7 +206,7 @@ public final class Repositories {
      *  tenant gets the plain scoped store, so only quota'd tenants pay for the metering. The counter lives on the
      *  tenant scope, so every repository's blobs count against one tenant-wide limit. */
     public ArtifactStore writable(String tenant, String repository) throws IOException {
-        long limit = authorization.quotas().of(tenant);
+        long limit = quotaLimit(tenant);
         return limit > 0
                 ? new QuotaArtifactStore(root.scope(tenant), limit).scope(repository)
                 : store(tenant, repository);

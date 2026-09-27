@@ -162,7 +162,7 @@ class MaintenanceControllerTest {
     void a_stored_retention_policy_reads_back_and_is_audited() throws Exception {
         Servlets.Response write = Servlets.response();
 
-        controller.setRetention(REPO, 3, "P30D", "", "P90D", "key", request(), write.servlet());
+        controller.setRetention(REPO, "3", "P30D", "", "P90D", "key", request(), write.servlet());
 
         assertThat(write.status()).isEqualTo(200);
         MaintenanceController.RetentionView view = controller.retention(REPO, null, request(),
@@ -170,7 +170,8 @@ class MaintenanceControllerTest {
         assertThat(view).isEqualTo(new MaintenanceController.RetentionView(3, "PT720H", "", "PT2160H"));
         assertThat(audit.rows()).singleElement().satisfies(row -> {
             assertThat(row.action()).isEqualTo(AuditActions.REPOSITORY_RETENTION);
-            assertThat(row.target()).isEqualTo(REPO + " keepLast=3 maxAge=P30D notDownloadedFor=P90D");
+            assertThat(row.target()).isEqualTo(REPO + " keep-last=3 max-age=P30D prerelease-expiry=(inherited) "
+                    + "not-downloaded-for=P90D");
         });
     }
 
@@ -178,18 +179,20 @@ class MaintenanceControllerTest {
     void a_malformed_retention_dial_is_refused_and_never_stored() throws Exception {
         Servlets.Response write = Servlets.response();
 
-        controller.setRetention(REPO, 3, "a month", "", "", null, request(), write.servlet());
+        controller.setRetention(REPO, "3", "a month", "", "", null, request(), write.servlet());
 
         assertThat(write.status()).isEqualTo(400);
         assertThat(write.body()).isNotBlank();
-        assertThat(inventory().readRetention()).isEmpty();
+        assertThat(controller.retention(REPO, null, request(), Servlets.response().servlet()))
+                .as("nothing was stored: the repository runs under the deployment's empty policy")
+                .isEqualTo(new MaintenanceController.RetentionView(0, "", "", ""));
         assertThat(audit.rows()).isEmpty();
     }
 
     @Test
     void the_dry_run_names_what_the_policy_would_evict_and_deletes_nothing() throws Exception {
         recordThreeVersions();
-        controller.setRetention(REPO, 1, "", "", "", null, request(), Servlets.response().servlet());
+        controller.setRetention(REPO, "1", "", "", "", null, request(), Servlets.response().servlet());
 
         MaintenanceController.CleanupReport plan = controller.cleanupPlan(REPO, null, request(),
                 Servlets.response().servlet());
@@ -205,7 +208,7 @@ class MaintenanceControllerTest {
     @Test
     void a_sweep_evicts_what_the_policy_names_spares_a_pin_and_is_audited() throws Exception {
         recordThreeVersions();
-        controller.setRetention(REPO, 1, "", "", "", null, request(), Servlets.response().servlet());
+        controller.setRetention(REPO, "1", "", "", "", null, request(), Servlets.response().servlet());
         controller.pin(REPO, ECOSYSTEM, COORDINATE, "1.0.0", null, request(), Servlets.response().servlet());
 
         MaintenanceController.CleanupReport report = controller.cleanup(REPO, "key", request(),
@@ -224,7 +227,7 @@ class MaintenanceControllerTest {
     @Test
     void a_sweep_over_an_ecosystem_no_format_places_refuses_rather_than_deleting() throws Exception {
         recordThreeVersions(UNPLACED);
-        controller.setRetention(REPO, 1, "", "", "", null, request(), Servlets.response().servlet());
+        controller.setRetention(REPO, "1", "", "", "", null, request(), Servlets.response().servlet());
 
         assertThatThrownBy(() -> controller.cleanup(REPO, null, request(), Servlets.response().servlet()))
                 .isInstanceOf(IOException.class).hasMessageContaining("no installed format can place");

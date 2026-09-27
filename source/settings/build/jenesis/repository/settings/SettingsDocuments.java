@@ -28,6 +28,11 @@ public final class SettingsDocuments {
     /** The store prefix under which the per-module documents are kept. */
     public static final String ROOT = Scopes.space(Scopes.CONFIG) + "/settings";
 
+    /** The settings epoch, beside the documents under {@code .system/config}: a token every settings write moves, so a
+     *  node's scheduled re-read lists and re-reads the documents only when some writer - on any node, on any surface -
+     *  changed one. A key at the root would make {@code config} a tenant to every pass that enumerates them. */
+    public static final String EPOCH = Scopes.space(Scopes.CONFIG) + "/settings-epoch";
+
     /** The document a setting with no discovered contributor (the neutral core dials, the map entries) belongs in. */
     public static final String NEUTRAL = "core";
 

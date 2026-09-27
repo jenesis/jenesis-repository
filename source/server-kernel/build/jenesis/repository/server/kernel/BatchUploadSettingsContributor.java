@@ -18,7 +18,7 @@ public final class BatchUploadSettingsContributor implements SettingsContributor
                 new Setting("batch-upload", "Uploads", "Batch archive upload",
                         "Explode a single PUT carrying the Jenesis-Explode: zip header into one publish per archive "
                                 + "entry, each screened by the compliance gate. Off by default.",
-                        Setting.Kind.BOOLEAN, "false", true).essential(),
+                        Setting.Kind.BOOLEAN, "false", true).standard(),
                 new Setting("batch-upload-max-entries", "Uploads", "Batch upload entry cap",
                         "The most members one exploded archive may publish; the walk stops at this cap.",
                         Setting.Kind.INTEGER, "10000", true).advanced(),

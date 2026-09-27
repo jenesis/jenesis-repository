@@ -2,7 +2,7 @@ The build cache
 ===============
 
 > This is the build-cache module. The wire protocol, the per-project
-> `cache.properties`, eviction and security below are current. What is no longer true anywhere in this
+> settings, eviction and security below are current. What is no longer true anywhere in this
 > file's history is that the cache is a product you deploy on its own: **there is no cache-only image and
 > no dedicated cache deployment.** A cache and an artifact store normally sit on one machine over one
 > store, so a deployment that wants only the cache runs the ordinary node with every format switched off -
@@ -103,10 +103,11 @@ and that real keys should be issued per credential through the admin console. No
 `<tenant>.<secret>` credentials keep working alongside it.
 
 Everything else is per tenant and per project. Under the root, each tenant is a
-folder; inside it each project holds its entries plus its `cache.properties`, and the
-tenant's credentials live under `.users/`. Configs are parsed on first use and kept
-in an LRU cache, re-read only when they change on disk - so revoking a grant takes
-effect at once without re-parsing on every request:
+folder; inside it each project holds its entries plus its own settings documents, and the
+tenant's credentials live under `.users/`. A project's policy is read on first use and kept
+in an LRU cache for the policy window (`jenreg.cache.ttl`), and grants are read through the
+credential space's cache - so revoking a grant takes effect at once without re-reading
+every document on every request:
 
     <root>/
       acme/                                        # a tenant
@@ -116,7 +117,7 @@ effect at once without re-parsing on every request:
             projects.properties                    # this credential's grants: <project> = read,write  (* = all)
             metadata.properties                    # label, created
         lib/                                        # a project
-          cache.properties                          # this project's cache policy
+          .system/config/settings/<module>.json     # this project's own settings
           <step>/<inputs>                           # entries, shared by all of the tenant's credentials
 
 A credential's `projects.properties` maps projects to roles (a comma list of `read` /
@@ -127,17 +128,19 @@ SHA-256, and the minted key is `<tenant>.<secret>`:
     docs  = read
     *     = read
 
-`cache.properties` tunes the project's storage (both keys optional):
+Three project settings tune the project's storage, each set for one project, for a tenant's
+projects or for every project - the narrowest value wins - through the settings screens, the
+project wizard, `/api/cache/projects/<name>/settings` and `jenesis-repo settings --project`:
 
-| key    | default   | effect                                                                       |
-| ------ | --------- | ---------------------------------------------------------------------------- |
-| `size` | *(unset)* | total byte cap; over it, entries are evicted on a background thread until under (unset = no cap) |
-| `lru`  | `true`    | evict the least-recently-modified entry first (`false` = most-recently)      |
-| `ttl`  | *(unset)* | ISO-8601 duration (e.g. `P30D`); a dedicated reaper thread evicts entries not touched within it (unset = no age eviction) |
+| key            | default   | effect                                                                       |
+| -------------- | --------- | ---------------------------------------------------------------------------- |
+| `project-size` | `0`       | total byte cap; over it, entries are evicted on a background thread until under (0 = no cap) |
+| `project-lru`  | `true`    | evict the least-recently-used entry first (`false` = most-recently)          |
+| `project-ttl`  | *(unset)* | duration (e.g. `P30D`); a dedicated reaper thread evicts entries not touched within it (unset inherits, `none` = no age eviction) |
 
-`size`/`lru` eviction is reactive, triggered on a store that pushes the project over its cap.
-`ttl` eviction is periodic: a single reaper thread sweeps every project root each
-`JENREG_CACHE_REAPER` interval and drops entries idle longer than that project's `ttl` (a GET or
+`project-size`/`project-lru` eviction is reactive, triggered on a store that pushes the project over
+its cap. `project-ttl` eviction is periodic: a single reaper thread sweeps every project root each
+`JENREG_CACHE_REAPER` interval and drops entries idle longer than that project's lifetime (a GET or
 HEAD touch counts as use, so an actively-read entry never ages out).
 
 Disk headroom is a property of the shared volume, not any one project, so it is configured
@@ -145,8 +148,8 @@ server-wide (the env vars above) rather than per project. When `JENREG_CACHE_MIN
 `JENREG_CACHE_MIN_FREE_PERCENT` is set and the volume drops below either, a **global**
 least-recently-used sweep across every project reclaims space until both floors are satisfied - on
 each reaper tick and again before a store, where a PUT that still cannot fit is refused with `507
-Insufficient Storage`. This is the safety net against a full disk: per-project `size`/`ttl` caps do
-not by themselves bound total volume use.
+Insufficient Storage`. This is the safety net against a full disk: per-project size and lifetime caps
+do not by themselves bound total volume use.
 
 A tenant with no credentials under `.users/` is unreachable - every request is
 refused - so a project is live only once a credential has been granted it. Credentials
@@ -174,7 +177,7 @@ over one store for no gain, and two security postures to keep in step.
 What follows from it: the store settings, the credentials, the console, the actuator posture
 and the TLS termination are the node's, documented with the node, and nothing here restates
 them. What stays here is what is specific to the cache: the wire protocol above, the
-per-project `cache.properties`, eviction and the key model below.
+per-project settings, eviction and the key model below.
 
 Security
 --------
@@ -194,7 +197,7 @@ Relationship to the local cache
 -------------------------------
 
 This is the networked sibling of `BuildExecutorFileCache`: same content-addressing,
-same zip entry format, and the same `cache.properties` knobs (`size`, `lru`) per
+same zip entry format, and the same knobs (a size cap, an eviction order) per
 project. A build typically layers them - the always-on incremental cache under
 `target/`, then a shared cache (local folder or this server) consulted on a miss.
 `BuildExecutorHttpCache` is one implementation of the pluggable `BuildExecutorCache`

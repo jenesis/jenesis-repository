@@ -117,8 +117,13 @@ public final class RebuildTask implements MaintenanceTask {
 
     @Override
     public void repository(RepositoryContext context) throws IOException {
-        // Every family the deployment can name; the pass walks only the ones a consumer listens on.
-        Optional<WalkPass> pass = RebuildPass.run(walk, context.store(), new Publication(context.store()),
+        // Every family the deployment can name; the pass walks only the ones a consumer listens on. Each consumer is
+        // handed this repository's configuration first, so a rule set for the repository governs what it does here.
+        ArtifactStore store = context.store();
+        for (WalkConsumer consumer : consumers) {
+            consumer.onRepository(store, context.config());
+        }
+        Optional<WalkPass> pass = RebuildPass.run(walk, store, new Publication(store),
                 new RebuildPass.Roots(StoreRepositoryInventory.pointerRoots(),
                         List.of(StoreRepositoryInventory.publishedRoot()), List.of("blobs"),
                         StoreRepositoryInventory.derivedRoots()), consumers, name);

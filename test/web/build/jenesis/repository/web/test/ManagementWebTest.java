@@ -42,7 +42,8 @@ class ManagementWebTest {
         Authorization authorization = Authorization.enforcing(store);
         Repositories repositories = Web.repositories(store, authorization);
         audit = Web.audit();
-        controller = new ManagementController(repositories, Web.routing(store, repositories), authorization, audit);
+        controller = new ManagementController(repositories, Web.routing(store, repositories), authorization, audit,
+                repositories.live());
     }
 
     /** An {@code /api} call, which names no tenant: the routing answers the one this deployment serves. */
@@ -154,7 +155,7 @@ class ManagementWebTest {
     void with_no_audit_module_the_trail_answers_501() throws IOException {
         Repositories repositories = Web.repositories(store);
         ManagementController unaudited = new ManagementController(repositories, Web.routing(store, repositories),
-                Authorization.enforcing(store), AuditTrail.none());
+                Authorization.enforcing(store), AuditTrail.none(), repositories.live());
         Servlets.Response page = Servlets.response();
         Servlets.Response csv = Servlets.response();
 

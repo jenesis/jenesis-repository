@@ -2,6 +2,9 @@ package build.jenesis.repository.server.kernel;
 
 import module java.base;
 import module org.slf4j;
+import build.jenesis.repository.settings.Setting;
+import build.jenesis.repository.settings.SettingsScopes;
+import build.jenesis.repository.settings.StoredSettings;
 import build.jenesis.repository.maintenance.MaintenanceTask;
 import build.jenesis.repository.maintenance.MaintenanceTaskProvider;
 import build.jenesis.repository.maintenance.RepositoryContext;
@@ -106,6 +109,11 @@ public final class MaintenanceScheduler implements AutoCloseable {
      *  hooks resolve through it; the deployment-global {@link #config()} accessor (the on-demand endpoints'
      *  provider lookup) stays tenant-agnostic. */
     private final BiFunction<String, String, String> tenantConfig;
+    /** The per-repository lookup a running pass reads through {@link PassRepositoryContext#config()}: the chain
+     *  {@link #tenantConfig} resolves, with the repository's own values between the pin and the tenant's - so a
+     *  repository setting (a retention rule set for one repository) takes effect in the sweep over that repository.
+     *  Absent, a unit reads its repository's documents straight from the store, once, ahead of the tenant chain. */
+    private final RepositoryConfig repositoryConfig;
     /** The single-writer guard: the one owner of {@code locks/<task>} for the whole deployment. */
     private final LeaseGuard leases;
     /** The due-time and run bookkeeping - storeless, threadless, driven by the one worker loop below. */
@@ -137,6 +145,12 @@ public final class MaintenanceScheduler implements AutoCloseable {
     /** The passes the last {@link #refresh()} could not build, by name with a one-line cause. */
     public Map<String, String> unavailable() {
         return unavailable;
+    }
+
+    /** A repository's effective configuration: the value of {@code key} for {@code repository} of {@code tenant}. */
+    @FunctionalInterface
+    public interface RepositoryConfig {
+        String apply(String tenant, String repository, String key);
     }
 
     /** A fixed task list (a test or a single-shot pass); the list never re-resolves, so {@link #refresh()} is a no-op. */
@@ -196,6 +210,24 @@ public final class MaintenanceScheduler implements AutoCloseable {
                                  Supplier<MaintenanceTaskProvider.Contained> resolver, UnaryOperator<String> config,
                                  BiFunction<String, String, String> tenantConfig,
                                  Duration leaseTtl, MeterRegistry registry, int workers) {
+        this(repositories, root, booted, resolver, config, tenantConfig, null, leaseTtl, registry, workers);
+    }
+
+    /** The live wiring: {@link #MaintenanceScheduler(Repositories, ArtifactStore, List, Supplier, UnaryOperator,
+     *  BiFunction, Duration, MeterRegistry)} with the deployment's own per-repository resolution, which puts an
+     *  operator's pin above a repository's value as it does above every other. */
+    public MaintenanceScheduler(Repositories repositories, ArtifactStore root, List<MaintenanceTask> booted,
+                                Supplier<MaintenanceTaskProvider.Contained> resolver, UnaryOperator<String> config,
+                                BiFunction<String, String, String> tenantConfig, RepositoryConfig repositoryConfig,
+                                Duration leaseTtl, MeterRegistry registry) {
+        this(repositories, root, booted, resolver, config, tenantConfig, repositoryConfig, leaseTtl, registry,
+                DEFAULT_WORKERS);
+    }
+
+    private MaintenanceScheduler(Repositories repositories, ArtifactStore root, List<MaintenanceTask> booted,
+                                 Supplier<MaintenanceTaskProvider.Contained> resolver, UnaryOperator<String> config,
+                                 BiFunction<String, String, String> tenantConfig, RepositoryConfig repositoryConfig,
+                                 Duration leaseTtl, MeterRegistry registry, int workers) {
         this.repositories = repositories;
         this.root = root;
         this.resolver = resolver;
@@ -204,6 +236,7 @@ public final class MaintenanceScheduler implements AutoCloseable {
         this.tasks = scheduled(booted);
         this.config = config;
         this.tenantConfig = tenantConfig;
+        this.repositoryConfig = repositoryConfig;
         this.nodeId = NodeFingerprintPublisher.nodeId(config);
         // A degenerate lease ttl is refused here, naming cleanup-lease: it removes single-writer exclusion outright and
         // makes every exclusive pass throw, so it must never resolve to a scheduler that looks healthy.
@@ -871,11 +904,38 @@ public final class MaintenanceScheduler implements AutoCloseable {
             return repositories.store(tenant, repository);
         }
 
+        /** The repository's own stored values, read once for the unit when no repository resolution was wired. */
+        private Map<String, String> own;
+
         @Override
         public UnaryOperator<String> config() {
-            // Resolve this pass's tenant's effective value, so a tenant-overridable setting takes effect in the sweep;
-            // a global-only key resolves deployment-wide through the same chain, unchanged.
-            return key -> tenantConfig.apply(tenant, key);
+            // Resolve this pass's repository's effective value, so a repository setting takes effect in the sweep over
+            // it; a tenant or global key resolves through the tenant chain, unchanged.
+            if (repositoryConfig != null) {
+                return key -> repositoryConfig.apply(tenant, repository, key);
+            }
+            return key -> {
+                if (SettingsScopes.settableAt(key, Setting.Scope.REPOSITORY)) {
+                    String value = own().get(key);
+                    if (value != null) {
+                        return value;
+                    }
+                }
+                return tenantConfig.apply(tenant, key);
+            };
+        }
+
+        private Map<String, String> own() {
+            if (own == null) {
+                try {
+                    own = StoredSettings.read(StoredSettings.repository(root, tenant, repository),
+                            Setting.Scope.REPOSITORY);
+                } catch (IOException unreadable) {
+                    throw new UncheckedIOException("Failed to read the settings of repository '" + tenant + "/"
+                            + repository + "'", unreadable);
+                }
+            }
+            return own;
         }
 
         @Override

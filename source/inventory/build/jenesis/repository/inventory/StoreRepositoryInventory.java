@@ -133,7 +133,7 @@ public final class StoreRepositoryInventory implements RepositoryInventory {
         this.reconciler = new InventoryReconciler(this, store, metadata);
         this.recording = new InventoryRecording(this, store, metadata, identity);
         this.pinning = new InventoryPins(this, store, metadata);
-        this.retention = new InventoryRetention(this, store);
+        this.retention = new InventoryRetention(store);
         // Construct the servable-name enumeration seam from the store and THIS facade's Publication, so the withheld
         // chain the coordinate/paging screen consults is the deployment's own interceptor list (the ComplianceScreen and
         // staging screens), never a second independently discovered one.
@@ -497,15 +497,11 @@ public final class StoreRepositoryInventory implements RepositoryInventory {
         return browse.knownPaths(ecosystem, coordinate, version);
     }
 
-    /** The retention policy stored for this repository, or empty if none has been set. A stored policy that cannot
-     *  be parsed fails loudly (a contained {@link IOException}) rather than reading as "no policy". */
-    public Optional<RetentionPolicy> readRetention() throws IOException {
+    /** The retention policy this repository stored before retention was a repository setting, or empty if it stored
+     *  none - read only by the one-time move of it into the repository's settings, which leaves it in place. A stored
+     *  policy that cannot be parsed fails loudly (a contained {@link IOException}) rather than reading as "no policy". */
+    public Optional<RetentionPolicy> formerRetention() throws IOException {
         return retention.readRetention();
-    }
-
-    /** Store this repository's retention policy. */
-    public void writeRetention(RetentionPolicy policy) throws IOException {
-        retention.writeRetention(policy);
     }
 
     /** Compare-and-set a small pointer under {@link Retries}: re-read the opaque version token and write against it,

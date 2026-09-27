@@ -334,9 +334,12 @@ public final class Commands {
 
             new Section("Settings", List.of(
                     noun("settings", "the runtime settings", null, AdminCommands::settings,
-                            act("settings [--tenant N]", "list the settings, or a tenant's overridable slice"),
-                            act("settings set <key> <value> [--tenant N]", "set a setting"),
-                            act("settings clear <key> [--tenant N]", "revert a setting to its default"),
+                            act("settings [--tenant N | --repository R | --project P]",
+                                    "list the settings, or those a tenant, a repository or a project sets"),
+                            act("settings set <key> <value> [--tenant N | --repository R | --project P]",
+                                    "set a setting, deployment-wide or for one tenant, repository or project"),
+                            act("settings clear <key> [--tenant N | --repository R | --project P]",
+                                    "revert a setting to what it inherits"),
                             act("settings export [file] [--tenant N]", "dump the settings as a JSON bundle"),
                             act("settings import <file> [--tenant N]", "restore a bundle, validated first")),
                     noun("setup", "the first-run setup guide", null, AdminCommands::setup,
@@ -350,16 +353,17 @@ public final class Commands {
                             act("tenants delete <name> [--yes]", "delete a tenant and everything it owns, after "
                                     + "typing 'delete <name>' - or --yes, for a script")),
                     noun("repos", "the repositories and their runtime definitions", null, AdminCommands::repos,
-                            act("repos [--tenant N]", "list the definitions - the deployment's, or a tenant's own"),
+                            act("repos", "list the deployment's definitions, which a repository of each name routes by "
+                                    + "unless it sets its own routing"),
                             act("repos create <name> <format> [description]",
                                     "create a repository holding one format, optionally described"),
                             act("repos describe <name> <description>", "describe a repository; an empty one clears it"),
                             act("repos delete <name> [--yes]", "delete a repository and everything it holds, after "
                                     + "typing 'delete <name>' - or --yes, for a script"),
-                            act("repos set <name> <definition> [--tenant N]",
-                                    "define a repository in clauses (writable, fallback <url> [nocache] [harden], "
-                                            + "fallback <repository>); with a tenant, that tenant's own"),
-                            act("repos remove <name> [--tenant N]", "remove a definition")),
+                            act("repos set <name> <definition>",
+                                    "define a repository name deployment-wide in clauses (writable, fallback <url> "
+                                            + "[nocache] [harden], fallback <repository>)"),
+                            act("repos remove <name>", "remove a definition")),
                     noun("upstreams", "the per-format proxy upstreams", null, AdminCommands::upstreams,
                             act("upstreams [--tenant N]", "list the upstreams - the deployment's, or a tenant's own"),
                             act("upstreams set <format> <url> [--tenant N]", "set a format's upstream"),
@@ -371,7 +375,7 @@ public final class Commands {
                     noun("limits", "what the tenant's repositories may use together: a storage quota and a "
                                     + "request rate", null, AdminCommands::limits,
                             act("limits", "the storage quota with what is stored, and the request-rate ceiling"),
-                            act("limits set quota <bytes>", "set the storage quota (0 clears it)"),
+                            act("limits set quota <bytes>", "set the storage quota (0 falls back to the deployment's)"),
                             act("limits set rate <permits-per-minute>",
                                     "set the request-rate ceiling (0 falls back to the deployment's)")),
                     noun("capabilities", "what this deployment carries", null, AdminCommands::capabilities,

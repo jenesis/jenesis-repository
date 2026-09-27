@@ -118,6 +118,11 @@ import build.jenesis.repository.store.Features;
  *     than the implementation's. {@link #settings()} names the dials that govern what the consumer does with what it
  *     is handed - a retention policy's criteria, a collector's grace - so the screen can show them beside it; a
  *     consumer with no such dial answers none. Neither is consulted by the pass, and neither reaches the store.</li>
+ * <li><b>Configuration.</b> A dial can differ per repository - a retention rule is set for one repository over its
+ *     tenant's and the deployment's - so a driver that knows which repository a store is hands the consumer that
+ *     repository's effective configuration through {@link #onRepository} before the pass over it starts, keyed like
+ *     every per-store hook by {@link ArtifactStore#identity()}. A driver that knows no repository calls nothing; a
+ *     consumer then reads the deployment's configuration, and says so.</li>
  * </ol>
  */
 public interface WalkConsumer {
@@ -341,6 +346,11 @@ public interface WalkConsumer {
      * has nothing to flush.
      */
     default void beforeCheckpoint(String cursor) throws IOException {
+    }
+
+    /** {@code config} is the effective configuration - pin, repository, tenant, deployment, default - of the repository
+     *  whose {@code store} the next pass walks (clause 16); the default ignores it. */
+    default void onRepository(ArtifactStore store, UnaryOperator<String> config) {
     }
 
     /** The pass over {@code store} is starting - the moment a snapshot rebuilder resets its accumulation, and the

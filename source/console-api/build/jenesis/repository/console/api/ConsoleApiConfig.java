@@ -31,8 +31,8 @@ public class ConsoleApiConfig {
     @Bean
     public CacheProjectsController cacheProjectsController(
             @Qualifier("cacheRootStorage") ObjectProvider<CacheStorage> storage, AuditTrail audit,
-            RepositoryRouting routing) {
-        return new CacheProjectsController(storage, audit, routing);
+            RepositoryRouting routing, Repositories repositories) {
+        return new CacheProjectsController(storage, audit, routing, repositories.root());
     }
 
     @Bean

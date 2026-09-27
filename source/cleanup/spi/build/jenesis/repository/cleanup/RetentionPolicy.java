@@ -16,6 +16,15 @@ import build.jenesis.repository.store.Durations;
  */
 public final class RetentionPolicy {
 
+    /** The four rules as settings keys - each a repository setting, read by these names wherever a policy is built. */
+    public static final String KEEP_LAST = "keep-last";
+    public static final String MAX_AGE = "max-age";
+    public static final String PRERELEASE_EXPIRY = "prerelease-expiry";
+    public static final String NOT_DOWNLOADED_FOR = "not-downloaded-for";
+
+    /** The four keys, in the order the rules are listed everywhere. */
+    public static final List<String> KEYS = List.of(KEEP_LAST, MAX_AGE, PRERELEASE_EXPIRY, NOT_DOWNLOADED_FOR);
+
     // Newest-first, reused across every coordinate of every plan rather than reallocated inside the grouping loop
     // (a large repository sorts one version list per coordinate, so the comparator would otherwise be minted per group).
     private static final Comparator<Release> BY_PUBLISHED_DESCENDING = Comparator.comparing(Release::published).reversed();
@@ -54,16 +63,17 @@ public final class RetentionPolicy {
      *  {@code not-downloaded-for}) read through {@code config} - a property/setting accessor returning {@code null}
      *  when unset; an unset or blank key disables its rule. */
     public static RetentionPolicy fromConfig(UnaryOperator<String> config) {
-        return parse(config.apply("keep-last"), config.apply("max-age"), config.apply("prerelease-expiry"),
-                config.apply("not-downloaded-for"));
+        return parse(config.apply(KEEP_LAST), config.apply(MAX_AGE), config.apply(PRERELEASE_EXPIRY),
+                config.apply(NOT_DOWNLOADED_FOR));
     }
 
     /**
      * The one parse of the four dials as an operator writes them - the deployment default, the scheduled sweep, the
-     * API, the console and the stored per-repository policy all come through here, so they cannot disagree about a
-     * value. An unset or blank dial disables its rule; a duration is the deployment's one grammar ({@code P30D},
-     * {@code 30d}, {@code PT12H}); a zero or negative one is refused here, at the operator's desk, and never at sweep
-     * time (see the constructor). A malformed value is an {@link IllegalArgumentException} naming it.
+     * API, the console and a repository's own settings all come through here, so they cannot disagree about a value.
+     * An unset or blank dial, or a duration dial set to {@link Durations#NONE}, disables its rule - the word a
+     * repository takes to switch off a rule its tenant or deployment sets; a duration is the deployment's one grammar
+     * ({@code P30D}, {@code 30d}, {@code PT12H}); a zero or negative one is refused here, at the operator's desk, and
+     * never at sweep time (see the constructor). A malformed value is an {@link IllegalArgumentException} naming it.
      */
     public static RetentionPolicy parse(String keepLast, String maxAge, String prereleaseExpiry,
                                         String notDownloadedFor) {
@@ -73,17 +83,12 @@ public final class RetentionPolicy {
 
     /** {@link #parse(String, String, String, String)} with the count already a number. */
     public static RetentionPolicy parse(int keepLast, String maxAge, String prereleaseExpiry, String notDownloadedFor) {
-        RetentionPolicy policy = new RetentionPolicy(keepLast);
-        if (maxAge != null && !maxAge.isBlank()) {
-            policy = policy.maxAge(Durations.parse(maxAge));
-        }
-        if (prereleaseExpiry != null && !prereleaseExpiry.isBlank()) {
-            policy = policy.prereleaseExpiry(Durations.parse(prereleaseExpiry));
-        }
-        if (notDownloadedFor != null && !notDownloadedFor.isBlank()) {
-            policy = policy.notDownloadedFor(Durations.parse(notDownloadedFor));
-        }
-        return policy;
+        return new RetentionPolicy(keepLast, rule(maxAge), rule(prereleaseExpiry), rule(notDownloadedFor));
+    }
+
+    /** One duration dial: absent when unset, blank or {@link Durations#NONE}, else its duration. */
+    private static Duration rule(String value) {
+        return value == null || value.isBlank() ? null : Durations.parseOrNone(value).orElse(null);
     }
 
     public RetentionPolicy maxAge(Duration maxAge) {

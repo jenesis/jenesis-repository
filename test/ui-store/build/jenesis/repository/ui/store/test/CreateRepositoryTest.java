@@ -11,6 +11,7 @@ import build.jenesis.repository.format.RepositoryType;
 import build.jenesis.repository.ui.CurrentTenant;
 import build.jenesis.repository.ui.store.RepositoryAdmin;
 import build.jenesis.repository.ui.store.RepositoryLifecycle;
+import build.jenesis.repository.ui.store.SettingsAdmin;
 import io.micrometer.observation.ObservationRegistry;
 
 import static java.nio.charset.StandardCharsets.UTF_8;
@@ -34,7 +35,7 @@ class CreateRepositoryTest {
     void a_created_repository_is_listed_typed_audited_and_empty() throws IOException {
         ArtifactStore store = store();
         RepositoryLifecycle lifecycle = new RepositoryLifecycle(store, tenant(), ObservationRegistry.NOOP, audit(),
-                () -> "operator");
+                () -> "operator", new SettingsAdmin(store));
         RepositoryAdmin admin = new RepositoryAdmin(store, tenant(), ObservationRegistry.NOOP);
 
         assertThat(lifecycle.create("files", "raw")).isEqualTo(RepositoryType.Creation.CREATED);
@@ -50,7 +51,7 @@ class CreateRepositoryTest {
     void a_repository_that_holds_a_format_is_left_alone() throws IOException {
         ArtifactStore store = store();
         RepositoryLifecycle lifecycle = new RepositoryLifecycle(store, tenant(), ObservationRegistry.NOOP, audit(),
-                () -> "operator");
+                () -> "operator", new SettingsAdmin(store));
         assertThat(lifecycle.create("files", "raw")).isEqualTo(RepositoryType.Creation.CREATED);
         recorded.clear();
 
@@ -63,7 +64,7 @@ class CreateRepositoryTest {
         ArtifactStore store = store();
         store.scope("acme").scope("files").write("raw/notes.txt", new ByteArrayInputStream("notes".getBytes(UTF_8)));
         RepositoryLifecycle lifecycle = new RepositoryLifecycle(store, tenant(), ObservationRegistry.NOOP, audit(),
-                () -> "operator");
+                () -> "operator", new SettingsAdmin(store));
 
         assertThat(lifecycle.create("files", "raw")).isEqualTo(RepositoryType.Creation.CREATED);
         assertThat(RepositoryDocument.read(store.scope("acme").scope("files")).map(RepositoryDocument::format))
@@ -74,7 +75,7 @@ class CreateRepositoryTest {
     void a_repository_moves_only_to_a_type_that_holds_everything_it_did() throws IOException {
         ArtifactStore store = store();
         RepositoryLifecycle lifecycle = new RepositoryLifecycle(store, tenant(), ObservationRegistry.NOOP, audit(),
-                () -> "operator");
+                () -> "operator", new SettingsAdmin(store));
         assertThat(lifecycle.create("libs", "maven")).isEqualTo(RepositoryType.Creation.CREATED);
 
         assertThat(lifecycle.create("libs", "java")).as("java holds Maven at the same URLs, and the module layout")
@@ -93,7 +94,7 @@ class CreateRepositoryTest {
     @Test
     void a_format_no_repository_can_hold_is_refused() {
         RepositoryLifecycle lifecycle = new RepositoryLifecycle(store(), tenant(), ObservationRegistry.NOOP, audit(),
-                () -> "operator");
+                () -> "operator", new SettingsAdmin(store()));
         assertThatThrownBy(() -> lifecycle.create("files", "not-installed"))
                 .isInstanceOf(IllegalArgumentException.class).hasMessageContaining("not-installed");
         assertThat(recorded).isEmpty();
@@ -102,7 +103,7 @@ class CreateRepositoryTest {
     @Test
     void a_name_no_repository_may_carry_is_refused() {
         RepositoryLifecycle lifecycle = new RepositoryLifecycle(store(), tenant(), ObservationRegistry.NOOP, audit(),
-                () -> "operator");
+                () -> "operator", new SettingsAdmin(store()));
         assertThatThrownBy(() -> lifecycle.create("../escape", "raw")).isInstanceOf(IllegalArgumentException.class);
     }
 

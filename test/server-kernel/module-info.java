@@ -29,6 +29,9 @@ open module build.jenesis.repository.server.kernel.contract.test {
     requires build.jenesis.repository.maintenance;
     requires build.jenesis.repository.observation;
     requires build.jenesis.repository.inventory;
+    requires build.jenesis.repository.ratelimit;
+    requires build.jenesis.repository.definitions;
+    requires build.jenesis.repository.cache.storage.delegating;
     requires build.jenesis.repository.metadata;
     requires build.jenesis.repository.blobs;
     requires build.jenesis.repository.bounds;

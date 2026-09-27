@@ -12,6 +12,7 @@ import build.jenesis.repository.format.RepositoryType;
 import build.jenesis.repository.ui.CurrentTenant;
 import build.jenesis.repository.ui.store.RepositoryAdmin;
 import build.jenesis.repository.ui.store.RepositoryLifecycle;
+import build.jenesis.repository.ui.store.SettingsAdmin;
 import io.micrometer.observation.ObservationRegistry;
 
 import static java.nio.charset.StandardCharsets.UTF_8;
@@ -133,7 +134,8 @@ class DeleteRepositoryTest {
     }
 
     private RepositoryLifecycle lifecycle(ArtifactStore store) {
-        return new RepositoryLifecycle(store, tenant(), ObservationRegistry.NOOP, audit(), () -> "operator");
+        return new RepositoryLifecycle(store, tenant(), ObservationRegistry.NOOP, audit(), () -> "operator",
+                new SettingsAdmin(store));
     }
 
     private ArtifactStore store() {

@@ -21,6 +21,6 @@ public final class CacheNodeSettingsContributor implements SettingsContributor {
                 "Whether this deployment serves the remote build cache. On by default: an image carrying the cache "
                         + "meant to serve it. Switched off, the cache's endpoint and the chain that permits it are "
                         + "not registered, so the node serves artifacts only. Applies on restart.",
-                Setting.Kind.BOOLEAN, "true", false).gate().essential());
+                Setting.Kind.BOOLEAN, "true", false).gate().standard());
     }
 }

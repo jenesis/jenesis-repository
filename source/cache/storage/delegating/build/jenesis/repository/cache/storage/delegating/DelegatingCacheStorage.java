@@ -26,8 +26,8 @@ import build.jenesis.repository.walk.Traversal;
  *
  * <h2>The mapping</h2>
  *
- * A cache entry is the key {@code <project>/<step>/<inputs>}; a project's policy is {@code <project>/cache.properties};
- * the console's access tree is the {@code .users/} paths, at the same prefix under the same tenant scope. The one
+ * A cache entry is the key {@code <project>/<step>/<inputs>}; a project's own files are {@code <project>/<file>} and
+ * its settings {@code <project>/.system/config/settings/<module>.json}; the console's access tree is the {@code .users/} paths, at the same prefix under the same tenant scope. The one
  * exception is deliberate and is the provider's business, not this class's: the
  * filesystem cache root and the artifact-store root are different directories by design.
  *
@@ -36,13 +36,10 @@ import build.jenesis.repository.walk.Traversal;
  * Storage is on the hot path, so the delegation is held to the round-trip count the hand-written backends had. Two
  * places would otherwise have regressed, and both are why {@link ArtifactStore} grew the primitives it did:
  * {@link #entries} takes each entry's size and recency from the listing that enumerated it, rather than stat-ing once
- * per entry on the pass that walks the whole cache; and {@link #fileVersion} / {@link #configVersion} ask
- * {@link ArtifactStore#version} for a token rather than downloading an object to read one off it.
+ * per entry on the pass that walks the whole cache; and {@link #fileVersion} asks {@link ArtifactStore#version} for a
+ * token rather than downloading an object to read one off it.
  */
 public final class DelegatingCacheStorage implements CacheStorage {
-
-    /** The per-project policy document, and the file {@link #configVersion} reports the version of. */
-    private static final String CACHE_PROPERTIES = "cache.properties";
 
     /** The provisioning marker {@link #createProject} writes - see there for why it exists. */
     public static final String PROJECT_PROPERTIES = "project.properties";
@@ -301,7 +298,7 @@ public final class DelegatingCacheStorage implements CacheStorage {
         }
     }
 
-    /** Whether a project-relative key is an ENTRY rather than the project's own {@code cache.properties} or anything
+    /** Whether a project-relative key is an ENTRY rather than the project's own files, its settings or anything
      *  else that shares the prefix: exactly {@code <step>/<inputs>}, both hex, no deeper. The hand-written backends
      *  applied the same shape test to the same listing, and it is what keeps a policy document out of an eviction
      *  pass's candidate set. */
@@ -335,7 +332,7 @@ public final class DelegatingCacheStorage implements CacheStorage {
         // Anything under the prefix, in one listing capped at a single entry. A project does not have to be
         // provisioned to exist - a build writing an entry brings it into being, and the console must see it - so this
         // deliberately does not key on a marker. A provisioned-but-empty project is covered by the same call, because
-        // provisioning writes cache.properties, which is an object under the prefix.
+        // provisioning writes its marker, which is an object under the prefix.
         try {
             return Names.isProject(project) && store.scan(project, "", 1, _ -> { }).delivered() > 0;
         } catch (IOException e) {
@@ -383,11 +380,6 @@ public final class DelegatingCacheStorage implements CacheStorage {
         return Names.isProject(project) && Names.isFile(file)
                 ? readFile(project + "/" + file)
                 : new Properties();
-    }
-
-    @Override
-    public Object configVersion(String project) {
-        return Names.isProject(project) ? fileVersion(project + "/" + CACHE_PROPERTIES) : null;
     }
 
     @Override

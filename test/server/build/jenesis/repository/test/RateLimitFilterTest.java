@@ -6,8 +6,6 @@ import module java.base;
 import build.jenesis.repository.server.RateLimitFilter;
 import build.jenesis.repository.server.spi.Authorization;
 import build.jenesis.repository.server.spi.RateLimiter;
-import build.jenesis.repository.store.ArtifactStore;
-import build.jenesis.repository.store.ArtifactStoreProvider;
 import jakarta.servlet.DispatcherType;
 import jakarta.servlet.FilterChain;
 import jakarta.servlet.http.HttpServletRequest;
@@ -56,10 +54,11 @@ public class RateLimitFilterTest {
      *  exactly forces the next distinct tenant to overflow into the shared {@code anonymous} bucket. */
     private static final int CAP = 50_000;
 
-    @TempDir
-    Path root;
-
-    private Authorization authorization;
+    /** Each tenant's ceiling as the settings would resolve it: the forged tenant carries a high value of its own. It
+     *  is honoured while the tenant holds its own bucket and must be ignored once the tenant overflows to the shared
+     *  anonymous bucket. */
+    private static final ToLongFunction<String> CEILINGS =
+            tenant -> "evil-corp".equals(tenant) ? TENANT_OVERRIDE : DEFAULT_CEILING;
 
     /** A {@link RateLimiter} double that admits every request and records the bucket and ceiling of the most recent
      *  call, so a test can assert exactly what a metered request was measured against. */
@@ -75,20 +74,10 @@ public class RateLimitFilterTest {
         }
     }
 
-    @BeforeEach
-    void setUp() throws IOException {
-        ArtifactStore store = ArtifactStoreProvider.resolve(
-                "filesystem", key -> "jenreg.filesystem.root".equals(key) ? root.toString() : null);
-        authorization = Authorization.enforcing(store);
-        // The forged tenant carries a high per-tenant override. It is honoured while the tenant holds its own bucket
-        // and must be ignored once the tenant overflows to the shared anonymous bucket.
-        authorization.rateLimits().set("evil-corp", TENANT_OVERRIDE);
-    }
-
     @Test
     void a_shed_request_carries_a_retry_after_header_and_never_reaches_the_chain() throws Exception {
         RateLimiter deny = (bucket, permitsPerMinute) -> false;
-        RateLimitFilter filter = new RateLimitFilter(deny, Authorization.anonymous(), DEFAULT_CEILING);
+        RateLimitFilter filter = new RateLimitFilter(deny, DEFAULT_CEILING);
 
         HttpServletRequest request = mock(HttpServletRequest.class);
         when(request.getRequestURI()).thenReturn("/repository/default/maven/org/x/y/1/y-1.jar");
@@ -117,7 +106,7 @@ public class RateLimitFilterTest {
     @Test
     void an_overflowed_forged_tenant_meters_at_the_default_ceiling_not_its_own_override() throws Exception {
         Capturing limiter = new Capturing();
-        RateLimitFilter filter = new RateLimitFilter(limiter, authorization, DEFAULT_CEILING);
+        RateLimitFilter filter = new RateLimitFilter(limiter, CEILINGS);
 
         // Drive one request each from CAP distinct well-formed tenants, so the filter's bucket table fills exactly to
         // its cap; the reused request mock answers the current tenant's key through a holder the loop advances.
@@ -157,7 +146,7 @@ public class RateLimitFilterTest {
         // per-tenant override IS honoured. This proves the override is live, so the overflow test's fall-back to the
         // default is the anonymous-bucket downgrade at work - not a dead or unread override.
         Capturing limiter = new Capturing();
-        RateLimitFilter filter = new RateLimitFilter(limiter, authorization, DEFAULT_CEILING);
+        RateLimitFilter filter = new RateLimitFilter(limiter, CEILINGS);
 
         String[] key = {Authorization.mint("evil-corp")};
         HttpServletRequest request = mock(HttpServletRequest.class);
@@ -178,7 +167,7 @@ public class RateLimitFilterTest {
     void the_default_ceiling_is_read_live_so_a_runtime_setting_is_honoured_without_a_reboot() throws Exception {
         long[] configured = {DEFAULT_CEILING};
         Capturing limiter = new Capturing();
-        RateLimitFilter filter = new RateLimitFilter(limiter, Authorization.anonymous(), () -> configured[0]);
+        RateLimitFilter filter = new RateLimitFilter(limiter, _ -> configured[0]);
         HttpServletRequest request = mock(HttpServletRequest.class);
         when(request.getRequestURI()).thenReturn("/repository/default/maven/org/x/y/1/y-1.jar");
         when(request.getDispatcherType()).thenReturn(DispatcherType.REQUEST);
@@ -194,16 +183,30 @@ public class RateLimitFilterTest {
     }
 
     @Test
-    void the_live_default_resolves_the_rate_limit_setting_and_falls_back_to_the_boot_value() {
-        assertThat(RateLimitFilter.liveDefault(Map.of("jenreg.rate-limit", "0")::get, DEFAULT_CEILING).getAsLong())
+    void the_live_ceiling_resolves_the_rate_limit_setting_and_falls_back_to_the_boot_value() {
+        assertThat(RateLimitFilter.liveCeiling(_ -> Map.of("jenreg.rate-limit", "0")::get, DEFAULT_CEILING)
+                .applyAsLong(null))
                 .as("an operator who writes 0 disables the limiter").isEqualTo(0);
-        assertThat(RateLimitFilter.liveDefault(Map.of("jenreg.rate-limit", "120")::get, DEFAULT_CEILING).getAsLong())
+        assertThat(RateLimitFilter.liveCeiling(_ -> Map.of("jenreg.rate-limit", "120")::get, DEFAULT_CEILING)
+                .applyAsLong(null))
                 .isEqualTo(120);
-        assertThat(RateLimitFilter.liveDefault(Map.<String, String>of()::get, DEFAULT_CEILING).getAsLong())
+        assertThat(RateLimitFilter.liveCeiling(_ -> Map.<String, String>of()::get, DEFAULT_CEILING).applyAsLong(null))
                 .as("nothing written at runtime leaves the boot property in force").isEqualTo(DEFAULT_CEILING);
-        assertThat(RateLimitFilter.liveDefault(Map.of("jenreg.rate-limit", "plenty")::get, DEFAULT_CEILING)
-                .getAsLong())
+        assertThat(RateLimitFilter.liveCeiling(_ -> Map.of("jenreg.rate-limit", "plenty")::get, DEFAULT_CEILING)
+                .applyAsLong(null))
                 .as("a value that is not a number never turns every request into an error")
                 .isEqualTo(DEFAULT_CEILING);
+    }
+
+    @Test
+    void the_live_ceiling_is_the_tenants_own_setting_over_the_deployments() {
+        Map<String, String> deployment = Map.of("jenreg.rate-limit", "120");
+        Map<String, String> acme = Map.of("jenreg.rate-limit", "30");
+        ToLongFunction<String> ceiling = RateLimitFilter.liveCeiling(
+                tenant -> "acme".equals(tenant) ? acme::get : deployment::get, DEFAULT_CEILING);
+
+        assertThat(ceiling.applyAsLong("acme")).as("a tenant's own value is its ceiling").isEqualTo(30);
+        assertThat(ceiling.applyAsLong("globex")).as("a tenant with none meters at the deployment's").isEqualTo(120);
+        assertThat(ceiling.applyAsLong(null)).as("and so does a keyless request").isEqualTo(120);
     }
 }

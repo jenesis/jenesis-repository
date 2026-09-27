@@ -4,7 +4,6 @@ import build.jenesis.repository.server.kernel.PinnedSettings;
 import build.jenesis.repository.server.RepositoryProperties;
 import build.jenesis.repository.server.kernel.RequestBodyLimitFilter;
 import build.jenesis.repository.server.kernel.Settings;
-import build.jenesis.repository.server.spi.Authorization;
 import build.jenesis.repository.server.spi.KeyUsageTracker;
 import build.jenesis.repository.server.RateLimitFilter;
 import build.jenesis.repository.server.spi.RateLimiter;
@@ -49,15 +48,15 @@ import org.springframework.security.web.authentication.UsernamePasswordAuthentic
 public class RepositorySecurityConfig {
 
     @Bean
-    public RateLimitFilter rateLimitFilter(RateLimiter rateLimiter, Authorization authorization,
-                                           RepositoryProperties properties, Settings settings,
-                                           Environment environment, PinnedSettings pinnedSettings) {
-        // The default ceiling is read live through the whole runtime-settings chain - an operator's pin, else the
-        // stored override, else the environment - so the rate-limit setting written through the settings API is
-        // honoured within the filter's ten-second ceiling cache rather than at the next boot; the boot property stays
-        // the fallback for a deployment that never set it at runtime.
-        return new RateLimitFilter(rateLimiter, authorization, RateLimitFilter.liveDefault(
-                pinnedSettings.effectiveProperty(settings, environment, null), properties.getRateLimit()));
+    public RateLimitFilter rateLimitFilter(RateLimiter rateLimiter, RepositoryProperties properties,
+                                           Settings settings, Environment environment,
+                                           PinnedSettings pinnedSettings) {
+        // Each tenant's ceiling is read live through the whole runtime-settings chain - an operator's pin, else the
+        // tenant's stored value, else the deployment's, else the environment - so the rate-limit setting written
+        // through the settings API is honoured within the filter's ten-second ceiling cache rather than at the next
+        // boot; the boot property stays the fallback for a deployment that never set it at runtime.
+        return new RateLimitFilter(rateLimiter, RateLimitFilter.liveCeiling(
+                tenant -> pinnedSettings.effectiveProperty(settings, environment, tenant), properties.getRateLimit()));
     }
 
     @Bean

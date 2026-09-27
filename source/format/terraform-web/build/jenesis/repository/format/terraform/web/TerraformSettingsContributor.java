@@ -30,11 +30,11 @@ public final class TerraformSettingsContributor implements SettingsContributor {
                                 + "bitbucket.org names its kind after '=' (github, gitlab or bitbucket), as in "
                                 + "git.example.com=gitlab. Empty by default, since it reaches a third party: to "
                                 + "fetch from the three public hosts, set github.com,gitlab.com,bitbucket.org.",
-                        Setting.Kind.STRING, "", false).essential(),
+                        Setting.Kind.STRING, "", false).standard(),
                 new Setting("terraform.git-refuse-unlisted", "Formats", "Refuse Terraform git sources elsewhere",
                         "Whether a proxied Terraform module whose git source cannot be fetched through this "
                                 + "repository - its host is not in the git hosts, or it names no single ref - is "
                                 + "refused rather than handed to the client to clone.",
-                        Setting.Kind.BOOLEAN, "false", false).essential());
+                        Setting.Kind.BOOLEAN, "false", false).standard());
     }
 }

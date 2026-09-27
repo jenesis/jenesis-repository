@@ -29,7 +29,7 @@ public final class ConsoleSettingsContributor implements SettingsContributor {
                         + "registered at all and the node answers only the repository's own surfaces - which is the "
                         + "posture for a deployment that is operated through the API and the CLI, or one that runs "
                         + "its console elsewhere. Applies on restart.",
-                Setting.Kind.BOOLEAN, "true", false).gate().essential(),
+                Setting.Kind.BOOLEAN, "true", false).gate().standard(),
                 new Setting(SetupWizard.SETTING, "First run", "First-run setup guide",
                         "Send a super-admin who signs in with the starter key to the first-run setup screen, which "
                                 + "walks the decisions a new deployment should make: the starter credentials, the "

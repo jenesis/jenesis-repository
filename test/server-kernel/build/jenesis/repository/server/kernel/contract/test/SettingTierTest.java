@@ -8,9 +8,9 @@ import build.jenesis.repository.settings.SettingsContributor;
 import static org.assertj.core.api.Assertions.assertThat;
 
 /**
- * Every setting says whether an operator is expected to decide it or whether it tunes what was decided, and nothing
- * decides that for a contributor that forgot: a constructed setting is undecided until it is declared, and the
- * catalogue this module composes holds none undecided.
+ * Every setting says whether the wizard of its scope asks it, a settings screen shows it, or folds it away as tuning,
+ * and nothing decides that for a contributor that forgot: a constructed setting is undecided until it is declared,
+ * and the catalogue this module composes holds none undecided.
  *
  * <p>The census here covers the contributors this module's graph carries; the image's own census covers every
  * setting the shipped composition declares.
@@ -26,6 +26,7 @@ class SettingTierTest {
     void a_constructed_setting_is_undecided_until_it_is_declared() {
         assertThat(plain().tier()).as("no constructor decides").isNull();
         assertThat(plain().essential().tier()).isEqualTo(Setting.Tier.ESSENTIAL);
+        assertThat(plain().standard().tier()).isEqualTo(Setting.Tier.STANDARD);
         assertThat(plain().advanced().tier()).isEqualTo(Setting.Tier.ADVANCED);
     }
 
@@ -51,8 +52,8 @@ class SettingTierTest {
 
         assertThat(catalogue).as("the core's own contributors are on this graph").isNotEmpty();
         assertThat(undecided(catalogue))
-                .as("each of these arrived with neither essential() nor advanced(), so the settings screen cannot "
-                        + "say whether to fold it away")
+                .as("each of these arrived with none of essential(), standard() or advanced(), so neither a wizard "
+                        + "nor the settings screen can say whether to ask it, show it or fold it away")
                 .isEmpty();
     }
 

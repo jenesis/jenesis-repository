@@ -77,40 +77,21 @@ public class FilesystemStorageGuardTest {
     }
 
     /**
-     * The deterministic half of the config-revalidation guarantee the shared {@code CacheStorageContract} states as
-     * {@code CONFIG_VERSION_ADVANCES_ON_REWRITE}: a rewrite must leave this backend's stamp strictly <em>past</em>
-     * whatever the document carried, not merely at "now".
+     * The deterministic half of the revalidation guarantee the config tree's version token makes: a rewrite must leave
+     * this backend's stamp strictly <em>past</em> whatever the document carried, not merely at "now".
      *
-     * <p>The contract's own check rewrites back to back and requires the token to differ, which is the guarantee all
-     * four backends owe - but on a volume whose timestamps are finer than the cost of a write it cannot manufacture
-     * the collision, so it passes either way here. Pinning the stored stamp does manufacture it, and pins the same
-     * repair for the two ways it really arises: a filesystem whose timestamp granularity is coarser than the gap
-     * between two rewrites (a console double-save, an API applying a batch of dials), and a stamp simply ahead of
-     * this node's clock (an NTP step backwards, a restored backup, a {@code cp -p} from another host). In both, a
-     * stamp that does not move leaves the server's per-project config cache revalidating successfully against a
-     * policy that no longer exists - the operator's lowered size cap or shortened ttl silently not applied.
-     *
-     * <p>{@code writeFileVersioned} always forced its stamp forward; {@code writeConfig} and {@code writeFile} mint
-     * exactly the same kind of token and did not, so both are asserted here.
+     * <p>A back-to-back rewrite on a volume whose timestamps are finer than the cost of a write cannot manufacture the
+     * collision, so it passes either way. Pinning the stored stamp does manufacture it, and pins the same repair for
+     * the two ways it really arises: a filesystem whose timestamp granularity is coarser than the gap between two
+     * rewrites, and a stamp simply ahead of this node's clock (an NTP step backwards, a restored backup, a
+     * {@code cp -p} from another host). A token that did not move would let a writer holding the pre-rewrite token
+     * land a stale write.
      */
     @Test
     void a_rewrite_always_moves_the_version_token_past_what_the_document_carried() throws IOException {
         Path root = Files.createDirectories(base.resolve("cache"));
         CacheStorage storage = CacheStorages.filesystem(root);
         FileTime ahead = FileTime.from(Instant.now().plus(Duration.ofHours(1)));
-
-        storage.writeConfig("demo", "cache.properties", props("size", "100"));
-        Files.setLastModifiedTime(cached(root).resolve("demo").resolve("cache.properties"), ahead);
-        Object beforeConfig = storage.configVersion("demo");
-        storage.writeConfig("demo", "cache.properties", props("size", "50"));
-        assertThat(storage.readConfig("demo", "cache.properties").getProperty("size"))
-                .as("the rewrite is the policy that now stands").isEqualTo("50");
-        assertThat(storage.configVersion("demo"))
-                .as("the project-config revalidation token must move when the document does, or the per-project "
-                        + "config cache goes on serving the superseded caps. A STAMP alone could not promise it - "
-                        + "the rewrite lands an hour EARLIER than the stamp the document carried - which is why the "
-                        + "token names an incarnation (the stamp plus a digest of the bytes) and not a moment")
-                .isNotEqualTo(beforeConfig);
 
         String path = ".users/login.properties";
         storage.writeFile(path, props("acme", "admin"));

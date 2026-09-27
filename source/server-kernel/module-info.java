@@ -80,5 +80,6 @@ open module build.jenesis.repository.server.kernel {
                     build.jenesis.repository.server.kernel.CachingSettingsContributor,
                     build.jenesis.repository.server.kernel.DemoSettingsContributor,
                     build.jenesis.repository.server.kernel.ImmutabilitySettingsContributor,
-                    build.jenesis.repository.server.kernel.ModuleTogglesSettingsContributor;
+                    build.jenesis.repository.server.kernel.ModuleTogglesSettingsContributor,
+                    build.jenesis.repository.server.kernel.QuotaSettingsContributor;
 }

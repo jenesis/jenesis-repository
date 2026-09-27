@@ -25,12 +25,20 @@ public class EvictionController {
         this.service = service;
     }
 
+    /**
+     * It reads the tenant's and the deployment's settings documents, which the values it resolves inherit from: one
+     * object per module under a constant prefix, narrow by construction.
+     */
     @PostMapping("/ui/projects/{name}/evict/size")
     public String enforceSizeCap(@PathVariable("name") String name, RedirectAttributes redirect) throws IOException {
         flash(redirect, "size-cap sweep", service.enforceSizeCap(name));
         return "redirect:/ui/projects/" + name;
     }
 
+    /**
+     * It reads the tenant's and the deployment's settings documents, which the values it resolves inherit from: one
+     * object per module under a constant prefix, narrow by construction.
+     */
     @PostMapping("/ui/projects/{name}/evict/ttl")
     public String expireTtl(@PathVariable("name") String name, RedirectAttributes redirect) throws IOException {
         flash(redirect, "stale-entry sweep", service.expireTtl(name));

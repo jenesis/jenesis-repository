@@ -169,9 +169,11 @@ public class RepositoryAuthorizationManager implements AuthorizationManager<Requ
     public static Target classify(String path, String query) {
         Optional<String> operated = RepositoryRouting.operated(path, query);
         if (operated.isPresent()) {
-            // An export sends the repository's contents and a credential wherever it is told to, so it is
-            // administration of that repository rather than a use of it.
-            return new Target(operated.get(), null, path.startsWith("/api/repository/export"));
+            // An export sends the repository's contents and a credential wherever it is told to, and a repository's
+            // settings decide where it fetches from and how long it keeps what it holds, so both are administration
+            // of that repository rather than a use of it.
+            return new Target(operated.get(), null, path.startsWith("/api/repository/export")
+                    || path.startsWith("/api/repository/settings"));
         }
         // Two reads that are not administration. The asset enumeration of one repository is that repository's read:
         // it is what another instance's importer walks to move a repository out, with a key that may only read it.
