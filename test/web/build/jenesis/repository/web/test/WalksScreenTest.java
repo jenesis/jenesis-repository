@@ -11,6 +11,7 @@ import build.jenesis.repository.store.ArtifactStore;
 import build.jenesis.repository.walk.task.WalkRuns;
 import build.jenesis.repository.walk.task.WalkSchedules;
 import build.jenesis.repository.walk.web.WalksController;
+import build.jenesis.repository.servlet.testkit.Servlets;
 import build.jenesis.repository.web.testkit.Web;
 import org.springframework.ui.ExtendedModelMap;
 import org.springframework.web.servlet.mvc.support.RedirectAttributesModelMap;
@@ -43,7 +44,8 @@ class WalksScreenTest {
         RepositoryProperties properties = new RepositoryProperties();
         properties.setOperatorTenant("ops");
         screen = new WalksController(settings, store, audit, Web.scheduler(repositories, store), properties);
-        api = new WalksAdminController(store, audit, settings, Web.scheduler(repositories, store), properties);
+        api = new WalksAdminController(store, audit, settings, Web.scheduler(repositories, store),
+                Web.routing(repositories, "acme", "ops"));
     }
 
     @Test
@@ -142,12 +144,14 @@ class WalksScreenTest {
 
     @Test
     void the_api_records_a_hash_of_the_key_never_the_key() throws IOException {
-        WalkRuns.Overview overview = api.run("secret-key");
+        WalkRuns.Overview overview = api.run("secret-key", Servlets.request("POST", "/api/admin/walks/run"));
 
         assertThat(overview.requests()).hasSize(1);
         assertThat(audit.rows()).singleElement().satisfies(row -> {
             assertThat(row.actor()).isNotEqualTo("secret-key").doesNotContain("secret");
             assertThat(row.action()).isEqualTo(AuditActions.WALKS_RUN);
+            assertThat(row.tenant()).as("in the trail of the tenant the call answers for, which it reads back")
+                    .isEqualTo("acme");
         });
     }
 }

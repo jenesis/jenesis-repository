@@ -45,9 +45,7 @@ public class ConsoleApiConfig {
     @Bean
     public TenantsApiController tenantsApiController(Repositories repositories, Authorization authorization,
                                                      AuditTrail audit, RepositoryProperties properties) {
-        String operatorTenant = properties.getOperatorTenant().isBlank()
-                ? properties.getDefaultTenant()
-                : properties.getOperatorTenant();
+        String operatorTenant = properties.operatorTenantOrDefault();
         return new TenantsApiController(Documents.over(repositories.root()), repositories.root(), authorization,
                 audit, operatorTenant);
     }

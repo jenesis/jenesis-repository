@@ -85,8 +85,14 @@ public final class Web {
     /** The fixed routing over {@code repositories}' store serving {@code tenant}, administered by that tenant's keys
      *  alone - the tenant every {@code /api} call a suite makes through it answers for. */
     public static RepositoryRouting routing(Repositories repositories, String tenant) {
+        return routing(repositories, tenant, tenant);
+    }
+
+    /** The fixed routing over {@code repositories}' store serving {@code tenant}, operated by {@code operator} - a
+     *  deployment whose operator tenant is not the one it serves. */
+    public static RepositoryRouting routing(Repositories repositories, String tenant, String operator) {
         return new FixedTenantRouting(new RepositoriesRoutingContext(repositories.root(), repositories, tenant,
-                _ -> null), tenant, tenant);
+                _ -> null), tenant, operator);
     }
 
     /** An environment holding exactly {@code pinned} and nothing ambient - no process environment, no system

@@ -8,7 +8,6 @@ import build.jenesis.repository.management.web.CachesAdminController;
 import build.jenesis.repository.management.web.ManagementController;
 import build.jenesis.repository.management.web.PostureAdminController;
 import build.jenesis.repository.management.web.SpiCatalogController;
-import build.jenesis.repository.server.RepositoryProperties;
 import build.jenesis.repository.server.kernel.Repositories;
 import build.jenesis.repository.server.kernel.Settings;
 import build.jenesis.repository.server.spi.Authorization;
@@ -219,19 +218,20 @@ class ManagementWebTest {
     }
 
     @Test
-    void clearing_the_caches_answers_what_went_and_is_recorded_for_the_operator() throws IOException {
-        RepositoryProperties properties = new RepositoryProperties();
-        properties.setOperatorTenant("ops");
-        CachesAdminController caches = new CachesAdminController(audit, Authorization.enforcing(store), properties);
+    void clearing_the_caches_answers_what_went_and_is_recorded_in_the_routed_tenants_trail() throws IOException {
+        // Operated by another tenant than the one it serves: the call answers for the served one, and records there.
+        CachesAdminController caches = new CachesAdminController(audit, Authorization.enforcing(store),
+                Web.routing(Web.repositories(store), "acme", "ops"));
 
         CachesAdminController.CachesView before = caches.caches();
-        CachesAdminController.ClearedView cleared = caches.clear("operator-key");
+        CachesAdminController.ClearedView cleared = caches.clear("operator-key",
+                Servlets.request("POST", "/api/admin/caches/clear"));
 
         assertThat(cleared.node()).isEqualTo(before.node());
         assertThat(cleared.cleared()).isNotNegative();
         assertThat(audit.rows()).singleElement().satisfies(row -> {
             assertThat(row.action()).isEqualTo(AuditActions.CACHES_CLEAR);
-            assertThat(row.tenant()).isEqualTo("ops");
+            assertThat(row.tenant()).isEqualTo("acme");
             assertThat(row.actor()).isEqualTo(Authorization.hash("operator-key"));
         });
     }

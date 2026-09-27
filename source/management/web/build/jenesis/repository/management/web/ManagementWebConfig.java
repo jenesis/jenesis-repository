@@ -6,7 +6,6 @@ import build.jenesis.repository.audit.AuditTrail;
 import build.jenesis.repository.server.kernel.PinnedSettings;
 import build.jenesis.repository.server.CredentialContext;
 import build.jenesis.repository.server.kernel.Repositories;
-import build.jenesis.repository.server.RepositoryProperties;
 import build.jenesis.repository.server.RepositoryRouting;
 import build.jenesis.repository.server.kernel.MaintenanceScheduler;
 import build.jenesis.repository.server.kernel.Settings;
@@ -66,17 +65,17 @@ public class ManagementWebConfig {
 
     @Bean
     public CachesAdminController cachesAdminController(AuditTrail audit, Authorization authorization,
-                                                      RepositoryProperties properties) {
+                                                      RepositoryRouting routing) {
         // Registered by hand, like every controller here: absent from this list, /api/admin/caches and its clear
         // would answer 404 in every composition while the console's own button worked. The controller-registration
         // inspection rule holds that.
-        return new CachesAdminController(audit, authorization, properties);
+        return new CachesAdminController(audit, authorization, routing);
     }
 
     @Bean
     public StoragePurgeController storagePurgeController(StorageNamespaces namespaces, Tenants tenants, AuditTrail audit,
-                                                        RepositoryProperties properties) {
-        return new StoragePurgeController(namespaces, tenants, audit, properties);
+                                                        RepositoryRouting routing) {
+        return new StoragePurgeController(namespaces, tenants, audit, routing);
     }
 
     /**
@@ -90,7 +89,7 @@ public class ManagementWebConfig {
     @Bean
     public WalksAdminController walksAdminController(ArtifactStore root, AuditTrail audit, Settings settings,
                                                      MaintenanceScheduler maintenance,
-                                                     RepositoryProperties properties) {
-        return new WalksAdminController(root, audit, settings, maintenance, properties);
+                                                     RepositoryRouting routing) {
+        return new WalksAdminController(root, audit, settings, maintenance, routing);
     }
 }

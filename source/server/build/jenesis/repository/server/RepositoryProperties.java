@@ -519,6 +519,12 @@ public class RepositoryProperties {
         return operatorTenant;
     }
 
+    /** The tenant that operates the deployment: {@link #getOperatorTenant()}, or the {@code default-tenant} when that
+     *  names none - the one reading of the pair that the operator-gated routes and their audit trail share. */
+    public String operatorTenantOrDefault() {
+        return operatorTenant.isBlank() ? getDefaultTenant() : operatorTenant;
+    }
+
     public void setOperatorTenant(String operatorTenant) {
         this.operatorTenant = operatorTenant;
     }

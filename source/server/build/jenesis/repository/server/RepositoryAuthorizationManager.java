@@ -79,9 +79,7 @@ public class RepositoryAuthorizationManager implements AuthorizationManager<Requ
         this.authorization = authorization;
         this.usage = usage;
         this.trustedProxies = parseTrustedProxies(properties.getTrustedProxies());
-        this.operatorTenant = properties.getOperatorTenant().isBlank()
-                ? properties.getDefaultTenant()
-                : properties.getOperatorTenant();
+        this.operatorTenant = properties.operatorTenantOrDefault();
     }
 
     @Override

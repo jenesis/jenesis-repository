@@ -3,10 +3,11 @@ package build.jenesis.repository.management.web;
 import module java.base;
 import build.jenesis.repository.audit.AuditTrail;
 import build.jenesis.repository.server.kernel.Repositories;
-import build.jenesis.repository.server.RepositoryProperties;
+import build.jenesis.repository.server.RepositoryRouting;
 import build.jenesis.repository.maintenance.StorageNamespaces;
 import build.jenesis.repository.server.spi.Authorization;
 import build.jenesis.repository.store.Tenants;
+import jakarta.servlet.http.HttpServletRequest;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -43,16 +44,14 @@ public class StoragePurgeController {
     private final StorageNamespaces namespaces;
     private final Tenants tenants;
     private final AuditTrail audit;
-    private final String operatorTenant;
+    private final RepositoryRouting routing;
 
     public StoragePurgeController(StorageNamespaces namespaces, Tenants tenants, AuditTrail audit,
-                                  RepositoryProperties properties) {
+                                  RepositoryRouting routing) {
         this.namespaces = namespaces;
         this.tenants = tenants;
         this.audit = audit;
-        this.operatorTenant = properties.getOperatorTenant().isBlank()
-                ? properties.getDefaultTenant()
-                : properties.getOperatorTenant();
+        this.routing = routing;
     }
 
     /** The orphaned-data diagnostic: every manifest entry whose declaring module is not installed yet whose
@@ -71,8 +70,9 @@ public class StoragePurgeController {
     @PostMapping("/api/admin/purge")
     public ResponseEntity<PurgeView> purge(@RequestParam("namespace") String namespace,
                                            @RequestParam(value = "dryRun", defaultValue = "true") boolean dryRun,
-                                           @RequestHeader(value = Repositories.KEY, required = false) String key)
-            throws IOException {
+                                           @RequestHeader(value = Repositories.KEY, required = false) String key,
+                                           HttpServletRequest request) throws IOException {
+        String tenant = routing.tenant(request);
         List<String> all = tenants.list();
         Optional<StorageNamespaces.Report> report = dryRun
                 ? namespaces.plan(namespace, all)
@@ -81,7 +81,7 @@ public class StoragePurgeController {
             return ResponseEntity.status(404).build();
         }
         if (!dryRun) {
-            audit.record(operatorTenant, key == null ? "anonymous" : Authorization.hash(key), "storage.purge",
+            audit.record(tenant, key == null ? "anonymous" : Authorization.hash(key), "storage.purge",
                     namespace + " (" + report.get().objects() + " objects, " + report.get().bytes() + " bytes)");
         }
         List<SpaceView> spaces = new ArrayList<>();

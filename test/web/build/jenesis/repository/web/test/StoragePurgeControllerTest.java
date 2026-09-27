@@ -4,7 +4,9 @@ import module java.base;
 import module org.junit.jupiter.api;
 import build.jenesis.repository.maintenance.StorageNamespaces;
 import build.jenesis.repository.management.web.StoragePurgeController;
-import build.jenesis.repository.server.RepositoryProperties;
+import build.jenesis.repository.servlet.testkit.Servlets;
+import build.jenesis.repository.store.ArtifactStore;
+import jakarta.servlet.http.HttpServletRequest;
 import build.jenesis.repository.store.Tenants;
 import org.junit.jupiter.api.io.TempDir;
 import build.jenesis.repository.web.testkit.Web;
@@ -32,6 +34,9 @@ import static org.assertj.core.api.Assertions.assertThat;
  */
 class StoragePurgeControllerTest {
 
+    /** An {@code /api} call naming no tenant: the routing answers the one this deployment serves. */
+    private static final HttpServletRequest PURGE = Servlets.request("POST", "/api/admin/purge");
+
     @TempDir
     Path root;
 
@@ -39,18 +44,19 @@ class StoragePurgeControllerTest {
     private StoragePurgeController controller;
 
     @BeforeEach
-    void wire() {
+    void wire() throws IOException {
         audit = Web.audit();
-        RepositoryProperties properties = new RepositoryProperties();
-        controller = new StoragePurgeController(new StorageNamespaces(Web.store(root)),
-                Tenants.fixed("default"), audit, properties);
+        ArtifactStore store = Web.store(root);
+        controller = new StoragePurgeController(new StorageNamespaces(store),
+                Tenants.fixed("default"), audit, Web.routing(store, Web.repositories(store)));
     }
 
     @Test
     void the_purge_parameter_defaults_to_a_dry_run() throws Exception {
         // The single word this endpoint's safety rests on. Read off the annotation because that is where it lives:
         // every call in the product passes the flag explicitly, so no other test can notice it changing.
-        Method purge = StoragePurgeController.class.getMethod("purge", String.class, boolean.class, String.class);
+        Method purge = StoragePurgeController.class.getMethod("purge", String.class, boolean.class, String.class,
+                HttpServletRequest.class);
         RequestParam dryRun = null;
         for (Parameter parameter : purge.getParameters()) {
             RequestParam annotation = parameter.getAnnotation(RequestParam.class);
@@ -66,13 +72,13 @@ class StoragePurgeControllerTest {
 
     @Test
     void an_unknown_namespace_is_a_404_rather_than_a_silent_success() throws Exception {
-        assertThat(controller.purge("no-such-module", true, null).getStatusCode().value()).isEqualTo(404);
-        assertThat(controller.purge("no-such-module", false, null).getStatusCode().value()).isEqualTo(404);
+        assertThat(controller.purge("no-such-module", true, null, PURGE).getStatusCode().value()).isEqualTo(404);
+        assertThat(controller.purge("no-such-module", false, null, PURGE).getStatusCode().value()).isEqualTo(404);
     }
 
     @Test
     void a_dry_run_records_no_audit_row() throws Exception {
-        controller.purge("no-such-module", true, null);
+        controller.purge("no-such-module", true, null, PURGE);
 
         // Not merely "nothing was deleted": an audit row for a deletion that did not happen is a trail that
         // disagrees with the store, and the trail is what an operator reconstructs an incident from.

@@ -5,7 +5,8 @@ import module spring.web;
 
 import build.jenesis.repository.audit.AuditTrail;
 import build.jenesis.repository.server.kernel.MaintenanceScheduler;
-import build.jenesis.repository.server.RepositoryProperties;
+import build.jenesis.repository.server.RepositoryRouting;
+import jakarta.servlet.http.HttpServletRequest;
 import build.jenesis.repository.server.kernel.Settings;
 import build.jenesis.repository.server.kernel.TaskSchedule;
 import build.jenesis.repository.server.spi.Authorization;
@@ -30,17 +31,15 @@ public class WalksAdminController {
 
     private final MaintenanceScheduler maintenance;
 
-    private final String operatorTenant;
+    private final RepositoryRouting routing;
 
     public WalksAdminController(ArtifactStore root, AuditTrail audit, Settings settings,
-                                MaintenanceScheduler maintenance, RepositoryProperties properties) {
+                                MaintenanceScheduler maintenance, RepositoryRouting routing) {
         this.root = root;
         this.audit = audit;
         this.settings = settings;
         this.maintenance = maintenance;
-        this.operatorTenant = properties.getOperatorTenant().isBlank()
-                ? properties.getDefaultTenant()
-                : properties.getOperatorTenant();
+        this.routing = routing;
     }
 
     /** The walks: every entry with its last run, every installed consumer, every standing request. */
@@ -51,9 +50,9 @@ public class WalksAdminController {
 
     /** Ask for a walk of the store now; answers the overview, the new request among its standing ones. */
     @PostMapping("/api/admin/walks/run")
-    public WalkRuns.Overview run(@RequestHeader(value = Repositories.KEY, required = false) String key)
-            throws IOException {
-        WalkRuns.request(root, audit, operatorTenant, key == null ? "anonymous" : Authorization.hash(key));
+    public WalkRuns.Overview run(@RequestHeader(value = Repositories.KEY, required = false) String key,
+                                 HttpServletRequest request) throws IOException {
+        WalkRuns.request(root, audit, routing.tenant(request), key == null ? "anonymous" : Authorization.hash(key));
         return overview();
     }
 
