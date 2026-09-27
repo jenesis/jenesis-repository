@@ -10,7 +10,7 @@ import build.jenesis.repository.compliance.QualityInspector;
 import build.jenesis.repository.compliance.SignerTrust;
 import build.jenesis.repository.compliance.SignerTrustProvider;
 import build.jenesis.repository.compliance.TrustAware;
-import build.jenesis.repository.gate.store.ComplianceScreen;
+import build.jenesis.repository.gate.store.PublishInspection;
 import build.jenesis.repository.format.ArtifactSignatures;
 import build.jenesis.repository.format.RepositoryFormat;
 import build.jenesis.repository.inventory.StoreRepositoryInventory;
@@ -124,7 +124,7 @@ public final class SignatureCompletionObserver implements PublicationObserver {
         // none of the second and would have gone blind on every format that keeps its own key space.
         List<ComplianceGate.Subject> subjects = inspector.inspectArtifact(covered,
                 new StoredContent(blobs, hash.get()),
-                ComplianceScreen.siblings(publication.heldContentOf(hash.get()))).subjects();
+                PublishInspection.siblings(publication.heldContentOf(hash.get()))).subjects();
         List<ComplianceGate.Signature> signatures = subjects.stream()
                 .flatMap(subject -> subject.signatures().stream())
                 .toList();

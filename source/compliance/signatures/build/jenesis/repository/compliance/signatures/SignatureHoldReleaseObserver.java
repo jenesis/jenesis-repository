@@ -11,7 +11,7 @@ import build.jenesis.repository.store.ArtifactStore;
  * <h2>Why a dimension that declares a hold kind must also declare this</h2>
  *
  * A quarantining finding that names a hold kind makes the screen write a durable {@code holds/<kind>} record
- * ({@code ComplianceScreen.recordHolds}), and every release surface clears such a record through the discovered
+ * ({@code PublishHolds.recordHolds}), and every release surface clears such a record through the discovered
  * {@link HoldReleaseObserver} for that kind. A kind with no observer therefore writes records nothing can consume:
  * the review queue renders the row as held by an uninstalled kind, {@code HoldReleaseObserver.anyHolds} keeps
  * answering yes forever, and an accepted re-publish of the same path declines to clear the quarantine pointer because

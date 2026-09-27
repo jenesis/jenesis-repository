@@ -105,7 +105,7 @@ import build.jenesis.repository.store.ArtifactStore;
  *     {@link #heldByAnotherKind(ArtifactStore, String, String)} and {@link #anyHolds} cannot reach it without one, so
  *     for an unplaceable path both answer {@code false} from both legs. That {@code false} means "nothing could be
  *     asked", and <b>no consumer may spend it as "nothing holds this"</b>: it is judged at each consumer, per site,
- *     because what to do about it differs. {@code ComplianceScreen.sweepHeld} answers
+ *     because what to do about it differs. {@code PublishHolds.sweepHeld} answers
  *     sweep-owned so an accepted re-publish cannot launder a hold; the KEV auto-release refuses to release at all and
  *     says why. A release site that already holds the coordinate - which every enforcement sweep does - must instead
  *     use {@link #heldByAnotherKind(ArtifactStore, String, String, String, Collection, String)}, whose authoritative
@@ -244,7 +244,7 @@ public interface HoldReleaseObserver {
      * never a record already found above. A path nothing can place at all - no format, no recorded subject - still
      * answers {@code false} from both legs, and that answer is <em>"nothing could be asked"</em> which a consumer must
      * never spend as <em>"no other kind holds"</em>: judged at the consumer, per site, exactly as {@link #anyHolds}'
-     * is, where {@code ComplianceScreen.sweepHeld} treats an unplaceable path as sweep-owned so an accepted re-publish
+     * is, where {@code PublishHolds.sweepHeld} treats an unplaceable path as sweep-owned so an accepted re-publish
      * cannot launder a hold, and the KEV auto-release refuses to release at all rather than release unguarded. An
      * automated release site that HAS the coordinate - which every enforcement sweep does, since its records are
      * coordinate-keyed - should ask {@link #heldByAnotherKind(ArtifactStore, String, String, String, Collection,
