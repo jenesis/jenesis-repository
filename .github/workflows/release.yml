@@ -3,7 +3,7 @@ name: Release jenesis-repository
 # Releases are dispatched by hand from the Actions tab, so any commit is releasable:
 # the sha input picks the commit (the head this runs on by default) and the tag input
 # picks the tag (the next minor of the latest tag by default). Staging re-runs the build with strict
-# dependency pinning and the Maven Central POM metadata from project.properties;
+# dependency pinning and the Maven Central POM metadata from project.properties, which the build reads at the root;
 # JReleaser then signs, deploys every staged module to Maven Central and cuts the
 # GitHub release + tag. The Maven staging repository under target/stage/maven/output
 # carries all modules, each with sources and javadoc as Central requires.
@@ -78,7 +78,6 @@ jobs:
                -Djenesis.project.sources=true \
                -Djenesis.project.documentation=true \
                -Djenesis.dependency.pin=strict \
-               -Djenesis.project.metadata=project.properties \
                build/jenesis/Make.java stage
 
       - name: JReleaser deploy
