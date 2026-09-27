@@ -1,6 +1,8 @@
 package build.jenesis.repository.compliance.signatures;
 
 import module java.base;
+import build.jenesis.repository.compliance.SignatureScheme;
+import build.jenesis.repository.format.ArtifactSignatures;
 import build.jenesis.repository.settings.Setting;
 import build.jenesis.repository.settings.SettingsContributor;
 
@@ -10,11 +12,27 @@ import build.jenesis.repository.settings.SettingsContributor;
  *
  * <p>Both are {@link Setting.Scope#TENANT}: which keys are trusted, and for which namespaces, is a statement one
  * tenant makes about its own supply chain, and two tenants sharing a deployment have no reason to share a keyring.
+ *
+ * <p>The keyless dials - the Sigstore trusted root, where it is fetched from and how often, and the issuers trusted by
+ * provenance - are listed only where a scheme verifies a Sigstore bundle. Without one they configure nothing, and the
+ * settings screen, the generated reference and the boot check for unrecognised settings would describe a capability
+ * the deployment does not have. The answer is held, since installation is fixed for the life of a JVM.
  */
 public final class SignatureSettingsContributor implements SettingsContributor {
 
+    private static final boolean KEYLESS =
+            SignatureScheme.installed(ArtifactSignatures.Scheme.SIGSTORE_BUNDLE).isPresent();
+
+    private static final Set<String> KEYLESS_KEYS = Set.of(ConfiguredSignerTrust.SIGSTORE_ROOT, TrustedRootTask.URL,
+            TrustedRootTask.INTERVAL.key(), ProvenanceTrust.ACCEPT);
+
     @Override
     public List<Setting> settings() {
+        List<Setting> settings = all();
+        return KEYLESS ? settings : settings.stream().filter(setting -> !KEYLESS_KEYS.contains(setting.key())).toList();
+    }
+
+    private static List<Setting> all() {
         return List.of(
                 new Setting(ConfiguredSignerTrust.KEYS, "Compliance", "Trusted signing keys",
                         "The armoured OpenPGP public keys this deployment verifies publisher signatures against - one "

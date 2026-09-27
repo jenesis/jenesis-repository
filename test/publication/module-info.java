@@ -66,6 +66,7 @@ open module build.jenesis.repository.publication.contract.test {
     requires build.jenesis.repository.blobs;
     requires build.jenesis.repository.format;
     requires build.jenesis.repository.inventory;
+    requires build.jenesis.repository.settings;
     requires build.jenesis.repository.staging.store;
     requires build.jenesis.repository.store.testkit;
     // What a fixture over a shipped hook needs beyond the contract: the deployment it is gated on, the pass its
