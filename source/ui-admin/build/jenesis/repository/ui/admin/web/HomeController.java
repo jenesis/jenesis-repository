@@ -9,6 +9,7 @@ import org.springframework.security.authentication.AnonymousAuthenticationToken;
 import org.springframework.security.core.Authentication;
 import org.springframework.stereotype.Controller;
 import org.springframework.web.bind.annotation.GetMapping;
+import build.jenesis.repository.ui.ConsoleScreen;
 
 /**
  * The landing routes. After sign-in a reader is routed by how many tenants they can reach. On a fixed deployment there
@@ -17,6 +18,7 @@ import org.springframework.web.bind.annotation.GetMapping;
  * instances list, which the header's tenant chooser also leads to; so does anyone who belongs to several.
  */
 @Controller
+@ConsoleScreen
 public class HomeController {
 
     private final Memberships memberships;

@@ -15,6 +15,7 @@ import org.springframework.web.bind.annotation.GetMapping;
  * {@link CurrentTenant}'s, so this screen is the same screen on a deployment with one tenant and on one with many.
  */
 @Controller
+@ConsoleScreen
 public class PostureScreenController {
 
     private final PostureSource source;

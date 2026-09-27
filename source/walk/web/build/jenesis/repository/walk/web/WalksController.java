@@ -18,6 +18,7 @@ import build.jenesis.repository.server.kernel.TaskSchedule;
 import build.jenesis.repository.store.ArtifactStore;
 import build.jenesis.repository.walk.task.WalkRuns;
 import build.jenesis.repository.walk.task.WalkSchedules;
+import build.jenesis.repository.ui.ConsoleScreen;
 
 /**
  * The walks screen. It renders the overview {@link WalkRuns} assembles - the scheduled entries with what each one's
@@ -28,6 +29,7 @@ import build.jenesis.repository.walk.task.WalkSchedules;
  * A walk now goes through the same request the admin endpoint records.
  */
 @Controller
+@ConsoleScreen
 public class WalksController {
 
     private final Settings settings;

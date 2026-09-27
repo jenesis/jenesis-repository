@@ -23,6 +23,7 @@ import org.springframework.web.bind.annotation.GetMapping;
  * forever.
  */
 @Controller
+@ConsoleScreen
 public class NoAccessController {
 
     @GetMapping("/ui/no-access")

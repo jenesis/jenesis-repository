@@ -21,6 +21,7 @@ import org.springframework.web.bind.annotation.GetMapping;
  * with is the mechanism's statement, not a console's guess at what kind it is.
  */
 @Controller
+@ConsoleScreen
 public class LoginController {
 
     private final List<LoginOptions> mechanisms;

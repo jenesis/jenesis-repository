@@ -8,12 +8,14 @@ import org.springframework.stereotype.Controller;
 import org.springframework.ui.Model;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.RequestParam;
+import build.jenesis.repository.ui.ConsoleScreen;
 
 /**
  * The audit trail in the console: the current tenant's security-relevant changes, newest first, filterable by action
  * and exportable as CSV. Both routes sit under {@code /admin/} so only a tenant admin reaches them (see SecurityConfig).
  */
 @Controller
+@ConsoleScreen
 public class AuditController {
 
     private final AuditTrail audit;

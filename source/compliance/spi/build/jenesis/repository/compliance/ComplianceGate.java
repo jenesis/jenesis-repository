@@ -581,8 +581,8 @@ public final class ComplianceGate {
      * package subject (a {@code raw}-format artifact, an un-inspected format), screened from a path-derived coordinate
      * alone. It runs ONLY the core coordinate/feed dimensions - the operator {@link DenyListPolicy} (the essential one,
      * so an operator's {@code deny com.evil:*} still bites a raw/un-inspected coordinate instead of that being the exact
-     * path an attacker uses to bypass it), plus the vulnerability and malicious feed dimensions for consistency (they
-     * simply match nothing on a non-package coordinate whose feed lookup is empty) - and DELIBERATELY SKIPS the
+     * path an attacker uses to bypass it), plus the vulnerability and malicious feed dimensions for consistency (a
+     * subject that names no version, such as an index or a packument, is asked of no feed) - and DELIBERATELY SKIPS the
      * discovered {@link #policies} (the license, attestation, known-exploited and secret-scan dimensions). This skip is
      * load-bearing: a path-derived subject declares no license and carries no content, so per {@link Subject#contentScan()}
      * it reaches the license policy's unknown-license branch and would quarantine EVERY raw upload - over-quarantining
@@ -596,8 +596,13 @@ public final class ComplianceGate {
 
     private Assessment assess(Subject subject, boolean discoveredPolicies) {
         List<Finding> findings = new ArrayList<>();
-        List<AdvisorySource.Advisory> found =
-                advisories.advisories(subject.ecosystem(), subject.coordinate(), subject.version());
+        // An advisory names the versions it affects, so a subject that names none - an index, a packument, a path no
+        // layout reads a version from - has nothing a feed could match, and asking would only fail: a feed that fails
+        // closed rejects a query with no version, and the screen of a document that names no artifact would then fail
+        // the fetch of that document. The deny-list below still reads the coordinate.
+        List<AdvisorySource.Advisory> found = subject.version() == null || subject.version().isBlank()
+                ? List.of()
+                : advisories.advisories(subject.ecosystem(), subject.coordinate(), subject.version());
         // A VEX statement that marks an advisory not-applicable to this subject downgrades it to a recorded allow and
         // keeps it out of every dimension (vulnerability, malicious, known-exploited), so one attested claim clears the
         // flaw uniformly rather than each dimension re-flagging it. The remaining advisories screen as usual.

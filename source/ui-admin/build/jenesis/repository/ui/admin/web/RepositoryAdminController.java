@@ -27,6 +27,7 @@ import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.ResponseBody;
 import org.springframework.web.servlet.mvc.support.RedirectAttributes;
 import org.springframework.web.util.UriComponentsBuilder;
+import build.jenesis.repository.ui.ConsoleScreen;
 
 /**
  * The repository-admin panels of the console: list the tenant's repositories, and per repository browse releases,
@@ -36,6 +37,7 @@ import org.springframework.web.util.UriComponentsBuilder;
  * javac step does not emit {@code -parameters}.
  */
 @Controller
+@ConsoleScreen
 public class RepositoryAdminController {
 
     /** How many recent releases the overview renders - a bound so it never buffers or emits a row per release of a

@@ -5,6 +5,7 @@ import build.jenesis.repository.store.ReadOnlyArtifactStore;
 import build.jenesis.repository.store.ReadOnlyException;
 import jakarta.servlet.http.HttpServletResponse;
 import org.springframework.web.bind.annotation.ExceptionHandler;
+import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
 
 /**
@@ -14,9 +15,10 @@ import org.springframework.web.bind.annotation.RestControllerAdvice;
  * settings edit on a management / config controller in another module - and this one advice answers them all with a
  * clear {@code 403}, so no per-controller guard has to remember the mode (the quota {@code 507} handler stays
  * per-controller because only the publish path meters bytes; read-only cuts across every write). The store refuses
- * the write before any bytes are stored, so the response is never committed when this runs.
+ * the write before any bytes are stored, so the response is never committed when this runs. It answers for the
+ * {@code @RestController}s only: a console screen renders the refusal as its own error page.
  */
-@RestControllerAdvice
+@RestControllerAdvice(annotations = RestController.class)
 public class ReadOnlyAdvice {
 
     @ExceptionHandler(ReadOnlyException.class)

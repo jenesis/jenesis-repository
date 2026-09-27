@@ -18,6 +18,7 @@ import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.servlet.mvc.support.RedirectAttributes;
+import build.jenesis.repository.ui.ConsoleScreen;
 
 /**
  * The per-tenant admin screen: manage the current tenant's console members (add/remove viewers,
@@ -28,6 +29,7 @@ import org.springframework.web.servlet.mvc.support.RedirectAttributes;
  * {@code -parameters}.
  */
 @Controller
+@ConsoleScreen
 @RequestMapping("/ui/admin")
 public class AdminController {
 

@@ -2,6 +2,7 @@ package build.jenesis.repository.auth.keylogin;
 
 import org.springframework.stereotype.Controller;
 import org.springframework.web.bind.annotation.GetMapping;
+import build.jenesis.repository.ui.ConsoleScreen;
 
 /**
  * Serves the key-entry form at {@code GET /login/key} (the link the {@link build.jenesis.repository.ui.LoginOptions} adds to
@@ -11,6 +12,7 @@ import org.springframework.web.bind.annotation.GetMapping;
  * simple-deployment path, not the recommended production sign-in.
  */
 @Controller
+@ConsoleScreen
 public class KeyLoginPageController {
 
     @GetMapping("/ui/login/key")

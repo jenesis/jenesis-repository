@@ -15,6 +15,7 @@ import org.springframework.web.bind.annotation.GetMapping;
  * reports the module graph undecorated.
  */
 @Controller
+@ConsoleScreen
 public class SpiCatalogScreenController {
 
     private final SpiCatalogSource source;

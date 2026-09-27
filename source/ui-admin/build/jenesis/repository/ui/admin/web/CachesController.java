@@ -8,6 +8,7 @@ import org.springframework.ui.Model;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.servlet.mvc.support.RedirectAttributes;
+import build.jenesis.repository.ui.ConsoleScreen;
 
 /**
  * The read caches of the node that served this request, and the clear that drops them. A super-admin's screen under
@@ -15,6 +16,7 @@ import org.springframework.web.servlet.mvc.support.RedirectAttributes;
  * grants, so nothing about it is one tenant's.
  */
 @Controller
+@ConsoleScreen
 public class CachesController {
 
     private final CacheClear clear;

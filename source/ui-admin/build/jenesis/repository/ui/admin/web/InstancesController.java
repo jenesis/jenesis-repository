@@ -12,6 +12,7 @@ import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.servlet.mvc.support.RedirectAttributes;
+import build.jenesis.repository.ui.ConsoleScreen;
 
 /**
  * The tenants screen. Every user can list the tenants they may reach and select one to work in; an env super-admin
@@ -20,6 +21,7 @@ import org.springframework.web.servlet.mvc.support.RedirectAttributes;
  * does not emit {@code -parameters}.
  */
 @Controller
+@ConsoleScreen
 public class InstancesController {
 
     private final TenantService tenants;

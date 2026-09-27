@@ -15,6 +15,7 @@ import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.servlet.mvc.support.RedirectAttributes;
+import build.jenesis.repository.ui.ConsoleScreen;
 
 /**
  * The deployment-settings screen: the super-admin reviews every runtime-editable setting grouped by area, with its
@@ -30,6 +31,7 @@ import org.springframework.web.servlet.mvc.support.RedirectAttributes;
  * slice by selecting it, layered over the deployment default and leaving other tenants untouched.
  */
 @Controller
+@ConsoleScreen
 public class SettingsController {
 
     /** The uploaded bundle is parsed with the framework's JSON reader, not the internal flat-document codec: an import

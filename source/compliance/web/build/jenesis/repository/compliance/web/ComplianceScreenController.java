@@ -10,6 +10,7 @@ import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.servlet.mvc.support.RedirectAttributes;
+import build.jenesis.repository.ui.ConsoleScreen;
 
 /**
  * Every console screen that reads a screening ledger: what a scan found and what a maintainer-health sweep
@@ -25,6 +26,7 @@ import org.springframework.web.servlet.mvc.support.RedirectAttributes;
  * the rescan is the write path the render deliberately does not take.
  */
 @Controller
+@ConsoleScreen
 public class ComplianceScreenController {
 
     /** How many holds the quarantine screen pages at a time. */

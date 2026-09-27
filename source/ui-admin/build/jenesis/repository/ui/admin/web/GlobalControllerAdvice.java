@@ -8,6 +8,7 @@ import build.jenesis.repository.ui.PrincipalNameResolver;
 import build.jenesis.repository.ui.NavEntry;
 import build.jenesis.repository.ui.NavEntry.Access;
 import build.jenesis.repository.ui.NavEntry.Group;
+import build.jenesis.repository.ui.ConsoleScreen;
 import build.jenesis.repository.ui.Navigation;
 import build.jenesis.repository.ui.RepositoryHeader;
 import build.jenesis.repository.ui.RepositoryPage;
@@ -29,13 +30,14 @@ import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.ModelAttribute;
 
 /**
- * Cross-cutting web concerns: expose the signed-in user, the selected tenant, and the role flags for
+ * Cross-cutting web concerns of the console's screens - the {@link ConsoleScreen}s, and nothing else in the context,
+ * so a failure on the API or the data plane is never answered with the console's error page. Expose the signed-in user, the selected tenant, and the role flags for
  * that tenant to every view (so the layout can greet them, show the instances switcher only when it
  * is meaningful, let editors mutate and reserve admin-only controls). The role flags are resolved
  * against the current tenant, and a super-admin is admin everywhere. Validation/storage failures
  * become a friendly error page, and a missing tenant selection bounces back through the router.
  */
-@ControllerAdvice
+@ControllerAdvice(annotations = ConsoleScreen.class)
 public class GlobalControllerAdvice {
 
     private static final Logger LOGGER = LoggerFactory.getLogger(GlobalControllerAdvice.class);

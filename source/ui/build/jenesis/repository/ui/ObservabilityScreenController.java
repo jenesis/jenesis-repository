@@ -18,6 +18,7 @@ import org.springframework.web.bind.annotation.GetMapping;
  * report degrades to a friendly empty state rather than an empty table.
  */
 @Controller
+@ConsoleScreen
 public class ObservabilityScreenController {
 
     private final ConfigurableListableBeanFactory beans;

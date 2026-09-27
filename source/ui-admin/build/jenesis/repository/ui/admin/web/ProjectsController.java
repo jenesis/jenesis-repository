@@ -16,6 +16,7 @@ import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.servlet.mvc.support.RedirectAttributes;
+import build.jenesis.repository.ui.ConsoleScreen;
 
 /**
  * Lists the projects on the volume, creates new ones, and edits a project's cache.properties (the well-known size /
@@ -25,6 +26,7 @@ import org.springframework.web.servlet.mvc.support.RedirectAttributes;
  * {@code -parameters}.
  */
 @Controller
+@ConsoleScreen
 public class ProjectsController {
 
     private final CacheService service;

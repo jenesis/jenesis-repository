@@ -11,6 +11,7 @@ import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.servlet.mvc.support.RedirectAttributes;
+import build.jenesis.repository.ui.ConsoleScreen;
 
 /**
  * Publish a whole repository to another one from the console, and watch the jobs doing it.
@@ -21,6 +22,7 @@ import org.springframework.web.servlet.mvc.support.RedirectAttributes;
  * itself, and each job's counts read back one stored document at a time, a page of them at once.
  */
 @Controller
+@ConsoleScreen
 public class ExportScreenController {
 
     private final Exports exports;

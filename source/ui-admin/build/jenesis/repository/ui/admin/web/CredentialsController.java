@@ -10,6 +10,7 @@ import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.servlet.mvc.support.RedirectAttributes;
+import build.jenesis.repository.ui.ConsoleScreen;
 
 /**
  * Manages access credentials through the console: list them, mint a new one (its key is shown once), grant or
@@ -20,6 +21,7 @@ import org.springframework.web.servlet.mvc.support.RedirectAttributes;
  * opt-out is ticked. Binding names are explicit because the Jenesis javac step does not emit {@code -parameters}.
  */
 @Controller
+@ConsoleScreen
 public class CredentialsController {
 
     private final CredentialService credentials;

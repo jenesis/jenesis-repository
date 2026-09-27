@@ -10,6 +10,7 @@ import org.springframework.stereotype.Controller;
 import org.springframework.ui.Model;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PostMapping;
+import build.jenesis.repository.ui.ConsoleScreen;
 
 /**
  * The first-run setup screen: the decisions a new deployment should make, walked in order, each rendered from the
@@ -23,6 +24,7 @@ import org.springframework.web.bind.annotation.PostMapping;
  * is on the starter key), since those are secrets a deployment is provisioned with rather than dials in the store.
  */
 @Controller
+@ConsoleScreen
 public class SetupController {
 
     private final SetupWizard wizard;

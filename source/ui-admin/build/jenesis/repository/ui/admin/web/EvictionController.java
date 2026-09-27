@@ -6,6 +6,7 @@ import org.springframework.stereotype.Controller;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.servlet.mvc.support.RedirectAttributes;
+import build.jenesis.repository.ui.ConsoleScreen;
 
 /**
  * Triggers eviction directly on the shared volume (no call into jenesis-cache): enforce the size
@@ -15,6 +16,7 @@ import org.springframework.web.servlet.mvc.support.RedirectAttributes;
  * editor mutation gate.
  */
 @Controller
+@ConsoleScreen
 public class EvictionController {
 
     private final CacheService service;

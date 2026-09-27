@@ -14,6 +14,7 @@ import org.springframework.web.bind.annotation.GetMapping;
  * job is to be neutral between them.
  */
 @Controller
+@ConsoleScreen
 public class DevLoginController {
 
     @GetMapping("/ui/login/dev")
