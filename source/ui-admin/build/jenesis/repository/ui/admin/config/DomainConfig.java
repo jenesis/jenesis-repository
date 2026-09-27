@@ -219,8 +219,9 @@ public class DomainConfig {
 
     @Bean
     public RepositoryImports repositoryImports(ArtifactStore repositoryStore, CurrentTenant currentTenant,
-                                               ObservationRegistry observations, AuditTrail audit, ConsoleActor actor) {
-        return new RepositoryImports(repositoryStore, currentTenant, observations, audit, actor);
+                                               ObservationRegistry observations, AuditTrail audit, ConsoleActor actor,
+                                               SettingsEditor settingsEditor) {
+        return new RepositoryImports(repositoryStore, currentTenant, observations, audit, actor, settingsEditor);
     }
 
     @Bean

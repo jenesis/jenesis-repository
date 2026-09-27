@@ -5,6 +5,8 @@ import module java.base;
 import build.jenesis.repository.store.Documents;
 import build.jenesis.repository.store.Features;
 import build.jenesis.repository.ui.CurrentTenant;
+import build.jenesis.repository.server.kernel.Settings;
+import build.jenesis.repository.server.kernel.SettingsEditor;
 import build.jenesis.repository.audit.AuditActions;
 import build.jenesis.repository.audit.AuditTrail;
 import build.jenesis.repository.format.FetcherProvider;
@@ -24,9 +26,13 @@ import io.micrometer.observation.ObservationRegistry;
  */
 public class RepositoryImports extends TenantScope {
 
+    /** The deployment's settings, read as the API's import leg reads them. */
+    private final Settings settings;
+
     public RepositoryImports(ArtifactStore repositoryStore, CurrentTenant current, ObservationRegistry observations,
-                             AuditTrail audit, ConsoleActor actor) {
+                             AuditTrail audit, ConsoleActor actor, SettingsEditor editor) {
         super(repositoryStore, current, observations, audit, actor);
+        this.settings = editor.settings();
     }
 
     /** Start a background migration of another manager's repository into this one, returning the job id to
@@ -42,11 +48,11 @@ public class RepositoryImports extends TenantScope {
             // Secure by default: a migration URL is fetched server-side, so an unrestricted one turns the console
             // into an SSRF vector against cloud metadata or an internal service. Route the enable decision through the
             // one ImportHostGuard both import legs share so the console and the API leg cannot drift: the stored
-            // block-private-import-hosts setting, else fail-closed to block. The console has no RepositoryProperties
+            // block-private-import-hosts setting, read as the API leg reads it, else fail-closed to block. The console has no RepositoryProperties
             // env-field, so it passes null for that layer; an operator sets block-private-import-hosts=false to allow
             // an internal mirror.
             boolean blockPrivateHosts = ImportHostGuard.blockPrivateHosts(
-                    ImportHostGuard.stored(settings().getProperty("block-private-import-hosts")), null);
+                    ImportHostGuard.stored(settings.getOrDefault("block-private-import-hosts", null)), null);
             ImportSource importSource = importSource(source, url, sourceRepository, format, username, password,
                     prior == null ? null : prior.cursor(), blockPrivateHosts);
             if (importSource == null) {

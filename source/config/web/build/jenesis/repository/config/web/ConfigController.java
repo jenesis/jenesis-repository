@@ -13,7 +13,6 @@ import build.jenesis.repository.server.kernel.Settings;
 import build.jenesis.repository.server.kernel.SettingsEditor;
 import build.jenesis.repository.server.spi.Authorization;
 import build.jenesis.repository.settings.Setting;
-import build.jenesis.repository.settings.SettingsContributor;
 import build.jenesis.repository.settings.SettingsDocuments;
 import build.jenesis.repository.settings.SettingsScopes;
 import build.jenesis.repository.settings.Wizard;
@@ -62,10 +61,6 @@ public class ConfigController {
     /** Whether a presented key is the deployment operator's - an operator-only setting, a repository's routing, is set
      *  only with one. */
     private final Predicate<String> operator;
-    // The set of settings a deployment's installed modules contribute is static for the JVM, so the catalogue is
-    // discovered once rather than re-running the ServiceLoader scan (and re-sorting) on every /api/settings read/write;
-    // a setting's live effective value and override state are resolved per request against this fixed template below.
-    private final List<Setting> catalogue = SettingsContributor.all();
 
     public ConfigController(Repositories repositories, SettingsEditor editor,
                             UpstreamCredentialSource upstreamCredentials,
@@ -87,28 +82,27 @@ public class ConfigController {
      *  whether a stored override is in force, and whether it is pinned from a source above the store (with the phrase
      *  naming what pins it) - a pinned key ignores the store, so a client greys the knob and a write is refused. The
      *  settings that cannot change at runtime (storage backend, listen port, whether auth is enforced) are not
-     *  listed. */
+     *  listed. With {@code ?tenant=}, that tenant's settings - the ones a tenant may hold, each with the deployment's
+     *  value as its baseline. */
     @GetMapping("/api/settings")
     @ResponseBody
     public List<SettingView> settings(@RequestHeader(value = Repositories.KEY, required = false) String key,
                                       @RequestParam(value = "tenant", required = false) String tenant) {
-        if (tenant != null && !tenant.isBlank()) {
-            return tenantSettings(tenant);
-        }
-        Map<String, String> overrides = settings.overrides();
+        return tenant != null && !tenant.isBlank() ? rows(Setting.Scope.TENANT, tenant)
+                : rows(Setting.Scope.GLOBAL, null);
+    }
+
+    /** A level's settings as the settings editor reads them for every surface ({@link SettingsEditor#rows}): the
+     *  deployment's, or a tenant's - each row's effective value, what it inherits, whether the level set its own, and
+     *  what pins it. */
+    private List<SettingView> rows(Setting.Scope level, String tenant) {
         List<SettingView> view = new ArrayList<>();
-        for (Setting setting : catalogue()) {
-            if (!setting.settableAt(Setting.Scope.GLOBAL)) {
-                // A local repository or project setting has no deployment value: it is listed per repository.
-                continue;
+        try {
+            for (SettingsEditor.Row row : editor.rows(level, tenant, null)) {
+                view.add(view(row.setting(), row.effective(), row.inherited(), row.overridden(), row.pin()));
             }
-            String override = overrides.get(setting.key());
-            Optional<PinnedSettings.Pin> pin = editor.pinned(setting.key());
-            // A pinned key resolves to the operator's pin, not the store: report the pin's value as effective and
-            // the store override (if any) as inert.
-            String effective = pin.map(PinnedSettings.Pin::value)
-                    .orElse(override != null ? override : setting.defaultValue());
-            view.add(view(setting, effective, setting.defaultValue(), override != null, pin));
+        } catch (IOException unreadable) {
+            throw new UncheckedIOException(unreadable);
         }
         return view;
     }
@@ -141,33 +135,6 @@ public class ConfigController {
             }
         }
         return new SetupView(steps);
-    }
-
-    /** A tenant's runtime-settings view: only the tenant-overridable keys (the gate policy, deny list and forward
-     *  targets a tenant may retune), each with its tenant-effective value along the chain <em>pin &gt; tenant document
-     *  &gt; global document &gt; default</em>, its global effective value as the tenant's baseline, whether this tenant
-     *  has overridden it, and whether it is pinned deployment-wide (a pinned key is inert for a tenant too). The
-     *  deployment-wide knobs are not listed - a tenant cannot change them. */
-    private List<SettingView> tenantSettings(String tenant) {
-        Map<String, String> tenantOverrides = settings.overrides(tenant);
-        List<SettingView> view = new ArrayList<>();
-        for (Setting setting : catalogue()) {
-            if (!SettingsScopes.tenantOverridable(setting.key())) {
-                continue;
-            }
-            String tenantValue = tenantOverrides.get(setting.key());
-            // A SECRET's baseline is never read back (view() nulls it), so do not decrypt it here: resolving a stored
-            // secret only to discard it would needlessly fail-closed and 500 this view when the value cannot be
-            // decrypted. Its presence still shows through the raw tenant-override map below.
-            String globalEffective = setting.kind() == Setting.Kind.SECRET
-                    ? null
-                    : settings.getOrDefault(setting.key(), setting.defaultValue());
-            Optional<PinnedSettings.Pin> pin = editor.pinned(setting.key());
-            String effective = pin.map(PinnedSettings.Pin::value)
-                    .orElse(tenantValue != null ? tenantValue : globalEffective);
-            view.add(view(setting, effective, globalEffective, tenantValue != null, pin));
-        }
-        return view;
     }
 
     /** Build one setting's API view carrying its {@link Setting.Kind kind}. A SECRET value is <em>never</em> emitted -
@@ -647,15 +614,6 @@ public class ConfigController {
         response.setStatus(200);
     }
 
-
-    /** The catalogue of runtime-editable settings - the single source for what the API, console and CLI may change
-     *  (the maps - repository definitions and format upstreams - have their own CRUD). The neutral core dogfoods the
-     *  same {@code SettingsContributor} SPI its plugin modules use ({@code CoreSettingsContributor}), so this collapses
-     *  to {@link SettingsContributor#all()} - the core is described once, not inlined here and again in the console's
-     *  {@code SettingsAdmin}, and the catalogue always matches the modules on this deployment. */
-    private List<Setting> catalogue() {
-        return catalogue;
-    }
 
     /** Refuse a SECRET write the deployment cannot encrypt at rest (no master key configured): {@code 400} with the
      *  remedy, which names {@code JENREG_SECRETS_KEY}. Nothing was persisted. */

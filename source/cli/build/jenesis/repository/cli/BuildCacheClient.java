@@ -52,26 +52,6 @@ public final class BuildCacheClient extends ClientCalls {
         return response.body();
     }
 
-    /** The well-known cache values; an omitted one is cleared rather than left at its previous value. */
-    public String saveCacheConfig(String name, String size, String lru, String ttl)
-            throws IOException, InterruptedException {
-        StringBuilder query = new StringBuilder();
-        if (size != null) {
-            query.append(query.isEmpty() ? "?" : "&").append("size=").append(enc(size));
-        }
-        if (lru != null) {
-            query.append(query.isEmpty() ? "?" : "&").append("lru=").append(enc(lru));
-        }
-        if (ttl != null) {
-            query.append(query.isEmpty() ? "?" : "&").append("ttl=").append(enc(ttl));
-        }
-        HttpResponse<String> response = send("POST",
-                "/api/cache/projects/" + enc(name) + "/cache" + query,
-                HttpRequest.BodyPublishers.noBody(), null);
-        require(response, 200, "save the build-cache settings");
-        return response.body();
-    }
-
     /**
      * Start one of the project's passes - {@code size}, {@code ttl} or {@code clear} - and answer what the server
      * said. The pass sweeps off the request path, so this returns as soon as it has started, and {@code started}

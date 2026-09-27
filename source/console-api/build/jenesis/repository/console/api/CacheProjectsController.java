@@ -155,29 +155,6 @@ public class CacheProjectsController {
         return service.project(name);
     }
 
-    /**
-     * The well-known cache values; an omitted parameter clears that value rather than leaving the previous one.
-     *
-     * <p>It reads the tenant's and the deployment's settings documents, which the values it resolves inherit from: one
-     * object per module under a constant prefix, narrow by construction.
-     */
-    @PostMapping("/api/cache/projects/{name}/cache")
-    public CacheService.ProjectDetail saveCache(@PathVariable("name") String name,
-                                                @RequestParam(name = "size", required = false) String size,
-                                                @RequestParam(name = "lru", required = false) String lru,
-                                                @RequestParam(name = "ttl", required = false) String ttl,
-                                                @RequestHeader(value = Repositories.KEY, required = false) String key,
-                                                HttpServletRequest request,
-                                                HttpServletResponse response) throws IOException {
-        CacheService service = service(key, request, response);
-        if (service == null) {
-            return null;
-        }
-        RepositoryRequests.rejectTraversal(name);
-        service.saveCacheConfig(name, size, lru, ttl);
-        return service.project(name);
-    }
-
     /** A project's settings - every project setting the catalogue carries, with the project's effective value, what it
      *  would inherit from its tenant and the deployment, and whether it set its own.
      *

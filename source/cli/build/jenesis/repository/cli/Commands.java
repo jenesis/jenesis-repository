@@ -229,8 +229,6 @@ public final class Commands {
                             act("projects create <project> [--set <key>=<value>]...",
                                     "create a project, with its own settings if given; grant access from a "
                                             + "credential"),
-                            act("projects config <project> [--size <cap>] [--lru <true|false>] [--ttl <duration>]",
-                                    "set the well-known cache values; an omitted one is cleared"),
                             act("projects evict <project> <size|ttl|clear>",
                                     "start a sweep in the background and report whether this call started it"),
                             act("projects recount <project>", "recount the project's entries and bytes"),

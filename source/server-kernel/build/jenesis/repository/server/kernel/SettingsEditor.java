@@ -445,32 +445,62 @@ public final class SettingsEditor {
     }
 
     /**
-     * The settings of one level as a screen or an answer shows them - a repository's or a build-cache project's -
-     * each with what the object set itself, what it inherits and what pins it. {@code name} is the repository or the
-     * project, or {@code null} for one not created yet, which has nothing of its own - what a creation wizard shows.
-     * Its reads are the object's own documents by name and the cached tenant and deployment snapshots.
+     * The settings of one level as a screen or an answer shows them - the one read every surface's settings rows come
+     * from, the API's answers and the console's screens alike - each with the value the level set itself, what it
+     * would inherit without one, and the pin that fixes it:
+     * <ul>
+     * <li>{@link Setting.Scope#GLOBAL the deployment's}: every setting the deployment may hold, inheriting its
+     *     declared default;</li>
+     * <li>{@link Setting.Scope#TENANT a tenant's} ({@code tenant}): every setting a tenant may hold, inheriting the
+     *     deployment's value - never a secret's, which is not read back;</li>
+     * <li>{@link Setting.Scope#REPOSITORY a repository's} or {@link Setting.Scope#PROJECT a project's} ({@code name}
+     *     in {@code tenant}, or {@code null} for one not created yet, which has nothing of its own - what a creation
+     *     wizard shows): the settings of that level, inheriting the tenant's, the deployment's, else the default.</li>
+     * </ul>
+     * Its reads are the node's cached deployment and tenant snapshots and an object's own documents by name.
      */
     public List<Row> rows(Setting.Scope level, String tenant, String name) throws IOException {
         Map<String, String> own = own(level, tenant, name);
         List<Row> rows = new ArrayList<>();
         for (Setting setting : SettingsContributor.all()) {
-            if (setting.scope() != level) {
+            if (!listed(setting, level)) {
                 continue;
             }
-            rows.add(new Row(setting, own.get(setting.key()), inherited(setting, tenant),
+            rows.add(new Row(setting, own.get(setting.key()), inherited(setting, level, tenant),
                     setting.localOnly() ? Optional.empty() : pins.apply(setting.key())));
         }
         return rows;
     }
 
-    /** What an object of {@code level} in {@code tenant} would have for {@code setting} without a value of its own:
-     *  the tenant's, else the deployment's, else the setting's default - a local setting's default only. */
-    private String inherited(Setting setting, String tenant) {
+    /** Whether a level's rows list {@code setting}: every one it may hold at the deployment and a tenant, and a
+     *  repository's or project's own settings at theirs. */
+    private static boolean listed(Setting setting, Setting.Scope level) {
+        return switch (level) {
+            case GLOBAL, TENANT -> SettingsScopes.settableAt(setting.key(), level);
+            case REPOSITORY, PROJECT -> setting.scope() == level;
+        };
+    }
+
+    /** What {@code setting} would have at {@code level} in {@code tenant} without a value of its own. */
+    private String inherited(Setting setting, Setting.Scope level, String tenant) {
         String fallback = setting.defaultValue().isBlank() ? "" : setting.defaultValue();
-        if (setting.localOnly()) {
-            return fallback;
-        }
-        return settings.getOrDefault(tenant, setting.key(), fallback);
+        return switch (level) {
+            case GLOBAL -> setting.defaultValue();
+            // A secret's deployment value is never read back, so it is not decrypted only to be dropped - resolving
+            // it would fail closed and answer an error for the whole view when it cannot be decrypted.
+            case TENANT -> setting.kind() == Setting.Kind.SECRET ? null
+                    : settings.getOrDefault(setting.key(), setting.defaultValue());
+            case REPOSITORY, PROJECT -> setting.localOnly() ? fallback
+                    : settings.getOrDefault(tenant, setting.key(), fallback);
+        };
+    }
+
+    /** One key's value in force for {@code tenant} - {@code null} for the deployment's - as a decision that reads a
+     *  dial rather than rendering it asks: a pin, else the tenant's own where a tenant may hold the key, else the
+     *  deployment's stored value, else {@code fallback}. */
+    public String effective(String tenant, String key, String fallback) {
+        return pins.apply(key).map(PinnedSettings.Pin::value)
+                .orElseGet(() -> settings.getOrDefault(tenant, key, fallback));
     }
 
     /**
@@ -497,14 +527,11 @@ public final class SettingsEditor {
     }
 
     private Map<String, String> own(Setting.Scope level, String tenant, String name) throws IOException {
-        if (name == null) {
-            return Map.of();
-        }
         return switch (level) {
-            case REPOSITORY -> settings.overrides(tenant, name);
-            case PROJECT -> settings.project(tenant, name);
-            default -> throw new IllegalArgumentException("Only a repository's or a project's settings are read as "
-                    + "a level's rows.");
+            case GLOBAL -> settings.overrides();
+            case TENANT -> settings.overrides(tenant);
+            case REPOSITORY -> name == null ? Map.of() : settings.overrides(tenant, name);
+            case PROJECT -> name == null ? Map.of() : settings.project(tenant, name);
         };
     }
 }

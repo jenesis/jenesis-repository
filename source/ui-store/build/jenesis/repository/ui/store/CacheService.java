@@ -331,17 +331,6 @@ public class CacheService {
         settings.saveProject(current.name(), name, Map.of(key, value));
     }
 
-    /** Set a project's three policy settings - each given value set, each omitted ({@code null} or blank) one
-     *  cleared, so the project inherits its tenant's and the deployment's - through the settings catalogue. */
-    public void saveCacheConfig(String name, String size, String lru, String ttl) throws IOException {
-        requireProject(name);
-        Map<String, String> values = new LinkedHashMap<>();
-        values.put(ProjectPolicy.SIZE, size == null ? "" : size);
-        values.put(ProjectPolicy.LRU, lru == null ? "" : lru);
-        values.put(ProjectPolicy.TTL, ttl == null ? "" : ttl);
-        settings.saveProject(current.name(), name, values);
-    }
-
     /** Start the size-cap sweep in the background; whether it was started (not while another pass runs). Audited
      *  before the mutation (crash-safe ordering, as the quarantine release/discard) with the project as target, so a
      *  crash mid-eviction still records that a privileged eviction was driven. The sweep walks every entry of the

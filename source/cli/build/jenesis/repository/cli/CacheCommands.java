@@ -31,7 +31,6 @@ final class CacheCommands {
         return switch (args[1]) {
             case "show" -> print(CliSupport.client(home).buildCache().cacheProject(name(args, "show <project>")));
             case "create" -> create(args, home);
-            case "config" -> config(args, home);
             case "evict" -> evict(args, home);
             case "recount" -> print(CliSupport.client(home).buildCache().recountCache(name(args, "recount <project>")));
             case "delete" -> delete(args, home);
@@ -58,21 +57,6 @@ final class CacheCommands {
                 settings.clearProjectSetting(name, key);
             }
         });
-    }
-
-    private static int config(String[] args, Path home) throws Exception {
-        String project = name(args, "config <project> [--size <cap>] [--lru <true|false>] [--ttl <duration>]");
-        String size = null, lru = null, ttl = null;
-        for (int i = 3; i < args.length; i++) {
-            switch (args[i]) {
-                case "--size" -> size = CliSupport.flag(args, ++i);
-                case "--lru" -> lru = CliSupport.flag(args, ++i);
-                case "--ttl" -> ttl = CliSupport.flag(args, ++i);
-                default -> throw new IllegalArgumentException("Usage: projects config <project> [--size <cap>] "
-                        + "[--lru <true|false>] [--ttl <duration>]");
-            }
-        }
-        return print(CliSupport.client(home).buildCache().saveCacheConfig(project, size, lru, ttl));
     }
 
     private static int evict(String[] args, Path home) throws Exception {

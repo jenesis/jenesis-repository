@@ -35,10 +35,10 @@ import build.jenesis.repository.server.kernel.SettingsEditor;
  * The console's view of the runtime settings - the deployment's, a tenant's, a repository's and a project's - and its
  * way to change them. Every change goes through the one settings editor ({@link SettingsEditor}) the
  * {@code /api/settings} endpoints and so the CLI change settings through, called here in process: the same refusals,
- * pins, secret sealing, epoch and audit whichever surface asked. What is read here renders the same documents
- * ({@link StoredConfig}). The running repository nodes apply a live setting on their next scheduled re-read - at once
- * on a node the console is composed into - and a restart-only setting on their next boot (the screen says which is
- * which).
+ * pins, secret sealing, epoch and audit whichever surface asked. What a screen renders is read by that same editor
+ * ({@link SettingsEditor#rows}) - the rows {@code /api/settings} answers. The running repository nodes apply a live
+ * setting on their next scheduled re-read - at once on a node the console is composed into - and a restart-only
+ * setting on their next boot (the screen says which is which).
  *
  * <p>The catalogue is the discovered {@code SettingsContributor} list, not a hand-inlined copy: the neutral core
  * dogfoods the SPI ({@code CoreSettingsContributor} in the settings module) exactly as its plugin modules do, so the
@@ -192,82 +192,25 @@ public class SettingsAdmin {
         return values;
     }
 
-    /** The editable settings grouped for the form: each carries its documentation, its value kind and choices, its
-     *  effective value, its default, whether an override is in force, whether a change applies live or only on the
-     *  repository's next restart, and whether it is a high-impact policy knob a change should be confirmed on. The
-     *  metadata is exactly what the catalogue already holds - the config page surfaces it, it is not re-authored. */
+    /** The deployment's settings grouped for the settings screen, from the rows the settings editor reads for every
+     *  surface ({@link SettingsEditor#rows}) - the ones {@code GET /api/settings} answers: each with its documentation,
+     *  its value kind and choices, its effective value, its default, whether an override is in force, whether a change
+     *  applies live or only on the repository's next restart, and whether it is a high-impact policy knob a change
+     *  should be confirmed on. */
     public List<Group> groups() throws IOException {
-        Properties stored = read();
-        Map<String, String> attribution = SettingsContributor.attribution();
-        Map<String, List<SettingView>> grouped = new LinkedHashMap<>();
-        for (Setting setting : catalogue()) {
-            if (!setting.settableAt(Setting.Scope.GLOBAL)) {
-                // A local repository or project setting has no deployment value to show.
-                continue;
-            }
-            String override = stored.getProperty(setting.key());
-            Optional<PinnedSettings.Pin> pin = pins.apply(setting.key());
-            // A pinned key resolves to the operator's pin, not the store: the effective value shown is the pin's,
-            // and the store override (if any) is inert.
-            String effective = pin.map(PinnedSettings.Pin::value).orElse(override != null ? override : setting.defaultValue());
-            grouped.computeIfAbsent(setting.group(), _ -> new ArrayList<>())
-                    .add(view(setting, effective, setting.defaultValue(), override != null, pin,
-                            moduleOf(attribution, setting.key())));
-        }
-        List<Group> groups = new ArrayList<>();
-        grouped.forEach((name, settings) -> groups.add(new Group(name, settings)));
-        return groups;
+        return levelGroups(editor.rows(Setting.Scope.GLOBAL, null, null), true);
     }
 
-    /** The rows for {@code keys}, in that order, for the keys the catalogue carries - what the first-run setup guide
-     *  renders per step, exactly as {@link #groups()} renders the settings screen; a key no installed contributor
-     *  declares is left out rather than invented. */
-    public List<SettingView> views(List<String> keys) throws IOException {
-        Properties stored = read();
-        Map<String, String> attribution = SettingsContributor.attribution();
-        Map<String, Setting> declared = new HashMap<>();
-        for (Setting setting : catalogue()) {
-            declared.put(setting.key(), setting);
-        }
-        List<SettingView> views = new ArrayList<>();
-        for (String key : keys) {
-            Setting setting = declared.get(key);
-            if (setting == null || !setting.settableAt(Setting.Scope.GLOBAL)) {
-                continue;
-            }
-            String override = stored.getProperty(key);
-            Optional<PinnedSettings.Pin> pin = pins.apply(key);
-            String effective = pin.map(PinnedSettings.Pin::value).orElse(override != null ? override : setting.defaultValue());
-            views.add(view(setting, effective, setting.defaultValue(), override != null, pin,
-                    moduleOf(attribution, key)));
-        }
-        return views;
+    /** One key's value in force deployment-wide - the operator's pin, else the stored value, else {@code fallback} -
+     *  for a console decision that reads a dial rather than rendering it ({@link SettingsEditor#effective}). */
+    public String effective(String key, String fallback) {
+        return editor.effective(null, key, fallback);
     }
 
-    /** One key's effective value as this console sees it - the operator's pin, else the stored override, else
-     *  {@code fallback} - for a console decision that reads a dial rather than rendering it. */
-    public String effective(String key, String fallback) throws IOException {
-        Optional<PinnedSettings.Pin> pin = pins.apply(key);
-        if (pin.isPresent()) {
-            return pin.get().value();
-        }
-        return read().getProperty(key, fallback);
-    }
-
-    /** One key's effective value for a tenant - a pin, else the tenant's own where the key is tenant-settable, else the
-     *  deployment's stored value, else {@code fallback}. */
-    public String effective(String tenant, String key, String fallback) throws IOException {
-        Optional<PinnedSettings.Pin> pin = pins.apply(key);
-        if (pin.isPresent()) {
-            return pin.get().value();
-        }
-        if (tenant != null && SettingsScopes.tenantOverridable(key)) {
-            String own = StoredConfig.load(root, tenant).getProperty(key);
-            if (own != null) {
-                return own;
-            }
-        }
-        return read().getProperty(key, fallback);
+    /** One key's value in force for a tenant - a pin, else the tenant's own where the key is tenant-settable, else the
+     *  deployment's stored value, else {@code fallback} ({@link SettingsEditor#effective}). */
+    public String effective(String tenant, String key, String fallback) {
+        return editor.effective(tenant, key, fallback);
     }
 
     /** Build one setting's view: its effective value against {@code baseline} (the product default globally, the global
@@ -301,7 +244,7 @@ public class SettingsAdmin {
             Optional<PinnedSettings.Pin> pin = pins.apply(key);
             return pin.isPresent() ? pin.get().value() : stored.getProperty(key);
         };
-        Set<String> storedModules = new TreeSet<>(StoredConfig.documents(root).keySet());
+        Set<String> storedModules = new TreeSet<>(editor.settings().documents().keySet());
         Map<String, StorageNamespaces.Report> orphans = orphanedData();
         List<ModuleView> views = new ArrayList<>();
         for (ModuleCapability capability : ModuleCapability.resolve(effective, storedModules)) {
@@ -337,7 +280,7 @@ public class SettingsAdmin {
             Optional<PinnedSettings.Pin> pin = pins.apply(key);
             return pin.isPresent() ? pin.get().value() : stored.getProperty(key);
         };
-        Set<String> storedModules = new TreeSet<>(StoredConfig.documents(root).keySet());
+        Set<String> storedModules = new TreeSet<>(editor.settings().documents().keySet());
         return ModuleCapability.catalog(effective, storedModules);
     }
 
@@ -405,7 +348,7 @@ public class SettingsAdmin {
     private ScopedPosture collectPosture(String selected, UnaryOperator<String> deployment) throws IOException {
         String prefix = "jenreg.";
         Properties stored = read();
-        Properties overrides = selected.isEmpty() ? new Properties() : StoredConfig.load(root, selected);
+        Properties overrides = selected.isEmpty() ? new Properties() : read(selected);
         Configuration base = Configuration.of(fullKey -> {
             // The advisor asks by full key (jenreg.auth); the store is keyed by the bare key, so strip the
             // prefix and walk the effective chain, falling back to the deployment lookup - and read a
@@ -534,30 +477,12 @@ public class SettingsAdmin {
         invalidatePosture();
     }
 
-    /** A tenant's runtime-settings groups: only the tenant-overridable keys (the gate policy, deny list and forward
-     *  targets a tenant may retune), each with its tenant-effective value along the chain <em>pin &gt; tenant document
-     *  &gt; global document &gt; default</em>, its global effective value as the baseline default, and whether this
-     *  tenant has overridden it - the console's per-tenant settings view, offered to that tenant's admins. */
+    /** A tenant's settings grouped for its settings screen, from the rows the settings editor reads for every surface
+     *  ({@link SettingsEditor#rows}) - the ones {@code GET /api/settings?tenant=} answers: only the keys a tenant may
+     *  hold, each with its tenant-effective value, the deployment's value as its baseline, and whether this tenant set
+     *  its own. */
     public List<Group> groups(String tenant) throws IOException {
-        Properties global = read();
-        Properties tenantOverrides = StoredConfig.load(root, tenant);
-        Map<String, String> attribution = SettingsContributor.attribution();
-        Map<String, List<SettingView>> grouped = new LinkedHashMap<>();
-        for (Setting setting : catalogue()) {
-            if (!SettingsScopes.tenantOverridable(setting.key())) {
-                continue;
-            }
-            String globalEffective = global.getProperty(setting.key(), setting.defaultValue());
-            String tenantValue = tenantOverrides.getProperty(setting.key());
-            Optional<PinnedSettings.Pin> pin = pins.apply(setting.key());
-            String effective = pin.map(PinnedSettings.Pin::value).orElse(tenantValue != null ? tenantValue : globalEffective);
-            grouped.computeIfAbsent(setting.group(), _ -> new ArrayList<>())
-                    .add(view(setting, effective, globalEffective, tenantValue != null, pin,
-                            moduleOf(attribution, setting.key())));
-        }
-        List<Group> groups = new ArrayList<>();
-        grouped.forEach((name, settings) -> groups.add(new Group(name, settings)));
-        return groups;
+        return levelGroups(editor.rows(Setting.Scope.TENANT, tenant, null), true);
     }
 
     /** Set or clear one of a tenant's overrides through the settings editor ({@link SettingsEditor#tenant}), layered
@@ -805,7 +730,7 @@ public class SettingsAdmin {
     /** The upstreams {@code tenant} set for itself (format to URL), which its repositories pull through over the
      *  deployment's. */
     public Map<String, String> upstreams(String tenant) throws IOException {
-        Properties own = StoredConfig.load(root, tenant);
+        Properties own = read(tenant);
         Map<String, String> entries = new LinkedHashMap<>();
         for (String key : own.stringPropertyNames()) {
             if (key.startsWith(SettingsScopes.UPSTREAM_PREFIX)) {
@@ -851,8 +776,20 @@ public class SettingsAdmin {
     }
 
 
-    private Properties read() throws IOException {
-        return StoredConfig.load(root);
+    /** The deployment's stored values, as the node holds them - the read {@code GET /api/settings} makes. */
+    private Properties read() {
+        return properties(editor.settings().overrides());
+    }
+
+    /** A tenant's own stored values, as the node holds them. */
+    private Properties read(String tenant) {
+        return properties(editor.settings().overrides(tenant));
+    }
+
+    private static Properties properties(Map<String, String> values) {
+        Properties properties = new Properties();
+        properties.putAll(values);
+        return properties;
     }
 
     /**
@@ -945,10 +882,12 @@ public class SettingsAdmin {
             if (pin.isEmpty() && !operator && setting.operatorOnly()) {
                 pin = Optional.of(new PinnedSettings.Pin("the deployment's operator", row.effective()));
             }
-            String effective = pin.map(PinnedSettings.Pin::value).orElse(row.effective());
+            // A tenant's row does not read a secret's deployment value back, so it inherits nothing to show.
+            String effective = Objects.requireNonNullElse(pin.map(PinnedSettings.Pin::value).orElse(row.effective()),
+                    "");
             grouped.computeIfAbsent(setting.group(), _ -> new ArrayList<>())
-                    .add(view(setting, effective, row.inherited(), row.overridden(), pin,
-                            moduleOf(attribution, setting.key())));
+                    .add(view(setting, effective, Objects.requireNonNullElse(row.inherited(), ""), row.overridden(),
+                            pin, moduleOf(attribution, setting.key())));
         }
         List<Group> groups = new ArrayList<>();
         grouped.forEach((name, settings) -> groups.add(new Group(name, settings)));

@@ -2,6 +2,7 @@ package build.jenesis.repository.ui.admin.test;
 
 import module java.base;
 import module org.junit.jupiter.api;
+import build.jenesis.repository.server.kernel.SettingsEditor;
 import build.jenesis.repository.audit.AuditTrail;
 import build.jenesis.repository.cleanup.StoredReport;
 import build.jenesis.repository.format.FormatMarks;
@@ -52,7 +53,7 @@ class RepositoryAdminControllerTest {
     private RepositoryAdminController controller;
 
     @BeforeEach
-    void wire() {
+    void wire() throws IOException {
         store = ArtifactStoreProvider.resolve("filesystem",
                 key -> "jenreg.filesystem.root".equals(key) ? root.toString() : null);
         settings = new SettingsAdmin(store);
@@ -62,7 +63,8 @@ class RepositoryAdminControllerTest {
                 new RepositoryAdmin(store, () -> TENANT, ObservationRegistry.NOOP),
                 new RepositoryBrowse(store, () -> TENANT, ObservationRegistry.NOOP), limits,
                 new RepositoryImports(store, () -> TENANT, ObservationRegistry.NOOP, AuditTrail.none(),
-                        () -> "operator"),
+                        () -> "operator", SettingsEditor.over(store, _ -> Optional.empty(), AuditTrail.none(),
+                                _ -> null)),
                 new RepositoryLifecycle(store, () -> TENANT, ObservationRegistry.NOOP, AuditTrail.none(),
                         () -> "operator", settings),
                 settings, FormatMarks.installed(),

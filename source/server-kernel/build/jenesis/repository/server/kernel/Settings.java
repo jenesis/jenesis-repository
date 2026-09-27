@@ -661,17 +661,11 @@ public final class Settings {
         return loadFrom(root);
     }
 
+    /** A scope's stored values, merged across its modules' documents - the one read of them
+     *  ({@link StoredSettings#read(ArtifactStore)}) the console's too. */
     private static Properties loadFrom(ArtifactStore store) throws IOException {
         Properties merged = new Properties();
-        for (String child : store.list(SettingsDocuments.ROOT)) {
-            if (!child.endsWith(".json")) {
-                continue;
-            }
-            Optional<ArtifactStore.Versioned> object = store.readVersioned(SettingsDocuments.ROOT + "/" + child);
-            if (object.isPresent()) {
-                SettingsDocuments.parse(object.get().content()).forEach(merged::setProperty);
-            }
-        }
+        merged.putAll(StoredSettings.read(store));
         return merged;
     }
 }

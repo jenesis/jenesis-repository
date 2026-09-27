@@ -1,6 +1,7 @@
 package build.jenesis.repository.ui.store;
 
 import module java.base;
+import build.jenesis.repository.settings.StoredSettings;
 
 import build.jenesis.repository.ui.CurrentTenant;
 import build.jenesis.repository.audit.AuditTrail;
@@ -76,10 +77,12 @@ public abstract class TenantScope {
         return new StoreRepositoryInventory(scope(repository));
     }
 
-    /** The deployment-wide runtime settings, the same store of truth the settings screens edit and the repository
-     *  server reads. */
+    /** The deployment's stored settings, read as the repository server's settings read them
+     *  ({@link StoredSettings#read(ArtifactStore)}) - for a console decision that reads a module's configuration. */
     protected final Properties settings() throws IOException {
-        return StoredConfig.load(root);
+        Properties properties = new Properties();
+        properties.putAll(StoredSettings.read(root));
+        return properties;
     }
 
     /**
