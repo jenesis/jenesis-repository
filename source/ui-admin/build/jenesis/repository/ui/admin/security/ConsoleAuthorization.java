@@ -62,7 +62,7 @@ final class ConsoleAuthorization {
                 // Screens that moved to the base module keep the floor they had under /settings/**: a shared screen
                 // must not become easier to reach by moving, and the route no longer carries the prefix that gated
                 // it. Named one by one so a move is a deliberate decision about access, not a side effect.
-                .requestMatchers("/ui/observability", "/ui/catalog", "/ui/posture").hasRole("SUPERADMIN")
+                .requestMatchers("/ui/observability", "/ui/posture").hasRole("SUPERADMIN")
                 // Every tenant's cached reads on the node, and every node's grants: nothing about it is a tenant's.
                 .requestMatchers("/ui/caches", "/ui/caches/**").hasRole("SUPERADMIN")
                 .requestMatchers("/ui/admin/**").access(tenants.require(UserDirectory.Role.ADMIN))
@@ -77,7 +77,7 @@ final class ConsoleAuthorization {
                 // that reads as available. The module is off unless an operator switches it on; this is what the
                 // route means once it exists.
                 .requestMatchers("/ui/repositories/*/deploy").access(tenants.require(UserDirectory.Role.ADMIN))
-                .requestMatchers(HttpMethod.POST, "/ui/repositories/quota", "/ui/repositories/rate-limit")
+                .requestMatchers(HttpMethod.POST, "/ui/limits/**")
                         .access(tenants.require(UserDirectory.Role.ADMIN))
                 // A repository's routing names the upstreams it fetches from, which is the operator's decision on every
                 // surface - the API takes an operator key for it - so a tenant's own definition is a super-admin's.
@@ -103,7 +103,8 @@ final class ConsoleAuthorization {
                 // TenantAuthorization, so the request-scoped MembershipCache sees a revoked grant on the next
                 // request and fails closed. The tenant-agnostic reads matched above (the instance picker, login)
                 // stay on plain authentication.
-                .requestMatchers(HttpMethod.GET, "/ui/repositories", "/ui/repositories/**", "/ui/projects", "/ui/projects/**")
+                .requestMatchers(HttpMethod.GET, "/ui/repositories", "/ui/repositories/**", "/ui/limits",
+                        "/ui/projects", "/ui/projects/**")
                         .access(tenants.require(UserDirectory.Role.VIEWER))
                 // The floor, and it is not merely "signed in". Sign-in succeeds for anyone the identity provider
                 // authenticates - that is deliberate, and it is why the membership check that used to refuse a

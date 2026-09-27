@@ -19,10 +19,8 @@
 <header th:replace="~{fragments :: nav}"></header>
 <main id="main">
     <div th:replace="~{fragments :: messages}"></div>
-    <!--/* The browse's single navigation spine (UI.md §5): repositories list -> this repository's detail hub ->
-         the browse root -> one crumb per path segment. It folds in the affordance that used to be a separate link
-         back to the repository, so there is one trail rather than three overlapping "go up" controls. Rendered as
-         the shared .app-page-header markup (crumbs above the title) on the ol.app-breadcrumb. */-->
+    <!--/* The browse's one navigation trail: the repositories, this repository, the browse root, then one crumb per
+         path segment - the repository header's trail, extended by the folder the reader is in. */-->
     <header class="app-page-header">
         <hgroup class="app-page-header__heading">
             <nav aria-label="Breadcrumb" th:unless="${searching}">
@@ -42,9 +40,10 @@
                     </li>
                 </ol>
             </nav>
-            <h1 class="app-page-header__title">Browse <span th:text="${repo}">name</span></h1>
+            <h1 class="app-page-header__title">Browse</h1>
         </hgroup>
     </header>
+    <p th:replace="~{base :: repositoryIdentity}"></p>
 
     <form method="get" th:action="@{/ui/repositories/{repo}/browse(repo=${repo})}">
         <div class="grid">

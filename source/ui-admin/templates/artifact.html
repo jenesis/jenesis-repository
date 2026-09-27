@@ -15,12 +15,8 @@
 <header th:replace="~{fragments :: nav}"></header>
 <main id="main">
     <div th:replace="~{fragments :: messages}"></div>
-    <header th:replace="~{base :: pageHeader('Artifact')}"></header>
-    <p>
-        <a th:href="@{/ui/repositories/{repo}/browse(repo=${repo},prefix=${parent})}">&larr; back to folder</a>
-        &nbsp;·&nbsp;
-        <a th:href="@{/ui/repositories/{repo}(repo=${repo})}" th:text="'repository ' + ${repo}">repository</a>
-    </p>
+    <th:block th:replace="~{base :: repositoryHeader('Artifact', 'Browse', @{/ui/repositories/{repo}/browse(repo=${repo})})}"></th:block>
+    <p><a th:href="@{/ui/repositories/{repo}/browse(repo=${repo},prefix=${parent})}">&larr; back to folder</a></p>
 
     <article>
         <p><code th:text="${detail.path}">/maven/org/acme/lib/1.0/lib-1.0.jar</code></p>

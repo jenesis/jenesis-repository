@@ -6,6 +6,7 @@
 <main id="main">
     <div th:replace="~{fragments :: messages}"></div>
     <header th:replace="~{base :: pageHeader('Modules')}"></header>
+    <nav th:replace="~{base :: moduleViews('module')}"></nav>
     <p><small>Every capability this deployment carries is a discovered module. This screen shows each one's
         <strong>installed</strong> state (whether it is on this image's module path) and its <strong>enabled</strong>
         state (whether its enable flag is switched on), with its contributed settings beneath. Where a module declares
@@ -56,17 +57,6 @@
                 value below (a ceiling of 0 disables it).</small></p>
             <p class="setting-doc" th:unless="${m.installed}"><small>Referenced only by a stored settings document; this
                 image was not built with this module, so its settings are inert until it is installed.</small></p>
-            <div class="setting-doc" th:if="${m.orphaned()}"><small>Orphaned data detected:
-                <strong th:text="${m.orphanObjects}">0</strong> object(s),
-                <strong th:text="${m.orphanBytes}">0</strong> byte(s) across this module's declared key-spaces. It is
-                never removed automatically — an incomplete image or a mid-rolling deploy looks the same as an
-                intentional removal. If the removal was intentional, purge here (the counts above are the blast
-                radius), or script it: <code>jenesis-repo purge <span th:text="${m.module}">module</span></code> /
-                <code>POST /api/admin/purge?namespace=<span th:text="${m.module}">module</span></code>.</small>
-                <form method="post" th:action="@{/ui/settings/modules/purge}" class="module-toggle">
-                    <input type="hidden" name="module" th:value="${m.module}">
-                    <button th:replace="~{base :: deleteButton('Purge orphaned data', ${m.module}, 'Everything this module left behind is deleted, in every tenant.')}">Purge orphaned data</button>
-                </form></div>
             <ul class="module-settings" th:if="${!m.settings.isEmpty()}">
                 <li th:each="s : ${m.settings}">
                     <code th:text="${s.key}">key</code>
@@ -79,6 +69,36 @@
         </div>
     </article>
     <p><small><a th:href="@{/ui/settings}">Edit these settings on the Settings screen &rarr;</a></small></p>
+
+    <!--/* Deleting what a removed module left behind is set apart from the enable switches: it acts on data, in
+         every tenant, and cannot be undone, while a switch can be flipped back. */-->
+    <section class="app-divide" th:if="${modules.?[orphaned()].size() > 0}" aria-labelledby="orphaned">
+        <h2 id="orphaned">Orphaned data</h2>
+        <p><small>These modules are no longer installed but their declared key-spaces still hold data. Nothing is
+            removed automatically - an incomplete image or a mid-rolling deploy looks the same as an intentional
+            removal. If the removal was intentional, purge it here (the counts are what is deleted), or script it with
+            <code>jenesis-repo purge &lt;module&gt;</code> or
+            <code>POST /api/admin/purge?namespace=&lt;module&gt;</code>.</small></p>
+        <figure>
+            <table class="app-list">
+                <thead><tr><th scope="col">Module</th><th scope="col">Objects</th><th scope="col">Bytes</th>
+                    <th scope="col"><span class="app-sr-only">Actions</span></th></tr></thead>
+                <tbody>
+                <tr th:each="m : ${modules.?[orphaned()]}">
+                    <td><code th:text="${m.module}">module</code></td>
+                    <td th:text="${m.orphanObjects}">0</td>
+                    <td th:text="${m.orphanBytes}">0</td>
+                    <td>
+                        <form method="post" th:action="@{/ui/settings/modules/purge}" style="margin:0">
+                            <input type="hidden" name="module" th:value="${m.module}">
+                            <button th:replace="~{base :: deleteButton('Purge', ${m.module}, 'Everything this module left behind is deleted, in every tenant.')}">Purge</button>
+                        </form>
+                    </td>
+                </tr>
+                </tbody>
+            </table>
+        </figure>
+    </section>
 </main>
 </body>
 </html>

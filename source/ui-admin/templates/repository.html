@@ -5,8 +5,7 @@
 <header th:replace="~{fragments :: nav}"></header>
 <main id="main">
     <div th:replace="~{fragments :: messages}"></div>
-    <header th:replace="~{base :: pageHeader(${repo})}"></header>
-    <p th:replace="~{fragments :: repositoryIdentity(${identity})}"></p>
+    <th:block th:replace="~{base :: repositoryOverviewHeader}"></th:block>
     <p><small>What this repository serves, what it published most recently and how it is routed. Everything else
         about it - its contents, what the gate decided, how long it keeps what it holds - is a page of its own in the
         sidebar.</small></p>

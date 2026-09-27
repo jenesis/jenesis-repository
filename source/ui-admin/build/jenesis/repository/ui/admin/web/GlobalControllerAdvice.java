@@ -9,7 +9,9 @@ import build.jenesis.repository.ui.NavEntry;
 import build.jenesis.repository.ui.NavEntry.Access;
 import build.jenesis.repository.ui.NavEntry.Group;
 import build.jenesis.repository.ui.Navigation;
+import build.jenesis.repository.ui.RepositoryHeader;
 import build.jenesis.repository.ui.RepositoryPage;
+import build.jenesis.repository.scope.Scopes;
 import build.jenesis.repository.ui.RepositoryPage.Topic;
 import build.jenesis.repository.ui.admin.security.Memberships;
 import build.jenesis.repository.ui.identity.UserDirectory.Role;
@@ -210,6 +212,7 @@ public class GlobalControllerAdvice {
         boolean superadmin = hasSuperadmin(authentication);
         List<NavEntry> entries = new ArrayList<>();
         entries.add(new NavEntry("All repositories", "/ui/repositories", Group.REPOSITORIES));
+        entries.add(new NavEntry("Limits", "/ui/limits", Group.REPOSITORIES));
         entries.add(new NavEntry("Projects", "/ui/projects", Group.BUILD_CACHE));
         entries.add(new NavEntry("Credentials", "/ui/credentials", Access.ADMIN, Group.ACCESS));
         entries.add(new NavEntry("Members", "/ui/admin", Access.ADMIN, Group.ACCESS));
@@ -223,7 +226,6 @@ public class GlobalControllerAdvice {
         entries.add(new NavEntry("Upstreams", "/ui/settings/upstreams", Access.SUPERADMIN, Group.SETTINGS));
         entries.add(new NavEntry("Tenant settings", "/ui/settings/tenant", Access.SUPERADMIN, Group.SETTINGS));
         entries.add(new NavEntry("Modules", "/ui/settings/modules", Access.SUPERADMIN, Group.SETTINGS));
-        entries.add(new NavEntry("Installed providers", "/ui/catalog", Access.SUPERADMIN, Group.SETTINGS));
         // Picking a tenant is meaningful only where there is more than one to pick, and the header's tenant name
         // links here too, so a member of several tenants reaches it without the Settings group being theirs.
         if (showInstances(authentication)) {
@@ -255,6 +257,23 @@ public class GlobalControllerAdvice {
                         .toList(),
                 this::listedRepositories,
                 path);
+    }
+
+    /**
+     * The repository a page under {@code /ui/repositories/<name>} is about, with its identity, for the header every
+     * such page opens with - resolved here from the path so a page any module contributes opens the same way.
+     * {@code null} on a page about no repository, or before a tenant is chosen.
+     */
+    @ModelAttribute("repositoryHeader")
+    public RepositoryHeader repositoryHeader(HttpServletRequest request) throws IOException {
+        String repository = ConsoleNavigation.repository(
+                request.getRequestURI().substring(request.getContextPath().length()));
+        if (repository == null || !Scopes.valid(repository) || current.name() == null) {
+            return null;
+        }
+        return repositories.identity(repository)
+                .map(identity -> new RepositoryHeader(repository, identity.format(), identity.url()))
+                .orElseGet(() -> new RepositoryHeader(repository, null, null));
     }
 
     /** The tenant's repositories as the sidebar names them. A listing that fails costs the sidebar its names and

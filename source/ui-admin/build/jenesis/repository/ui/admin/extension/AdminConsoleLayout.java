@@ -25,9 +25,8 @@ public final class AdminConsoleLayout implements ConsoleLayout.Extension {
 
     @Override
     public Set<String> fragments() {
-        // What these templates reach for directly. The brand, the module links and the theme switch are no
-        // longer among them: they moved inside the shared shell, so this console asks for the shell and gets them.
-        // The alert is: the repository overview warns inline when garbage collection refuses the repository.
+        // What these templates reach for directly. The brand, the module links and the theme switch are inside
+        // the shared shell, so this console asks for the shell and gets them. The alert is: the repository overview warns inline when garbage collection refuses the repository.
         return Set.of(ConsoleLayout.HEAD_CONTENTS, ConsoleLayout.SHELL, ConsoleLayout.PAGE_HEADER,
                 ConsoleLayout.MESSAGES, ConsoleLayout.SUBSECTION_ERROR, ConsoleLayout.ALERT,
                 ConsoleLayout.EMPTY, ConsoleLayout.DELETE_BUTTON,
@@ -37,6 +36,9 @@ public final class AdminConsoleLayout implements ConsoleLayout.Extension {
                 ConsoleLayout.BROWSE_ROWS, ConsoleLayout.BROWSE_UP,
                 // Every screen that starts work off the request path renders this instead of telling the reader to
                 // reload: the rescans, the blast radius, the project count, both cleanup notices and the migration.
-                ConsoleLayout.RUNNING);
+                ConsoleLayout.RUNNING,
+                // Every page about one repository opens with its trail and identity; the modules have two views.
+                ConsoleLayout.REPOSITORY_HEADER, ConsoleLayout.REPOSITORY_OVERVIEW_HEADER,
+                ConsoleLayout.REPOSITORY_IDENTITY, ConsoleLayout.MODULE_VIEWS);
     }
 }

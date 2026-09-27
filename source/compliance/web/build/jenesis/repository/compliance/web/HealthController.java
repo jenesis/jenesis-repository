@@ -264,7 +264,7 @@ public class HealthController {
     public record HealthEntryView(String ecosystem, String coordinate, String sourceRepository, double overall,
                                   double maintenance, double review, double provenance, String scannedAt) {
 
-        private static HealthEntryView of(HealthLedger.Located located) {
+        static HealthEntryView of(HealthLedger.Located located) {
             Health health = located.health();
             return new HealthEntryView(located.ecosystem(), located.coordinate(), health.sourceRepository(),
                     health.overall(), health.maintenance(), health.review(), health.provenance(),

@@ -76,10 +76,26 @@ public final class ConsoleLayout {
      *  work; it renders what is known and refreshes itself, and this is the one place that interval lives. */
     public static final String RUNNING = "running";
 
+    /** The heading every page about one repository opens with, taking the title and an optional page between the
+     *  repository and this one: the trail back to the repository, the title and the repository's identity, from the
+     *  {@link RepositoryHeader} the console resolves for the request. */
+    public static final String REPOSITORY_HEADER = "repositoryHeader";
+
+    /** The repository overview's heading, where the repository is the page. */
+    public static final String REPOSITORY_OVERVIEW_HEADER = "repositoryOverviewHeader";
+
+    /** The format a repository holds and the URL a client reaches it at, for a page with a trail of its own. */
+    public static final String REPOSITORY_IDENTITY = "repositoryIdentity";
+
+    /** The two views of the installed modules - by module and by the contract each implements - taking the current
+     *  one. */
+    public static final String MODULE_VIEWS = "moduleViews";
+
     /** Every fragment an extending console may build on. */
     public static final Set<String> FRAGMENTS = Set.of(
             PAGE_HEADER, PAGE_HEADER_CRUMBS, EMPTY, ALERT, HEAD_CONTENTS, DANGER_BUTTON, DELETE_BUTTON, SHELL, SIGN_IN_SHELL,
-            MESSAGES, SUBSECTION_ERROR, BROWSE_ROWS, BROWSE_UP, RUNNING);
+            MESSAGES, SUBSECTION_ERROR, BROWSE_ROWS, BROWSE_UP, RUNNING, REPOSITORY_HEADER, REPOSITORY_OVERVIEW_HEADER,
+            REPOSITORY_IDENTITY, MODULE_VIEWS);
 
     private ConsoleLayout() {
         throw new UnsupportedOperationException();

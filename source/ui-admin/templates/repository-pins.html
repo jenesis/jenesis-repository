@@ -5,8 +5,7 @@
 <header th:replace="~{fragments :: nav}"></header>
 <main id="main">
     <div th:replace="~{fragments :: messages}"></div>
-    <header th:replace="~{base :: pageHeader('Pins')}"></header>
-    <p th:replace="~{fragments :: repositoryIdentity(${identity})}"></p>
+    <th:block th:replace="~{base :: repositoryHeader('Pins', null, null)}"></th:block>
     <p><small>A pinned version is never evicted, whatever the retention policy says.</small></p>
     <ul th:unless="${pins.isEmpty()}">
         <li th:each="pin : ${pins}">

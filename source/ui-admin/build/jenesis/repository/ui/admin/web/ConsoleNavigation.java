@@ -22,9 +22,6 @@ final class ConsoleNavigation {
     /** How many repositories the Repositories group's sidebar names before pointing at the whole list. */
     static final int LISTED = 50;
 
-    /** The names below {@link #REPOSITORIES} that are not repositories but actions on the collection. */
-    private static final Set<String> COLLECTION_ACTIONS = Set.of("quota", "rate-limit");
-
     private ConsoleNavigation() {
     }
 
@@ -119,7 +116,7 @@ final class ConsoleNavigation {
         String rest = path.substring(REPOSITORIES.length() + 1);
         int slash = rest.indexOf('/');
         String name = slash < 0 ? rest : rest.substring(0, slash);
-        return name.isEmpty() || COLLECTION_ACTIONS.contains(name) ? null : name;
+        return name.isEmpty() ? null : name;
     }
 
     /** Whether {@code path} is {@code prefix} or lies below it, on a segment boundary. */

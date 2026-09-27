@@ -10,7 +10,7 @@
 <header th:replace="~{fragments :: nav}"></header>
 <main id="main">
     <div th:replace="~{fragments :: messages}"></div>
-    <header th:replace="~{base :: pageHeader('Refused')}"></header>
+    <th:block th:replace="~{base :: repositoryHeader('Refused', null, null)}"></th:block>
     <p><small>Uploads and upstream bodies the gate refused outright, the latest <span th:text="${pageSize}">200</span>.
         A refusal stores nothing, so there is nothing to release or discard - unlike the quarantine queue, this is a
         record, not a queue.</small></p>
@@ -27,7 +27,8 @@
             <tbody>
             <tr th:each="f : ${refusals}">
                 <td>
-                    <span th:text="${f.coordinate}">group:artifact:version</span><br>
+                    <a th:if="${f.placed()}" th:href="@{/ui/repositories/{repo}/coordinate(repo=${repo},ecosystem=${f.ecosystem},coordinate=${f.bareCoordinate})}" th:text="${f.coordinate}">group:artifact:version</a>
+                    <span th:unless="${f.placed()}" th:text="${f.coordinate}">group:artifact:version</span><br>
                     <small><code th:text="${f.path}">/path/...</code></small>
                 </td>
                 <td><span class="app-badge app-badge--danger" th:text="${f.verdict}">REJECT</span></td>

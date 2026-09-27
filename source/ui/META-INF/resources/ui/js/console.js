@@ -339,7 +339,8 @@
  * label, description and module) contains what was typed, so a setting is found by what it does and not only by its
  * name. It works over the rows already rendered and asks the server nothing. A group none of whose rows match steps
  * aside, and so does any other panel of the page, so the result is only what matched. A match inside a group's
- * folded advanced settings opens the fold, and clearing the filter puts every fold back as the reader left it.
+ * folded advanced settings opens the fold, and clearing the filter puts every fold back as the reader left it. A
+ * `q` query parameter fills the filter, so a link from another screen lands on the setting it names.
  */
 (function () {
     'use strict';
@@ -392,5 +393,10 @@
         }
 
         input.addEventListener('input', apply);
+        var named = new URLSearchParams(window.location.search).get('q');
+        if (named) {
+            input.value = named;
+            apply();
+        }
     });
 })();

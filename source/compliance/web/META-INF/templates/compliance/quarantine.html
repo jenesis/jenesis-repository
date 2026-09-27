@@ -9,7 +9,7 @@
 <header th:replace="~{fragments :: nav}"></header>
 <main id="main">
     <div th:replace="~{fragments :: messages}"></div>
-    <header th:replace="~{base :: pageHeader('Quarantine')}"></header>
+    <th:block th:replace="~{base :: repositoryHeader('Quarantine', null, null)}"></th:block>
 
     <article>
         <p><small>Artifacts the compliance gate held back, on the publish or the proxy-fetch path, in path order,
@@ -29,7 +29,8 @@
                 <tbody>
                 <tr th:each="q : ${quarantine}">
                     <td>
-                        <span th:text="${q.coordinate}">group:artifact:version</span><br>
+                        <a th:if="${q.placed()}" th:href="@{/ui/repositories/{repo}/coordinate(repo=${repo},ecosystem=${q.ecosystem},coordinate=${q.bareCoordinate})}" th:text="${q.coordinate}">group:artifact:version</a>
+                        <span th:unless="${q.placed()}" th:text="${q.coordinate}">group:artifact:version</span><br>
                         <small><code th:text="${q.path}">/path/...</code></small>
                     </td>
                     <td><span class="app-badge app-badge--warn" th:text="${q.verdict}">QUARANTINE</span></td>

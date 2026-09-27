@@ -44,6 +44,7 @@ import build.jenesis.repository.health.HealthLedgerProvider;
 import build.jenesis.repository.icon.Mark;
 import build.jenesis.repository.icon.Marks;
 import build.jenesis.repository.inventory.StoreRepositoryInventory;
+import build.jenesis.repository.store.ArtifactDescriptor;
 import build.jenesis.repository.maintenance.MaintenanceTaskProvider;
 import build.jenesis.repository.store.ArtifactStore;
 import io.micrometer.observation.ObservationRegistry;
@@ -117,9 +118,15 @@ public class ComplianceReview extends TenantScope {
      *  reasons the gate recorded, and the retroactive hold kinds standing on its coordinate - each drawn with the
      *  same three-state mark a finding's source gets, so a kind whose module has been uninstalled reads as orphaned
      *  rather than vanishing. Empty {@code holds} for a gate hold whose findings name no kind (a CVSS threshold, a
-     *  deny-list rule). */
+     *  deny-list rule). {@code ecosystem} and {@code bareCoordinate} are what the path's layout describes, the
+     *  coordinate's page is opened by, and {@code null} for a path no installed layout places. */
     public record QuarantineView(String when, String path, String coordinate, String verdict, List<String> reasons,
-                                 List<Mark> holds) {
+                                 List<Mark> holds, String ecosystem, String bareCoordinate) {
+
+        /** Whether the row names a coordinate the console can open. */
+        public boolean placed() {
+            return ecosystem != null && bareCoordinate != null;
+        }
     }
 
     /**
@@ -160,10 +167,14 @@ public class ComplianceReview extends TenantScope {
     public QuarantinePage quarantine(String repository, String after, int limit) throws IOException {
         // The gate composes the page - the same rows the API serves - and this surface only draws each kind as a mark.
         ReviewQueue.Page page = ReviewQueue.page(scope(repository), after, limit);
+        StoreRepositoryInventory inventory = inventory(repository);
         List<QuarantineView> views = new ArrayList<>();
         for (ReviewQueue.Row row : page.rows()) {
+            Optional<ArtifactDescriptor> placed = placed(inventory, row.path());
             views.add(new QuarantineView(row.when(), row.path(), row.coordinate(), row.verdict(), row.reasons(),
-                    row.holds().stream().map(ComplianceReview::holdMark).toList()));
+                    row.holds().stream().map(ComplianceReview::holdMark).toList(),
+                    placed.map(ArtifactDescriptor::ecosystem).orElse(null),
+                    placed.map(ArtifactDescriptor::coordinate).orElse(null)));
         }
         return new QuarantinePage(List.copyOf(views), page.next());
     }
@@ -277,15 +288,33 @@ public class ComplianceReview extends TenantScope {
      */
     public List<Refusal> refusals(String repository, int limit) throws IOException {
         List<Refusal> refusals = new ArrayList<>();
+        StoreRepositoryInventory inventory = inventory(repository);
         for (QuarantineLog.Event refusal : new QuarantineLog(scope(repository)).refusals(limit)) {
+            Optional<ArtifactDescriptor> placed = placed(inventory, refusal.path());
             refusals.add(new Refusal(refusal.when().toString(), refusal.path(), refusal.coordinate(),
-                    refusal.verdict().name(), refusal.reasons()));
+                    refusal.verdict().name(), refusal.reasons(),
+                    placed.map(ArtifactDescriptor::ecosystem).orElse(null),
+                    placed.map(ArtifactDescriptor::coordinate).orElse(null)));
         }
         return refusals;
     }
 
-    /** One refusal as the console renders it: when, the coordinate refused, the verdict, and the reasons naming it. */
-    public record Refusal(String when, String path, String coordinate, String verdict, List<String> reasons) {
+    /** The coordinate a held or refused path names, as the layout owning it describes the path - from the path alone,
+     *  with no store read - or empty when no installed layout places it. */
+    private static Optional<ArtifactDescriptor> placed(StoreRepositoryInventory inventory, String path) {
+        return inventory.describe(path)
+                .filter(descriptor -> descriptor.ecosystem() != null && descriptor.coordinate() != null);
+    }
+
+    /** One refusal as the console renders it: when, the coordinate refused, the verdict, and the reasons naming it;
+     *  {@code ecosystem} and {@code bareCoordinate} as {@link QuarantineView} carries them. */
+    public record Refusal(String when, String path, String coordinate, String verdict, List<String> reasons,
+                          String ecosystem, String bareCoordinate) {
+
+        /** Whether the row names a coordinate the console can open. */
+        public boolean placed() {
+            return ecosystem != null && bareCoordinate != null;
+        }
     }
 
     /** A repository's vulnerability scan as the console renders it: whether a live feed answered, the report
@@ -324,15 +353,9 @@ public class ComplianceReview extends TenantScope {
      */
     /** @param scanning whether a rescan is running right now, so the panel says so instead of showing a stale
      *                  page with no explanation for why the button did nothing. Mirrors the vulnerability panel. */
-    public record MaintainerHealthReport(boolean available, boolean ranked, List<HealthEntry> entries,
-                                         String nextCursor, int total, Instant lastScanned, boolean scanning) {
-    }
-
-    /** One coordinate's stored maintainer-health: its coordinate, the overall Scorecard score and the three component
-     *  signals (a component the source could not evaluate is {@code -1}, told apart from a real zero), the source
-     *  repository the score was computed on, and the instant it was scored. */
-    public record HealthEntry(String coordinate, String sourceRepository, double overall, double maintenance,
-                              double review, double provenance, String scannedAt) {
+    public record MaintainerHealthReport(boolean available, boolean ranked,
+                                         List<HealthController.HealthEntryView> entries, String nextCursor, int total,
+                                         Instant lastScanned, boolean scanning) {
     }
 
     /** One weakest-first page of a repository's maintainer-health panel, rendered purely from the durable health ledger
@@ -435,12 +458,9 @@ public class ComplianceReview extends TenantScope {
                     new MaintainerHealthReport(true, false, null, null, 0, notBuilt.scannedAt().orElse(null),
                             scanning(repository));
             case HealthLedger.Ranking.Ranked ranked -> {
-                List<HealthEntry> entries = new ArrayList<>(ranked.entries().size());
+                List<HealthController.HealthEntryView> entries = new ArrayList<>(ranked.entries().size());
                 for (HealthLedger.Located located : ranked.entries()) {
-                    Health health = located.health();
-                    entries.add(new HealthEntry(located.coordinate(), health.sourceRepository(), health.overall(),
-                            health.maintenance(), health.review(), health.provenance(),
-                            located.scannedAt().toString()));
+                    entries.add(HealthController.HealthEntryView.of(located));
                 }
                 // The eventually-consistent page carries the ranking's own build-time freshness, so it is never shown
                 // fresher than it is (Principle 10) - never a later scan the ranking has not folded in.

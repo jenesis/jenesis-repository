@@ -5,7 +5,7 @@
 <header th:replace="~{fragments :: nav}"></header>
 <main id="main">
     <div th:replace="~{fragments :: messages}"></div>
-    <header th:replace="~{base :: pageHeader('Vulnerabilities · ' + ${repo})}"></header>
+    <th:block th:replace="~{base :: repositoryHeader('Vulnerabilities', null, null)}"></th:block>
     <p><small>What the advisory feeds say about this repository's published artifacts now, worst first. Every row the
         scans and the gate recorded, with the reviews on each, is the
         <a th:href="@{'/ui/repositories/' + ${repo} + '/findings'}">findings ledger</a>.</small></p>
@@ -90,7 +90,9 @@
                 <tbody>
                 <th:block th:each="artifact : ${report.vulnerable()}">
                     <tr th:each="advisory : ${artifact.advisories()}">
-                        <td><code th:text="${artifact.coordinate()}">coordinate:version</code></td>
+                        <td><a th:if="${artifact.ecosystem() != null}" th:href="@{/ui/repositories/{repo}/coordinate(repo=${repo},ecosystem=${artifact.ecosystem()},coordinate=${artifact.bareCoordinate()})}"><code
+                                th:text="${artifact.coordinate()}">coordinate:version</code></a><code
+                                th:if="${artifact.ecosystem() == null}" th:text="${artifact.coordinate()}">coordinate:version</code></td>
                         <td><code th:text="${advisory.id()}">ADVISORY-1</code></td>
                         <td>
                             <span th:text="${advisory.severity()}">CRITICAL</span>

@@ -5,7 +5,7 @@
 <header th:replace="~{fragments :: nav}"></header>
 <main id="main">
     <div th:replace="~{fragments :: messages}"></div>
-    <header th:replace="~{base :: pageHeader('Deploy an artifact')}"></header>
+    <th:block th:replace="~{base :: repositoryHeader('Deploy', null, null)}"></th:block>
 
     <p><small>Publishing here goes through the same ingress edge a build tool's upload takes: the artifact is
         screened by the compliance gate before any format lays it out, so a held artifact lands in quarantine and a

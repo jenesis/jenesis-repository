@@ -21,7 +21,6 @@ import build.jenesis.repository.ui.CurrentTenant;
 import org.springframework.stereotype.Controller;
 import org.springframework.ui.Model;
 import org.springframework.web.bind.annotation.GetMapping;
-import org.springframework.web.bind.annotation.ModelAttribute;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestParam;
@@ -112,9 +111,19 @@ public class RepositoryAdminController {
         // and so carries no per-row identity.
         model.addAttribute("neutralMark", Marks.neutral());
         model.addAttribute("definitionWarnings", warnings);
+        return "repositories";
+    }
+
+    /** What the tenant's repositories may use together - its storage quota and its request rate ceiling - with the
+     *  deployment's rate ceiling the tenant falls back to when it sets none. That value is read from the settings
+     *  documents, one object per module under a constant prefix, which is the one listing this page reaches. */
+    @GetMapping("/ui/limits")
+    public String limits(Model model) throws IOException {
         model.addAttribute("quota", limits.quota());
         model.addAttribute("rateLimit", limits.rateLimit());
-        return "repositories";
+        model.addAttribute("deploymentRateLimit", settings.views(List.of("rate-limit")).stream().findFirst()
+                .map(SettingsAdmin.SettingView::value).orElse("0"));
+        return "limits";
     }
 
     /**
@@ -273,44 +282,32 @@ public class RepositoryAdminController {
         return RepositoryType.offerable();
     }
 
-    @PostMapping("/ui/repositories/quota")
+    @PostMapping("/ui/limits/quota")
     public String setQuota(@RequestParam(name = "maxBytes", defaultValue = "0") long maxBytes,
                            RedirectAttributes redirect) throws IOException {
         limits.setQuota(maxBytes);
         redirect.addFlashAttribute("message", maxBytes > 0 ? "Storage quota updated." : "Storage quota cleared.");
-        return "redirect:/ui/repositories";
+        return "redirect:/ui/limits";
     }
 
-    @PostMapping("/ui/repositories/rate-limit")
+    @PostMapping("/ui/limits/rate-limit")
     public String setRateLimit(@RequestParam(name = "permitsPerMinute", defaultValue = "0") long permitsPerMinute,
                                RedirectAttributes redirect) throws IOException {
         limits.setRateLimit(permitsPerMinute);
         redirect.addFlashAttribute("message",
                 permitsPerMinute > 0 ? "Rate limit updated." : "Rate limit cleared.");
-        return "redirect:/ui/repositories";
+        return "redirect:/ui/limits";
     }
 
     /**
      * A repository's overview: how it is routed, whether it hardens its proxy, what stands between it and its
      * collector, its published index and its most recent releases. Everything else about a repository is a page of
-     * its own beside this one, listed in the sidebar - it was one screen of thirteen collapsible sections, on which a
-     * healthy repository and one needing attention looked the same.
+     * its own beside this one, listed in the sidebar, so a healthy repository and one needing attention do not look
+     * the same.
      *
      * <p>Every read here is a bounded window or a stored result, so the first screen of a repository renders in the
      * same time over a million releases as over ten. Nothing walks the published set.
      */
-    /**
-     * The identity every one of a repository's pages opens with - the format it holds and where a client reaches
-     * it - so a page about the repository's staging or retention says which repository it is about in the same terms
-     * a client uses. Absent on the pages that name no repository.
-     */
-    @ModelAttribute
-    public void identity(@PathVariable(value = "repo", required = false) String repo, Model model) throws IOException {
-        if (repo != null) {
-            model.addAttribute("identity", repositories.identity(repo).orElse(null));
-        }
-    }
-
     @GetMapping("/ui/repositories/{repo}")
     public String detail(@PathVariable("repo") String repo, Model model) throws IOException {
         model.addAttribute("repo", repo);

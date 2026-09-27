@@ -15,11 +15,9 @@
 <header th:replace="~{fragments :: nav}"></header>
 <main id="main">
     <div th:replace="~{fragments :: messages}"></div>
-    <header th:replace="~{base :: pageHeader('Coordinate')}"></header>
+    <th:block th:replace="~{base :: repositoryHeader('Coordinate', 'Browse', @{/ui/repositories/{repo}/browse(repo=${repo})})}"></th:block>
     <p>
-        <a th:href="@{/ui/repositories/{repo}(repo=${repo})}" th:text="'repository ' + ${repo}">repository</a>
         <th:block th:if="${!detail.location.isEmpty()}">
-            &nbsp;·&nbsp;
             <a th:href="@{/ui/repositories/{repo}/browse(repo=${repo},prefix=${detail.location})}">browse folder &rarr;</a>
         </th:block>
     </p>

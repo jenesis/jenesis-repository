@@ -23,7 +23,7 @@ public class SpiCatalogScreenController {
         this.source = source;
     }
 
-    @GetMapping("/ui/catalog")
+    @GetMapping("/ui/settings/modules/contracts")
     public String catalog(Model model) throws IOException {
         model.addAttribute("spis", source.catalog());
         return "console/catalog";

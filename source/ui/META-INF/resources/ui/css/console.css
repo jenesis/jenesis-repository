@@ -605,6 +605,24 @@ figure {
     color: var(--pico-muted-border-color);
 }
 
+/* Two views of one subject, as a row of links above the content; the current one is marked, not linked away. */
+.app-views {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--app-space-4);
+    margin: 0 0 var(--app-space-4);
+    border-bottom: 1px solid var(--pico-muted-border-color);
+}
+.app-views a {
+    padding-bottom: var(--app-space-1);
+    text-decoration: none;
+}
+.app-views a[aria-current="page"] {
+    border-bottom: 2px solid var(--pico-primary);
+    color: var(--pico-color);
+    font-weight: 600;
+}
+
 /* ---- Lists ------------------------------------------------------------------------------------------------ */
 .app-list {
     margin: 0;

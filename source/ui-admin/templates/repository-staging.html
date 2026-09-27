@@ -5,8 +5,7 @@
 <header th:replace="~{fragments :: nav}"></header>
 <main id="main">
     <div th:replace="~{fragments :: messages}"></div>
-    <header th:replace="~{base :: pageHeader('Staging')}"></header>
-    <p th:replace="~{fragments :: repositoryIdentity(${identity})}"></p>
+    <th:block th:replace="~{base :: repositoryHeader('Staging', null, null)}"></th:block>
     <p><small>Uploads staged under an id rather than published: promote one to publish everything staged under it,
     or drop it.</small></p>
     <figure th:unless="${staging.isEmpty()}">

@@ -5,7 +5,7 @@
 <header th:replace="~{fragments :: nav}"></header>
 <main id="main">
     <div th:replace="~{fragments :: messages}"></div>
-    <header th:replace="~{base :: pageHeader('Maintainer health · ' + ${repo})}"></header>
+    <th:block th:replace="~{base :: repositoryHeader('Maintainer health', null, null)}"></th:block>
 
     <p th:unless="${report.available()}">
         No durable maintainer-health module is installed on this deployment, so its published artifacts' project health
@@ -73,7 +73,7 @@
                     </thead>
                     <tbody>
                     <tr th:each="entry : ${report.entries()}">
-                        <td><code th:text="${entry.coordinate()}">group:artifact</code></td>
+                        <td><a th:href="@{/ui/repositories/{repo}/coordinate(repo=${repo},ecosystem=${entry.ecosystem()},coordinate=${entry.coordinate()})}"><code th:text="${entry.coordinate()}">group:artifact</code></a></td>
                         <td>
                             <span th:text="${#numbers.formatDecimal(entry.overall(), 1, 1)}">3.0</span>/10
                             <span th:if="${entry.overall() < 5.0}" class="app-badge app-badge--warn">low</span>

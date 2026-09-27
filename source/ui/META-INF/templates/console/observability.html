@@ -12,6 +12,9 @@
         read-only and surfaces the same collected report the <code>/api/admin/observability</code> admin API and the
         <code>/actuator/observability</code> Actuator read return. A disabled or absent source contributes nothing, so
         it is simply not listed.</small></p>
+    <p th:if="${navigation != null and navigation.offers('/ui/walks')}"><small>The scheduled walks over the store,
+        and what each of their consumers measured on its last run, are on
+        <a th:href="@{/ui/walks}">Walks</a>.</small></p>
 
     <p>Overall health: <strong class="app-badge"
             th:classappend="${report.overall().name() == 'UP'} ? 'app-badge--pass'

@@ -1,0 +1,43 @@
+<!DOCTYPE html>
+<html lang="en" xmlns:th="http://www.thymeleaf.org">
+<head th:replace="~{fragments :: head('Limits')}"></head>
+<body>
+<header th:replace="~{fragments :: nav}"></header>
+<main id="main">
+    <div th:replace="~{fragments :: messages}"></div>
+    <header th:replace="~{base :: pageHeader('Limits')}"></header>
+    <p><small>What this tenant's repositories may use together: each limit applies to all of them at once, never to
+        one.</small></p>
+    <div class="app-panels">
+        <article>
+            <h2>Storage quota</h2>
+            <p><small>A cap on what all repositories store together; a publish that would exceed it is
+                refused. Currently storing <strong th:text="${quota.usedBytes}">0</strong> bytes<span
+                        th:if="${quota.maxBytes > 0}"> of <strong th:text="${quota.maxBytes}">0</strong></span><span
+                        th:if="${quota.maxBytes == 0}">, with no limit set</span>.</small></p>
+            <form th:if="${isAdmin}" method="post" th:action="@{/ui/limits/quota}">
+                <label>Maximum bytes (0 = unlimited)
+                    <input type="number" name="maxBytes" min="0" th:value="${quota.maxBytes}"></label>
+                <button type="submit">Save quota</button>
+            </form>
+        </article>
+        <article th:if="${capabilities.rateLimit()}">
+            <h2>Rate limit</h2>
+            <p><small>A ceiling on the request rate across all repositories; excess requests are answered
+                <code>429 Too Many Requests</code>.
+                <span th:if="${rateLimit > 0}">Currently <strong th:text="${rateLimit}">0</strong> permits per
+                    minute.</span>
+                <span th:if="${rateLimit == 0}">Currently the deployment's <strong
+                        th:text="${deploymentRateLimit == '0'} ? 'no limit' : ${deploymentRateLimit} + ' permits per minute'">6000
+                    permits per minute</strong><th:block th:if="${isSuperadmin}">, set as <a
+                        th:href="@{/ui/settings(q='rate-limit')}">Rate limit</a> on the Settings screen</th:block>.</span></small></p>
+            <form th:if="${isAdmin}" method="post" th:action="@{/ui/limits/rate-limit}">
+                <label>Permits per minute (0 = the deployment's)
+                    <input type="number" name="permitsPerMinute" min="0" th:value="${rateLimit}"></label>
+                <button type="submit">Save rate limit</button>
+            </form>
+        </article>
+    </div>
+</main>
+</body>
+</html>

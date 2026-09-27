@@ -1,17 +1,18 @@
 <!doctype html>
 <html lang="en" xmlns:th="http://www.thymeleaf.org">
-<head th:replace="~{base :: head('Installed providers', ${product})}"></head>
+<head th:replace="~{base :: head('Modules by contract', ${product})}"></head>
 <body>
 <th:block th:replace="~{base :: shell}"></th:block>
 
 <main id="main">
     <div th:replace="~{base :: messages}"></div>
-    <header th:replace="~{base :: pageHeader('Installed providers')}"></header>
-    <p><small>Every capability this deployment carries is a discovered <strong>SPI</strong> (a plug-in contract) with
-        one or more installed <strong>implementations</strong>. This screen lists them grouped by SPI. Each
-        implementation shows the <strong>module</strong> it comes from, whether it is <strong>enabled</strong>, the
-        <code>jenreg.*</code> key that toggles it, and the settings its module reads. It is read-only: what an
-        operator can change about an implementation is changed where that setting lives.</small></p>
+    <header th:replace="~{base :: pageHeader('Modules')}"></header>
+    <nav th:replace="~{base :: moduleViews('contract')}"></nav>
+    <p><small>The same modules as the by-module view, grouped by the <strong>SPI</strong> (a plug-in contract) each
+        implements. Each implementation shows the <strong>module</strong> it comes from, whether it is
+        <strong>enabled</strong>, the <code>jenreg.*</code> key that toggles it, and the settings its module reads. It
+        is read-only: switching a module and purging what a removed one left behind are on the by-module
+        view.</small></p>
 
     <div th:if="${spis.isEmpty()}" th:replace="~{base :: empty('No SPIs are installed.')}"></div>
 

@@ -186,6 +186,63 @@
     </hgroup>
 </header>
 
+<!--/* The header every page about one repository opens with: the trail back to the repository, the page's title and
+     the repository's identity - the format it holds and the URL a client reaches it at. The console resolves
+     `repositoryHeader` from the request path, so a page contributed by any module opens the same way. `parent` and
+     `parentHref` name a page between the repository and this one (a signer's page sits under Signers), or are null. */-->
+<th:block th:fragment="repositoryHeader(title, parent, parentHref)">
+    <header class="app-page-header">
+        <hgroup class="app-page-header__heading">
+            <nav aria-label="Breadcrumb" th:if="${repositoryHeader != null}">
+                <ol class="app-breadcrumb">
+                    <li><a th:href="@{/ui/repositories}">Repositories</a></li>
+                    <li><a th:href="@{/ui/repositories/{r}(r=${repositoryHeader.name()})}"
+                           th:text="${repositoryHeader.name()}">releases</a></li>
+                    <li th:if="${parent != null}"><a th:href="${parentHref}" th:text="${parent}">Parent</a></li>
+                    <li><span aria-current="page" th:text="${title}">Page</span></li>
+                </ol>
+            </nav>
+            <h1 class="app-page-header__title" th:text="${title}">Page</h1>
+        </hgroup>
+    </header>
+    <p th:replace="~{base :: repositoryIdentity}"></p>
+</th:block>
+
+<!--/* The repository overview's header: the repository is the page, so the trail ends at it. */-->
+<th:block th:fragment="repositoryOverviewHeader">
+    <header class="app-page-header">
+        <hgroup class="app-page-header__heading">
+            <nav aria-label="Breadcrumb" th:if="${repositoryHeader != null}">
+                <ol class="app-breadcrumb">
+                    <li><a th:href="@{/ui/repositories}">Repositories</a></li>
+                    <li><span aria-current="page" th:text="${repositoryHeader.name()}">releases</span></li>
+                </ol>
+            </nav>
+            <h1 class="app-page-header__title" th:text="${repositoryHeader?.name()}">releases</h1>
+        </hgroup>
+    </header>
+    <p th:replace="~{base :: repositoryIdentity}"></p>
+</th:block>
+
+<!--/* The format a repository holds and the URL a client reaches it at, or why there is none. */-->
+<p th:fragment="repositoryIdentity" class="app-repository-identity" th:if="${repositoryHeader != null}">
+    <th:block th:if="${repositoryHeader.served()}">
+        <span class="app-badge" title="The format this repository holds" th:text="${repositoryHeader.format()}">maven</span>
+        <small>served at <code th:text="${repositoryHeader.url()}">/repository/default/releases/</code></small>
+    </th:block>
+    <th:block th:unless="${repositoryHeader.served()}">
+        <span class="app-badge app-badge--warn">no format</span>
+        <small>This repository holds no format, so no URL answers for it; give it one on the Repositories page.</small>
+    </th:block>
+</p>
+
+<!--/* The two views of the installed modules - one card per module, or grouped by the contract each implements -
+     reached as one screen, so the navigation does not list the same inventory twice under two names. */-->
+<nav th:fragment="moduleViews(current)" class="app-views" aria-label="Views of the modules">
+    <a th:href="@{/ui/settings/modules}" th:attr="aria-current=${current == 'module'} ? 'page' : null">By module</a>
+    <a th:href="@{/ui/settings/modules/contracts}" th:attr="aria-current=${current == 'contract'} ? 'page' : null">By contract</a>
+</nav>
+
 <!--/* Empty / loading / error state: one consistent treatment, never a blank screen. */-->
 <div th:fragment="empty(message)" class="app-empty" role="status">
     <div class="app-empty__icon" aria-hidden="true">∅</div>
