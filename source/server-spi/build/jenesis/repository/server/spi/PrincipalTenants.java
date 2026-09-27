@@ -90,7 +90,8 @@ final class PrincipalTenants {
     /** Name {@code tenant} in the index or take it out; answers whether the document was asked to change. An absent
      *  document is not created to record that a principal holds nothing. */
     private boolean record(String tenant, Authorization.Subject subject, boolean held) throws IOException {
-        return space.decide(CredentialSpace.tenantsPath(subject.id()), tenants -> {
+        return space.decide(CredentialSpace.tenantsPath(subject.id()), current -> {
+            Properties tenants = current == null ? new Properties() : current;
             if (tenants.containsKey(tenant) == held) {
                 return null;
             }

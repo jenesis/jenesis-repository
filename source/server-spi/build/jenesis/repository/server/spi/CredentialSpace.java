@@ -215,12 +215,16 @@ final class CredentialSpace {
      * moves only when a try asked to write, so a decision that keeps the document costs its read and nothing more.
      * Answers whether a try asked to write - which is not proof that it landed, but a caller acting on a change has
      * to assume it may have, since a write whose response was lost reads back as a kept document.
+     *
+     * <p>The change is asked again on every try, so whatever else it reads should be read past the cache too: what
+     * it decides is then decided from what the store holds at the write that lands.
      */
-    boolean decide(String path, Function<Properties, Properties> change) throws IOException {
+    boolean decide(String path, Change change) throws IOException {
         AtomicBoolean asked = new AtomicBoolean();
         Retries.decide(store, path, current -> {
-            Properties properties = new Properties();
+            Properties properties = null;
             if (current.isPresent()) {
+                properties = new Properties();
                 properties.load(new ByteArrayInputStream(current.get().content()));
             }
             Properties changed = change.apply(properties);
@@ -235,6 +239,14 @@ final class CredentialSpace {
             mutated();
         }
         return asked.get();
+    }
+
+    /** What {@link #decide} writes: the new document, given the one there is ({@code null} when absent), or
+     *  {@code null} to leave it as it is. */
+    @FunctionalInterface
+    interface Change {
+
+        Properties apply(Properties current) throws IOException;
     }
 
     void write(String path, Properties properties) throws IOException {

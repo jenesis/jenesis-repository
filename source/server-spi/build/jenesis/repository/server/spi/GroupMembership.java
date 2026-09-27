@@ -130,9 +130,17 @@ public final class GroupMembership {
      * this principal belongs to. A scope granted by two groups keeps both their rights, joined, because a union is
      * the only answer that does not depend on which group was read first.
      *
-     * <p>Idempotent, so the repair and the write path can both call it and a second call changes nothing. It
-     * writes even when the union is empty, because the absence of the document and an empty one mean different
-     * things to a reader that has to distinguish "no groups" from "never derived".
+     * <p>Idempotent, so the repair and the write path can both call it and a second call changes nothing - and
+     * writes nothing: a document that already holds the union is kept. An empty union is still written where there
+     * is no document, because the absence of the document and an empty one mean different things to a reader that
+     * has to distinguish "no groups" from "never derived".
+     *
+     * <p><b>Derived from what the store holds at the write.</b> Two nodes derive one principal at once whenever one
+     * changes a membership while the other changes a group's grants. A union computed from a cached grant, or from
+     * a reading taken before the other node's change, and written over whatever is there, leaves the principal
+     * holding what no group grants any more until the next repair. So the union is computed inside a
+     * compare-and-set on the derived document, every read past the cache: a node whose write finds the document
+     * changed since it read it computes the union again rather than writing over a peer's newer one.
      *
      * <p>The principal's tenant index is reconciled with what they now hold here, so a tenant reached only through a
      * group is listed as one reached by a direct grant is, and leaves the list when neither remains.
@@ -140,12 +148,22 @@ public final class GroupMembership {
     public void rederive(String tenant, String principal) throws IOException {
         space.require();
         Authorization.Subject subject = Authorization.Subject.principal(principal);
+        space.decide(CredentialSpace.derivedPath(tenant, subject), current -> {
+            Properties union = union(tenant, subject);
+            return union.equals(current) ? null : union;
+        });
+        tenants.reconcile(tenant, subject);
+    }
+
+    /** The union of the grants of every group of {@code tenant} that {@code subject} belongs to, read past the cache:
+     *  the membership probe and each group's grants as the store holds them now. */
+    private Properties union(String tenant, Authorization.Subject subject) throws IOException {
         Properties union = new Properties();
         for (String group : groups(tenant)) {
             if (!space.store().exists(CredentialSpace.memberPath(tenant, group, subject.id()))) {
                 continue;
             }
-            Properties held = space.read(CredentialSpace.grantsPath(tenant, Authorization.Subject.group(group)));
+            Properties held = space.fresh(CredentialSpace.grantsPath(tenant, Authorization.Subject.group(group)));
             if (held == null) {
                 continue;
             }
@@ -155,8 +173,7 @@ public final class GroupMembership {
                         : already + "," + held.getProperty(scope));
             }
         }
-        space.write(CredentialSpace.derivedPath(tenant, subject), union);
-        tenants.reconcile(tenant, subject);
+        return union;
     }
 
     /**

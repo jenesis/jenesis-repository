@@ -7,6 +7,7 @@ import build.jenesis.repository.server.spi.Authorization;
 import build.jenesis.repository.store.ArtifactStore;
 import build.jenesis.repository.store.ArtifactStoreProvider;
 import build.jenesis.repository.store.ReadOnlyArtifactStore;
+import build.jenesis.repository.store.testkit.FaultInjectingStore;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatCode;
 import static org.assertj.core.api.Assertions.assertThatIllegalArgumentException;
@@ -170,6 +171,40 @@ class GroupGrantTest {
                 .as("the repair took away what the group stopped granting").isFalse();
         assertThat(allowed("oidc/ada", Authorization.MANAGE_WRITE))
                 .as("and gave back what it does grant").isTrue();
+    }
+
+    @Test
+    void two_nodes_deriving_one_member_at_once_leave_what_the_groups_grant() throws IOException {
+        // The crossing made deterministic: node one puts ada in developers and has computed her union - the group
+        // grants read - when node two takes the group's grant away and derives her again. Node one's write is
+        // against the derived document it read, so it must lose the compare-and-set and compute again rather than
+        // put back a right the group no longer grants.
+        String derived = ".system/auth/acme/principal/oidc%2Fada/derived";
+        Authorization peer = Authorization.enforcing(store);
+        authorization.setGrant("acme", Authorization.Subject.group("developers"), "*",
+                Authorization.REPOSITORY_READ);
+        AtomicBoolean crossed = new AtomicBoolean();
+        FaultInjectingStore first = FaultInjectingStore.peer(store);
+        first.tracing((op, key) -> {
+            if ((op == FaultInjectingStore.Op.WRITE_VERSIONED || op == FaultInjectingStore.Op.WRITE)
+                    && derived.equals(key) && crossed.compareAndSet(false, true)) {
+                try {
+                    peer.removeGrant("acme", Authorization.Subject.group("developers"), "*");
+                } catch (IOException e) {
+                    throw new UncheckedIOException(e);
+                }
+            }
+        });
+
+        Authorization.enforcing(first).groups().addMember("acme", "developers", "oidc/ada");
+
+        assertThat(crossed).as("node two's derivation landed inside node one's").isTrue();
+        Authorization fresh = Authorization.enforcing(store);
+        assertThat(fresh.derivedGrants("acme", Authorization.Subject.principal("oidc/ada")))
+                .as("what developers grants now, which is nothing").isEmpty();
+        assertThat(fresh.authorize("acme", Authorization.Subject.principal("oidc/ada"), null,
+                Authorization.REPOSITORY_READ)).isEqualTo(Authorization.Decision.FORBIDDEN);
+        assertThat(fresh.tenantsOf("oidc/ada")).as("and the index follows the derived document").isEmpty();
     }
 
     @Test
