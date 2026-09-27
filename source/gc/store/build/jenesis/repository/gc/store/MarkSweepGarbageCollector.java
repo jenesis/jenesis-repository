@@ -109,6 +109,11 @@ public final class MarkSweepGarbageCollector implements GarbageCollector {
     private final String collector = UUID.randomUUID().toString().substring(0, 8);
     private final AtomicLong batches = new AtomicLong();
 
+    /** What a pass's running time is measured on. A collection's instants are the collector's clock - the one a
+     *  caller hands {@link #collect} - and a delete is stamped with that instant advanced by how long the pass has
+     *  run, so a long sweep's last delete is stamped when it happened rather than when the pass began. */
+    private final Clock clock;
+
     public MarkSweepGarbageCollector(ArtifactWalk walk) {
         this(walk, Duration.ZERO);
     }
@@ -124,7 +129,14 @@ public final class MarkSweepGarbageCollector implements GarbageCollector {
      *  {@code walks}) is refused here rather than silently ignored: a format claiming to lend references under the
      *  namespace being swept is a wiring bug, and swallowing it would leave its blobs unmarked. */
     public MarkSweepGarbageCollector(ArtifactWalk walk, Duration graceFloor, List<BlobReferences> lenders) {
+        this(walk, graceFloor, lenders, Clock.systemUTC());
+    }
+
+    /** {@code clock} is what a pass's running time is measured on; a deployment's is the system clock. */
+    public MarkSweepGarbageCollector(ArtifactWalk walk, Duration graceFloor, List<BlobReferences> lenders,
+                                     Clock clock) {
         this.walk = walk;
+        this.clock = Objects.requireNonNull(clock, "clock");
         this.graceFloor = graceFloor == null ? Duration.ZERO : graceFloor;
         List<Lender> owners = new ArrayList<>();
         for (BlobReferences lender : lenders == null ? List.<BlobReferences>of() : lenders) {
@@ -213,6 +225,7 @@ public final class MarkSweepGarbageCollector implements GarbageCollector {
             case Known.Present<List<String>> present -> named = present.value();
             case Known.Absent<List<String>> _ -> throw new IllegalArgumentException(NO_ROOTS);
         }
+        Instant started = clock.instant();
         WalkPass marked = walk.walk(store, MARK, markRoots(named), new Mark(store));
         if (!marked.complete()) {
             // Another node still holds mark segments: the reference shards are not yet complete, and judging
@@ -221,7 +234,7 @@ public final class MarkSweepGarbageCollector implements GarbageCollector {
             CollectionRecord.collected(now, 0, -1, false);
             return GcPlan.of(false, 0, 0, 0, List.of());
         }
-        Sweep sweep = new Sweep(store, marked.generation(), now);
+        Sweep sweep = new Sweep(store, marked.generation(), now, started);
         WalkPass swept = walk.walk(store, SWEEP, List.of("blobs"), sweep);
         if (!swept.complete()) {
             CollectionRecord.collected(now, sweep.collected, sweep.standing, false);
@@ -432,6 +445,8 @@ public final class MarkSweepGarbageCollector implements GarbageCollector {
         private final ArtifactStore store;
         private final long generation;
         private final Instant now;
+        /** The {@link #clock}'s reading when the pass began, against which {@link #now} is advanced. */
+        private final Instant started;
         private final References references;
         /** The condemned markers of the shard being swept, so the sparing question is answered in memory. */
         private final Markers markers;
@@ -441,10 +456,11 @@ public final class MarkSweepGarbageCollector implements GarbageCollector {
         private long standing;
         private final List<String> sample = new ArrayList<>();
 
-        private Sweep(ArtifactStore store, long generation, Instant now) {
+        private Sweep(ArtifactStore store, long generation, Instant now, Instant started) {
             this.store = store;
             this.generation = generation;
             this.now = now;
+            this.started = started;
             this.references = new References(store, generation);
             this.markers = new Markers(store);
         }
@@ -505,9 +521,10 @@ public final class MarkSweepGarbageCollector implements GarbageCollector {
                 // The blob goes and the marker stays, rewritten to say so: a publish that stored these bytes while the
                 // blob still stood had its upload dropped as a duplicate, and when it asks to spare them it must meet
                 // a marker, since an absent one lets it link a pointer at nothing. The convergence leg removes the
-                // marker once no such publish can still be in flight.
+                // marker once no such publish can still be in flight, counting from the delete: a stamp taken when
+                // the pass began would shorten that window by however long the sweep ran before reaching this blob.
                 deleteIfPresent(store, key);
-                Condemned.collected(store, hash, now);
+                Condemned.collected(store, hash, now.plus(Duration.between(started, clock.instant())));
                 collected++;
                 if (sample.size() < GcPlan.SAMPLE) {
                     sample.add(hash);

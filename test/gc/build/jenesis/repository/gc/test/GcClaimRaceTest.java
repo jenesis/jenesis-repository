@@ -7,12 +7,14 @@ import build.jenesis.repository.gc.GcPlan;
 import build.jenesis.repository.gc.store.MarkSweepGarbageCollector;
 import build.jenesis.repository.store.ArtifactStore;
 import build.jenesis.repository.store.ArtifactStoreProvider;
+import build.jenesis.repository.store.Condemned;
 import build.jenesis.repository.store.Known;
 import build.jenesis.repository.store.Publication;
 import build.jenesis.repository.store.testkit.FaultInjectingStore;
 import build.jenesis.repository.walk.store.StoreArtifactWalk;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 /**
  * The confirming sweep and a publish of the same condemned bytes, interleaved at the two instants that can lose an
@@ -43,6 +45,12 @@ class GcClaimRaceTest {
 
     private MarkSweepGarbageCollector collector() {
         return new MarkSweepGarbageCollector(new StoreArtifactWalk(5, 4, Duration.ofMinutes(10), clock));
+    }
+
+    /** A collector whose pass's running time is read off {@code running} rather than the system clock. */
+    private MarkSweepGarbageCollector collector(Clock running) {
+        return new MarkSweepGarbageCollector(new StoreArtifactWalk(5, 4, Duration.ofMinutes(10), clock),
+                Duration.ZERO, List.of(), running);
     }
 
     /** Store the bytes with nothing pointing at them and let one pass condemn them. */
@@ -164,6 +172,76 @@ class GcClaimRaceTest {
         Publication again = new Publication(store);
         again.link(PATH, again.storeBlob(new ByteArrayInputStream(BYTES)));
         assertThat(again.locate(PATH)).as("the bytes sent again are stored and served").isPresent();
+    }
+
+    /**
+     * A sweep that died between deleting the blob and recording the delete leaves its claim behind, and once the
+     * claim has expired a publish takes it back - writing the marker spared - and is refused, since the blob is gone.
+     * A second publish whose upload was dropped as a duplicate while the blob still stood then meets a marker that
+     * says spared, and must be refused as well rather than link a pointer at nothing.
+     */
+    @Test
+    void a_publish_meeting_a_marker_spared_over_a_deleted_blob_is_refused() throws IOException {
+        ArtifactStore store = store();
+        String hash = condemned(store);
+        String marker = "gc/condemned/" + hash;
+        // The marker's second write of the confirming pass is the rewrite to collected, the claim being its first.
+        int[] writes = {0};
+        FaultInjectingStore dying = FaultInjectingStore.wrap(store)
+                .failNextOn(FaultInjectingStore.Op.WRITE_VERSIONED, key -> key.equals(marker) && ++writes[0] == 2);
+        assertThatThrownBy(() -> collector().collect(dying, Known.known(List.of("publish")), clock.instant()))
+                .isInstanceOf(IOException.class);
+        assertThat(store.exists("blobs/" + hash)).as("the blob went before the sweep died").isFalse();
+        // The claim is stamped with the wall clock, which a test cannot advance, so its expiry is written into it.
+        String expired = new String(store.readVersioned(marker).orElseThrow().content(), StandardCharsets.UTF_8)
+                .replaceAll("claimed=.*", "claimed=" + Instant.now().minus(Condemned.CLAIM_EXPIRY).minusSeconds(60));
+        store.write(marker, new ByteArrayInputStream(expired.getBytes(StandardCharsets.UTF_8)));
+
+        assertThat(publishRelyingOnTheBytes(store, hash)).as("the publish taking the expired claim back is refused")
+                .isInstanceOf(Publication.BlobCollected.class);
+        assertThat(new String(store.readVersioned(marker).orElseThrow().content(), StandardCharsets.UTF_8))
+                .as("and leaves the marker spared").startsWith("spared=");
+
+        assertThat(publishRelyingOnTheBytes(store, hash)).as("a duplicate meeting the spared marker is refused too")
+                .isInstanceOf(Publication.BlobCollected.class);
+        assertThat(new Publication(store).locate(PATH)).as("and no pointer names the bytes that went").isEmpty();
+
+        Publication again = new Publication(store);
+        again.link(PATH, again.storeBlob(new ByteArrayInputStream(BYTES)));
+        assertThat(again.locate(PATH)).as("the bytes sent again are stored and served").isPresent();
+    }
+
+    /**
+     * A collection is stamped with the moment the blob went, not the moment the pass began: the stamp opens the
+     * window in which a publish that relied on the bytes still meets the marker, so a stamp taken at the start of a
+     * sweep that reached the blob forty minutes later would close that window before it had been open for a minute.
+     */
+    @Test
+    void a_collection_is_stamped_when_the_blob_went_rather_than_when_the_pass_began() throws IOException {
+        ArtifactStore store = store();
+        String hash = condemned(store);
+        String marker = "gc/condemned/" + hash;
+        MutableClock running = new MutableClock();
+        Duration reaching = Duration.ofMinutes(40);
+        FaultInjectingStore slow = FaultInjectingStore.wrap(store).tracing((op, key) -> {
+            if (op == FaultInjectingStore.Op.DELETE && ("blobs/" + hash).equals(key)) {
+                running.advance(reaching);   // the sweep took this long to reach the blob
+            }
+        });
+        Instant began = clock.instant();
+
+        assertThat(collector(running).collect(slow, Known.known(List.of("publish")), began).collected())
+                .isEqualTo(1);
+
+        assertThat(Condemned.collectedAt(new String(store.readVersioned(marker).orElseThrow().content(),
+                StandardCharsets.UTF_8))).as("the stamp is the delete's").contains(began.plus(reaching));
+
+        clock.advance(reaching.plusMinutes(1));
+        var _ = collector().collect(store, Known.known(List.of("publish")), clock.instant());
+        assertThat(store.exists(marker)).as("a pass a minute after the delete leaves the marker for the claim window")
+                .isTrue();
+        assertThat(publishRelyingOnTheBytes(store, hash)).as("so a publish that relied on the bytes still meets it")
+                .isInstanceOf(Publication.BlobCollected.class);
     }
 
     /** Link {@link #PATH} at {@code hash} as a publish whose upload was dropped as a duplicate does - without storing

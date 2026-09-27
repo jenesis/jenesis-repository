@@ -104,7 +104,8 @@ public final class Condemned {
      * publish that stored these bytes while the blob still stood had its upload dropped as a duplicate, and meets the
      * marker after the sweep deleted the blob. It is refused, so the client sends the bytes again; an absent marker
      * would let it link a pointer at nothing. A publish that stored the bytes after the collection finds the blob
-     * there again and spares it.
+     * there again and spares it. A marker already spared is taken at its word only while the blob is there: the
+     * publish that spared it may have found the blob gone and been refused.
      *
      * @param what the request path or key the publish is writing, which a refusal names
      */
@@ -119,6 +120,12 @@ public final class Condemned {
             }
             String body = new String(current.get().content(), StandardCharsets.UTF_8);
             if (body.startsWith(SPARED)) {
+                // Spared, but not necessarily standing: a publish that took back an expired claim over a blob the
+                // sweep had already deleted wrote this marker and was then refused, and a duplicate upload dropped
+                // while the blob still stood would otherwise link to nothing here.
+                if (store.size("blobs/" + hash) < 0) {
+                    throw new Publication.BlobCollected(what, hash);
+                }
                 return Retries.Verdict.keep(false);
             }
             if (collectedAt(body).isPresent() && store.size("blobs/" + hash) < 0) {
