@@ -12,9 +12,14 @@
         <article>
             <h2>Storage quota</h2>
             <p><small>A cap on what all repositories store together; a publish that would exceed it is
-                refused. Currently storing <strong th:text="${quota.usedBytes}">0</strong> bytes<span
-                        th:if="${quota.maxBytes > 0}"> of <strong th:text="${quota.maxBytes}">0</strong></span><span
-                        th:if="${quota.maxBytes == 0}">, with no limit set</span>.</small></p>
+                refused.</small></p>
+            <!--/* The meter runs only under a limit: without one, the store passes writes through uncounted, so a
+                 count here would read zero whatever is stored. */-->
+            <p th:if="${quota.maxBytes > 0}"><small>Storing <strong th:text="${quota.usedBytes}">0</strong> of
+                <strong th:text="${quota.maxBytes}">0</strong> bytes, as last counted; the cleanup pass recounts what is
+                stored.</small></p>
+            <p th:if="${quota.maxBytes == 0}"><small>No limit is set, so nothing is metered. Setting one counts what
+                is already stored on the next cleanup pass.</small></p>
             <form th:if="${isAdmin}" method="post" th:action="@{/ui/limits/quota}">
                 <label>Maximum bytes (0 = unlimited)
                     <input type="number" name="maxBytes" min="0" th:value="${quota.maxBytes}"></label>

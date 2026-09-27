@@ -28,26 +28,7 @@
     <article>
         <h2>Releases</h2>
         <figure th:unless="${releases.isEmpty()}">
-            <table class="app-list">
-                <thead>
-                <tr>
-                    <th scope="col">Coordinate</th>
-                    <th scope="col">Version</th>
-                    <th scope="col">Pinned</th>
-                </tr>
-                </thead>
-                <tbody>
-                <tr th:each="r : ${releases}">
-                    <!--/* Every release has a screen of its own, whichever way its format stores: the coordinate page
-                         lists the versions and the paths each is served at, for the blobs-namespace formats that have
-                         no folder in the browse tree as much as for the ones that do. */-->
-                    <td><a th:href="@{/ui/repositories/{repo}/coordinate(repo=${repo},ecosystem=${r.ecosystem()},coordinate=${r.coordinate()})}"
-                           th:text="${r.coordinate()}">group:artifact</a></td>
-                    <td th:text="${r.version}">1.0.0</td>
-                    <td th:text="${r.pinned} ? 'yes' : ''">yes</td>
-                </tr>
-                </tbody>
-            </table>
+            <table th:replace="~{fragments :: releaseTable(${repo}, ${releases})}"></table>
             <!--/* A bounded recent slice of the published set (newest first), never the whole set - the detail hub is an
                  overview. When more releases exist than this page shows, the count says so and links to the browse page,
                  which pages the full list; nothing is silently dropped. */-->
@@ -70,7 +51,11 @@
             <span th:case="'TENANT'">Set for this tenant, over the deployment's definition.</span>
             <span th:case="'DEPLOYMENT'">Inherited from the deployment's definition<span th:if="${isSuperadmin}">
                 on <a th:href="@{/ui/settings/upstreams}">Upstreams</a></span>, which every tenant shares.</span>
-            <span th:case="*">Not defined: a hosted repository that accepts uploads and fetches from nowhere.</span>
+            <span th:case="*"><th:block th:if="${formatUpstream == null}">Not defined: a hosted repository that
+                accepts uploads and fetches from nowhere.</th:block><th:block th:unless="${formatUpstream == null}">Not
+                defined: it accepts uploads and fetches what it lacks through its format's upstream,
+                <code th:text="${formatUpstream}">https://registry.npmjs.org/</code><span th:if="${isSuperadmin}">,
+                named on <a th:href="@{/ui/settings/upstreams}">Upstreams</a></span>.</th:block></span>
         </small></p>
         <ul th:if="${!shape.warnings().isEmpty()}" class="app-subsection-error" role="alert" aria-live="polite">
             <li th:each="w : ${shape.warnings()}">⚑ <span th:text="${w}">warning</span></li>

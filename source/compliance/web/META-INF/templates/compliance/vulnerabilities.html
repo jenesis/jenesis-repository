@@ -55,7 +55,7 @@
              (re-query every enabled feed, persist, re-render); without the write role the button is not offered,
              but the last-scan time still is. */-->
         <p><small th:if="${report.lastScanned() != null}">Last scanned against the advisory feeds:
-            <span th:text="${report.lastScanned()}">-</span></small>
+            <span th:text="${instants.display(report.lastScanned())}">-</span></small>
             <small th:if="${report.lastScanned() == null}">Never scanned against the advisory feeds - findings shown
             come from publish-time screening only.</small></p>
         <th:block th:if="${report.scanning()}">

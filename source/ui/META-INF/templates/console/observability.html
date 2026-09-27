@@ -88,7 +88,7 @@
                         <strong th:text="${task.name()}">jenreg.feature.task</strong>
                         <br><small class="setting-doc" th:text="${task.description()}">What this task does.</small>
                         <br><small th:if="${task.everRan()}">last run
-                            <span th:text="${task.lastRun()}">time</span>
+                            <span th:text="${instants.display(task.lastRun())}">time</span>
                             <span th:if="${task.lastDuration() != null}" th:text="'(' + ${task.lastDuration()} + ')'">(dur)</span>
                             <span th:if="${!task.outcome().isEmpty()}" th:text="'— ' + ${task.outcome()}">— outcome</span>
                         </small>

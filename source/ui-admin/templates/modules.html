@@ -19,7 +19,7 @@
          minute rather than on every render, so its as-of instant is shown - a just-purged module may linger in the
          counts until the next walk, which this line makes honest rather than reading a stale count as current. */-->
     <p th:if="${orphanScannedAt != null}"><small>Orphaned-data diagnostic as of
-        <span th:text="${orphanScannedAt}">-</span> — a deployment-wide store walk refreshed at most once a minute,
+        <span th:text="${instants.display(orphanScannedAt)}">-</span> — a deployment-wide store walk refreshed at most once a minute,
         not re-run on every render, so a just-purged module may still be counted for up to a minute.</small></p>
 
     <article>

@@ -37,10 +37,10 @@
                 <p th:if="${plan.failure() != null}"><small>The last preview failed:
                     <span th:text="${plan.failure()}">reason</span></small></p>
                 <p th:if="${plan.failure() == null and plan.count() == 0}"><small>Nothing would be evicted under the
-                    policy and pins as of <span th:text="${plan.finishedAt()}">time</span>.</small></p>
+                    policy and pins as of <span th:text="${instants.display(plan.finishedAt())}">time</span>.</small></p>
                 <th:block th:if="${plan.failure() == null and plan.count() > 0}">
                     <p><small><span th:text="${plan.count()}">0</span> version(s) would be evicted as of
-                        <span th:text="${plan.finishedAt()}">time</span><span th:if="${plan.count() > plan.rows().size()}">;
+                        <span th:text="${instants.display(plan.finishedAt())}">time</span><span th:if="${plan.count() > plan.rows().size()}">;
                         the first <span th:text="${plan.rows().size()}">0</span> are listed</span>.</small></p>
                     <ul>
                         <li th:each="p : ${plan.rows()}" th:text="${p}">coordinate:version - reason</li>
@@ -53,7 +53,7 @@
                 <p th:replace="~{base :: running(|A cleanup is running, started ${lastCleanup.startedAt()}.|)}"></p>
             </th:block>
             <p th:unless="${lastCleanup.running()}"><small>Last cleanup finished
-                <span th:text="${lastCleanup.finishedAt()}">time</span>:
+                <span th:text="${instants.display(lastCleanup.finishedAt())}">time</span>:
                 <span th:if="${lastCleanup.failure() != null}" th:text="${lastCleanup.failure()}">failed</span>
                 <span th:if="${lastCleanup.failure() == null}"
                       th:text="${lastCleanup.rows().isEmpty() ? 'nothing evicted' : lastCleanup.rows().get(0) + ', ' + (lastCleanup.count() - 1) + ' version(s) evicted'}">result</span>.</small></p>

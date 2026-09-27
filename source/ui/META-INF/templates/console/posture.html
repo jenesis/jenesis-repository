@@ -32,7 +32,7 @@
          passing a memoised report off as a live one. A change made through this console drops the memo at once, so
          only a change made through the API, the CLI or another node can be this stale. */-->
     <p th:if="${postureCollectedAt != null}"><small>Collected as of
-        <span th:text="${postureCollectedAt}">-</span> — the same collection the header badge counts, refreshed at
+        <span th:text="${instants.display(postureCollectedAt)}">-</span> — the same collection the header badge counts, refreshed at
         most once every few seconds rather than on every page, so a change made outside this console may take that
         long to appear. Your own settings changes appear immediately.</small></p>
 

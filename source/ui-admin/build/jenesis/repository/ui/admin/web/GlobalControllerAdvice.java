@@ -9,6 +9,7 @@ import build.jenesis.repository.ui.NavEntry;
 import build.jenesis.repository.ui.NavEntry.Access;
 import build.jenesis.repository.ui.NavEntry.Group;
 import build.jenesis.repository.ui.ConsoleScreen;
+import build.jenesis.repository.ui.Instants;
 import build.jenesis.repository.ui.Navigation;
 import build.jenesis.repository.ui.RepositoryHeader;
 import build.jenesis.repository.ui.RepositoryPage;
@@ -92,6 +93,12 @@ public class GlobalControllerAdvice {
     }
 
     /** One line under the sign-in heading, saying what a visitor is signing in to. */
+    /** How every screen shows an instant - see {@link Instants}. */
+    @ModelAttribute("instants")
+    public Instants instants() {
+        return Instants.DISPLAY;
+    }
+
     @ModelAttribute("tagline")
     public String tagline() {
         return "The console of the repository server.";

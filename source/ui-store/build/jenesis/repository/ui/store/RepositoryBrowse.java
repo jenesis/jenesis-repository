@@ -323,7 +323,8 @@ public class RepositoryBrowse extends TenantScope {
         }
         versions.sort(Comparator.comparing(CoordinateVersion::published).reversed()
                 .thenComparing(CoordinateVersion::version));
-        String location = newest == null ? "" : safePrefix(inventory.locate(ecosystem, coordinate, newest.version()));
+        String location = newest == null ? ""
+                : safePrefix(inventory.locateHeld(ecosystem, coordinate, newest.version()));
         return new CoordinateDetail(ecosystem, coordinate, location, versions, page.next());
     }
 

@@ -62,7 +62,7 @@
                         <code th:text="${v.version}">1.0.0</code>
                         <small th:unless="${v.served}">(withheld)</small>
                     </td>
-                    <td><small th:text="${v.published}">2026-06-01T00:00:00Z</small></td>
+                    <td><small th:text="${instants.display(v.published)}">2026-06-01T00:00:00Z</small></td>
                     <!--/* Pinned where the versions are listed: an editor pins or lifts it on the row itself. */-->
                     <td>
                         <span th:text="${v.pinned} ? 'yes' : ''">yes</span>
@@ -79,7 +79,7 @@
                     </td>
                     <td th:if="${downloadsTracked}">
                         <span th:text="${v.downloads}">7</span>
-                        <small th:if="${!v.lastDownloaded.isEmpty()}" th:text="'last ' + ${v.lastDownloaded}">last 2026-06-05T12:00:00Z</small>
+                        <small th:if="${!v.lastDownloaded.isEmpty()}" th:text="'last ' + ${instants.display(v.lastDownloaded)}">last 2026-06-05T12:00:00Z</small>
                     </td>
                     <td>
                         <ul th:if="${!v.paths.isEmpty()}" style="margin:0; padding-left:1em">

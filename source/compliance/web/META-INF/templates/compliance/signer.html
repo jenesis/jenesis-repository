@@ -39,7 +39,7 @@
                     <td th:text="${c.ecosystem}">Maven</td>
                     <td><a th:href="@{/ui/repositories/{repo}/coordinate(repo=${repo},ecosystem=${c.ecosystem},coordinate=${c.coordinate})}"><code th:text="${c.coordinate}">org.acme:lib</code></a></td>
                     <td th:text="${c.versions}">1</td>
-                    <td><small th:text="${c.since}">2026-09-14T00:00:00Z</small></td>
+                    <td><small th:text="${instants.display(c.since)}">2026-09-14T00:00:00Z</small></td>
                     <td th:text="${c.last}">1.0</td>
                 </tr>
                 </tbody>

@@ -53,7 +53,7 @@
             <h2>
                 <span th:text="${blast.count()}">0</span> release(s) would be held
                 <small>(<span th:text="${blast.mode()}">denied</span>, as of
-                    <span th:text="${blast.computedAt()}">time</span>)</small>
+                    <span th:text="${instants.display(blast.computedAt())}">time</span>)</small>
             </h2>
             <p th:if="${blast.count() > blast.held().size()}"><small>The first
                 <span th:text="${blast.held().size()}">0</span> are listed.</small></p>

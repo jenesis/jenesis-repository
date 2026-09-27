@@ -456,6 +456,13 @@ public final class StoreRepositoryInventory implements RepositoryInventory {
         return browse.locate(ecosystem, coordinate, version);
     }
 
+    /** The browse folder a coordinate version occupies in this repository, for a single link: the first claiming
+     *  layout whose folder holds something, else the first that resolves one. One bounded probe per claiming layout,
+     *  so it is for a page's one link, not for every row of a page. */
+    public String locateHeld(String ecosystem, String coordinate, String version) {
+        return browse.locateHeld(ecosystem, coordinate, version);
+    }
+
     /** Every served request path a coordinate version currently occupies - the leaf {@code publish/} pointers under
      *  the layout folder(s) the owning format's {@link ArtifactLayout} maps it to, including any cross-published
      *  mirror it recorded - the same reverse mapping an {@link #evict} walks, but read rather than removed. Reads only

@@ -351,6 +351,24 @@ final class InventoryBrowse {
         return "";
     }
 
+    /** {@link #locate}, preferring the first layout whose folder holds something: an ecosystem several layouts serve
+     *  resolves a folder in each, and only one of them holds the version in a given repository. One bounded probe per
+     *  claiming layout; the first that resolves at all when none holds anything. */
+    String locateHeld(String ecosystem, String coordinate, String version) {
+        String resolved = "";
+        for (ArtifactLayout layout : StoreRepositoryInventory.layoutsFor(ecosystem)) {
+            for (String path : layout.paths(coordinate, version)) {
+                if (!children(path, 1).isEmpty()) {
+                    return path;
+                }
+                if (resolved.isEmpty()) {
+                    resolved = path;
+                }
+            }
+        }
+        return resolved;
+    }
+
     /** Every served request path a coordinate version currently occupies - see {@link StoreRepositoryInventory#paths}. */
     List<String> paths(String ecosystem, String coordinate, String version) throws IOException {
         return knownPaths(ecosystem, coordinate, version).unknownAsAbsent(

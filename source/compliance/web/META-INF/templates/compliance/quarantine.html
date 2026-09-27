@@ -38,7 +38,8 @@
                            holds/ records rather than from the installed providers. A kind whose module has been
                            uninstalled still holds, and is drawn here exactly as an orphaned finding source is - the
                            same dashed tile and the same words - so an operator releasing it knows no installed module
-                           can re-evaluate that hold. A plain publish-time gate hold writes no record and shows none. */-->
+                           can re-evaluate that hold. A hold the gate placed when the artifact arrived writes no record,
+                           and says it is the gate's. */-->
                     <td>
                         <th:block th:each="mark : ${q.holds}">
                             <span th:class="${mark.installed()} ? 'format-icon' : 'format-icon format-icon--orphaned'"
@@ -46,7 +47,9 @@
                                   th:utext="${mark.svg()}"></span><small th:text="${mark.name()}">kev</small><small
                                     th:unless="${mark.installed()}">&mdash; not installed</small><br>
                         </th:block>
-                        <small th:if="${q.holds.isEmpty()}">&mdash;</small>
+                        <small th:if="${q.holds.isEmpty()}"
+                               title="Held by the screen the artifact met when it was published or fetched">the gate, on
+                            arrival</small>
                     </td>
                     <td><small th:text="${#strings.listJoin(q.reasons, '; ')}">reason</small></td>
                     <td th:if="${isEditor}">

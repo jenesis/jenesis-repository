@@ -313,8 +313,8 @@ public class RepositoryAdminController {
     @GetMapping("/ui/repositories/{repo}")
     public String detail(@PathVariable("repo") String repo, Model model) throws IOException {
         model.addAttribute("repo", repo);
-        model.addAttribute("description",
-                repositories.document(repo).map(RepositoryDocument::description).orElse(""));
+        Optional<RepositoryDocument> document = repositories.document(repo);
+        model.addAttribute("description", document.map(RepositoryDocument::description).orElse(""));
         RepositoryAdmin.Releases releases = repositories.recentReleases(repo, DETAIL_RELEASES);
         model.addAttribute("releases", releases.shown());
         model.addAttribute("releasesMore", releases.more());
@@ -326,6 +326,17 @@ public class RepositoryAdminController {
         model.addAttribute("routing", routing);
         model.addAttribute("hardened", SettingsAdmin.hardenedDefinition(routing.specification()));
         model.addAttribute("shape", routing.shape());
+        // With no definition, a repository fetches what it lacks through its format's upstream - the tenant's own,
+        // else the deployment's - so "fetches from nowhere" is true only where neither names one.
+        String format = document.map(RepositoryDocument::format).orElse(null);
+        String upstream = null;
+        if (format != null) {
+            upstream = tenant.name() == null ? null : settings.upstreams(tenant.name()).get(format);
+            if (upstream == null) {
+                upstream = settings.upstreams().get(format);
+            }
+        }
+        model.addAttribute("formatUpstream", upstream);
         // The ecosystems this repository records that no installed format can place - what stands between the
         // repository and its collector - named with the explicit way out, and what the last retirement of each did,
         // since a retirement runs off the request and the button would otherwise look as though it did nothing.
@@ -411,6 +422,11 @@ public class RepositoryAdminController {
             model.addAttribute("dir", descending ? "desc" : "asc");
             model.addAttribute("base", safe);
             model.addAttribute("depth", 0);
+            // An empty root with releases is a format with no folder tree, whose releases are listed instead.
+            RepositoryAdmin.Releases releases = level.entries().isEmpty() && safe.isEmpty()
+                    ? repositories.recentReleases(repo, DETAIL_RELEASES) : null;
+            model.addAttribute("releases", releases == null ? List.of() : releases.shown());
+            model.addAttribute("releasesMore", releases != null && releases.more());
         }
         return "browse";
     }
