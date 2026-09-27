@@ -190,13 +190,15 @@ public class RepositoryBrowse extends TenantScope {
     }
 
     /**
-     * One version of a coordinate: when it was published, whether it is pinned, whether it is currently served (a
-     * held or evicted version is listed, greyed, so the history reads whole), and the request paths it is served
-     * at - for a tree format each links to its artifact page, for a blobs-namespace format they are the paths a
-     * client fetches.
+     * One version of a coordinate: when it was published - or, for a copy cached from an upstream, first cached, with
+     * the upstream it came from - whether it is pinned, whether it is currently served (a held or evicted version is
+     * listed, greyed, so the history reads whole), and the request paths it is served at - for a tree format each
+     * links to its artifact page, for a blobs-namespace format they are the paths a client fetches. A cached copy is
+     * never pinned: a pin is a retention decision, and retention keeps to releases.
      */
     public record CoordinateVersion(String version, String published, boolean pinned, boolean served,
-                                    List<String> paths, boolean browsable, Long downloads, String lastDownloaded) {
+                                    List<String> paths, boolean browsable, Long downloads, String lastDownloaded,
+                                    boolean cached, String upstream) {
     }
 
     /** A recorded instant as a row shows it, blank when nothing was recorded. */
@@ -307,8 +309,9 @@ public class RepositoryBrowse extends TenantScope {
     }
 
     /**
-     * A coordinate's own screen: every version the publish facts record for it in this repository, newest first, with
-     * the paths each is served at. Reads the facts and the tiny pointers only, never an artifact blob.
+     * A coordinate's own screen: every version of it this repository holds - published here or cached from an
+     * upstream - newest first, with the paths each is served at. Reads the version documents and the tiny pointers
+     * only, never an artifact blob.
      */
     public CoordinateDetail coordinate(String repository, String ecosystem, String coordinate) throws IOException {
         return coordinate(repository, ecosystem, coordinate, null, VERSIONS_PAGE);
@@ -320,18 +323,18 @@ public class RepositoryBrowse extends TenantScope {
                                        int limit) throws IOException {
         ArtifactStore store = scope(repository);
         StoreRepositoryInventory inventory = new StoreRepositoryInventory(store);
-        StoreRepositoryInventory.ReleasePage page = inventory.versions(ecosystem, coordinate, after,
+        StoreRepositoryInventory.HoldingPage page = inventory.holdings(ecosystem, coordinate, after,
                 Math.max(1, Math.min(limit, VERSIONS_PAGE)));
         List<CoordinateVersion> versions = new ArrayList<>();
         CoordinateVersion newest = null;
-        for (Release release : page.releases()) {
-            String when = release.published() == null ? "" : release.published().toString();
-            boolean served = inventory.disclosable(ecosystem, coordinate, release.version(),
+        for (StoreRepositoryInventory.Holding holding : page.holdings()) {
+            String when = holding.at() == null ? "" : holding.at().toString();
+            boolean served = inventory.disclosable(ecosystem, coordinate, holding.version(),
                     ServableNames.Policy.HIDE_WITHHELD_AND_GONE);
-            boolean browsable = !inventory.locate(ecosystem, coordinate, release.version()).isEmpty();
-            CoordinateVersion row = new CoordinateVersion(release.version(), when, release.pinned(), served,
-                    inventory.paths(ecosystem, coordinate, release.version()), browsable, release.downloads(),
-                    stamp(release.downloadedAt()));
+            boolean browsable = !inventory.locate(ecosystem, coordinate, holding.version()).isEmpty();
+            CoordinateVersion row = new CoordinateVersion(holding.version(), when, holding.pinned(), served,
+                    inventory.paths(ecosystem, coordinate, holding.version()), browsable, holding.downloads(),
+                    stamp(holding.downloadedAt()), holding.cached(), holding.upstream());
             versions.add(row);
             if (browsable && (newest == null || row.published().compareTo(newest.published()) > 0)) {
                 newest = row;

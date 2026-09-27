@@ -1,6 +1,8 @@
 /**
  * The store-backed repository inventory: publish/download/pin recording keyed by the format-neutral ecosystem and
- * coordinate an {@code ArtifactLayout} supplies, release enumeration, per-repository retention-policy storage, and
+ * coordinate an {@code ArtifactLayout} supplies, release enumeration, the copies a pull-through caches from an
+ * upstream recorded as holdings of their own (seen by the scans and the overview, never by retention or anything
+ * else that keeps to releases), per-repository retention-policy storage, and
  * the {@code pointerRoots()} union (the {@code publish/} namespace plus every installed blobs-namespace format's
  * declared roots) the discovered garbage collector and rebuild pass judge references from - the reclamation itself
  * moved onto the {@code GarbageCollector} SPI. Core plumbing shared by the gate, staging, retention and
@@ -44,7 +46,8 @@ module build.jenesis.repository.inventory {
             with build.jenesis.repository.inventory.InventoryStorageNamespace,
                     build.jenesis.repository.inventory.FormatStorageNamespaces;
     provides build.jenesis.repository.store.PublicationObserver
-            with build.jenesis.repository.inventory.SubtreeSizePublicationObserver;
+            with build.jenesis.repository.inventory.SubtreeSizePublicationObserver,
+                    build.jenesis.repository.inventory.CachedHoldingObserver;
     provides build.jenesis.repository.settings.SettingsContributor
             with build.jenesis.repository.inventory.ReconcileSettingsContributor,
                     build.jenesis.repository.inventory.TornWriteReconcileSettingsContributor,

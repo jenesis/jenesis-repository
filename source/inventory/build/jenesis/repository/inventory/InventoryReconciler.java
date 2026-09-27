@@ -2,12 +2,15 @@ package build.jenesis.repository.inventory;
 
 import module java.base;
 import build.jenesis.repository.blobs.BlobLayout;
+import build.jenesis.repository.metadata.DocumentTurns;
 import build.jenesis.repository.metadata.MetadataDocument;
+import build.jenesis.repository.metadata.MetadataKey;
 import build.jenesis.repository.metadata.MetadataStore;
-import build.jenesis.repository.metadata.Section;
+import build.jenesis.repository.metadata.SectionMutation;
 import build.jenesis.repository.store.ArtifactDescriptor;
 import build.jenesis.repository.store.ArtifactStore;
 import build.jenesis.repository.store.Known;
+import build.jenesis.repository.store.Retries;
 import build.jenesis.repository.format.ArtifactLayout;
 import build.jenesis.repository.walk.ArtifactWalk;
 
@@ -20,6 +23,11 @@ import build.jenesis.repository.walk.ArtifactWalk;
  * the seam - {@link StoreRepositoryInventory#reconcile} delegates here - so this class carries only the sweep legs and
  * calls back into the inventory core for the format-driven {@code describe}/{@code record}, the membership check and the
  * shared key/layout helpers.
+ *
+ * <p>What it restores is a <em>holding</em> ({@link Holdings}), of whichever kind the version's document says: a live
+ * pointer whose version nothing records is recorded as a cached copy where its origin trail shows it was fetched from
+ * an upstream and as a release otherwise, a cached copy whose pointers are gone stops being held, and a release that
+ * is really a copy recorded as a release becomes the cached copy it is.
  *
  * <p>It opens walks of its own rather than riding the shared rebuild pass: the reverse leg walks the derived roots,
  * which that pass never visits, and the forward leg must see every {@code publish/} pointer including the withheld
@@ -214,27 +222,105 @@ final class InventoryReconciler {
         if (artifact.coordinate() == null || artifact.version() == null) {
             return false;                                                // a checksum or generated file - no section
         }
-        // Only where the version's absence from the published set is an answer rather than an unread plane:
-        // re-recording a version whose facts stand in the plane this deployment does not read would
-        // re-stamp its publish instant at now on every pass, silently resetting the age retention evicts by.
-        Known<PublishedSection.Facts> membership = inventory.membership(
-                artifact.ecosystem(), artifact.coordinate(), artifact.version());
-        boolean restorable = switch (membership) {
-            case Known.Absent<PublishedSection.Facts> _ -> true;
-            case Known.Present<PublishedSection.Facts> _ -> false;      // already recorded; idempotent per pointer
-            case Known.Unknown<PublishedSection.Facts> _ -> false;      // its facts stand on the unread plane
-        };
-        if (restorable) {
-            inventory.record(artifact, now);                            // reconcile-time: the conservative instant
-            return true;
-        }
-        if (membership instanceof Known.Present<PublishedSection.Facts> present) {
-            // The facts just read also backfill the two bounded listing faces for a release recorded before
-            // they existed: the newest-first index row and the pinned/ marker. No further read: both are
-            // idempotent writes guarded by a presence probe of their own small key.
-            backfillFaces(artifact.ecosystem(), artifact.coordinate(), artifact.version(), present.value());
+        MetadataDocument document = document(artifact.ecosystem(), artifact.coordinate(), artifact.version());
+        switch (Holdings.kind(document)) {
+            case NONE -> {
+                // reconcile-time: the conservative instant
+                return holdMissing(artifact.ecosystem(), artifact.coordinate(), artifact.version(),
+                        artifact.prerelease(), document, now);
+            }
+            case RELEASE -> {
+                // The facts just read also backfill the two bounded listing faces for a release recorded before
+                // they existed: the newest-first index row and the pinned/ marker. No further read: both are
+                // idempotent writes guarded by a presence probe of their own small key. A release the reverse leg
+                // is about to turn into a cached copy is left to it, so the pass does not write a row it removes.
+                PublishedSection.Facts facts = PublishedSection.facts(document.section(PublishedSection.TAG))
+                        .orElseThrow();
+                if (!copyRecordedAsRelease(document, facts)) {
+                    backfillFaces(artifact.ecosystem(), artifact.coordinate(), artifact.version(), facts);
+                }
+                return false;
+            }
+            case CACHED -> {
+                backfillCachedFace(artifact.ecosystem(), artifact.coordinate(), artifact.version(), document);
+                return false;
+            }
         }
         return false;
+    }
+
+    /** The version document of a coordinate version as it stands, or an empty one where none is stored. */
+    private MetadataDocument document(String ecosystem, String coordinate, String version) throws IOException {
+        return store.readVersioned(MetadataKey.version(ecosystem, coordinate, version))
+                .map(versioned -> MetadataDocument.read(versioned.content()))
+                .orElseGet(MetadataDocument::empty);
+    }
+
+    /**
+     * Record a live pointer's version that nothing records as held, from what its document already says: a version
+     * whose origin trail shows it was fetched from an upstream is a cached copy whose fill's notice was lost or never
+     * sent, and anything else is a release whose record was lost, recorded at {@code now}, the conservative publish
+     * instant. Returns {@code true} when a record was written. Shared by the forward leg over {@code publish/} and the inventory back-fill over the
+     * blobs-namespace pointers, so the two decide it the same way.
+     */
+    boolean holdMissing(String ecosystem, String coordinate, String version, boolean prerelease,
+                        MetadataDocument document, Instant now) throws IOException {
+        if (Holdings.fetched(document)) {
+            return inventory.cache(ecosystem, coordinate, version, Holdings.upstream(document), now);
+        }
+        inventory.record(ecosystem, coordinate, version, prerelease, now);
+        return true;
+    }
+
+    /**
+     * Whether a release is really a copy of an upstream's artifact that a repair recorded as a release: its origin
+     * trail names fetches through a fallback and no hand upload, and nobody pinned it. While such a row stands,
+     * retention ages the copy as if it had been published here and every reader of the published set counts it. A pinned one is left as it is, since a pin is an operator's decision about that
+     * release and turning it into a copy would drop it.
+     */
+    private static boolean copyRecordedAsRelease(MetadataDocument document, PublishedSection.Facts facts) {
+        return Holdings.fetched(document) && !facts.pinned();
+    }
+
+    /**
+     * Turn a release that is really a copy of an upstream's artifact into the cached copy it is: in one
+     * compare-and-set the {@code published} section goes and a {@code cached} section takes its place, dated when
+     * the release was, then the release's newest-first row gives way to a cached one. Retention stops ageing it and
+     * the scans keep seeing it. The rollup identity, which folds the published set, is recomputed at the end of the
+     * pass that did this, as it is after every reconcile.
+     */
+    private void recordAsCopy(String ecosystem, String coordinate, String version, PublishedSection.Facts facts,
+                              String upstream) throws IOException {
+        String key = MetadataKey.version(ecosystem, coordinate, version);
+        boolean turned = DocumentTurns.take(store, key, () -> Retries.decide(store, key, current -> {
+            if (current.isEmpty()) {
+                return Retries.Verdict.keep(false);
+            }
+            MetadataDocument document = MetadataDocument.read(current.get().content());
+            Optional<PublishedSection.Facts> now = PublishedSection.facts(document.section(PublishedSection.TAG));
+            if (Holdings.kind(document) != Holdings.Kind.RELEASE || now.isEmpty()
+                    || !copyRecordedAsRelease(document, now.get())) {
+                return Retries.Verdict.keep(false);              // a publish or a pin landed in between
+            }
+            SequencedMap<String, SectionMutation> mutations = new LinkedHashMap<>();
+            mutations.put(PublishedSection.TAG, _ -> null);
+            mutations.put(CachedSection.TAG, _ -> CachedSection.section(now.get().at(), upstream));
+            return Retries.Verdict.write(document.mutate(mutations).serialize(), true);
+        }));
+        if (turned) {
+            NewestFirst.RELEASES.forget(store, ecosystem, coordinate, version, facts.at());
+            NewestFirst.CACHED.ensure(store, ecosystem, coordinate, version, facts.at());
+        }
+    }
+
+    /** Write a cached copy's newest-first row unless it is already there - the idempotent backfill from a document a
+     *  leg has already read. */
+    private void backfillCachedFace(String ecosystem, String coordinate, String version, MetadataDocument document)
+            throws IOException {
+        Optional<CachedSection.Facts> facts = CachedSection.facts(document.section(CachedSection.TAG));
+        if (facts.isPresent()) {
+            NewestFirst.CACHED.ensure(store, ecosystem, coordinate, version, facts.get().at());
+        }
     }
 
     /** For every published member whose coordinate has no surviving pointer - {@code publish/} for a
@@ -272,17 +358,18 @@ final class InventoryReconciler {
             String ecosystem = segments[0];
             String coordinate = StoreRepositoryInventory.decode(segments[1]);
             String version = segments[2];
-            // Membership is the document's published section; a licenses-only document is not a member and is left
-            // untouched.
-            Optional<ArtifactStore.Versioned> document = store.readVersioned(key);
-            Section section = document
-                    .map(versioned -> MetadataDocument.read(versioned.content())
-                            .section(PublishedSection.TAG).orElse(null))
-                    .orElse(null);
-            if (!PublishedSection.published(Optional.ofNullable(section))) {
+            // Membership is the document's published or cached section; a licenses-only document holds nothing and
+            // is left untouched.
+            Optional<ArtifactStore.Versioned> stored = store.readVersioned(key);
+            if (stored.isEmpty()) {
                 return false;
             }
-            Optional<PublishedSection.Facts> facts = PublishedSection.facts(Optional.ofNullable(section));
+            MetadataDocument document = MetadataDocument.read(stored.get().content());
+            Holdings.Kind kind = Holdings.kind(document);
+            if (kind == Holdings.Kind.NONE) {
+                return false;
+            }
+            Optional<PublishedSection.Facts> facts = PublishedSection.facts(document.section(PublishedSection.TAG));
             boolean judgeable = false;
             boolean live = false;
             for (ArtifactLayout layout : StoreRepositoryInventory.layoutsFor(ecosystem)) {
@@ -307,7 +394,29 @@ final class InventoryReconciler {
                     }
                 }
             }
+            if (kind == Holdings.Kind.CACHED) {
+                // A cached copy is judged by the same liveness as a release: a live one gets its newest-first row
+                // back if it lacks one, and one whose pointers are gone - reclaimed, removed, or a crash between
+                // the two - stops being held. Nothing else about the version is touched: its origin trail and
+                // verdict stay, as a reclaim leaves them.
+                if (live) {
+                    backfillCachedFace(ecosystem, coordinate, version, document);
+                    return false;
+                }
+                if (!judgeable) {
+                    return false;
+                }
+                metadata.mutate(ecosystem, coordinate, version, CachedSection.TAG, current -> null);
+                NewestFirst.CACHED.forget(store, ecosystem, coordinate, version,
+                        CachedSection.facts(document.section(CachedSection.TAG)).map(CachedSection.Facts::at)
+                                .orElse(null));
+                return true;
+            }
             if (live && facts.isPresent()) {
+                if (copyRecordedAsRelease(document, facts.get())) {
+                    recordAsCopy(ecosystem, coordinate, version, facts.get(), Holdings.upstream(document));
+                    return false;
+                }
                 // The document already read backfills the two bounded listing faces for a live release recorded
                 // before they existed.
                 backfillFaces(ecosystem, coordinate, version, facts.get());
@@ -325,7 +434,7 @@ final class InventoryReconciler {
     private void backfillFaces(String ecosystem, String coordinate, String version, PublishedSection.Facts facts)
             throws IOException {
         if (facts.at() != null) {
-            RecentReleases.ensure(store, ecosystem, coordinate, version, facts.at());
+            NewestFirst.RELEASES.ensure(store, ecosystem, coordinate, version, facts.at());
         }
         if (facts.pinned()) {
             String marker = StoreRepositoryInventory.pinnedKey(ecosystem, coordinate, version);

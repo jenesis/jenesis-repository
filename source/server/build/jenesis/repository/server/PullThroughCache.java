@@ -190,7 +190,7 @@ public final class PullThroughCache {
         if (served) {
             keep(proxy, store, companions, fetched);
             observation.lowCardinalityKeyValue("outcome", "miss");
-            observePublish(format, path, store);
+            observeFill(format, path, upstream, store);
         } else {
             if (!fetched.isEmpty() && held(store, path)) {
                 keep(proxy, store, companions, fetched);
@@ -313,22 +313,33 @@ public final class PullThroughCache {
 
     /**
      * Fire the after-commit {@link build.jenesis.repository.store.PublicationObserver}s once a proxy leg has fetched,
-     * stored and served an upstream miss, so a proxy-publish is observed exactly like a direct publish. It is fired
-     * here, at the point the fetched body is committed to the store, so it does not depend on a format's own publish
-     * path firing it. Best-effort
-     * and contained: it fires only when the artifact is actually published ({@link Publication#located located} - so a
-     * quarantined or rejected proxy leg is not observed) and any failure building the event is swallowed, never failing
+     * stored and served an upstream miss: {@code onPublished}, so a fill is observed exactly like a direct publish,
+     * and then {@code onCached} with the upstream it came from, so what the repository now holds is recorded as a copy
+     * of that upstream's artifact rather than as a release of its own. It is fired here, at the point the fetched body
+     * is committed to the store, so it does not depend on a format's own publish path firing it - and it is the one
+     * place a fill is recorded, whichever route (a router fallback, hardened or not, or the dispatcher's format
+     * upstream) reached it. Best-effort and contained: it runs only for a leg that served ({@code served}, so a
+     * quarantined or rejected fill is not observed), and any failure building the event is swallowed, never failing
      * the serve.
+     *
+     * <p>A fill linked under the generic {@code publish/} pointer is observed both ways, with its blob, once
+     * {@link Publication#located located} proves it served. A format that keeps its own key space - npm, PyPI and the
+     * other blobs-namespace layouts - stores nothing there, so this loop cannot see what it stored: its fill is
+     * reported through {@code onCached} alone, by path, and the observer asks the format that owns the path whether
+     * a serving key now stands there before it records anything.
      */
-    private static void observePublish(RepositoryFormat format, String path, ArtifactStore store) {
+    private static void observeFill(RepositoryFormat format, String path, URI upstream, ArtifactStore store) {
         try {
             Publication publication = new Publication(store);
             Optional<String> key = publication.located(path);
             if (key.isEmpty()) {
+                publication.cached(descriptor(format, path, store), upstream);
                 return;
             }
             String hash = key.get().substring("blobs/".length());
-            publication.published(descriptor(format, path, store).withBlob(hash, store.size(key.get())));
+            ArtifactDescriptor filled = descriptor(format, path, store).withBlob(hash, store.size(key.get()));
+            publication.published(filled);
+            publication.cached(filled, upstream);
         } catch (Exception _) {
             // best-effort observer parity; a proxy serve must never fail because an observer event could not be built
         }

@@ -37,9 +37,9 @@
 
     <article>
         <h2>Versions</h2>
-        <p><small>The published versions of this coordinate in this repository, newest first, and the paths each is
-            served at; a long list is paged by name. A held or collected version is listed greyed and its paths
-            answer 404.</small></p>
+        <p><small>The versions of this coordinate this repository holds - published into it, or cached from an
+            upstream - newest first, and the paths each is served at; a long list is paged by name. A held or collected
+            version is listed greyed and its paths answer 404.</small></p>
         <p th:if="${downloadsTracked && !downloadsLag.isEmpty()}"><small
                 th:text="'Download counts and times can be up to ' + ${downloadsLag} + ' behind.'">Download counts and times can be up to 6 hours behind.</small></p>
         <div th:if="${detail.versions.isEmpty()}" class="app-empty" role="status">
@@ -50,7 +50,7 @@
                 <thead>
                 <tr>
                     <th scope="col">Version</th>
-                    <th scope="col">Published</th>
+                    <th scope="col">Published or cached</th>
                     <th scope="col">Pinned</th>
                     <th scope="col" th:if="${downloadsTracked}">Downloads</th>
                     <th scope="col">Served at</th>
@@ -62,11 +62,12 @@
                         <code th:text="${v.version}">1.0.0</code>
                         <small th:unless="${v.served}">(withheld)</small>
                     </td>
-                    <td><small th:text="${instants.display(v.published)}">2026-06-01T00:00:00Z</small></td>
+                    <td><small th:text="${instants.display(v.published)}">2026-06-01T00:00:00Z</small>
+                        <small th:if="${v.cached}"><br>cached from <code th:text="${v.upstream} ?: 'an upstream'">https://registry.npmjs.org/</code></small></td>
                     <!--/* Pinned where the versions are listed: an editor pins or lifts it on the row itself. */-->
                     <td><div class="app-actions">
                         <span th:if="${v.pinned}">yes</span>
-                        <form th:if="${isEditor}" method="post"
+                        <form th:if="${isEditor and !v.cached}" method="post"
                               th:action="${v.pinned} ? @{'/ui/repositories/' + ${repo} + '/pins/remove'} : @{'/ui/repositories/' + ${repo} + '/pins'}"
                               th:with="here=@{/ui/repositories/{repo}/coordinate(repo=${repo},ecosystem=${detail.ecosystem},coordinate=${detail.coordinate})}">
                             <input type="hidden" name="ecosystem" th:value="${detail.ecosystem}">

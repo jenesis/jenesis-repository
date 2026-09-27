@@ -156,17 +156,18 @@
         </table>
         </figure>
 
-        <th:block th:if="${entries.isEmpty() and !hasParent and releases.isEmpty()}">
+        <th:block th:if="${entries.isEmpty() and !hasParent and holdings.isEmpty()}">
             <div th:replace="~{base :: empty('The repository is empty. Publish an artifact to see it here.')}"></div>
         </th:block>
         <!--/* A format that keeps its packages outside the folder tree (npm, PyPI, NuGet and their kind) has no folder
-             to show and still holds releases; they are listed by coordinate, each to its own page. */-->
-        <th:block th:if="${entries.isEmpty() and !hasParent and !releases.isEmpty()}">
+             to show and still holds versions - published, or cached from an upstream; they are listed by coordinate,
+             each to its own page. */-->
+        <th:block th:if="${entries.isEmpty() and !hasParent and !holdings.isEmpty()}">
             <p><small>This repository's format keeps its packages outside a folder tree, so they are listed by
-                coordinate<span th:if="${releasesMore}"> - the <span th:text="${releases.size()}">0</span> most recent;
+                coordinate<span th:if="${holdingsMore}"> - the <span th:text="${holdings.size()}">0</span> most recent;
                 search by coordinate above to reach the rest</span>.</small></p>
             <figure>
-                <table th:replace="~{fragments :: releaseTable(${repo}, ${releases})}"></table>
+                <table th:replace="~{fragments :: holdingTable(${repo}, ${holdings})}"></table>
             </figure>
         </th:block>
         <th:block th:if="${entries.isEmpty() and hasParent}">

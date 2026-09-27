@@ -157,7 +157,7 @@ final class InventoryRecording {
         if (committed.firstPublish()) {
             identity.foldIn(InventoryIdentity.member(recording.ecosystem, recording.coordinate, recording.version,
                     LicenseSection.fingerprintOf(committed.licensesAfter())), recording.published);
-            RecentReleases.record(store, recording.ecosystem, recording.coordinate, recording.version,
+            NewestFirst.RELEASES.record(store, recording.ecosystem, recording.coordinate, recording.version,
                     recording.published);
         } else if (committed.licensesChanged() && committed.facts().isPresent()
                 && committed.facts().get().at() != null) {
@@ -207,7 +207,7 @@ final class InventoryRecording {
         if (!recordPublishedSection(ecosystem, coordinate, version, prerelease, published, originSha256)) {
             return;
         }
-        RecentReleases.record(store, ecosystem, coordinate, version, published);
+        NewestFirst.RELEASES.record(store, ecosystem, coordinate, version, published);
     }
 
     /** Write the publish facts into the document's {@code published} section and, on a first publish (the section
@@ -248,6 +248,41 @@ final class InventoryRecording {
         identity.foldIn(InventoryIdentity.member(ecosystem, coordinate, version,
                 LicenseSection.fingerprintOf(declaredIn(committed))), published);
         return true;
+    }
+
+    /**
+     * Record a copy a pull-through cached from {@code upstream} as a cached holding - the document's {@code cached}
+     * section and the row of the newest-first cached index - unless the version is already held, as a release or as
+     * a copy. One compare-and-set of the document, and none at all when it is already held, so a re-fill of a known
+     * version costs the read that finds it and nothing else. Returns {@code true} when this call recorded it.
+     *
+     * <p>A published version is never recorded as a copy: a release here is the system of record for its bytes,
+     * whatever an upstream also serves under the same name, and it keeps to the published set's rules.
+     */
+    boolean cache(String ecosystem, String coordinate, String version, String upstream, Instant at)
+            throws IOException {
+        String key = MetadataKey.version(ecosystem, coordinate, version);
+        boolean recorded = DocumentTurns.take(store, key, () -> Retries.decide(store, key, current -> {
+            MetadataDocument document = current.map(versioned -> MetadataDocument.read(versioned.content()))
+                    .orElseGet(MetadataDocument::empty);
+            if (Holdings.held(document)) {
+                return Retries.Verdict.keep(false);
+            }
+            SequencedMap<String, SectionMutation> mutations = new LinkedHashMap<>();
+            mutations.put(CachedSection.TAG, CachedSection.record(at, upstream));
+            return Retries.Verdict.write(document.mutate(mutations).serialize(), true);
+        }));
+        if (recorded) {
+            NewestFirst.CACHED.record(store, ecosystem, coordinate, version, at);
+        }
+        return recorded;
+    }
+
+    /** When a coordinate version was first cached from an upstream and where from, or empty when it is not held as a
+     *  cached copy - a point read of its document's {@code cached} section. A read never writes. */
+    Optional<CachedSection.Facts> cachedFacts(String ecosystem, String coordinate, String version)
+            throws IOException {
+        return CachedSection.facts(metadata.section(ecosystem, coordinate, version, CachedSection.TAG));
     }
 
     /** The declared-license set a document carries, as {@link LicenseInventory#read} answers it on the consolidated

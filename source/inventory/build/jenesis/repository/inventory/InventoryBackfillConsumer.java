@@ -3,6 +3,8 @@ package build.jenesis.repository.inventory;
 import module java.base;
 
 import build.jenesis.repository.blobs.BlobLayout;
+import build.jenesis.repository.metadata.MetadataDocument;
+import build.jenesis.repository.metadata.MetadataKey;
 import build.jenesis.repository.store.ArtifactDescriptor;
 import build.jenesis.repository.store.ArtifactStore;
 import build.jenesis.repository.walk.WalkConsumer;
@@ -35,8 +37,13 @@ import build.jenesis.repository.walk.WalkPass;
  * they do not agree, this records nothing and says so: taking the first answer would make a durable row a property
  * of module-path ordering, so one node could record a coordinate another would not, with nothing able to report it.
  *
- * <p><strong>Idempotent by membership.</strong> A pointer whose row already exists - written by the accept path, by
- * an earlier pass, or by a replayed delivery after a crash-resume - is skipped without a write. So a second pass
+ * <p><strong>A copy is recorded as a copy.</strong> A pointer a pull-through filled is a holding too, and one whose
+ * fill was not recorded - its fill's notice lost or never sent - is recorded as the
+ * cached copy its origin trail says it is, through the same decision the reconcile's forward leg takes
+ * ({@code InventoryReconciler.holdMissing}), rather than as a release that retention would then age.
+ *
+ * <p><strong>Idempotent by membership.</strong> A pointer whose row already exists - written by the accept path or a
+ * fill, by an earlier pass, or by a replayed delivery after a crash-resume - is skipped without a write. So a second pass
  * over unchanged state changes nothing durable and a row's instant never drifts. The instant a first record stamps
  * is the pass's own {@link WalkPass#started()}, which is stable across a resume and identical across fanned-out
  * workers, so two workers racing on one pointer write the same bytes. It is deliberately not a sentinel: the
@@ -124,14 +131,22 @@ public final class InventoryBackfillConsumer implements WalkConsumer {
             return;                             // not a per-version pointer, or a format that cannot name one
         }
         StoreRepositoryInventory inventory = new StoreRepositoryInventory(store);
-        if (inventory.publishedAt(named.ecosystem(), named.coordinate(), named.version()).isPresent()) {
-            return;                             // already a member - the idempotence a replayed delivery relies on
+        MetadataDocument document = store.readVersioned(
+                        MetadataKey.version(named.ecosystem(), named.coordinate(), named.version()))
+                .map(versioned -> MetadataDocument.read(versioned.content()))
+                .orElseGet(MetadataDocument::empty);
+        if (Holdings.held(document)) {
+            return;                             // already held - the idempotence a replayed delivery relies on
         }
-        inventory.record(named.ecosystem(), named.coordinate(), named.version(), named.prerelease(), recordedAt);
+        if (!inventory.reconciler().holdMissing(named.ecosystem(), named.coordinate(), named.version(),
+                named.prerelease(), document, recordedAt)) {
+            return;
+        }
         // Bounded by content rather than by cadence: a row is written on the absent -> present transition only, so
-        // this logs once per release over the life of a deployment and a converged pass says nothing at all.
+        // this logs once per holding over the life of a deployment and a converged pass says nothing at all.
         LOGGER.log(System.Logger.Level.INFO, "Rebuilt the inventory row for " + named.ecosystem() + " "
-                + named.coordinate() + ":" + named.version() + " at " + recordedAt
+                + named.coordinate() + ":" + named.version() + " at " + recordedAt + " as "
+                + (Holdings.fetched(document) ? "a copy cached from an upstream" : "a release")
                 + " - the retroactive sweeps can enumerate it again");
     }
 

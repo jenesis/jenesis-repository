@@ -3,7 +3,6 @@ package build.jenesis.repository.ui.store;
 import module java.base;
 
 import build.jenesis.repository.ui.CurrentTenant;
-import build.jenesis.repository.cleanup.Release;
 import build.jenesis.repository.format.RepositoryType;
 import build.jenesis.repository.inventory.StoreRepositoryInventory;
 import build.jenesis.repository.scope.Scopes;
@@ -16,7 +15,7 @@ import io.micrometer.observation.ObservationRegistry;
 
 /**
  * The console's listing of the artifact repository, scoped to the signed-in user's tenant: the tenant's named
- * repositories and, per repository, its storage namespaces and its published releases. The browse, search and
+ * repositories and, per repository, its storage namespaces and what it holds. The browse, search and
  * compliance-review families it once also held now live in sibling services in this package - {@link RepositoryBrowse}
  * (the browse tree, artifact detail, search, license inventory and published-index card) and {@code ComplianceReview}
  * (quarantine review, the vulnerability and findings panels, the license blast radius and dependents) - alongside the
@@ -115,33 +114,58 @@ public class RepositoryAdmin extends TenantScope {
     }
 
     /**
-     * The most-recently-published releases of a repository (up to {@code limit}, newest first) and the total published
-     * count. A bounded window streamed through a size-limited heap over the published set, so the detail hub renders a
-     * recent slice rather than buffering and emitting one table row per release of a repository with a very large
-     * published set - the full, paged list is the browse page. The stream is complete here (a walk-less inventory).
+     * The versions a repository most recently took in (up to {@code limit}, newest first): the releases published
+     * into it and the copies it cached from its upstreams, each read from its own newest-first index a window at a
+     * time and merged by when it arrived. Two bounded windows rather than a walk, so the detail hub renders a recent
+     * slice of a repository of any size - the full, paged list is the browse page and a coordinate's own page - and
+     * {@code more} says when either index held more than the slice shows.
      */
-    public Releases recentReleases(String repository, int limit) throws IOException {
+    public Held recentHoldings(String repository, int limit) throws IOException {
         StoreRepositoryInventory inventory = inventory(repository);
-        List<Release> shown = new ArrayList<>();
+        Window releases = window(inventory, limit, (after, size) -> {
+            StoreRepositoryInventory.ReleasePage page = inventory.recent(after, size);
+            return new StoreRepositoryInventory.HoldingPage(
+                    page.releases().stream().map(StoreRepositoryInventory.Holding::of).toList(), page.next());
+        });
+        Window cached = window(inventory, limit, inventory::cached);
+        List<StoreRepositoryInventory.Holding> merged = new ArrayList<>(releases.shown());
+        merged.addAll(cached.shown());
+        merged.sort(Comparator.comparing(StoreRepositoryInventory.Holding::at,
+                Comparator.nullsLast(Comparator.reverseOrder())));
+        boolean more = releases.more() || cached.more() || merged.size() > limit;
+        return new Held(List.copyOf(merged.subList(0, Math.min(limit, merged.size()))), more);
+    }
+
+    /** One index's newest-first window: at most {@code limit} holdings still served, and whether the index held more.
+     *  The index is read a page at a time and screened as it goes - a row whose version has since been held or
+     *  removed is skipped - and the next page is asked for only while the window is not yet full. */
+    private static Window window(StoreRepositoryInventory inventory, int limit, Pages pages) throws IOException {
+        List<StoreRepositoryInventory.Holding> shown = new ArrayList<>();
         String after = null;
         boolean more = true;
-        // The newest-first index is read a page at a time and screened as it goes: a row whose release has since
-        // been held or removed is skipped, and the next page is asked for only while the window is not yet full -
-        // never a walk of the publish facts to find the newest few hundred.
         while (shown.size() < limit && more) {
-            StoreRepositoryInventory.ReleasePage page = inventory.recent(after, limit - shown.size());
-            for (Release release : page.releases()) {
-                if (shown.size() < limit && inventory.disclosable(release.ecosystem(), release.coordinate(),
-                        release.version(), ServableNames.Policy.HIDE_WITHHELD_AND_GONE)) {
-                    shown.add(release);
+            StoreRepositoryInventory.HoldingPage page = pages.page(after, limit - shown.size());
+            for (StoreRepositoryInventory.Holding holding : page.holdings()) {
+                if (shown.size() < limit && inventory.disclosable(holding.ecosystem(), holding.coordinate(),
+                        holding.version(), ServableNames.Policy.HIDE_WITHHELD_AND_GONE)) {
+                    shown.add(holding);
                 }
             }
             after = page.next();
             more = after != null;
         }
-        return new Releases(List.copyOf(shown), more);
+        return new Window(shown, more);
     }
 
-    public record Releases(List<Release> shown, boolean more) {
+    @FunctionalInterface
+    private interface Pages {
+        StoreRepositoryInventory.HoldingPage page(String after, int limit) throws IOException;
+    }
+
+    private record Window(List<StoreRepositoryInventory.Holding> shown, boolean more) {
+    }
+
+    /** The recent slice a screen renders, and whether there is more than it shows. */
+    public record Held(List<StoreRepositoryInventory.Holding> shown, boolean more) {
     }
 }

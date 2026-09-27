@@ -201,6 +201,93 @@ final class InventoryReleases {
         });
     }
 
+    /** Stream every coordinate version the repository holds, released or cached from an upstream, to
+     *  {@code visitor} - see {@link StoreRepositoryInventory#holdings(StoreRepositoryInventory.CoordinateVisitor)}.
+     *  The same walk as {@link #coordinates(StoreRepositoryInventory.CoordinateVisitor)}, one document read per key,
+     *  with the wider membership. */
+    void holdings(StoreRepositoryInventory.CoordinateVisitor visitor) throws IOException {
+        inventory.walk(MetadataKey.PREFIX, key -> {
+            StoreRepositoryInventory.Holding holding = holding(key);
+            if (holding != null) {
+                visitor.accept(new StoreRepositoryInventory.Coordinate(
+                        holding.ecosystem(), holding.coordinate(), holding.version()));
+            }
+        });
+    }
+
+    /** One version document as a holding - a release or a cached copy, with the download facts it carries - or
+     *  {@code null} for a key that is no version document, or one that holds nothing. One read. */
+    StoreRepositoryInventory.Holding holding(String key) throws IOException {
+        if (!key.startsWith(MetadataKey.PREFIX + "/")) {
+            return null;
+        }
+        String[] segments = key.substring(MetadataKey.PREFIX.length() + 1).split("/");
+        if (segments.length != 3 || segments[2].startsWith("@")) {
+            return null;                                     // the per-coordinate document, not a version
+        }
+        Optional<ArtifactStore.Versioned> stored = store.readVersioned(key);
+        if (stored.isEmpty()) {
+            return null;
+        }
+        MetadataDocument document = MetadataDocument.read(stored.get().content());
+        String ecosystem = segments[0];
+        String coordinate = StoreRepositoryInventory.decode(segments[1]);
+        String version = segments[2];
+        Optional<DownloadsSection.Facts> downloads = DownloadsSection.facts(document.section(DownloadsSection.TAG));
+        Long count = downloads.map(DownloadsSection.Facts::count).orElse(null);
+        Instant downloadedAt = downloads.map(DownloadsSection.Facts::last).orElse(null);
+        return switch (Holdings.kind(document)) {
+            case RELEASE -> {
+                PublishedSection.Facts facts = PublishedSection.facts(document.section(PublishedSection.TAG))
+                        .orElseThrow();
+                yield new StoreRepositoryInventory.Holding(ecosystem, coordinate, version, facts.at(), false, null,
+                        facts.pinned(), count, downloadedAt);
+            }
+            case CACHED -> {
+                CachedSection.Facts facts = CachedSection.facts(document.section(CachedSection.TAG)).orElseThrow();
+                yield new StoreRepositoryInventory.Holding(ecosystem, coordinate, version, facts.at(), true,
+                        facts.upstream(), false, count, downloadedAt);
+            }
+            case NONE -> null;
+        };
+    }
+
+    /** One bounded page of a coordinate's holdings - see {@link StoreRepositoryInventory#holdings(String, String,
+     *  String, int)}. */
+    StoreRepositoryInventory.HoldingPage holdings(String ecosystem, String coordinate, String after, int limit)
+            throws IOException {
+        String prefix = StoreRepositoryInventory.publishedRoot() + "/"
+                + ArtifactStore.segment(ecosystem) + "/" + StoreRepositoryInventory.encode(coordinate);
+        List<String> names = new ArrayList<>();
+        store.page(prefix, after == null ? "" : after, ArtifactStore.oneMoreThan(limit), names::add);
+        boolean more = names.size() > limit;
+        List<String> window = more ? names.subList(0, limit) : names;
+        List<StoreRepositoryInventory.Holding> holdings = new ArrayList<>(window.size());
+        for (String version : window) {
+            StoreRepositoryInventory.Holding holding = holding(prefix + "/" + version);
+            if (holding != null) {
+                holdings.add(holding);
+            }
+        }
+        return new StoreRepositoryInventory.HoldingPage(holdings, more ? window.getLast() : null);
+    }
+
+    /** The copies most recently cached from an upstream - see {@link StoreRepositoryInventory#cached}. A row whose
+     *  version is no longer held as a copy - published here since, reclaimed, removed - is skipped. */
+    StoreRepositoryInventory.HoldingPage cached(String after, int limit) throws IOException {
+        NewestFirst.Page page = NewestFirst.CACHED.page(store, after, limit);
+        List<StoreRepositoryInventory.Holding> holdings = new ArrayList<>(page.entries().size());
+        for (NewestFirst.Entry entry : page.entries()) {
+            StoreRepositoryInventory.Holding holding = holding(StoreRepositoryInventory.publishedRoot() + "/"
+                    + ArtifactStore.segment(entry.ecosystem()) + "/" + StoreRepositoryInventory.encode(entry.coordinate())
+                    + "/" + entry.version());
+            if (holding != null && holding.cached()) {
+                holdings.add(holding);
+            }
+        }
+        return new StoreRepositoryInventory.HoldingPage(holdings, page.next());
+    }
+
     /** Stream every published member with its publish instant and declared-license set - the identity rebuild's
      *  enumeration: one document read per member, where the publish facts and the licenses are sections of the same
      *  document. Same membership as {@link #coordinates(StoreRepositoryInventory.CoordinateVisitor)}. */
@@ -247,9 +334,9 @@ final class InventoryReleases {
 
     /** The most recently published releases - see {@link StoreRepositoryInventory#recent}. */
     StoreRepositoryInventory.ReleasePage recent(String after, int limit) throws IOException {
-        RecentReleases.Page page = RecentReleases.page(store, after, limit);
+        NewestFirst.Page page = NewestFirst.RELEASES.page(store, after, limit);
         List<Release> releases = new ArrayList<>(page.entries().size());
-        for (RecentReleases.Entry entry : page.entries()) {
+        for (NewestFirst.Entry entry : page.entries()) {
             Release release = release(StoreRepositoryInventory.publishedRoot() + "/"
                     + ArtifactStore.segment(entry.ecosystem()) + "/" + StoreRepositoryInventory.encode(entry.coordinate())
                     + "/" + entry.version());

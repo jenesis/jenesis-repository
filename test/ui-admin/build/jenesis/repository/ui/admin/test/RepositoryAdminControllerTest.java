@@ -228,7 +228,7 @@ class RepositoryAdminControllerTest {
         assertThat(controller.detail("libs", model)).isEqualTo("repository");
 
         assertThat(model).containsEntry("repo", "libs").containsEntry("description", "Platform releases")
-                .containsEntry("hardened", false).containsEntry("releasesMore", false)
+                .containsEntry("hardened", false).containsEntry("holdingsMore", false)
                 .containsEntry("formatUpstream", "https://repo1.maven.org/maven2");
         assertThat((Collection<?>) model.get("unplaceable")).isEmpty();
         assertThat(((SettingsAdmin.Routing) model.get("routing")).shape()).isNotNull();
@@ -317,6 +317,38 @@ class RepositoryAdminControllerTest {
         controller.coordinate("libs", "cobol", "x", "", orphan);
         assertThat(orphan.get("mark")).as("an ecosystem nothing installed declares is drawn as an orphan")
                 .isNotNull();
+    }
+
+    @Test
+    void the_overview_and_a_coordinate_page_show_a_copy_cached_from_an_upstream_beside_the_releases()
+            throws IOException {
+        create("libs", "maven");
+        publish("libs", "/maven/org/yaml/snakeyaml/1.33/snakeyaml-1.33.jar", "cached jar");
+        publish("libs", "/maven/org/acme/lib/1.0/lib-1.0.jar", "released jar");
+        StoreRepositoryInventory inventory = new StoreRepositoryInventory(repository("libs"));
+        inventory.record("Maven", "org.acme:lib", "1.0", Instant.parse("2026-01-01T00:00:00Z"));
+        inventory.cache("Maven", "org.yaml:snakeyaml", "1.33", "https://repo1.maven.org/maven2/",
+                Instant.parse("2026-01-02T00:00:00Z"));
+        ExtendedModelMap overview = new ExtendedModelMap();
+
+        controller.detail("libs", overview);
+
+        assertThat(overview.get("holdings")).asInstanceOf(InstanceOfAssertFactories.LIST)
+                .as("newest first, the copy beside the release rather than an empty list of releases")
+                .extracting(holding -> ((StoreRepositoryInventory.Holding) holding).coordinate() + " "
+                        + ((StoreRepositoryInventory.Holding) holding).cached())
+                .containsExactly("org.yaml:snakeyaml true", "org.acme:lib false");
+
+        ExtendedModelMap page = new ExtendedModelMap();
+        controller.coordinate("libs", "Maven", "org.yaml:snakeyaml", "", page);
+        RepositoryBrowse.CoordinateDetail detail = (RepositoryBrowse.CoordinateDetail) page.get("detail");
+        assertThat(detail.versions()).singleElement().satisfies(version -> {
+            assertThat(version.version()).isEqualTo("1.33");
+            assertThat(version.cached()).isTrue();
+            assertThat(version.upstream()).isEqualTo("https://repo1.maven.org/maven2/");
+            assertThat(version.pinned()).isFalse();
+            assertThat(version.paths()).containsExactly("/maven/org/yaml/snakeyaml/1.33/snakeyaml-1.33.jar");
+        });
     }
 
     @Test

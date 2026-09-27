@@ -40,9 +40,9 @@ import build.jenesis.repository.ui.ConsoleScreen;
 @ConsoleScreen
 public class RepositoryAdminController {
 
-    /** How many recent releases the overview renders - a bound so it never buffers or emits a row per release of a
-     *  repository with a very large published set; the full, paged list is the browse page. */
-    private static final int DETAIL_RELEASES = 200;
+    /** How many recent holdings the overview renders - a bound so it never buffers or emits a row per version of a
+     *  repository that holds a great many; the full, paged list is the browse page and each coordinate's own. */
+    private static final int DETAIL_HOLDINGS = 200;
 
 
     /** How many staging ids the staging page shows before pointing at the staging API, which pages the rest. */
@@ -303,7 +303,8 @@ public class RepositoryAdminController {
 
     /**
      * A repository's overview: how it is routed, whether it hardens its proxy, what stands between it and its
-     * collector, its published index and its most recent releases. Everything else about a repository is a page of
+     * collector, its published index and the versions it most recently took in - published into it, or cached from an
+     * upstream. Everything else about a repository is a page of
      * its own beside this one, listed in the sidebar, so a healthy repository and one needing attention do not look
      * the same.
      *
@@ -315,9 +316,9 @@ public class RepositoryAdminController {
         model.addAttribute("repo", repo);
         Optional<RepositoryDocument> document = repositories.document(repo);
         model.addAttribute("description", document.map(RepositoryDocument::description).orElse(""));
-        RepositoryAdmin.Releases releases = repositories.recentReleases(repo, DETAIL_RELEASES);
-        model.addAttribute("releases", releases.shown());
-        model.addAttribute("releasesMore", releases.more());
+        RepositoryAdmin.Held holdings = repositories.recentHoldings(repo, DETAIL_HOLDINGS);
+        model.addAttribute("holdings", holdings.shown());
+        model.addAttribute("holdingsMore", holdings.more());
         // The hardened proxy leg: whether this repository screens every upstream body in full. Its typed structural
         // refusals are rows of the Refused page rather than a list of their own.
         // The routing in force for this tenant - its own definition, else the deployment's - and which of the two it
@@ -422,11 +423,12 @@ public class RepositoryAdminController {
             model.addAttribute("dir", descending ? "desc" : "asc");
             model.addAttribute("base", safe);
             model.addAttribute("depth", 0);
-            // An empty root with releases is a format with no folder tree, whose releases are listed instead.
-            RepositoryAdmin.Releases releases = level.entries().isEmpty() && safe.isEmpty()
-                    ? repositories.recentReleases(repo, DETAIL_RELEASES) : null;
-            model.addAttribute("releases", releases == null ? List.of() : releases.shown());
-            model.addAttribute("releasesMore", releases != null && releases.more());
+            // An empty root that holds versions is a format with no folder tree, whose holdings - releases and
+            // copies cached from an upstream alike - are listed instead.
+            RepositoryAdmin.Held holdings = level.entries().isEmpty() && safe.isEmpty()
+                    ? repositories.recentHoldings(repo, DETAIL_HOLDINGS) : null;
+            model.addAttribute("holdings", holdings == null ? List.of() : holdings.shown());
+            model.addAttribute("holdingsMore", holdings != null && holdings.more());
         }
         return "browse";
     }

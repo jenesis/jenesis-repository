@@ -73,7 +73,7 @@ import build.jenesis.repository.store.StoredCounter;
  * shape that cannot have this defect, and the one to prefer when the choice is open.
  *
  * <p>The early return in {@link #recent} rests on the index being ordered by publish instant rather than by
- * insertion - {@code RecentReleases} keys it by the instant inverted, so once a row is below the floor every row
+ * insertion - {@code NewestFirst} keys it by the instant inverted, so once a row is below the floor every row
  * after it is too. An insertion-ordered index would make that return wrong, and the two orderings are
  * indistinguishable from the test's end: both explain a leg that comes back empty.
  *
@@ -186,6 +186,35 @@ public final class IncrementalPasses {
         }
         recent(inventory, release -> visitor.accept(
                 new StoreRepositoryInventory.Coordinate(release.ecosystem(), release.coordinate(), release.version())));
+    }
+
+    /**
+     * Every version the repository holds - its releases and the copies it cached from upstreams - on a full pass; the
+     * releases published and the copies cached since the last full pass otherwise, each out of its own newest-first
+     * index. The leg a pass that is about everything held rides (the advisory and health scans), where
+     * {@link #coordinates} keeps to releases.
+     */
+    public void holdings(StoreRepositoryInventory inventory, StoreRepositoryInventory.CoordinateVisitor visitor)
+            throws IOException {
+        if (full) {
+            inventory.holdings(visitor);
+            return;
+        }
+        recent(inventory, release -> visitor.accept(
+                new StoreRepositoryInventory.Coordinate(release.ecosystem(), release.coordinate(), release.version())));
+        Instant floor = since.orElseThrow().minus(lookback);
+        String after = null;
+        do {
+            StoreRepositoryInventory.HoldingPage page = inventory.cached(after, RECENT_PAGE);
+            for (StoreRepositoryInventory.Holding holding : page.holdings()) {
+                if (holding.at() != null && holding.at().isBefore(floor)) {
+                    return;
+                }
+                visitor.accept(new StoreRepositoryInventory.Coordinate(
+                        holding.ecosystem(), holding.coordinate(), holding.version()));
+            }
+            after = page.next();
+        } while (after != null);
     }
 
     /** Every published release on a full pass; the releases published since the last full pass otherwise. */

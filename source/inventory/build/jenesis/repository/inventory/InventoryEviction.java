@@ -106,7 +106,13 @@ final class InventoryEviction {
         if (!pointersEnumerable(release.ecosystem(), release.coordinate(), release.version())) {
             throw refusal("eviction", release.ecosystem(), release.coordinate(), release.version());
         }
-        RecentReleases.forget(store, release);
+        NewestFirst.RELEASES.forget(store, release.ecosystem(), release.coordinate(), release.version(),
+                release.published());
+        // A release that was first held as a copy cached from an upstream still has that copy's newest-first row, and
+        // the document that would let a later pass find it is deleted below.
+        NewestFirst.CACHED.forget(store, release.ecosystem(), release.coordinate(), release.version(),
+                inventory.cachedAt(release.ecosystem(), release.coordinate(), release.version())
+                        .map(CachedSection.Facts::at).orElse(null));
         // Capture the version's rollup contribution before its document is removed, so the maintained identity can be
         // folded out once the eviction completes (the whole-repository SBOM / NOTICE ETag then revalidates). Read here,
         // ahead of the deletes, because the document carrying both is gone by the end.
@@ -291,6 +297,10 @@ final class InventoryEviction {
             return removals.isEmpty() ? Retries.Verdict.keep(null)
                     : Retries.Verdict.write(now.mutate(removals).serialize(), null);
         });
+        // The cached section went with the trim, so the copy's newest-first row goes too: the document no longer says
+        // it is held, and nothing else would ever name the row again.
+        NewestFirst.CACHED.forget(store, ecosystem, coordinate, version,
+                CachedSection.facts(document.section(CachedSection.TAG)).map(CachedSection.Facts::at).orElse(null));
         // The trim above dropped every served-fact section, the findings section among them, so this version's ranked
         // line must drop too - bump the findings eviction epoch so the vulnerability rank index rebuilds on its next
         // pass rather than paging the reclaimed line until the next scan.

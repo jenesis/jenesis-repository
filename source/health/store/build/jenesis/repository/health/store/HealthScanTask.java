@@ -99,11 +99,11 @@ public final class HealthScanTask implements MaintenanceTask {
                 + "deliberately NOT advanced, so no panel reads this pass as a completed scan; the next pass "
                 + "re-probes them.");
         StoreRepositoryInventory inventory = new StoreRepositoryInventory(context.store());
-        // Every version every Nth pass; between, only the versions published since the last full one, whose
-        // coordinates are the ones that may never have been scored.
+        // Every version held, published or cached from an upstream, every Nth pass; between, only the versions
+        // published or cached since the last full one, whose coordinates are the ones that may never have been scored.
         IncrementalPasses cadence = IncrementalPasses.over(context.store(), name(), "health/scan-passes",
                 HealthLedger.scanned(context.store()), context.config());
-        cadence.coordinates(inventory, held -> {
+        cadence.holdings(inventory, held -> {
             // Health is version-independent, so probe each distinct (ecosystem, coordinate) once per pass rather
             // than once per held version.
             if (!probed.add(held.ecosystem() + ' ' + held.coordinate())) {
@@ -129,7 +129,8 @@ public final class HealthScanTask implements MaintenanceTask {
         // what happened (clause 4), and an incremental pass cannot make the claim at all.
         cadence.completed(context.now(), !failed.any());
         context.gauge("jenreg.health.scored.count",
-                "Published coordinates whose maintainer-health the sweep scored and persisted this pass",
+                "Coordinates held, published or cached from an upstream, whose maintainer-health the sweep scored "
+                        + "and persisted this pass",
                 Map.of("tenant", context.tenant(), "repository", context.repository()), scored[0]);
     }
 }

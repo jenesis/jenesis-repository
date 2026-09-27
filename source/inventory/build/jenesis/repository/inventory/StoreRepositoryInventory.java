@@ -519,7 +519,13 @@ public final class StoreRepositoryInventory implements RepositoryInventory {
     /** The root of the newest-first release index every publish is recorded into, beside {@link #publishedRoot()}:
      *  a pass or hook that records a publish writes here too and declares it. */
     public static String recentRoot() {
-        return RecentReleases.ROOT;
+        return NewestFirst.RELEASES.root;
+    }
+
+    /** The root of the newest-first index of cached copies, beside {@link #recentRoot()}: a pass or hook that
+     *  records a cached copy writes here too and declares it. */
+    public static String cachedRoot() {
+        return NewestFirst.CACHED.root;
     }
 
     /** The key-space the published-set enumeration walks: the consolidated {@code meta} documents, whose
@@ -681,6 +687,101 @@ public final class StoreRepositoryInventory implements RepositoryInventory {
 
     /** A bounded page of releases and the key to continue from - {@code null} when the page was the last. */
     public record ReleasePage(List<Release> releases, String next) {
+    }
+
+    /**
+     * Record a copy a pull-through fetched from {@code upstream}, stored and served, as a cached holding of the
+     * version the owning format describes its path to - a holding of its own, apart from the releases: the
+     * scheduled advisory and health scans and the repository's overview see it, while retention and everything else
+     * that keeps to the published set never do. Written once per version, on the fill that first caches
+     * it; a version already held, as a release or as a copy, is left as it is, and a hit writes nothing.
+     *
+     * <p>A descriptor the fill linked under the generic {@code publish/} pointer carries its blob and is taken as
+     * served. One from a format that keeps its own key space carries only its path, so the format that owns the path
+     * is asked whether a serving key now stands there - a fill that answered without storing (an index streamed
+     * through, a document the leg refused) holds nothing. Returns {@code true} when this call recorded the copy.
+     */
+    public boolean cache(ArtifactDescriptor artifact, URI upstream, Instant at) throws IOException {
+        Optional<ArtifactDescriptor> described = artifact.coordinate() != null && artifact.version() != null
+                ? Optional.of(artifact) : recording.resolve(artifact.path());
+        if (described.isEmpty() || described.get().coordinate() == null || described.get().version() == null) {
+            return false;
+        }
+        if (artifact.hash() == null && !servedFromOwnKeys(artifact.path())) {
+            return false;
+        }
+        ArtifactDescriptor held = described.get();
+        return cache(held.ecosystem(), held.coordinate(), held.version(),
+                upstream == null ? null : upstream.toString(), at);
+    }
+
+    /** Whether a blobs-namespace format that owns {@code path} stores a serving key for it. */
+    private boolean servedFromOwnKeys(String path) throws IOException {
+        for (RepositoryFormat format : formats()) {
+            if (format.handles(path) && format instanceof BlobLayout layout
+                    && layout.servingKey(path, store).isPresent()) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    /** Record a cached copy of a coordinate version from {@code upstream} - see
+     *  {@link #cache(ArtifactDescriptor, URI, Instant)}; a version already held is left as it is. */
+    public boolean cache(String ecosystem, String coordinate, String version, String upstream, Instant at)
+            throws IOException {
+        return recording.cache(ecosystem, coordinate, version, upstream, at);
+    }
+
+    /** When a coordinate version was first cached from an upstream and where from, or empty when it is not held as a
+     *  cached copy. A point read of its document. */
+    public Optional<CachedSection.Facts> cachedAt(String ecosystem, String coordinate, String version)
+            throws IOException {
+        return recording.cachedFacts(ecosystem, coordinate, version);
+    }
+
+    /**
+     * A version this repository holds: a release published into it, or a copy a pull-through cached from an
+     * upstream. {@code at} is when it was published or first cached, {@code upstream} where a copy came from
+     * ({@code null} for a release, and for a copy whose fill named none); a copy is never pinned, because a pin is a
+     * retention decision and retention keeps to releases.
+     */
+    public record Holding(String ecosystem, String coordinate, String version, Instant at, boolean cached,
+                          String upstream, boolean pinned, Long downloads, Instant downloadedAt) {
+
+        /** A release as the holding it is. */
+        public static Holding of(Release release) {
+            return new Holding(release.ecosystem(), release.coordinate(), release.version(), release.published(),
+                    false, null, release.pinned(), release.downloads(), release.downloadedAt());
+        }
+    }
+
+    /** A bounded page of holdings and the key to continue from - {@code null} when the page was the last. */
+    public record HoldingPage(List<Holding> holdings, String next) {
+    }
+
+    /**
+     * Stream every coordinate version the repository holds - its releases and the copies it cached from upstreams -
+     * without buffering the set: the enumeration a pass that is about everything held rides (the advisory and health
+     * scans), where {@link #coordinates(CoordinateVisitor)} is the published set alone. One walk of the version
+     * documents either way, one read per document.
+     */
+    public void holdings(CoordinateVisitor visitor) throws IOException {
+        enumeration.holdings(visitor);
+    }
+
+    /** One bounded page of a coordinate's holdings, releases and cached copies alike, in version-key order and
+     *  resumable from the bare version name the previous page ended on: the page a coordinate's screen reads. One
+     *  document read per version returned. */
+    public HoldingPage holdings(String ecosystem, String coordinate, String after, int limit) throws IOException {
+        return enumeration.holdings(ecosystem, coordinate, after, limit);
+    }
+
+    /** The copies most recently cached from an upstream, newest first, one bounded page at a time - read from the
+     *  newest-first index a fill writes, never from a walk; the cached twin of {@link #recent}. A row whose version
+     *  is no longer held as a copy is skipped, so a caller asks for a few more than it shows. */
+    public HoldingPage cached(String after, int limit) throws IOException {
+        return enumeration.cached(after, limit);
     }
 
     /**

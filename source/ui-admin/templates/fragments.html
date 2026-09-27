@@ -223,24 +223,27 @@
      repository detail hub so both render one repository's writable/read-only/host+proxy posture and its per-fallback
      store/no-store + screen-strength (or inner-repo reference) badges identically, straight from the one Definition the
      router routes on. Nothing renders for an unconfigured/malformed shape (the default: writable, no fallbacks). */-->
-<!--/* releaseTable: a slice of a repository's releases, each linked to its coordinate's page - which every release has,
-     whichever way its format stores, so the blobs-namespace formats with no folder in the browse tree are reached the
-     same way as the ones with one. Shared by the repository overview and the browse of a repository whose format
-     keeps no folder tree. */-->
-<table th:fragment="releaseTable(repo, releases)" class="app-list">
+<!--/* holdingTable: a slice of what a repository holds - the releases published into it and the copies it cached from
+     an upstream - each linked to its coordinate's page, which every holding has whichever way its format stores, so the
+     blobs-namespace formats with no folder in the browse tree are reached the same way as the ones with one. Shared by
+     the repository overview and the browse of a repository whose format keeps no folder tree. */-->
+<table th:fragment="holdingTable(repo, holdings)" class="app-list">
     <thead>
     <tr>
         <th scope="col">Coordinate</th>
         <th scope="col">Version</th>
+        <th scope="col">Held as</th>
         <th scope="col">Pinned</th>
     </tr>
     </thead>
     <tbody>
-    <tr th:each="r : ${releases}">
-        <td><a th:href="@{/ui/repositories/{repo}/coordinate(repo=${repo},ecosystem=${r.ecosystem()},coordinate=${r.coordinate()})}"
-               th:text="${r.coordinate()}">group:artifact</a></td>
-        <td th:text="${r.version}">1.0.0</td>
-        <td th:text="${r.pinned} ? 'yes' : ''">yes</td>
+    <tr th:each="h : ${holdings}">
+        <td><a th:href="@{/ui/repositories/{repo}/coordinate(repo=${repo},ecosystem=${h.ecosystem()},coordinate=${h.coordinate()})}"
+               th:text="${h.coordinate()}">group:artifact</a></td>
+        <td th:text="${h.version}">1.0.0</td>
+        <td th:if="${h.cached}"><small>cached from <code th:text="${h.upstream} ?: 'an upstream'">https://repo1.maven.org/maven2/</code></small></td>
+        <td th:unless="${h.cached}"><small>published</small></td>
+        <td th:text="${h.pinned} ? 'yes' : ''">yes</td>
     </tr>
     </tbody>
 </table>

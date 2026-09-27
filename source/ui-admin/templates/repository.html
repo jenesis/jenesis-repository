@@ -26,17 +26,19 @@
     </th:block>
 
     <article>
-        <h2>Releases</h2>
-        <figure th:unless="${releases.isEmpty()}">
-            <table th:replace="~{fragments :: releaseTable(${repo}, ${releases})}"></table>
-            <!--/* A bounded recent slice of the published set (newest first), never the whole set - the detail hub is an
-                 overview. When more releases exist than this page shows, the count says so and links to the browse page,
-                 which pages the full list; nothing is silently dropped. */-->
-            <p th:if="${releasesMore}"><small>The <span th:text="${releases.size()}">0</span> most recent
-                releases. <a th:href="@{/ui/repositories/{repo}/browse(repo=${repo})}">Browse all &rarr;</a></small></p>
+        <h2>Holdings</h2>
+        <p><small>The versions this repository holds: the releases published into it, and the copies it cached from an
+            upstream. The scheduled scans check both; retention keeps to releases.</small></p>
+        <figure th:unless="${holdings.isEmpty()}">
+            <table th:replace="~{fragments :: holdingTable(${repo}, ${holdings})}"></table>
+            <!--/* A bounded recent slice of what the repository holds (newest first), never the whole set - the detail
+                 hub is an overview. When more exist than this page shows, the count says so and links to the browse
+                 page, which pages the full list; nothing is silently dropped. */-->
+            <p th:if="${holdingsMore}"><small>The <span th:text="${holdings.size()}">0</span> most recent.
+                <a th:href="@{/ui/repositories/{repo}/browse(repo=${repo})}">Browse all &rarr;</a></small></p>
         </figure>
-        <th:block th:if="${releases.isEmpty()}">
-            <div th:replace="~{base :: empty('No published releases yet.')}"></div>
+        <th:block th:if="${holdings.isEmpty()}">
+            <div th:replace="~{base :: empty('Nothing published or cached yet.')}"></div>
         </th:block>
     </article>
     <!--/* How the repository is routed for this tenant, and where that comes from: the tenant's own definition, the

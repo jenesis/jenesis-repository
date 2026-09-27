@@ -732,6 +732,15 @@ public final class Publication {
         notifyPublished(published);
     }
 
+    /** Notify every observer that a pull-through has cached {@code cached} from {@code upstream} and now serves it -
+     *  the seam the fill calls after {@link #published}, once per artifact it stored and serves, so an observer that
+     *  keeps a record of what this repository holds can tell a copy fetched from an upstream from a release published
+     *  into it. Nothing is read or written here; failures are logged and contained like every observer
+     *  notification, never failing the serve. */
+    public void cached(ArtifactDescriptor cached, URI upstream) {
+        notify(observers, "cache of " + cached.path(), observer -> observer.onCached(cached, upstream, store));
+    }
+
     /** Whether a pointer's content is the lower-case SHA-256 hex a {@link #link} writes - the only shape carried
      *  into a removal descriptor's blob identity, so a corrupt pointer never masquerades as a hash. */
     /** Counts the bytes a store reads through it. {@link #transferTo} is spelled out over this class's own reads

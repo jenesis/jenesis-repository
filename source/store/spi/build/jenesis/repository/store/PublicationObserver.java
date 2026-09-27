@@ -138,6 +138,20 @@ public interface PublicationObserver {
     }
 
     /**
+     * React to an artifact a pull-through fetched from {@code upstream}, stored and served - fired after
+     * {@link #onPublished} for the same descriptor, so an observer that treats every served artifact alike needs
+     * nothing here, and one that keeps a record of what the repository <em>holds</em> can tell a copy cached from an
+     * upstream from a release published into it. A fill the screen held or refused serves nothing and is not
+     * observed. {@code store} is where the bytes were kept - for a pass-through that keeps no copy, the throwaway
+     * scratch it served from, so whatever an observer records there goes with the bytes. The
+     * descriptor carries the coordinate only where the format's path layout names it, and the blob only where the
+     * fill was linked under the generic {@code publish/} pointer: a format that keeps its own key space is reported
+     * by path, and an observer that needs to know what is stored asks that format. Default no-op.
+     */
+    default void onCached(ArtifactDescriptor artifact, URI upstream, ArtifactStore store) throws IOException {
+    }
+
+    /**
      * After-commit notice that a withhold transitioned <em>on</em> for a served identity - the transition-ON leg of the
      * withhold-change feed a durable, name-bearing derived artifact (a published index, a future catalogue) subscribes
      * to so a <em>retroactive</em> hold retracts it, not only the emit-time screen. Fired at exactly the two durable

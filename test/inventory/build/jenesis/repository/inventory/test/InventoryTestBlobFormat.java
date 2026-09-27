@@ -65,6 +65,24 @@ public final class InventoryTestBlobFormat implements RepositoryFormat, BlobLayo
                 : List.of();
     }
 
+    /** The pointer that serves a request path, when it stands - what the inventory asks before it records a fill
+     *  this format reported by path alone. */
+    @Override
+    public Optional<String> servingKey(String requestPath, ArtifactStore store) throws IOException {
+        if (!requestPath.startsWith(PREFIX)) {
+            return Optional.empty();
+        }
+        String key = requestPath.substring(1);
+        return store.readVersioned(key).isPresent() ? Optional.of(key) : Optional.empty();
+    }
+
+    /** The version a stored pointer serves - the reverse of {@link #blobKey}, for the inventory back-fill. */
+    @Override
+    public Optional<ArtifactDescriptor> describePointer(String key) {
+        return key.startsWith("testblob/") ? describe("/" + key).filter(described -> described.version() != null)
+                : Optional.empty();
+    }
+
     @Override
     public Optional<ArtifactDescriptor> describe(String path) {
         if (!path.startsWith(PREFIX) || !path.endsWith(".bin")) {

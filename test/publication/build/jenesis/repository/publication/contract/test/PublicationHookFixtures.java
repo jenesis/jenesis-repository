@@ -34,7 +34,7 @@ final class PublicationHookFixtures {
                 // The core's own hooks beyond the formats' listing observers: the after-commit observers ...
                 new SubtreeSizeFixture(), new IndexRetractionFixture(), new IndexPublicationFixture(),
                 new PublicationEventFixture(), new ProvenanceReaperFixture(), new AttestationLookupObserverFixture(),
-                new SignatureCompletionObserverFixture(),
+                new SignatureCompletionObserverFixture(), new CachedHoldingFixture(),
                 // ... the pre-commit screens ...
                 new ComplianceScreenFixture(), new StagingWithholdFixture(), new OciHoldRecorderFixture(),
                 // ... and the hold-release hooks, which are not PublicationObservers at all.

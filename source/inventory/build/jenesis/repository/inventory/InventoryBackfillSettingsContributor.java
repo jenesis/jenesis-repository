@@ -17,13 +17,14 @@ public final class InventoryBackfillSettingsContributor implements SettingsContr
     @Override
     public List<Setting> settings() {
         return List.of(new Setting("inventory-backfill", "Maintenance", "Rebuild missing inventory rows",
-                "Let the shared rebuild pass restore the published/ inventory row of a blobs-namespace release "
-                        + "whose row is missing, reading the coordinate back out of the release's own stored "
-                        + "pointer. A row goes missing when a publish is interrupted after the artifact is "
-                        + "committed and before its row is written: the artifact keeps serving, but a retroactive "
-                        + "advisory or licence sweep no longer enumerates it, so it can carry a later-listed CVE "
-                        + "while the held count reads clean. It costs one membership probe per live pointer once "
-                        + "converged.",
+                "Let the shared rebuild pass restore the inventory row of a blobs-namespace version whose row "
+                        + "is missing, reading the coordinate back out of its own stored pointer - as a cached copy "
+                        + "where its origin shows it was fetched from an upstream, as a release otherwise. A row "
+                        + "goes missing when a publish is interrupted after the artifact is committed and before "
+                        + "its row is written, and a cached copy's when its fill's notice is lost: the "
+                        + "artifact keeps serving, but a retroactive advisory sweep no longer enumerates it, so it "
+                        + "can carry a later-listed CVE while the held count reads clean. It costs one membership "
+                        + "probe per live pointer once converged.",
                 Setting.Kind.BOOLEAN, "true", false).advanced());
     }
 }
