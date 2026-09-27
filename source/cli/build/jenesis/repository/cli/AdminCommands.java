@@ -50,51 +50,25 @@ final class AdminCommands {
     }
 
     static int settings(String[] args, Path home) throws Exception {
-        // One of `--tenant <name>`, `--repository <name>` or `--project <name>` (anywhere in the line) scopes the verb
-        // to that level's settings - the same per-level views the console shows; without one the verb reads and
-        // writes the deployment-wide settings.
+        // `--tenant <name>` (anywhere in the line) scopes the verb to that tenant's settings; without it the verb reads
+        // and writes the deployment-wide ones. A repository's and a project's own settings are their nouns' -
+        // `repos settings` and `projects settings` - as they are their screens' in the console.
         String tenant = null;
-        String repository = null;
-        String project = null;
         List<String> rest = new ArrayList<>();
         for (int i = 1; i < args.length; i++) {
             if (args[i].equals("--tenant") && i + 1 < args.length) {
                 tenant = args[++i];
-            } else if (args[i].equals("--repository") && i + 1 < args.length) {
-                repository = args[++i];
-            } else if (args[i].equals("--project") && i + 1 < args.length) {
-                project = args[++i];
             } else {
                 rest.add(args[i]);
             }
         }
-        if ((tenant != null ? 1 : 0) + (repository != null ? 1 : 0) + (project != null ? 1 : 0) > 1) {
-            throw new IllegalArgumentException("Name one of --tenant, --repository and --project.");
-        }
-        String scope = tenant != null ? "tenant " + tenant : repository != null ? "repository " + repository
-                : project != null ? "project " + project : "deployment";
+        String scope = tenant != null ? "tenant " + tenant : "deployment";
         RepositoryClient client = CliSupport.client(home);
         if (rest.isEmpty()) {
-            List<SettingsClient.Setting> listed = tenant != null ? client.settings().settings(tenant)
-                    : repository != null ? client.settings().repositorySettings(repository)
-                    : project != null ? client.settings().projectSettings(project)
-                    : client.settings().settings();
-            for (SettingsClient.Setting setting : listed) {
-                // A pinned key is fixed above the store (env var, -D, command line or a config file), so its stored
-                // value is inert and a `settings set` would be refused; name what pins it instead of "override".
-                String state = setting.pinned() ? "pinned by " + setting.pinnedBy()
-                        : setting.overridden() ? "override" : "default";
-                // A SECRET value is never read back (the server returns null), so show only whether it is set - never
-                // its plaintext, matching the console's masking.
-                String display = "SECRET".equals(setting.kind())
-                        ? (setting.overridden() || setting.pinned() ? "(set)" : "(unset)")
-                        : setting.value() == null || setting.value().isEmpty() ? "(empty)" : setting.value();
-                System.out.printf("%-26s %-30s %s%s%s%n", setting.key(), display, state,
-                        setting.appliesImmediately() ? "" : " (restart)", setting.advanced() ? " (advanced)" : "");
-            }
+            list(tenant != null ? client.settings().settings(tenant) : client.settings().settings());
             return 0;
         }
-        String usage = " [--tenant <name> | --repository <name> | --project <name>]";
+        String usage = " [--tenant <name>]";
         switch (rest.get(0)) {
             case "set" -> {
                 if (rest.size() < 3) {
@@ -102,10 +76,6 @@ final class AdminCommands {
                 }
                 if (tenant != null) {
                     client.settings().setSetting(tenant, rest.get(1), rest.get(2));
-                } else if (repository != null) {
-                    client.settings().setRepositorySetting(repository, rest.get(1), rest.get(2));
-                } else if (project != null) {
-                    client.settings().setProjectSetting(project, rest.get(1), rest.get(2));
                 } else {
                     client.settings().setSetting(rest.get(1), rest.get(2));
                 }
@@ -117,25 +87,78 @@ final class AdminCommands {
                 }
                 if (tenant != null) {
                     client.settings().clearSetting(tenant, rest.get(1));
-                } else if (repository != null) {
-                    client.settings().clearRepositorySetting(repository, rest.get(1));
-                } else if (project != null) {
-                    client.settings().clearProjectSetting(project, rest.get(1));
                 } else {
                     client.settings().clearSetting(rest.get(1));
                 }
                 System.out.println("Cleared " + rest.get(1) + " (" + scope + "); it inherits the wider value again.");
             }
-            case "export", "import" -> {
-                if (repository != null || project != null) {
-                    throw new IllegalArgumentException("A bundle is the deployment's or one tenant's settings; a "
-                            + "repository's and a project's settings live with them.");
-                }
-                exchange(client, rest, tenant, scope);
-            }
+            case "export", "import" -> exchange(client, rest, tenant, scope);
             default -> throw new IllegalArgumentException("Unknown settings command '" + rest.get(0) + "'");
         }
         return 0;
+    }
+
+    /** Print a list of settings rows, one a line: the key, the value in force, and where it comes from. */
+    static void list(List<SettingsClient.Setting> listed) {
+        for (SettingsClient.Setting setting : listed) {
+            // A pinned key is fixed above the store (env var, -D, command line or a config file), so its stored value
+            // is inert and a `set` would be refused; name what pins it instead of "override".
+            String state = setting.pinned() ? "pinned by " + setting.pinnedBy()
+                    : setting.overridden() ? "override" : "default";
+            // A SECRET value is never read back (the server returns null), so show only whether it is set - never its
+            // plaintext, matching the console's masking.
+            String display = "SECRET".equals(setting.kind())
+                    ? (setting.overridden() || setting.pinned() ? "(set)" : "(unset)")
+                    : setting.value() == null || setting.value().isEmpty() ? "(empty)" : setting.value();
+            System.out.printf("%-26s %-30s %s%s%s%n", setting.key(), display, state,
+                    setting.appliesImmediately() ? "" : " (restart)", setting.advanced() ? " (advanced)" : "");
+        }
+    }
+
+    /**
+     * An object's own settings - {@code <noun> settings <name>} lists them with what each inherits,
+     * {@code ... set <key> <value>} sets one and {@code ... clear <key>} clears one - for a repository or a project,
+     * whose settings level {@code level} reads and writes.
+     */
+    static int objectSettings(String noun, String[] args, ObjectSettings level) throws Exception {
+        String usage = "Usage: " + noun + " settings <name> [set <key> <value> | clear <key>]";
+        if (args.length < 3) {
+            throw new IllegalArgumentException(usage);
+        }
+        String name = args[2];
+        if (args.length == 3) {
+            list(level.list(name));
+            return 0;
+        }
+        switch (args[3]) {
+            case "set" -> {
+                if (args.length < 6) {
+                    throw new IllegalArgumentException(usage);
+                }
+                level.set(name, args[4], args[5]);
+                System.out.println("Set " + args[4] + " (" + noun + " " + name + ").");
+            }
+            case "clear" -> {
+                if (args.length < 5) {
+                    throw new IllegalArgumentException(usage);
+                }
+                level.clear(name, args[4]);
+                System.out.println("Cleared " + args[4] + " (" + noun + " " + name
+                        + "); it inherits the wider value again.");
+            }
+            default -> throw new IllegalArgumentException(usage);
+        }
+        return 0;
+    }
+
+    /** How one kind of object's settings are read and written: a repository's, or a project's. */
+    interface ObjectSettings {
+
+        List<SettingsClient.Setting> list(String name) throws IOException, InterruptedException;
+
+        void set(String name, String key, String value) throws IOException, InterruptedException;
+
+        void clear(String name, String key) throws IOException, InterruptedException;
     }
 
     private static void exchange(RepositoryClient client, List<String> rest, String tenant, String scope)
@@ -656,6 +679,26 @@ final class AdminCommands {
             return 0;
         }
         switch (args[1]) {
+            case "settings" -> {
+                scoped.unscoped("repos settings <name> [set <key> <value> | clear <key>]");
+                SettingsClient settings = client.settings();
+                return objectSettings("repos", args, new ObjectSettings() {
+                    @Override
+                    public List<SettingsClient.Setting> list(String name) throws IOException, InterruptedException {
+                        return settings.repositorySettings(name);
+                    }
+
+                    @Override
+                    public void set(String name, String key, String value) throws IOException, InterruptedException {
+                        settings.setRepositorySetting(name, key, value);
+                    }
+
+                    @Override
+                    public void clear(String name, String key) throws IOException, InterruptedException {
+                        settings.clearRepositorySetting(name, key);
+                    }
+                });
+            }
             case "create" -> {
                 String usage = "repos create <name> <format> [description] [--set <key>=<value>]...";
                 scoped.unscoped(usage);

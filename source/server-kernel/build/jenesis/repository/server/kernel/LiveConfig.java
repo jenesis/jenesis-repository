@@ -15,7 +15,6 @@ import build.jenesis.repository.compliance.Verdict;
 import build.jenesis.repository.compliance.Vex;
 import build.jenesis.repository.compliance.VulnerabilityPolicy;
 import build.jenesis.repository.settings.Setting;
-import build.jenesis.repository.settings.SettingsContributor;
 import build.jenesis.repository.settings.SettingsScopes;
 
 /**
@@ -33,7 +32,7 @@ import build.jenesis.repository.settings.SettingsScopes;
  * The advisory source and the worker/audit lifecycle are not here: they own a client or a thread and so are seeded
  * once at startup from the same settings and only change on a restart.
  */
-public final class LiveConfig {
+public final class LiveConfig implements SettingsEditor.Resolution {
 
     private final Settings settings;
     private final RepositoryProperties defaults;
@@ -121,12 +120,40 @@ public final class LiveConfig {
      * assigned, so the running configuration is untouched.
      */
     public void validateTenant(String tenant, String key, String value) {
+        Map<String, String> values = new HashMap<>();
+        values.put(key, value);
+        checkTenant(tenant, values);
+    }
+
+    /** The stored settings this configuration resolves, which a {@link SettingsEditor} over this node writes
+     *  through so a change applies here at once. */
+    public Settings settings() {
+        return settings;
+    }
+
+    /** {@link #validate}, the check a settings change makes before a deployment write. */
+    @Override
+    public void check(Map<String, String> deployment) {
+        validate(deployment);
+    }
+
+    /** {@link #validateTenant} for several values at once - a blank or {@code null} one standing for a clear, under
+     *  which the tenant falls back to the deployment's value. */
+    @Override
+    public void checkTenant(String tenant, Map<String, String> values) {
         resolve((candidateKey, fallback) -> {
-            if (candidateKey.equals(key)) {
-                return value != null ? value : fallback;
+            if (values.containsKey(candidateKey)) {
+                String value = values.get(candidateKey);
+                return value != null && !value.isBlank() ? value : settings.getOrDefault(candidateKey, fallback);
             }
             return settings.getOrDefault(tenant, candidateKey, fallback);
         });
+    }
+
+    /** {@link #rebuild}: a deployment change applies on this node at once. */
+    @Override
+    public void applied() {
+        rebuild();
     }
 
     /**
@@ -386,66 +413,9 @@ public final class LiveConfig {
         return pin.isPresent() ? pin.get() : settings.getOrDefault(tenant, key, fallback);
     }
 
-    /**
-     * Why each of {@code values} cannot be stored at {@code level}, keyed by setting, in key order - empty when every
-     * one may: the catalogue's own refusal ({@link SettingsContributor#refusal(String, String, Setting.Scope,
-     * UnaryOperator)}), a key an operator has pinned above the store (its stored value would be inert), and an
-     * {@link Setting#operatorOnly() operator-only} key when {@code operator} is false. Every write path asks this,
-     * for every value, before it writes any of them.
-     */
-    public SortedMap<String, String> refusals(Setting.Scope level, Map<String, String> values, boolean operator) {
-        SortedMap<String, String> refused = new TreeMap<>();
-        values.forEach((key, value) -> {
-            Optional<String> refusal = SettingsContributor.refusal(key, value, level, other -> effective(other, null));
-            if (refusal.isPresent()) {
-                refused.put(key, refusal.get());
-                return;
-            }
-            boolean local = SettingsScopes.declared(key).map(Setting::localOnly).orElse(false);
-            Optional<String> pin = local ? Optional.empty() : pinned.apply(key);
-            if (pin.isPresent()) {
-                refused.put(key, "Setting '" + key + "' is pinned above the store, so a stored value would be inert.");
-            } else if (!operator && SettingsScopes.operatorOnly(key)) {
-                refused.put(key, "Setting '" + key + "' is the deployment operator's to set.");
-            }
-        });
-        return refused;
-    }
-
-    /**
-     * Store {@code values} for one repository - each non-blank one set, each blank one cleared - once every one of
-     * them passes {@link #refusals}; otherwise nothing is written and the refusals are thrown together, so a caller
-     * learns every value that was refused rather than the first.
-     */
-    public void setRepository(String tenant, String repository, Map<String, String> values, boolean operator)
-            throws IOException {
-        SortedMap<String, String> refused = refusals(Setting.Scope.REPOSITORY, values, operator);
-        if (!refused.isEmpty()) {
-            throw new IllegalArgumentException(String.join(" ", refused.values()));
-        }
-        settings.setRepository(tenant, repository, values);
-    }
-
     /** The value {@code tenant} set for {@code key} itself, or empty when it inherits the deployment's. */
     public Optional<String> own(String tenant, String key) {
         return Optional.ofNullable(settings.overrides(tenant).get(key));
-    }
-
-    /**
-     * Store {@code values} for one tenant - each non-blank one set, each blank one cleared - once every one of them
-     * passes {@link #refusals} and the tenant's gate still resolves with them in place; otherwise nothing is written.
-     */
-    public void setTenant(String tenant, Map<String, String> values, boolean operator) throws IOException {
-        SortedMap<String, String> refused = refusals(Setting.Scope.TENANT, values, operator);
-        if (!refused.isEmpty()) {
-            throw new IllegalArgumentException(String.join(" ", refused.values()));
-        }
-        for (Map.Entry<String, String> value : values.entrySet()) {
-            validateTenant(tenant, value.getKey(), value.getValue());
-        }
-        for (Map.Entry<String, String> value : values.entrySet()) {
-            settings.set(tenant, value.getKey(), value.getValue());
-        }
     }
 
     /** {@link #effective(String, String, String)} for one repository: a pin still wins outright, then the repository's

@@ -2,8 +2,8 @@
  * The store-backed repository inventory: publish/download/pin recording keyed by the format-neutral ecosystem and
  * coordinate an {@code ArtifactLayout} supplies, release enumeration, the copies a pull-through caches from an
  * upstream recorded as holdings of their own (seen by the scans and the overview, never by retention or anything
- * else that keeps to releases), per-repository retention-policy storage, and
- * the {@code pointerRoots()} union (the {@code publish/} namespace plus every installed blobs-namespace format's
+ * else that keeps to releases), the read of a repository's former stored retention policy that the one-time move
+ * into its retention settings makes, and the {@code pointerRoots()} union (the {@code publish/} namespace plus every installed blobs-namespace format's
  * declared roots) the discovered garbage collector and rebuild pass judge references from - the reclamation itself
  * moved onto the {@code GarbageCollector} SPI. Core plumbing shared by the gate, staging, retention and
  * the console - deliberately a direct seam, not an SPI - in its own module so a feature module reaches it without

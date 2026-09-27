@@ -4,12 +4,8 @@ import module java.base;
 import module org.junit.jupiter.api;
 import build.jenesis.repository.audit.AuditActions;
 import build.jenesis.repository.cleanup.web.MaintenanceController;
-import build.jenesis.repository.compliance.AdvisorySource;
 import build.jenesis.repository.inventory.StoreRepositoryInventory;
-import build.jenesis.repository.server.RepositoryProperties;
-import build.jenesis.repository.server.kernel.LiveConfig;
 import build.jenesis.repository.server.kernel.Repositories;
-import build.jenesis.repository.server.kernel.Settings;
 import build.jenesis.repository.store.ArtifactStore;
 import build.jenesis.repository.servlet.testkit.Servlets;
 import build.jenesis.repository.web.testkit.Web;
@@ -18,6 +14,7 @@ import jakarta.servlet.http.HttpServletRequest;
 import org.springframework.web.server.ResponseStatusException;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.tuple;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 /**
@@ -59,10 +56,8 @@ class MaintenanceControllerTest {
         ArtifactStore store = Web.store(root);
         repositories = Web.repositories(store);
         audit = Web.audit();
-        LiveConfig live = new LiveConfig(new Settings(store), new RepositoryProperties(), AdvisorySource.none(),
-                _ -> null);
-        controller = new MaintenanceController(repositories, Web.routing(store, repositories), live,
-                ObservationRegistry.NOOP, audit, Web.scheduler(repositories, store));
+        controller = new MaintenanceController(repositories, Web.routing(store, repositories), repositories.live(),
+                Web.editor(repositories, audit), ObservationRegistry.NOOP, audit, Web.scheduler(repositories, store));
     }
 
     private StoreRepositoryInventory inventory() {
@@ -168,11 +163,12 @@ class MaintenanceControllerTest {
         MaintenanceController.RetentionView view = controller.retention(REPO, null, request(),
                 Servlets.response().servlet());
         assertThat(view).isEqualTo(new MaintenanceController.RetentionView(3, "PT720H", "", "PT2160H"));
-        assertThat(audit.rows()).singleElement().satisfies(row -> {
-            assertThat(row.action()).isEqualTo(AuditActions.REPOSITORY_RETENTION);
-            assertThat(row.target()).isEqualTo(REPO + " keep-last=3 max-age=P30D prerelease-expiry=(inherited) "
-                    + "not-downloaded-for=P90D");
-        });
+        assertThat(audit.rows()).as("each rule is the repository's setting, recorded as every surface records it")
+                .extracting(Web.Recorded::action, Web.Recorded::target).containsExactly(
+                        tuple(AuditActions.SETTING_SET, "default/" + REPO + "/keep-last"),
+                        tuple(AuditActions.SETTING_SET, "default/" + REPO + "/max-age"),
+                        tuple(AuditActions.SETTING_SET, "default/" + REPO + "/not-downloaded-for"),
+                        tuple(AuditActions.SETTING_CLEAR, "default/" + REPO + "/prerelease-expiry"));
     }
 
     @Test
@@ -233,7 +229,9 @@ class MaintenanceControllerTest {
                 .isInstanceOf(IOException.class).hasMessageContaining("no installed format can place");
 
         assertThat(inventory().publishedAt(UNPLACED, COORDINATE, "1.0.0")).as("nothing was evicted").isPresent();
-        assertThat(audit.actions()).containsExactly(AuditActions.REPOSITORY_RETENTION);
+        assertThat(audit.actions()).as("the retention change names all four rules, one set and three cleared")
+                .containsExactly(AuditActions.SETTING_SET, AuditActions.SETTING_CLEAR, AuditActions.SETTING_CLEAR,
+                        AuditActions.SETTING_CLEAR);
     }
 
     @Test

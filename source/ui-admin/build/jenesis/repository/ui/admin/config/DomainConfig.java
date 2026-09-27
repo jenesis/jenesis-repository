@@ -21,6 +21,7 @@ import build.jenesis.repository.ui.store.RepositoryAdmin;
 import build.jenesis.repository.ui.store.RepositoryBrowse;
 import build.jenesis.repository.ui.store.RepositoryImports;
 import build.jenesis.repository.ui.store.RepositoryLifecycle;
+import build.jenesis.repository.server.kernel.SettingsEditor;
 import build.jenesis.repository.ui.store.SettingsAdmin;
 import build.jenesis.repository.ui.store.TenantLimits;
 import build.jenesis.repository.ui.store.TenantPurge;
@@ -175,20 +176,16 @@ public class DomainConfig {
 
     @Bean
     public SettingsAdmin settingsAdmin(ArtifactStore repositoryStore, ConfigurableEnvironment environment,
-                                       TenantService tenantService, AuditTrail audit, CurrentTenant currentTenant,
-                                       ConsoleActor actor) {
-        // The console shares the store with the repository and reads the settings directly. The pin state, however,
-        // comes from the operator's launch configuration (env vars, -D, the command line, external config files),
-        // which the console's own environment carries too (identically in the recommended combined deployment). The
-        // console mirrors the server's precedence rule here rather than depending on the repository-server
-        // module that holds PinnedSettings - the decoupling under which it reads the settings catalogue via the SPI.
-        // The tenant directory feeds the modules screen's orphaned-data diagnostic (a per-tenant scan, read-only).
-        SettingsPins pins = new SettingsPins(environment);
+                                       SettingsEditor settingsEditor, TenantService tenantService, AuditTrail audit,
+                                       CurrentTenant currentTenant, ConsoleActor actor) {
+        // The console changes settings through the one settings editor every surface uses, in process: the
+        // repository's own where the console is composed into it, the console's own store wiring's otherwise. The
+        // tenant directory feeds the modules screen's orphaned-data diagnostic (a per-tenant scan, read-only).
         // The upstream-credential source reads its deploy-time bootstrap keys - notably secrets-key
         // (JENREG_SECRETS_KEY), the master key that envelope-encrypts a stored credential at rest - from the
         // console's own environment, exactly as the /api ConfigController path does, so a credential set through the
         // console is encrypted under the same key (and refused the same way when none is configured).
-        return new SettingsAdmin(repositoryStore, pins::pinned, tenantService::all, audit, currentTenant, actor,
+        return new SettingsAdmin(repositoryStore, settingsEditor, tenantService::all, audit, currentTenant, actor,
                 Features.namespaced(environment::getProperty));
     }
 

@@ -1,17 +1,16 @@
 package build.jenesis.repository.config.web;
 
 import module java.base;
-import build.jenesis.repository.definitions.RepositoryDefinition;
 import build.jenesis.repository.format.RepositoryType;
 import build.jenesis.repository.server.RepositoryRouting;
 import build.jenesis.repository.store.RepositoryDocument;
 import build.jenesis.repository.store.RepositoryRemoval;
 import build.jenesis.repository.audit.AuditActions;
 import build.jenesis.repository.audit.AuditTrail;
-import build.jenesis.repository.server.kernel.LiveConfig;
 import build.jenesis.repository.server.kernel.PinnedSettings;
 import build.jenesis.repository.server.kernel.Repositories;
 import build.jenesis.repository.server.kernel.Settings;
+import build.jenesis.repository.server.kernel.SettingsEditor;
 import build.jenesis.repository.server.spi.Authorization;
 import build.jenesis.repository.settings.Setting;
 import build.jenesis.repository.settings.SettingsContributor;
@@ -38,9 +37,10 @@ import org.springframework.web.bind.annotation.RestController;
  * The deployment-config management surface - the runtime-editable settings catalogue, the runtime repository
  * definitions, the per-format proxy upstreams and the per-host upstream credentials - peeled out of the
  * {@code RepositoryController} monolith into its own thin {@code web} adapter and contributed through the
- * {@code ServerModuleProvider} seam. A JSON CRUD over the store-backed {@link Settings} (with {@link LiveConfig}
- * rebuilt live where a setting allows it) and the discovered {@link UpstreamCredentialSource}; a mutation is audited
- * under the tenant the deployment's routing answers for the request ({@link RepositoryRouting#tenant}).
+ * {@code ServerModuleProvider} seam. It reads the store-backed {@link Settings} and changes them only through the
+ * one settings editor ({@link SettingsEditor}) the console calls too, and manages the discovered
+ * {@link UpstreamCredentialSource}; a mutation is audited under the tenant the deployment's routing answers for the
+ * request ({@link RepositoryRouting#tenant}).
  * These are deployment-wide knobs, so every route here is under {@code /api/} and is gated {@code manage:write} (the
  * mutations) or {@code manage:read} (the reads) at scope {@code *} by the security chain before the request is
  * reached - operator-tenant-only - so this controller makes no authorization decision, the same guard the monolith
@@ -52,9 +52,10 @@ import org.springframework.web.bind.annotation.RestController;
 public class ConfigController {
 
     private final Repositories repositories;
+    /** The one place a setting is changed, which every write here goes through; its settings are what the reads
+     *  here render. */
+    private final SettingsEditor editor;
     private final Settings settings;
-    private final LiveConfig live;
-    private final PinnedSettings pinnedSettings;
     private final UpstreamCredentialSource upstreamCredentials;
     private final AuditTrail audit;
     private final RepositoryRouting routing;
@@ -66,23 +67,16 @@ public class ConfigController {
     // a setting's live effective value and override state are resolved per request against this fixed template below.
     private final List<Setting> catalogue = SettingsContributor.all();
 
-    public ConfigController(Repositories repositories, Settings settings, LiveConfig live,
-                            PinnedSettings pinnedSettings, UpstreamCredentialSource upstreamCredentials,
+    public ConfigController(Repositories repositories, SettingsEditor editor,
+                            UpstreamCredentialSource upstreamCredentials,
                             AuditTrail audit, RepositoryRouting routing, Predicate<String> operator) {
         this.operator = operator;
+        this.editor = editor;
+        this.settings = editor.settings();
         this.repositories = repositories;
-        this.settings = settings;
-        this.live = live;
-        this.pinnedSettings = pinnedSettings;
         this.upstreamCredentials = upstreamCredentials;
         this.audit = audit;
         this.routing = routing;
-    }
-
-    /** The deployment's {@code proxy-allow-internal} dial, read through {@link LiveConfig} so this write surface and
-     *  the boot sweep answer from exactly the same effective value (stored setting over file/env default). */
-    private boolean allowInternal() {
-        return live.proxyAllowInternal();
     }
 
     private void audit(String tenant, String key, String action, String target) {
@@ -109,7 +103,7 @@ public class ConfigController {
                 continue;
             }
             String override = overrides.get(setting.key());
-            Optional<PinnedSettings.Pin> pin = pinnedSettings.pinned(setting.key());
+            Optional<PinnedSettings.Pin> pin = editor.pinned(setting.key());
             // A pinned key resolves to the operator's pin, not the store: report the pin's value as effective and
             // the store override (if any) as inert.
             String effective = pin.map(PinnedSettings.Pin::value)
@@ -168,7 +162,7 @@ public class ConfigController {
             String globalEffective = setting.kind() == Setting.Kind.SECRET
                     ? null
                     : settings.getOrDefault(setting.key(), setting.defaultValue());
-            Optional<PinnedSettings.Pin> pin = pinnedSettings.pinned(setting.key());
+            Optional<PinnedSettings.Pin> pin = editor.pinned(setting.key());
             String effective = pin.map(PinnedSettings.Pin::value)
                     .orElse(tenantValue != null ? tenantValue : globalEffective);
             view.add(view(setting, effective, globalEffective, tenantValue != null, pin));
@@ -192,119 +186,40 @@ public class ConfigController {
                 setting.tier() == null ? "" : setting.tier().name());
     }
 
-    /** Set a runtime override for one editable setting; unknown keys are rejected so only the catalogued settings
-     *  change. A live setting takes effect at once on this node ({@code live.rebuild()}); the rest apply on restart. A
-     *  value that a live setting cannot parse (a bad severity, duration or number) is rolled back and refused with
-     *  {@code 400}, so it neither persists nor wedges the running configuration. */
+    /** Set a runtime override for one editable setting, deployment-wide or - with a {@code tenant} - for that tenant,
+     *  through the one settings editor ({@link SettingsEditor}): {@code 400} naming the refusal when the catalogue
+     *  refuses the value or the deployment would not resolve with it, {@code 409} when an operator pinned the key
+     *  above the store. A live setting takes effect on this node at once; the rest apply on restart. */
     @PutMapping("/api/settings/{key}")
     public void setSetting(@PathVariable("key") String key,
                            @RequestHeader(value = Repositories.KEY, required = false) String authKey,
                            @RequestParam(value = "tenant", required = false) String tenant,
                            @RequestBody SettingRequest request, HttpServletRequest http,
                            HttpServletResponse response) throws IOException {
-        String routed = routing.tenant(http);
-        Setting setting = catalogue().stream().filter(candidate -> candidate.key().equals(key))
-                .findFirst().orElse(null);
-        if (setting == null) {
-            response.setStatus(400);
-            return;
-        }
-        Optional<PinnedSettings.Pin> pin = pinnedSettings.pinned(key);
-        if (pin.isPresent()) {
-            // The operator has fixed this key from above the store (env var, -D, command line or an external config
-            // file); a stored value would be inert, so refuse the write rather than persist a lie.
-            response.setStatus(409);
-            response.setContentType("text/plain;charset=UTF-8");
-            response.getWriter().write("setting '" + key + "' is pinned by " + pin.get().source()
-                    + " and cannot be changed; the stored value would be inert");
-            return;
-        }
-        String value = request == null ? null : request.value();
-        Optional<String> refusal = SettingsContributor.refusal(key, value,
-                tenant != null && !tenant.isBlank() ? Setting.Scope.TENANT : Setting.Scope.GLOBAL,
-                other -> live.effective(other, null));
-        if (refusal.isPresent()) {
-            text(response, 400, refusal.get());
-            return;
-        }
-        if (tenant != null && !tenant.isBlank()) {
-            // A per-tenant override: refused for a deployment-wide key by Settings.set(tenant, ...) - a tenant retunes
-            // only its own gate policy, deny list or forward target. No global rebuild - a tenant gate is resolved on
-            // demand from the freshly invalidated tenant snapshot. Dry-resolve the tenant gate with the candidate
-            // first, though: a kind-valid but plugin-rejected value (a malformed policy expression) would otherwise
-            // persist and then 500 every one of that tenant's publishes until cleared - the same keep-last-good guard
-            // the deployment-wide branch below gets from live.rebuild()'s rollback.
-            try {
-                live.validateTenant(tenant, key, value);
-            } catch (RuntimeException _) {
-                response.setStatus(400);
-                return;
+        String value = request == null || request.value() == null ? "" : request.value();
+        changeSetting(key, value, authKey, tenant, http, response);
+    }
+
+    private void changeSetting(String key, String value, String authKey, String tenant, HttpServletRequest http,
+                               HttpServletResponse response) throws IOException {
+        Map<String, String> values = one(key, value);
+        change(http, authKey, response, actor -> {
+            if (tenant != null && !tenant.isBlank()) {
+                editor.tenant(tenant, values, true, actor);
+            } else {
+                editor.deployment(values, actor);
             }
-            try {
-                settings.set(tenant, key, value);
-            } catch (IllegalStateException refused) {
-                refuseSecret(response, refused);
-                return;
-            }
-            audit(routed, authKey, "setting.set", tenant + "/" + key);
-            response.setStatus(200);
-            return;
-        }
-        String previous = settings.overrides().get(key);
-        try {
-            settings.set(key, value);
-        } catch (IllegalStateException refused) {
-            // A SECRET write with no master key configured is refused, naming the remedy; nothing was persisted.
-            refuseSecret(response, refused);
-            return;
-        }
-        try {
-            live.rebuild();
-        } catch (RuntimeException _) {
-            settings.set(key, previous);
-            live.rebuild();
-            response.setStatus(400);
-            return;
-        }
-        audit(routed, authKey, "setting.set", key);
-        response.setStatus(200);
+        });
     }
 
     /** Clear a runtime override, reverting the setting to its file/env default (or, with a {@code tenant}, to the
-     *  deployment-wide value the tenant was overriding). Runs the same guards its {@link #setSetting PUT twin} does:
-     *  an unknown key is refused with {@code 400}, so only catalogued settings clear - the {@code repositories.*} and
-     *  {@code format-upstream.*} map entries have their own {@code DELETE} routes and are audited as a repository /
-     *  upstream removal, not mislabelled as a plain {@code setting.clear} through this catch-all - and a pinned key is
-     *  refused with {@code 409}, since its stored value is inert and there is nothing to clear. */
+     *  deployment-wide value the tenant was overriding), refused as its {@link #setSetting PUT twin} is. */
     @DeleteMapping("/api/settings/{key}")
     public void clearSetting(@PathVariable("key") String key,
                              @RequestHeader(value = Repositories.KEY, required = false) String authKey,
                              @RequestParam(value = "tenant", required = false) String tenant,
                              HttpServletRequest request, HttpServletResponse response) throws IOException {
-        String routed = routing.tenant(request);
-        boolean catalogued = catalogue().stream().anyMatch(candidate -> candidate.key().equals(key));
-        if (!catalogued) {
-            response.setStatus(400);
-            return;
-        }
-        Optional<PinnedSettings.Pin> pin = pinnedSettings.pinned(key);
-        if (pin.isPresent()) {
-            response.setStatus(409);
-            response.setContentType("text/plain;charset=UTF-8");
-            response.getWriter().write("setting '" + key + "' is pinned by " + pin.get().source()
-                    + " and cannot be changed; the stored value would be inert");
-            return;
-        }
-        if (tenant != null && !tenant.isBlank()) {
-            settings.set(tenant, key, null);
-            audit(routed, authKey, "setting.clear", tenant + "/" + key);
-            response.setStatus(200);
-            return;
-        }
-        settings.set(key, null);
-        live.rebuild();
-        audit(routed, authKey, "setting.clear", key);
-        response.setStatus(200);
+        changeSetting(key, "", authKey, tenant, request, response);
     }
 
     /** Dump the stored settings as one JSON bundle, for backup or transfer to another deployment (the {@code }
@@ -326,159 +241,43 @@ public class ConfigController {
         response.getOutputStream().write(SettingsDocuments.serializeBundle(bundle));
     }
 
-    /** Restore a settings bundle produced by {@link #exportSettings}: parsed with the framework's JSON reader (never
-     *  the internal flat-document codec), validated first by a dry {@link LiveConfig} resolve - a malformed value is
-     *  refused with {@code 400} before anything is written, so a bad bundle never wedges the running configuration -
-     *  then written document-by-document through the store's compare-and-set. With no {@code tenant} it is a full
-     *  restore of the deployment-wide documents and every tenant slice (a document the bundle omits is cleared, and a
-     *  global-only key in a tenant slice is refused); with a {@code tenant} only that tenant's slice is restored,
-     *  leaving the global settings and other tenants untouched. A live setting takes effect at once on this node; the
-     *  rest apply on the nodes' next restart. */
+    /** Restore a settings bundle produced by {@link #exportSettings}, parsed with the framework's JSON reader: with
+     *  no {@code tenant} a full restore of the deployment's documents and every tenant slice, with a {@code tenant}
+     *  that tenant's slice alone ({@link SettingsEditor#importBundle}, {@link SettingsEditor#importTenant}). A bundle
+     *  that would not resolve, or carries a value its setting refuses, is {@code 400}; one that sets a pinned key is
+     *  {@code 409}, naming every such key. Nothing is written unless all of it is accepted. */
     @PostMapping("/api/settings/import")
     public void importSettings(@RequestHeader(value = Repositories.KEY, required = false) String authKey,
                                @RequestParam(value = "tenant", required = false) String tenant,
                                @RequestBody(required = false) Map<String, Map<String, String>> bundle,
                                HttpServletRequest request, HttpServletResponse response) throws IOException {
-        String routed = routing.tenant(request);
         if (bundle == null) {
             response.setStatus(400);
             return;
         }
-        try {
+        change(request, authKey, response, actor -> {
             if (tenant == null || tenant.isBlank()) {
-                validateBundle(bundle);
+                editor.importBundle(bundle, actor);
             } else {
-                validateTenantSlice(bundle);
-            }
-        } catch (RuntimeException _) {
-            response.setStatus(400);
-            response.setContentType("text/plain;charset=UTF-8");
-            response.getWriter().write("the settings bundle does not resolve to a valid configuration");
-            return;
-        }
-        // A pinned key is refused here on the same terms PUT and DELETE refuse it. Without this the bundle restore
-        // was the one write that could persist a value the operator has fixed from above the store - inert by
-        // construction, and the way a pinned-and-stored pair became reachable inside a single boot rather than only
-        // across a redeploy. Refusing names every offending key at once, because a restore is one operation and
-        // failing it one key at a time would have an operator edit and re-post the bundle repeatedly.
-        List<String> pinned = bundle.values().stream()
-                .flatMap(document -> document.keySet().stream())
-                .distinct()
-                .filter(key -> pinnedSettings.pinned(key).isPresent())
-                .sorted()
-                .toList();
-        if (!pinned.isEmpty()) {
-            response.setStatus(409);
-            response.setContentType("text/plain;charset=UTF-8");
-            response.getWriter().write("the bundle sets " + pinned.size() + " setting(s) this deployment pins from "
-                    + "above the store, whose stored values would be inert: " + String.join(", ", pinned)
-                    + ". Remove them from the bundle, or unpin them where they are pinned.");
-            return;
-        }
-        try {
-            if (tenant == null || tenant.isBlank()) {
-                settings.importBundle(bundle);
-            } else {
-                settings.importTenant(tenant, bundle);
-            }
-        } catch (IllegalArgumentException | IllegalStateException e) {
-            // IllegalStateException covers a restored SECRET the deployment cannot encrypt at rest (no master key);
-            // nothing was persisted, and the message names the remedy.
-            response.setStatus(400);
-            response.setContentType("text/plain;charset=UTF-8");
-            response.getWriter().write(e.getMessage());
-            return;
-        }
-        live.rebuild();
-        audit(routed, authKey, "settings.import", tenant == null || tenant.isBlank()
-                ? SettingsDocuments.ROOT
-                : tenant + "/" + SettingsDocuments.ROOT);
-        response.setStatus(200);
-    }
-
-    /** Dry-resolve a full-restore bundle scope by scope: the deployment-wide (global) documents on their own, then
-     *  each tenant slice overlaid on that global. A single flattened candidate (last-put-wins) would let a valid
-     *  tenant override of a key mask a <em>bad global</em> value of the same key - the flattened resolve validates
-     *  clean, yet the import persists the bad global and wedges every boot. Validating each scope distinctly catches
-     *  the bad global (and a bad tenant value) before {@link Settings#importBundle} writes anything. Throws on a value
-     *  that does not resolve; nothing is assigned. */
-    private void validateBundle(Map<String, Map<String, String>> bundle) {
-        Map<String, String> global = new LinkedHashMap<>();
-        Map<String, Map<String, String>> perTenant = new LinkedHashMap<>();
-        bundle.forEach((key, document) -> {
-            if (document == null) {
-                return;
-            }
-            if (SettingsDocuments.isTenantKey(key)) {
-                String[] parsed = SettingsDocuments.parseTenantKey(key);
-                if (parsed == null) {
-                    return;   // an unsafe tenant key is rejected with its own message by the persist below
-                }
-                Map<String, String> slice = perTenant.computeIfAbsent(parsed[0], _ -> new LinkedHashMap<>());
-                document.forEach((setting, value) -> {
-                    if (value != null) {
-                        slice.put(setting, value);
-                    }
-                });
-            } else {
-                document.forEach((setting, value) -> {
-                    if (value != null) {
-                        global.put(setting, value);
-                    }
-                });
+                editor.importTenant(tenant, bundle, actor);
             }
         });
-        live.validate(global);
-        perTenant.values().forEach(slice -> {
-            Map<String, String> combined = new LinkedHashMap<>(global);
-            combined.putAll(slice);   // the tenant's overridable keys win over the global baseline, as the gate resolves
-            live.validate(combined);
-        });
-    }
-
-    /** Dry-resolve a tenant-slice import (the {@code ?tenant=} path): the tenant's module documents overlaid on the
-     *  deployment-wide overrides the tenant layers over, so the tenant's would-be gate is resolved as it will serve.
-     *  Throws on a value that does not resolve; nothing is assigned. */
-    private void validateTenantSlice(Map<String, Map<String, String>> bundle) {
-        Map<String, String> combined = new LinkedHashMap<>(settings.overrides());
-        bundle.values().forEach(document -> {
-            if (document != null) {
-                document.forEach((setting, value) -> {
-                    if (value != null) {
-                        combined.put(setting, value);
-                    }
-                });
-            }
-        });
-        live.validate(combined);
     }
 
     /**
      * A repository's settings - every repository setting the catalogue carries, with the repository's effective value,
-     * what it would inherit from its tenant and the deployment ({@code defaultValue}), and whether it set its own. The
-     * tenant is the one the deployment's routing answers for the request. Its reads are the repository's settings
-     * documents - one object per module - and nothing that grows with what the repository holds.
-     *
-     * <p>It reads the tenant's and the deployment's settings documents, which the values it resolves inherit from: one
-     * object per module under a constant prefix, narrow by construction.
+     * what it would inherit from its tenant and the deployment ({@code defaultValue}), and whether it set its own - as
+     * the settings editor reads them for every surface ({@link SettingsEditor#rows}). The tenant is the one the
+     * deployment's routing answers for the request. Its reads are the repository's settings documents by name and the
+     * cached tenant and deployment snapshots, nothing that grows with what the repository holds.
      */
     @GetMapping("/api/repository/settings")
     @ResponseBody
-    public List<SettingView> repositorySettings(@RequestParam("repo") String repo, HttpServletRequest http) {
-        String tenant = repositoryTenant(repo, http);
-        Map<String, String> own = settings.overrides(tenant, repo);
+    public List<SettingView> repositorySettings(@RequestParam("repo") String repo, HttpServletRequest http)
+            throws IOException {
         List<SettingView> view = new ArrayList<>();
-        for (Setting setting : catalogue()) {
-            if (setting.scope() != Setting.Scope.REPOSITORY) {
-                continue;
-            }
-            String inherited = setting.localOnly() ? setting.defaultValue()
-                    : live.effective(tenant, setting.key(), setting.defaultValue());
-            String value = own.get(setting.key());
-            Optional<PinnedSettings.Pin> pin = setting.localOnly() ? Optional.empty()
-                    : pinnedSettings.pinned(setting.key());
-            String effective = pin.map(PinnedSettings.Pin::value).orElse(value != null ? value : inherited);
-            view.add(view(setting, effective, inherited, value != null, pin));
+        for (SettingsEditor.Row row : editor.rows(Setting.Scope.REPOSITORY, repositoryTenant(repo, http), repo)) {
+            view.add(view(row.setting(), row.effective(), row.inherited(), row.overridden(), row.pin()));
         }
         return view;
     }
@@ -506,14 +305,8 @@ public class ConfigController {
     private void writeRepositorySetting(String repo, String name, String value, String key, HttpServletRequest http,
                                         HttpServletResponse response) throws IOException {
         String tenant = repositoryTenant(repo, http);
-        try {
-            live.setRepository(tenant, repo, Map.of(name, value), operator.test(key));
-        } catch (IllegalArgumentException refused) {
-            text(response, 400, refused.getMessage());
-            return;
-        }
-        audit(tenant, key, value.isBlank() ? "setting.clear" : "setting.set", tenant + "/" + repo + "/" + name);
-        response.setStatus(200);
+        change(http, key, response, actor -> editor.repository(tenant, repo, one(name, value), operator.test(key),
+                actor));
     }
 
     /** The tenant a repository operation answers for, once its repository name is a routable one. */
@@ -543,56 +336,24 @@ public class ConfigController {
     private static final String TENANT_ROUTING = "A tenant has no repository definitions: each repository is routed by "
             + "its own routing setting, PUT /api/repository/settings/routing?repo=<name>.";
 
+    /** Define a repository name deployment-wide ({@link SettingsEditor#definition}): parsed as the boot sweep parses
+     *  it and its upstreams screened, so a definition that would not route, or would fetch from where this deployment
+     *  must not, is a {@code 400} naming why and the fix. */
     @PutMapping("/api/repositories/{name}")
     public void setRepositoryDefinition(@PathVariable("name") String name,
                                         @RequestHeader(value = Repositories.KEY, required = false) String key,
                                         @RequestParam(value = "tenant", required = false) String tenant,
                                         @RequestBody NamedValueRequest request,
                                         HttpServletRequest http, HttpServletResponse response) throws IOException {
-        String routed = routing.tenant(http);
         if (tenant != null) {
             text(response, 400, TENANT_ROUTING);
             return;
         }
-        if (!Repositories.valid(name) || request == null || request.value() == null) {
+        if (!Repositories.valid(name) || request == null || request.value() == null || request.value().isBlank()) {
             response.setStatus(400);
             return;
         }
-        // Write-time validation: run the SAME parser the boot sweep (
-        // LiveConfig.sweepDefinitions) uses BEFORE the definition is stored, so a broken definition never reaches the
-        // store. The refusal is LOUD and NAMED - the repository, what is wrong, and the fix - not a bare 400: the
-        // parse remedy is surfaced verbatim so the operator can correct it. The parser accepts the clause grammar
-        // (writable / fallback <source> [nocache|harden|unscreened]) and nothing else. A valid-but-risky definition
-        // (unscreened/plaintext/mixed-strength) parses - its warning is logged and surfaced by the console banner, not
-        // refused here.
-        RepositoryDefinition definition;
-        try {
-            definition = RepositoryDefinition.parse(request.value());
-        } catch (RuntimeException invalid) {
-            response.setStatus(400);
-            response.setContentType("text/plain;charset=UTF-8");
-            response.getWriter().write("Repository '" + name + "' has an invalid definition '" + request.value()
-                    + "': " + invalid.getMessage() + " Fix the definition (writable / fallback <source> "
-                    + "[nocache|harden|unscreened]), or remove it - a "
-                    + "repository definition that cannot be parsed is refused rather than stored.");
-            return;
-        }
-        // a plaintext upstream is REFUSED here, not stored with a warning. It is an operator-configured
-        // outbound target carrying this deployment's per-host upstream credential, and every peer target (webhook,
-        // forward, emulator, redirect rule, import) refuses one; the proxy upstream was the odd one out. The dial is
-        // the same proxy-allow-internal the legs read for upstream-advertised URLs, so a deployment with a
-        // plaintext internal mirror opts out once for both.
-        String refused = RepositoryDefinition.upstreamRefusal(definition, allowInternal());
-        if (refused != null) {
-            response.setStatus(400);
-            response.setContentType("text/plain;charset=UTF-8");
-            response.getWriter().write("Repository '" + name + "' has a refused definition '" + request.value()
-                    + "': " + refused + "." + RepositoryDefinition.upstreamRemedy());
-            return;
-        }
-        store(null, SettingsScopes.repositoryKey(name), request.value());
-        audit(routed, key, AuditActions.REPOSITORY_SET, name);
-        response.setStatus(200);
+        change(http, key, response, actor -> editor.definition(name, request.value(), actor));
     }
 
     /**
@@ -664,7 +425,7 @@ public class ConfigController {
         }
         boolean operatorKey = operator.test(key);
         if (!configured.isEmpty()) {
-            SortedMap<String, String> refused = live.refusals(Setting.Scope.REPOSITORY, configured, operatorKey);
+            SortedMap<String, String> refused = editor.refusals(Setting.Scope.REPOSITORY, configured, operatorKey);
             if (!refused.isEmpty()) {
                 text(response, 400, "Repository '" + route.repository() + "' was not created: "
                         + String.join(" ", refused.values()));
@@ -674,7 +435,8 @@ public class ConfigController {
         String tenant = route.tenant();
         String repository = route.repository();
         RepositoryType.Creation creation = RepositoryType.create(route.store(), format, description,
-                configured.isEmpty() ? null : () -> live.setRepository(tenant, repository, configured, operatorKey));
+                configured.isEmpty() ? null
+                        : () -> editor.repository(tenant, repository, configured, operatorKey, actor(servlet, key)));
         if ((creation == RepositoryType.Creation.UNCHANGED || creation == RepositoryType.Creation.RETYPED)
                 && description != null) {
             describe(route, key, description);
@@ -682,11 +444,6 @@ public class ConfigController {
         switch (creation) {
             case CREATED -> {
                 audit(tenant, key, AuditActions.REPOSITORY_CREATE, repository);
-                configured.forEach((setting, value) -> {
-                    if (value != null && !value.isBlank()) {
-                        audit(tenant, key, "setting.set", tenant + "/" + repository + "/" + setting);
-                    }
-                });
                 response.setStatus(201);
             }
             case RETYPED -> {
@@ -762,14 +519,11 @@ public class ConfigController {
                                            @RequestParam(value = "tenant", required = false) String tenant,
                                            HttpServletRequest request,
                                            HttpServletResponse response) throws IOException {
-        String routed = routing.tenant(request);
         if (tenant != null) {
             text(response, 400, TENANT_ROUTING);
             return;
         }
-        store(null, SettingsScopes.repositoryKey(name), null);
-        audit(routed, key, AuditActions.REPOSITORY_REMOVE, name);
-        response.setStatus(200);
+        change(request, key, response, actor -> editor.definition(name, null, actor));
     }
 
     /** The per-format proxy upstreams set at runtime ({@code format-upstream.<format>}): each language format with the
@@ -782,38 +536,19 @@ public class ConfigController {
         return stored(tenant, SettingsScopes.UPSTREAM_PREFIX);
     }
 
+    /** Name a format's upstream - the deployment's, or with {@code ?tenant=} that tenant's own
+     *  ({@link SettingsEditor#upstream}) - screened as every outbound target is. */
     @PutMapping("/api/upstreams/{format}")
     public void setUpstream(@PathVariable("format") String format,
                             @RequestHeader(value = Repositories.KEY, required = false) String key,
                             @RequestParam(value = "tenant", required = false) String tenant,
                             @RequestBody NamedValueRequest request,
                             HttpServletRequest http, HttpServletResponse response) throws IOException {
-        String routed = routing.tenant(http);
         if (request == null || request.value() == null || request.value().isBlank() || !tenantName(tenant)) {
             response.setStatus(400);
             return;
         }
-        URI upstream;
-        try {
-            upstream = URI.create(request.value());
-        } catch (RuntimeException _) {
-            response.setStatus(400);
-            return;
-        }
-        // The same screen, on the other spelling of the same operator-configured target: format-upstream.<format>
-        // is the live override of the jenreg.proxy.<format> boot default, and one repository
-        // pulling in cleartext is the same hazard whichever key names it.
-        String refused = RepositoryDefinition.upstreamRefusal(upstream, allowInternal());
-        if (refused != null) {
-            response.setStatus(400);
-            response.setContentType("text/plain;charset=UTF-8");
-            response.getWriter().write("The '" + format + "' upstream '" + request.value() + "' is refused: "
-                    + refused + "." + RepositoryDefinition.upstreamRemedy());
-            return;
-        }
-        store(tenant, SettingsScopes.upstreamKey(format), request.value());
-        audit(routed, key, AuditActions.UPSTREAM_SET, scoped(tenant, format));
-        response.setStatus(200);
+        change(http, key, response, actor -> editor.upstream(tenant, format, request.value(), actor));
     }
 
     @DeleteMapping("/api/upstreams/{format}")
@@ -821,34 +556,16 @@ public class ConfigController {
                                @RequestHeader(value = Repositories.KEY, required = false) String key,
                                @RequestParam(value = "tenant", required = false) String tenant,
                                HttpServletRequest request, HttpServletResponse response) throws IOException {
-        String routed = routing.tenant(request);
         if (!tenantName(tenant)) {
             response.setStatus(400);
             return;
         }
-        store(tenant, SettingsScopes.upstreamKey(format), null);
-        audit(routed, key, AuditActions.UPSTREAM_REMOVE, scoped(tenant, format));
-        response.setStatus(200);
-    }
-
-    /** Store a routing entry in the deployment's settings, or - with a tenant - in that tenant's own, where it routes
-     *  that tenant's repositories over the deployment's. A {@code null} value clears it. */
-    private void store(String tenant, String key, String value) throws IOException {
-        if (tenant == null || tenant.isBlank()) {
-            settings.set(key, value);
-        } else {
-            settings.set(tenant, key, value);
-        }
+        change(request, key, response, actor -> editor.upstream(tenant, format, null, actor));
     }
 
     /** Whether a routing write's {@code tenant} is absent (the deployment's) or a name a tenant can have. */
     private static boolean tenantName(String tenant) {
         return tenant == null || tenant.isBlank() || SettingsDocuments.validTenant(tenant);
-    }
-
-    /** An audit target naming the tenant a routing entry was set for, the way the tenant settings writes do. */
-    private static String scoped(String tenant, String name) {
-        return tenant == null || tenant.isBlank() ? name : tenant + "/" + name;
     }
 
     /** The stored settings whose key carries a prefix (a map entry), as name (prefix stripped) to value: the
@@ -941,11 +658,42 @@ public class ConfigController {
     }
 
     /** Refuse a SECRET write the deployment cannot encrypt at rest (no master key configured): {@code 400} with the
-     *  remedy from {@link Settings}, which names {@code JENREG_SECRETS_KEY}. Nothing was persisted. */
+     *  remedy, which names {@code JENREG_SECRETS_KEY}. Nothing was persisted. */
     private static void refuseSecret(HttpServletResponse response, IllegalStateException refused) throws IOException {
-        response.setStatus(400);
-        response.setContentType("text/plain;charset=UTF-8");
-        response.getWriter().write(refused.getMessage());
+        text(response, 400, refused.getMessage());
+    }
+
+    /** A change, made as {@code actor}. */
+    @FunctionalInterface
+    private interface Change {
+        void apply(SettingsEditor.Actor actor) throws IOException;
+    }
+
+    /** Make a change through the settings editor, answering {@code 200}; a refused one answers {@code 409} when what
+     *  it sets is pinned above the store and {@code 400} otherwise - a value the catalogue refuses, a deployment that
+     *  would not resolve, a secret this deployment cannot seal - with the editor's own sentence. Nothing was written
+     *  then. */
+    private void change(HttpServletRequest http, String key, HttpServletResponse response, Change change)
+            throws IOException {
+        try {
+            change.apply(actor(http, key));
+        } catch (IllegalArgumentException | IllegalStateException refused) {
+            text(response, refused instanceof SettingsEditor.Pinned ? 409 : 400, refused.getMessage());
+            return;
+        }
+        response.setStatus(200);
+    }
+
+    /** Who a request acts as on the audit trail: the tenant the routing answers for it, and its key's hash. */
+    private SettingsEditor.Actor actor(HttpServletRequest http, String key) {
+        return new SettingsEditor.Actor(routing.tenant(http), key == null ? "anonymous" : Authorization.hash(key));
+    }
+
+    /** One value, blank for a clear. */
+    private static Map<String, String> one(String key, String value) {
+        Map<String, String> values = new LinkedHashMap<>();
+        values.put(key, value == null ? "" : value);
+        return values;
     }
 
     @ExceptionHandler(IllegalArgumentException.class)

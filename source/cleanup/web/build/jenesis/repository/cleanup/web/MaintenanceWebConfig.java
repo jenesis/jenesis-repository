@@ -5,6 +5,7 @@ import build.jenesis.repository.server.kernel.MaintenanceScheduler;
 import build.jenesis.repository.server.RepositoryRouting;
 import build.jenesis.repository.server.kernel.Repositories;
 import build.jenesis.repository.server.kernel.LiveConfig;
+import build.jenesis.repository.server.kernel.SettingsEditor;
 import io.micrometer.observation.ObservationRegistry;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
@@ -22,8 +23,9 @@ public class MaintenanceWebConfig {
 
     @Bean
     public MaintenanceController maintenanceController(Repositories repositories, RepositoryRouting routing,
-                                                       LiveConfig live, ObservationRegistry observations,
-                                                       AuditTrail audit, MaintenanceScheduler maintenance) {
-        return new MaintenanceController(repositories, routing, live, observations, audit, maintenance);
+                                                       LiveConfig live, SettingsEditor editor,
+                                                       ObservationRegistry observations, AuditTrail audit,
+                                                       MaintenanceScheduler maintenance) {
+        return new MaintenanceController(repositories, routing, live, editor, observations, audit, maintenance);
     }
 }

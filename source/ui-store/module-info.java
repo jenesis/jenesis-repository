@@ -38,7 +38,7 @@ open module build.jenesis.repository.ui.store {
             build.jenesis.repository.forwarding.web;
     requires transitive build.jenesis.repository.cache.storage;
     requires transitive build.jenesis.repository.server;
-    requires build.jenesis.repository.server.kernel;
+    requires transitive build.jenesis.repository.server.kernel;
     requires transitive build.jenesis.repository.audit;
     requires transitive build.jenesis.repository.store;
     requires transitive build.jenesis.repository.cleanup;

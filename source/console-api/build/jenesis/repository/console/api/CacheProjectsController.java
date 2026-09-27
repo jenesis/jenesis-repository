@@ -7,6 +7,7 @@ import build.jenesis.repository.cache.storage.CacheStorage;
 import build.jenesis.repository.server.RepositoryRouting;
 import build.jenesis.repository.server.kernel.Repositories;
 import build.jenesis.repository.server.kernel.RepositoryRequests;
+import build.jenesis.repository.server.kernel.SettingsEditor;
 import build.jenesis.repository.server.spi.Authorization;
 import build.jenesis.repository.store.ArtifactStore;
 import build.jenesis.repository.ui.store.CacheService;
@@ -61,6 +62,8 @@ public class CacheProjectsController {
     private final RepositoryRouting routing;
     private final CacheService.Passes passes;
     private final ArtifactStore root;
+    /** The one place a setting is changed, which a project's settings are changed through. */
+    private final SettingsEditor editor;
 
     /**
      * The cache's own segment of the store is wired by the console node, so a repository-only composition does not
@@ -75,8 +78,8 @@ public class CacheProjectsController {
      */
     public CacheProjectsController(@Qualifier("cacheRootStorage") ObjectProvider<CacheStorage> storage,
                                    AuditTrail audit,
-                                   RepositoryRouting routing, ArtifactStore root) {
-        this(storage, audit, routing, root, CacheService.Passes.BACKGROUND);
+                                   RepositoryRouting routing, ArtifactStore root, SettingsEditor editor) {
+        this(storage, audit, routing, root, editor, CacheService.Passes.BACKGROUND);
     }
 
     /**
@@ -87,8 +90,9 @@ public class CacheProjectsController {
      */
     public CacheProjectsController(ObjectProvider<CacheStorage> storage,
                                    AuditTrail audit,
-                                   RepositoryRouting routing, ArtifactStore root,
+                                   RepositoryRouting routing, ArtifactStore root, SettingsEditor editor,
                                    CacheService.Passes passes) {
+        this.editor = editor;
         this.storage = storage;
         this.audit = audit;
         this.routing = routing;
@@ -347,10 +351,10 @@ public class CacheProjectsController {
             return null;
         }
         String actor = key == null ? "anonymous" : Authorization.hash(key);
-        // A project's policy is its project settings; the settings are read and written over the same root store the
-        // cache delegates into, validated through the catalogue, and audited as this request's writes.
-        SettingsAdmin settings = new SettingsAdmin(root, _ -> Optional.empty(), List::of, audit, () -> tenant,
-                () -> actor);
+        // A project's policy is its project settings, read and changed through the one settings editor every surface
+        // uses, and audited as this request's writes.
+        SettingsAdmin settings = new SettingsAdmin(root, editor, List::of, audit, () -> tenant, () -> actor,
+                _ -> null);
         return new CacheService(cache.scope(tenant), audit, () -> tenant, () -> actor, settings, passes);
     }
 }

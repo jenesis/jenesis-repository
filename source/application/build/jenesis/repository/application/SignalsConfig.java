@@ -4,12 +4,14 @@ import build.jenesis.repository.compliance.ComplianceSettings;
 import module java.base;
 
 import build.jenesis.repository.store.Features;
+import build.jenesis.repository.audit.AuditTrail;
 import build.jenesis.repository.server.kernel.LiveConfig;
 import build.jenesis.repository.server.kernel.PinnedSettings;
 import build.jenesis.repository.server.kernel.PublishTenant;
 import build.jenesis.repository.server.kernel.Repositories;
 import build.jenesis.repository.server.RepositoryProperties;
 import build.jenesis.repository.server.kernel.Settings;
+import build.jenesis.repository.server.kernel.SettingsEditor;
 import build.jenesis.repository.compliance.AdvisorySignal;
 import build.jenesis.repository.compliance.AdvisorySource;
 import build.jenesis.repository.compliance.NamedAdvisoryFeeds;
@@ -118,6 +120,15 @@ public class SignalsConfig {
         // before the sweep, so a `fallback <url> redirect` definition is not refused at boot by a flag the router
         // construction (which runs later) would have set.
         return liveConfig;
+    }
+
+    /** The one place a setting is changed, on every surface: the API's handlers call it, and the console - composed
+     *  into this node - calls it in process. It writes through this node's {@link Settings}, so a change applies here
+     *  at once, and resolves a candidate against this node's {@link LiveConfig} before writing it. */
+    @Bean
+    public SettingsEditor settingsEditor(Settings settings, PinnedSettings pinnedSettings, LiveConfig liveConfig,
+                                         AuditTrail auditTrail) {
+        return new SettingsEditor(settings, pinnedSettings::pinned, liveConfig, auditTrail);
     }
 
     /**

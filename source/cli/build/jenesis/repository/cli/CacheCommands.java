@@ -35,8 +35,29 @@ final class CacheCommands {
             case "evict" -> evict(args, home);
             case "recount" -> print(CliSupport.client(home).buildCache().recountCache(name(args, "recount <project>")));
             case "delete" -> delete(args, home);
+            case "settings" -> settings(args, home);
             default -> throw new IllegalArgumentException("Unknown projects action '" + args[1] + "'");
         };
+    }
+
+    private static int settings(String[] args, Path home) throws Exception {
+        SettingsClient settings = CliSupport.client(home).settings();
+        return AdminCommands.objectSettings("projects", args, new AdminCommands.ObjectSettings() {
+            @Override
+            public List<SettingsClient.Setting> list(String name) throws IOException, InterruptedException {
+                return settings.projectSettings(name);
+            }
+
+            @Override
+            public void set(String name, String key, String value) throws IOException, InterruptedException {
+                settings.setProjectSetting(name, key, value);
+            }
+
+            @Override
+            public void clear(String name, String key) throws IOException, InterruptedException {
+                settings.clearProjectSetting(name, key);
+            }
+        });
     }
 
     private static int config(String[] args, Path home) throws Exception {

@@ -5,6 +5,8 @@ import module org.junit.jupiter.api;
 import build.jenesis.repository.server.RepositoryProperties;
 import build.jenesis.repository.server.kernel.LiveConfig;
 import build.jenesis.repository.server.kernel.Settings;
+import build.jenesis.repository.server.kernel.SettingsEditor;
+import build.jenesis.repository.audit.AuditTrail;
 import build.jenesis.repository.compliance.AdvisorySource;
 import build.jenesis.repository.settings.Setting;
 import build.jenesis.repository.settings.SettingsContributor;
@@ -30,6 +32,10 @@ class SettingLevelsTest {
     private ArtifactStore store;
     private Settings settings;
     private LiveConfig live;
+    private SettingsEditor editor;
+
+    /** Who these writes are recorded against. */
+    private static final SettingsEditor.Actor ACTOR = new SettingsEditor.Actor("acme", "test");
 
     @BeforeEach
     void setUp() throws IOException {
@@ -37,6 +43,7 @@ class SettingLevelsTest {
                 key -> "jenreg.filesystem.root".equals(key) ? root.toString() : null);
         settings = new Settings(store);
         live = new LiveConfig(settings, new RepositoryProperties(), AdvisorySource.none(), _ -> null);
+        editor = new SettingsEditor(settings, _ -> Optional.empty(), live, AuditTrail.none());
     }
 
     private static Setting of(Setting.Scope scope) {
@@ -101,20 +108,20 @@ class SettingLevelsTest {
         assertThat(live.effective("acme", "libs", "keep-last", "0")).isEqualTo("1");
         settings.set("acme", "keep-last", "3");
         assertThat(live.effective("acme", "libs", "keep-last", "0")).isEqualTo("3");
-        live.setRepository("acme", "libs", Map.of("keep-last", "5"), false);
+        editor.repository("acme", "libs", Map.of("keep-last", "5"), false, ACTOR);
         assertThat(live.effective("acme", "libs", "keep-last", "0")).isEqualTo("5");
         assertThat(live.effective("acme", "other", "keep-last", "0")).as("another repository inherits")
                 .isEqualTo("3");
         assertThat(live.retention("acme", "libs").keepLast()).as("the policy a sweep runs under").isEqualTo(5);
 
-        live.setRepository("acme", "libs", Map.of("keep-last", ""), false);
+        editor.repository("acme", "libs", Map.of("keep-last", ""), false, ACTOR);
         assertThat(live.effective("acme", "libs", "keep-last", "0")).as("cleared, it inherits again")
                 .isEqualTo("3");
     }
 
     @Test
     void a_repositorys_values_live_in_its_own_documents() throws IOException {
-        live.setRepository("acme", "libs", Map.of("max-age", "P30D"), false);
+        editor.repository("acme", "libs", Map.of("max-age", "P30D"), false, ACTOR);
 
         assertThat(StoredSettings.read(store.scope("acme").scope("libs"))).containsEntry("max-age", "P30D");
         assertThat(StoredSettings.read(store.scope("acme"))).as("not the tenant's").doesNotContainKey("max-age");
@@ -124,8 +131,8 @@ class SettingLevelsTest {
 
     @Test
     void a_repository_write_is_refused_whole_when_any_of_its_values_is_refused() throws IOException {
-        assertThatThrownBy(() -> live.setRepository("acme", "libs",
-                Map.of("keep-last", "5", "max-age", "PT0S", "default-tenant", "acme"), false))
+        assertThatThrownBy(() -> editor.repository("acme", "libs",
+                Map.of("keep-last", "5", "max-age", "PT0S", "default-tenant", "acme"), false, ACTOR))
                 .isInstanceOf(IllegalArgumentException.class)
                 .hasMessageContaining("max-age").hasMessageContaining("default-tenant");
 

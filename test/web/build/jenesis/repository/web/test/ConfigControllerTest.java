@@ -9,6 +9,7 @@ import build.jenesis.repository.server.RepositoryProperties;
 import build.jenesis.repository.server.kernel.LiveConfig;
 import build.jenesis.repository.server.kernel.Repositories;
 import build.jenesis.repository.server.kernel.Settings;
+import build.jenesis.repository.server.kernel.SettingsEditor;
 import build.jenesis.repository.settings.SecretCipher;
 import build.jenesis.repository.settings.SettingsDocuments;
 import build.jenesis.repository.store.ArtifactStore;
@@ -63,9 +64,10 @@ class ConfigControllerTest {
     private ConfigController controller(UpstreamCredentialSource credentials, boolean operator) throws IOException {
         settings = new Settings(store);
         LiveConfig live = new LiveConfig(settings, new RepositoryProperties(), AdvisorySource.none(), _ -> null);
-        return new ConfigController(repositories, settings, live,
-                Web.pins(Web.environment(Map.of("jenreg." + PINNED, "REJECT"))), credentials, audit,
-                Web.routing(store, repositories), _ -> operator);
+        SettingsEditor editor = new SettingsEditor(settings,
+                Web.pins(Web.environment(Map.of("jenreg." + PINNED, "REJECT")))::pinned, live, audit);
+        return new ConfigController(repositories, editor, credentials, audit, Web.routing(store, repositories),
+                _ -> operator);
     }
 
     /** An {@code /api} call, which names no tenant: the routing answers the one this deployment serves. */
@@ -440,7 +442,8 @@ class ConfigControllerTest {
         });
         assertThat(StoredSettings.read(repository, Setting.Scope.REPOSITORY))
                 .containsEntry("keep-last", "3").containsEntry("routing", "writable");
-        assertThat(audit.actions()).containsExactly(AuditActions.REPOSITORY_CREATE, "setting.set", "setting.set");
+        assertThat(audit.actions()).as("the settings are written, and recorded, before what makes the repository exist")
+                .containsExactly(AuditActions.SETTING_SET, AuditActions.SETTING_SET, AuditActions.REPOSITORY_CREATE);
     }
 
     @Test

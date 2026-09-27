@@ -7,6 +7,7 @@ import build.jenesis.repository.server.RepositoryRouting;
 import build.jenesis.repository.server.kernel.LiveConfig;
 import build.jenesis.repository.server.kernel.QuotaSettingsContributor;
 import build.jenesis.repository.server.kernel.Repositories;
+import build.jenesis.repository.server.kernel.SettingsEditor;
 import build.jenesis.repository.server.spi.Authorization;
 import build.jenesis.repository.server.spi.CredentialLifetimes;
 import build.jenesis.repository.server.spi.RateLimiter;
@@ -46,16 +47,23 @@ public class ManagementController {
     private final Authorization authorization;
     private final AuditTrail audit;
     private final LiveConfig live;
+    private final SettingsEditor editor;
     // Module presence is static for a JVM; resolved once so the rate-limit surface can say "not installed".
     private final boolean rateLimiting = RateLimiterProvider.resolve(key -> null) != RateLimiter.NONE;
 
     public ManagementController(Repositories repositories, RepositoryRouting routing, Authorization authorization,
-                                AuditTrail audit, LiveConfig live) {
+                                AuditTrail audit, LiveConfig live, SettingsEditor editor) {
         this.repositories = repositories;
         this.routing = routing;
         this.authorization = authorization;
         this.audit = audit;
         this.live = live;
+        this.editor = editor;
+    }
+
+    /** Who a request acts as on the audit trail: its tenant and its key's hash. */
+    private static SettingsEditor.Actor actor(String tenant, String key) {
+        return new SettingsEditor.Actor(tenant, key == null ? "anonymous" : Authorization.hash(key));
     }
 
     private void audit(String tenant, String key, String action, String target) {
@@ -103,7 +111,8 @@ public class ManagementController {
     }
 
     /** Set ({@code > 0}) or clear ({@code 0}, so the deployment's applies) the tenant's own storage quota in bytes -
-     *  its {@code tenant-quota} setting, validated and stored through the settings catalogue.
+     *  its {@code tenant-quota} setting, changed through the one settings editor, which records it on the trail as
+     *  every surface's change of the setting is recorded.
      *
      * <p>It reads the tenant's and the deployment's settings documents, which the values it resolves inherit from: one
      * object per module under a constant prefix, narrow by construction.
@@ -114,15 +123,14 @@ public class ManagementController {
                          HttpServletRequest http, HttpServletResponse response) throws IOException {
         String tenant = routing.tenant(http);
         long maxBytes = request == null ? 0L : request.maxBytes();
-        live.setTenant(tenant, Map.of(QuotaSettingsContributor.KEY, maxBytes == 0 ? "" : Long.toString(maxBytes)),
-                false);
+        editor.tenant(tenant, Map.of(QuotaSettingsContributor.KEY, maxBytes == 0 ? "" : Long.toString(maxBytes)),
+                false, actor(tenant, key));
         // The usage total is NOT recomputed here: that walks every blob of every repository the tenant owns while
         // the caller waits - so the cost of setting a limit would grow with the tenant, which is the one thing a
         // request must not do. The cleanup pass already recomputes it for any tenant that has
         // a limit, so deferring costs a window rather than the number: enforcement runs on the previous total until
         // the next pass, and a limit lowered mid-window can be briefly over-admitted against. That is the trade,
         // taken deliberately, and it is the reason the pass runs unconditionally rather than only on change.
-        audit(tenant, key, AuditActions.QUOTA_SET, Long.toString(request == null ? 0L : request.maxBytes()));
         response.setStatus(200);
     }
 
@@ -147,7 +155,8 @@ public class ManagementController {
     private static final String RATE_LIMIT = "rate-limit";
 
     /** Set ({@code > 0}) or clear ({@code 0}, so the deployment's applies) the tenant's own request rate ceiling in
-     *  permits per minute - its {@code rate-limit} setting, validated and stored through the settings catalogue.
+     *  permits per minute - its {@code rate-limit} setting, changed through the one settings editor as the quota
+     *  is.
      *
      * <p>It reads the tenant's and the deployment's settings documents, which the values it resolves inherit from: one
      * object per module under a constant prefix, narrow by construction.
@@ -162,9 +171,8 @@ public class ManagementController {
         }
         long permitsPerMinute = request == null ? 0L : request.permitsPerMinute();
         String tenant = routing.tenant(http);
-        live.setTenant(tenant, Map.of(RATE_LIMIT, permitsPerMinute == 0 ? "" : Long.toString(permitsPerMinute)),
-                false);
-        audit(tenant, key, "rate-limit.set", Long.toString(permitsPerMinute));
+        editor.tenant(tenant, Map.of(RATE_LIMIT, permitsPerMinute == 0 ? "" : Long.toString(permitsPerMinute)),
+                false, actor(tenant, key));
         response.setStatus(200);
     }
 

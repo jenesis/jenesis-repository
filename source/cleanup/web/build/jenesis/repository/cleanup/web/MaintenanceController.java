@@ -17,6 +17,7 @@ import build.jenesis.repository.server.kernel.Repositories;
 import build.jenesis.repository.server.spi.Authorization;
 import build.jenesis.repository.store.ServableNames;
 import build.jenesis.repository.server.kernel.LiveConfig;
+import build.jenesis.repository.server.kernel.SettingsEditor;
 import io.micrometer.observation.ObservationRegistry;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
@@ -54,6 +55,8 @@ public class MaintenanceController {
     private final Repositories repositories;
     private final RepositoryRouting routing;
     private final LiveConfig live;
+    /** The one place a setting is changed: a repository's retention rules are its settings. */
+    private final SettingsEditor editor;
     private final ObservationRegistry observations;
     private final AuditTrail audit;
     private final MaintenanceScheduler maintenance;
@@ -64,7 +67,9 @@ public class MaintenanceController {
     private final List<GarbageCollectorProvider> collectors = GarbageCollectorProvider.providers();
 
     public MaintenanceController(Repositories repositories, RepositoryRouting routing, LiveConfig live,
-                                 ObservationRegistry observations, AuditTrail audit, MaintenanceScheduler maintenance) {
+                                 SettingsEditor editor, ObservationRegistry observations, AuditTrail audit,
+                                 MaintenanceScheduler maintenance) {
+        this.editor = editor;
         this.repositories = repositories;
         this.routing = routing;
         this.live = live;
@@ -236,7 +241,8 @@ public class MaintenanceController {
      * repository, an empty one clears it so the repository inherits its tenant's and the deployment's, {@code none}
      * on a duration rule switches it off here; a rule not given is left as it is. Every given value is validated
      * through the settings catalogue before any is stored, so a malformed or non-positive rule is a {@code 400} and
-     * never reaches a sweep.
+     * never reaches a sweep. A change is the settings editor's, recorded on the trail as each rule's setting change -
+     * as the console's retention page records the same change.
      */
     @PutMapping("/api/repository/retention")
     public void setRetention(@RequestParam("repo") String repo,
@@ -257,7 +263,8 @@ public class MaintenanceController {
         given(rules, RetentionPolicy.PRERELEASE_EXPIRY, prereleaseExpiry);
         given(rules, RetentionPolicy.NOT_DOWNLOADED_FOR, notDownloadedFor);
         try {
-            live.setRepository(tenant, repo, rules, false);
+            editor.repository(tenant, repo, rules, false,
+                    new SettingsEditor.Actor(tenant, key == null ? "anonymous" : Authorization.hash(key)));
         } catch (IllegalArgumentException e) {
             // A malformed or non-positive dial is the caller's error (400), never a 500 - and never stored, since a
             // stored bad rule would fail (or, inverted, mass-delete) at sweep time instead of at the operator's desk.
@@ -266,10 +273,6 @@ public class MaintenanceController {
             response.getWriter().write(e.getMessage() == null ? "invalid retention policy" : e.getMessage());
             return;
         }
-        StringBuilder detail = new StringBuilder(repo);
-        rules.forEach((rule, value) -> detail.append(' ').append(rule).append('=')
-                .append(value.isEmpty() ? "(inherited)" : value));
-        audited(tenant, key, AuditActions.REPOSITORY_RETENTION, detail.toString());
         response.setStatus(200);
     }
 

@@ -52,8 +52,15 @@ public final class AuditActions {
     /** A gate policy value set. */
     public static final String POLICY_SET = action("policy.set");
 
-    /** A repository storage quota set. */
-    public static final String QUOTA_SET = action("quota.set");
+    /** A setting's value stored, at any level - the deployment's, a tenant's, a repository's or a project's; the
+     *  target is the key, prefixed by the level it was set at. */
+    public static final String SETTING_SET = action("setting.set");
+
+    /** A setting's stored value cleared, so it inherits again; targeted as {@link #SETTING_SET} is. */
+    public static final String SETTING_CLEAR = action("setting.clear");
+
+    /** A settings bundle restored - the deployment's documents, or one tenant's. */
+    public static final String SETTINGS_IMPORT = action("settings.import");
 
     /** The node-local read caches over the store dropped - one node, never the fleet. */
     public static final String CACHES_CLEAR = action("caches.clear");
@@ -105,9 +112,6 @@ public final class AuditActions {
 
     /** An ecosystem's records dropped from a repository. */
     public static final String REPOSITORY_FORGET_ECOSYSTEM = action("repository.forget-ecosystem");
-
-    /** A repository's retention policy written. */
-    public static final String REPOSITORY_RETENTION = action("repository.retention");
 
     /** A version pinned against retention. */
     public static final String REPOSITORY_PIN = action("repository.pin");

@@ -238,6 +238,35 @@ public class CliBindingTest {
     }
 
     /**
+     * A repository's and a project's own settings are their nouns' actions, and each reaches the endpoint the console's
+     * screen for the same object is served by the same code behind: read, set and clear, the repository named in the
+     * query and the project in the path.
+     */
+    @Test
+    void a_repositorys_and_a_projects_settings_reach_their_objects_settings() throws Exception {
+        server.resetRequests();
+        sent("repos", "settings", "libs");
+        sent("repos", "settings", "libs", "set", "keep-last", "3");
+        sent("repos", "settings", "libs", "clear", "keep-last");
+        sent("projects", "settings", "agents");
+        sent("projects", "settings", "agents", "set", "project-size", "1048576");
+        sent("projects", "settings", "agents", "clear", "project-size");
+
+        List<String> requests = server.findAll(RequestPatternBuilder.allRequests()).stream()
+                .map(request -> request.getMethod() + " " + request.getUrl()).toList();
+        assertThat(requests).containsExactly(
+                "GET /api/repository/settings?repo=libs",
+                "PUT /api/repository/settings/keep-last?repo=libs",
+                "DELETE /api/repository/settings/keep-last?repo=libs",
+                "GET /api/cache/projects/agents/settings",
+                "PUT /api/cache/projects/agents/settings/project-size",
+                "DELETE /api/cache/projects/agents/settings/project-size");
+        assertThatThrownBy(() -> run("settings", "--repository", "libs"))
+                .as("the settings noun is the deployment's and a tenant's; a repository's are its own noun's")
+                .isInstanceOf(IllegalArgumentException.class);
+    }
+
+    /**
      * A project deletion is a {@code DELETE} of the project itself, and with no terminal to type the name on it goes
      * only with {@code --yes}: refused without it, the command sends nothing at all.
      */

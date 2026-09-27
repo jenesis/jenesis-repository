@@ -4,6 +4,7 @@ import build.jenesis.repository.audit.AuditTrail;
 import build.jenesis.repository.cache.storage.CacheStorage;
 import build.jenesis.repository.store.Documents;
 import build.jenesis.repository.server.kernel.Repositories;
+import build.jenesis.repository.server.kernel.SettingsEditor;
 import build.jenesis.repository.server.RepositoryProperties;
 import build.jenesis.repository.server.RepositoryRouting;
 import build.jenesis.repository.server.spi.Authorization;
@@ -31,8 +32,8 @@ public class ConsoleApiConfig {
     @Bean
     public CacheProjectsController cacheProjectsController(
             @Qualifier("cacheRootStorage") ObjectProvider<CacheStorage> storage, AuditTrail audit,
-            RepositoryRouting routing, Repositories repositories) {
-        return new CacheProjectsController(storage, audit, routing, repositories.root());
+            RepositoryRouting routing, Repositories repositories, SettingsEditor editor) {
+        return new CacheProjectsController(storage, audit, routing, repositories.root(), editor);
     }
 
     @Bean

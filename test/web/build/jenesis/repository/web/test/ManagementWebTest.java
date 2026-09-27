@@ -43,7 +43,7 @@ class ManagementWebTest {
         Repositories repositories = Web.repositories(store, authorization);
         audit = Web.audit();
         controller = new ManagementController(repositories, Web.routing(store, repositories), authorization, audit,
-                repositories.live());
+                repositories.live(), Web.editor(repositories, audit));
     }
 
     /** An {@code /api} call, which names no tenant: the routing answers the one this deployment serves. */
@@ -80,10 +80,11 @@ class ManagementWebTest {
                 Servlets.response().servlet());
 
         assertThat(controller.quota(request())).isEqualTo(new ManagementController.QuotaView(1_048_576, 0));
-        assertThat(audit.rows()).singleElement().satisfies(row -> {
-            assertThat(row.action()).isEqualTo(AuditActions.QUOTA_SET);
-            assertThat(row.target()).isEqualTo("1048576");
-        });
+        assertThat(audit.rows()).as("the tenant's quota setting changed, recorded as every surface records it")
+                .singleElement().satisfies(row -> {
+                    assertThat(row.action()).isEqualTo(AuditActions.SETTING_SET);
+                    assertThat(row.target()).isEqualTo("default/tenant-quota");
+                });
 
         controller.setQuota(null, new ManagementController.QuotaRequest(0), request(), Servlets.response().servlet());
         assertThat(controller.quota(request()).maxBytes()).as("zero clears the ceiling").isZero();
@@ -95,7 +96,10 @@ class ManagementWebTest {
                 Servlets.response().servlet());
 
         assertThat(controller.rateLimit(request(), Servlets.response().servlet()).permitsPerMinute()).isEqualTo(600);
-        assertThat(audit.actions()).containsExactly("rate-limit.set");
+        assertThat(audit.rows()).singleElement().satisfies(row -> {
+            assertThat(row.action()).isEqualTo(AuditActions.SETTING_SET);
+            assertThat(row.target()).isEqualTo("default/rate-limit");
+        });
     }
 
     @Test
@@ -155,7 +159,8 @@ class ManagementWebTest {
     void with_no_audit_module_the_trail_answers_501() throws IOException {
         Repositories repositories = Web.repositories(store);
         ManagementController unaudited = new ManagementController(repositories, Web.routing(store, repositories),
-                Authorization.enforcing(store), AuditTrail.none(), repositories.live());
+                Authorization.enforcing(store), AuditTrail.none(), repositories.live(),
+                Web.editor(repositories, AuditTrail.none()));
         Servlets.Response page = Servlets.response();
         Servlets.Response csv = Servlets.response();
 

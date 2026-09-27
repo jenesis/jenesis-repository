@@ -14,6 +14,7 @@ import build.jenesis.repository.server.kernel.PinnedSettings;
 import build.jenesis.repository.server.kernel.Repositories;
 import build.jenesis.repository.server.kernel.RepositoriesRoutingContext;
 import build.jenesis.repository.server.kernel.Settings;
+import build.jenesis.repository.server.kernel.SettingsEditor;
 import build.jenesis.repository.server.spi.Authorization;
 import build.jenesis.repository.staging.StagingProvider;
 import build.jenesis.repository.store.ArtifactStore;
@@ -109,6 +110,12 @@ public final class Web {
      *  one. A pin outranks the store, which is exactly the precedence a suite wants to be able to vary. */
     public static PinnedSettings pins(ConfigurableEnvironment environment) {
         return new PinnedSettings(environment);
+    }
+
+    /** The settings editor of {@code repositories}' node, over the settings its resolver reads - so a change a handler
+     *  makes through it is what the resolver answers next - pinning nothing, and recording on {@code audit}. */
+    public static SettingsEditor editor(Repositories repositories, AuditTrail audit) {
+        return new SettingsEditor(repositories.live().settings(), _ -> Optional.empty(), repositories.live(), audit);
     }
 
     /** A scheduler with no passes registered - enough for a handler that only needs to take the exclusive lease,

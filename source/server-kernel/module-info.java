@@ -12,11 +12,13 @@
  * retention and upstream-credential SPIs, the blobs view and the metering decorator - and no implementation of
  * anything - not the router, the gate, the inventory, the metadata store or the import SPI. Every web adapter
  * requires this module, and most of what they call is {@code tenant()} and {@code store()}, so anything required
- * here is dragged through every one of them. The definitions parser, the release-immutability guard, the deploy
- * edge's hooks and the live definitions are the gateway's, and the kernel asks a definition only the two questions
- * it has ({@code RepositoryDefinitions}). The toggle catalogue ({@code ModuleTogglesSettingsContributor}) stays: it
- * enumerates every provider family, but every family it names is a contract home this module requires anyway,
- * and a settings contributor's module names the document its values are stored in
+ * here is dragged through every one of them. The release-immutability guard, the deploy edge's hooks and the live
+ * definitions are the gateway's, and the kernel asks a definition only the two questions it has
+ * ({@code RepositoryDefinitions}); the definitions parser, a library over the store and the settings, is required only
+ * so the settings editor refuses a routing definition that would not parse or would fetch from where it must not.
+ * The toggle catalogue ({@code ModuleTogglesSettingsContributor}) stays: it enumerates every provider family, but
+ * every family it names is a contract home this module requires anyway, and a settings contributor's module names the
+ * document its values are stored in
  * ({@code config/settings/<module>.json}) - moving it would strand every toggle an operator ever wrote. A feature's
  * factory is the feature's own: {@code new StoreRepositoryInventory(store)}, {@code new QuarantineLog(store)},
  * {@code new GatedRepository(writable)}.
@@ -55,6 +57,9 @@ open module build.jenesis.repository.server.kernel {
     requires build.jenesis.repository.store.metering;
     requires build.jenesis.repository.compliance;
     requires build.jenesis.repository.settings;
+    // The settings editor records every change on the audit trail and screens a routing definition's upstreams.
+    requires build.jenesis.repository.audit;
+    requires build.jenesis.repository.definitions;
     requires build.jenesis.repository.upstream;
     requires build.jenesis.repository.format;
     requires build.jenesis.repository.cleanup;

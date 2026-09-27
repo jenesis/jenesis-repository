@@ -234,6 +234,10 @@ public final class Commands {
                             act("projects evict <project> <size|ttl|clear>",
                                     "start a sweep in the background and report whether this call started it"),
                             act("projects recount <project>", "recount the project's entries and bytes"),
+                            act("projects settings <project>", "a project's own settings, with what each inherits"),
+                            act("projects settings <project> set <key> <value>", "set one of a project's settings"),
+                            act("projects settings <project> clear <key>",
+                                    "clear one of a project's settings, so it inherits again"),
                             act("projects delete <project> [--yes]", "delete a project, its entries and its settings "
                                     + "in the background, after typing 'delete <project>' - or --yes, for a script")),
                     noun("scans", "build scans: what a build ran, and what the cache saved it",
@@ -336,12 +340,10 @@ public final class Commands {
 
             new Section("Settings", List.of(
                     noun("settings", "the runtime settings", null, AdminCommands::settings,
-                            act("settings [--tenant N | --repository R | --project P]",
-                                    "list the settings, or those a tenant, a repository or a project sets"),
-                            act("settings set <key> <value> [--tenant N | --repository R | --project P]",
-                                    "set a setting, deployment-wide or for one tenant, repository or project"),
-                            act("settings clear <key> [--tenant N | --repository R | --project P]",
-                                    "revert a setting to what it inherits"),
+                            act("settings [--tenant N]", "list the settings, or those a tenant sets"),
+                            act("settings set <key> <value> [--tenant N]",
+                                    "set a setting, deployment-wide or for one tenant"),
+                            act("settings clear <key> [--tenant N]", "revert a setting to what it inherits"),
                             act("settings export [file] [--tenant N]", "dump the settings as a JSON bundle"),
                             act("settings import <file> [--tenant N]", "restore a bundle, validated first")),
                     noun("setup", "the first boot's wizard", null, AdminCommands::setup,
@@ -361,6 +363,10 @@ public final class Commands {
                                     "create a repository holding one format, optionally described and with its "
                                             + "own settings - all written together, or nothing when one is refused"),
                             act("repos describe <name> <description>", "describe a repository; an empty one clears it"),
+                            act("repos settings <name>", "a repository's own settings, with what each inherits"),
+                            act("repos settings <name> set <key> <value>", "set one of a repository's settings"),
+                            act("repos settings <name> clear <key>",
+                                    "clear one of a repository's settings, so it inherits again"),
                             act("repos delete <name> [--yes]", "delete a repository and everything it holds, after "
                                     + "typing 'delete <name>' - or --yes, for a script"),
                             act("repos set <name> <definition>",

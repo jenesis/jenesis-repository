@@ -9,7 +9,6 @@ import build.jenesis.repository.ui.ScopedPosture;
 import build.jenesis.repository.ui.CurrentTenant;
 import build.jenesis.repository.audit.AuditActions;
 import build.jenesis.repository.audit.AuditTrail;
-import build.jenesis.repository.compliance.GatePolicyProvider;
 import build.jenesis.repository.maintenance.StorageNamespaces;
 import build.jenesis.repository.observation.SpiCatalog;
 import build.jenesis.repository.posture.Configuration;
@@ -28,15 +27,18 @@ import build.jenesis.repository.format.RepositoryFormat;
 import build.jenesis.repository.upstream.UpstreamCredential;
 import build.jenesis.repository.upstream.UpstreamCredentialSource;
 import build.jenesis.repository.upstream.UpstreamCredentialSourceProvider;
+import build.jenesis.repository.server.kernel.PinnedSettings;
+import build.jenesis.repository.server.kernel.Settings;
+import build.jenesis.repository.server.kernel.SettingsEditor;
 
 /**
- * The console's gateway to the deployment-wide runtime settings, the same {@code config/settings/<module>.json}
- * documents the repository server reads and the {@code /api/settings} endpoint and the CLI edit - so all three
- * administration surfaces drive one store of truth ({@link StoredConfig}). Unlike {@link RepositoryAdmin}, these are
- * not tenant-scoped: they belong to the whole deployment, so the screen is super-admin only and the documents live at
- * the store root rather than under a tenant. A change here is written straight to the shared store; the running
- * repository nodes apply a live setting on their next scheduled re-read and a restart-only setting on their next boot
- * (the screen says which is which).
+ * The console's view of the runtime settings - the deployment's, a tenant's, a repository's and a project's - and its
+ * way to change them. Every change goes through the one settings editor ({@link SettingsEditor}) the
+ * {@code /api/settings} endpoints and so the CLI change settings through, called here in process: the same refusals,
+ * pins, secret sealing, epoch and audit whichever surface asked. What is read here renders the same documents
+ * ({@link StoredConfig}). The running repository nodes apply a live setting on their next scheduled re-read - at once
+ * on a node the console is composed into - and a restart-only setting on their next boot (the screen says which is
+ * which).
  *
  * <p>The catalogue is the discovered {@code SettingsContributor} list, not a hand-inlined copy: the neutral core
  * dogfoods the SPI ({@code CoreSettingsContributor} in the settings module) exactly as its plugin modules do, so the
@@ -46,7 +48,6 @@ import build.jenesis.repository.upstream.UpstreamCredentialSourceProvider;
  */
 public class SettingsAdmin {
 
-    private static final Pattern NAME = Pattern.compile("[A-Za-z0-9_-]+");
     private static final Pattern HOST = Pattern.compile("[A-Za-z0-9.-]+");
 
     /** How long a computed orphaned-data snapshot is reused before the multi-tenant store walk is repeated. The
@@ -81,7 +82,10 @@ public class SettingsAdmin {
 
     private final ArtifactStore root;
     private final UpstreamCredentialSource upstreamCredentials;
-    private final Function<String, Optional<Pin>> pins;
+    /** The one place a setting is changed, on every surface. */
+    private final SettingsEditor editor;
+    /** The editor's pin probe, which the screens grey a pinned knob by. */
+    private final Function<String, Optional<PinnedSettings.Pin>> pins;
     private final Supplier<List<String>> tenants;
     private final AuditTrail audit;
     private final CurrentTenant current;
@@ -115,45 +119,54 @@ public class SettingsAdmin {
     }
 
     /** Without a tenant directory the orphaned-data diagnostic has no scopes to scan and stays silent. */
-    public SettingsAdmin(ArtifactStore repositoryStore, Function<String, Optional<Pin>> pins) {
+    public SettingsAdmin(ArtifactStore repositoryStore, Function<String, Optional<PinnedSettings.Pin>> pins) {
         this(repositoryStore, pins, List::of);
     }
 
     /** A fixture constructor that records no audit events (the no-op trail, no bound tenant, a neutral actor). The
-     *  console binds the seven-argument constructor so a privileged settings mutation is audited. */
-    public SettingsAdmin(ArtifactStore repositoryStore, Function<String, Optional<Pin>> pins,
+     *  console binds the constructor taking the deployment's settings editor. */
+    public SettingsAdmin(ArtifactStore repositoryStore, Function<String, Optional<PinnedSettings.Pin>> pins,
                          Supplier<List<String>> tenants) {
         this(repositoryStore, pins, tenants, AuditTrail.none(), () -> null, () -> "console");
     }
 
-    /** {@code pins} answers the runtime-settings precedence probe (the server's {@code PinnedSettings}, adapted by the
-     *  console's Spring layer from its environment): a key an operator has pinned from a source above the store - an
-     *  environment variable, a {@code -D} system property, the command line or an external config file - is reported
-     *  pinned, so the screen greys its knob, names what pins it and shows the pin's value as effective, and a save
-     *  attempt is refused. The store value of a pinned key is inert; the store never overrides an explicit pin.
-     *  {@code tenants} is the deployment's tenant directory, the scopes the orphaned-data diagnostic scans. A
-     *  privileged settings mutation records an audit event through {@code audit}, attributed to the {@code actor}
-     *  under the {@code current} tenant, using the same {@code action}/{@code target} the {@code /api} ConfigController
-     *  emits, so the console and the API audit settings changes identically. */
-    public SettingsAdmin(ArtifactStore repositoryStore, Function<String, Optional<Pin>> pins,
+    /** A fixture over an editor of its own ({@link SettingsEditor#over}) that pins what {@code pins} answers and
+     *  records on {@code audit} under the {@code current} tenant as the {@code actor}. */
+    public SettingsAdmin(ArtifactStore repositoryStore, Function<String, Optional<PinnedSettings.Pin>> pins,
                          Supplier<List<String>> tenants, AuditTrail audit, CurrentTenant current, ConsoleActor actor) {
-        this(repositoryStore, pins, tenants, audit, current, actor, _ -> null);
+        this(repositoryStore, editor(repositoryStore, pins, audit), tenants, audit, current, actor, _ -> null);
     }
 
-    /** The console-bound constructor, additionally given the {@code credentialConfig} the upstream-credential source
-     *  reads its deploy-time bootstrap keys from - notably {@code secrets-key} ({@code JENREG_SECRETS_KEY}),
-     *  the master key that envelope-encrypts a stored credential at rest. The console reads
-     *  it from its own environment exactly as the {@code /api} path does, so a credential set through the console is
-     *  encrypted under the same key and refused the same way when none is configured. A fixture that passes no
-     *  config resolves an unconfigured cipher, so any credential write it makes is refused - as at rest it must be. */
-    public SettingsAdmin(ArtifactStore repositoryStore, Function<String, Optional<Pin>> pins,
-                         Supplier<List<String>> tenants, AuditTrail audit, CurrentTenant current, ConsoleActor actor,
+    private static SettingsEditor editor(ArtifactStore store, Function<String, Optional<PinnedSettings.Pin>> pins,
+                                         AuditTrail audit) {
+        try {
+            return SettingsEditor.over(store, pins, audit, _ -> null);
+        } catch (IOException unreadable) {
+            throw new UncheckedIOException(unreadable);
+        }
+    }
+
+    /**
+     * The console-bound constructor. {@code editor} is the one place a setting is changed, on every surface - the
+     * console calls it in process as the API's handlers do - and its pin probe is what the screens grey a pinned knob
+     * by. {@code tenants} is the deployment's tenant directory, the scopes the orphaned-data diagnostic scans. What is
+     * not a setting - an upstream credential, a purge - is recorded through {@code audit}, attributed to the
+     * {@code actor} under the {@code current} tenant, and a settings change the editor records the same way.
+     * {@code credentialConfig} is what the upstream-credential source reads its deploy-time bootstrap keys from -
+     * notably {@code secrets-key} ({@code JENREG_SECRETS_KEY}), the master key that envelope-encrypts a stored
+     * credential at rest - so a credential set through the console is encrypted under the same key as through the
+     * API. A fixture that passes no config resolves an unconfigured cipher, so any credential write it makes is
+     * refused - as at rest it must be.
+     */
+    public SettingsAdmin(ArtifactStore repositoryStore, SettingsEditor editor, Supplier<List<String>> tenants,
+                         AuditTrail audit, CurrentTenant current, ConsoleActor actor,
                          UnaryOperator<String> credentialConfig) {
+        this.editor = editor;
         this.root = repositoryStore;
         // The console manages upstream credentials through the same discovered source as the server; NONE when
         // the module is absent, and the card is hidden through the capability flag.
         this.upstreamCredentials = UpstreamCredentialSourceProvider.resolve(repositoryStore, credentialConfig);
-        this.pins = pins;
+        this.pins = editor::pinned;
         this.tenants = tenants;
         this.audit = audit;
         this.current = current;
@@ -165,6 +178,18 @@ public class SettingsAdmin {
      *  a failed audit write never fails the settings mutation it records. */
     private void audit(String action, String target) {
         audit.record(current.name(), actor.name(), action, target);
+    }
+
+    /** Who this console's session acts as on the audit trail: the selected tenant and the signed-in member. */
+    private SettingsEditor.Actor actor() {
+        return new SettingsEditor.Actor(current.name(), actor.name());
+    }
+
+    /** One value, blank for a clear. */
+    private static Map<String, String> one(String key, String value) {
+        Map<String, String> values = new LinkedHashMap<>();
+        values.put(key, value == null ? "" : value);
+        return values;
     }
 
     /** The editable settings grouped for the form: each carries its documentation, its value kind and choices, its
@@ -181,10 +206,10 @@ public class SettingsAdmin {
                 continue;
             }
             String override = stored.getProperty(setting.key());
-            Optional<Pin> pin = pins.apply(setting.key());
+            Optional<PinnedSettings.Pin> pin = pins.apply(setting.key());
             // A pinned key resolves to the operator's pin, not the store: the effective value shown is the pin's,
             // and the store override (if any) is inert.
-            String effective = pin.map(Pin::value).orElse(override != null ? override : setting.defaultValue());
+            String effective = pin.map(PinnedSettings.Pin::value).orElse(override != null ? override : setting.defaultValue());
             grouped.computeIfAbsent(setting.group(), _ -> new ArrayList<>())
                     .add(view(setting, effective, setting.defaultValue(), override != null, pin,
                             moduleOf(attribution, setting.key())));
@@ -211,8 +236,8 @@ public class SettingsAdmin {
                 continue;
             }
             String override = stored.getProperty(key);
-            Optional<Pin> pin = pins.apply(key);
-            String effective = pin.map(Pin::value).orElse(override != null ? override : setting.defaultValue());
+            Optional<PinnedSettings.Pin> pin = pins.apply(key);
+            String effective = pin.map(PinnedSettings.Pin::value).orElse(override != null ? override : setting.defaultValue());
             views.add(view(setting, effective, setting.defaultValue(), override != null, pin,
                     moduleOf(attribution, key)));
         }
@@ -222,7 +247,7 @@ public class SettingsAdmin {
     /** One key's effective value as this console sees it - the operator's pin, else the stored override, else
      *  {@code fallback} - for a console decision that reads a dial rather than rendering it. */
     public String effective(String key, String fallback) throws IOException {
-        Optional<Pin> pin = pins.apply(key);
+        Optional<PinnedSettings.Pin> pin = pins.apply(key);
         if (pin.isPresent()) {
             return pin.get().value();
         }
@@ -232,7 +257,7 @@ public class SettingsAdmin {
     /** One key's effective value for a tenant - a pin, else the tenant's own where the key is tenant-settable, else the
      *  deployment's stored value, else {@code fallback}. */
     public String effective(String tenant, String key, String fallback) throws IOException {
-        Optional<Pin> pin = pins.apply(key);
+        Optional<PinnedSettings.Pin> pin = pins.apply(key);
         if (pin.isPresent()) {
             return pin.get().value();
         }
@@ -249,10 +274,10 @@ public class SettingsAdmin {
      *  effective value in a tenant view), whether an override is in force, its live/restart and pin state, and the JPMS
      *  module that contributes it (so both the settings screen and the modules screen attribute it). */
     private SettingView view(Setting setting, String effective, String baseline, boolean overridden,
-                             Optional<Pin> pin, String module) {
+                             Optional<PinnedSettings.Pin> pin, String module) {
         return new SettingView(setting.key(), setting.group(), setting.label(), setting.description(),
                 setting.kind().name(), setting.choices(), effective, baseline, overridden, setting.live(),
-                highImpact(setting), pin.isPresent(), pin.map(Pin::source).orElse(""), module,
+                highImpact(setting), pin.isPresent(), pin.map(PinnedSettings.Pin::source).orElse(""), module,
                 setting.tier() == Setting.Tier.ADVANCED);
     }
 
@@ -273,7 +298,7 @@ public class SettingsAdmin {
         Properties stored = read();
         Map<String, String> attribution = SettingsContributor.attribution();
         UnaryOperator<String> effective = key -> {
-            Optional<Pin> pin = pins.apply(key);
+            Optional<PinnedSettings.Pin> pin = pins.apply(key);
             return pin.isPresent() ? pin.get().value() : stored.getProperty(key);
         };
         Set<String> storedModules = new TreeSet<>(StoredConfig.documents(root).keySet());
@@ -283,8 +308,8 @@ public class SettingsAdmin {
             List<SettingView> settings = new ArrayList<>();
             for (Setting setting : capability.settings()) {
                 String override = stored.getProperty(setting.key());
-                Optional<Pin> pin = pins.apply(setting.key());
-                String value = pin.map(Pin::value).orElse(override != null ? override : setting.defaultValue());
+                Optional<PinnedSettings.Pin> pin = pins.apply(setting.key());
+                String value = pin.map(PinnedSettings.Pin::value).orElse(override != null ? override : setting.defaultValue());
                 settings.add(view(setting, value, setting.defaultValue(), override != null, pin,
                         moduleOf(attribution, setting.key())));
             }
@@ -309,7 +334,7 @@ public class SettingsAdmin {
     public List<SpiCatalog> catalog() throws IOException {
         Properties stored = read();
         UnaryOperator<String> effective = key -> {
-            Optional<Pin> pin = pins.apply(key);
+            Optional<PinnedSettings.Pin> pin = pins.apply(key);
             return pin.isPresent() ? pin.get().value() : stored.getProperty(key);
         };
         Set<String> storedModules = new TreeSet<>(StoredConfig.documents(root).keySet());
@@ -387,7 +412,7 @@ public class SettingsAdmin {
             // non-jenreg. key (spring.profiles.active) straight off the deployment.
             if (fullKey.startsWith(prefix)) {
                 String key = fullKey.substring(prefix.length());
-                Optional<Pin> pin = pins.apply(key);
+                Optional<PinnedSettings.Pin> pin = pins.apply(key);
                 if (pin.isPresent()) {
                     return pin.get().value();
                 }
@@ -487,68 +512,26 @@ public class SettingsAdmin {
                         || setting.key().toLowerCase(Locale.ROOT).contains("deny"));
     }
 
-    /** Set ({@code value} non-blank) or clear ({@code null}/blank) one override; an unknown key is refused so only
-     *  catalogued settings change. Read-modify-write so a concurrent change to another key is not lost. */
+    /** Set ({@code value} non-blank) or clear ({@code null}/blank) one deployment-wide override, through the one
+     *  settings editor every surface changes settings with ({@link SettingsEditor#deployment}). */
     public void save(String key, String value) throws IOException {
-        Optional<Pin> pin = pins.apply(key);
-        if (pin.isPresent()) {
-            throw new IllegalArgumentException("Setting '" + key + "' is pinned by " + pin.get().source()
-                    + " and cannot be changed here; the stored value would be inert.");
-        }
-        Optional<String> refused = SettingsContributor.refusal(key, value, Setting.Scope.GLOBAL, deployment());
-        if (refused.isPresent()) {
-            throw new IllegalArgumentException(refused.get());
-        }
-        put(key, value);
-        // setting.set / setting.clear, the same split the /api ConfigController records (a PUT sets, a DELETE clears);
-        // here one save does both, so a blank value is the clear.
-        audit(value.isBlank() ? "setting.clear" : "setting.set", key);
+        editor.deployment(one(key, value), actor());
+        invalidatePosture();
     }
 
-    /** The stored settings as one JSON bundle for the console's download - the same layout the {@code /api/settings/export}
-     *  endpoint and the CLI emit. The deployment-wide (global) documents keyed by module plus every tenant's slice keyed
-     *  {@code tenant:<tenant>:<module>}; with no per-tenant config it is exactly the global bundle. Credential-free by
-     *  construction: every SECRET-kind key is excluded, so a stored secret (the keyless identity token) never travels
-     *  in a downloaded backup - not by the false "secrets are environment-only" assumption. */
+    /** The stored settings as one JSON bundle for the console's download - the one export the {@code /api/settings/export}
+     *  endpoint and the CLI emit ({@link Settings#exportBundle}), credential-free by construction. */
     public byte[] exportBundle() throws IOException {
-        return SettingsDocuments.serializeBundle(StoredConfig.exportBundle(root));
+        return SettingsDocuments.serializeBundle(editor.settings().exportBundle());
     }
 
     /** Restore an uploaded settings bundle (module name to that module's stored overrides, parsed by the console's web
-     *  layer with a real JSON reader): every catalogued value is validated - an unparseable one is refused before
-     *  anything is written, so a bad bundle never half-applies - then each module document is written as a whole and a
-     *  module the bundle omits is cleared (a full restore). Map entries (repository definitions, format upstreams) are
-     *  validated with their own parsers, matching the single-key save path. A pinned key's stored value stays inert. */
+     *  layer with a real JSON reader) through the settings editor ({@link SettingsEditor#importBundle}): refused whole,
+     *  before anything is written, when it would not resolve, carries a value its setting refuses or sets a pinned
+     *  key. */
     public void importBundle(Map<String, ? extends Map<String, String>> bundle) throws IOException {
-        boolean allowInternal = allowInternal();
-        Map<String, Setting> catalogue = new LinkedHashMap<>();
-        for (Setting setting : catalogue()) {
-            catalogue.put(setting.key(), setting);
-        }
-        for (Map<String, String> document : bundle.values()) {
-            if (document == null) {
-                continue;
-            }
-            document.forEach((key, value) -> {
-                if (value == null || value.isBlank()) {
-                    return;
-                }
-                Setting setting = catalogue.get(key);
-                if (setting != null) {
-                    if (!setting.parses(value)) {
-                        throw new IllegalArgumentException(
-                                "'" + value + "' is not a valid value for setting '" + key + "'.");
-                    }
-                } else if (key.startsWith(SettingsScopes.REPOSITORY_PREFIX)) {
-                    refuseUnusableUpstream(key, RepositoryDefinition.parse(value), value, allowInternal);
-                } else if (key.startsWith(SettingsScopes.UPSTREAM_PREFIX)) {
-                    refuseUnusableUpstream(key, URI.create(value), allowInternal);
-                }
-            });
-        }
-        StoredConfig.importBundle(root, bundle);
+        editor.importBundle(bundle, actor());
         invalidatePosture();
-        audit("settings.import", SettingsDocuments.ROOT);
     }
 
     /** A tenant's runtime-settings groups: only the tenant-overridable keys (the gate policy, deny list and forward
@@ -566,8 +549,8 @@ public class SettingsAdmin {
             }
             String globalEffective = global.getProperty(setting.key(), setting.defaultValue());
             String tenantValue = tenantOverrides.getProperty(setting.key());
-            Optional<Pin> pin = pins.apply(setting.key());
-            String effective = pin.map(Pin::value).orElse(tenantValue != null ? tenantValue : globalEffective);
+            Optional<PinnedSettings.Pin> pin = pins.apply(setting.key());
+            String effective = pin.map(PinnedSettings.Pin::value).orElse(tenantValue != null ? tenantValue : globalEffective);
             grouped.computeIfAbsent(setting.group(), _ -> new ArrayList<>())
                     .add(view(setting, effective, globalEffective, tenantValue != null, pin,
                             moduleOf(attribution, setting.key())));
@@ -577,101 +560,19 @@ public class SettingsAdmin {
         return groups;
     }
 
-    /** Set or clear one of a tenant's overrides; an unknown or deployment-wide key is refused so a tenant changes only
-     *  its own tenant-overridable settings. Layered over the deployment-wide value, leaving the global settings and
-     *  other tenants untouched. */
+    /** Set or clear one of a tenant's overrides through the settings editor ({@link SettingsEditor#tenant}), layered
+     *  over the deployment-wide value: a key a tenant cannot hold, a pinned one, or a value the tenant's gate would
+     *  not resolve with is refused, and nothing is written. */
     public void save(String tenant, String key, String value) throws IOException {
-        Setting setting = catalogue().stream().filter(candidate -> candidate.key().equals(key))
-                .findFirst().orElseThrow(() -> new IllegalArgumentException("Unknown setting '" + key + "'."));
-        if (!SettingsScopes.tenantOverridable(key)) {
-            throw new IllegalArgumentException("Setting '" + key + "' is deployment-wide and cannot be set per tenant.");
-        }
-        Optional<Pin> pin = pins.apply(key);
-        if (pin.isPresent()) {
-            throw new IllegalArgumentException("Setting '" + key + "' is pinned by " + pin.get().source()
-                    + " and cannot be changed here; the stored value would be inert.");
-        }
-        if (!value.isBlank() && !setting.parses(value)) {
-            throw new IllegalArgumentException("'" + value + "' is not a valid value for setting '" + key + "'.");
-        }
-        if (!value.isBlank()) {
-            validateTenantGate(tenant, key, value);
-        }
-        StoredConfig.put(root, tenant, key, value);
+        editor.tenant(tenant, one(key, value), true, actor());
         invalidatePosture();
-        // Per-tenant setting.set / setting.clear, target tenant/key - the shape ConfigController's tenant path emits.
-        audit(value.isBlank() ? "setting.clear" : "setting.set", tenant + "/" + key);
     }
 
-    /** Dry-resolve this tenant's gate with the candidate overlaid, so a kind-valid but plugin-rejected value (a
-     *  malformed policy-as-code expression, a bad version floor - values a {@link GatePolicyProvider} refuses only at
-     *  gate resolve time, which {@code setting.parses} cannot see) is refused here rather than persisted and then
-     *  500ing every one of this tenant's publishes until it is cleared. This is the console's equivalent of the
-     *  {@code /api} {@code ConfigController}'s tenant {@code PUT}, which runs the same guard through
-     *  {@code LiveConfig.validateTenant}: both dry-resolve the discovered {@code GatePolicyProvider} dimensions over
-     *  the tenant's effective chain (pin &gt; tenant document &gt; global document), exactly as the vulnerability panel
-     *  reuses the discovered advisory sources. The console reuses the compliance SPI directly rather than the
-     *  repository-server module (which it does not depend on). A throwaway resolve; nothing is assigned, so the running
-     *  configuration is untouched. */
-    private void validateTenantGate(String tenant, String key, String value) throws IOException {
-        Properties global = read();
-        Properties tenantOverrides = StoredConfig.load(root, tenant);
-        UnaryOperator<String> config = candidate -> {
-            if (candidate.equals(key)) {
-                return value;
-            }
-            Optional<Pin> pin = pins.apply(candidate);
-            if (pin.isPresent()) {
-                return pin.get().value();
-            }
-            if (SettingsScopes.tenantOverridable(candidate)) {
-                String tenantValue = tenantOverrides.getProperty(candidate);
-                if (tenantValue != null) {
-                    return tenantValue;
-                }
-            }
-            return global.getProperty(candidate);
-        };
-        try {
-            GatePolicyProvider.resolve(config, GatePolicyProvider.Path.PUBLISH);
-            GatePolicyProvider.resolve(config, GatePolicyProvider.Path.PROXY);
-        } catch (RuntimeException e) {
-            throw new IllegalArgumentException(
-                    "'" + value + "' is not a valid value for setting '" + key + "': " + e.getMessage());
-        }
-    }
-
-    /** Restore one tenant's slice from an uploaded bundle (module name to that tenant's overrides), a full restore
-     *  leaving the global settings and other tenants untouched; a global-only key is refused. */
+    /** Restore one tenant's slice from an uploaded bundle through the settings editor
+     *  ({@link SettingsEditor#importTenant}), leaving the global settings and other tenants untouched. */
     public void importTenant(String tenant, Map<String, ? extends Map<String, String>> bundle) throws IOException {
-        boolean allowInternal = allowInternal();
-        Map<String, Setting> catalogue = new LinkedHashMap<>();
-        for (Setting setting : catalogue()) {
-            catalogue.put(setting.key(), setting);
-        }
-        for (Map<String, String> document : bundle.values()) {
-            if (document == null) {
-                continue;
-            }
-            document.forEach((key, value) -> {
-                if (value == null || value.isBlank()) {
-                    return;
-                }
-                Setting setting = catalogue.get(key);
-                if (setting != null && !setting.parses(value)) {
-                    throw new IllegalArgumentException(
-                            "'" + value + "' is not a valid value for setting '" + key + "'.");
-                }
-                if (setting == null && key.startsWith(SettingsScopes.REPOSITORY_PREFIX)) {
-                    refuseUnusableUpstream(key, RepositoryDefinition.parse(value), value, allowInternal);
-                } else if (setting == null && key.startsWith(SettingsScopes.UPSTREAM_PREFIX)) {
-                    refuseUnusableUpstream(key, URI.create(value), allowInternal);
-                }
-            });
-        }
-        StoredConfig.importTenant(root, tenant, bundle);
+        editor.importTenant(tenant, bundle, actor());
         invalidatePosture();
-        audit("settings.import", tenant + "/" + SettingsDocuments.ROOT);
     }
 
     /** The repositories defined at runtime (name to routing spec) - the same {@code repositories.<name>} entries the
@@ -840,41 +741,17 @@ public class SettingsAdmin {
                 : new Routing(deployment, Layer.DEPLOYMENT, shape(name, deployment));
     }
 
-    /** Store the deployment's definition of a repository name, validated as the boot sweep validates it; it routes every
-     *  tenant's repository of that name that sets no routing of its own. {@code tenant} must be {@code null}: a
-     *  tenant's repository is routed by its own {@code routing} setting ({@link #saveRepository}). */
+    /** Store the deployment's definition of a repository name through the settings editor
+     *  ({@link SettingsEditor#definition}); it routes every tenant's repository of that name that sets no routing of
+     *  its own. {@code tenant} must be {@code null}: a tenant's repository is routed by its own {@code routing}
+     *  setting ({@link #saveRepository}). */
     public void setRepository(String tenant, String name, String specification) throws IOException {
         if (tenant != null) {
             throw new IllegalArgumentException("A tenant's repository is routed by its own routing setting, not by a "
                     + "tenant definition.");
         }
-        if (!NAME.matcher(name).matches()) {
-            throw new IllegalArgumentException("Invalid repository name '" + name + "'.");
-        }
-        // Write-time validation: run the SAME parser the boot sweep uses BEFORE the
-        // definition is stored, so a broken definition never reaches the store. A parse failure is refused LOUD and
-        // NAMED - the repository name, what is wrong, and the fix - mirroring LiveConfig.sweepDefinitions so the
-        // console write-surface refuses exactly what the boot sweep would. A valid-but-risky definition (unscreened,
-        // plaintext, mixed-strength) parses (its warning logged inside parse and surfaced by the console banner via
-        // #shape) - only an unparseable one is refused here.
-        RepositoryDefinition definition;
-        try {
-            definition = RepositoryDefinition.parse(specification);
-        } catch (RuntimeException invalid) {
-            throw new IllegalArgumentException("Repository '" + name + "' has an invalid definition '" + specification
-                    + "': " + invalid.getMessage() + " Fix the definition (writable / fallback <source> "
-                    + "[nocache|harden|unscreened]), or remove it - a "
-                    + "repository definition that cannot be parsed is refused rather than stored.", invalid);
-        }
-        // A plaintext upstream is refused rather than stored with a console notice, exactly as the API write
-        // surface and the boot sweep refuse it. The console notice stays for a deployment that took the dial.
-        String refused = RepositoryDefinition.upstreamRefusal(definition, allowInternal());
-        if (refused != null) {
-            throw new IllegalArgumentException("Repository '" + name + "' has a refused definition '" + specification
-                    + "': " + refused + "." + RepositoryDefinition.upstreamRemedy());
-        }
-        store(tenant, SettingsScopes.repositoryKey(name), specification);
-        audit(AuditActions.REPOSITORY_SET, tenant == null ? name : tenant + "/" + name);
+        editor.definition(name, specification, actor());
+        invalidatePosture();
     }
 
     /** Remove the deployment's definition of a repository name; {@code tenant} must be {@code null}, as for
@@ -884,17 +761,8 @@ public class SettingsAdmin {
             throw new IllegalArgumentException("A tenant's repository is routed by its own routing setting, not by a "
                     + "tenant definition.");
         }
-        store(null, SettingsScopes.repositoryKey(name), null);
-        audit(AuditActions.REPOSITORY_REMOVE, tenant == null ? name : tenant + "/" + name);
-    }
-
-    /** A routing entry into the deployment's settings, or into {@code tenant}'s own. */
-    private void store(String tenant, String key, String value) throws IOException {
-        if (tenant == null) {
-            put(key, value);
-        } else {
-            StoredConfig.put(root, tenant, key, value);
-        }
+        editor.definition(name, null, actor());
+        invalidatePosture();
     }
 
     /** The per-format proxy upstreams set at runtime (format to upstream URL). */
@@ -922,24 +790,16 @@ public class SettingsAdmin {
     }
 
     /** A format's upstream: the deployment's, or with a {@code tenant} that tenant's own, which its repositories pull
-     *  through instead. Refused as the deployment's is refused - the outbound screen is the deployment's either way. */
+     *  through instead - through the settings editor ({@link SettingsEditor#upstream}), screened as every outbound
+     *  target is. */
     public void setUpstream(String tenant, String format, String url) throws IOException {
-        if (!NAME.matcher(format).matches()) {
-            throw new IllegalArgumentException("Invalid format name '" + format + "'.");
-        }
-        // The same screen on the other spelling of the same operator-configured target (see setRepository).
-        String refused = RepositoryDefinition.upstreamRefusal(URI.create(url), allowInternal());
-        if (refused != null) {
-            throw new IllegalArgumentException("The '" + format + "' upstream '" + url + "' is refused: " + refused
-                    + "." + RepositoryDefinition.upstreamRemedy());
-        }
-        store(tenant, SettingsScopes.upstreamKey(format), url);
-        audit(AuditActions.UPSTREAM_SET, tenant == null ? format : tenant + "/" + format);
+        editor.upstream(tenant, format, url, actor());
+        invalidatePosture();
     }
 
     public void removeUpstream(String tenant, String format) throws IOException {
-        store(tenant, SettingsScopes.upstreamKey(format), null);
-        audit(AuditActions.UPSTREAM_REMOVE, tenant == null ? format : tenant + "/" + format);
+        editor.upstream(tenant, format, null, actor());
+        invalidatePosture();
     }
 
     /** The upstreams {@code tenant} set for itself (format to URL), which its repositories pull through over the
@@ -991,118 +851,46 @@ public class SettingsAdmin {
     }
 
 
-    private void put(String key, String value) throws IOException {
-        StoredConfig.put(root, key, value);
-        StoredSettings.changed(root);
-        invalidatePosture();
-    }
-
     private Properties read() throws IOException {
         return StoredConfig.load(root);
     }
 
-    /** The deployment's {@code proxy-allow-internal} dial as this console can see it: the stored value, else the
-     *  shipped default (off). Like the import guard's console leg, this surface has no {@code RepositoryProperties}
-     *  env-field to consult, so a deployment that takes the opt-out through the environment alone is still refused
-     *  here and admitted by the boot sweep - the console's stored-only view, stated rather than silently assumed. */
-    private boolean allowInternal() throws IOException {
-        return Boolean.parseBoolean(read().getProperty(RepositoryDefinition.ALLOW_INTERNAL_SETTING, "false"));
-    }
-
-    /** Refuse a repository definition whose upstream this deployment must not pull from, naming the key. */
-    private static void refuseUnusableUpstream(String key, RepositoryDefinition definition,
-                                               String specification, boolean allowInternal) {
-        String refused = RepositoryDefinition.upstreamRefusal(definition, allowInternal);
-        if (refused != null) {
-            throw new IllegalArgumentException("'" + specification + "' is not an importable value for '" + key
-                    + "': " + refused + "." + RepositoryDefinition.upstreamRemedy());
-        }
-    }
-
-    /** Refuse a {@code format-upstream.<format>} value this deployment must not pull from, naming the key. */
-    private static void refuseUnusableUpstream(String key, URI upstream, boolean allowInternal) {
-        String refused = RepositoryDefinition.upstreamRefusal(upstream, allowInternal);
-        if (refused != null) {
-            throw new IllegalArgumentException("'" + upstream + "' is not an importable value for '" + key + "': "
-                    + refused + "." + RepositoryDefinition.upstreamRemedy());
-        }
-    }
-
     /**
-     * Set each of {@code values} deployment-wide in one batch - the first-boot wizard's Complete - once every one of
-     * them is known, settable deployment-wide, not pinned, of a value its kind and its contributor accept: one refused
-     * value writes none, and the refusals are thrown together. A blank value clears.
+     * Set each of {@code values} deployment-wide in one batch - the first-boot wizard's Complete - through the settings
+     * editor ({@link SettingsEditor#deployment}): one refused value writes none, and the refusals are thrown together.
+     * A blank value clears.
      */
     public void saveAll(Map<String, String> values) throws IOException {
-        SortedMap<String, String> refused = refusals(Setting.Scope.GLOBAL, values, true);
-        if (!refused.isEmpty()) {
-            throw new IllegalArgumentException(String.join(" ", refused.values()));
-        }
-        StoredSettings.write(root, values);
-        StoredSettings.changed(root);
+        editor.deployment(values, actor());
         invalidatePosture();
-        values.forEach((key, value) -> audit(value == null || value.isBlank() ? "setting.clear" : "setting.set", key));
     }
 
     /**
-     * Why each of {@code values} cannot be stored at {@code level}, keyed by setting, in key order - empty when every
-     * one may: the catalogue's refusal ({@link SettingsContributor#refusal(String, String, Setting.Scope,
-     * UnaryOperator)}), a key pinned above the store, an {@link Setting#operatorOnly() operator-only} key when
-     * {@code operator} is false, and - at a tenant - a value the tenant's gate does not resolve with. What a wizard
-     * asks on leaving a step and before it completes, and what every save here asks first.
+     * Why each of {@code values} cannot be stored at {@code level}, keyed by setting - the settings editor's
+     * {@link SettingsEditor#refusals}, which every change asks first. What a wizard asks on leaving a step.
      */
-    public SortedMap<String, String> refusals(Setting.Scope level, Map<String, String> values, boolean operator)
-            throws IOException {
-        UnaryOperator<String> deployment = deployment();
-        SortedMap<String, String> refused = new TreeMap<>();
-        for (Map.Entry<String, String> entry : values.entrySet()) {
-            String key = entry.getKey();
-            String value = entry.getValue() == null ? "" : entry.getValue();
-            Optional<String> refusal = SettingsContributor.refusal(key, value, level, deployment);
-            if (refusal.isPresent()) {
-                refused.put(key, refusal.get());
-                continue;
-            }
-            boolean local = SettingsScopes.declared(key).map(Setting::localOnly).orElse(false);
-            Optional<Pin> pin = local ? Optional.empty() : pins.apply(key);
-            if (pin.isPresent()) {
-                refused.put(key, "Setting '" + key + "' is pinned by " + pin.get().source()
-                        + ", so a stored value would be inert.");
-            } else if (!operator && SettingsScopes.operatorOnly(key)) {
-                refused.put(key, "Setting '" + key + "' is the deployment operator's to set.");
-            }
-        }
-        return refused;
-    }
-
-    /** The deployment's effective value of any key - a pin, else the stored value - for a refusal that depends on a
-     *  deployment dial. */
-    private UnaryOperator<String> deployment() throws IOException {
-        Properties stored = read();
-        return key -> pins.apply(key).map(Pin::value).orElse(stored.getProperty(key));
+    public SortedMap<String, String> refusals(Setting.Scope level, Map<String, String> values, boolean operator) {
+        return editor.refusals(level, values, operator);
     }
 
     /**
-     * A repository's effective configuration: a pin, else the repository's own value, else its tenant's, else the
-     * deployment's, else the setting's declared default - {@code null} for a key nothing sets. A
-     * {@link Setting#localOnly() local} key is the repository's own or its default. The console's reading of the chain
-     * the server resolves ({@code LiveConfig.effective}), so a preview here judges by the policy a sweep runs.
+     * A repository's effective configuration, as the settings editor resolves it for every surface
+     * ({@link SettingsEditor#config}) - the chain the server resolves too, so a preview here judges by the policy a
+     * sweep runs.
      */
     public UnaryOperator<String> repositoryConfig(String tenant, String repository) throws IOException {
-        return chain(ownRepository(tenant, repository), tenant);
+        return editor.config(Setting.Scope.REPOSITORY, tenant, repository);
     }
 
     /** A build-cache project's effective configuration, as {@link #repositoryConfig} is a repository's. */
     public UnaryOperator<String> projectConfig(String tenant, String project) throws IOException {
-        return chain(ownProject(tenant, project), tenant);
+        return editor.config(Setting.Scope.PROJECT, tenant, project);
     }
 
-    /** Each of a tenant's projects' effective configuration, the tenant's and the deployment's documents read once
-     *  for all of them - what a list of every project reads rather than the three levels per row. */
-    public ProjectConfigs projectConfigs(String tenant) throws IOException {
-        Properties tenants = StoredConfig.load(root, tenant);
-        Properties global = read();
-        return project -> chain(ownProject(tenant, project), tenants, global);
+    /** Each of a tenant's projects' effective configuration - a project's own documents read by name, over the
+     *  tenant's and the deployment's cached snapshots - for a list of every project. */
+    public ProjectConfigs projectConfigs(String tenant) {
+        return project -> editor.config(Setting.Scope.PROJECT, tenant, project);
     }
 
     /** A project's effective configuration, by project name - see {@link #projectConfigs}. */
@@ -1111,49 +899,20 @@ public class SettingsAdmin {
         UnaryOperator<String> of(String project) throws IOException;
     }
 
-    private UnaryOperator<String> chain(Map<String, String> own, String tenant) throws IOException {
-        return chain(own, StoredConfig.load(root, tenant), read());
-    }
-
-    private UnaryOperator<String> chain(Map<String, String> own, Properties tenants, Properties global) {
-        Map<String, Setting> declared = new HashMap<>();
-        for (Setting setting : catalogue()) {
-            declared.put(setting.key(), setting);
-        }
-        return key -> {
-            Setting setting = declared.get(key);
-            boolean local = setting != null && setting.localOnly();
-            Optional<Pin> pin = local ? Optional.empty() : pins.apply(key);
-            if (pin.isPresent()) {
-                return pin.get().value();
-            }
-            String value = own.get(key);
-            if (value == null && !local && SettingsScopes.settableAt(key, Setting.Scope.TENANT)) {
-                value = tenants.getProperty(key);
-            }
-            if (value == null && !local) {
-                value = global.getProperty(key);
-            }
-            if (value == null && setting != null && !setting.defaultValue().isBlank()) {
-                value = setting.defaultValue();
-            }
-            return value;
-        };
-    }
-
     /**
-     * A repository's settings, grouped for its settings screen: every repository setting with the repository's
-     * effective value, what it would inherit without its own ({@code baseline}), and whether it set one. An
-     * {@link Setting#operatorOnly() operator-only} setting is shown to a session that is not the operator as fixed,
-     * naming who sets it, rather than as a control it cannot use.
+     * A repository's settings, grouped for its settings screen, from the rows the settings editor reads for every
+     * surface ({@link SettingsEditor#rows}): every repository setting with the repository's effective value, what it
+     * would inherit without its own ({@code baseline}), and whether it set one. An {@link Setting#operatorOnly()
+     * operator-only} setting is shown to a session that is not the operator as fixed, naming who sets it, rather than
+     * as a control it cannot use.
      */
     public List<Group> repositoryGroups(String tenant, String repository, boolean operator) throws IOException {
-        return levelGroups(Setting.Scope.REPOSITORY, tenant, ownRepository(tenant, repository), operator);
+        return levelGroups(editor.rows(Setting.Scope.REPOSITORY, tenant, repository), operator);
     }
 
     /** A build-cache project's settings, grouped for its screen, as {@link #repositoryGroups} are a repository's. */
     public List<Group> projectGroups(String tenant, String project) throws IOException {
-        return levelGroups(Setting.Scope.PROJECT, tenant, ownProject(tenant, project), true);
+        return levelGroups(editor.rows(Setting.Scope.PROJECT, tenant, project), true);
     }
 
     /**
@@ -1165,8 +924,8 @@ public class SettingsAdmin {
     public Map<String, SettingView> wizardViews(Wizard wizard, String tenant, boolean operator) throws IOException {
         List<Group> groups = switch (wizard) {
             case SETUP -> groups();
-            case REPOSITORY -> levelGroups(Setting.Scope.REPOSITORY, tenant, Map.of(), operator);
-            case PROJECT -> levelGroups(Setting.Scope.PROJECT, tenant, Map.of(), true);
+            case REPOSITORY -> levelGroups(editor.rows(Setting.Scope.REPOSITORY, tenant, null), operator);
+            case PROJECT -> levelGroups(editor.rows(Setting.Scope.PROJECT, tenant, null), true);
         };
         Map<String, SettingView> views = new LinkedHashMap<>();
         for (Group group : groups) {
@@ -1177,34 +936,19 @@ public class SettingsAdmin {
         return views;
     }
 
-    /** A repository's own stored values, read by name from its settings documents. */
-    private Map<String, String> ownRepository(String tenant, String repository) throws IOException {
-        return StoredSettings.read(StoredSettings.repository(root, tenant, repository), Setting.Scope.REPOSITORY);
-    }
-
-    /** A project's own stored values, read by name from its settings documents. */
-    private Map<String, String> ownProject(String tenant, String project) throws IOException {
-        return StoredSettings.read(StoredSettings.project(root, tenant, project), Setting.Scope.PROJECT);
-    }
-
-    private List<Group> levelGroups(Setting.Scope level, String tenant, Map<String, String> own, boolean operator)
-            throws IOException {
-        UnaryOperator<String> inherited = chain(Map.of(), tenant);
+    private List<Group> levelGroups(List<SettingsEditor.Row> rows, boolean operator) {
         Map<String, String> attribution = SettingsContributor.attribution();
         Map<String, List<SettingView>> grouped = new LinkedHashMap<>();
-        for (Setting setting : catalogue()) {
-            if (setting.scope() != level) {
-                continue;
-            }
-            String baseline = Objects.requireNonNullElse(inherited.apply(setting.key()), "");
-            String value = own.get(setting.key());
-            Optional<Pin> pin = setting.localOnly() ? Optional.empty() : pins.apply(setting.key());
+        for (SettingsEditor.Row row : rows) {
+            Setting setting = row.setting();
+            Optional<PinnedSettings.Pin> pin = row.pin();
             if (pin.isEmpty() && !operator && setting.operatorOnly()) {
-                pin = Optional.of(new Pin("the deployment's operator", value != null ? value : baseline));
+                pin = Optional.of(new PinnedSettings.Pin("the deployment's operator", row.effective()));
             }
-            String effective = pin.map(Pin::value).orElse(value != null ? value : baseline);
+            String effective = pin.map(PinnedSettings.Pin::value).orElse(row.effective());
             grouped.computeIfAbsent(setting.group(), _ -> new ArrayList<>())
-                    .add(view(setting, effective, baseline, value != null, pin, moduleOf(attribution, setting.key())));
+                    .add(view(setting, effective, row.inherited(), row.overridden(), pin,
+                            moduleOf(attribution, setting.key())));
         }
         List<Group> groups = new ArrayList<>();
         grouped.forEach((name, settings) -> groups.add(new Group(name, settings)));
@@ -1212,32 +956,18 @@ public class SettingsAdmin {
     }
 
     /**
-     * Set each non-blank value and clear each blank one in a repository's own documents, once every one of them
-     * passes {@link #refusals} at the repository level - otherwise nothing is written and the refusals are thrown
-     * together. {@code operator} is whether the acting session is the deployment's operator.
+     * Set each non-blank value and clear each blank one in a repository's own documents, through the settings editor
+     * ({@link SettingsEditor#repository}) - refused whole, naming every refusal, when any value is refused.
+     * {@code operator} is whether the acting session is the deployment's operator.
      */
     public void saveRepository(String tenant, String repository, Map<String, String> values, boolean operator)
             throws IOException {
-        SortedMap<String, String> refused = refusals(Setting.Scope.REPOSITORY, values, operator);
-        if (!refused.isEmpty()) {
-            throw new IllegalArgumentException(String.join(" ", refused.values()));
-        }
-        StoredSettings.write(StoredSettings.repository(root, tenant, repository), values);
-        StoredSettings.changed(root);
-        values.forEach((key, value) -> audit(value == null || value.isBlank() ? "setting.clear" : "setting.set",
-                tenant + "/" + repository + "/" + key));
+        editor.repository(tenant, repository, values, operator, actor());
     }
 
-    /** {@link #saveRepository} for a build-cache project's own documents. */
+    /** {@link #saveRepository} for a build-cache project's own documents ({@link SettingsEditor#project}). */
     public void saveProject(String tenant, String project, Map<String, String> values) throws IOException {
-        SortedMap<String, String> refused = refusals(Setting.Scope.PROJECT, values, true);
-        if (!refused.isEmpty()) {
-            throw new IllegalArgumentException(String.join(" ", refused.values()));
-        }
-        StoredSettings.write(StoredSettings.project(root, tenant, project), values);
-        StoredSettings.changed(root);
-        values.forEach((key, value) -> audit(value == null || value.isBlank() ? "setting.clear" : "setting.set",
-                tenant + "/" + project + "/" + key));
+        editor.project(tenant, project, values, actor());
     }
 
     /** The editable-settings catalogue: the neutral core dogfoods the same {@code SettingsContributor} SPI its plugin
@@ -1315,13 +1045,6 @@ public class SettingsAdmin {
         public boolean orphaned() {
             return orphanObjects > 0;
         }
-    }
-
-    /** A key pinned above the store: the human phrase for what pins it ("environment variable", "system property",
-     *  "command line", "configuration file") and the value it is fixed to. The console's Spring layer produces this
-     *  from the server's {@code PinnedSettings} probe over its environment, so this Spring-free layer stays decoupled
-     *  from it. */
-    public record Pin(String source, String value) {
     }
 
     /** One setting rendered for the config page: its key and human label, its inline documentation, its value kind

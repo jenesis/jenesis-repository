@@ -1,5 +1,7 @@
 package build.jenesis.repository.ui.admin.config;
 
+import java.io.IOException;
+
 import build.jenesis.repository.audit.AuditTrail;
 import build.jenesis.repository.audit.AuditTrailProvider;
 import build.jenesis.repository.store.ReadOnlyArtifactStore;
@@ -8,6 +10,10 @@ import build.jenesis.repository.store.ArtifactStore;
 import build.jenesis.repository.store.ArtifactStoreProvider;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import build.jenesis.repository.server.kernel.PinnedSettings;
+import build.jenesis.repository.server.kernel.SettingsEditor;
+import build.jenesis.repository.store.Features;
+import org.springframework.core.env.ConfigurableEnvironment;
 import org.springframework.core.env.Environment;
 
 /**
@@ -40,6 +46,20 @@ public class RepositoryStoreConfig {
     @Bean
     public Authorization authorization(ArtifactStore repositoryStore) {
         return Authorization.enforcing(repositoryStore);
+    }
+
+    /**
+     * The one place a setting is changed, for a console that runs as its own node: over its own view of the settings
+     * of the store it opens, resolving a change against the shipped defaults and pinning what this console's launch
+     * configuration fixes. Composed into the repository, the console uses the repository's editor instead, which is
+     * why this wiring is excluded there.
+     */
+    @Bean
+    public SettingsEditor settingsEditor(ArtifactStore repositoryStore, AuditTrail auditTrail,
+                                         ConfigurableEnvironment environment) throws IOException {
+        PinnedSettings pins = new PinnedSettings(environment);
+        return SettingsEditor.over(repositoryStore, pins::pinned, auditTrail,
+                Features.namespaced(environment::getProperty));
     }
 
     @Bean
