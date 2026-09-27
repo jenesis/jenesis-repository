@@ -45,7 +45,7 @@ import build.jenesis.repository.store.ServableNames;
  *     {@link #servedPaths} answer an <em>empty list</em> for a coordinate version that maps to no live pointer;
  *     {@code null} is never returned and no input is refused with an exception.</li>
  * <li><b>Traversal refusal.</b> A coordinate and a version are as client-supplied as a request path - they arrive from
- *     a published name, an advisory feed, a console form or a stored {@code published/} sidecar - so a coordinate or
+ *     a published name, an advisory feed, a console form or a stored version document - so a coordinate or
  *     version part that is not a single addressable path segment ({@link #addressable}) maps <em>nowhere</em>: every
  *     method here answers empty rather than composing a pointer key carrying a {@code .} or {@code ..} segment. This
  *     is not cosmetic: {@link #blobKeys} is what an eviction <em>deletes</em>, and {@code ArtifactStore.delete} is not
@@ -147,11 +147,10 @@ public interface BlobLayout extends BlobRoots {
     }
 
     /** The format-neutral coordinate a request path carries, from the path alone - the blobs-namespace twin of
-     *  {@code ArtifactLayout.describe}, and what lets the inventory write the {@code published/} sidecar
-     *  for a blobs-namespace publish so the retroactive enforcement sweeps enumerate the version (without it, a
-     *  KEV-listed npm or PyPI package admitted before its CVE landed would be invisible to every sweep while the
-     *  "held" gauge reported the repository clean). Empty for a path that names no versioned artifact - an index, a
-     *  packument, a metadata read. */
+     *  {@code ArtifactLayout.describe}, and what lets the inventory record a blobs-namespace publish so the retroactive
+     *  enforcement sweeps enumerate the version (without it, a KEV-listed npm or PyPI package admitted before its CVE
+     *  landed would be invisible to every sweep while the "held" gauge reported the repository clean). Empty for a path
+     *  that names no versioned artifact - an index, a packument, a metadata read. */
     /**
      * The store key that SERVES {@code requestPath}, or empty when this layout stores nothing there.
      *
@@ -188,9 +187,9 @@ public interface BlobLayout extends BlobRoots {
      * {@link #servingKey} maps a request path to a store key. Nothing mapped a stored key back to the coordinate it
      * serves, and the {@code by/} indexes are per-format answers to other questions rather than a general one.
      *
-     * <p>Without it a blobs-namespace release whose {@code published/} row is lost is never rebuilt. The reconcile's
+     * <p>Without it a blobs-namespace release whose {@code published} record is lost is never rebuilt. The reconcile's
      * forward-repair leg walks {@code publish/}, so it covers the Publication-namespace layouts only; a blobs-namespace
-     * format keeps its pointers under its own roots, which that walk never visits. The row is lost by an ordinary
+     * format keeps its pointers under its own roots, which that walk never visits. The record is lost by an ordinary
      * window rather than by an upgrade: the accept path records it <em>after</em> the artifact is committed, so
      * anything that stops the process in between leaves a pointer nobody can name a coordinate for. The artifact
      * keeps serving; what stops is a retroactive sweep seeing it, so it can carry a later-listed CVE while the held

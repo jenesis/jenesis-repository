@@ -657,10 +657,10 @@ public class RepositoryBrowse extends TenantScope {
         }
         if (indexed.isPresent()) {
             // The index already identified the exact hits, so resolve each one directly instead of enumerating the
-            // whole published/ tree just to filter it down to those hits (read-first: a full-store walk per request
+            // whole published set just to filter it down to those hits (read-first: a full-store walk per request
             // when the index answered). The ecosystem is the only fact the coordinate:version display string does not
             // carry, so it is recovered by a bounded probe over the few top-level ecosystems - a per-coordinate version
-            // listing that reads only the small published/ sidecars, never a walk of every coordinate.
+            // listing that reads only the small version documents, never a walk of every coordinate.
             List<String> ecosystems = ecosystems(repository);
             for (String hit : indexed.get().coordinates()) {
                 int split = hit.lastIndexOf(':');
@@ -718,7 +718,7 @@ public class RepositoryBrowse extends TenantScope {
         return new SearchPage(results, truncated[0]);
     }
 
-    /** The ecosystems this repository has published rows under - the top-level children of {@code published/},
+    /** The ecosystems this repository has published releases under - the top level of its version documents,
      *  bounded by the installed-format count; the inventory's own enumeration, over this repository's store. */
     private List<String> ecosystems(String repository) throws IOException {
         return new ArrayList<>(StoreRepositoryInventory.ecosystems(scope(repository)));

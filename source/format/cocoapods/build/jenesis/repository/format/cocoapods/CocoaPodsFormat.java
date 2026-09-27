@@ -682,7 +682,7 @@ public final class CocoaPodsFormat implements RepositoryFormat, ArtifactLayout, 
 
     /**
      * The pod version a stored CocoaPods pointer serves - the backwards direction the inventory back-fill rebuilds a
-     * lost {@code published/} row from.
+     * lost {@code published} record from.
      *
      * <p>Both of this format's pointer shapes carry the pair in <em>path segments</em>, which is the easy case: the
      * download pointer is {@code cocoapods/<repo>/blob/<name>/<version>} and the podspec stanza is

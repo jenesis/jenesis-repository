@@ -278,8 +278,8 @@ public final class HoldClears {
     public static Known<String> holder(ArtifactStore store, StoreRepositoryInventory inventory, String hash,
                                        List<StoreRepositoryInventory.Coordinate> claimants, Known<String> alias)
             throws IOException {
-        // (c) No live SERVABLE coordinate claims these bytes: an OCI REJECT manifest (marker-only, never in
-        //     published/) or a detached orphan we cannot prove is servable. Keep it withheld forever - fail-safe.
+        // (c) No live SERVABLE coordinate claims these bytes: an OCI REJECT manifest (marker-only, never recorded as
+        //     published) or a detached orphan we cannot prove is servable. Keep it withheld forever - fail-safe.
         if (claimants.isEmpty()) {
             return Known.known("no live published coordinate claims blobs/" + hash + " - a REJECT manifest or a "
                     + "detached marker, which stays withheld");

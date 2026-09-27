@@ -130,7 +130,7 @@ public interface WalkConsumer {
         /** The serving pointers: the {@code publish/} root and every blobs-namespace root a format declares.
          *  Delivered as descriptors through {@link #onRetained} and {@link #onWithheld}. */
         POINTERS,
-        /** The inventory's rows per published version - the sidecars under {@code published/} - delivered as keys. */
+        /** The inventory's documents per published version, delivered as keys. */
         INVENTORY,
         /** The content-addressed pool under {@code blobs/}, delivered as keys. */
         BLOBS,

@@ -209,7 +209,7 @@ public final class DebianFormat implements RepositoryFormat, ProxyLeg, BlobLayou
 
     /**
      * The package version a stored Debian pointer serves - the backwards direction the inventory back-fill rebuilds
-     * a lost {@code published/} row from.
+     * a lost {@code published} record from.
      *
      * <p>Debian is the first format here whose pair lives in a <em>filename</em> rather than in path segments, and
      * the only reason that is safe is a rule of the ecosystem rather than of this store: a {@code .deb} is named
@@ -348,7 +348,7 @@ public final class DebianFormat implements RepositoryFormat, ProxyLeg, BlobLayou
      *  convention (Debian policy allows {@code _} in neither a package name nor a version, so the split is exact) -
      *  the package name alone as the coordinate, the {@code Package} the Debian compliance inspector reads from the
      *  control stanza. The filename version omits any epoch the control's {@code Version} carries, the one
-     *  path-underivable piece. Feeds the {@code published/} sidecar the retroactive enforcement sweeps enumerate the
+     *  path-underivable piece. Feeds the {@code published} record the retroactive enforcement sweeps enumerate the
      *  version by. The generated {@code Release}/{@code Packages} indexes and the keyring endpoints name no package
      *  and stay empty; a filename off the convention describes coordinate-less rather than guessing. */
     @Override

@@ -257,7 +257,7 @@ public final class HoldLifecycle {
         new QuarantineLog(store).discarded(path);
         HoldReleaseObserver.discarded(store, path, hooks);
         // The discard counterpart of the release leg's orphan reap: a kind with no installed hook cannot drop its own
-        // record, and a discarded version has no published/ sidecar for any sweep to ever reach, so the row would
+        // record, and a discarded version has no published record for any sweep to ever reach, so the row would
         // dangle forever. Guarded exactly as the installed kinds' own onDiscarded guards it - the record is per
         // VERSION, so discarding one path of a multi-path hold must not strip the state the remaining held paths are
         // reviewed against; the last discard reaps it.

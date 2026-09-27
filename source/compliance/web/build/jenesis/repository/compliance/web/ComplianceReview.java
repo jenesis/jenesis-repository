@@ -764,12 +764,13 @@ public class ComplianceReview extends TenantScope {
     /** The retroactive-license-enforcement dry-run for a repository - the console blast-radius panel over the discovered
      *  {@link RetroLicensePlanner} (provided by the {@code compliance/licenses} module): what a fresh enabling pass
      *  <em>would</em> newly hold under the current license policy, so a reviewer sees the blast radius before turning
-     *  enforcement on. {@code includeUnknown} widens the preview to the riskier {@code denied+unknown} mode (holding the
-     *  coordinates whose license could not be identified) versus the high-confidence {@code denied}-only set. The plan
-     *  is read-only (it reads the license sidecars and hold/override markers, never an artifact blob and never a write)
-     *  and, like the {@code /api/licenses/retro/plan} surface it mirrors, lists only what an enabling pass would newly
-     *  hold. Reports {@code installed=false} (empty held list) when no license-policy module contributes a planner - the
-     *  same graceful degrade the endpoint answers {@code 501} on - so the panel states it is not installed. */
+     *  enforcement on. {@code includeUnknown} widens the preview to the riskier {@code denied+unknown} mode (holding
+     *  the coordinates whose license could not be identified) versus the high-confidence {@code denied}-only set. The
+     *  plan is read-only (it reads the declared licenses and hold/override markers, never an artifact blob and never a
+     *  write) and, like the {@code /api/licenses/retro/plan} surface it mirrors, lists only what an enabling pass would
+     *  newly hold. Reports {@code installed=false} (empty held list) when no license-policy module contributes a
+     *  planner - the same graceful degrade the endpoint answers {@code 501} on - so the panel states it is not
+     *  installed. */
     public BlastRadiusView blastRadius(String repository, boolean includeUnknown) throws IOException {
         return blastRadius(repository, includeUnknown, RetroLicensePlanner.installed());
     }

@@ -10,8 +10,8 @@ import build.jenesis.repository.metadata.State;
 /**
  * The {@code downloads} section codec of the consolidated metadata document: how often a coordinate version was
  * downloaded and when it last was - the observation the {@code not-downloaded-for} retention criterion evicts by,
- * folded into the document beside the publish facts rather than kept as its own {@code downloaded/} sidecar, so it
- * evicts with the version's document and survives a copy of the store as the document does.
+ * kept in the document beside the publish facts, so it evicts with the version's document and survives a copy of the
+ * store as the document does.
  *
  * <p>The {@code data} payload is {@code {"count":<long>, "last":<instant>}}. The one mutation, {@link #add}, is a
  * delta: it is re-derived over whatever the document holds on every compare-and-set attempt, so two nodes each

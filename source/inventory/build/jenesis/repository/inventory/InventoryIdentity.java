@@ -402,18 +402,18 @@ final class InventoryIdentity {
     }
 
     /** A version's member digest: the SHA-256 over its neutral coordinate triple and its declared-license
-     *  fingerprint, distinguishing an <em>absent</em> license sidecar (never inspected) from a <em>present-but-empty</em>
-     *  one (inspected, none declared) so a later inspection re-folds the member. Every mutation point and the rebuild
-     *  compute the member through this one definition, over the exact stored sidecar bytes, so an incremental fold and
-     *  a full recompute agree. */
-    static byte[] member(String ecosystem, String coordinate, String version, Optional<byte[]> licenseSidecar) {
+     *  fingerprint, distinguishing an <em>absent</em> {@code licenses} section (never inspected) from a
+     *  <em>present-but-empty</em> one (inspected, none declared) so a later inspection re-folds the member. Every
+     *  mutation point and the rebuild compute the member through this one definition, over the exact stored section
+     *  bytes, so an incremental fold and a full recompute agree. */
+    static byte[] member(String ecosystem, String coordinate, String version, Optional<byte[]> licenses) {
         MessageDigest digest = sha256();
         update(digest, ecosystem);
         update(digest, coordinate);
         update(digest, version);
-        if (licenseSidecar.isPresent()) {
+        if (licenses.isPresent()) {
             digest.update((byte) 1);
-            digest.update(licenseSidecar.get());
+            digest.update(licenses.get());
         } else {
             digest.update((byte) 0);
         }

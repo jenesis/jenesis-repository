@@ -794,7 +794,7 @@ public final class ComplianceScreen implements PublishInterceptor {
      * evicted-but-still- enumerated sibling version - which legitimately resolves to nothing at describe time - never
      * false-positives. Only blobs-namespace ecosystems are checked: a {@code publish/}-namespace layout (Maven) or a
      * non-blobs upload has no such reverse mapping to verify, and a path that names no versioned artifact (an index, a
-     * packument, a versionless envelope endpoint) is skipped exactly as the {@code published/} sidecar write is.
+     * packument, a versionless envelope endpoint) is skipped exactly as the {@code published} record is.
      */
     private static void verifyHoldMapping(ArtifactDescriptor artifact, ArtifactStore store) throws IOException {
         StoreRepositoryInventory inventory = new StoreRepositoryInventory(store);
@@ -864,7 +864,7 @@ public final class ComplianceScreen implements PublishInterceptor {
     /**
      * Persist a quarantining assessment's reasons as structured rows in the findings ledger - one attributed
      * {@link Finding.Kind#GATE} row per gate finding, keyed by the coordinate the layout descriptor maps the path
-     * to (the same coordinate the {@code published/} sidecar would use, so a later release's eviction reclaims the
+     * to (the same coordinate the {@code published} record uses, so a later release's eviction reclaims the
      * rows) - beside the {@link QuarantineLog}'s flat audit line. Held to quarantines only: a rejected upload stores
      * no artifact whose lifecycle could ever reclaim its rows, so its trail stays the retention-pruned log. Best
      * effort like every derived write here - the hold and the log line are already durable, so a failed ledger write
@@ -952,8 +952,8 @@ public final class ComplianceScreen implements PublishInterceptor {
      * writes them ({@link AdvisoryFindings#of}). This closes the between-sweeps window: a coordinate published AFTER the
      * last sweep already carries its advisory findings rather than rendering clean until the next pass, and because the
      * rows key by {@code (source, id)} the later sweep converges on the identical rows instead of doubling them. Held
-     * to ACCEPT, where the coordinate lands in {@code published/} and the sweep will revisit it - a quarantined or
-     * rejected upload has no such sidecar, so persisting its advisory rows would strand them. Best-effort like every
+     * to ACCEPT, where the coordinate is recorded as published and the sweep will revisit it - a quarantined or
+     * rejected upload has no such record, so persisting its advisory rows would strand them. Best-effort like every
      * derived write here, and fail-soft <em>per feed</em>: a feed the warm cache cannot answer (a feed failing
      * closed with nothing cached) is logged and metered, never a reason to fail an already-accepted publish. A no-op
      * when no findings module is installed or no feeds are wired.
@@ -1022,7 +1022,7 @@ public final class ComplianceScreen implements PublishInterceptor {
      * {@code HealthScanTask} writes it. This closes the between-sweeps window: a coordinate published AFTER the last
      * health sweep already carries its health in the ledger the gate now reads, so admission of a LATER version of the
      * same coordinate scores off a populated ledger rather than the not-yet-swept fallback. Held to ACCEPT, where the
-     * coordinate lands in {@code published/} and the sweep will revisit it. A coordinate the source scores nothing is
+     * coordinate is recorded as published and the sweep will revisit it. A coordinate the source scores nothing is
      * left unrecorded (unknown, not healthy). Best-effort like every derived write here - the artifact is already stored,
      * so a failed probe or write must not fail an accepted publish - and a no-op when no health-ledger module is
      * installed or no live source is wired; the sweep then records the coordinate on its next pass. The commit does NOT
@@ -1146,7 +1146,7 @@ public final class ComplianceScreen implements PublishInterceptor {
         }
     }
 
-    /** The {@code (ecosystem, coordinate, version)} that entered this repository's {@code published/} tree for the
+    /** The {@code (ecosystem, coordinate, version)} this repository recorded as published for the
      *  accepted upload - exactly what the scheduled sweep reads back and re-queries, so the publish-time advisory rows
      *  key identically and converge. It is the path descriptor's coordinate where the layout maps the path to one (a
      *  Maven publish), else the inspected subject's own coordinate for a versionless envelope publish
@@ -1209,9 +1209,9 @@ public final class ComplianceScreen implements PublishInterceptor {
         return HoldReleaseObserver.anyHolds(store, artifact.path());
     }
 
-    /** On an accepted publish an inspector claimed, record the artifact's own declared licenses as a sidecar keyed
-     *  exactly like the publish-time sidecar (the layout descriptor's coordinate, not the inspector subject's, so the
-     *  {@code licenses/} key joins the {@code published/} one the search sweep enumerates). The first subject is the
+    /** On an accepted publish an inspector claimed, record the artifact's own declared licenses in its version
+     *  document, keyed by the layout descriptor's coordinate rather than the inspector subject's, so they land in the
+     *  document whose publish facts the search sweep enumerates. The first subject is the
      *  artifact itself - the root of the inspected set, ahead of any transitive dependency - so its licenses are the
      *  artifact's own; an empty list is still recorded, marking the artifact as inspected-but-license-free so the
      *  sweep indexes it as unknown rather than re-parsing it. A claimed path that maps to no coordinate (a checksum,

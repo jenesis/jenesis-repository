@@ -7,12 +7,12 @@ import build.jenesis.repository.store.Providers;
 /**
  * The dry-run seam for retroactive license enforcement: a {@code ServiceLoader}-discovered planner that reports what
  * the retro sweep <em>would</em> newly hold in a repository under the current license policy, so an operator can review
- * the blast radius before turning enforcement on. The heavy logic (the license policy, the declared-license sidecars)
+ * the blast radius before turning enforcement on. The heavy logic (the license policy, the declared licenses)
  * rides in the {@code compliance/licenses} module that provides this seam; a thin {@code web} adapter resolves it
  * through {@link #installed} and answers {@code 501} when the module is absent, so the preview surface degrades
  * gracefully without either forking the policy or hard-wiring the endpoint to the plugin.
  *
- * <p>The plan is read-only - it enumerates the {@code published/} sidecars and reads the {@code licenses/} sidecars and
+ * <p>The plan is read-only - it enumerates the published releases and reads their {@code licenses} sections and
  * the hold/override markers, never an artifact blob and never a write - and lists only what a fresh enabling pass would
  * <em>newly</em> hold: a release already held (by this sweep, the gate or the KEV sweep) or already released by an
  * operator is excluded, so the count matches the number an enabling pass then holds.
@@ -35,8 +35,8 @@ import build.jenesis.repository.store.Providers;
  *     {@link Providers#optionalUnique} primitive, never a hand-rolled loop.</li>
  * <li><b>Tenant scoping.</b> The caller hands in an already-scoped repository store; the plan may read
  *     nothing outside it.</li>
- * <li><b>Read purity.</b> The plan is read-only: it enumerates {@code published/} sidecars and reads
- *     {@code licenses/} sidecars and hold/override markers, never an artifact blob, never an external fetch and
+ * <li><b>Read purity.</b> The plan is read-only: it enumerates the published releases and reads their
+ *     {@code licenses} sections and hold/override markers, never an artifact blob, never an external fetch and
  *     never a write. A preview must stand when the license feeds are down.</li>
  * <li><b>Bounded work / cancellation.</b> The plan walks an existing corpus, so it is bounded by the repository's
  *     published set rather than by a cap; a caller that must bound it bounds the repository it asks about.

@@ -10,7 +10,7 @@ import tools.jackson.databind.json.JsonMapper;
  * format describes from the path, whether it is a prerelease, and the instant its coordinate version was published.
  * Serialised as one NDJSON object per artifact terminated by a newline, so a consumer streams the index line by line;
  * no artifact blob is ever opened to build it (path/size/hash come from the pointer, the coordinate from the path
- * alone, the publish instant from the {@code published/} sidecar).
+ * alone, the publish instant from the version document).
  */
 public record IndexRecord(String path, long size, String sha256, String ecosystem, String coordinate,
                           String version, boolean prerelease, Instant published) {

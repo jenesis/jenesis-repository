@@ -111,7 +111,7 @@ public final class NpmFormat implements RepositoryFormat, ProxyLeg, BlobLayout, 
 
     /** The coordinate a tarball request path carries ({@code /npm/<name>/-/<shortName>-<version>.tgz}, the name kept
      *  whole with its {@code @scope} - the coordinate {@link #blobKeys} and the npm compliance inspector key on), so
-     *  the inventory writes the {@code published/} sidecar the retroactive enforcement sweeps enumerate the version
+     *  the inventory records the release the retroactive enforcement sweeps enumerate the version
      *  by. A packument or publish path ({@code /npm/<name>}) and the dist-tags carry no single version and stay
      *  empty; a tarball filename off the conventional {@code <shortName>-<version>} shape describes coordinate-less
      *  rather than guessing a wrong version. A {@code -} suffix in the version marks a prerelease, the same

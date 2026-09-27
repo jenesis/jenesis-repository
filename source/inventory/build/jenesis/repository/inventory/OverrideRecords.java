@@ -31,8 +31,8 @@ import build.jenesis.repository.store.ArtifactStore;
  * <p>It sits in the inventory module rather than beside {@code HoldRecords} in the gate because the inventory is what
  * <em>reaps</em> this space - {@code InventoryEviction} on a version's destruction, {@code InventoryReconciler} on
  * the derived-row sweep - and the gate already depends on the inventory, not the other way round. The inventory also
- * already owns every sibling per-version key space ({@code published/}, {@code downloaded/}, {@code pinned/},
- * {@code licenses/}), so this is the space joining them rather than a new home being invented for it.
+ * owns every other per-version fact - the version document's {@code published}, {@code downloads} and {@code licenses}
+ * sections - so this is the space joining them rather than a new home being invented for it.
  */
 public final class OverrideRecords {
 

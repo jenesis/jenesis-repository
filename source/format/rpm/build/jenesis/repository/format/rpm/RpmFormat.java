@@ -773,7 +773,7 @@ public final class RpmFormat implements RepositoryFormat, ArtifactLayout, ProxyL
 
     /**
      * The package version a stored RPM pointer serves - the backwards direction the inventory back-fill rebuilds a
-     * lost {@code published/} row from.
+     * lost {@code published} record from.
      *
      * <p>Like Debian's, the pair lives in a <em>filename</em> rather than in path segments, and like Debian's the
      * only thing that makes decoding it safe is a rule of the ecosystem rather than of this store: an RPM file is

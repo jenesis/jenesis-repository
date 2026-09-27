@@ -14,10 +14,9 @@ import build.jenesis.repository.walk.Traversal;
  * But the coordinate-keyed read has a second consumer one module down: the inventory's name-enumeration screen
  * ({@code InventoryBrowse.disclosable}) has to know whether a version is held for an ecosystem <em>no installed format
  * can place</em>, which is exactly when neither of its own withholding faces - both layout-resolved - can be asked.
- * The gate depends on the inventory, not the other way round, so the read had to come down; and it comes down
- * to the module that already owns every sibling per-version key space ({@code published/}, {@code downloaded/},
- * {@code pinned/}, {@code licenses/}, and - for the same reason - the {@code overrides/} twin in
- * {@link OverrideRecords}). {@code HoldRecords} in the gate keeps its whole public surface and delegates its
+ * The gate depends on the inventory, not the other way round, so the read lives down here, in the module that owns
+ * every other per-version fact: the version document's sections, and - for the same reason - the {@code overrides/}
+ * twin in {@link OverrideRecords}. {@code HoldRecords} in the gate keeps its whole public surface and delegates its
  * coordinate-keyed reads here, so there is still exactly one construction of these keys and exactly one enumeration of
  * the kind index. What stays in the gate is everything that needs discovery: the path-keyed forms (which need a format
  * to turn a request path into a coordinate), the installed-provider join, and the operator's orphan reap.

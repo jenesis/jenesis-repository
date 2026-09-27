@@ -30,9 +30,10 @@ import build.jenesis.repository.store.SingleFlight;
 
 /**
  * A {@link RepositoryInventory} over the artifact store, keyed by the format-neutral {@code ecosystem} and coordinate
- * a format supplies rather than any layout this code parses. Publish times are recorded in a {@code published/}
- * sidecar (the store's version token is opaque, so the time cleanup orders and ages by is kept explicitly, alongside
- * the format-supplied prerelease flag); enumeration reads those sidecars, and an eviction unpublishes every pointer a
+ * a format supplies rather than any layout this code parses. Publish times are recorded in the {@code published}
+ * section of each version's document (the store's version token is opaque, so the time cleanup orders and ages by is
+ * kept explicitly, alongside the format-supplied prerelease flag); enumeration reads those documents, and an eviction
+ * unpublishes every pointer a
  * version occupies - the paths resolved by the owning format's {@link ArtifactLayout}, including any cross-published
  * mirror it recorded - each removal observed ({@code PublicationObserver.onDeleted}) with the coordinate this
  * eviction already resolved. The now-unreferenced content blobs are reclaimed by the discovered
@@ -49,9 +50,8 @@ import build.jenesis.repository.store.SingleFlight;
  * {@link InventoryEviction} (the unpublish + derived-row reap), {@link InventoryReconciler} (the convergence
  * sweep), {@link InventoryIdentity} (the rollup identity) and {@link SubtreeSizeRollUp} (the browse-size fold) - and
  * delegates each method to the one that owns it. The shared store-key/codec helpers ({@link #encode}/{@link #decode},
- * the {@code published/}/{@code downloaded/}/{@code pinned/} key builders, {@link #layoutsFor}/{@link #blobLayoutsFor},
- * the fenced {@link #writeVersioned} and the subtree {@link #walk}) live here once and every collaborator reuses them,
- * so the split changed no behaviour and no on-store byte/key layout.
+ * the {@code pinned/} index key, {@link #layoutsFor}/{@link #blobLayoutsFor}, the fenced {@link #writeVersioned} and
+ * the subtree {@link #walk}) live here once and every collaborator reuses them.
  */
 public final class StoreRepositoryInventory implements RepositoryInventory {
 
@@ -144,7 +144,7 @@ public final class StoreRepositoryInventory implements RepositoryInventory {
 
     /** Record a published request path by the neutral coordinate the owning format describes - through its
      *  {@link ArtifactLayout} for a {@code publish/}-namespace layout, or its {@link BlobLayout#describe} for a
-     *  blobs-namespace one, so npm/PyPI/NuGet-style publishes gain the {@code published/} sidecar the retroactive
+     *  blobs-namespace one, so npm/PyPI/NuGet-style publishes gain the {@code published} record the retroactive
      *  enforcement sweeps enumerate. A no-op for a path no descriptive format claims. */
     public void record(String path, Instant published) throws IOException {
         recording.record(path, published);
@@ -238,9 +238,9 @@ public final class StoreRepositoryInventory implements RepositoryInventory {
         return recording.dependencies(ecosystem, coordinate, version);
     }
 
-    /** When a coordinate version was recorded as published - the {@code published/} sidecar's instant - or empty if no
-     *  sidecar exists, so a non-retroactive backstop (forwarding self-repair) can compare a publication against a
-     *  watermark without enumerating every {@link Release}. Reads only the tiny sidecar, never an artifact blob. */
+    /** When a coordinate version was recorded as published - its {@code published} section's instant - or empty if it
+     *  has none, so a non-retroactive backstop (forwarding self-repair) can compare a publication against a watermark
+     *  without enumerating every {@link Release}. Reads only the version's document, never an artifact blob. */
     public Optional<Instant> publishedAt(String ecosystem, String coordinate, String version) throws IOException {
         return recording.publishedAt(ecosystem, coordinate, version);
     }
@@ -338,7 +338,7 @@ public final class StoreRepositoryInventory implements RepositoryInventory {
 
     /** Whether a search-index hit - a {@code coordinate:version} display string, the form the Lucene leg returns and the
      *  substring scan builds - may be disclosed under {@code policy}. Resolves the hit's ecosystem by the same bounded
-     *  top-level {@code published/} probe the console search uses to place a hit, then screens it through
+     *  top-level probe of the version documents the console search uses to place a hit, then screens it through
      *  {@link #disclosable(String, String, String, ServableNames.Policy)}. The {@code coordinate:version} split is
      *  probed at every colon right-to-left (not just the last), so a digest-pinned OCI display {@code <name>:sha256:<hex>}
      *  places on its {@code (<name>, sha256:<hex>)} split and screens rather than mis-splitting to {@code (<name>:sha256,
@@ -346,7 +346,7 @@ public final class StoreRepositoryInventory implements RepositoryInventory {
      *  any split is disclosable, since membership is the only truth there (the ghost-coordinate contract). The one eco-resolution the
      *  console {@code RepositoryBrowse} and the REST {@code /api/search} share, so both search surfaces screen a held
      *  {@code coordinate:version} identically rather than each re-implementing it. Reads
-     *  only the small {@code published/} sidecars and, under {@link ServableNames.Policy#HIDE_WITHHELD}, the tiny
+     *  only the small version documents and, under {@link ServableNames.Policy#HIDE_WITHHELD}, the tiny
      *  quarantine pointers / {@code withheld/<hash>} markers - never an artifact blob.
      *
      *  <p>A colon-less {@code display} (a bare name carrying no {@code :version}) is rejected with
@@ -358,7 +358,7 @@ public final class StoreRepositoryInventory implements RepositoryInventory {
      *  ghost-coordinate contract is preserved: a
      *  {@code coordinate:version} display no installed ecosystem places on any split still discloses (membership is the
      *  only truth there). Accepted residual: a cross-ecosystem {@code coordinate:version} collision resolves
-     *  to the first ecosystem whose {@code published/} rows place the split, so two ecosystems that share an identical
+     *  to the first ecosystem whose version documents place the split, so two ecosystems that share an identical
      *  {@code coordinate:version} are screened by whichever the probe reaches first. */
     /**
      * Whether a search hit may be disclosed, whichever of the two shapes it is.
@@ -557,7 +557,7 @@ public final class StoreRepositoryInventory implements RepositoryInventory {
 
     /**
      * Stream every published release, grouped by coordinate as the {@link RepositoryInventory} contract asks -
-     * without a walk, a depth-first stream of the {@code published/} key tree (O(depth) memory, grouped by
+     * without a walk, a depth-first stream of the version documents' key tree (O(depth) memory, grouped by
      * construction); constructed with the shared {@link ArtifactWalk}, this caller's share of the resumable
      * {@code walks/retention} pass instead. A resumed pass deliberately does <em>not</em> re-deliver what a crashed
      * worker already processed, and a pass whose remaining segments a live worker still holds returns without them -
@@ -581,7 +581,7 @@ public final class StoreRepositoryInventory implements RepositoryInventory {
     }
 
     /**
-     * Both of the repository's key spaces over ONE pass: the {@code published/} rows a release is read from, and the
+     * Both of the repository's key spaces over ONE pass: the version documents a release is read from, and the
      * {@code publish/} pointers a served request path IS.
      *
      * <p>They are walked together rather than in two passes because a second whole-store enumeration is the most
@@ -611,7 +611,7 @@ public final class StoreRepositoryInventory implements RepositoryInventory {
     }
 
     /** Every published coordinate version as its neutral {@code (ecosystem, coordinate, version)} triple, read from the
-     *  {@code published/} key tree alone - no publish-time, last-download or pin sidecar is opened. The cheap
+     *  version documents' keys alone - no document is opened. The cheap
      *  enumeration a request path that needs only the coordinates uses instead of {@link #releases()}. */
     public List<Coordinate> coordinates() {
         return enumeration.coordinates();
@@ -637,8 +637,8 @@ public final class StoreRepositoryInventory implements RepositoryInventory {
     }
 
     /** The published releases of a single coordinate - the sibling versions the console's artifact-detail view lists -
-     *  read from just that coordinate's version folder rather than the whole {@link #releases()} tree. Reads only the
-     *  tiny sidecars, never an artifact blob; empty when the coordinate has no published version. */
+     *  read from just that coordinate's version documents rather than the whole {@link #releases()} tree. Reads only
+     *  those documents, never an artifact blob; empty when the coordinate has no published version. */
     public List<Release> versions(String ecosystem, String coordinate) throws IOException {
         return enumeration.versions(ecosystem, coordinate);
     }
@@ -996,9 +996,9 @@ public final class StoreRepositoryInventory implements RepositoryInventory {
 
     public Reconciliation reconcile(ArtifactWalk walk, Instant now) throws IOException {
         Reconciliation reconciliation = reconciler.reconcile(walk, now);
-        // Self-heal: with the published/ and licenses/ spaces converged, recompute the rollup identity from that
-        // truth, so any drift from a lost incremental fold (a crash between a sidecar write and its fold, or a
-        // double-applied concurrent one) is repaired - the identity converges on the same schedule the sidecars do.
+        // Self-heal: with the version documents converged, recompute the rollup identity from that truth, so any drift
+        // from a lost incremental fold (a crash between a document write and its fold, or a double-applied concurrent
+        // one) is repaired - the identity converges on the same schedule the documents do.
         rebuildIdentity();
         return reconciliation;
     }
@@ -1169,9 +1169,9 @@ public final class StoreRepositoryInventory implements RepositoryInventory {
         void accept(Member member) throws IOException;
     }
 
-    /** The outcome of a {@link #reconcile} pass: how many missing sidecars were rebuilt from live pointers, how
-     *  many orphan sidecars (whose pointers are gone) were removed, and how many derived rows (download markers,
-     *  license records, hold overrides) of no-longer-published versions were swept with them. */
+    /** The outcome of a {@link #reconcile} pass: how many missing published records were rebuilt from live pointers,
+     *  how many orphan ones (whose pointers are gone) were removed, and how many derived rows (pin markers, hold
+     *  overrides) of no-longer-published versions were swept with them. */
     public record Reconciliation(int restored, int removed, int derived) {
     }
 
@@ -1284,7 +1284,7 @@ public final class StoreRepositoryInventory implements RepositoryInventory {
     /** Encode a coordinate to a single path segment, so a {@code group:artifact} or a scoped package name never splits
      *  the {@code <ecosystem>/<coordinate>/<version>} key. The ecosystem and version segments are instead validated
      *  traversal-free ({@link ArtifactStore#segment}) where the keys are built. Package-private so the extracted
-     *  subsystems key their objects and decode their sidecar coordinates the same way. */
+     *  subsystems key their objects and decode the coordinates of the keys they walk the same way. */
     static String encode(String coordinate) {
         return URLEncoder.encode(coordinate, StandardCharsets.UTF_8);
     }

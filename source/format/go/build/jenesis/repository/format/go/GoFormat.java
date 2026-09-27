@@ -124,7 +124,7 @@ public final class GoFormat implements RepositoryFormat, ProxyLeg, BlobLayout, R
 
     /**
      * The module version a stored Go pointer serves - the backwards direction the inventory back-fill rebuilds a
-     * lost {@code published/} row from.
+     * lost {@code published} record from.
      *
      * <p>A Go module path is legitimately multi-segment, so the coordinate and the version cannot be separated by
      * counting segments the way NuGet's can. They are separated by {@code /@v/}, and that is safe rather than
@@ -195,7 +195,7 @@ public final class GoFormat implements RepositoryFormat, ProxyLeg, BlobLayout, R
 
     /** The coordinate a module-archive request path carries ({@code /go/<module>/@v/<version>.zip}, the module path
      *  verbatim with the client's {@code !lower} escaping preserved, exactly as the store and {@link #blobKeys} key
-     *  it), so the inventory writes the {@code published/} sidecar the retroactive enforcement sweeps enumerate the
+     *  it), so the inventory records the release the retroactive enforcement sweeps enumerate the
      *  version by. The {@code .info}/{@code .mod} metadata and the {@code @v/list} / {@code @latest} version queries
      *  name no module archive and stay empty - a version is enumerated by the {@code .zip} that carries it. A
      *  {@code -} suffix in the version marks a prerelease (a pseudo-version included), the same convention

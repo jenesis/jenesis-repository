@@ -14,14 +14,14 @@ import build.jenesis.repository.walk.WalkPass;
 
 /**
  * The release-enumeration subsystem extracted from {@link StoreRepositoryInventory}: the read side that streams the
- * published releases retention, garbage collection and the search/license sweeps all run over - the whole-store
- * {@link #releases} enumerations (the plain buffered form, the {@link RepositoryInventory.ReleaseVisitor} stream, and
- * the shared-{@link ArtifactWalk} form a scheduled surface rides), the cheaper coordinate-only {@link #coordinates}
- * projection, a single coordinate's {@link #versions}, and the blobs-namespace queries ({@link #blobHashes},
- * {@link #servesFromBlobs}). Each row is read from the {@link StoreRepositoryInventory#publishedRoot} tree plus a few
- * tiny sidecars, never an artifact blob, and a corrupt or raced row is skipped rather than aborting the enumeration so
- * one bad row never stops the repository converging. The facade owns the seam - those methods delegate here - and this
- * class shares the facade's subtree {@code walk} and its store-key/codec helpers rather than duplicating them.
+ * published releases retention, garbage collection and the search/license sweeps all run over - the whole-store {@link
+ * #releases} enumerations (the plain buffered form, the {@link RepositoryInventory.ReleaseVisitor} stream, and the
+ * shared-{@link ArtifactWalk} form a scheduled surface rides), the cheaper coordinate-only {@link #coordinates}
+ * projection, a single coordinate's {@link #versions}, and the blobs-namespace queries ({@link #blobHashes}, {@link
+ * #servesFromBlobs}). Each row is read from its version document under {@link StoreRepositoryInventory#publishedRoot},
+ * never an artifact blob, and a corrupt or raced row is skipped rather than aborting the enumeration so one bad row
+ * never stops the repository converging. The facade owns the seam - those methods delegate here - and this class shares
+ * the facade's subtree {@code walk} and its store-key/codec helpers rather than duplicating them.
  */
 final class InventoryReleases {
 

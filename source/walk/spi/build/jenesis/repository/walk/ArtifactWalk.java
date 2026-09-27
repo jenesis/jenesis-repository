@@ -8,7 +8,7 @@ import build.jenesis.repository.store.ArtifactStore;
  * A totally ordered, resumable, range-segmented stream of store keys under root prefixes - the one shared
  * enumeration primitive every whole-store sweep (garbage collection, retention eviction, derived-metadata
  * rebuild) rides instead of hand-rolling its own {@code list()} loop. Key-level is deliberately the primitive:
- * half the consumers sweep key spaces that are not artifacts ({@code published/}, {@code pinned/}, marker
+ * half the consumers sweep key spaces that are not artifacts (the version documents, {@code pinned/}, marker
  * spaces); artifact-level views layer on top of it.
  *
  * <p><b>Order.</b> Sibling names are visited sorted, which yields one total order over all keys - <em>path

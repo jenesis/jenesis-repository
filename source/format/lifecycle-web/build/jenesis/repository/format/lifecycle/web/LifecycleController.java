@@ -69,7 +69,7 @@ public class LifecycleController {
         // Served-view parity: a withheld version's lifecycle mark must not be disclosed on this
         // served listing. Each mark is routed through the servable-name enumeration seam
         // (inventory.disclosableDisplay under HIDE_WITHHELD: the membership policy, resolving the mark's ecosystem by
-        // the shared bounded published/ probe, stats no blob), so a held coordinate:version's mark drops out while a
+        // the inventory's shared bounded probe, stats no blob), so a held coordinate:version's mark drops out while a
         // deprecated-but-servable mark - or a ghost the inventory cannot place as a held member - stays listed.
         StoreRepositoryInventory inventory = new StoreRepositoryInventory(repositories.store(tenant, repository));
         List<FlagView> flags = new ArrayList<>();

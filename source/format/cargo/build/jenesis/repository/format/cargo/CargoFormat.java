@@ -863,7 +863,7 @@ public final class CargoFormat implements RepositoryFormat, ArtifactLayout, Prox
 
     /**
      * The crate version a stored Cargo pointer serves - the backwards direction the inventory back-fill rebuilds a
-     * lost {@code published/} row from.
+     * lost {@code published} record from.
      *
      * <p>Only the index key is decoded, {@code cargo/<repo>/index.d/<crate>/<version>}: every segment is in a fixed
      * position and {@code index.d} is a literal this format writes, so the pair is read off the key rather than out

@@ -185,7 +185,7 @@ public final class PyPiFormat implements RepositoryFormat, ProxyLeg, BlobLayout,
 
     /** The coordinate a distribution request path carries ({@code /pypi/simple/<project>/<file>}, the project
      *  PEP 503-normalized exactly as {@link #blobKeys}, the upload and the PyPI compliance inspector key it), so the
-     *  inventory writes the {@code published/} sidecar the retroactive enforcement sweeps enumerate the version by.
+     *  inventory records the release the retroactive enforcement sweeps enumerate the version by.
      *  The root and per-project indexes and a PEP 658 {@code .metadata} sidecar name no versioned artifact and stay
      *  empty. The version is peeled from the filename the way the inspector does: a wheel's is unambiguously its
      *  second {@code -} field (the wheel spec escapes the name's dashes to {@code _}), an sdist/egg's by matching the

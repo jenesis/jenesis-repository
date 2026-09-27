@@ -9,7 +9,7 @@ import build.jenesis.repository.walk.WalkConsumer;
 import build.jenesis.repository.walk.WalkPass;
 
 /**
- * Rebuilds the {@code published/} row of a blobs-namespace release whose row was lost, for every format that can
+ * Rebuilds the {@code published} record of a blobs-namespace release whose record was lost, for every format that can
  * name the coordinate one of its pointers serves.
  *
  * <p><strong>The gap this closes.</strong> The reconcile's forward-repair leg walks {@code publish/}, so it covers

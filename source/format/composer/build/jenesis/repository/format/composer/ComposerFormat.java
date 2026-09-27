@@ -139,7 +139,7 @@ public final class ComposerFormat implements RepositoryFormat, ArtifactLayout, P
 
     /**
      * The package version a stored Composer pointer serves - the backwards direction the inventory back-fill
-     * rebuilds a lost {@code published/} row from.
+     * rebuilds a lost {@code published} record from.
      *
      * <p>Only the index entry is decoded, {@code composer/<repo>/index/<vendor>/<name>/<version>}. What makes that
      * unambiguous despite a two-segment coordinate is that a Composer coordinate is <em>always</em> exactly

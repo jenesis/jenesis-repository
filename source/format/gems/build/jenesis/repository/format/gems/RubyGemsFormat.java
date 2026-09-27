@@ -75,7 +75,7 @@ public final class RubyGemsFormat implements RepositoryFormat, ProxyLeg, BlobLay
 
     /**
      * The coordinate version a stored RubyGems pointer serves - the backwards direction the inventory back-fill
-     * rebuilds a lost {@code published/} row from.
+     * rebuilds a lost {@code published} record from.
      *
      * <p>Only {@code rubygems/<name>/versions/<version>} is decoded. The two {@code rubygemfiles/} keys spell the
      * pair as {@code <name>-<version>}, and a gem name may itself contain a hyphen, so that split is ambiguous and
@@ -149,7 +149,7 @@ public final class RubyGemsFormat implements RepositoryFormat, ProxyLeg, BlobLay
     /** The coordinate a gem request path carries ({@code /rubygems/gems/<name>-<version>.gem}), split at the
      *  rightmost {@code -} followed by a digit - a gem version always starts with one, a name's own dashed segments
      *  conventionally do not - reproducing the {@code <name>-<version>} the push stored and {@link #blobKeys}
-     *  rebuilds, so the inventory writes the {@code published/} sidecar the retroactive enforcement sweeps enumerate
+     *  rebuilds, so the inventory records the release the retroactive enforcement sweeps enumerate
      *  the version by. The compact-index {@code versions}/{@code info} documents and the derived quick-spec
      *  {@code .gemspec.rz} name no gem artifact and stay empty, as does the push endpoint (whose coordinate lives in
      *  the gemspec, not the path) and a filename with no version-looking suffix - empty over a wrong coordinate. */

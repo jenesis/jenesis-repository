@@ -5,10 +5,9 @@ import module java.base;
 /**
  * A small stored document as lines: a first line naming what it is and which version of itself it is, then named
  * fields one per line, then - after a blank line, when there are any - free lines the document carries whole. The
- * shape half a dozen stored objects each hand-rolled: the listing frame, the generation-index marker, the search
- * manifest and its segment manifest, the license sidecar, the forwarding provenance marker - and the stored report,
- * which was positional lines with no name and no version at all, the one shape a reader cannot tell a foreign object
- * from.
+ * shape several stored objects share: the listing frame, the generation-index marker, the search manifest and its
+ * segment manifest, the forwarding provenance marker and the stored report. A first line naming the document is what
+ * lets a reader tell a foreign object from one of its own.
  *
  * <p>The magic line is what makes a torn, older or foreign object read as absent rather than as garbage:
  * {@link #parse} answers empty for anything that does not open with the magic asked for, and a caller treats that as

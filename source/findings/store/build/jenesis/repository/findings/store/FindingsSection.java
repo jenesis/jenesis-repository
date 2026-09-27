@@ -11,17 +11,14 @@ import build.jenesis.repository.metadata.Signal;
 
 /**
  * The {@code findings} section codec of the consolidated metadata document: a coordinate version's
- * findings rows, keyed {@code (source, id)}, unioned across every writer exactly as the {@code findings/} sidecar this
- * section replaces did. This is the section-scoped form of {@link StoreFindings}' row model - the same
+ * findings rows, keyed {@code (source, id)}, unioned across every writer. This is the section-scoped form of {@link StoreFindings}' row model - the same
  * categorize-never-discard merge (a re-record refreshes a row's facts and {@code lastSeen} while keeping its
  * {@code firstSeen}, labels and any supersession mark; a sibling writer only ever ADDS or refreshes a row, never
  * drops one) and the same row-carry: a row this node cannot parse (a {@link Finding.Kind} or {@link Severity}
  * a newer node wrote, and its labels) is held as its raw {@link JsonNode} and re-serialised verbatim on the next CAS,
  * so an older node never eats a newer node's rows.
  *
- * <p>The {@code data} payload is exactly what the ledger serialised as a standalone sidecar - {@code {"findings":[...]}}
- * - so the sidecar bytes and this section's {@code data} node are the same shape, and the migration folds one into the
- * other by re-union rather than a re-encode. The envelope's {@code signal} summarises the section for the gate and the
+ * <p>The {@code data} payload is {@code {"findings":[...]}}. The envelope's {@code signal} summarises the section for the gate and the
  * generic renderer: the highest active vulnerability/malware severity, or neutral. All methods are pure; a
  * mutation returns a fresh {@link Section} and never touches its argument.
  */
@@ -44,7 +41,7 @@ public final class FindingsSection {
 
     /** The findings rows carried by a section, in stored order; empty for an absent section. Only rows this node
      *  recognises are surfaced - a carried (forward-incompatible) row rides a mutate untouched but is never returned
-     *  to a reader, exactly as the sidecar ledger's read was total. */
+     *  to a reader, so a read is total. */
     public static List<Finding> rows(Optional<Section> section) {
         return document(section).recognised();
     }
@@ -116,9 +113,7 @@ public final class FindingsSection {
         return Signal.of(highest);
     }
 
-    /** Serialise a row set plus its carried raw rows to the {@code {"findings":[...]}} data node - the same shape the
-     *  standalone sidecar wrote, so a sidecar's bytes and this node are interchangeable across the migration. Carried
-     *  rows ride after the recognised ones, verbatim, so a mutate by a node that cannot parse them stays lossless. */
+    /** Serialise a row set plus its carried raw rows to the {@code {"findings":[...]}} data node. Carried rows ride after the recognised ones, verbatim, so a mutate by a node that cannot parse them stays lossless. */
     static JsonNode serialize(List<Finding> rows, List<JsonNode> carried) {
         ObjectNode data = JSON.createObjectNode();
         ArrayNode findings = data.putArray(FINDINGS_FIELD);

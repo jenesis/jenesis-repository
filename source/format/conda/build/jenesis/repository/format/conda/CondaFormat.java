@@ -638,7 +638,7 @@ public final class CondaFormat implements RepositoryFormat, ArtifactLayout, Prox
 
     /**
      * The package version a stored conda pointer serves - the backwards direction the inventory back-fill rebuilds a
-     * lost {@code published/} row from.
+     * lost {@code published} record from.
      *
      * <p>The pair lives in a <em>filename</em>, {@code <name>-<version>-<build>.<ext>}, and what makes decoding it
      * safe is the ecosystem's own rule rather than this store's: a conda version contains no {@code -}, so

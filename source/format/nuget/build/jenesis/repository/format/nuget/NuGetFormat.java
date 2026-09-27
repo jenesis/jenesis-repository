@@ -74,7 +74,7 @@ public final class NuGetFormat implements RepositoryFormat, ProxyLeg, BlobLayout
 
     /**
      * The coordinate version a stored NuGet pointer serves - the backwards direction the inventory back-fill
-     * rebuilds a lost {@code published/} row from.
+     * rebuilds a lost {@code published} record from.
      *
      * <p>Unusually easy here, because the version is its own path segment: {@code blobKeys} composes
      * {@code nuget/<id>/<version>/<id>.<version>.nupkg}, so the pair is read off the key rather than out of a
@@ -164,7 +164,7 @@ public final class NuGetFormat implements RepositoryFormat, ProxyLeg, BlobLayout
     /** The coordinate a flat-container request path carries
      *  ({@code /nuget/v3-flatcontainer/<id>/<version>/<file>.nupkg}, the id lower-cased exactly as the store and
      *  {@link #blobKeys} key it - the nuspec's original casing is not derivable from the path), so the inventory
-     *  writes the {@code published/} sidecar the retroactive enforcement sweeps enumerate the version by. The
+     *  records the release the retroactive enforcement sweeps enumerate the version by. The
      *  service index, search, registrations and the flat-container version list ({@code .../index.json}) name no
      *  versioned artifact and stay empty, as does the push endpoint (whose coordinate lives in the {@code .nuspec},
      *  not the path) and a non-{@code .nupkg} file like the dependency sidecar. A {@code -} suffix in the version

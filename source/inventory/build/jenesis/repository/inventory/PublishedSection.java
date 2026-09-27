@@ -8,10 +8,9 @@ import build.jenesis.repository.metadata.Signal;
 import build.jenesis.repository.metadata.State;
 
 /**
- * The {@code published} section codec of the consolidated metadata document: the publish facts a
- * coordinate version carries - the publish instant retention orders and ages by, the format-supplied {@code prerelease}
- * flag the prerelease-expiry rule reads, and the {@code pinned} force-keep marker - consolidated out of the separate
- * {@code published/} and {@code pinned/} sidecars this section replaces. The section's presence <em>is</em> membership
+ * The {@code published} section codec of the consolidated metadata document: the publish facts a coordinate version
+ * carries - the publish instant retention orders and ages by, the format-supplied {@code prerelease} flag the
+ * prerelease-expiry rule reads, and the {@code pinned} force-keep marker. The section's presence <em>is</em> membership
  * of the published set: a version with a {@code published} section is a published release, and its absence is the
  * absent-from-the-set signal the retention enumeration, the rollup identity, and eviction all key off.
  *

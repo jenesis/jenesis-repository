@@ -38,7 +38,7 @@ public final class HeldElsewhere {
      * owning format which paths this version serves, and with that format's module off the graph - or with a
      * roots-only layout that resolves no path for the coordinate - it answers nothing. Read as "no other path is
      * held", that silence makes a discard of ONE path reap the whole version's state: the kev/license/reachability
-     * records through their {@code onDiscarded}, the metadata document and {@code findings/} sidecar through
+     * records through their {@code onDiscarded}, the metadata document and its findings through
      * {@code DiscardedHoldFindingsObserver}, the orphaned records through {@code releaseOrphaned}, the version-wide
      * withhold markers through the release leg, and the served blobs themselves through {@code discardBlobs} - all of
      * it removed while the remaining paths are still under review, because a module is absent. So the enumeration is

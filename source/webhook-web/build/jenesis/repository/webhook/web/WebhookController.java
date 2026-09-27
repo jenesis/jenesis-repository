@@ -63,14 +63,14 @@ public class WebhookController {
         if (tenant == null) {
             return null;
         }
-        // Served-view parity: a withheld coordinate's name/path must not be disclosed on this
-        // manage:read outbox listing, exactly as the sibling manage:read served-listings (/api/lifecycle,
-        // /api/dependents) screen through the same seam at the same scope. Each parked/queued entry's coordinate:version
-        // is routed through inventory.disclosableDisplay under HIDE_WITHHELD (the membership policy, resolving the
-        // coordinate's ecosystem by the shared bounded published/ probe, stats no blob); a held member's coordinate and
-        // its served path are neutralised out of the view while the operational row (id, attempts, parked, last error)
-        // stays so the operator can still retry it, and a servable coordinate - or a ghost the inventory cannot place as
-        // a held member - is disclosed unchanged. A probe that throws drops the name (fail-closed).
+        // Served-view parity: a withheld coordinate's name/path must not be disclosed on this manage:read outbox
+        // listing, exactly as the sibling manage:read served-listings (/api/lifecycle, /api/dependents) screen through
+        // the same seam at the same scope. Each parked/queued entry's coordinate:version is routed through
+        // inventory.disclosableDisplay under HIDE_WITHHELD (the membership policy, resolving the coordinate's ecosystem
+        // by the inventory's shared bounded probe, stats no blob); a held member's coordinate and its served path are
+        // neutralised out of the view while the operational row (id, attempts, parked, last error) stays so the
+        // operator can still retry it, and a servable coordinate - or a ghost the inventory cannot place as a held
+        // member - is disclosed unchanged. A probe that throws drops the name (fail-closed).
         StoreRepositoryInventory inventory = new StoreRepositoryInventory(repositories.store(tenant, repo));
         List<WebhookEntryView> entries = new ArrayList<>();
         WebhookOutbox.Window<WebhookOutbox.Entry> window = new WebhookOutbox(repositories.store(tenant, repo))

@@ -11,7 +11,7 @@
  * test; the manifest <em>document</em>'s dialect is not re-read at all - the config, layer and sub-manifest digests
  * come from the {@code BlobReferences} seam, resolved at call time, which is why this module requires no JSON parser
  * of its own.
- * <p>It carries no walk consumer of its own: recording the {@code published/} inventory row for tagged images is
+ * <p>It carries no walk consumer of its own: recording the {@code published} inventory record for tagged images is
  * the layout's parse - {@code BlobLayout.describePointer}, which {@code OciBlobLayout} answers from the same
  * {@code tagPointer} grammar - and one {@code InventoryBackfillConsumer} walks the pointers once for every format
  * that can name its own keys.

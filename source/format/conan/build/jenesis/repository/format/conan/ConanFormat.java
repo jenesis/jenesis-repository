@@ -833,7 +833,7 @@ public final class ConanFormat implements RepositoryFormat, ArtifactLayout, Prox
 
     /**
      * The recipe or package version a stored Conan pointer serves - the backwards direction the inventory back-fill
-     * rebuilds a lost {@code published/} row from.
+     * rebuilds a lost {@code published} record from.
      *
      * <p>Conan is the easy shape: the pair is two <em>path segments</em> near the root of a tree whose depth is
      * fixed. A recipe file is {@code conan/<repo>/r/<name>/<version>/<user>/<channel>/<rrev>/files/<file>} and a

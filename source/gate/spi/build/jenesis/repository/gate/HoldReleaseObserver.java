@@ -178,7 +178,7 @@ public interface HoldReleaseObserver {
 
     /** React to a reviewer discarding {@code path} without releasing it: drop this observer's hold record for the
      *  path, so a thrown-away version's {@code holds/} row does not dangle forever (a discarded version has no
-     *  {@code published/} sidecar, so no eviction or reconcile sweep would ever reach it). No override is promoted -
+     *  {@code published} record, so no eviction or reconcile sweep would ever reach it). No override is promoted -
      *  no human cleared the finding. A default no-op so an observer without a per-version record ignores it. */
     default void onDiscarded(ArtifactStore store, String path) throws IOException {
     }
