@@ -146,17 +146,34 @@ public final class ServedAliases {
     /**
      * Drop every record naming {@code path} - the leg an eviction runs, so no alias row outlives the artifact it
      * describes. Both directions go: the path's own group, and the reverse entry of each alias that group named.
+     *
+     * <p>Each is written empty by compare-and-set rather than deleted, and only what this call read goes: the store
+     * has no conditional delete, so a delete decided on a read takes with it an alias a peer recorded in between - a
+     * republish of the path cross-publishing again as it is evicted - with nothing to say so. Against an emptying
+     * write the peer's record is a conflict, the write is retried over it, and the line it added stays. A reverse
+     * entry is emptied only while it still names {@code path}, so one an alias was moved to another origin by since
+     * is left to that origin.
      */
     public static void forget(ArtifactStore store, String path) throws IOException {
-        for (String alias : aliases(store, path)) {
-            store.delete(OF + alias);
+        Set<String> named = lines(store.readVersioned(GROUP + path));
+        for (String alias : named) {
+            release(store, OF + alias, path);
         }
-        store.delete(GROUP + path);
+        removeAll(store, GROUP + path, named);
         Optional<String> origin = origin(store, path);
-        store.delete(OF + path);
         if (origin.isPresent()) {
+            release(store, OF + path, origin.get());
             remove(store, GROUP + origin.get(), path);
         }
+    }
+
+    /** Write {@code key} empty under compare-and-set while it still names {@code expected}; an empty entry reads as
+     *  no origin. */
+    private static void release(ArtifactStore store, String key, String expected) throws IOException {
+        Retries.decide(store, key, current -> current.isPresent()
+                && new String(current.get().content(), StandardCharsets.UTF_8).trim().equals(expected)
+                ? Retries.Verdict.write(new byte[0], null)
+                : Retries.Verdict.keep(null));
     }
 
     /**
@@ -206,6 +223,17 @@ public final class ServedAliases {
                 return Retries.Verdict.keep(null);
             }
             return Retries.Verdict.write(join(lines), null);
+        });
+    }
+
+    /** Remove {@code gone} from a stored set under compare-and-set, keeping any line a peer added since. */
+    private static void removeAll(ArtifactStore store, String key, Set<String> gone) throws IOException {
+        if (gone.isEmpty()) {
+            return;
+        }
+        Retries.decide(store, key, current -> {
+            Set<String> lines = lines(current);
+            return lines.removeAll(gone) ? Retries.Verdict.write(join(lines), null) : Retries.Verdict.keep(null);
         });
     }
 

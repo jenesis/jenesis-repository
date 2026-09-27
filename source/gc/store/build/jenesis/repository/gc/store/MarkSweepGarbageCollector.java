@@ -227,20 +227,34 @@ public final class MarkSweepGarbageCollector implements GarbageCollector {
             CollectionRecord.collected(now, sweep.collected, sweep.standing, false);
             return GcPlan.of(false, sweep.condemned, sweep.spared, sweep.collected, sweep.sample);
         }
-        converge(store, marked.generation());
+        converge(store, marked.generation(), now);
         CollectionRecord.collected(now, sweep.collected, sweep.standing, true);
         return GcPlan.of(true, sweep.condemned, sweep.spared, sweep.collected, sweep.sample);
     }
 
 
-    /** The bookkeeping convergence after a completed sweep: a marker whose blob is gone (the residue of a crash
-     *  between the blob and marker deletes, or of an already-collected blob) is removed, and the reference shards
-     *  of every superseded pass are dropped - so the {@code gc/} space converges instead of growing forever, and
+    /** The bookkeeping convergence after a completed sweep: a marker whose blob is gone (a collected blob's, or the
+     *  residue of a sweep that died after deleting one) is removed once the claim window has passed, and the
+     *  reference shards of every superseded pass are dropped - so the {@code gc/} space converges instead of growing forever, and
      *  an idempotent re-run over a converged store changes nothing. */
-    private void converge(ArtifactStore store, long generation) throws IOException {
+    private void converge(ArtifactStore store, long generation, Instant now) throws IOException {
+        // A collection is stamped with the collector's clock, a claim with the wall clock it was written at.
+        Instant collectedSettled = now.minus(Condemned.CLAIM_EXPIRY);
+        Instant claimSettled = Instant.now().minus(Condemned.CLAIM_EXPIRY);
         each(store, CONDEMNED, name -> {
             if (hash(name) && !store.exists("blobs/" + name)) {
-                deleteIfPresent(store, CONDEMNED + "/" + name);
+                // A marker whose blob is gone stays while a publish may still be meeting it: a claim not yet expired,
+                // or a collection more recent than the claim window. After that it is residue.
+                String key = CONDEMNED + "/" + name;
+                Optional<ArtifactStore.Versioned> marker = store.readVersioned(key);
+                String body = marker.map(held -> new String(held.content(), StandardCharsets.UTF_8)).orElse("");
+                Optional<Instant> collected = Condemned.collectedAt(body);
+                Optional<Instant> claimed = Condemned.claimed(body);
+                boolean inFlight = collected.map(at -> !at.isBefore(collectedSettled)).orElse(false)
+                        || claimed.map(at -> !at.isBefore(claimSettled)).orElse(false);
+                if (!inFlight) {
+                    deleteIfPresent(store, key);
+                }
             }
         });
         for (String child : store.list("gc")) {
@@ -488,9 +502,12 @@ public final class MarkSweepGarbageCollector implements GarbageCollector {
                     standing++;
                     return;
                 }
-                // Blob first, marker last, so a crash in between leaves only a marker the convergence leg removes.
+                // The blob goes and the marker stays, rewritten to say so: a publish that stored these bytes while the
+                // blob still stood had its upload dropped as a duplicate, and when it asks to spare them it must meet
+                // a marker, since an absent one lets it link a pointer at nothing. The convergence leg removes the
+                // marker once no such publish can still be in flight.
                 deleteIfPresent(store, key);
-                deleteIfPresent(store, marker);
+                Condemned.collected(store, hash, now);
                 collected++;
                 if (sample.size() < GcPlan.SAMPLE) {
                     sample.add(hash);

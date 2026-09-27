@@ -6,6 +6,7 @@ import module java.base;
 import build.jenesis.repository.gc.GcPlan;
 import build.jenesis.repository.gc.store.MarkSweepGarbageCollector;
 import build.jenesis.repository.store.ArtifactStore;
+import build.jenesis.repository.store.Condemned;
 import build.jenesis.repository.store.Known;
 import build.jenesis.repository.store.ArtifactStoreProvider;
 import build.jenesis.repository.store.Publication;
@@ -106,6 +107,9 @@ class GcClaimTest {
         for (String hash : orphans) {
             assertThat(store.exists("blobs/" + hash)).as("every orphan converged to collected").isFalse();
         }
+        // A collected blob's marker outlives it for the claim window, then converges away.
+        clock.advance(Condemned.CLAIM_EXPIRY.plusMinutes(1));
+        var _ = collector(1).collect(store, Known.known(List.of("publish")), clock.instant());
         assertThat(store.list("gc/condemned")).isEmpty();
         new StoreInvariants(store).assertConsistent();
     }

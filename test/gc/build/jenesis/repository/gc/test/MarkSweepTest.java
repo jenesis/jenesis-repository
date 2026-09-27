@@ -70,8 +70,15 @@ class MarkSweepTest {
         assertThat(second.collected()).isEqualTo(1);
         assertThat(second.sample()).containsExactly(orphan);
         assertThat(store.exists("blobs/" + orphan)).isFalse();
-        assertThat(store.exists("gc/condemned/" + orphan)).as("a collected blob leaves no marker").isFalse();
+        assertThat(store.exists("gc/condemned/" + orphan))
+                .as("a collected blob's marker says so for the claim window, so a publish that relied on the bytes "
+                        + "before they went meets it rather than an absence").isTrue();
         assertThat(store.exists("blobs/" + kept)).isTrue();
+
+        clock.advance(Condemned.CLAIM_EXPIRY.plusMinutes(1));
+        var _ = collector().collect(store, Known.known(List.of("publish")), clock.instant());
+        assertThat(store.exists("gc/condemned/" + orphan)).as("and converges away once the window has passed")
+                .isFalse();
         new StoreInvariants(store).assertConsistent();
     }
 

@@ -151,6 +151,33 @@ class ServedAliasesTest {
         assertThat(ServedAliases.origin(store, LATEST)).isEmpty();
     }
 
+    /** An eviction forgets what it read; an alias a republish records at the same moment is a peer's, and stays. */
+    @Test
+    void an_alias_recorded_while_a_path_is_forgotten_is_kept() throws IOException {
+        ServedAliases.record(store, ONE, LATEST);
+        boolean[] recorded = {false};
+        FaultInjectingStore racing = FaultInjectingStore.wrap(store).tracing((op, key) -> {
+            if ((op == FaultInjectingStore.Op.WRITE_VERSIONED || op == FaultInjectingStore.Op.DELETE)
+                    && ServedAliases.groupKey(ONE).equals(key) && !recorded[0]) {
+                recorded[0] = true;
+                try {
+                    ServedAliases.record(store, ONE, VERSIONED);
+                } catch (IOException failure) {
+                    throw new UncheckedIOException(failure);
+                }
+            }
+        });
+
+        ServedAliases.forget(racing, ONE);
+
+        assertThat(recorded[0]).as("the record landed as the group was forgotten").isTrue();
+        assertThat(ServedAliases.aliases(store, ONE))
+                .as("a forget written by compare-and-set drops what it read and keeps the peer's line, where a delete "
+                        + "would have taken it too")
+                .containsExactly(VERSIONED);
+        assertThat(ServedAliases.origin(store, LATEST)).as("and what it read is gone").isEmpty();
+    }
+
     @Test
     void recording_the_same_alias_twice_is_free() throws IOException {
         ServedAliases.record(store, ONE, VERSIONED);

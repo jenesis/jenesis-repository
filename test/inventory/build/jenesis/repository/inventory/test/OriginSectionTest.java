@@ -11,6 +11,8 @@ import build.jenesis.repository.metadata.Section;
 import build.jenesis.repository.metadata.SectionMutation;
 import build.jenesis.repository.metadata.Signal;
 import build.jenesis.repository.store.ArtifactStore;
+import build.jenesis.repository.metadata.MetadataKey;
+import build.jenesis.repository.store.testkit.FaultInjectingStore;
 import build.jenesis.repository.store.ArtifactStoreProvider;
 import build.jenesis.repository.store.Publication;
 
@@ -179,6 +181,42 @@ class OriginSectionTest {
         assertThat(section("verdict")).as("the sibling verdict section is retained").isPresent();
         assertThat(section(PublishedSection.TAG))
                 .as("the served-fact published section goes with the discarded bytes").isEmpty();
+    }
+
+    /**
+     * A peer writing the version's document between the reclaim's read and its trim - a download counter flushing -
+     * is a lost compare-and-set, and the trim is retried over what the peer wrote rather than dropped: a reclaim that
+     * ignored the lost write left the document saying the version was published after its pointers were gone.
+     */
+    @Test
+    void a_trim_racing_a_peers_write_of_the_document_still_lands() throws IOException {
+        String path = InventoryTestFormat.path(COORD, VERSION);
+        Publication publication = new Publication(store);
+        String hash = publication.storeBlob(new ByteArrayInputStream("cached-bytes".getBytes(StandardCharsets.UTF_8)));
+        publication.link(path, hash);
+        inventory().record(ECO, COORD, VERSION, false, NOW);
+        metadata.mutate(ECO, COORD, VERSION, OriginSection.TAG,
+                OriginSection.recordFallback("frontdoor", 0, "https://central/lib", hash, true, "harden", NOW));
+        String document = MetadataKey.version(ECO, COORD, VERSION);
+        boolean[] raced = {false};
+        FaultInjectingStore racing = FaultInjectingStore.wrap(store).tracing((op, key) -> {
+            if (op == FaultInjectingStore.Op.WRITE_VERSIONED && document.equals(key) && !raced[0]) {
+                raced[0] = true;
+                try {
+                    metadata.mutate(ECO, COORD, VERSION, "verdict", verdictSection());
+                } catch (IOException failure) {
+                    throw new UncheckedIOException(failure);
+                }
+            }
+        });
+
+        boolean reclaimed = new StoreRepositoryInventory(racing).reclaimFallbackCache(ECO, COORD, VERSION);
+
+        assertThat(raced[0]).as("the peer's write landed between the reclaim's read and its trim").isTrue();
+        assertThat(reclaimed).isTrue();
+        assertThat(section(PublishedSection.TAG))
+                .as("the trim was retried over the peer's write rather than dropped").isEmpty();
+        assertThat(section("verdict")).as("and what the peer wrote is kept").isPresent();
     }
 
     @Test

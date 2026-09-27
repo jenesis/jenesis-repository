@@ -6,6 +6,7 @@ import module java.base;
 import build.jenesis.repository.gc.GcPlan;
 import build.jenesis.repository.gc.store.MarkSweepGarbageCollector;
 import build.jenesis.repository.store.ArtifactStore;
+import build.jenesis.repository.store.Condemned;
 import build.jenesis.repository.store.Known;
 import build.jenesis.repository.store.ArtifactStoreProvider;
 import build.jenesis.repository.store.Publication;
@@ -84,19 +85,34 @@ class GcRecoveryTest {
         var _ = collector().collect(inner, Known.known(List.of("publish")), clock.instant());
         assertThat(inner.exists("gc/condemned/" + orphan)).isTrue();
 
+        // The crash lands between the blob's delete and the marker's rewrite to collected: the marker's second write
+        // of the pass, the claim being its first.
+        String marker = "gc/condemned/" + orphan;
+        int[] writes = {0};
         FaultInjectingStore store = FaultInjectingStore.wrap(inner)
-                .failNextOn(FaultInjectingStore.Op.DELETE, key -> key.equals("gc/condemned/" + orphan));
+                .failNextOn(FaultInjectingStore.Op.WRITE_VERSIONED, key -> key.equals(marker) && ++writes[0] == 2);
         assertThatThrownBy(() -> collector().collect(store, Known.known(List.of("publish")), clock.instant()))
                 .isInstanceOf(IOException.class);
         assertThat(inner.exists("blobs/" + orphan)).as("the blob went before the crash").isFalse();
-        assertThat(inner.exists("gc/condemned/" + orphan)).as("its marker is the crash residue").isTrue();
+        assertThat(inner.exists(marker)).as("its claim is the crash residue").isTrue();
+        assertThatThrownBy(() -> new Publication(inner).link("/maven/relied.jar", orphan))
+                .as("and a publish that relied on the bytes meets the claim rather than an absence")
+                .isInstanceOf(Publication.BlobCollected.class);
 
         store.heal();
         clock.advance(Duration.ofMinutes(11));
+        var _ = collector().collect(inner, Known.known(List.of("publish")), clock.instant());
+        assertThat(inner.exists(marker)).as("a claim still within its window stays").isTrue();
+
+        // The claim is stamped with the wall clock, which a test cannot advance, so the window passing is written
+        // into the marker instead.
+        String aged = new String(inner.readVersioned(marker).orElseThrow().content(), StandardCharsets.UTF_8)
+                .replaceAll("claimed=.*", "claimed=" + Instant.now().minus(Condemned.CLAIM_EXPIRY).minusSeconds(60));
+        inner.write(marker, new ByteArrayInputStream(aged.getBytes(StandardCharsets.UTF_8)));
         GcPlan converged = collector().collect(inner, Known.known(List.of("publish")), clock.instant());
         assertThat(converged.complete()).isTrue();
-        assertThat(inner.exists("gc/condemned/" + orphan))
-                .as("a marker whose blob is gone is swept by the convergence leg").isFalse();
+        assertThat(inner.exists(marker))
+                .as("a marker whose blob is gone is swept by the convergence leg once its claim has expired").isFalse();
         assertThat(inner.exists("blobs/" + kept)).isTrue();
     }
 
@@ -121,6 +137,9 @@ class GcRecoveryTest {
         var _ = collector().collect(inner, Known.known(List.of("publish")), clock.instant());
         assertThat(inner.exists("blobs/" + orphan)).as("the orphan still converges to collected").isFalse();
         assertThat(inner.exists("blobs/" + kept)).isTrue();
+        // The collected blob's marker outlives it for the claim window, then converges away.
+        clock.advance(Condemned.CLAIM_EXPIRY.plusMinutes(1));
+        var _ = collector().collect(inner, Known.known(List.of("publish")), clock.instant());
         assertThat(inner.list("gc/condemned")).isEmpty();
     }
 }

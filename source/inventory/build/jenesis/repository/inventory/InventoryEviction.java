@@ -8,6 +8,7 @@ import build.jenesis.repository.health.HealthLedger;
 import build.jenesis.repository.metadata.MetadataKey;
 import build.jenesis.repository.store.ArtifactDescriptor;
 import build.jenesis.repository.store.ArtifactStore;
+import build.jenesis.repository.store.Retries;
 import build.jenesis.repository.store.ServableNames;
 import build.jenesis.repository.store.Known;
 import build.jenesis.repository.store.Publication;
@@ -272,18 +273,25 @@ final class InventoryEviction {
         // pointer-removal an evict does - but the meta document is trimmed, not deleted, below.
         unpublishPointers(ecosystem, coordinate, version, prerelease);
         // Retain only origin + verdict; drop every served-fact section (published/licenses/findings/...) that goes with
-        // the discarded bytes, so the version is no longer a served member yet its audit trail survives.
-        build.jenesis.repository.metadata.MetadataDocument trimmed = document;
-        SequencedMap<String, build.jenesis.repository.metadata.SectionMutation> removals = new LinkedHashMap<>();
-        for (String tag : document.tags()) {
-            if (!RETAINED_ON_RECLAIM.contains(tag)) {
-                removals.put(tag, _ -> null);   // a mutation returning null removes the section
+        // the discarded bytes, so the version stops being a served member while its audit trail survives. Decided over
+        // the document as it stands at the write, and retried through Retries: a peer's write in between - a download
+        // counter flushing, a scan recording a finding - is a lost compare-and-set, and a trim that dropped it would
+        // leave the document saying the version is published after its pointers are gone.
+        Retries.decide(store, docKey, current -> {
+            if (current.isEmpty()) {
+                return Retries.Verdict.keep(null);
             }
-        }
-        if (!removals.isEmpty()) {
-            trimmed = document.mutate(removals);
-        }
-        store.writeVersioned(docKey, trimmed.serialize(), currentDoc.get().token());
+            build.jenesis.repository.metadata.MetadataDocument now =
+                    build.jenesis.repository.metadata.MetadataDocument.read(current.get().content());
+            SequencedMap<String, build.jenesis.repository.metadata.SectionMutation> removals = new LinkedHashMap<>();
+            for (String tag : now.tags()) {
+                if (!RETAINED_ON_RECLAIM.contains(tag)) {
+                    removals.put(tag, _ -> null);   // a mutation returning null removes the section
+                }
+            }
+            return removals.isEmpty() ? Retries.Verdict.keep(null)
+                    : Retries.Verdict.write(now.mutate(removals).serialize(), null);
+        });
         // The trim above dropped every served-fact section, the findings section among them, so this version's ranked
         // line must drop too - bump the findings eviction epoch so the vulnerability rank index rebuilds on its next
         // pass rather than paging the reclaimed line until the next scan.

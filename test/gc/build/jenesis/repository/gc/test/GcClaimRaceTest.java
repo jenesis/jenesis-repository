@@ -115,4 +115,65 @@ class GcClaimRaceTest {
         assertThat(store.exists("blobs/" + hash)).as("the retry stores the bytes afresh").isTrue();
         assertThat(again.locate(PATH)).as("and serves them").isPresent();
     }
+
+    /**
+     * A publish that relied on the bytes while they still stood - its upload dropped as a duplicate of the stored
+     * blob - and asks to spare them just after the sweep deleted the blob is refused: it meets the claim the sweep
+     * still holds.
+     */
+    @Test
+    void a_publish_meeting_the_sweep_just_after_the_delete_is_refused() throws IOException {
+        ArtifactStore store = store();
+        String hash = condemned(store);
+        String marker = "gc/condemned/" + hash;
+        boolean[] deleted = {false};
+        IOException[] refused = {null};
+        FaultInjectingStore racing = FaultInjectingStore.wrap(store).tracing((op, key) -> {
+            if (op == FaultInjectingStore.Op.DELETE && ("blobs/" + hash).equals(key)) {
+                deleted[0] = true;
+            } else if (deleted[0] && refused[0] == null && marker.equals(key)) {
+                // The blob is gone and the sweep is about to record that on its marker.
+                refused[0] = publishRelyingOnTheBytes(store, hash);
+            }
+        });
+
+        collector().collect(racing, Known.known(List.of("publish")), clock.instant());
+
+        assertThat(refused[0]).as("a publish between the delete and the marker's rewrite meets the claim")
+                .isInstanceOf(Publication.BlobCollected.class);
+        assertThat(new Publication(store).locate(PATH)).as("and wrote no pointer at the bytes that went").isEmpty();
+    }
+
+    /**
+     * The same publish arriving once the sweep has finished: the marker says the blob was collected, so the publish
+     * is refused rather than taking the fast path an absent marker would give it and linking a pointer at nothing.
+     * A retry stores the bytes afresh and is spared.
+     */
+    @Test
+    void a_publish_arriving_after_the_sweep_finished_is_refused_until_it_sends_the_bytes_again() throws IOException {
+        ArtifactStore store = store();
+        String hash = condemned(store);
+
+        assertThat(collector().collect(store, Known.known(List.of("publish")), clock.instant()).collected())
+                .isEqualTo(1);
+
+        assertThat(publishRelyingOnTheBytes(store, hash)).as("the marker outlives the blob and refuses the pointer")
+                .isInstanceOf(Publication.BlobCollected.class);
+        assertThat(new Publication(store).locate(PATH)).isEmpty();
+
+        Publication again = new Publication(store);
+        again.link(PATH, again.storeBlob(new ByteArrayInputStream(BYTES)));
+        assertThat(again.locate(PATH)).as("the bytes sent again are stored and served").isPresent();
+    }
+
+    /** Link {@link #PATH} at {@code hash} as a publish whose upload was dropped as a duplicate does - without storing
+     *  the bytes - and answer the refusal it met, or an exception saying it met none. */
+    private static IOException publishRelyingOnTheBytes(ArtifactStore store, String hash) {
+        try {
+            new Publication(store).link(PATH, hash);
+            return new IOException("the publish was not refused");
+        } catch (IOException failure) {
+            return failure;
+        }
+    }
 }

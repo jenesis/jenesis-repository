@@ -41,6 +41,8 @@ public final class Condemned {
 
     private static final String SPARED = "spared=";
 
+    private static final String COLLECTED = "collected=";
+
     private Condemned() {
     }
 
@@ -69,10 +71,40 @@ public final class Condemned {
     }
 
     /**
+     * Record that the sweep holding the claim on {@code hash} has deleted the blob: the claim is rewritten
+     * {@code collected}, which a publish reads as "these bytes went at this instant" rather than "a sweep is about to
+     * take them". A claim a publish took back since (an expired one it spared) is left as the publish wrote it.
+     */
+    public static void collected(ArtifactStore store, String hash, Instant at) throws IOException {
+        Retries.decide(store, key(hash), current -> current.isPresent()
+                && claimed(new String(current.get().content(), StandardCharsets.UTF_8)).isPresent()
+                ? Retries.Verdict.write((COLLECTED + at).getBytes(StandardCharsets.UTF_8), null)
+                : Retries.Verdict.keep(null));
+    }
+
+    /** When the blob a marker names was collected, or empty for a marker that is condemned, claimed or spared. */
+    public static Optional<Instant> collectedAt(String body) {
+        if (!body.startsWith(COLLECTED)) {
+            return Optional.empty();
+        }
+        try {
+            return Optional.of(Instant.parse(body.substring(COLLECTED.length()).strip()));
+        } catch (DateTimeParseException _) {
+            return Optional.empty();
+        }
+    }
+
+    /**
      * Spare {@code hash} from any collector, for a publish that relies on it: a condemned marker is written spared,
      * a claimed one refuses with {@link Publication.BlobCollected} unless its claim has expired, and a blob that turns
      * out to be gone although its marker was not yet claimed - a sweep that died after deleting it - refuses the same
      * way. One existence read wherever collection never condemned the blob.
+     *
+     * <p>A marker saying the blob was {@linkplain #collected collected} settles the case a bare absence cannot: a
+     * publish that stored these bytes while the blob still stood had its upload dropped as a duplicate, and meets the
+     * marker after the sweep deleted the blob. It is refused, so the client sends the bytes again; an absent marker
+     * would let it link a pointer at nothing. A publish that stored the bytes after the collection finds the blob
+     * there again and spares it.
      *
      * @param what the request path or key the publish is writing, which a refusal names
      */
@@ -88,6 +120,9 @@ public final class Condemned {
             String body = new String(current.get().content(), StandardCharsets.UTF_8);
             if (body.startsWith(SPARED)) {
                 return Retries.Verdict.keep(false);
+            }
+            if (collectedAt(body).isPresent() && store.size("blobs/" + hash) < 0) {
+                throw new Publication.BlobCollected(what, hash);
             }
             Optional<Instant> claimed = claimed(body);
             if (claimed.isPresent() && claimed.get().plus(CLAIM_EXPIRY).isAfter(Instant.now())) {
