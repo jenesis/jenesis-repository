@@ -161,7 +161,8 @@ public class RepositorySecurityAutoConfiguration {
                         .requestMatchers("/actuator/health",
                                 "/actuator/health/liveness",
                                 "/actuator/health/readiness").permitAll())
-                .addFilterBefore(new CrossSiteWriteFilter(), UsernamePasswordAuthenticationFilter.class)
+                .addFilterBefore(new CrossSiteWriteFilter(CrossSiteWriteFilter.live(Features.lookup())),
+                        UsernamePasswordAuthenticationFilter.class)
                 .addFilterBefore(new UploadLimitFilter(UploadLimitFilter.live(Features.lookup())),
                         UsernamePasswordAuthenticationFilter.class)
                 .addFilterBefore(rateLimitFilter, UsernamePasswordAuthenticationFilter.class)

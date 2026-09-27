@@ -1,5 +1,6 @@
 package build.jenesis.repository.compliance.signatures;
 
+import build.jenesis.repository.net.http.BoundedBody;
 import build.jenesis.repository.net.http.ScreenedHttpClient;
 import build.jenesis.repository.compliance.ComplianceSettings;
 import module java.base;
@@ -170,7 +171,8 @@ public final class AttestationLookupObserver implements PublicationObserver {
 
     private static Optional<byte[]> http(URI url) throws IOException {
         HttpClient client = ScreenedHttpClient.newBuilder().connectTimeout(Duration.ofSeconds(10))
-                .followRedirects(HttpClient.Redirect.NORMAL).build();
+                .followRedirects(HttpClient.Redirect.NORMAL)
+                .redirectsWithinPrivateNetwork().build();
         HttpRequest request = HttpRequest.newBuilder(url)
                 .header("Accept", "application/vnd.github+json, application/json")
                 .timeout(Duration.ofSeconds(30))
@@ -178,7 +180,8 @@ public final class AttestationLookupObserver implements PublicationObserver {
                 .build();
         HttpResponse<byte[]> response;
         try {
-            response = client.send(request, HttpResponse.BodyHandlers.ofByteArray());
+            response = client.send(request,
+                    BoundedBody.ofByteArray(url, ArtifactSignatures.Material.LARGEST_SIGNATURE));
         } catch (InterruptedException interrupted) {
             Thread.currentThread().interrupt();
             throw new IOException("interrupted asking " + url, interrupted);

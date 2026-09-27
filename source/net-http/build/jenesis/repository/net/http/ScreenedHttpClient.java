@@ -19,6 +19,7 @@ import org.eclipse.jetty.util.Promise;
 import org.eclipse.jetty.util.SocketAddressResolver;
 import org.eclipse.jetty.util.ssl.SslContextFactory;
 import org.eclipse.jetty.util.thread.QueuedThreadPool;
+import org.eclipse.jetty.util.thread.Scheduler;
 import org.eclipse.jetty.util.thread.ScheduledExecutorScheduler;
 
 /**
@@ -44,6 +45,14 @@ import org.eclipse.jetty.util.thread.ScheduledExecutorScheduler;
  *   <li>{@link HttpClient.Redirect#NORMAL} follows a redirect as the JDK does - never from {@code https} to
  *       {@code http} - and drops {@code Authorization}, {@code Cookie} and the repository key header when a hop
  *       leaves the origin they were meant for, which the JDK's client does not.</li>
+ *   <li>A followed redirect is screened before it is sent: a hop leaving the origin the call was made to for a host
+ *       that resolves to a private, loopback or link-local address ({@link PrivateHosts#resolvesToPrivate}) is
+ *       refused with {@link RedirectRefused}, unless the builder {@linkplain Builder#redirectsToPrivateHosts admits
+ *       them}. The peer chooses where a redirect leads, so a public host could otherwise send the call to a cloud
+ *       metadata service or an internal control plane that no screen admitted. A hop within the original origin
+ *       reaches nothing the call was not already reaching, and passes; so does a hop from a private origin to another
+ *       private host when the builder {@linkplain Builder#redirectsWithinPrivateNetwork says the calls go where an
+ *       operator pointed them}, since such a call is already inside the network it would be redirected into.</li>
  * </ul>
  *
  * <p><b>No call waits without a bound.</b> The JDK's client waits for ever when a caller names no timeout, and every
@@ -58,6 +67,11 @@ import org.eclipse.jetty.util.thread.ScheduledExecutorScheduler;
  * silence cannot catch is a peer answering a byte at a time, which resets it with every byte: a download must also
  * move {@link #THROUGHPUT_FLOOR} bytes over each {@link #FLOOR_WINDOW} of reading ({@link Builder#throughputFloor}),
  * or it is abandoned the same way - a floor on the rate, so a large blob on a slow but steady link still lands.
+ * A peer trickling just above the floor can still hold a call for as long as the body takes at that rate, and only a
+ * bound on the whole call ends that: {@link Builder#deadline} names one, from the request to the last byte of the
+ * body across every redirect, past which the call is abandoned with an {@link HttpTimeoutException} naming the
+ * deadline. There is none unless it is named, since any fixed number either cuts short a legitimate large transfer
+ * over a slow link or is too long to protect anything - the caller that knows what it fetches decides.
  *
  * <p>Everything else is the JDK's contract: {@link HttpRequest#timeout()} bounds the wait for the response's
  * headers from the moment the request is sent and answers {@link HttpTimeoutException}, and a body the handler reads
@@ -105,22 +119,33 @@ public final class ScreenedHttpClient extends HttpClient {
     /** The span of reading a {@linkplain #THROUGHPUT_FLOOR throughput floor} is measured over. */
     public static final Duration FLOOR_WINDOW = Duration.ofMinutes(1);
 
+    /** The deadline on a whole call when the builder names no {@linkplain Builder#deadline other}: none, spelled as
+     *  the zero duration a settings catalogue publishes as its default. */
+    public static final String DEADLINE_TEXT = "PT0S";
+
     private static final Map<Engine.Key, Engine> ENGINES = new ConcurrentHashMap<>();
 
     private final Engine engine;
     private final Duration connectTimeout;
     private final Duration idleTimeout;
     private final Floor floor;
+    private final Supplier<Duration> deadline;
     private final Redirect redirect;
+    private final BooleanSupplier privateRedirects;
+    private final boolean withinPrivateNetwork;
     private final SSLContext sslContext;
 
     private ScreenedHttpClient(Engine engine, Duration connectTimeout, Duration idleTimeout, Floor floor,
-                               Redirect redirect, SSLContext sslContext) {
+                               Supplier<Duration> deadline, Redirect redirect, BooleanSupplier privateRedirects,
+                               boolean withinPrivateNetwork, SSLContext sslContext) {
         this.engine = engine;
         this.connectTimeout = connectTimeout;
         this.idleTimeout = idleTimeout;
         this.floor = floor;
+        this.deadline = deadline;
         this.redirect = redirect;
+        this.privateRedirects = privateRedirects;
+        this.withinPrivateNetwork = withinPrivateNetwork;
         this.sslContext = sslContext;
     }
 
@@ -147,6 +172,40 @@ public final class ScreenedHttpClient extends HttpClient {
         Resolver SYSTEM = host -> List.of(InetAddress.getAllByName(host));
 
         List<InetAddress> resolve(String host) throws UnknownHostException;
+    }
+
+    /** When one call must be done by, read once as it starts: {@code total} from the moment it was sent, or
+     *  {@link #NONE}. */
+    private record Deadline(Duration total, long due) {
+
+        static final Deadline NONE = new Deadline(Duration.ZERO, 0);
+
+        static Deadline of(Duration total) {
+            return total == null || total.isZero() || total.isNegative() ? NONE
+                    : new Deadline(total, System.nanoTime() + total.toNanos());
+        }
+
+        boolean set() {
+            return !total.isZero();
+        }
+
+        long remaining() {
+            return due - System.nanoTime();
+        }
+
+        HttpTimeoutException passed(URI uri) {
+            return new HttpTimeoutException("the call to " + uri + " did not complete within its deadline of "
+                    + total.toMillis() + " ms, so it was abandoned (deadline)");
+        }
+    }
+
+    /** A followed redirect refused because it leaves the call's origin for a private, loopback or link-local host. */
+    public static final class RedirectRefused extends IOException {
+
+        RedirectRefused(URI from, URI to) {
+            super("refusing to follow the redirect from " + from + " to " + to + ": it leaves the origin the call was "
+                    + "made to for a private, loopback or link-local address, which no screen admitted");
+        }
     }
 
     /** A connection refused because the host now resolves only to addresses a screen refused when it admitted it. */
@@ -211,11 +270,18 @@ public final class ScreenedHttpClient extends HttpClient {
     public <T> HttpResponse<T> send(HttpRequest request, HttpResponse.BodyHandler<T> handler)
             throws IOException, InterruptedException {
         URI origin = request.uri();
+        Deadline due = Deadline.of(deadline.get());
         HttpRequest current = request;
         HttpResponse<T> previous = null;
         for (int hop = 0; ; hop++) {
-            Exchange exchange = exchange(current);
-            Optional<HttpRequest> next = hop < MAX_REDIRECTS ? redirected(origin, current, exchange) : Optional.empty();
+            Exchange exchange = exchange(current, due);
+            Optional<HttpRequest> next;
+            try {
+                next = hop < MAX_REDIRECTS ? redirected(origin, current, exchange) : Optional.empty();
+            } catch (RedirectRefused refused) {
+                exchange.discard();
+                throw refused;
+            }
             if (next.isEmpty()) {
                 return exchange.complete(current, handler, previous);
             }
@@ -247,8 +313,12 @@ public final class ScreenedHttpClient extends HttpClient {
         return result;
     }
 
-    /** The request a followed redirect sends next, or empty when this response is the one to answer with. */
-    private Optional<HttpRequest> redirected(URI origin, HttpRequest request, Exchange exchange) {
+    /** The request a followed redirect sends next, or empty when this response is the one to answer with.
+     *
+     * @throws RedirectRefused when the redirect leaves {@code origin} for a private host this client does not admit
+     */
+    private Optional<HttpRequest> redirected(URI origin, HttpRequest request, Exchange exchange)
+            throws RedirectRefused {
         int status = exchange.response.getStatus();
         if (redirect == Redirect.NEVER || !(status == 301 || status == 302 || status == 303 || status == 307
                 || status == 308)) {
@@ -270,6 +340,11 @@ public final class ScreenedHttpClient extends HttpClient {
                 && "https".equalsIgnoreCase(request.uri().getScheme())) {
             return Optional.empty();
         }
+        boolean sameOrigin = sameOrigin(origin, target);
+        if (!sameOrigin && !privateRedirects.getAsBoolean() && PrivateHosts.resolvesToPrivate(target.getHost())
+                && !(withinPrivateNetwork && PrivateHosts.resolvesToPrivate(origin.getHost()))) {
+            throw new RedirectRefused(request.uri(), target);
+        }
         boolean keepsBody = status == 307 || status == 308;
         String method = keepsBody || request.method().equals("HEAD") ? request.method() : "GET";
         HttpRequest.Builder next = HttpRequest.newBuilder(target)
@@ -277,7 +352,6 @@ public final class ScreenedHttpClient extends HttpClient {
                         : HttpRequest.BodyPublishers.noBody())
                 .expectContinue(request.expectContinue());
         request.timeout().ifPresent(next::timeout);
-        boolean sameOrigin = sameOrigin(origin, target);
         request.headers().map().forEach((name, values) -> {
             if (sameOrigin || !SENSITIVE.contains(name.toLowerCase(Locale.ROOT))) {
                 values.forEach(value -> next.header(name, value));
@@ -286,8 +360,9 @@ public final class ScreenedHttpClient extends HttpClient {
         return Optional.of(next.build());
     }
 
-    /** Send one request and wait for its response's headers, the body left to stream. */
-    private Exchange exchange(HttpRequest request) throws IOException, InterruptedException {
+    /** Send one request and wait for its response's headers, the body left to stream - all of it before {@code due},
+     *  when a deadline is set, or the exchange is aborted naming it. */
+    private Exchange exchange(HttpRequest request, Deadline due) throws IOException, InterruptedException {
         // A request naming a longer wait for its headers than the idle timeout is waited for that long.
         Duration idle = request.timeout().filter(named -> named.compareTo(idleTimeout) > 0).orElse(idleTimeout);
         Request outbound = engine.client.newRequest(request.uri())
@@ -305,21 +380,37 @@ public final class ScreenedHttpClient extends HttpClient {
         });
         request.bodyPublisher().ifPresent(publisher -> body(outbound, request.method(), publisher));
         InputStreamResponseListener listener = new InputStreamResponseListener();
+        Runnable disarm = () -> { };
+        if (due.set()) {
+            long remaining = due.remaining();
+            if (remaining <= 0) {
+                throw due.passed(request.uri());
+            }
+            // The abort fails whatever is waiting on the exchange - the headers below, or the body being read -
+            // with the deadline's own exception, which the translations below hand on as it is.
+            Scheduler.Task task = engine.client.getScheduler().schedule(
+                    () -> outbound.abort(due.passed(request.uri())), remaining, TimeUnit.NANOSECONDS);
+            disarm = task::cancel;
+        }
         outbound.send(listener);
         try {
             // With no timeout named, the idle timeout is what ends a wait for headers that are not coming.
             Response response = request.timeout().isPresent()
                     ? listener.get(request.timeout().get().toMillis(), TimeUnit.MILLISECONDS)
                     : listener.get(Long.MAX_VALUE, TimeUnit.NANOSECONDS);
-            return new Exchange(response, listener, request.uri(), idle, floor.bytes().getAsLong(), floor.window());
+            return new Exchange(response, listener, request.uri(), idle, floor.bytes().getAsLong(), floor.window(),
+                    disarm);
         } catch (TimeoutException timedOut) {
+            disarm.run();
             HttpTimeoutException failure = new HttpTimeoutException("request timed out: " + request.uri());
             outbound.abort(failure);
             throw failure;
         } catch (InterruptedException interrupted) {
+            disarm.run();
             outbound.abort(interrupted);
             throw interrupted;
         } catch (ExecutionException failed) {
+            disarm.run();
             throw translated(failed.getCause(), request.uri(), idle);
         }
     }
@@ -406,10 +497,11 @@ public final class ScreenedHttpClient extends HttpClient {
 
     /** A response whose headers have arrived and whose body is still to be read. */
     private record Exchange(Response response, InputStreamResponseListener listener, URI uri, Duration idle,
-                            long floor, Duration window) {
+                            long floor, Duration window, Runnable disarm) {
 
-        /** Close the body unread: the response is a redirect the chain goes past. */
+        /** Close the body unread: the response is a redirect the chain goes past, or one it refuses to follow. */
         void discard() throws IOException {
+            disarm.run();
             listener.getInputStream().close();
         }
 
@@ -434,7 +526,7 @@ public final class ScreenedHttpClient extends HttpClient {
                     return Version.HTTP_1_1;
                 }
             });
-            Download download = new Download(listener.getInputStream(), subscriber, uri, idle, floor, window);
+            Download download = new Download(listener.getInputStream(), subscriber, uri, idle, floor, window, disarm);
             subscriber.onSubscribe(download);
             Thread.ofVirtual().name("jenesis-http-body").start(download);
             T body;
@@ -472,18 +564,20 @@ public final class ScreenedHttpClient extends HttpClient {
         private final Duration idle;
         private final long floor;
         private final long window;
+        private final Runnable disarm;
         private final Object lock = new Object();
         private long demand;
         private boolean cancelled;
 
         Download(InputStream in, HttpResponse.BodySubscriber<?> subscriber, URI uri, Duration idle, long floor,
-                 Duration window) {
+                 Duration window, Runnable disarm) {
             this.in = in;
             this.subscriber = subscriber;
             this.uri = uri;
             this.idle = idle;
             this.floor = floor;
             this.window = window.toNanos();
+            this.disarm = disarm;
         }
 
         @Override
@@ -553,6 +647,8 @@ public final class ScreenedHttpClient extends HttpClient {
             } catch (InterruptedException interrupted) {
                 Thread.currentThread().interrupt();
                 subscriber.onError(interrupted);
+            } finally {
+                disarm.run();
             }
         }
     }
@@ -690,7 +786,10 @@ public final class ScreenedHttpClient extends HttpClient {
         private Duration connectTimeout = CONNECT_TIMEOUT;
         private Duration idleTimeout = IDLE_TIMEOUT;
         private Floor floor = new Floor(() -> THROUGHPUT_FLOOR, FLOOR_WINDOW);
+        private Supplier<Duration> deadline = () -> Duration.ZERO;
         private Redirect redirect = Redirect.NEVER;
+        private BooleanSupplier privateRedirects = () -> false;
+        private boolean withinPrivateNetwork;
         private SSLContext sslContext;
         private Resolver resolver = Resolver.SYSTEM;
 
@@ -730,6 +829,42 @@ public final class ScreenedHttpClient extends HttpClient {
                 throw new IllegalArgumentException("a throughput window is positive: " + window);
             }
             this.floor = new Floor(Objects.requireNonNull(bytes, "bytes"), window);
+            return this;
+        }
+
+        /**
+         * The longest one call may take, from the moment it is sent to the last byte of its body and across every
+         * redirect it follows, before it is abandoned with an {@link HttpTimeoutException} naming the deadline; none
+         * unless named. The throughput floor ends a peer answering a byte at a time, but one trickling just above it
+         * holds the call for as long as the body takes at that rate, and this is what ends that - at the price of
+         * cutting short a legitimate transfer that takes longer, which is why the number is the caller's. It is read
+         * as each call starts, so a caller may hand a live setting; a zero or negative duration sets none.
+         */
+        public Builder deadline(Supplier<Duration> deadline) {
+            this.deadline = Objects.requireNonNull(deadline, "deadline");
+            return this;
+        }
+
+        /**
+         * Whether a followed redirect may leave the call's origin for a host resolving to a private, loopback or
+         * link-local address; not unless named. A caller whose deployment has admitted internal targets - an operator
+         * who set the dial that lets an upstream sit on the internal network - hands that dial here, read as each
+         * redirect is judged.
+         */
+        public Builder redirectsToPrivateHosts(BooleanSupplier admitted) {
+            this.privateRedirects = Objects.requireNonNull(admitted, "admitted");
+            return this;
+        }
+
+        /**
+         * The calls this client makes go to hosts an operator configured - an identity provider, a key server, a
+         * trust root - so a call made to a host that itself resolves to a private address may follow a redirect to
+         * another private host: an internal identity provider behind a load balancer answers that way, and the call
+         * was already inside the network the redirect leads into. A call made to a public host is still refused a
+         * private target, which is the redirect a peer uses to reach what no screen admitted.
+         */
+        public Builder redirectsWithinPrivateNetwork() {
+            this.withinPrivateNetwork = true;
             return this;
         }
 
@@ -798,7 +933,7 @@ public final class ScreenedHttpClient extends HttpClient {
                 }
             }
             return new ScreenedHttpClient(Engine.of(connectTimeout, tls, resolver), connectTimeout, idleTimeout, floor,
-                    redirect, tls);
+                    deadline, redirect, privateRedirects, withinPrivateNetwork, tls);
         }
     }
 }

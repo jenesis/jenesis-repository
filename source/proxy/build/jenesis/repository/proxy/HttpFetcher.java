@@ -68,6 +68,7 @@ public final class HttpFetcher implements ProxyFormat.Fetcher {
             .connectTimeout(Duration.ofSeconds(5))
             .followRedirects(HttpClient.Redirect.NEVER)
             .throughputFloor(HttpFetcher::throughputFloor, ScreenedHttpClient.FLOOR_WINDOW)
+            .deadline(HttpFetcher::deadline)
             .build();
     private final Duration requestTimeout;
     /** The SSRF screen applied to each redirect target's host: {@code true} refuses the hop. The shipped screen is
@@ -246,8 +247,6 @@ public final class HttpFetcher implements ProxyFormat.Fetcher {
         return "https".equalsIgnoreCase(uri.getScheme()) ? 443 : "http".equalsIgnoreCase(uri.getScheme()) ? 80 : -1;
     }
 
-    /** The configured per-request timeout: {@code jenreg.proxy.request-timeout} ({@code PT30S}, {@code 30s}), or a
-     *  minute. */
     /** The throughput floor an upstream fetch is held to, as the operator set it now: {@link
      *  ProxySettingsContributor#FLOOR_KEY}, else the client's own; a value that does not parse, or is negative, is the
      *  client's own rather than none. */
@@ -264,6 +263,22 @@ public final class HttpFetcher implements ProxyFormat.Fetcher {
         }
     }
 
+    /** The deadline on one upstream fetch, as the operator set it now: {@link ProxySettingsContributor#DEADLINE_KEY},
+     *  else none; a value that does not parse is none, as the default is, rather than a guess at what was meant. */
+    static Duration deadline() {
+        String configured = Features.lookup().apply("jenreg." + ProxySettingsContributor.DEADLINE_KEY);
+        if (configured == null || configured.isBlank()) {
+            return Duration.ZERO;
+        }
+        try {
+            return Durations.parse(configured);
+        } catch (IllegalArgumentException malformed) {
+            return Duration.ZERO;
+        }
+    }
+
+    /** The configured per-request timeout: {@code jenreg.proxy.request-timeout} ({@code PT30S}, {@code 30s}), or a
+     *  minute. */
     private static Duration requestTimeout() {
         String value = System.getProperty("jenreg.proxy.request-timeout");
         return value == null || value.isBlank() ? Duration.ofSeconds(60) : Durations.parse(value);

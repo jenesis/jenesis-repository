@@ -2,6 +2,7 @@ package build.jenesis.repository.compliance.signatures;
 
 import module java.base;
 import module java.net.http;
+import build.jenesis.repository.net.http.BoundedBody;
 import build.jenesis.repository.net.http.ScreenedHttpClient;
 import build.jenesis.repository.compliance.SignatureScheme;
 import build.jenesis.repository.format.ArtifactSignatures;
@@ -142,7 +143,8 @@ public final class TrustedRootTask implements MaintenanceTask {
     /** The default fetch over the JDK's client; a {@code 404} is a host saying it has none, anything else a failure. */
     private static Optional<byte[]> download(URI url) throws IOException {
         HttpClient client = ScreenedHttpClient.newBuilder().connectTimeout(Duration.ofSeconds(10))
-                .followRedirects(HttpClient.Redirect.NORMAL).build();
+                .followRedirects(HttpClient.Redirect.NORMAL)
+                .redirectsWithinPrivateNetwork().build();
         HttpRequest request = HttpRequest.newBuilder(url)
                 .header("Accept", "application/json")
                 .timeout(Duration.ofSeconds(30))
@@ -150,7 +152,7 @@ public final class TrustedRootTask implements MaintenanceTask {
                 .build();
         HttpResponse<byte[]> response;
         try {
-            response = client.send(request, HttpResponse.BodyHandlers.ofByteArray());
+            response = client.send(request, BoundedBody.ofByteArray(url, LARGEST));
         } catch (InterruptedException interrupted) {
             Thread.currentThread().interrupt();
             throw new IOException("interrupted fetching the trusted root from " + url, interrupted);
@@ -161,10 +163,6 @@ public final class TrustedRootTask implements MaintenanceTask {
         if (response.statusCode() != 200) {
             throw new IOException("the trusted root at " + url + " answered HTTP " + response.statusCode());
         }
-        byte[] body = response.body();
-        if (body.length > LARGEST) {
-            throw new IOException("the document at " + url + " is larger than the " + LARGEST + "-byte bound");
-        }
-        return Optional.of(body);
+        return Optional.of(response.body());
     }
 }

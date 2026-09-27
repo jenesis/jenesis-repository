@@ -152,8 +152,9 @@ class ScreenedHttpClientTest {
         assertThat(ScreenedHttpClient.newHttpClient().send(request, HttpResponse.BodyHandlers.discarding())
                 .statusCode()).as("never followed by default").isEqualTo(302);
 
+        // The other server is another origin on loopback, which only a client admitting private hosts goes to.
         HttpResponse<String> followed = ScreenedHttpClient.newBuilder().followRedirects(HttpClient.Redirect.NORMAL)
-                .build().send(request, HttpResponse.BodyHandlers.ofString());
+                .redirectsToPrivateHosts(() -> true).build().send(request, HttpResponse.BodyHandlers.ofString());
         assertThat(followed.statusCode()).isEqualTo(200);
         assertThat(followed.previousResponse()).map(HttpResponse::statusCode).contains(302);
         assertThat(received.getLast().containsKey("Authorization"))
@@ -164,6 +165,97 @@ class ScreenedHttpClientTest {
                         .header("Authorization", "Bearer secret").build(), HttpResponse.BodyHandlers.discarding());
         assertThat(received.getLast().getFirst("Authorization")).as("and stays within its own origin")
                 .isEqualTo("Bearer secret");
+    }
+
+    /**
+     * A redirect is the peer's choice of where the call goes next, so a hop leaving the origin for a private address
+     * is refused by name unless the client was told such targets are admitted; one within the origin is followed,
+     * since it reaches nothing the call was not already reaching.
+     */
+    @Test
+    void a_redirect_leaving_the_origin_for_a_private_address_is_refused_unless_admitted() throws Exception {
+        URI away = url(server, "/away?to=" + url(other, "/echo"));
+        int before = received.size();
+
+        assertThatThrownBy(() -> ScreenedHttpClient.newBuilder().followRedirects(HttpClient.Redirect.NORMAL).build()
+                .send(HttpRequest.newBuilder(away).build(), HttpResponse.BodyHandlers.discarding()))
+                .isInstanceOf(ScreenedHttpClient.RedirectRefused.class)
+                .hasMessageContaining(url(other, "/echo").toString())
+                .hasMessageContaining("private, loopback or link-local");
+        assertThat(received).as("the refused target was never asked").hasSize(before + 1);
+
+        assertThat(ScreenedHttpClient.newBuilder().followRedirects(HttpClient.Redirect.NORMAL)
+                .redirectsToPrivateHosts(() -> true).build()
+                .send(HttpRequest.newBuilder(away).build(), HttpResponse.BodyHandlers.discarding()).statusCode())
+                .as("followed where the deployment admits private targets").isEqualTo(200);
+        assertThat(ScreenedHttpClient.newBuilder().followRedirects(HttpClient.Redirect.NORMAL).build()
+                .send(HttpRequest.newBuilder(url(server, "/away?to=" + url(server, "/echo"))).build(),
+                        HttpResponse.BodyHandlers.discarding()).statusCode())
+                .as("a hop within the origin the call was made to is followed").isEqualTo(200);
+    }
+
+    /**
+     * An internal identity provider behind a load balancer redirects from one internal host to another. A client
+     * whose calls go where an operator pointed them follows that hop, since the call was already inside the network,
+     * and still drops the credential at the origin's edge.
+     */
+    @Test
+    void a_redirect_from_a_private_origin_to_another_private_host_is_followed_for_a_configured_host()
+            throws Exception {
+        HttpRequest request = HttpRequest.newBuilder(url(server, "/away?to=" + url(other, "/echo")))
+                .header("Authorization", "Bearer secret").build();
+
+        HttpResponse<String> followed = ScreenedHttpClient.newBuilder().followRedirects(HttpClient.Redirect.NORMAL)
+                .redirectsWithinPrivateNetwork().build().send(request, HttpResponse.BodyHandlers.ofString());
+
+        assertThat(followed.statusCode()).isEqualTo(200);
+        assertThat(received.getLast().containsKey("Authorization"))
+                .as("the credential stays with the origin it was meant for").isFalse();
+    }
+
+    /**
+     * A peer moving bytes briskly enough to pass the throughput floor - one every tenth of a second, a minute's
+     * floor window away from being judged - would hold the call for the hundred seconds its body takes. A deadline
+     * ends it by name at the time the caller named, whether the call is waiting for headers or reading the body.
+     */
+    @Test
+    void a_call_past_its_deadline_is_abandoned_by_name() throws Exception {
+        try (ServerSocket trickling = new ServerSocket(0, 50, InetAddress.getLoopbackAddress())) {
+            Thread.ofVirtual().start(() -> {
+                try (Socket socket = trickling.accept()) {
+                    socket.getInputStream().read(new byte[8192]);
+                    OutputStream out = socket.getOutputStream();
+                    out.write("HTTP/1.1 200 OK\r\nContent-Length: 1000\r\n\r\n".getBytes(StandardCharsets.US_ASCII));
+                    for (int sent = 0; sent < 1000; sent++) {
+                        out.write('x');
+                        out.flush();
+                        Thread.sleep(Duration.ofMillis(100));
+                    }
+                } catch (IOException | InterruptedException _) {
+                    // the client abandons the connection, which is what is being waited for
+                }
+            });
+            HttpClient client = ScreenedHttpClient.newBuilder().idleTimeout(Duration.ofMillis(500))
+                    .deadline(() -> Duration.ofSeconds(1)).build();
+            long started = System.nanoTime();
+
+            assertThatThrownBy(() -> client.send(HttpRequest.newBuilder(
+                            URI.create("http://127.0.0.1:" + trickling.getLocalPort() + "/trickle")).build(),
+                    HttpResponse.BodyHandlers.ofString()))
+                    .isInstanceOf(HttpTimeoutException.class)
+                    .hasMessageContaining("127.0.0.1:" + trickling.getLocalPort())
+                    .hasMessageContaining("deadline of 1000 ms");
+            assertThat(Duration.ofNanos(System.nanoTime() - started)).as("given up on at the deadline, not at the "
+                    + "hundred seconds the body would take").isLessThan(Duration.ofSeconds(10));
+        }
+        HttpClient client = ScreenedHttpClient.newBuilder().deadline(() -> Duration.ofMillis(500)).build();
+        assertThatThrownBy(() -> client.send(HttpRequest.newBuilder(url(server, "/slow"))
+                .timeout(Duration.ofSeconds(20)).build(), HttpResponse.BodyHandlers.discarding()))
+                .as("the wait for headers is inside the deadline too").isInstanceOf(HttpTimeoutException.class)
+                .hasMessageContaining("deadline");
+        assertThat(ScreenedHttpClient.newBuilder().deadline(() -> Duration.ofSeconds(20)).build()
+                .send(HttpRequest.newBuilder(url(server, "/trickle")).build(), HttpResponse.BodyHandlers.ofString())
+                .body()).as("a call inside its deadline completes").isEqualTo("abcdefghijkl");
     }
 
     @Test

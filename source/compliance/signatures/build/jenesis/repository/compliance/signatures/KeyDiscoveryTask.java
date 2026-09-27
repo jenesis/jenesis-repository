@@ -3,6 +3,7 @@ package build.jenesis.repository.compliance.signatures;
 import module java.base;
 import module java.net.http;
 import build.jenesis.repository.net.PrivateHosts;
+import build.jenesis.repository.net.http.BoundedBody;
 import build.jenesis.repository.net.http.ScreenedHttpClient;
 import build.jenesis.repository.compliance.SignatureScheme;
 import build.jenesis.repository.format.ArtifactSignatures;
@@ -77,6 +78,11 @@ public final class KeyDiscoveryTask implements MaintenanceTask {
 
     /** The most wanted keys one pass resolves, so a burst of unknown signers is drained over passes rather than in one. */
     static final int PER_PASS = 200;
+
+    /** The most of one answer a lookup reads: an armoured key with every certification a keyserver keeps on it is
+     *  some hundreds of kilobytes at most, while a key flooded with certifications runs to tens of megabytes and is
+     *  refused rather than held. */
+    static final int LARGEST_KEY = 4 * 1024 * 1024;
 
     private static final System.Logger LOGGER = System.getLogger(KeyDiscoveryTask.class.getName());
 
@@ -240,7 +246,8 @@ public final class KeyDiscoveryTask implements MaintenanceTask {
 
     private static HttpClient client() {
         return ScreenedHttpClient.newBuilder().connectTimeout(Duration.ofSeconds(10))
-                .followRedirects(HttpClient.Redirect.NORMAL).build();
+                .followRedirects(HttpClient.Redirect.NORMAL)
+                .redirectsWithinPrivateNetwork().build();
     }
 
     private static Optional<byte[]> get(HttpClient client, URI url, String accept, String what) throws IOException {
@@ -251,7 +258,7 @@ public final class KeyDiscoveryTask implements MaintenanceTask {
                 .build();
         HttpResponse<byte[]> response;
         try {
-            response = client.send(request, HttpResponse.BodyHandlers.ofByteArray());
+            response = client.send(request, BoundedBody.ofByteArray(url, LARGEST_KEY));
         } catch (InterruptedException interrupted) {
             Thread.currentThread().interrupt();
             throw new IOException("interrupted asking " + url + " for " + what, interrupted);

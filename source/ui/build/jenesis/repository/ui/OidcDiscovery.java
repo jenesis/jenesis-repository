@@ -3,6 +3,7 @@ package build.jenesis.repository.ui;
 import module java.base;
 import module java.net.http;
 
+import build.jenesis.repository.net.http.BoundedBody;
 import build.jenesis.repository.net.http.ScreenedHttpClient;
 import org.springframework.security.oauth2.core.AuthorizationGrantType;
 import org.springframework.security.oauth2.core.ClientAuthenticationMethod;
@@ -41,6 +42,9 @@ public final class OidcDiscovery {
      * read as an "infrastructure failure". A slow provider should make a login slow, not make it fail.
      */
     private static final Duration TIMEOUT = Duration.ofSeconds(30);
+
+    /** The most of a discovery document read: a provider's is a few kilobytes of endpoints and supported values. */
+    private static final int LARGEST_DOCUMENT = 1024 * 1024;
 
     private OidcDiscovery() {
     }
@@ -86,10 +90,11 @@ public final class OidcDiscovery {
             HttpResponse<String> response = ScreenedHttpClient.newBuilder()
                     .connectTimeout(TIMEOUT)
                     .followRedirects(HttpClient.Redirect.NORMAL)
+                    .redirectsWithinPrivateNetwork()
                     .build()
                     .send(HttpRequest.newBuilder(location).timeout(TIMEOUT)
                                     .header("Accept", "application/json").GET().build(),
-                            HttpResponse.BodyHandlers.ofString());
+                            BoundedBody.ofString(location, LARGEST_DOCUMENT));
             if (response.statusCode() != 200) {
                 failures.add(location + " answered " + response.statusCode());
                 return Optional.empty();

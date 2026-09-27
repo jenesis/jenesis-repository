@@ -5,6 +5,7 @@ import module java.net.http;
 import module tools.jackson.databind;
 
 import static java.nio.charset.StandardCharsets.UTF_8;
+import build.jenesis.repository.net.http.BoundedBody;
 import build.jenesis.repository.scope.Scopes;
 
 /**
@@ -23,6 +24,11 @@ public final class RepositoryClient {
     /** The request header that turns a publish into a batch explode; only {@code zip} is understood. Mirrors the free
      *  core's {@code BatchIngestion.EXPLODE_HEADER}, named here because the CLI module does not depend on the server. */
     private static final String EXPLODE_HEADER = "Jenesis-Explode";
+
+    /** The most of one answer read. Every answer is read whole, since {@code --json} prints it as one value; the API
+     *  pages its documents, so the answers that can grow are the exports taken over a range - the audit trail's CSV
+     *  above all - and one past this is taken a narrower range at a time rather than held in the CLI's heap. */
+    private static final int LARGEST_ANSWER = 256 * 1024 * 1024;
 
     private final URI base;
     private final String key;
@@ -1804,7 +1810,8 @@ public final class RepositoryClient {
         if (root.endsWith("/")) {
             root = root.substring(0, root.length() - 1);
         }
-        HttpRequest.Builder request = HttpRequest.newBuilder(URI.create(root + path))
+        URI uri = URI.create(root + path);
+        HttpRequest.Builder request = HttpRequest.newBuilder(uri)
                 .timeout(Duration.ofSeconds(60))
                 .method(method, body == null ? HttpRequest.BodyPublishers.noBody() : body);
         if (key != null && !key.isBlank()) {
@@ -1814,7 +1821,7 @@ public final class RepositoryClient {
             request.header("Content-Type", contentType);
         }
         headers.forEach(request::header);
-        HttpResponse<String> response = client.send(request.build(), HttpResponse.BodyHandlers.ofString());
+        HttpResponse<String> response = client.send(request.build(), BoundedBody.ofString(uri, LARGEST_ANSWER));
         // In --json mode the server's own answer is the output, so it is captured here rather than reconstructed
         // from whatever the calling command happened to parse out of it.
         if (Output.isJson() && response.statusCode() >= 200 && response.statusCode() < 300) {
