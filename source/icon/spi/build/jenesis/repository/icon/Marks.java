@@ -63,12 +63,12 @@ import module java.base;
  *     {@link #neutral()} is the document for the case where there is no contributor to ask. A {@code null} or blank
  *     name is a programming error and throws rather than resolving to a shared "unknown" figure, because two
  *     different unnamed things sharing one mark is exactly the mis-attribution this type exists to prevent.</li>
- * <li><b>Error visibility (&sect;9).</b> Nothing is swallowed and nothing is contained. A contributor whose
+ * <li><b>Error visibility.</b> Nothing is swallowed and nothing is contained. A contributor whose
  *     {@link IconContributor#icon()} throws - which its contract forbids - propagates out of {@link #of} to the
  *     surface that asked, which contains it the way it contains any other contributor failure (a console panel's
  *     {@code Contributions}, an endpoint's error handling). This class deliberately does not become a second
  *     containment mechanism beside the one the collected-report seams already share.</li>
- * <li><b>Read purity (&sect;10).</b> Resolving or generating a mark performs <b>no I/O</b>: no file read, no
+ * <li><b>Read purity.</b> Resolving or generating a mark performs <b>no I/O</b>: no file read, no
  *     classpath resource lookup, no store access, no fetch, no write, no logging. Every method computes from its
  *     arguments and returns. It is called on a render path, once per rendered row, so this is a hard requirement
  *     rather than a preference.</li>

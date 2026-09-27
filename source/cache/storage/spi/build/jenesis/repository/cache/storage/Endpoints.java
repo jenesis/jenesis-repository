@@ -9,7 +9,7 @@ import module java.base;
  * HMAC secret, an Azure account key - and every cached byte over a plaintext transport a MITM can read and tamper
  * with, and nothing anywhere says so.
  *
- * <p><strong>This is the artifact store's rule, not a second one (&sect;2).</strong> {@code S3ArtifactStoreProvider} and
+ * <p><strong>This is the artifact store's rule, not a second one.</strong> {@code S3ArtifactStoreProvider} and
  * {@code GcsArtifactStoreProvider} already refuse a non-https endpoint override unless
  * {@code JENREG_S3_ALLOW_INSECURE_ENDPOINT} / {@code JENREG_GCS_ALLOW_INSECURE_ENDPOINT} is {@code true}, and the
  * rule, the opt-out spelling and the {@link Boolean#parseBoolean} reading of it are reproduced here verbatim so one
@@ -42,7 +42,7 @@ public final class Endpoints {
      * @return the endpoint as a {@link URI}, so a caller screens and parses in one step and cannot use an unscreened
      *         one by accident.
      * @throws IllegalStateException when the endpoint is not {@code https} and the opt-out is not set - at
-     *         resolution, before any client is built or any credential is signed with (&sect;9).
+     *         resolution, before any client is built or any credential is signed with.
      */
     public static URI secure(String endpointKey, String endpoint, String allowKey, String allowInsecure) {
         URI override = URI.create(endpoint);

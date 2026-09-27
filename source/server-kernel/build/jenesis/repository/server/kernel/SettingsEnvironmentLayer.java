@@ -83,10 +83,10 @@ public final class SettingsEnvironmentLayer implements ApplicationListener<Appli
     /** Insert the stored settings into {@code sources} directly above the packaged classpath config file (so a shipped
      *  default is overridden but an external config file, {@code -D}, the environment and the command line still win),
      *  or at the bottom when no packaged default is present. The bottom is a <em>fallback</em>, not a resting place -
-     *  every app this listener is registered on ships a config file - so it says so rather than degrading in silence
-     *  (&sect;9): landing there means a stored setting is outranked by the shipped default it is meant to override, and
-     *  {@link PinnedSettings} then reports that default as an operator's pin. That is exactly what a stale name matcher
-     *  produced for a year, invisibly. */
+     *  every app this listener is registered on ships a config file - so it says so rather than degrading in
+     *  silence: landing there means a stored setting is outranked by the shipped default it is meant to override, and
+     *  {@link PinnedSettings} then reports that default as an operator's pin - which a stale name matcher would
+     *  produce invisibly. */
     public static void insert(MutablePropertySources sources, Map<String, Object> overrides) {
         sources.remove(NAME);
         MapPropertySource stored = new MapPropertySource(NAME, overrides);
@@ -110,11 +110,11 @@ public final class SettingsEnvironmentLayer implements ApplicationListener<Appli
      * 'class path resource [repository.properties]' via location 'optional:classpath:/'}; an <em>external</em> config
      * file is a {@code file [...]} resource and is not matched, so it keeps its precedence above the store.
      *
-     * <p><b>The base name is deliberately not matched.</b> This test used to require the substring
-     * {@code "application"} as well, from a time when the apps' config file was {@code application.properties}. 
-     * renamed all four - {@code repository}, {@code cache}, {@code combined}, {@code ui}, precisely so no dependency's
-     * root {@code application.properties} could race them - and the matcher was left behind, matching nothing. Being
-     * on the classpath at all <em>is</em> the property that makes a config resource a shipped default, and it is the
+     * <p><b>The base name is deliberately not matched.</b> The apps' config files are named {@code repository},
+     * {@code cache}, {@code combined} and {@code ui}, precisely so no dependency's root
+     * {@code application.properties} can race them, and a matcher on a base name falls behind the moment one is
+     * renamed, matching nothing. Being on the classpath at all <em>is</em> the property that makes a config resource a
+     * shipped default, and it is the
      * one an app cannot rename out from under this class; the configuration contract binds the recogniser
      * to every {@code spring.config.name} the tree actually declares so the pair cannot drift apart again.
      */

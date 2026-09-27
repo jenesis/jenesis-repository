@@ -22,10 +22,10 @@ import org.springframework.security.web.authentication.UsernamePasswordAuthentic
  * (key authentication, rate limiting and the deny-by-default authorization manager), and this contributes to it
  * through the {@link SecurityChainCustomizer} seam.
  *
- * <p><b>The authorization manager is no longer declared here.</b> It used to be, under a name the chain's
- * {@code @ConditionalOnMissingBean(name = ...)} backs off from - a coupling that was a string matched in two
- * modules, where nothing failed when it stopped matching and what failed instead was that every access decision
- * was taken by the weaker manager. There is one manager now, the server's own, and a richer policy is offered
+ * <p><b>The authorization manager is not declared here.</b> Declaring it under a name the chain's
+ * {@code @ConditionalOnMissingBean(name = ...)} backs off from would couple two modules by a matched string, where
+ * nothing fails when it stops matching and what fails instead is that every access decision is taken by the
+ * weaker manager. There is one manager, the server's own, and a richer policy is offered
  * through {@code AuthorizationManagerProvider}, which the declaration resolves as it builds the bean, so a
  * replacement happens in every composition carrying it rather than only in whichever one is the composition root.
  *
@@ -64,10 +64,9 @@ public class RepositorySecurityConfig {
     public SecurityChainCustomizer repositorySecurityChainCustomizer() {
         return http -> http
                 .authorizeHttpRequests(authorize -> authorize
-                        // The console shell and its format-icon route used to be opened here. They are gone: the
-                        // repository node served a single-page console that duplicated nine of the admin console's
-                        // ten screens, and it was removed rather than gated. A permit for an unmapped route is
-                        // inert, but it reads as a surface that exists, which is worse than nothing.
+                        // The repository node serves no console shell, so no console route is opened here. A permit
+                        // for an unmapped route is inert, but it reads as a surface that exists, which is worse than
+                        // nothing.
                         .requestMatchers(HttpMethod.GET, "/api/provenance/key").permitAll()
                         .requestMatchers(HttpMethod.POST, "/api/leaked").permitAll()
                         .requestMatchers(HttpMethod.POST, "/api/token").permitAll())

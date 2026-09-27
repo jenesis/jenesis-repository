@@ -10,9 +10,8 @@ import build.jenesis.repository.server.spi.CapabilityContributor;
  * ({@code readOnly}, {@code auth}, {@code anonymousRights}) and then merges every {@link ServiceLoader}-discovered
  * {@link CapabilityContributor} into it (base keys win); this contributor plugs the richer view -
  * installed formats, import sources, advisory-report columns, per-module capability rows and feature flags - onto that
- * single endpoint. It <b>retires the former {@code WebMvcRegistrations} mapping-suppression stopgap</b> that dropped
- * the {@code capabilities} mapping so {@link DeploymentInfoController} could own the same path: the
- * free controller now serves {@code /api/capabilities} once, extended (never shadowed) by this contribution.
+ * single endpoint. The free controller serves {@code /api/capabilities} once, extended (never shadowed) by this
+ * contribution, so no mapping override is needed for {@link DeploymentInfoController}'s view to reach that path.
  *
  * <p>A {@link CapabilityContributor} is discovered with a plain {@code ServiceLoader.load} inside the controller,
  * so it is instantiated with a no-arg constructor and has <b>no</b> Spring context. The rich view, by contrast, reads
@@ -25,29 +24,25 @@ import build.jenesis.repository.server.spi.CapabilityContributor;
  * contributes an empty map, so the base map is served byte-for-byte unchanged - the SPI's no-op-by-absence
  * contract.
  *
- * <p><b>The merge reports a collision now, so this side no longer refuses one</b>. The free
- * {@link CapabilityContributor#merge} used to fold a contribution in with {@code putIfAbsent}: a base key
- * <em>always</em> won, which protects the product's own flags but dropped the contributed value with nothing
- * logged, nothing thrown and nothing visible in the served body. This class first closed that from its own side, by
- * throwing at the point the contribution is built. The free core then closed it properly and at the right end: the
- * merge now <em>names</em> every entry it refuses, in the returned {@link CapabilityContributor.Merged} report and in
- * the served body under {@value CapabilityContributor#CONFLICTS_KEY}.
+ * <p><b>The merge reports a collision, so this side does not refuse one</b>. The free
+ * {@link CapabilityContributor#merge} lets a base key win, which protects the product's own flags, and <em>names</em>
+ * every entry it refuses, in the returned {@link CapabilityContributor.Merged} report and in the served body under
+ * {@value CapabilityContributor#CONFLICTS_KEY}.
  *
- * <p>So the throw is gone, and its removal is a <em>fix</em> rather than a relaxation. It had become both redundant
- * and <b>coarser than the report it stood in for</b>: an exception out of {@link #capabilities} is contained by the
- * merge and recorded as a contributor <em>failure</em>, which drops this contribution <b>entirely</b> - so one
- * misspelled key would have cost {@code /api/capabilities} the deployment's formats, import sources, signals, modules
- * and feature flags, where the rule drops exactly the one colliding key and serves the rest. Preventing a silent
- * drop by causing a loud, larger one is the wrong trade on a read surface whose whole job is to say what this
- * deployment can do.
+ * <p>Throwing here instead would be <b>coarser than that report</b>: an exception out of {@link #capabilities} is
+ * contained by the merge and recorded as a contributor <em>failure</em>, which drops this contribution
+ * <b>entirely</b> - so one misspelled key would cost {@code /api/capabilities} the deployment's formats, import
+ * sources, signals, modules and feature flags, where the merge drops exactly the one colliding key and serves the
+ * rest. Preventing a silent drop by causing a loud, larger one is the wrong trade on a read surface whose whole job
+ * is to say what this deployment can do.
  *
- * <p>What replaces it is a <b>build-time</b> guard rather than a request-time one, which is where a key-naming mistake
+ * <p>The guard is a <b>build-time</b> one rather than a request-time one, which is where a key-naming mistake
  * belongs: {@code CoreControllerSplitE2ETest} names the six component keys {@link DeploymentInfoController}
  * contributes, asserts the real served body carries them all, and asserts the remaining top-level keys are exactly
  * {@link #FREE_BASE_KEYS} - so a collision fails a build, not a request. {@link #extending} survives as the documented statement of the rule and as
  * the null-contribution normaliser.
  *
- * <p>This contribution no longer carries the optional modules' feature flags. Each feature module now contributes
+ * <p>This contribution does not carry the optional modules' feature flags. Each feature module contributes
  * its own flag directly through this same SPI, so {@code walk}, {@code gc}, {@code search}, {@code dependents},
  * {@code scan}, {@code provenance} and {@code audit} are top-level entries of the served document rather than
  * fields lifted into {@code FeaturesView} by a second fan-out. Two modules claiming one flag is caught by the one
@@ -92,12 +87,12 @@ public final class DeploymentCapabilities implements CapabilityContributor {
      * The rich view, normalised: a contributor's "nothing to contribute" is an empty map, and a {@code null} supplier
      * answer means the same (the SPI's absence sentinel).
      *
-     * <p>It deliberately does <b>not</b> refuse a key {@link #FREE_BASE_KEYS the base map already owns} any more.
+     * <p>It deliberately does <b>not</b> refuse a key {@link #FREE_BASE_KEYS the base map already owns}.
      * The free core's merge names every refused entry in its {@link CapabilityContributor.Merged} report and in the
-     * served body, so the silence this check existed to break is gone - and throwing here is strictly worse than the
-     * report, because the merge contains the exception and drops this contribution WHOLE where the rule drops the
-     * one colliding key. The rule itself is unchanged and is now enforced where a naming mistake can be fixed for
-     * free: at build time, by {@code CoreControllerSplitE2ETest}'s served-body key assertions.
+     * served body, so a collision is never silent - and throwing here is strictly worse than the report, because
+     * the merge contains the exception and drops this contribution WHOLE where the rule drops the one colliding
+     * key. The rule is enforced where a naming mistake can be fixed for free: at build time, by
+     * {@code CoreControllerSplitE2ETest}'s served-body key assertions.
      */
     static Map<String, Object> extending(Map<String, Object> contribution) {
         return contribution == null ? Map.of() : contribution;

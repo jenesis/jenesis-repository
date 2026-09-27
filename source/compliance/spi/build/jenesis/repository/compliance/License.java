@@ -36,9 +36,10 @@ public record License(String spdxId, String category) {
     public static License identify(String name, String url) {
         // A bare SPDX identifier - what an npm/Cargo/gemspec declaration emits ("MIT", "Apache-2.0", "GPL-3.0") -
         // resolves by an exact, case-insensitive match against the canonical spdx-id column FIRST. The substring
-        // fallback below only ever matched verbose license names and URLs ("The Apache Software License, Version 2.0",
-        // ".../licenses/MIT"); a bare id contains none of those name/URL tokens, so before this every bare-id
-        // declaration resolved to UNKNOWN - a proxy-path deny bypass and a mass false-quarantine of bare-MIT packages.
+        // fallback below only ever matches verbose license names and URLs ("The Apache Software License, Version 2.0",
+        // ".../licenses/MIT"); a bare id contains none of those name/URL tokens, so without this every bare-id
+        // declaration would resolve to UNKNOWN - a proxy-path deny bypass and a mass false-quarantine of bare-MIT
+        // packages.
         // A bare id is matched by exact spdx-id, never by a substring token (which would let "mit" match "commit").
         License byId = identifyId(name);
         if (byId != null) {

@@ -98,8 +98,8 @@ public class RepositoryBrowse extends TenantScope {
     }
 
     /** One entry in the generic browse tree: an immediate child under a prefix, classified folder-vs-artifact and
-     *  sized. A folder carries its cached rolled-up subtree size (the sum of the blob sizes published beneath it -
-     *, read from the one small roll-up object, never by walking the tree); an artifact leaf carries its stored
+     *  sized. A folder carries its cached rolled-up subtree size (the sum of the blob sizes published beneath it,
+     *  read from the one small roll-up object, never by walking the tree); an artifact leaf carries its stored
      *  blob's recorded size - read from the small pointer, never the artifact body. {@code bytes} is the raw count the
      *  browse sorts the Size column on ({@code -1} when unknown - a folder with no roll-up computed yet, or a pointer
      *  naming no present blob); {@code size} is that count rendered human-readable ({@code "—"} when unknown). */
@@ -205,8 +205,8 @@ public class RepositoryBrowse extends TenantScope {
     }
 
     /**
-     * One {@code origin} acquisition row rendered on the artifact detail and returned by the origin API (item 3,
-     * over the {@link OriginSection}): where <em>this</em> deployment's bytes for the coordinate version came
+     * One {@code origin} acquisition row rendered on the artifact detail and returned by the origin API (over the
+     * {@link OriginSection}): where <em>this</em> deployment's bytes for the coordinate version came
      * from - a {@code local-upload} (a hand upload through the publish path) or a {@code fallback} fetch (bytes fetched
      * from an ordered upstream fallback, for both a store and a no-store fallback). A fallback row carries which
      * repository and fallback it arrived through, the upstream {@code target} URL, whether it was {@code stored} (cached
@@ -265,12 +265,11 @@ public class RepositoryBrowse extends TenantScope {
         Publication publication = new Publication(store);
         String safe = safePrefix(prefix);
         List<BrowseEntry> entries = new ArrayList<>();
-        // The servable-name seam's paged, screened child listing (P-E2/P-E3): it pages one bounded level, forwards
-        // folder children unconditionally, suppresses the reserved quarantine review subtree at the root, and drops any
-        // non-folder leaf a GET would 404 (withheld, retracted, or a blob a garbage collection reclaimed) - the same WG
-        // serve-parity screen the retired deployment-wide browse applied, so this browse discloses exactly the paths a GET would.
-        // This replaces the former per-leaf located() screen and gains the paging bound the unbounded
-        // children(prefix) it called lacked - same disclosure result, now heap-bounded and routed through the one seam.
+        // The servable-name seam's paged, screened child listing: it pages one bounded level, forwards folder
+        // children unconditionally, suppresses the reserved quarantine review subtree at the root, and drops any
+        // non-folder leaf a GET would 404 (withheld, retracted, or a blob a garbage collection reclaimed) - the
+        // serve-parity screen, so this browse discloses exactly the paths a GET would, heap-bounded and routed
+        // through the one seam.
         StoreRepositoryInventory.ChildPage page =
                 inventory.children(safe, MAX_CHILDREN, ServableNames.Policy.HIDE_WITHHELD_AND_GONE);
         for (String name : page.names()) {
@@ -400,10 +399,10 @@ public class RepositoryBrowse extends TenantScope {
     }
 
     /**
-     * The {@code origin} acquisition rows for a published artifact path (item 3), read from the coordinate
+     * The {@code origin} acquisition rows for a published artifact path, read from the coordinate
      * version's consolidated metadata document's {@code origin} section ({@link OriginSection}) - a small,
-     * bounded read of the one section, never the artifact body (§1). Rows render on the artifact detail and are returned
-     * by the origin API, both the neutral display the gate does not consume. Best-effort render-what-you-have (§10): a
+     * bounded read of the one section, never the artifact body. Rows render on the artifact detail and are returned
+     * by the origin API, both the neutral display the gate does not consume. Best-effort render-what-you-have: a
      * path with no coordinate/version or a read failure yields an empty list (the panel then states there is no
      * recorded origin), never a failed detail view. The path is {@link #safePrefix traversal-guarded} exactly as
      * {@link #artifact} is.
@@ -416,7 +415,7 @@ public class RepositoryBrowse extends TenantScope {
      * The merged {@code origin} acquisition rows over one repository-scoped store for an already-{@link #safePrefix
      * traversal-guarded} path - the reusable read behind both the console origin panel/API and the
      * {@code /api/origin} audit-export endpoint, so the two surfaces share one merge rather than diverging. Reads only
-     * the two small {@code origin} sections, never the artifact body (§1); best-effort render-what-you-have (§10):
+     * the two small {@code origin} sections, never the artifact body; best-effort render-what-you-have:
      * anything missing or unreadable yields an empty list, never a thrown error.
      */
     public static List<OriginRow> originOf(ArtifactStore store, String safe) {
@@ -434,8 +433,8 @@ public class RepositoryBrowse extends TenantScope {
             if (!coordinate.isEmpty() && !version.isEmpty()) {
                 collectOrigin(metadata.section(ecosystem, coordinate, version, OriginSection.TAG), rows, seen);
             }
-            // (2) The path-derived document. A fallback fetch used to record its origin here and no longer does
-            // (one artifact, one origin document, and it is the format-coordinate one above). Still read,
+            // (2) The path-derived document. A fallback fetch does not record its origin here (one artifact, one
+            // origin document, and it is the format-coordinate one above). Still read,
             // for the two cases where it is the only key there is: a path no installed format describes - where
             // HardenedScreen.originCoordinate falls back to this same derivation, so this IS where the row is - and a
             // no-store fallback's row, which survives durably beside transient bytes that never landed.
@@ -449,7 +448,7 @@ public class RepositoryBrowse extends TenantScope {
             return List.copyOf(rows);
         } catch (IOException | RuntimeException _) {
             // Render-what-you-have: a metadata read failure degrades the origin panel to empty rather than failing the
-            // whole artifact detail view (§10), the same posture the quarantine/inspection subsections take.
+            // whole artifact detail view, the same posture the quarantine/inspection subsections take.
             return List.of();
         }
     }
@@ -474,7 +473,7 @@ public class RepositoryBrowse extends TenantScope {
     /** The quality-inspection subsection's scoped error state for a coordinate: the newest active
      *  {@link Finding.Kind#INSPECTION} finding, recorded when the compliance screen could not parse the artifact (so it
      *  was screened only from its path coordinate). A point lookup of this coordinate's findings - the same bounded
-     *  read the quarantine verdict above is - not a ledger scan. Best-effort (Principle 10 render-what-you-have): a
+     *  read the quarantine verdict above is - not a ledger scan. Best-effort (render what you have): a
      *  coordinate with no version, an uninstalled findings module, or a read failure yields {@code null}, so the rest
      *  of the detail
      *  view still renders rather than the whole page failing on one subsection's derive. */
@@ -602,8 +601,8 @@ public class RepositoryBrowse extends TenantScope {
     public record SearchResult(String coordinate, String version, String ecosystem, String location) {
     }
 
-    /** One screen's worth of search hits and whether matches remain past it - the visible outcome at the bound
-     *, so the browse screen states that it stopped rather than presenting a clamped list as the whole match
+    /** One screen's worth of search hits and whether matches remain past it - the visible outcome at the bound,
+     *  so the browse screen states that it stopped rather than presenting a clamped list as the whole match
      *  set. The index path resumes through a cursor; the no-index substring scan has none to offer and only says it
      *  stopped. */
     public record SearchPage(List<SearchResult> results, boolean truncated) {
@@ -672,7 +671,7 @@ public class RepositoryBrowse extends TenantScope {
                 for (String ecosystem : ecosystems) {
                     boolean present = inventory.publishedAt(ecosystem, coordinate, version).isPresent();
                     if (present) {
-                        // A6-F2: a held coordinate:version is still a member but a GET 404s it, so screen it out of the
+                        // A held coordinate:version is still a member but a GET 404s it, so screen it out of the
                         // hit list under HIDE_WITHHELD (the membership policy - a blob-less-but-not-withheld ghost
                         // coordinate is NOT withheld and stays found). The coordinate belongs to this one ecosystem, so
                         // stop probing the rest whether it discloses or is screened.

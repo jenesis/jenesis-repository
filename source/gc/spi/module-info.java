@@ -5,8 +5,8 @@
  * absence</em>: with no module installed, {@code GarbageCollectorProvider.resolve} is empty, nothing is ever
  * reclaimed, and the capability surfaces say garbage collection is off. No blob is deleted by a deployment that did
  * not opt into a collector. A collector that <em>was</em> explicitly selected but cannot be honoured fails at
- * resolution instead, because a silent no-op reads as a healthy idle system while storage grows without bound
- * (&sect;9). A {@code GarbageCollector} matches the retention sweeper's shape - {@code plan} is the dry run a
+ * resolution instead, because a silent no-op reads as a healthy idle system while storage grows without bound.
+ * A {@code GarbageCollector} matches the retention sweeper's shape - {@code plan} is the dry run a
  * maintenance console previews, {@code collect} computes and applies - and is handed the pointer roots by its
  * caller (always {@code publish}; a blobs-namespace format's declared roots are added by the caller that knows
  * them), because which namespaces hold serving pointers is layout knowledge this primitive deliberately does

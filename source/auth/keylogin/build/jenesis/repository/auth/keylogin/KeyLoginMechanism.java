@@ -9,34 +9,31 @@ import build.jenesis.repository.ui.ConsoleModuleProvider;
  * {@code key-login}, a {@link ConsoleModuleProvider} sibling to {@code oidc} and {@code ldap}.
  *
  * <p><b>It is on unless switched off</b> ({@link #onByDefault()}, the one definition the condition and the catalogue
- * both read). It used to be off, and a deployment that had configured nothing could then be signed in to by nobody:
- * the only way in was an admin key the operator had to invent and pass in beside the switch. On by default, a fresh
- * start prints a {@link FirstRunKey} and the console is reachable from one {@code docker run}. It accepts no key
+ * both read). Off, a deployment that had configured nothing could be signed in to by nobody: the only way in would
+ * be an admin key the operator had to invent and pass in beside the switch. On by default, a fresh start prints a
+ * {@link FirstRunKey} and the console is reachable from one {@code docker run}. It accepts no key
  * that was not printed, set or issued, so on costs nothing on a deployment that signs people in some other way;
  * switching it off is how that deployment says so.
  *
  * <p>The name is the module's toggle key, and it is deliberately the <em>same</em> spelling as the enablement gate
- * {@link KeyLoginSettingsContributor} catalogues and {@link KeyLoginConfig.KeyLoginEnabled} reads. It used to be
- * {@code keylogin}, one spelling out from both: the import selector switched on
- * {@code jenreg.keylogin} while every operator-facing surface - the settings catalogue, the modules
- * console toggle, this module's own condition - named {@code jenreg.key-login}, so the documented switch
- * reached the module's beans but never its import, and the undocumented one was the only way to un-import it.
+ * {@link KeyLoginSettingsContributor} catalogues and {@link KeyLoginConfig.KeyLoginEnabled} reads. A toggle one
+ * spelling out from those - {@code jenreg.keylogin} beside {@code jenreg.key-login} - would let the documented switch
+ * reach the module's beans but never its import, leaving the undocumented one the only way to un-import it.
  */
 public final class KeyLoginMechanism implements ConsoleModuleProvider {
 
     /** The <b>operator</b> spelling: the module name, its {@code jenreg.<name>} toggle, the settings key
      *  {@link KeyLoginSettingsContributor} catalogues and the property {@link KeyLoginConfig.KeyLoginEnabled} reads.
-     *  Every one of those four is rendered from this constant, so the four cannot drift the way they once did. */
+     *  Every one of those four is rendered from this constant, so the four cannot drift apart. */
     public static final String NAME = "key-login";
 
     /** The <b>durable</b> spelling, and it is a different string on purpose. It qualifies a login principal
      *  ({@code ProviderPrincipal.qualifiedId}) into the user directory and the issued-key index, and it is the mechanism
      *  token on every {@code login} / {@code login.failed} / {@code login.throttled} / {@code keylogin.issue} audit
      *  row. Both are durable, so <b>this one may never be renamed</b>: changing it would orphan every issued key's
-     *  qualified principal id and split the audit trail into a before and an after. What was fixed first was the
-     *  <em>operator</em> spelling leaking into the toggle; what remained was that the two spellings sat in five files
-     *  with nothing binding them, so a later rename of either could quietly take the other's sites with it. They are
-     *  bound here, side by side, with the reason there are two. */
+     *  qualified principal id and split the audit trail into a before and an after. Two spellings scattered across
+     *  files with nothing binding them would let a rename of either quietly take the other's sites with it, so they
+     *  are bound here, side by side, with the reason there are two. */
     public static final String QUALIFIER = "keylogin";
 
     /** The one definition of the switch's default: on. A compile-time text constant, so the settings contributor

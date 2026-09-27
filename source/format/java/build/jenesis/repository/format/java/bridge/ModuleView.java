@@ -12,9 +12,9 @@ import build.jenesis.repository.store.ArtifactStore;
  * Jenesis layout modules, the only two formats that cross-publish.
  *
  * <p>It has two methods and both write; there is deliberately no removal direction. A cross-view is removed by the
- * same eviction that removes the Maven version it mirrors (through {@code ArtifactLayout.paths}), and the one caller
- * that used to un-link a view by hand - the proxy leg retracting an artifact that failed its upstream checksum - no
- * longer needs to, because that leg now verifies before it links anything at all.
+ * same eviction that removes the Maven version it mirrors (through {@code ArtifactLayout.paths}), and the proxy leg
+ * never has to un-link a view by hand for an artifact that failed its upstream checksum, because that leg verifies
+ * before it links anything at all.
  *
  * <h2>Contract</h2>
  * <ol>
@@ -34,17 +34,17 @@ import build.jenesis.repository.store.ArtifactStore;
  *       still serving under its Maven coordinate. No argument is ever {@code null}, and a view that declines to publish
  *       does so silently rather than by raising.</li>
  *   <li><b>Selection failure.</b> There is nothing to select. The bridge is additive over a <em>qualified</em> export
- *       to exactly two modules, has no {@code name()}, no selection key and no {@code Features} toggle, so the &sect;9
+ *       to exactly two modules, has no {@code name()}, no selection key and no {@code Features} toggle, so the
  *       "explicitly selected but unavailable" case cannot arise; {@link #installed()} is therefore the plain
  *       discovered list, unvalidated because there is no name to validate by, and a module registered twice would
  *       publish the same view twice - harmless only because the writes are idempotent (clause 2).</li>
- *   <li><b>Streaming (&sect;1).</b> Neither method takes or returns artifact bytes: {@link #publish} is handed the
+ *   <li><b>Streaming.</b> Neither method takes or returns artifact bytes: {@link #publish} is handed the
  *       {@code hash} of a blob the caller already stored, so a cross-publish is a pointer write and never a re-upload,
  *       a second buffering of the jar, or a second pass over its bytes.</li>
- *   <li><b>Tenant scoping (&sect;6).</b> The {@link ArtifactStore} is the same doubly-scoped (tenant/repository) store
+ *   <li><b>Tenant scoping.</b> The {@link ArtifactStore} is the same doubly-scoped (tenant/repository) store
  *       the Maven publish routed through, so the {@code /module/} view lands in exactly the space the coordinate did.
  *       A view must not resolve a store of its own; a cross-published artifact never crosses a tenant.</li>
- *   <li><b>Error visibility (&sect;9).</b> Both methods <b>propagate</b> - the Maven format calls them inline and does
+ *   <li><b>Error visibility.</b> Both methods <b>propagate</b> - the Maven format calls them inline and does
  *       not contain them, so an {@link IOException} fails the publish (or the rebuild pass's segment) rather than being
  *       logged away. The one partial state this leaves is stated in clause 12 and named at the call site: the Maven
  *       coordinate is linked <em>before</em> the views, so a failure here fails the publish while the artifact already

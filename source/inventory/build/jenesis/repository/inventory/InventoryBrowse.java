@@ -56,11 +56,9 @@ final class InventoryBrowse {
     /**
      * Whether a child node is a container - <b>one child answers it</b>, and the probe stops there.
      *
-     * <p>It used to be {@code !store.isEmpty(child)}: a whole-namespace listing to answer an emptiness
-     * question, run once per row of the page. A browse of a folder holding twenty coordinates listed twenty
-     * namespaces to draw twenty folder icons, and a coordinate with ten thousand versions cost ten thousand names to
-     * answer {@code true}. That is the METADATA -&gt; MATERIALISED transition the unsafe-API ratchet's first leg is
-     * written to catch, hidden where that leg cannot look: inside a lambda, in an implementation.
+     * <p>Never {@code !store.isEmpty(child)}: a whole-namespace listing to answer an emptiness question, run once per
+     * row of the page, would list twenty namespaces to draw twenty folder icons for a folder holding twenty
+     * coordinates, and cost ten thousand names to answer {@code true} for a coordinate with ten thousand versions.
      */
     private boolean isContainer(String child) {
         boolean[] any = {false};
@@ -109,9 +107,9 @@ final class InventoryBrowse {
      * artifacts that have no coordinate to search by.
      *
      * <p>The console's search reads the COORDINATE inventory, which is the right index for a package: a name, a
-     * version, a licence facet. A raw upload has none of that - a raw path IS the address - so it was found by browse
-     * and by nothing else, and an operator hunting an installer by name got an empty page with no hint that the
-     * artifact was sitting one folder away. That is the gap this closes, and it closes it for both deployments:
+     * version, a licence facet. A raw upload has none of that - a raw path IS the address - so without this it would
+     * be found by browse and by nothing else, and an operator hunting an installer by name would get an empty page
+     * with no hint that the artifact was sitting one folder away. This covers both deployments:
      * the walk runs whether or not a search index is installed, so an indexed registry and a Lucene-less one answer
      * the same question the same way.
      *
@@ -184,8 +182,8 @@ final class InventoryBrowse {
             // Both faces below are layout-resolved: the publish/-namespace one needs the version FOLDER to probe its
             // /quarantine pointer and withheld leaves, the blobs-namespace one needs the version's content HASHES to
             // probe the withheld/<hash> markers. With no installed format for the ecosystem neither question could be
-            // asked, and this used to read that silence as "nothing withholds it" and disclose the name - so removing a
-            // format module published, by name, every version its enforcement sweeps were holding, through search, the
+            // asked, and reading that silence as "nothing withholds it" would disclose the name - removing a format
+            // module would publish, by name, every version its enforcement sweeps were holding, through search, the
             // console browse, the /api/lifecycle listing and the forwarding queue. That is a disclosure, not a
             // bookkeeping loss: a withhold that leaks cannot be undone by reinstalling the module.
             //
@@ -242,9 +240,9 @@ final class InventoryBrowse {
      * the two durable records that are keyed by the coordinate rather than by a request path.
      *
      * <p>It is the answer whenever the layout-resolved faces could not be asked - the ecosystem has no installed
-     * format, or the installed one could name no folder and no hash for this version. Both used to be read as
-     * "nothing withholds it", and that is a disclosure rather than a bookkeeping loss: removing a format module
-     * published, by name, every version its enforcement sweeps were holding, through search, the console browse, the
+     * format, or the installed one could name no folder and no hash for this version. Reading either as "nothing
+     * withholds it" would be a disclosure rather than a bookkeeping loss: removing a format module would publish, by
+     * name, every version its enforcement sweeps were holding, through search, the console browse, the
      * lifecycle listing and the forwarding queue, and a withhold that leaks cannot be undone by reinstalling the
      * module.
      *

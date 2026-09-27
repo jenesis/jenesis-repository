@@ -100,7 +100,7 @@ public class CapabilityService {
             // The hardening proxy leg: present when the gateway's migration-rescreen maintenance task is
             // installed, so the console shows the hardened badge/verdict panel for a hardened repository and hides the
             // surface entirely on a deployment that carries no hardening leg. The per-repository gate stays the repo's
-            // own harden flag; this is the module-presence signal, discovered like every other (§2).
+            // own harden flag; this is the module-presence signal, discovered like every other.
             MaintenanceTaskProvider.installed().contains("migration-rescreen"),
             enabled(consoleModules, "scim"),
             flag(contributed, "leak-webhook"),

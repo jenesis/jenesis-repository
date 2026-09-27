@@ -176,7 +176,7 @@ public class RepositoryLifecycle extends TenantScope {
     public boolean forgetEcosystem(String repository, String ecosystem) throws IOException {
         // Off the request thread. The primitive deletes in pages of 500 across five key-space roots until each is
         // empty, so its cost is however much that ecosystem published - unbounded from here, and paid a round trip
-        // at a time against the object store. It held the request open for as long as that took.
+        // at a time against the object store - no request may be held open for that.
         //
         // The refusal is deliberately still raised here rather than inside the pass: an ecosystem an installed
         // format still places must be refused to the operator's face, not reported as a failed background job.

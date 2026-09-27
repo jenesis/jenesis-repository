@@ -48,12 +48,10 @@ import org.springframework.core.env.Environment;
  * The routing / serving / proxy-dispatch wiring split out of {@link RepositoryConfig}: the upstream
  * credential source and fetcher, the {@link RepositoryRouter} and its {@link RoutedServing} read side, the tenancy
  * routing, the live {@link FormatDispatcher}, batch ingestion, the {@code RepositoryController} serving/writing
- * bean with {@link DeployEdgeHooks} and {@link PublishTenantFilter} plugged in. Every bean is copied
- * verbatim from the former monolith; the split is behaviour-preserving.
+ * bean with {@link DeployEdgeHooks} and {@link PublishTenantFilter} plugged in.
  *
- * <p><b>The import edge, without a bean override.</b> The former {@code WebMvcRegistrations} mapping-suppression
- * stopgap that dropped the controller's import handlers is retired. Those handlers have moved out of {@code
- * RepositoryController} into the {@code ImportEdgeController}, a bean conditionally registered by {@code
+ * <p><b>The import edge, without a bean override.</b> The import handlers live outside
+ * {@code RepositoryController}, in the {@code ImportEdgeController}, a bean conditionally registered by {@code
  * FreeImportEdgeCondition} only when no {@code ImportEdgeProvider} is installed. This composition installs {@link
  * RoutedImportEdge} through that SPI (a hook, not a cross-layer bean override), so the server's own import edge is
  * never created and {@link ImportController} - the tenant-scoped {@code /api/repository/import} with its {@code
@@ -227,11 +225,11 @@ public class ServingConfig {
     /**
      * The routing this deployment runs on, discovered rather than chosen here.
      *
-     * <p>This used to be an {@code if}-chain over {@code jenreg.tenancy} naming the four routings by constructor,
-     * which made tenancy a composition choice: the setting was real, the seam was not, and a fifth routing could
-     * only arrive by editing the method that names the other four. It resolves through
-     * {@link RepositoryRoutingProvider} now - the same {@code EXCLUSIVE_WITH_DEFAULT} discovery the artifact store
-     * uses - so what this method still owns is the one thing only the application knows: which store and which
+     * <p>Not an {@code if}-chain over {@code jenreg.tenancy} naming the routings by constructor, which would make
+     * tenancy a composition choice: the setting would be real, the seam would not, and a further routing could
+     * only arrive by editing the method that names the others. It resolves through
+     * {@link RepositoryRoutingProvider} - the same {@code EXCLUSIVE_WITH_DEFAULT} discovery the artifact store
+     * uses - so what this method owns is the one thing only the application knows: which store and which
      * repository view a routing's questions are answered from, which is
      * {@link RepositoriesRoutingContext}.
      *
@@ -302,7 +300,7 @@ public class ServingConfig {
         // through the routing seam and the free ScreenedDispatch edge. Registered under the bean name
         // "repositoryController" so the free RepositoryAutoConfiguration's own
         // @ConditionalOnMissingBean(name = "repositoryController") backs off - this one richer instance serves, never
-        // two - now that the auto-config is no longer excluded. A write is a store-then-screen over the free
+        // two - since the auto-config is not excluded. A write is a store-then-screen over the free
         // Publication with the discovered compliance gate riding the interceptor chain and the EdgeHooks bean
         // (deployEdgeHooks) plugged in for the immutability 409 / quarantine record / deploy observation; a batch
         // explode header is walked here too. A format reads a runtime toggle (the Maven metadata computation opt-in) off
@@ -333,8 +331,8 @@ public class ServingConfig {
     @Bean
     public PublishTenantFilter publishTenantFilter(RepositoryRouting routing) {
         // Binds the request's tenant to the publishing thread on /repository/** and /v2/** so the discovered compliance
-        // gate resolves that tenant's own policy - the binding the retired DeployController opened inline, now opened
-        // around the serving controller writes flow through. Resolving through the active routing (not the key
+        // gate resolves that tenant's own policy, opened around the serving controller writes flow through.
+        // Resolving through the active routing (not the key
         // header alone) is what makes path/host tenancy screen a keyless CDN write with the path-named tenant's policy.
         return new PublishTenantFilter(routing);
     }

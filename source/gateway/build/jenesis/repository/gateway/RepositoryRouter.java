@@ -48,9 +48,9 @@ public final class RepositoryRouter {
     private static final RepositoryDefinition UNDEFINED = new RepositoryDefinition(true, List.of());
 
     /**
-     * The typed outcome of resolving one repository (or one fallback leg) - the channel that replaces the boolean
-     * 404-sniffing the old walk used. The distinction the old
-     * {@code 404 ⇒ miss, else ⇒ commit} sniff could not make is {@link #REFUSED} vs {@link #MISS}: both are a plain
+     * The typed outcome of resolving one repository (or one fallback leg), rather than boolean 404-sniffing. The
+     * distinction a {@code 404 ⇒ miss, else ⇒ commit} sniff cannot make is {@link #REFUSED} vs {@link #MISS}: both
+     * are a plain
      * {@code 404} on the wire, but a refusal <b>ends the walk</b> so no weaker fallback is consulted - the structural
      * closure of the weakest-member bypass.
      */
@@ -144,8 +144,8 @@ public final class RepositoryRouter {
     /** The origin-refresh coalescing gate: the day each {@code (tenant|repo|path|sha256)} key last had its
      *  {@code origin} row's {@code lastServed}/{@code serves} durably refreshed, so a hot no-copy pass-through refreshes
      *  a key at most once per day rather than CAS-storming one doc key on every serve (the {@code BatchingDownloadTracker}
-     *  day-granular discipline, §7). The first acquisition of a key - and every digest change (a new key) - is never in
-     *  this map, so it is always written synchronously (§9). Pruned to a single day's keys on each pass, so it is bounded
+     *  day-granular discipline). The first acquisition of a key - and every digest change (a new key) - is never in
+     *  this map, so it is always written synchronously. Pruned to a single day's keys on each pass, so it is bounded
      *  by the distinct coordinates served in a day, not everything ever served. */
     private final Map<String, LocalDate> originRefreshed = new ConcurrentHashMap<>();
 
@@ -320,7 +320,7 @@ public final class RepositoryRouter {
      * {@link Deferred} that streams a hit straight to the client but swallows a {@code 404}, so the walk can try the
      * next fallback without a leaked existence probe; the final {@code 404} is committed once, by {@link #resolve}.
      *
-     * <p><b>§1 streaming.</b> No artifact body is materialised here: the local leg runs the format's own {@code handle}
+     * <p><b>Streaming.</b> No artifact body is materialised here: the local leg runs the format's own {@code handle}
      * (streaming), each upstream leg runs the shared {@link PullThroughCache} streaming pull-through, and the
      * screen/spool legs keep their bounded-prefix/bounded-spool discipline unchanged.
      */
@@ -343,9 +343,9 @@ public final class RepositoryRouter {
         // fallback's own PullThroughCache below).
         if (hasOwnStore(definition)) {
             ArtifactStore local = stores.apply(tenant, repository);
-            // #79 cache-HIT close: for a hardened serving posture, verify the cached hit against the CURRENT
+            // Cache-HIT close: for a hardened serving posture, verify the cached hit against the CURRENT
             // gate BEFORE it serves - this local-first path does NOT run through PullThroughCache, so the seam is
-            // consulted here directly. A DEFAULT/other posture (or an ungated tenant) serve-throughs, so today's
+            // consulted here directly. A DEFAULT/other posture (or an ungated tenant) serve-throughs, so the
             // local-first below is byte-for-byte unchanged and the withheld-pointer retraction still applies.
             if (MigrationRescreenTask.hardenedProxy(definition) && proxyGate(tenant) != null) {
                 PullThroughHooks.HitDecision decision = new HardenedHitVerify(gates(tenant), holdDays.getAsInt(),
@@ -418,7 +418,7 @@ public final class RepositoryRouter {
     /** The content-addressed hash a served fallback fetch landed under in {@code store} - the {@code blobs/<hash>}
      *  publish pointer the format wrote for {@code path}, or {@code null} when nothing is published there (an index
      *  served through the buffered {@code fetch} path, or a leg that cached nothing readable). A tiny pointer read, never
-     *  a blob-body read (§1): the store computed the hash on write, so origin reuses it. Best-effort - a read failure
+     *  a blob-body read: the store computed the hash on write, so origin reuses it. Best-effort - a read failure
      *  yields {@code null} (no origin row), never a failed serve. */
     private static String located(ArtifactStore store, String path) {
         try {
@@ -466,7 +466,7 @@ public final class RepositoryRouter {
      * policy, through a {@link Deferred} so a hit streams to the client while a miss/refusal stays swallowed. The
      * upstream's real status is observed below the screen by an {@link UpstreamProbe}, so a {@code 404}-on-the-wire is
      * classified as a {@link Outcome#REFUSED} (the upstream served {@code 200} but the screen withheld it) rather than
-     * a {@link Outcome#MISS} (the upstream itself had nothing) - the distinction the old 404-sniff could not make.
+     * a {@link Outcome#MISS} (the upstream itself had nothing) - the distinction a 404-sniff cannot make.
      */
     private Outcome fetchScreenServe(String tenant, String repository, int fallbackIndex, RepositoryDefinition.Fallback fallback,
                                      URI upstream, RepositoryFormat format, FormatExchange exchange) throws IOException {
@@ -481,7 +481,7 @@ public final class RepositoryRouter {
         ArtifactStore records = null;
         // The content-addressed hash of the served bytes - the sha256 the origin row is keyed on. It is read
         // from the store the bytes actually land in (the durable cache, or the transient scratch/spool BEFORE it is
-        // reclaimed) as the tiny publish pointer, never by re-reading the blob body (§1): the store computed the hash on
+        // reclaimed) as the tiny publish pointer, never by re-reading the blob body: the store computed the hash on
         // write, so origin reuses it. Captured inside each branch before the scratch is closed.
         String digest = null;
         if (harden) {
@@ -489,7 +489,7 @@ public final class RepositoryRouter {
             // stream is released (spool -> screen -> release-verified-stream, HardenedScreen). The pre-verdict spool is
             // a budgeted SpoolStore scratch, reclaimed once served; a budget exhaustion refuses the fetch with 503
             // rather than spooling unbounded. A hardened leg with no screening gate installed fails loud in screening()
-            // rather than proxying unscreened (§9). Store-on-pass vs transient: a plain harden (store=true)
+            // rather than proxying unscreened. Store-on-pass vs transient: a plain harden (store=true)
             // durably caches the verified copy; a harden-nocache (store=false) screens every fetch and caches nothing.
             // Either way the gate's DURABLE records (QuarantineLog row, /quarantine pointer, digest-pinned verdict) go
             // to the real per-repository store, never the throwaway scratch.
@@ -541,7 +541,7 @@ public final class RepositoryRouter {
                 // Origin follows the bytes. The upstream actually served THESE bytes (probe.served()) and they
                 // streamed to the client, so record where they came from - for BOTH a store and a no-store fallback.
                 // The sha256 is the content-addressed hash the store computed on write (read as the tiny publish
-                // pointer, never a blob re-read, §1); for a hardened leg it equals the spool digest the sibling verdict
+                // pointer, never a blob re-read); for a hardened leg it equals the spool digest the sibling verdict
                 // is pinned to (the schemas align).
                 String target = probe.url() != null ? probe.url() : upstream.toString();
                 recordFallbackOrigin(tenant, repository, fallbackIndex, fallback, target, exchange.path(),
@@ -562,13 +562,13 @@ public final class RepositoryRouter {
      * the throwaway scratch, so origin lands wherever the durable records do (the store is never touched by an ungated
      * pass-through).
      *
-     * <p><b>First acquisition synchronous, refreshes coalesced (§9/§7).</b> The first serve of a given
+     * <p><b>First acquisition synchronous, refreshes coalesced.</b> The first serve of a given
      * {@code (path, sha256)} - and every digest change (a new sha256 appends a new row, the visible drift trail) - is
      * written synchronously here, never swallowed. A repeated no-copy serve of the <em>same</em> bytes only refreshes
      * the row's {@code lastServed}/{@code serves}, and is coalesced to at most once per key per day (the
      * {@code BatchingDownloadTracker} day-granular discipline) so a hot pass-through never CAS-storms one doc key: a
      * same-day repeat returns early without reading or writing the document. The refresh is best-effort - a failure is
-     * logged (never silent, §9) and never fails the already-served response.
+     * logged (never silent) and never fails the already-served response.
      */
     private void recordFallbackOrigin(String tenant, String repository, int fallbackIndex, RepositoryDefinition.Fallback fallback,
                                       String target, String path, ArtifactStore records, String sha256) {
@@ -578,9 +578,9 @@ public final class RepositoryRouter {
         MetadataStore metadata = metadataOver.apply(records);
         String key = tenant + '|' + repository + '|' + path + '|' + sha256;
         LocalDate today = LocalDate.ofInstant(Instant.now(), ZoneOffset.UTC);
-        // Coalesce same-day refreshes of the SAME (key) so a hot pass-through does not CAS-storm one doc key (§7): a key
+        // Coalesce same-day refreshes of the SAME (key) so a hot pass-through does not CAS-storm one doc key: a key
         // already refreshed today is skipped without touching the document. A never-seen key (a first acquisition or a
-        // digest change - both a new (key)) is always written synchronously below (§9).
+        // digest change - both a new (key)) is always written synchronously below.
         originRefreshed.entrySet().removeIf(entry -> !today.equals(entry.getValue()));   // bound to a single day's keys
         if (today.equals(originRefreshed.putIfAbsent(key, today))) {
             return;
@@ -597,7 +597,7 @@ public final class RepositoryRouter {
                             sha256, fallback.store(), screening, Instant.now()));
         } catch (IOException | RuntimeException e) {
             // Best-effort refresh/first-write: the bytes are already served, so a record failure is logged (never
-            // silent, §9) rather than failing the serve - it only costs a re-record on the next non-coalesced serve.
+            // silent) rather than failing the serve - it only costs a re-record on the next non-coalesced serve.
             originRefreshed.remove(key);   // let the next serve retry rather than treating a failed write as done
             LOGGER.warn("Could not record the fallback origin row for " + path + " from " + target, e);
         }
@@ -615,7 +615,7 @@ public final class RepositoryRouter {
                                           ArtifactStore spool, ProxyFormat.Fetcher raw) {
         ComplianceGate active = proxyGate(tenant);
         if (fallback.screening() == RepositoryDefinition.Screening.HARDEN) {
-            // Selected-but-unsatisfiable stays loud (§9, the store=s3-without-module precedent): a hardened fallback is
+            // Selected-but-unsatisfiable stays loud (like store=s3 without its module): a hardened fallback is
             // an explicit opt-in to full screening, so a missing screening gate must throw at resolution naming what
             // is absent - never a silent fallback to unscreened proxying of an untrusted upstream.
             if (active == null) {
@@ -655,7 +655,7 @@ public final class RepositoryRouter {
                              FormatExchange exchange, ArtifactStore body, ArtifactStore records, ArtifactStore spool,
                              UpstreamProbe probe) throws IOException {
         if (format instanceof ProxyFormat proxy) {
-            // Unify both #79 legs through the pull-through seam: the raw probe is handed to the cache, and
+            // Unify both pull-through legs through the seam: the raw probe is handed to the cache, and
             // the fallback's screening()-composed fetcher is injected on the MISS leg via HardenedHitVerify.screenFetch
             // (one screening decorator, applied once - the eager screening() call still fails loud for a hardened leg
             // with no gate). On the HIT leg the same hooks verify a hardened cache hit fail-closed before it serves; a
@@ -691,7 +691,7 @@ public final class RepositoryRouter {
      *  sitting <b>below</b> the screen so it sees the real upstream status the screen may then withhold. It streams
      *  unchanged - being a decorator it is never a {@link ProxyFormat.Fetcher.Buffered}, so all three legs
      *  ({@code fetch}, {@code download} and {@code head}) delegate to the real fetcher's own implementations rather
-     *  than to a derivation that would buffer an artifact or open a body to answer a metadata question (§1), recording
+     *  than to a derivation that would buffer an artifact or open a body to answer a metadata question, recording
      *  only the observed status. A {@code head} that saw {@code 200} counts as served: the upstream <em>has</em> the
      *  artifact, and a screen above may still withhold that answer, which is exactly the REFUSED-not-MISS distinction
      *  this probe exists to draw - a screen-withheld metadata answer must not fall through to a weaker fallback. It

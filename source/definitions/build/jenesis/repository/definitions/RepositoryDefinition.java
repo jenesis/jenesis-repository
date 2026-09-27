@@ -21,9 +21,9 @@ import build.jenesis.repository.store.ArtifactDescriptor;
  *
  * <p><b>Its own module, because it is data every repository screen reads.</b> The record, its parser and the
  * two parse-time module switches ({@link #redirectHandlerInstalled(boolean)},
- * {@link #dnsDirectoryInstalled(boolean)}) lived as a nested type of the router until 2026-09-20, so a console
- * screen that only rendered a definition required the router, and with it the gate, the compliance SPI, the
- * inventory, the metadata store and the maintenance seam. What the model itself needs is the outbound-target
+ * {@link #dnsDirectoryInstalled(boolean)}) live apart from the router, so a console screen that only renders a
+ * definition does not require the router, and with it the gate, the compliance SPI, the inventory, the metadata
+ * store and the maintenance seam. What the model itself needs is the outbound-target
  * rule ({@code blobs}), the cleartext rule ({@code settings}) and the artifact descriptor a {@code match=}
  * predicate reads ({@code store}); the router consumes the record through {@code RepositoryRouter#resolve} and
  * stays where the serving is.
@@ -168,11 +168,11 @@ public record RepositoryDefinition(boolean writable, List<Fallback> fallbacks) {
 
     /** Per-fallback screening strength for fetched content. {@code DEFAULT} = the serving tenant's gate (a prefix
      *  screen; none if the tenant is ungated); {@code HARDEN} = a full-body, fail-closed screen before anything is
-     *  served; {@code UNSCREENED} = an explicit, loudly-warned no-screen opt-out (never silent, §9). */
+     *  served; {@code UNSCREENED} = an explicit, loudly-warned no-screen opt-out (never silent). */
     public enum Screening { DEFAULT, HARDEN, UNSCREENED }
 
     /** Defensively copy the fallback list into an unmodifiable list and reject the one shape that could never
-     *  serve anything - not writable and with no fallbacks (fail-loud, §9). Every clause-grammar parse yields a
+     *  serve anything - not writable and with no fallbacks (fail-loud). Every clause-grammar parse yields a
      *  serveable shape, so this guards only malformed direct construction. */
     public RepositoryDefinition {
         fallbacks = List.copyOf(fallbacks);
@@ -190,8 +190,9 @@ public record RepositoryDefinition(boolean writable, List<Fallback> fallbacks) {
      * and {@code writable} appears at most once, position-free. <b>Cache policy defaults to store:</b> a bare
      * {@code fallback <url>} caches its fetched bytes ({@code store=true}); {@code nocache} is the explicit opt-out to
      * a discard-after-serve pass-through. A definition that does not start with a clause, an option with no preceding
-     * fallback, an unknown option, or a store/screening option on a repository-name fallback is refused (fail-loud,
-     * §9). The words {@code hosted}, {@code proxy} and {@code group} are refused like any other leading token, with
+     * fallback, an unknown option, or a store/screening option on a repository-name fallback is refused
+     * (fail-loud). The words {@code hosted}, {@code proxy} and {@code group} are refused like any other leading token,
+     * with
      * the clause that says the same thing named in the message.
      */
     public static RepositoryDefinition parse(String specification) {
@@ -357,7 +358,7 @@ public record RepositoryDefinition(boolean writable, List<Fallback> fallbacks) {
             case "nocache" -> fallback.withStore(false);
             case "harden" -> fallback.withScreening(Screening.HARDEN);
             case "unscreened" -> {
-                // §9: an explicit no-screen opt-out is never silent. On a `redirect` fallback this
+                // An explicit no-screen opt-out is never silent. On a `redirect` fallback this
                 // is the loudly-warned bookmark-redirect opt-out; on a proxy fallback it is the no-screen proxy.
                 LOGGER.warn("SECURITY: fallback '"
                         + ((Source.Upstream) fallback.source()).url() + "' is declared 'unscreened' - its "
@@ -442,7 +443,7 @@ public record RepositoryDefinition(boolean writable, List<Fallback> fallbacks) {
     /** Warn loudly that an upstream travels in cleartext. Since this is only reachable when the deployment
      *  has taken the {@code proxy-allow-internal} opt-out - the write surfaces and the boot sweep refuse a
      *  plaintext upstream otherwise - so it is the standing reminder about an accepted risk rather than the whole
-     *  response to an unaccepted one (§9: an insecure configuration is loud, not silent). */
+     *  response to an unaccepted one (an insecure configuration is loud, not silent). */
     private static void warnPlaintext(URI upstream) {
         LOGGER.warn(
                 "SECURITY: upstream '" + upstream + "' is not https - artifacts and any per-host upstream "
@@ -452,10 +453,8 @@ public record RepositoryDefinition(boolean writable, List<Fallback> fallbacks) {
 
     /** Whether a proxy upstream travels in cleartext - any scheme other than {@code https}, over which the
      *  deployment's per-host upstream credential would be sent in the clear. One line, delegating to the shared
-     *  {@link PrivateHostGuard#cleartextRefusal} rule: the product used to answer "is this upstream's
-     *  transport acceptable" in two implementations - this one and the importer's
-     *  {@code RepositoryAutoConfiguration.isInsecureUpstream} - only one of which held the reasoning. The rule and
-     *  its wording now live where every other outbound leg reads them. */
+     *  {@link PrivateHostGuard#cleartextRefusal} rule, so "is this upstream's transport acceptable" has one answer
+     *  and its wording lives where every other outbound leg reads it. */
     public static boolean plaintextUpstream(URI upstream) {
         return upstream != null && PrivateHostGuard.cleartextRefusal(upstream) != null;
     }
@@ -471,7 +470,8 @@ public record RepositoryDefinition(boolean writable, List<Fallback> fallbacks) {
      * <p><b>The transport half only, and deliberately so.</b> Unlike a webhook callback, this URL is the
      * operator's own choice of where to pull from, and an internal, privately-addressed mirror is a legitimate and
      * common deployment. It is also read on a <em>render</em> path (the console renders a repository's shape from
-     * its stored definition), and resolving a host there would be an external lookup on a GET - the §10 breach
+     * its stored definition), and resolving a host there would be an external lookup on a GET - the breach of read
+     * purity
      * {@link PrivateHostGuard#cleartextRefusal} exists to avoid. So the host half is not applied here, and that
      * divergence is stated at the seam rather than left to be rediscovered.
      *

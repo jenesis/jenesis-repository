@@ -27,13 +27,13 @@ import build.jenesis.repository.icon.IconContributor;
  *   <li><b>Idempotency / replay.</b> {@code create} is called repeatedly over the life of a deployment and must be a
  *       pure function of {@code config}: the same configuration yields an equivalent task. It must not perform I/O,
  *       write to the store, or assume it is called once. The <em>task</em> it builds must converge idempotently on
- *       re-run and back-fill from durable state when enabled late (&sect;5); the provider itself does no work.</li>
+ *       re-run and back-fill from durable state when enabled late; the provider itself does no work.</li>
  *   <li><b>Absence sentinel.</b> {@code create} returns an empty {@link Optional} when the pass is switched off;
  *       {@code null} is never legal. Disabling has exactly <em>two</em> routes and gains no third: the neutral
  *       {@code jenreg.<name>=false} toggle plus the {@link #requiredConfig()} self-disable, both applied by
  *       {@link Features#active} before a provider is asked, and the provider's own enablement setting returning empty.
  *       A cadence of zero is <em>not</em> a disable route (see {@link IntervalSetting}).</li>
- *   <li><b>Construction failure is phase-dependent (&sect;9).</b> A provider's own value or construction failure (a
+ *   <li><b>Construction failure is phase-dependent.</b> A provider's own value or construction failure (a
  *       malformed dial, an unparseable policy, a constructor that throws) is <em>fatal at boot</em> and
  *       <em>contained on refresh</em>, and the two phases are two entry points rather than one flag:
  *       {@link #resolve} is what a deployment boots through and it <strong>fails</strong>, naming the provider;
@@ -45,13 +45,13 @@ import build.jenesis.repository.icon.IconContributor;
  *       deployment until someone noticed. At refresh the trade reverses: the server is already serving, a settings
  *       edit must not take a running deployment down, and per-provider containment lets the other toggles in the same
  *       write converge instead of being held hostage by one bad provider.</li>
- *   <li><b>Selection failure is never contained (&sect;9).</b> An {@link IllegalStateException} - what the shared
+ *   <li><b>Selection failure is never contained.</b> An {@link IllegalStateException} - what the shared
  *       provider-resolution primitives throw when an operator explicitly named a backend that is not installed, or
  *       when two providers claim one name - propagates out of <em>both</em> entry points, unwrapped, naming the
  *       selection. Those are deployment mistakes rather than one plugin's bad day: "the feed you selected does not
  *       exist" must never degrade into a silent fallback, on any path, and a duplicate-name packaging error is not
  *       something a convergence tick can heal.</li>
- *   <li><b>Error visibility (&sect;9).</b> A contained failure is never silent. It is logged at {@code WARNING} naming
+ *   <li><b>Error visibility.</b> A contained failure is never silent. It is logged at {@code WARNING} naming
  *       the provider and the cause, and the provider is listed in the resolve's {@link Contained#unavailable()}, so
  *       the scheduler that resolved it
  *       reports the pass as <em>failed</em> rather than letting it vanish from a silently shorter task list. The
@@ -105,7 +105,7 @@ public interface MaintenanceTaskProvider extends IconContributor {
      *
      * <p>A failure is reported as an {@link IllegalStateException} naming the provider, its implementing class and the
      * cause, so the bean-creation failure an operator reads says which pass to fix. A provider's own
-     * {@link IllegalStateException} - a &sect;9 selection failure, or two providers claiming one name - propagates
+     * {@link IllegalStateException} - a selection failure, or two providers claiming one name - propagates
      * unwrapped, since its message already names the selection.
      */
     static List<MaintenanceTask> resolve(UnaryOperator<String> config) {
@@ -135,7 +135,7 @@ public interface MaintenanceTaskProvider extends IconContributor {
      * retention provider - which no provider-local {@code catch} in this repository could fix.
      *
      * <p>An {@link IllegalStateException} is deliberately <em>not</em> contained here either: that is what the shared
-     * provider-resolution primitives raise for a &sect;9 selection failure (an operator named a backend that is not
+     * provider-resolution primitives raise for a selection failure (an operator named a backend that is not
      * installed) or a packaging error (two providers claiming one name). It aborts the whole re-resolve rather than
      * disabling one pass, so the caller keeps its last good task list whole instead of converging half of a
      * deployment mistake.
@@ -174,15 +174,16 @@ public interface MaintenanceTaskProvider extends IconContributor {
     }
 
     /** The one discovery loop both entry points run; {@code onFailure} is the <em>only</em> difference between them -
-     *  {@link #resolve} rethrows out of it, {@link #resolveContained} records and warns. The &sect;9 carve-out lives
+     *  {@link #resolve} rethrows out of it, {@link #resolveContained} records and warns. The selection-failure
+     *  carve-out lives
      *  here rather than in either caller, so a selection failure cannot be contained by construction on either path. */
     private static List<MaintenanceTask> discover(UnaryOperator<String> config,
                                                   BiConsumer<MaintenanceTaskProvider, RuntimeException> onFailure) {
         List<MaintenanceTaskProvider> discovered = new ArrayList<>();
         ServiceLoader.load(MaintenanceTaskProvider.class).forEach(discovered::add);
         // Read every name ONCE, before anything is decided on it. A pass name is its toggle key, its lease object and
-        // its attribution in every diagnostic below, and it used to be re-read at each of those points - so a provider
-        // whose name() answered differently on two calls could be enabled under one name and reported under another.
+        // its attribution in every diagnostic below; re-read at each of those points, a provider whose name()
+        // answered differently on two calls could be enabled under one name and reported under another.
         Map<MaintenanceTaskProvider, String> names = new IdentityHashMap<>();
         for (MaintenanceTaskProvider provider : discovered) {
             names.put(provider, provider.name());
@@ -200,18 +201,17 @@ public interface MaintenanceTaskProvider extends IconContributor {
                         onFailure.accept(provider, misconfigured);
                         return Optional.empty();
                     } catch (Error broken) {
-                        // NOT contained - and named on its way out, which is the half that was missing. An Error is
+                        // NOT contained - and named on its way out. An Error is
                         // the runtime or the module graph giving way (a LinkageError from a half-installed plugin)
                         // rather than a provider declining to build its task, so it reaches the caller instead of
                         // disabling one pass and leaving a deployment that looks whole. What it must not do is arrive
-                        // anonymous: this loop used to catch RuntimeException only, so an Error left with nothing
-                        // saying WHICH of the installed providers raised it, and an operator whose boot failed learned
-                        // that maintenance resolution died and not which plugin killed it.
+                        // anonymous: an Error with nothing saying WHICH of the installed providers raised it would
+                        // tell an operator whose boot failed that maintenance resolution died and not which plugin
+                        // killed it.
                         //
-                        // Attribute-and-rethrow rather than contain, matching Contributions' Error arm exactly - the
-                        // peer this entry cites. The blast-radius argument for containing it was withdrawn when the
-                        // claim underneath it turned out to be false: Spring's repeating-task error handler logs and
-                        // suppresses, so an Error out of a convergence tick costs that tick, not the schedule.
+                        // Attribute-and-rethrow rather than contain, matching Contributions' Error arm exactly. There
+                        // is no blast-radius argument for containing it: Spring's repeating-task error handler logs
+                        // and suppresses, so an Error out of a convergence tick costs that tick, not the schedule.
                         //
                         // Suppressed rather than logged, so the name survives every log configuration and rides the
                         // stack trace the caller already prints.

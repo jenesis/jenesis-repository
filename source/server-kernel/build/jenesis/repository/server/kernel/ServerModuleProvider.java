@@ -18,8 +18,8 @@ import build.jenesis.repository.store.Providers;
  * it is the application's own rather than a feature's: the migration edge and the deployment-info read are, because
  * they exist in every composition and describe the composition itself. A feature's route - a console screen's API
  * twin, a plug-in's surface - arrives through this seam, however small, so that switching the feature off or leaving
- * its module out of an image removes the route with it. Three such twins used to sit in the root beside the two
- * routes that belong there, and were the only feature endpoints a toggle could not reach.
+ * its module out of an image removes the route with it. A feature route in the root would be one a toggle cannot
+ * reach.
  *
  * <h2>Contract</h2>
  * <ol>
@@ -34,9 +34,9 @@ import build.jenesis.repository.store.Providers;
  * <li><b>Absence sentinel.</b> {@code null} is never a legal return from either method, and {@link #name()} is never
  *     blank. Absence of a feature is expressed by the module being absent from the path - there is no "disabled"
  *     provider and no null configuration standing in for one. A feature whose endpoints must answer when the module
- *     is <em>not</em> installed leaves that answer to the built-in surface, which reports it as not installed
- *     (&sect;3), never to a provider that declares itself and then does nothing.</li>
- * <li><b>Selection failure (&sect;9).</b> This is an {@code ALL} SPI: every installed module contributes and there is
+ *     is <em>not</em> installed leaves that answer to the built-in surface, which reports it as not installed,
+ *     never to a provider that declares itself and then does nothing.</li>
+ * <li><b>Selection failure.</b> This is an {@code ALL} SPI: every installed module contributes and there is
  *     nothing to select, so nothing degrades. What is still a packaging error is a <em>collision</em>: two providers
  *     answering to one {@link #name()}, or one provider class registered twice. Two providers on one name share the
  *     single {@code jenreg.<name>} toggle - switching one off switches both off and an operator has no key
@@ -45,14 +45,14 @@ import build.jenesis.repository.store.Providers;
  *     packaging error - the import list is de-duplicated by class name, so the loser's toggle would silently govern
  *     the winner's beans - and is refused by the contract suite, the configuration class being this SPI's own concept
  *     rather than the shared discovery primitive's.</li>
- * <li><b>Tenant scoping (&sect;6).</b> A provider carries no tenant and is resolved once per JVM, never per request:
+ * <li><b>Tenant scoping.</b> A provider carries no tenant and is resolved once per JVM, never per request:
  *     it declares a deployment's installed surface, not a tenant's. The controllers its configuration wires derive
  *     their tenant per request exactly as the core ones do.</li>
- * <li><b>Error visibility (&sect;9).</b> Nothing here is best-effort. An exception from either method, or a
+ * <li><b>Error visibility.</b> Nothing here is best-effort. An exception from either method, or a
  *     {@link #configuration()} class that cannot be loaded or instantiated, fails the context refresh - a feature
  *     that half-imports would leave the deployment serving some of a module's endpoints and 404-ing the rest, which
  *     is indistinguishable to a caller from a partly-broken product.</li>
- * <li><b>Read purity (&sect;10).</b> Neither method performs I/O. They are declarations read during context refresh;
+ * <li><b>Read purity.</b> Neither method performs I/O. They are declarations read during context refresh;
  *     a provider that reached the store, the network or the filesystem to decide its name would make the deployment's
  *     installed surface depend on the reachability of something else at boot.</li>
  * <li><b>Lifecycle / ownership.</b> {@code ServiceLoader} instances are created by {@link #installed()} and
@@ -110,7 +110,7 @@ public interface ServerModuleProvider {
      *
      * <p>The collision refusal of {@link #installed()} applies here too, and applies to providers that are switched
      * <em>off</em> as well: a name collision an operator has hidden by disabling one of the two is still a packaging
-     * error, and finding it only once someone switches it back on is exactly the late failure &sect;9 forbids.
+     * error, and finding it only once someone switches it back on is exactly the late failure fail-fast forbids.
      */
     static List<ServerModuleProvider> enabled(UnaryOperator<String> config) {
         Objects.requireNonNull(config, "config");

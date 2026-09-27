@@ -5,10 +5,9 @@
  * the starter credential ({@code StarterCredential}) and the console's own {@code jenreg.ui.*} properties
  * ({@code UiProperties}), with the one configuration class a console imports to declare them as beans.
  *
- * <p>It exists because these classes lived in the admin console's own module, exported package by package to
- * the modules that sign a person in - key login, SAML, OIDC - and to the SCIM provisioner, so each of those required
- * the whole console to reach five classes, and the console and its sign-in modules could only ever move together.
- * Measured 2026-09-20: thirteen imports across the four, every one of them one of these classes. What the layer
+ * <p>It exists so that the modules that sign a person in - key login, SAML, OIDC - and the SCIM provisioner reach
+ * these classes without requiring the whole console, which would make the console and its sign-in modules move
+ * together; these classes are all those modules take from it. What the layer
  * itself needs is the authorization store's contract, the store's documents, the console module's seams (the current
  * tenant, the administrators, the known principals, the login authorities) and the domain layer's tenant marker;
  * Spring Security's authority type for the two classes that speak it, and Spring Boot's properties binding for the

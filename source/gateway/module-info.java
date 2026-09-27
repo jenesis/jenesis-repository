@@ -13,9 +13,8 @@
 module build.jenesis.repository.gateway {
     requires build.jenesis.repository.server;
     // The kernel's live settings, tenant binding and the definitions seam the router answers into. The kernel never
-    // requires this module: what it used to take from here - the definitions parser, the deploy edge's hooks, the
-    // release-immutability guard - lives here now, so a web adapter that needs only a tenant and a store no longer
-    // drags the gated edge.
+    // requires this module: the definitions parser, the deploy edge's hooks and the release-immutability guard live
+    // here, so a web adapter that needs only a tenant and a store does not drag the gated edge.
     requires build.jenesis.repository.server.kernel;
     requires build.jenesis.repository.store;
     requires build.jenesis.repository.format;

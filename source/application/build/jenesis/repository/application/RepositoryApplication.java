@@ -18,18 +18,17 @@ import org.springframework.web.servlet.mvc.method.annotation.RequestMappingHandl
  * {@code RepositoryController} serving bean, with the deploy concerns (tenant binding, release immutability,
  * quarantine-dispatch record, deploy observation) plugged in through the
  * {@link build.jenesis.repository.server.kernel.PublishTenantFilter} and the
- * {@link build.jenesis.repository.gateway.DeployEdgeHooks} {@code EdgeHooks} bean (retired the forked
- * {@code DeployController}).
+ * {@link build.jenesis.repository.gateway.DeployEdgeHooks} {@code EdgeHooks} bean, never a forked deploy controller.
  * The storage backend is selected by
  * {@code jenreg.store} through {@code ArtifactStoreProvider} (ServiceLoader, filesystem fallback).
  *
- * <p>The {@code RepositorySecurityAutoConfiguration} is no longer excluded: it now runs and this distribution
+ * <p>The {@code RepositorySecurityAutoConfiguration} is not excluded: it runs and this distribution
  * <em>composes over</em> its chain rather than forking it. A contributed authorization manager (a
  * {@code @ConditionalOnMissingBean} the chain picks up), the open routes and the request-body cap ride the free
  * security chain through the {@code SecurityChainCustomizer} seam (see {@link RepositorySecurityConfig}); the rate limiter
  * and filter reuse the classes, re-declared there with the pin-aware live ceiling.
  *
- * <p>No free auto-configuration is excluded. The {@code RepositoryAutoConfiguration} now runs alongside
+ * <p>No free auto-configuration is excluded. The {@code RepositoryAutoConfiguration} runs alongside
  * the security one: every one of its beans is {@code @ConditionalOnMissingBean}, so each backs off behind this
  * module's richer replacement (the serving controller is registered here under the bean name
  * {@code repositoryController} so the one backs off too). One prefix carries one schema: the pull-through switch is
@@ -56,12 +55,11 @@ public class RepositoryApplication {
      * that filter rather than a loosened rule - and delete this.
      *
      * <p>What may live here is a report every entry point makes, not a decision a deployment depends on. The
-     * licence report qualifies and is made here; a defaults map did not, and was removed.
+     * licence report qualifies and is made here; a defaults map does not.
      *
-     * <p><b>Nothing a deployment depends on may be done in this method.</b> That is not a style note. A defaults
-     * map lived here and floored the public advisory feeds on; no shipped artifact ever ran it, so the feeds were
-     * off in the image while the settings screen said they were on. A boot-time decision belongs in the artifact
-     * that ships.
+     * <p><b>Nothing a deployment depends on may be done in this method.</b> That is not a style note. No shipped
+     * artifact runs this method, so a default floored here would be off in the image while the settings screen said
+     * it was on. A boot-time decision belongs in the artifact that ships.
      */
     public static void main(String[] args) {
         // The licence report fires from the licence feature module's configuration, which every composition that

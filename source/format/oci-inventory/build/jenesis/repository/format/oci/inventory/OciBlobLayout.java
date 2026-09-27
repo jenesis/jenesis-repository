@@ -134,9 +134,8 @@ public final class OciBlobLayout implements RepositoryFormat, BlobLayout {
     /**
      * The store-key root this format keeps its pointers and documents under, so the reference scan walks it.
      *
-     * <p><b>Load-bearing, never decorative</b> - which is what this comment used to call it, back when the mark phase
-     * could not read a {@code sha256:}-prefixed pointer body and every OCI key under this root was equally invisible.
-     * It is the sole entry point through which OCI content reaches the mark phase, and the mark phase's whole answer
+     * <p><b>Load-bearing, never decorative.</b> It is the sole entry point through which OCI content reaches the mark
+     * phase, and the mark phase's whole answer
      * for a visited key is derived from it: the blob that key's own body names (the tag-pointer dialect, read through
      * {@code ServableNames.hash} -), plus whatever the format that owns the key lends back for it through the
      * free {@code BlobReferences} seam - the config, layer and sub-manifest digests that live inside the manifest JSON
@@ -191,10 +190,9 @@ public final class OciBlobLayout implements RepositoryFormat, BlobLayout {
      * <p><b>Cost.</b> There is no digest-to-tags index to consult, so proving a manifest unaliased is a descent of the
      * {@code oci/} tag space - bounded and paged, short-circuiting on the first alias, but not free. That is a price an
      * eviction can pay and a per-version <em>probe</em> cannot, so the two cheap decisions come first: a digest
-     * reference and a dead tag pointer both answer before any listing, and a manifest with no sidecar at all (an image
-     * stored before the sidecar existed) costs one {@code exists}. The remaining caller that used to spend this on
-     * every published row - {@code InventoryReconciler.removeOrphanPublished} - now asks only when it can act on the
-     * answer.
+     * reference and a dead tag pointer both answer before any listing, and a manifest with no sidecar at all costs one
+     * {@code exists}. {@code InventoryReconciler.removeOrphanPublished} asks only when it can act on the answer,
+     * never for every published row.
      */
     @Override
     public List<String> blobKeys(String coordinate, String version, ArtifactStore store) throws IOException {
@@ -371,8 +369,8 @@ public final class OciBlobLayout implements RepositoryFormat, BlobLayout {
      *       its own config/layers;</li>
      *   <li>the config digest, each layer digest and each legacy {@code fsLayers} blobSum - bare hex, validated.</li>
      * </ol>
-     * <p><b>One derivation, not two</b>. This used to walk the manifest JSON itself - a second work-list
-     * expansion of indexes, a second digest validator, a second hard-coded manifest cap - beside the free
+     * <p><b>One derivation, not two</b>. This does not walk the manifest JSON itself - a second work-list expansion of
+     * indexes, a second digest validator, a second hard-coded manifest cap - beside the free
      * {@code OciFormat.references}, which answers the identical question from the identical stored bytes for the
      * collector. Two homes for one answer is the shape that produces a data-loss bug the day they disagree: a hash the
      * hold knows and the scan does not is a live blob the next pass deletes out from under a held image, and one the
@@ -381,21 +379,18 @@ public final class OciBlobLayout implements RepositoryFormat, BlobLayout {
      * free seam the {@code oci/types/<hex>} key that names it - the sidecar {@code OciManifests.ingest} writes for
      * every accepted manifest, which is a key the seam answers for whether or not the image is tagged.
      *
-     * <p><b>What the delegation had to wait for, and what it costs.</b> The two sides carry <b>opposite failure
+     * <p><b>What the delegation costs.</b> The two sides carry <b>opposite failure
      * postures by design</b>: a present-but-unenumerable manifest makes the seam THROW (its contract clause 3 - a
      * short list handed to a deleter is data loss), while the callers here are a console browse, a KEV sweep and a
      * release path, where a throw turns one corrupt stored manifest into a repository whose whole enforcement pass
-     * fails. That is why this could not simply call the seam until free named its refusal: catching {@link IOException}
-     * would convert every store hiccup into a silently under-enforced hold. It now catches exactly
-     * {@link BlobReferences.Unresolvable} - "these bytes will never parse", no retry changes it - degrades to the
-     * manifest hex it is sure of and WARNs so an operator can {@code discard} it, and lets a plain {@link IOException}
-     * (the store failing) propagate as it always did.
+     * fails. Catching {@link IOException} would convert every store hiccup into a silently under-enforced hold, so
+     * this catches exactly the seam's named refusal, {@link BlobReferences.Unresolvable} - "these bytes will never
+     * parse", no retry changes it - degrades to the manifest hex it is sure of and WARNs so an operator can
+     * {@code discard} it, and lets a plain {@link IOException} (the store failing) propagate.
      *
-     * <p><b>The degrade is symmetric now, where it used to be silent on one side.</b> The old walk WARNed only when the
-     * root had been resolved from a tag pointer, on the argument that only a tag pointer's target is contractually a
-     * manifest; a digest-rooted unparseable manifest degraded without a word. The seam raises {@code Unresolvable}
-     * for the root of either key - the sidecar's target is contractually a manifest too, since ingest wrote it - so
-     * both now WARN. A degraded SUB-manifest of an index still stays silent on both sides (a hostile index entry may
+     * <p><b>The degrade is symmetric.</b> The seam raises {@code Unresolvable} for the root of either key - a tag
+     * pointer's target and the sidecar's target are both contractually a manifest, since ingest wrote it - so both
+     * WARN. A degraded SUB-manifest of an index still stays silent on both sides (a hostile index entry may
      * legitimately point at a layer blob, which has no children to lose).
      *
      * <p><b>No installed OCI format is the same degrade.</b> This layout deliberately does not {@code require} the free
@@ -588,12 +583,11 @@ public final class OciBlobLayout implements RepositoryFormat, BlobLayout {
      * the {@code OciFormat} applies at the request door, stated the same way so the two cannot answer differently
      * about one name.
      *
-     * <p>It used to restate the rule instead of asking for it - {@code .}, {@code ..} and a backslash, spelled out
-     * here and again in the format - and the restatement was a character behind: a control-bearing name passed, and
-     * {@link #blobKeys} composed a live pointer key out of it. That key is handed to <b>eviction, which deletes</b>,
-     * and {@code delete} is not screened by {@link ArtifactStore#key} the way a write is, so the one seam that had to
-     * refuse the name was this one. Two copies of a security rule is the &sect;2 shape, and this is what it costs when
-     * the copies drift.
+     * <p>It asks for the rule rather than restating it: a restatement that fell a character behind would let a
+     * control-bearing name pass, and {@link #blobKeys} would compose a live pointer key out of it. That key is handed
+     * to <b>eviction, which deletes</b>, and {@code delete} is not screened by {@link ArtifactStore#key} the way a
+     * write is, so this is the one seam that has to refuse the name. Two copies of a security rule drift, and this is
+     * what it costs when they do.
      */
     private static boolean isImageName(String name) {
         if (name.isEmpty() || !ArtifactStore.traversalFree(name)) {

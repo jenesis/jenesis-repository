@@ -8,14 +8,14 @@
  * retroactive hold, the guarded clear of a withhold marker, and the two questions a release asks of the holds it
  * is not lifting ({@code HeldElsewhere}).
  *
- * <p>It was one module with the screen until 2026-09-20. Six modules required it for the vocabulary alone - the
- * findings ledger, forwarding, reachability, the licence and scan sweeps, the router - and got the review queue, the
- * compliance screen, the inspection merge, a retention pass and two walk consumers with it. Those are
- * {@code build.jenesis.repository.gate} now - the implementation keeps the module <em>name</em>, because a settings
+ * <p>It is a module apart from the screen so that a module needing only the vocabulary - the findings ledger,
+ * forwarding, reachability, the licence and scan sweeps, the router - does not get the review queue, the compliance
+ * screen, the inspection merge, a retention pass and two walk consumers with it. Those are
+ * {@code build.jenesis.repository.gate} - the implementation keeps that module <em>name</em>, because a settings
  * contributor's module names the document its dials are stored in and a namespace declaration's module names its
  * manifest entry, and both live on that side - and this contract half is {@code build.jenesis.repository.gate.spi}
- * over the package {@code build.jenesis.repository.gate}, so a provider of either SPI and every reader of the
- * records is unchanged. The implementation requires this module; nothing here requires it back.
+ * over the package {@code build.jenesis.repository.gate}. The implementation requires this module; nothing here
+ * requires it back.
  *
  * @jenesis.release 25
  * @jenesis.bom pin-repository.properties

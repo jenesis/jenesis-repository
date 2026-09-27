@@ -6,18 +6,13 @@ import build.jenesis.repository.net.PrivateHosts;
 import build.jenesis.repository.settings.PrivateHostGuard;
 
 /**
- * The outbound-target screen a proxy leg owes the URL it is about to fetch, held once for the whole product - the
- * wrapper that had been copied seven times, into <em>two contradictory policies</em>.
+ * The outbound-target screen a proxy leg owes the URL it is about to fetch, held once for the whole product.
  *
- * <p>The dangerous half was never the copied part: the blocked address ranges have always come from
- * {@link PrivateHosts}, and the transport half and the dial from {@link PrivateHostGuard}. What each leg still
- * spelled out for itself was the <b>wrapper</b> around them - the admitted scheme set, the answer for a URL naming no
- * host, and whether a target on the operator-configured upstream's own origin is exempt from the host half. Three legs
- * said it was ({@code NuGetFormat.unsafeUpstreamUrl}, {@code CargoFormat.publicDownloadHost},
- * {@code RpmPackageDigests.sameOrigin}), three said it was not ({@code ComposerFormat}/{@code PyPiFormat}/
- * {@code CocoaPodsFormat.publicHost}), four enumeration walks said it was and checked the scheme too
- * ({@code emittable}), and none of the ten admitted that any of the others existed. &sect;13 calls an undocumented
- * divergence on a shared concern a bug; this class is the one answer, and every leg now reaches it.
+ * <p>The blocked address ranges come from {@link PrivateHosts}, and the transport half and the dial from
+ * {@link PrivateHostGuard}. This class is the <b>wrapper</b> around them - the admitted scheme set, the answer for a
+ * URL naming no host, and whether a target on the operator-configured upstream's own origin is exempt from the host
+ * half. Spelled out per leg, that wrapper diverges into contradictory policies; an undocumented divergence on a
+ * shared concern is a bug, so this class is the one answer and every leg reaches it.
  *
  * <h2>The two provenances, and why each gets a different screen</h2>
  * {@link ProxyLeg}'s contract clause 9 already names them, so they are the two methods here rather than two habits:
@@ -27,7 +22,7 @@ import build.jenesis.repository.settings.PrivateHostGuard;
  *       what this deployment will put on the wire to reach it. <b>The transport half only</b>, for a reason
  *       that has not changed: an internal, privately-addressed mirror is a legitimate and common deployment,
  *       and this value is also rendered on console GET paths where resolving a host would be an external lookup on a
- *       read path (&sect;10).</li>
+ *       read path.</li>
  *   <li>{@link #advertisedRefusal(URI, URI, boolean)} - a URL an <b>upstream document</b> chose. The far side picked
  *       it, so it gets the whole screen: the capability floor, the transport half and the host half.</li>
  * </ul>
@@ -55,13 +50,13 @@ import build.jenesis.repository.settings.PrivateHostGuard;
  * same shape - {@code ImportScreen.refusalReason(authorised, url)}, "exactly where the operator pointed the
  * importer, at the level they authorised" - and the {@code OciFormat} page guard applies it to catalog/tags
  * pagination. Converging on absolute-refuse would have closed one divergence by opening a wider one, against the
- * rule the rest of the product already applies (&sect;13). The agreement is pinned rather than asserted: the proxy
+ * rule the rest of the product already applies. The agreement is pinned rather than asserted: the proxy
  * contract kit drives this class and that rule over one matrix and fails when they part company.
  *
- * <p>The remaining residue of the old divergence is closed rather than carried: the exemption is on the <b>origin</b>
- * (scheme <em>and</em> authority), not on the bare host name. NuGet and Cargo compared host names only, so a
- * compromised upstream could pivot to any other port on its own box - {@code https://mirror.internal:9200/} under an
- * {@code https://mirror.internal/} upstream was trusted. That was a genuine, if narrow, SSRF and it is gone.
+ * <p>The exemption is on the <b>origin</b> (scheme <em>and</em> authority), not on the bare host name. Comparing host
+ * names only would let a compromised upstream pivot to any other port on its own box -
+ * {@code https://mirror.internal:9200/} under an {@code https://mirror.internal/} upstream would be trusted, a
+ * genuine, if narrow, SSRF.
  */
 public final class OutboundTargets {
 

@@ -11,7 +11,7 @@ import build.jenesis.repository.store.Stamp;
  * The durable maintainer-health ledger over one repository's scoped store: the version-independent, per-coordinate
  * record of the OpenSSF Scorecard-style health a source scored for a coordinate's project, persisted so every surface
  * - the compliance gate, the read endpoint, the console panel - reads a stored answer rather than re-probing the live
- * source on the read path (Principle 10: reads render what is durably there, writes refresh it). It is the health
+ * source on the read path (reads render what is durably there, writes refresh it). It is the health
  * sibling of the advisory {@code Findings} ledger: where that keeps a coordinate
  * <em>version's</em> vulnerability rows, this keeps one coordinate's health (health is a property of the project, not
  * a release, so the key carries no version), written by the scheduled health sweep and the publish-time persistence
@@ -44,7 +44,7 @@ public interface HealthLedger extends HealthSource {
      * <em>eviction</em> (its last published version going) - the "dirty" signal the health rank index folds into its
      * rebuild stamp so an evicted coordinate drops on the next rank-index pass rather than lingering until the next
      * <em>scan</em> moves {@link #scanned health stamp}. It is deliberately NOT the scan stamp: an eviction is not a scan, so
-     * bumping the freshness stamp would both misreport the panel's as-of instant (Principle 10) and make the
+     * bumping the freshness stamp would both misreport the panel's as-of instant and make the
      * eventually-consistent read fall back - the two failure modes this separate epoch avoids.
      */
     String EVICTED = PREFIX + "/evicted";
@@ -125,12 +125,12 @@ public interface HealthLedger extends HealthSource {
      *     {@code sealed}: only {@link Ranking.Ranked} carries entries at all, so the not-built state cannot be handed
      *     to a renderer as an empty ranking - the mistake this signature exists to make impossible. A surface that
      *     showed the not-built state as an empty weakest-first list would tell an operator that nothing worse exists,
-     *     which is wrong precisely in the window before the first pass (&sect;9's silent fallback, one layer up).</li>
+     *     which is wrong precisely in the window before the first pass (a silent fallback, one layer up).</li>
      * <li><b>Both states carry their as-of instant</b> ({@link Ranking#scannedAt()}), so an empty panel is never
-     *     ambiguous between "clean" and "never scanned" (&sect;10). A ranked page reports the ledger scan freshness the
+     *     ambiguous between "clean" and "never scanned". A ranked page reports the ledger scan freshness the
      *     ranking was <em>built at</em> - never the live one, which the records may have moved past since - and the
      *     not-built state reports the ledger's own last sweep, so the panel can say "swept at X, not yet ranked".</li>
-     * <li><b>Read purity (&sect;10).</b> Neither state writes anything, refreshes anything or probes a live health
+     * <li><b>Read purity.</b> Neither state writes anything, refreshes anything or probes a live health
      *     source; both render durable state alone.</li>
      * </ol>
      *
@@ -162,7 +162,7 @@ public interface HealthLedger extends HealthSource {
      * {@code sealed} on purpose - the two states are not one state with an empty list, and a caller has to say which it
      * is rendering before it can reach a row.
      *
-     * <p>Both carry {@link #scannedAt()}, the ledger scan instant the answer stands on, so &sect;10's "every derived
+     * <p>Both carry {@link #scannedAt()}, the ledger scan instant the answer stands on, so the rule "every derived
      * view shows its last fetch instant" holds in both states and an empty panel is never ambiguous between "clean" and
      * "never scanned".
      */

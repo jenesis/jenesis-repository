@@ -46,7 +46,7 @@ public class WebhookController {
 
     /** The webhook outbox of one repository - what is still queued, retrying with backoff or parked after a terminal
      *  failure - so an operator can see a stuck delivery before retrying it. A read: it renders the durably-stored
-     *  entries only, with no delivery attempt on the read path (§10).
+     *  entries only, with no delivery attempt on the read path.
      *
      *  <p>Bounded, and the bound is shown. The window is one page of the outbox ({@code after}, {@code limit}) rather
      *  than the whole of it, because the parked backlog grows with every publish for as long as an endpoint is
@@ -106,7 +106,7 @@ public class WebhookController {
      *  integrator is already on when the question arises - "an event never arrived, what do I poll instead?" The
      *  webhook module is off the console node, so it reports its own conditions on a surface it owns rather than
      *  through a {@code SafetyAdvisor} no screen would render. Static data derived from the {@code EventType} enum,
-     *  so the read stays pure (&sect;10): it renders no store state and reaches no external source. */
+     *  so the read stays pure: it renders no store state and reaches no external source. */
     private static ReconciliationView reconciliation() {
         List<ReconciliationRoute> routes = new ArrayList<>();
         EventReconciliation.all().forEach((type, route) ->
@@ -194,7 +194,7 @@ public class WebhookController {
 
     /** One queued webhook delivery: its outbox id, the event type and path, the coordinate, how many attempts it has
      *  taken, whether it is parked (terminally failed) and its status text, how many endpoints already took it, when
-     *  the event occurred (its freshness, §10) and the last error if any. */
+     *  the event occurred (its freshness) and the last error if any. */
     public record WebhookEntryView(String id, String type, String path, String coordinate, int attempts,
                                    boolean parked, String status, int delivered, String occurredAt, String error) {
     }

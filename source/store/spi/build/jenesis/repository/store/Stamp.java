@@ -4,17 +4,15 @@ import module java.base;
 
 /**
  * A last-writer-wins instant under one store key: when something last completed - a feed refresh, a scan, a sweep -
- * so every view can show how fresh what it renders is (§10: a read renders what is durably there, and its staleness is
+ * so every view can show how fresh what it renders is (a read renders what is durably there, and its staleness is
  * visible). Absent means <em>never</em>, which a view must render as such and not as "clean"; a stamp that does not
  * parse reads as absent, the honest direction.
  *
  * <p>{@link #mark} is a single compare-and-set attempt against the token it read, deliberately not retried: two
  * completions racing to the same key settle on whichever wrote last, and a lost write leaves the <em>older</em> stamp
- * standing - never a wrong one - which the next completion moves. That is the whole of the mechanism, and it used to be
- * written twice, as the advisory findings ledger's {@code ScanStamp} and the maintainer-health ledger's
- * {@code HealthStamp}, each javadoc calling itself "the exact shape" of the other; the two moved apart only in their
- * key. A ledger now hands out its stamp through a factory naming the key ({@code Findings.scanned(store)}), so the
- * mechanism has one home and one test.
+ * standing - never a wrong one - which the next completion moves. That is the whole of the mechanism. A ledger hands
+ * out its stamp through a factory naming the key ({@code Findings.scanned(store)}), so the mechanism has one home and
+ * one test rather than a copy per ledger.
  *
  * <p>Not every small marker is a stamp. A <em>built</em> marker that a consumer gates its behaviour on carries a
  * format version ahead of the instant and is that consumer's; an {@link Epoch} is a token that changes without

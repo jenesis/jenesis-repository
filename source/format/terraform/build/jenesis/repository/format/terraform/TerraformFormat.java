@@ -45,7 +45,7 @@ import build.jenesis.repository.format.Listings;
  * client can verify the {@code SHA256SUMS} that names its zip's digest, so the first provider publish generates the
  * repository's OpenPGP key, every {@code SHA256SUMS} write derives a fresh detached signature, and the package
  * document declares the public half inline as the protocol requires. The signature is <b>binary</b> rather than
- * armoured, which was measured against {@code registry.terraform.io} rather than assumed.
+ * armoured, which is what {@code registry.terraform.io} serves.
  *
  * <p><b>{@code /v1/} is Terraform's, not ours.</b> The protocol fixes those paths, the way the OCI, NuGet and
  * crates prefixes are fixed by their specifications. The artifacts themselves are stored outside it, because the

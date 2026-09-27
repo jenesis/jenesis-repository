@@ -22,8 +22,7 @@ import build.jenesis.repository.store.StoredListing;
  * <p><b>This signs with SHA-256, not Alpine's SHA-1.</b> {@code apk-tools} has read {@code .SIGN.RSA256.} since
  * 2.12 (Alpine 3.15, 2022); Alpine's own index is still SHA-1 for the sake of clients older than that, which is a
  * compatibility debt a repository standing up today does not inherit. A full round trip - {@code apk update} then
- * {@code apk add} - was run against Alpine 3.20 with a SHA-256-signed index and completed with no untrusted
- * warning, so this is a measured choice rather than a hopeful one.
+ * {@code apk add} - against Alpine 3.20 with a SHA-256-signed index completes with no untrusted warning.
  *
  * <h2>Why the key is generated rather than asked for</h2>
  *
@@ -36,10 +35,9 @@ import build.jenesis.repository.store.StoredListing;
  * <h2>One key, stored once, because the two halves must be one pair</h2>
  *
  * <p>Only the private key is stored, and the public half is <b>derived from it</b> on the way out. That is the whole
- * mechanism keeping "the key this repository serves verifies what this repository signed" true, and it replaced a
- * mechanism that did not: the two halves used to be generated together and written as two blobs, so two first
- * publishes racing could store one pair's public half beside the other pair's private half. A full lane caught it -
- * the served index stopped verifying against the served key - and the module passed every time it ran alone.
+ * mechanism keeping "the key this repository serves verifies what this repository signed" true: two halves
+ * generated together and written as two blobs would let two first publishes racing store one pair's public half
+ * beside the other pair's private half, and the served index would then not verify against the served key.
  *
  * <p>Deriving removes one of the two writes; {@link Blobs#establish} removes the other, by letting exactly one
  * caller ever create the key and handing every loser the winner's. Neither alone is sufficient, because a caller

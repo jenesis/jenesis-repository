@@ -96,7 +96,7 @@ public class GateWiringConfig {
 
     @Bean(destroyMethod = "close")
     public AutoCloseable complianceScreenUnparseableWiring(MeterRegistry meterRegistry) {
-        // Count every artifact an inspector could not parse as jenreg.gate.unparseable tagged by format - the §9
+        // Count every artifact an inspector could not parse as jenreg.gate.unparseable tagged by format - the
         // make-errors-visible diagnostic beside the WARNING the screen logs. Registry-free like the verdicts meter:
         // the gate module hands the count through a plain callback, the Micrometer counter is created here.
         return ComplianceScreen.unparseableArtifacts(format ->

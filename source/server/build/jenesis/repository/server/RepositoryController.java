@@ -95,11 +95,9 @@ public class RepositoryController {
     }
 
     /**
-     * Every concern a deployment can wire in, each with a documented "off" value - which is what the four
-     * intermediate constructors between this and the convenience one above used to express, one argument at a time.
-     * Counting their callers is what settled it: a deployment builds this full form and a test builds the bare one,
-     * and the four in between had none, so each existed only to be delegated to by the next. What they carried that
-     * was worth keeping was the account of what each argument turns on, which is here instead.
+     * Every concern a deployment can wire in, each with a documented "off" value. A deployment builds this full form
+     * and a test builds the bare one; no intermediate constructor adds one argument at a time, and the account of
+     * what each argument turns on is here.
      *
      * @param batch     explodes a {@code PUT}/{@code POST} carrying the explode header into per-entry publishes
      *                  through the same dispatcher when it claims the archive; {@code null} leaves the header an
@@ -406,7 +404,7 @@ public class RepositoryController {
      * threw building its view, is named in the body under {@code capabilityConflicts} / {@code capabilityFailures} and
      * logged once here - never dropped in silence, which would leave an operator debugging a console that renders the
      * wrong thing with nothing anywhere to explain it. The endpoint still answers: a plugin's mistake costs that
-     * plugin's entry, never the product's own capability advertisement (&sect;3). A healthy deployment reports
+     * plugin's entry, never the product's own capability advertisement. A healthy deployment reports
      * nothing, so neither key appears and the zero-contributor body is unchanged.
      */
     @GetMapping("/api/capabilities")
@@ -419,8 +417,8 @@ public class RepositoryController {
         // the same jenreg.* settings the other flags read, so no extra dependency is threaded in.
         base.put("anonymousRights", anonymousRights());
         // Merge each discovered contribution onto the base map, so a richer distribution extends the one free
-        // /api/capabilities without a bean override (retiring the downstream WebMvcRegistrations
-        // mapping-suppression stopgap). Base keys win a conflict; with no contributor the body is the base map
+        // /api/capabilities without a bean override or a WebMvcRegistrations mapping suppression. Base keys win a
+        // conflict; with no contributor the body is the base map
         // unchanged. The discovery itself lives in the SPI home, not here, so this surface and every other consumer
         // of the same flags read one answer from one pipeline rather than each loading its own.
         CapabilityContributor.Merged merged = CapabilityContributor.merge(base, contributors, settings);
@@ -467,8 +465,8 @@ public class RepositoryController {
 
     /** A write refused because the coordinate is already published maps to {@code 409 Conflict} - the registry
      *  vocabulary every client already understands, and what npm, crates.io and NuGet all answer for a duplicate
-     *  version. Without this the refusal surfaced as an unhandled {@code IOException} and a client was told the
-     *  server had broken, when in fact it had held a released version immutable exactly as documented. */
+     *  version. Without this the refusal would surface as an unhandled {@code IOException} and a client would be told
+     *  the server had broken, when in fact it had held a released version immutable exactly as documented. */
     @ExceptionHandler(Publication.RepublishConflict.class)
     public void republishConflict(Publication.RepublishConflict exception, HttpServletResponse response)
             throws IOException {

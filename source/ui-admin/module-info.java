@@ -13,8 +13,8 @@
  * the boot layer refuses to resolve, with {@code ResolutionException: Modules jakarta.el and
  * org.apache.tomcat.embed.el export package jakarta.el}.
  *
- * <p>Measured 2026-08-26 by removing the exclusion from all five modules that carry it and booting the console's
- * tests. <b>Removing it from one module proves nothing:</b> an exclusion is inherited by consumers, so a single
+ * <p>The failure shows only once the exclusion is gone from all five modules that carry it and the console's tests
+ * boot. <b>Removing it from one module proves nothing:</b> an exclusion is inherited by consumers, so a single
  * module's copy is masked by its siblings' and the build stays green - which is exactly the misreading that lets
  * a redundant-looking line survive unexamined. All five have to go before the failure appears.
  *

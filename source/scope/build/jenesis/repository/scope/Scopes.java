@@ -10,11 +10,11 @@ import module java.base;
  * lives under {@link #SYSTEM} at the level it belongs to - {@code .system/auth/}, {@code .system/audit/} and the
  * rest beside the tenant scopes, {@code .system/quota} inside a tenant beside its repositories.
  *
- * <p><strong>Why a space of its own, and why that name.</strong> These used to sit directly beside the scopes a user
- * names, and nothing in the store could tell the two apart - only a list of forbidden words could, consulted in both
- * directions: refusing a reserved name on the way in (creating a tenant, routing a publish) and excluding one on the
- * way out (every enumeration that derives tenants or repositories from store names). Splitting those two is what
- * once rendered {@code audit} in the console as a tenant with working Open and Delete controls.
+ * <p><strong>Why a space of its own, and why that name.</strong> Beside the scopes a user names, nothing in the store
+ * could tell the two apart - only a list of forbidden words could, consulted in both directions: refusing a reserved
+ * name on the way in (creating a tenant, routing a publish) and excluding one on the way out (every enumeration that
+ * derives tenants or repositories from store names). A place that consults it in one direction only renders
+ * {@code audit} in the console as a tenant with working Open and Delete controls.
  *
  * <p>A list of forbidden words only works while everyone remembers to extend it, and forgetting fails silently - the
  * new space is simply offered as a tenant. Giving the product's data a position of its own removes the question
@@ -22,11 +22,11 @@ import module java.base;
  * {@code [A-Za-z0-9_-]+} (see {@link #valid}), which cannot contain a dot. So the separation is a property of the
  * grammar rather than of anyone's memory, it holds at every level with the same name, and a new product-owned space
  * needs no entry anywhere - it is safe the moment it is written under {@link #SYSTEM}. A tenant or a repository may
- * now legitimately be called {@code audit}, {@code cache} or {@code quota}.
+ * legitimately be called {@code audit}, {@code cache} or {@code quota}.
  *
  * <p>{@link #valid} is consequently only what it says: the shape a name must have to be a single traversal-free
  * segment. That still matters - a name carrying a separator or a {@code ..} would escape its scope wherever it sat -
- * but it is no longer what keeps the product's data and a user's data apart.
+ * but it is not what keeps the product's data and a user's data apart.
  */
 public final class Scopes {
 

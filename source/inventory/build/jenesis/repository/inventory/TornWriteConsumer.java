@@ -14,11 +14,10 @@ import build.jenesis.repository.walk.WalkPass;
  * The torn-write reconcile as a listener of the one walk. A dangling pointer - one whose blob is gone, impossible
  * under the blob-before-pointer ordering and so a loud sign of corruption - is found by asking the pool whether the
  * blob a pointer names is stored, one probe per pointer; it is counted, warned about, and with
- * {@code jenreg.torn-write-apply} removed through the guarded delete. The judgement used to be free: the pass handed
- * a pointer whose blob was gone over as a descriptor with a negative size, because that size was a stat of the blob.
- * Since the blob's length rides the pointer, the size is the pointer's own and says nothing about the pool, and the
- * healing suite measured the consequence on 2026-09-12 - a pointer whose blob had been deleted was never flagged,
- * every pointer reading as referenced. The probe is the reconcile's own cost, paid only where the reconcile is
+ * {@code jenreg.torn-write-apply} removed through the guarded delete. The judgement cannot be read off the
+ * descriptor's size: the blob's length rides the pointer, so the size is the pointer's own and says nothing about the
+ * pool, and a pointer whose blob had been deleted would never be flagged, every pointer reading as referenced. The
+ * probe is the reconcile's own cost, paid only where the reconcile is
  * switched on. An orphan blob - one no
  * pointer references - is judged at the end of the pass from two sets of hash prefixes, the pointers' and the
  * pool's, gathered from the pointer and blob streams in whichever order the walk delivers them; counted, never

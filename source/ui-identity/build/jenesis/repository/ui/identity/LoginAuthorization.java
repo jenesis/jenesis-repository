@@ -12,19 +12,17 @@ import org.springframework.security.core.authority.SimpleGrantedAuthority;
  * coarse - {@code ROLE_USER} for everyone, plus {@code ROLE_SUPERADMIN} for super-admins - because the meaningful
  * role (viewer/editor/admin) is per tenant and resolved per request against the selected tenant.
  *
- * <h2>Sign-in no longer refuses</h2>
- * It used to throw for anyone who was a member of no tenant and not a super-admin, so a colleague the identity
- * provider had authenticated was told their account "belongs to no Jenesis tenant". That was wrong in two ways at
- * once. It duplicated a control the provider already owns - app assignment in Entra or Okta, an OAuth app scoped to
- * one organisation - while doing it worse, since this code only ever sees an identity the provider has already
- * decided about. And it made granting access to a new person nearly impossible: the id an administrator has to
- * grant to is an opaque {@code oidc/<sub>}, and under a refusal the deployment never saw it, so nobody could learn
- * what to type.
+ * <h2>Sign-in does not refuse</h2>
+ * Refusing anyone who is a member of no tenant and not a super-admin would be wrong in two ways at once. It would
+ * duplicate a control the provider already owns - app assignment in Entra or Okta, an OAuth app scoped to one
+ * organisation - while doing it worse, since this code only ever sees an identity the provider has already decided
+ * about. And it would make granting access to a new person nearly impossible: the id an administrator has to grant
+ * to is an opaque {@code oidc/<sub>}, and under a refusal the deployment never sees it, so nobody could learn what
+ * to type.
  *
- * <p>The predicate did not go away - it moved from authentication to authorization, as
- * {@code MembershipConsoleAccess}, where a principal that holds nothing is answered with a screen saying so and
- * carrying its own id. Nothing became more permissive: what a signed-in principal may reach is decided by exactly
- * the same membership read, one layer later and on every request rather than once per session.
+ * <p>The membership predicate is authorization, not authentication: {@code MembershipConsoleAccess} answers a
+ * principal that holds nothing with a screen saying so and carrying its own id. What a signed-in principal may reach
+ * is decided by the membership read, on every request rather than once per session.
  */
 public class LoginAuthorization implements LoginAuthorities {
 

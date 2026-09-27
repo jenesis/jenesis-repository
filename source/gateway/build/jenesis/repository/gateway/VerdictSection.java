@@ -28,7 +28,7 @@ import build.jenesis.repository.metadata.State;
  * (the claiming inspectors, with versions where a validator supplies one). All methods are pure and return a fresh
  * {@link Section} folded from the arguments, re-derivable on each CAS attempt.
  *
- * <p>The section's {@link Signal} realises the §6 gate-mirror at the envelope: an {@code ALLOW} verdict is neutral, a
+ * <p>The section's {@link Signal} realises the gate-mirror at the envelope: an {@code ALLOW} verdict is neutral, a
  * withholding or a refusal carries a {@link Severity#HIGH} signal so a consumer that does not parse {@code data} still
  * sees the coordinate was withheld.
  *
@@ -96,7 +96,7 @@ public final class VerdictSection {
         }
 
         /** Whether this record is an {@code ALLOW} verdict pinned to exactly {@code digest} - the digest-exact reuse
-         *  test the hardened leg keys its hot-path dedup off (§7). A withholding, a refusal, or a verdict over
+         *  test the hardened leg keys its hot-path dedup off. A withholding, a refusal, or a verdict over
          *  different bytes never reuses. */
         public boolean allows(String digest) {
             return verdict == Verdict.ALLOW && this.digest != null && this.digest.equals(pinned(digest));
@@ -177,7 +177,7 @@ public final class VerdictSection {
         data.put(PROFILE_FIELD, profile);
         data.put(SOURCE_FIELD, source);
         // How completely we looked, beside what we decided. Without it a raised ceiling cannot invalidate a
-        // verdict the old ceiling cut short.
+        // verdict a lower ceiling cut short.
         data.put(INSPECTION_LIMIT_FIELD, inspectionLimit);
         ArrayNode validatorsNode = data.putArray(VALIDATORS_FIELD);
         for (Validator validator : validators) {

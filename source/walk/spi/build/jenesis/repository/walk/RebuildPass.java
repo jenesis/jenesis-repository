@@ -68,7 +68,8 @@ import build.jenesis.repository.store.ServableNames;
  * consumer receives nothing more in this generation, the others converge, and the next generation redelivers
  * everything to it. Its projection is therefore incomplete for exactly one generation and says so durably - the
  * task that drove the pass reports the consumer as failed - rather than every other consumer's rebuild waiting on
- * the one that broke, which is what a shared cursor used to cost. Either way nothing is served as whole that is
+ * the one that broke, which is what propagating the failure through a shared cursor would cost. Either way nothing
+ * is served as whole that is
  * not: a stuck pass is visible through {@link ArtifactWalk#pass} / {@link ArtifactWalk#segments}, a failed
  * consumer through {@link #failed}. {@link WalkConsumer#onPassStarted} fires on this worker before its first delivery (and
  * before {@code onPassCompleted} on an empty store - a rebuild from an empty truth is still a rebuild);
@@ -304,8 +305,8 @@ public final class RebuildPass {
             // its completion alone and does its own enumeration, which is exactly what the collector does. That is a
             // declaration rather than a mistake, and it falls through to a pass over no roots: the manifest, the
             // generation and the lease still exist, so the completion is still ordered and still happens once across
-            // the fleet, and no key is read for a delivery nobody takes. Before this told the two apart, a walk entry
-            // naming only such a consumer was refused - `consumers: ["collect"]` could not be scheduled at all.
+            // the fleet, and no key is read for a delivery nobody takes - so a walk entry naming only such a consumer
+            // (`consumers: ["collect"]`) can be scheduled.
             throw new IllegalArgumentException("no root to walk: the consumers listen on " + listening.keySet()
                     + " and the deployment names no root for any of them");
         }
@@ -469,8 +470,8 @@ public final class RebuildPass {
          *
          * <p><b>This contains per consumer, and the cursor is why it may.</b> The cursor is <em>shared</em> - one
          * walk, one committed position, N consumers - so a consumer that missed a delivery can never be handed it
-         * again in this generation; the pass used to propagate the failure for that reason, holding the cursor for
-         * everyone at the price of every consumer's rebuild waiting on the one that broke. What makes containment
+         * again in this generation; propagating the failure for that reason would hold the cursor for everyone at
+         * the price of every consumer's rebuild waiting on the one that broke. What makes containment
          * honest is that a consumer's generation is a whole or nothing: the failure is written under
          * {@link #FAILED_SPACE} with the generation and the key before the pass moves on, the consumer is dropped
          * for the rest of the generation so its projection is never half of one, the task that drove the pass
@@ -578,9 +579,9 @@ public final class RebuildPass {
             // The body's dialect is read through the one seam that owns it, never re-parsed here: a pointer body is
             // either the bare lower-case hex the publish/ and blobs/ pointers carry or the algorithm-qualified
             // sha256:<hex> of the OCI Distribution tag pointers, and both denote the same blob. Reading it as bare hex
-            // instead threw every tag pointer away as "not a serving pointer", so a consumer over an OCI root was
-            // handed nothing and then reported itself converged - the silently-incomplete view §5 forbids, and the
-            // same normalisation ServableNames.hash was introduced for on the withhold screen.
+            // instead would throw every tag pointer away as "not a serving pointer", so a consumer over an OCI root
+            // would be handed nothing and then report itself converged - a silently-incomplete view served as whole,
+            // and the same normalisation ServableNames.hash makes on the withhold screen.
             ServableNames.Pointer parsed = ServableNames.parse(pointer.get().content());
             String named = parsed.hash();
             if (!hash(named)) {
@@ -602,12 +603,10 @@ public final class RebuildPass {
                 started(walk.pass(store, scope)
                         .orElseThrow(() -> new IOException("no rebuild pass to deliver under")));
             }
-            // The blob's size comes off the pointer, where the link recorded it. A pointer written before the length
-            // was recorded has none, and for that one the walk pays, ONCE, what it used to pay per pointer per pass
-            // - a HEAD on a key it is not enumerating, measured on a node counting by key family as 4.80 reads per
-            // blob held - and writes the length back into the pointer, so that every serve and every later pass
-            // reads it there: this is the regeneration a cut-over store gets, one walk after the cutover, and the
-            // only place a lengthless pointer is ever completed. The OCI tag dialect (sha256:<hex>) is left as it
+            // The blob's size comes off the pointer, where the link recorded it. A pointer without a length is the
+            // one for which the walk pays, ONCE, a HEAD on a key it is not enumerating - and writes the length back
+            // into the pointer, so that every serve and every later pass reads it there: this is the only place a
+            // lengthless pointer is ever completed. The OCI tag dialect (sha256:<hex>) is left as it
             // is - its blobs are served by digest through the Distribution API, which carries its own length - so
             // only a bare-hash body is rewritten, under compare-and-set against the body just read. -1 stays the
             // descriptor's own "unknown" where the blob is gone, which is what a consumer would have seen anyway.
@@ -640,8 +639,8 @@ public final class RebuildPass {
          * {@code unpublish} removes the review pointer and then the flag; a crash between either pair leaves the copy
          * behind the original in one direction, and this is the one place it is repaired - at the cost of one read
          * per HELD pointer per pass, never one per pointer. A review pointer whose served path stands unflagged is
-         * flagged (a hold that lost its second write, under-holding until now); a flagged pointer whose review
-         * pointer is gone is lifted (a release that lost its second write, over-holding until now). Both converge on
+         * flagged (a hold that lost its second write, under-holding until then); a flagged pointer whose review
+         * pointer is gone is lifted (a release that lost its second write, over-holding until then). Both converge on
          * the review pointer, which is the queue and the authority; the ordering of the two writes is what keeps this
          * repair from ever undoing a release or lifting a hold a moment from landing.
          */
@@ -663,7 +662,7 @@ public final class RebuildPass {
 
         /** Whether a pointer is withheld from serving - the interceptor chain's hold on the path, the content-addressed
          *  marker under {@code withheld/} for its hash, or the quarantine path itself. Two point reads, where the
-         *  servability probe this used to go through read the pointer again and stat the blob as well: a rebuild has
+         *  general servability probe would read the pointer again and stat the blob as well: a rebuild has
          *  already read the pointer and has the hash in hand, and a withheld-and-reclaimed pointer reads WITHHELD by
          *  its marker alone. The pointer's own hold flag is read by the caller, off the body it already parsed. */
         private boolean withheld(String requestPath, String hash) throws IOException {

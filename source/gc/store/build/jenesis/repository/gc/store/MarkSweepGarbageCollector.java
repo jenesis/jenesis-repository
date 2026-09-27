@@ -284,7 +284,7 @@ public final class MarkSweepGarbageCollector implements GarbageCollector {
     /** What an answered-but-empty root set means. {@code publish} always exists, so both {@link Known.Absent} ("the
      *  question was asked and there are no pointer roots") and a {@link Known.Present} empty list are contradictions
      *  rather than deployment states - and, unlike an unanswerable set, they are caller bugs, so they fail loudly
-     *  (&sect;9) instead of being absorbed into a refusal an operator would have to go looking for. */
+     *  instead of being absorbed into a refusal an operator would have to go looking for. */
     private static final String NO_ROOTS = "garbage collection needs at least one pointer root, e.g. publish";
 
     /** Validate and normalise the caller's pointer roots: at least one, and never one of the store namespaces the
@@ -461,8 +461,8 @@ public final class MarkSweepGarbageCollector implements GarbageCollector {
             String marker = CONDEMNED + "/" + hash;
             if (references.contains(hash)) {
                 // Asked in memory first. Almost every blob in a healthy store is referenced and carries no marker,
-                // and probing the store for one cost an existence read per referenced blob per pass - measured
-                // 2026-09-08 as 32,000 of a collection's 44,754, for an answer that is nearly always "absent".
+                // and probing the store for one would cost an existence read per referenced blob per pass - most of
+                // a collection's reads - for an answer that is nearly always "absent".
                 // The markers stream in the same hash order the blobs do, so one shard is resident at a time,
                 // exactly as the reference shards are. A stale snapshot can only make this skip a delete, leaving
                 // a marker on a referenced blob for the next pass to clear - the convergence this already relies
@@ -539,10 +539,9 @@ public final class MarkSweepGarbageCollector implements GarbageCollector {
             // pass re-judges it. We can only be here inside a sweep that followed a completed mark, so an empty
             // answer is always the unreadable case rather than a genuinely fresh store.
             // The generation alone, not the whole pass: this fence asks whether the mark we are sweeping under
-            // still stands, and assembling every segment state to read one number off the manifest cost up to
-            // thirty three reads per blob deleted - 4.64 per blob held, the largest single line of a collection,
-            // measured on a node counting by key family. Same read of the same object, same freshness, same
-            // answer; only the segments it did not use are gone.
+            // still stands, and assembling every segment state to read one number off the manifest would cost up
+            // to thirty three reads per blob deleted - the largest single line of a collection. Same read of the
+            // same object, same freshness, same answer, without the segments it does not use.
             return walk.generation(store, MARK).map(current -> current <= generation).orElse(false);
         }
     }

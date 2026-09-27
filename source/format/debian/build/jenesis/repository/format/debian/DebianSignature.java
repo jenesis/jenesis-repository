@@ -49,7 +49,7 @@ public final class DebianSignature {
      *  the client already paid for and no ratio is the attacker's to choose - the concern that bound exists for.
      *  Read through a bounded {@code readNBytes(MAX + 1)} so a hostile
      *  {@code .deb} declaring a huge {@code _gpgorigin} member cannot OOM the verifier: the large {@code data.tar.*}
-     *  members are already streamed in 8 KiB chunks, and this was the one member read whole ({@code readAllBytes}). */
+     *  members are streamed in 8 KiB chunks, and this is the one member read whole. */
     private static final int MAX_SIGNATURE = 1024 * 1024;
 
     private DebianSignature() {
@@ -61,10 +61,10 @@ public final class DebianSignature {
 
     /**
      * Verify a {@code .deb}'s embedded signature streaming, so a publish never holds the whole (unbounded) package -
-     * above all its {@code data.tar.*} member - in heap just to check the signature. The former single pass buffered
-     * every {@code ar} member (including {@code data.tar}) into a {@link ByteArrayOutputStream} to form the signed
-     * data, which is {@code ~2x} the package on the heap and cannot even represent a package past the {@code byte[]}
-     * array limit. Instead the {@link Source reopenable} blob is read twice: the first pass lifts only the small
+     * above all its {@code data.tar.*} member - in heap just to check the signature. Buffering every {@code ar}
+     * member (including {@code data.tar}) to form the signed data would be {@code ~2x} the package on the heap and
+     * could not even represent a package past the {@code byte[]} array limit. Instead the
+     * {@link Source reopenable} blob is read twice: the first pass lifts only the small
      * {@code _gpgorigin} signature member(s) and builds a verifier for each that names a trusted key; the second pass
      * re-reads the archive and feeds every non-signature member's bytes straight into those verifiers in bounded
      * chunks. An OpenPGP signature is a digest over the signed data, so feeding the members chunk-by-chunk (in archive
@@ -92,8 +92,8 @@ public final class DebianSignature {
                 // Bounded read: a legitimate detached signature is tiny, so read at most MAX_SIGNATURE + 1 bytes. An
                 // over-cap member is a hostile/oversized signature, never a usable one - skip it (getNextEntry() below
                 // advances past its remaining bytes), so it can never yield a trusted verifier and the package stays
-                // UNTRUSTED (refused), never VALID. This is the one member formerly read whole (readAllBytes) - the
-                // OOM vector a huge _gpgorigin declared, since .deb uploads are otherwise uncapped.
+                // UNTRUSTED (refused), never VALID. Read whole, a huge _gpgorigin would be an OOM vector, since .deb
+                // uploads are otherwise uncapped.
                 byte[] signatureMember = archive.readNBytes(MAX_SIGNATURE + 1);
                 if (signatureMember.length > MAX_SIGNATURE) {
                     continue;

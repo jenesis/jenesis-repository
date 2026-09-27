@@ -27,14 +27,14 @@ import build.jenesis.repository.store.Providers;
  *     when no module is installed and when every installed signer is unconfigured. {@link #create} declares "I am
  *     not configured" with an empty {@link Optional}; {@code null} is never a legal return from it, from
  *     {@link #name()} or from {@link #requiredConfig()}.</li>
- * <li><b>Selection failure (&sect;9).</b> The {@code provenance-signer} setting selects the attestation identity by
+ * <li><b>Selection failure.</b> The {@code provenance-signer} setting selects the attestation identity by
  *     provider name. A selection no installed provider answers to, or whose provider is unconfigured, throws
  *     {@link IllegalStateException} at resolution naming the selection and the installed signer names - a
  *     misconfigured attestation identity must stop the start, never sign with the wrong key or silently fall back
  *     to the disabled signer. More than one <em>configured</em> signer with no selection is likewise ambiguous and
  *     throws rather than letting discovery order pick which key the repository attests with. Only an
  *     <em>unselected</em> deployment with nothing configured degrades, and only to the disabled signer.</li>
- * <li><b>Error visibility (&sect;9).</b> A provider whose configuration is present but unusable (an unreadable key
+ * <li><b>Error visibility.</b> A provider whose configuration is present but unusable (an unreadable key
  *     file, a malformed Fulcio URL) is fail-soft <em>at the provider</em>: it logs and declines, so the deployment
  *     starts unsigned rather than refusing to boot. What may never happen silently is signing with an identity the
  *     operator did not choose, which is why an explicit selection is fail-fast.</li>
@@ -74,7 +74,7 @@ public interface ProvenanceSignerProvider {
 
     /** The single configured signer, resolved through the shared {@link Providers#optionalUnique} policy: the
      *  {@code provenance-signer} setting selects one by provider name and a selection nothing can honour
-     *  <em>throws</em> (§9), more than one configured signer without a selection is ambiguous rather than a
+     *  <em>throws</em>, more than one configured signer without a selection is ambiguous rather than a
      *  discovery-order winner, and only a deployment with nothing configured gets the
      *  {@link ProvenanceSigner#disabled() disabled} signer - a misconfigured attestation identity should stop the
      *  start, not silently sign with the wrong key. */

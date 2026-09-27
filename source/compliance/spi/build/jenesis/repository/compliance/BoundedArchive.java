@@ -8,29 +8,26 @@ import build.jenesis.repository.store.ArchiveWalk;
 /**
  * The zip-entry walk a {@link QualityInspector} cracks an artifact with: open the archive, refuse a body that is not
  * the archive it claims to be, and pick the best-ranked manifest entry - the shape the NuGet, Composer, CocoaPods and
- * Conda inspectors each hand-rolled before it lived here once.
+ * Conda inspectors share, held here once.
  *
  * <h2>The bound is not this class's</h2>
- * It used to be. This file carried its own 64 MiB {@code SCAN_LIMIT}, its own body-relative {@code scanLimit(len,
- * ratio)} and its own byte-counting {@code Capped} stream, in parallel with the formats' private copies of the same
- * three things one repository over. All of that is now {@link ArchiveWalk} - one number an operator can
- * move at {@link ArchiveWalk#LARGEST_WALK_KEY}, one screened walk that applies it, one vocabulary for reaching it - and
- * this class is the zip walker that rides it. What is left here is the ranking and the entry reading, which are the
- * gate's own and have no counterpart on the shared walk.
+ * The bound is {@link ArchiveWalk} - one number an operator can move at {@link ArchiveWalk#LARGEST_WALK_KEY}, one
+ * screened walk that applies it, one vocabulary for reaching it - and this class is the zip walker that rides it.
+ * What is here is the ranking and the entry reading, which are the gate's own and have no counterpart on the shared
+ * walk.
  *
- * <h2>What that changed, deliberately</h2>
- * Two behaviours the hand-rolled cap got wrong, and the screen gets right:
+ * <h2>Two behaviours the screen decides</h2>
  * <ul>
- *   <li><b>A truncated walk yields nothing at all.</b> The old walk handed back the best entry it had found <em>with
- *       the truncation flag set</em>, so an archive could place a decoy manifest early and the real one past the
- *       ceiling and choose what a screen saw. {@link ArchiveWalk.Found} makes that unrepresentable - a value exactly
- *       when the walk was not cut off - so the {@code orNull()} callers (Composer, CocoaPods, Conda, Maven licences)
- *       now read "this artifact declares nothing" where they used to read the early find.</li>
- *   <li><b>A budget exactly spent is not a truncation.</b> The old stream reported capped the moment the ceiling was
- *       reached, even when the archive ended on that very byte, so an artifact whose footprint was exactly the bound
- *       cried wolf. The screen looks one byte ahead before it decides.</li>
+ *   <li><b>A truncated walk yields nothing at all.</b> Handing back the best entry found <em>with the truncation
+ *       flag set</em> would let an archive place a decoy manifest early and the real one past the ceiling and choose
+ *       what a screen saw. {@link ArchiveWalk.Found} makes that unrepresentable - a value exactly when the walk was
+ *       not cut off - so the {@code orNull()} callers (Composer, CocoaPods, Conda, Maven licences) read "this
+ *       artifact declares nothing" rather than an early find.</li>
+ *   <li><b>A budget exactly spent is not a truncation.</b> Reporting capped the moment the ceiling is reached, even
+ *       when the archive ends on that very byte, would make an artifact whose footprint is exactly the bound cry
+ *       wolf. The screen looks one byte ahead before it decides.</li>
  * </ul>
- * Nothing else about the walk moves. In particular a walk that runs out of <em>body</em> part-way through still ends
+ * In particular a walk that runs out of <em>body</em> part-way through still ends
  * as a walk that did not complete rather than as a corrupt archive: the {@code byte[]} an inspector is handed is
  * itself bounded, at {@link QualityInspector#PREFIX_INSPECTION_LIMIT}, so an archive ending mid-entry is the ordinary
  * shape of a large artifact seen through that window and not a verdict about the artifact. That tier is the gate's to

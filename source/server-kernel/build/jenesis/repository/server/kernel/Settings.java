@@ -88,7 +88,7 @@ public final class Settings {
 
     /** The store form of a value about to be persisted for {@code key}: unchanged for a non-secret key or a clearing
      *  (blank) value; for a SECRET key set to a non-blank value it is the {@code enc:v1:} envelope - refusing the write
-     *  (§9) when no master key is configured, so plaintext never reaches the store, and passing an already-encrypted
+     *  when no master key is configured, so plaintext never reaches the store, and passing an already-encrypted
      *  envelope through untouched so a carried-forward secret is not double-sealed. */
     private String forStore(String key, String value) {
         if (value == null || value.isBlank() || !isSecret(key) || SecretCipher.isEnvelope(value)) {
@@ -103,7 +103,7 @@ public final class Settings {
     }
 
     /** The usable value of a stored entry for {@code key}: decrypted when it is an {@code enc:v1:} envelope; passed
-     *  through for a non-secret; and refused (§9, fail-closed) when it is a SECRET key whose stored value is not an
+     *  through for a non-secret; and refused (fail-closed) when it is a SECRET key whose stored value is not an
      *  envelope - a plaintext or tampered secret must be re-entered, never silently used. A stored envelope that no
      *  configured key can open throws from {@link SecretCipher#decrypt}, so a broken secret never reads as blank. */
     private String fromStore(String key, String value) {
@@ -423,7 +423,7 @@ public final class Settings {
         Map<String, String> sanitized = new LinkedHashMap<>();
         values.forEach((key, value) -> {
             if (value != null && !value.isBlank()) {
-                // A restored SECRET is re-encrypted here (or refused when no key is configured, §9) exactly like a
+                // A restored SECRET is re-encrypted here (or refused when no key is configured) exactly like a
                 // console write, so an import never writes a secret as plaintext; an already-enveloped value passes
                 // through untouched.
                 sanitized.put(key, forStore(key, value));
@@ -499,9 +499,9 @@ public final class Settings {
         } catch (IOException e) {
             throw new UncheckedIOException("Failed to read tenant settings for '" + tenant + "'", e);
         }
-        // An empty snapshot is cached like a full one: a tenant with no overrides used to be re-read on every lookup,
-        // and every tenant-overridable key a publish consults listed the settings space again - three listings per
-        // publish on a deployment that had never set a tenant value, measured. The map is bounded rather than the
+        // An empty snapshot is cached like a full one: otherwise a tenant with no overrides would be re-read on every
+        // lookup, and every tenant-overridable key a publish consults would list the settings space again - three
+        // listings per publish on a deployment that had never set a tenant value. The map is bounded rather than the
         // negative left out: an anonymous deployment never validates that a request key names a real tenant, so a
         // flood of invented names could otherwise grow it without bound until the scheduled refresh clears it; past
         // TENANT_SNAPSHOTS entries an empty snapshot is answered and not kept.

@@ -204,8 +204,8 @@ public final class WebhookDeliveryTask implements MaintenanceTask {
                 // Retries are exhausted: MOVE the entry out of the active queue into the parked backlog rather than
                 // delete it, so a terminal failure stays visible on the status surface (outbox.entries()) and is
                 // recoverable through /api/webhook/retry -> WebhookOutbox.unpark - the same park-and-recover semantics
-                // forwarding gives. Parking it out of the active queue is the unbounded-scan fix: the hot drain scan
-                // (outbox.active()) no longer re-lists and re-reads it every pass. The park transition is counted once.
+                // forwarding gives. Parking it out of the active queue keeps the scan bounded: the hot drain scan
+                // (outbox.active()) does not re-list and re-read it every pass. The park transition is counted once.
                 // Gate the park-transition metric on the CAS result, exactly as ForwardingTask does:
                 // park() compare-and-sets on the read token, so a re-publish that replaced the entry mid-pass loses the
                 // CAS and nothing is parked - counting it then would over-report the transition. Only meter a park that
@@ -233,11 +233,10 @@ public final class WebhookDeliveryTask implements MaintenanceTask {
     /**
      * The depth gauges, emitted on <em>every</em> exit from a pass.
      *
-     * <p>The peer of {@code ForwardingTask.depths}, and fixed with it because §13 makes them one mechanism. They
-     * used to be written only where the pass found work, so each early return left the previous pass's numbers
-     * standing and a drained queue was indistinguishable from a module that had stopped running. The same fix had
-     * already hoisted {@code jenreg.webhook.unsigned} above these very returns for the same reason - the pattern was
-     * understood here and simply not applied to the depths.
+     * <p>The peer of {@code ForwardingTask.depths}, and one mechanism with it: like concerns are treated alike.
+     * Written only where the pass found work, each early return would leave the previous pass's numbers standing and
+     * a drained queue would be indistinguishable from a module that had stopped running - the same reason
+     * {@code jenreg.webhook.unsigned} sits above these very returns.
      *
      * <p>What is true at each exit differs: the no-endpoint exit has just emptied the queue and reports nothing,
      * while the two retain-on-misconfiguration exits keep theirs and report its real depth. Reporting zero there

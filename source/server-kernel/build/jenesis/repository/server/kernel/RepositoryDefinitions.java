@@ -8,10 +8,10 @@ package build.jenesis.repository.server.kernel;
  * hands the kernel an implementation the router's live definitions answer, and a composition without the router
  * answers {@link #HOSTED}, which is what a repository with no definition has always meant.
  *
- * <p>It exists because {@code Repositories} used to hand out the router's {@code Definition} type directly, which
- * made the kernel require the router and, through it, the gate, the inventory and the metadata store - so every web
- * adapter that needed only a tenant and a store dragged the whole gated edge. The two questions the kernel asked of
- * a definition are these two, so this is all that crosses.
+ * <p>It exists so that {@code Repositories} does not hand out the router's {@code Definition} type directly, which
+ * would make the kernel require the router and, through it, the gate, the inventory and the metadata store - so
+ * every web adapter that needed only a tenant and a store would drag the whole gated edge. The two questions the
+ * kernel asks of a definition are these two, so this is all that crosses.
  */
 public interface RepositoryDefinitions {
 

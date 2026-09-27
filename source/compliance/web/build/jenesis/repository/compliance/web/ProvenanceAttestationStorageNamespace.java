@@ -10,9 +10,9 @@ import build.jenesis.repository.maintenance.StorageNamespace;
  * cache is keyed by {@code (blob SHA-256, served path)}, not by coordinate version, so it cannot ride the inventory's
  * per-version {@code evict}; its reclamation is the {@link ProvenanceAttestationReaper} - a discovered
  * {@code PublicationObserver} that deletes an artifact's cached attestation the moment that served pointer is
- * unpublished, the one lifecycle its content key aligns with. Declaring the space here ends its
- * purge-invisibility: before this it was written by no declared namespace, so the orphan diagnostic and the operator
- * purge could not see it. Derived data by design - a lost or stale entry only costs one re-sign on the next read.
+ * unpublished, the one lifecycle its content key aligns with. Declaring the space here is what lets the orphan
+ * diagnostic and the operator purge see it. Derived data by design - a lost or stale entry only costs one re-sign on
+ * the next read.
  */
 public final class ProvenanceAttestationStorageNamespace implements StorageNamespace {
 

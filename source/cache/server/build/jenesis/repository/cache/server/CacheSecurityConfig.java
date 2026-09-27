@@ -11,9 +11,9 @@ import org.springframework.security.web.SecurityFilterChain;
 /**
  * The cache's own security chain, in the cache's own module.
  *
- * <p>It used to live in the module that composed the console and the cache into one app, which meant the cache
- * carried its security only when that particular composition assembled it. Any other node with the cache aboard -
- * the bundle - would have had {@code /build/**} governed by whatever chain happened to match, which for a
+ * <p>It lives here rather than in a module that composes the cache into an app, where the cache would carry its
+ * security only when that particular composition assembled it. Any other node with the cache aboard - the bundle -
+ * would then have {@code /build/**} governed by whatever chain happened to match, which for a
  * cache client is either a redirect to a login page or a demand for a repository key it does not have. A module
  * that authenticates its own requests should carry the chain that lets it, exactly as
  * {@code scimSecurityFilterChain} does for {@code /scim/**}.
@@ -25,8 +25,8 @@ import org.springframework.security.web.SecurityFilterChain;
  * <p>It governs {@code /build/**} and nothing else, deliberately. The management surface of a cache running ALONE
  * is closed by {@code CacheServer}, in the launcher rather than here, because a chain declared here would reach
  * the merged node too - and an ordered chain over a narrower space wins over the repository's unmatched-scope
- * one, so it would deny the actuator surface of the node an operator actually runs. Measured: it did, and
- * {@code ServerToggleE2ETest} caught it.
+ * one, so it would deny the actuator surface of the node an operator actually runs ({@code ServerToggleE2ETest}
+ * holds that).
  */
 /*
  * @EnableWebSecurity because this module now owns its chain and must therefore bring what builds one. Moving the

@@ -26,8 +26,9 @@ import org.springframework.core.env.Environment;
  * {@code ServerModuleProvider} discovery (see {@link ComplianceWebModule}), never named by the server - so with
  * this module absent the server carries no quarantine, vulnerability or provenance endpoints. The VEX API is
  * <em>not</em> here: it is the VEX store's own web module ({@code build.jenesis.repository.compliance.vex.web}),
- * discovered the same way under the store's own toggle, so this adapter no longer requires that store. The beans mirror the constructor injection the monolith
- * performed, so the resolved dependencies are the same ones the server already exposes.
+ * discovered the same way under the store's own toggle, so this adapter does not require that store. The beans take
+ * their dependencies by constructor injection, so the resolved dependencies are the same ones the server already
+ * exposes.
  */
 @Configuration(proxyBeanMethods = false)
 public class ComplianceWebConfig {

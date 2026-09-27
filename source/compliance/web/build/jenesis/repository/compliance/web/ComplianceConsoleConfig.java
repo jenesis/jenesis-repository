@@ -30,9 +30,8 @@ public class ComplianceConsoleConfig {
     /**
      * This feature's console read service over its own ledgers.
      *
-     * <p>It was declared by the console, which had to know the type to build it. The console no longer does: the
-     * screens that read it are contributed from here, so the service is too, and a deployment without this module
-     * has neither.
+     * <p>The console does not declare it: the screens that read it are contributed from here, so the service is
+     * too, and a deployment without this module has neither.
      */
     @Bean
     public ComplianceReview complianceReview(ArtifactStore repositoryStore, CurrentTenant currentTenant,

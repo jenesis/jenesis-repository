@@ -90,14 +90,15 @@ public final class ComplianceScreen implements PublishInterceptor {
     private static final AtomicReference<FeedMissListener> FEED_MISSES = new AtomicReference<>();
 
     /** A registry-free sink the deployment wires so an artifact an inspector could not parse is counted
-     *  ({@code jenreg.gate.unparseable} tagged by format) rather than only logged - the §9 make-errors-visible
+     *  ({@code jenreg.gate.unparseable} tagged by format) rather than only logged - the make-errors-visible
      *  diagnostic. Registry-free like {@link #VERDICTS}: the Micrometer counter lives in the distribution. */
     private static final AtomicReference<UnparseableListener> UNPARSEABLE_METER = new AtomicReference<>();
 
     /** Whether a blobs-namespace format that resolves no reverse hold mapping for the publish it just laid out
      *  {@code throws} (failing the publish) or only alarms. The deployment wires this from
      *  {@code jenreg.strict-hold-mapping} (default false): production stays alarm-not-abort so one broken
-     *  format cannot DoS publishes (the #204 gauge reasoning), while every test that publishes through a format flips
+     *  format cannot DoS publishes (the {@code hold.unenforceable} gauge reasoning), while every test that publishes
+     *  through a format flips
      *  it on so a broken mapping fails on the FIRST publish in CI rather than surfacing in a later audit. Unset (the
      *  ServiceLoader-constructed screen until the deployment wires it) reads as {@code false}. */
     private static final AtomicReference<BooleanSupplier> STRICT_HOLD_MAPPING = new AtomicReference<>();
@@ -116,9 +117,9 @@ public final class ComplianceScreen implements PublishInterceptor {
     private static final Optional<FindingsProvider> FINDINGS = FindingsProvider.installed();
 
     /** The durable maintainer-health ledger, when a persistence module is installed. Present, it is overlaid onto the
-     *  gate before assess (so the health dimension scores off the persisted answer, not a live probe - Principle 10) and
+     *  gate before assess (so the health dimension scores off the persisted answer, not a live probe) and
      *  written at commit for a just-accepted coordinate; absent, the gate keeps its live health source and the screen
-     *  persists no health, exactly as before. */
+     *  persists no health. */
     /** The deployment's signer trust, when a module supplies one. Overlaid onto every {@link TrustAware} inspector
      *  before it runs, for the reason the health ledger is overlaid onto its dimension: the screen holds the
      *  request's scoped store and the {@link java.util.ServiceLoader}-built inspector does not. Absent, an inspector
@@ -143,7 +144,7 @@ public final class ComplianceScreen implements PublishInterceptor {
     /** The most bytes handed to an inspector from a claimed artifact. A claimed upload is a metadata document or a
      *  small archive by the inspectors' nature (a POM, a {@code package.json}, a {@code .nuspec}), whose declaration
      *  sits at the front - a jar's manifest, a wheel's METADATA - so a bounded prefix carries everything they read,
-     *  while a pathologically large jar can no longer be pulled whole into a {@code byte[]} to gate it (which a
+     *  while a pathologically large jar is never pulled whole into a {@code byte[]} to gate it (which a
      *  {@code readAllBytes} would, materialising the entire artifact in heap on the publish path). Beyond the cap the
      *  archive is truncated, and the zip/tar reader inside the inspector simply stops at the last complete entry.
      *  <p>It is the SPI's prefix tier itself, not a screen-local copy of the same number: the {@code byte[]} legs are
@@ -448,7 +449,7 @@ public final class ComplianceScreen implements PublishInterceptor {
 
     /**
      * The gate this repository actually assesses through: the deployment's gate with its two per-repository overlays
-     * applied. Extracted rather than inlined because a publish is no longer the only caller - the late-declaration
+     * applied. Extracted rather than inlined because a publish is not the only caller - the late-declaration
      * re-assessment in {@link #releaseCompleted} assesses held bytes through the very same gate, and a re-assessment
      * running a differently-configured gate than the publish did would report a difference that is an artefact of the
      * caller rather than of the evidence.
@@ -460,7 +461,7 @@ public final class ComplianceScreen implements PublishInterceptor {
      * in place. Coordinate-scoped (a point lookup per inspected subject) so a publish into a busy repository never
      * walks the whole findings ledger to build the overlay.
      *
-     * <p><b>Health.</b> The health dimension is repointed at the durable ledger (Principle 10): with the ledger
+     * <p><b>Health.</b> The health dimension is repointed at the durable ledger: with the ledger
      * module installed the gate scores maintainer-health off the persisted answer for this repository, not a live
      * deps.dev probe on the admission path. The ledger IS a {@code HealthSource}, so this is the same overlay shape;
      * a coordinate with no stored record resolves to empty (no finding), the same safe default a live probe that
@@ -486,8 +487,8 @@ public final class ComplianceScreen implements PublishInterceptor {
     // No withheld(path, store) override: this screen holds through the /quarantine<path> review pointer, and the publication
     // copies that hold onto the serving pointer (Publication.link writes the flag, unpublish lifts it, the
     // rebuild walk reconciles the two), so a serve reads it off the one pointer it reads anyway. An override probing
-    // the review pointer here paid a second key on every download - measured 2026-09-12 as the first of a download's
-    // four reads on every backing - and the router's miss path, the one place that must tell a hold from an absence
+    // the review pointer here would pay a second key on every download - one of a download's four reads on every
+    // backing - and the router's miss path, the one place that must tell a hold from an absence
     // with no serving pointer to read, asks Publication.reviewPending beside the chain instead.
 
     @Override
@@ -593,7 +594,7 @@ public final class ComplianceScreen implements PublishInterceptor {
                 if (malformed != null) {
                     // The hold's own reason when the artifact was held for being unparseable (no gate assessment): a
                     // scoped, operator-legible line naming the artifact and the inspector's parse-failure message, so a
-                    // reviewer sees which artifact was held and why (§9 make-errors-visible), not a silent reject.
+                    // reviewer sees which artifact was held and why (errors made visible), not a silent reject.
                     reasons.add("Could not fully screen the claimed artifact " + artifact.path()
                             + " - its quality inspector could not parse it: " + malformed);
                 }
@@ -789,7 +790,7 @@ public final class ComplianceScreen implements PublishInterceptor {
      * here it fails on the FIRST publish. On a break: emit {@code jenreg.publish.holdmapping.broken{eco}} + one WARN,
      * and {@code throw} only when {@code jenreg.strict-hold-mapping} is on (every test config sets it) - production
      * stays alarm-not-abort, since a broken format must not DoS publishes (the {@code hold.unenforceable} gauge
-     * reasoning of #204). Scoped strictly to the JUST-published path/hash, which the format just wrote, so an
+     * reasoning). Scoped strictly to the JUST-published path/hash, which the format just wrote, so an
      * evicted-but-still- enumerated sibling version - which legitimately resolves to nothing at describe time - never
      * false-positives. Only blobs-namespace ecosystems are checked: a {@code publish/}-namespace layout (Maven) or a
      * non-blobs upload has no such reverse mapping to verify, and a path that names no versioned artifact (an index, a
@@ -1183,8 +1184,8 @@ public final class ComplianceScreen implements PublishInterceptor {
     /** Whether ANY retroactive enforcement sweep owns a hold on this path's coordinate - a {@code holds/} record of
      *  any discovered kind (KEV, license, reachability, a plugged future one), written before its {@code /quarantine}
      *  pointer. When one does, an accepted publish must not clear the pointer: doing so would strand the sweep's hold
-     *  record and let an unprivileged re-upload launder a human-review hold (before this only the KEV kind was
-     *  consulted, so a re-publish declaring clean metadata cleared a license-retro hold). The check reads the durable
+     *  record and let an unprivileged re-upload launder a human-review hold (consulting one kind alone would let a
+     *  re-publish declaring clean metadata clear another kind's retroactive hold). The check reads the durable
      *  {@link HoldRecords} and then the discovered {@link HoldReleaseObserver}s, so a new hold kind joins by writing a
      *  record, never an edit here - and a kind whose module has been UNINSTALLED still counts, so
      *  uninstalling a compliance module cannot turn an ordinary re-upload into a laundering channel for the holds it
@@ -1336,9 +1337,9 @@ public final class ComplianceScreen implements PublishInterceptor {
             // The guard asks whether any PACKAGE subject came back, not whether the list is empty, and the two differ
             // exactly when a second inspector claims the same path. A content-scan subject - a detected secret, an
             // inbound attestation, a publisher's signature - satisfies "not empty" while carrying no licensable
-            // identity for the license and deny-list dimensions to bite on, so reading emptiness here let any content
-            // inspector that found something in a truncated head silently switch this fallback off. The proxy leg had
-            // the same defect and is fixed the same way; stating it in one predicate is what stops the two drifting.
+            // identity for the license and deny-list dimensions to bite on, so reading emptiness here would let any
+            // content inspector that found something in a truncated head silently switch this fallback off. The proxy
+            // leg asks the same question; stating it in one predicate is what stops the two drifting.
             //
             // The fallback is APPENDED rather than substituted, because substituting would drop the very content
             // finding that made the list non-empty in order to add a coordinate.
@@ -1360,10 +1361,10 @@ public final class ComplianceScreen implements PublishInterceptor {
      * full-body tier; one that does not is bridged down to the same front prefix it would have seen anyway and says
      * so in its own answer, so nothing here silently upgrades what an inspector actually read.
      *
-     * <p><b>What it buys, measured.</b> The format inspectors crack their archives through
+     * <p><b>What it buys.</b> The format inspectors crack their archives through
      * {@code BoundedArchive.zipEntry}, which already takes an {@code InputStream} - so a declaration stored at the
-     * BACK of a large archive becomes reachable without a new parser and without random access. Before this,
-     * a 1.5 GiB NuGet package and a {@code .deb} of the same size were both held on the shipped defaults, because the
+     * BACK of a large archive becomes reachable without a new parser and without random access. Without it,
+     * a 1.5 GiB NuGet package or a {@code .deb} of the same size is held on the shipped defaults, because the
      * signature material each carries inside itself sits past the bound and an unreadable signature is scored with
      * the untrusted dial.
      *
@@ -1483,16 +1484,13 @@ public final class ComplianceScreen implements PublishInterceptor {
      * The already-published-sibling lookup this screen hands its inspectors on the publish leg: a thin adapter over
      * the publication seam's <em>own</em> two sibling reads, one compliance leg delegating to one store leg.
      *
-     * <p><b>Each leg delegates to its counterpart; neither is derived from the other.</b> That is the whole content of
-     * the fix. Before it, this screen handed inspectors {@code content::sibling} - a method reference
-     * that supplied only the whole-document read and let {@link QualityInspector.Lookup}'s since-deleted default
-     * synthesise the bounded one from it. The synthesis inherited the whole-document ceiling, so
-     * {@code AttestationInspector}, which asks for a 32 MiB bounded read of the artifact its referrer names, got an
-     * exception above {@link PublishInterceptor.Content#LARGEST_SIBLING} (8 MiB) here while the proxy leg - which
-     * overrode the default and streams - answered {@code truncated} for the very same sibling. An 8-32 MiB companion
-     * therefore degraded on one leg and raised on the other. The publication seam has offered a real bounded read
-     * ({@link PublishInterceptor.Content#sibling(String, int)}, capped at the store), so the screen now hands
-     * that through unchanged and the two legs agree.
+     * <p><b>Each leg delegates to its counterpart; neither is derived from the other.</b> A bounded read synthesised
+     * from the whole-document read would inherit the whole-document ceiling, so {@code AttestationInspector}, which
+     * asks for a 32 MiB bounded read of the artifact its referrer names, would get an exception above
+     * {@link PublishInterceptor.Content#LARGEST_SIBLING} (8 MiB) here while the proxy leg, which streams, answers
+     * {@code truncated} for the very same sibling - an 8-32 MiB companion degrading on one leg and raising on the
+     * other. The publication seam offers a real bounded read ({@link PublishInterceptor.Content#sibling(String, int)},
+     * capped at the store), so the screen hands that through unchanged and the two legs agree.
      *
      * <p>The two {@code Bounded} records are the same pair of values in two SPIs (the store contract and the
      * compliance contract, which must not depend on each other's shapes), so the adapter re-wraps rather
@@ -1531,8 +1529,8 @@ public final class ComplianceScreen implements PublishInterceptor {
             public Optional<QualityInspector.Lookup.Bounded> fetchStored(String path, int limit) throws IOException {
                 // The stored pointer, not the serving resolution: one point read for a companion that is absent,
                 // where the serving question pays the withhold-chain probe and the content-addressed marker on top.
-                // Measured as three store reads per Maven publish for an .asc that is usually not there, which is a
-                // fixed cost on the request path for asking a question this seam does not need answered.
+                // The serving question would cost three store reads per Maven publish for an .asc that is usually not
+                // there, a fixed cost on the request path for a question this seam does not need answered.
                 Optional<String> stored = new Publication(content.store()).blob(path);
                 if (stored.isEmpty()) {
                     // Falls back to the blobs-namespace formats' own serving keys, which have no publish/ pointer to
@@ -1665,7 +1663,7 @@ public final class ComplianceScreen implements PublishInterceptor {
 
     /** Route an artifact an inspector claimed but could not parse: FAIL CLOSED. A could-not-parse outcome means the
      *  gate's input silently failed to derive - the license and vulnerability dimensions never saw the artifact's real
-     *  coordinate - so it must never read as a clean admit (§9: no silent fallback on a correctness-bearing path). The
+     *  coordinate - so it must never read as a clean admit (no silent fallback on a correctness-bearing path). The
      *  upload is HELD in quarantine unconditionally, never admitted: "could not fully screen ⇒ do not serve". The hold
      *  is made visible rather than a silent reject - a WARNING naming the path is logged, the unparseable meter is
      *  bumped ({@code jenreg.gate.unparseable}, tagged by format), and the parse-failure reason is stashed so {@link

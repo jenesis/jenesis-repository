@@ -6,9 +6,7 @@ import module java.base;
  * The consolidated metadata document over one repository's scoped store: any subsystem reads and mutates its own
  * tagged section of a coordinate version's document, and every surface reads the whole document in one lookup. This
  * is the foundation contract - the version-doc reader plus the section-scoped, multi-section CAS mutate that
- * generalises {@code StoreFindings.mutate}/{@code Document} to the section level. No production path reads or writes
- * this document yet; the per-subsystem cutovers (licenses, publish facts, findings, health, AI outcomes) land in
- * later tickets.
+ * generalises {@code StoreFindings.mutate}/{@code Document} to the section level.
  *
  * <p>Every mutate is a section-scoped compare-and-set with bounded retry: a writer transforms only its own
  * {@link Section} and carries every other section verbatim, so disjoint-section concurrent writers converge (each
@@ -44,7 +42,7 @@ public interface MetadataStore {
      * The whole per-<em>coordinate</em> document - the version-independent facts (maintainer health) living at the
      * reserved {@link MetadataKey#COORDINATE} segment - or empty when none was ever written. The read is total, exactly
      * as {@link #read} is: a torn or foreign object reads as an empty document with a WARNING, never an exception. This
-     * is the second document scope the {@code meta} tree carries (§5): one document per coordinate for the facts
+     * is the second document scope the {@code meta} tree carries: one document per coordinate for the facts
      * that are a property of the project rather than a release.
      */
     Optional<MetadataDocument> readCoordinate(String ecosystem, String coordinate) throws IOException;

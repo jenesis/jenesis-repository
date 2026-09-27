@@ -139,8 +139,8 @@ public final class MavenSource implements ImportSource {
             walkIndex(consumer, checkpoint, root);
             return;
         }
-        // Neither surface answered - but WHY decides what the operator should do, and this used to collapse every
-        // reason into "enable directory listing". A root and an index probe that both come back 401/403 is a refused
+        // Neither surface answered - but WHY decides what the operator should do, so not every reason collapses
+        // into "enable directory listing". A root and an index probe that both come back 401/403 is a refused
         // credential, and a 5xx or a throttle is "not now"; telling either of those to switch autoindex on sends the
         // operator after the wrong thing. Only an honest absence (a 404/410 - nothing published at either surface)
         // keeps the actionable no-listing-no-index message.

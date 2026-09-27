@@ -139,7 +139,7 @@ public class CacheController {
         }
     }
 
-    /** The request path with each segment decoded, which is what the mapped handlers used to be handed. */
+    /** The request path with each segment decoded. */
     private static String decoded(HttpServletRequest request) {
         String uri = request.getRequestURI();
         String context = request.getContextPath();
@@ -222,11 +222,11 @@ public class CacheController {
      * Refuse, and on a 401 say how to authenticate.
      *
      * <p>A bare 401 is only usable by a client that sends its credential unasked. The native clients do - the key
-     * rides a header they always set - so this was invisible until a client arrived that waits to be challenged.
-     * Maven Resolver is one: it sends the GET without credentials, and with no {@code WWW-Authenticate} it never
-     * retries, so the read half of the Maven cache could not authenticate at all. The write half worked, because
-     * Resolver sends credentials unasked on an upload - which is why the symptom was a cache that stored perfectly
-     * and never hit, reported by the extension as "Remote cache is incomplete or missing".
+     * rides a header they always set - but a client that waits to be challenged needs the challenge. Maven Resolver
+     * is one: it sends the GET without credentials, and with no {@code WWW-Authenticate} it never retries, so the
+     * read half of the Maven cache could not authenticate at all. It sends credentials unasked on an upload, so the
+     * missing challenge shows as a cache that stores perfectly and never hits, reported by the extension as "Remote
+     * cache is incomplete or missing".
      */
     private static void challenge(Cache.Rejected rejected, HttpServletResponse response) {
         response.setStatus(rejected.status());

@@ -8,9 +8,9 @@ import org.springframework.context.annotation.FilterType;
 /**
  * The build cache, as one thing an application either carries or does not.
  *
- * <p>Same reason as the console's gate, and the same shape: the cache used to be its own image, so "do not run it"
- * was how a deployment without a build cache was expressed. On one node it is beans beside the repository's, and a
- * deployment that serves artifacts and wants no cache endpoint needs a way to say so.
+ * <p>Same reason as the console's gate, and the same shape: on one node the cache is beans beside the
+ * repository's, so "do not run it" cannot express a deployment without a build cache, and a deployment that serves
+ * artifacts and wants no cache endpoint needs a way to say so.
  *
  * <p>Read as the context starts rather than from the settings store, because it decides whether the cache's
  * controller and its permit-all chain are registered at all. That chain is the reason it matters more than a

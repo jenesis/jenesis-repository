@@ -21,14 +21,14 @@ import build.jenesis.repository.store.Providers;
  *     is a sentinel rather than an exception: a deployment holding no keys has no grounds to believe a signature, and
  *     must never be told that it does because a module is missing.</li>
  * <li><b>Selection is ALL, and each provider is scoped.</b> Every installed provider contributes and their answers
- *     are unioned through {@link SignerTrust#composite}. This used to be {@code Providers.singleton}, on the
- *     reasoning that two providers disagreeing about a key would make the gate's answer a property of module-path
- *     ordering. That was the wrong cure: trust genuinely has several sources - what an operator configured, what a
- *     format's own operator-provisioned keyring holds, what a coordinate's history established - and forcing them
- *     into one implementation meant one class knowing about all of them. What keeps the union honest is that a
+ *     are unioned through {@link SignerTrust#composite}. A single selection, chosen so that two providers disagreeing
+ *     about a key cannot make the gate's answer a property of module-path ordering, would be the wrong cure: trust
+ *     genuinely has several sources - what an operator configured, what a format's own operator-provisioned keyring
+ *     holds, what a coordinate's history established - and forcing them into one implementation would mean one class
+ *     knowing about all of them. What keeps the union honest is that a
  *     provider answers {@code trusts} only for what it speaks for; a provider that trusts everything is a defect in
  *     that provider, composed or not.</li>
- * <li><b>Read purity (&sect;10).</b> {@link #over} itself performs no I/O; the returned {@link SignerTrust} reads
+ * <li><b>Read purity.</b> {@link #over} itself performs no I/O; the returned {@link SignerTrust} reads
  *     durably stored state and makes no outbound call. Fetching a key from a keyserver at verification time would put
  *     a third party on the publish path and make a verdict depend on their uptime.</li>
  * </ol>
@@ -58,21 +58,18 @@ public interface SignerTrustProvider {
      *
      * <h4>Why this is a holder and not a {@code ServiceLoader.load} in the method</h4>
      *
-     * It was the latter, and that made a per-request cost out of what had been a one-time one. Both screens resolve
-     * trust per inspection - the publish screen per claiming inspector, the proxy screen per screened fetch - so a
-     * {@code load()} inside {@link #installed} meant walking the whole module graph's service declarations on every
-     * artifact, where the previous single-provider resolution had happened once in a static field.
+     * Both screens resolve trust per inspection - the publish screen per claiming inspector, the proxy screen per
+     * screened fetch - so a {@code load()} inside {@link #installed} would walk the whole module graph's service
+     * declarations on every artifact, a per-request cost for what is a one-time answer.
      *
-     * <p>It was measured rather than reasoned about: a rubygems proxy suite went from passing to failing across the
-     * commit that introduced it, twice each way, with four {@code Broken pipe} writes in the failing runs and none
-     * in the passing ones - {@code bundle install} abandoning a large index download the proxy had become too slow
-     * to serve. No verdict changed and no logic differed, which is exactly why reading the code found nothing: the
-     * defect was in what the path <em>cost</em>, not in what it decided.
+     * <p>That cost shows as a client giving up rather than as a wrong answer: a proxy too slow to serve a large index
+     * sees {@code bundle install} abandon the download with a {@code Broken pipe}. No verdict changes and no logic
+     * differs, which is why reading the code finds nothing: the difference is in what the path <em>costs</em>, not in
+     * what it decides.
      *
      * <p>Resolution happens on first use rather than at class-init so that a composition which never screens pays
      * nothing, and the list is immutable so callers cannot disturb it. A provider set is fixed for a JVM, so caching
-     * it costs no correctness - which is what {@code Providers.singleton} was already relying on before this became
-     * a list.
+     * it costs no correctness.
      */
     final class Installed {
 

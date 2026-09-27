@@ -5,9 +5,9 @@
  * backend ships as its own module that {@code provides} a {@code CacheStorageProvider}: the default filesystem
  * backend, plus the optional s3 and azure backends when on the graph.
  *
- * <p>Both dependencies are taken for the same reason (&sect;2 - shared mechanism has one home and is reused, never
- * copied). {@code build.jenesis.repository.store} carries the shared
- * {@code Providers}/{@code Features} resolution mechanism (SPI hardening plan): this SPI is the cache-side
+ * <p>Both dependencies are taken for the same reason: shared mechanism has one home and is reused, never
+ * copied. {@code build.jenesis.repository.store} carries the shared
+ * {@code Providers}/{@code Features} resolution mechanism: this SPI is the cache-side
  * sibling of the artifact store's exclusive-with-default selection, and resolving it through the same primitives
  * is what keeps the two from drifting apart in what they accept and what they refuse.
  * {@code build.jenesis.repository.walk} carries {@code Traversal.Result}, the outcome vocabulary every bounded

@@ -17,7 +17,7 @@ import build.jenesis.repository.net.PrivateHosts;
  *   <li>else the deployment's {@code jenreg.block-private-import-hosts} env-field, if explicitly set;</li>
  *   <li>else {@code true} (block) - for <em>every</em> edition.</li>
  * </ol>
- * The old tenancy-derived "off for the single-tenant {@code fixed} edition" convenience is deliberately gone: a
+ * There is deliberately no tenancy-derived "off for the single-tenant {@code fixed} edition" convenience: a
  * forgotten or misunderstood config must never be the insecure one. A {@code fixed}-edition operator migrating from an
  * internal Nexus/Artifactory at a private address opts out <em>explicitly</em> (the stored setting or the env-field set
  * to {@code false}).
@@ -53,7 +53,7 @@ public final class ImportHostGuard {
      *
      * <p>That is what makes it safe for the console's import leg to pass {@code null} for the deployment env-field
      * and consult no pin of its own. It could not see one without requiring the server kernel, which would drag the
-     * kernel onto a screen-serving node (&sect;2); it does not need to. {@code SettingsImportGuardE2ETest} is the
+     * kernel onto a screen-serving node; it does not need to. {@code SettingsImportGuardE2ETest} is the
      * leg that holds the upstream half in place, because this argument is only true while every write path refuses.
      */
     public static boolean blockPrivateHosts(Boolean stored, Boolean configured) {

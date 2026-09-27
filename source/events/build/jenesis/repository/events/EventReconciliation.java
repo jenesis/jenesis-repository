@@ -34,7 +34,7 @@ import module java.base;
  */
 public record EventReconciliation(String ledger, String route, String caveat) {
 
-    /** All three parts are required, and {@code null} is never a legal value for any of them (&sect;3): a route with
+    /** All three parts are required, and {@code null} is never a legal value for any of them: a route with
      *  no read is not a route, and a route with no caveat is the over-promise this type exists to prevent. */
     public EventReconciliation {
         Objects.requireNonNull(ledger, "ledger");

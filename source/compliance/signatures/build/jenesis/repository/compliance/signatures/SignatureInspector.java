@@ -549,10 +549,10 @@ public final class SignatureInspector implements QualityInspector, TrustAware {
      * Raised when an artifact outruns the inspection bound, so the caller reports an unverified signature rather
      * than reading on.
      *
-     * <p>An {@link IOException}, deliberately, where it used to be unchecked. Every verifier streams the covered
+     * <p>An {@link IOException}, deliberately, not an unchecked exception. Every verifier streams the covered
      * bytes through a call that declares {@code IOException} and lets one ride out, while three of them catch
      * {@code RuntimeException} around that read as their "a key this signature cannot be checked with" outcome -
-     * so an unchecked bound came back from those three as INVALID, holding a well-signed apk, gem or NuGet
+     * so an unchecked bound would come back from those three as INVALID, holding a well-signed apk, gem or NuGet
      * package against its own signature the moment it outgrew the bound, and from the others as "not verified
      * here". As an {@code IOException} it takes the one path every verifier already leaves open, which the scheme
      * contract's bound check holds each of them to. No stack: it is raised once per oversized artifact and the

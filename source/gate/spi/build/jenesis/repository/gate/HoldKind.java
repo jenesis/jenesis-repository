@@ -26,10 +26,9 @@ import build.jenesis.repository.store.Retries;
  * and a re-publish is simply re-screened; and both are per <em>version</em>, so discarding one path of a
  * multi-path hold leaves the state the remaining held paths are reviewed against and the last discard reaps it.
  *
- * <p>Three kinds - the KEV, licence and reachability sweeps - used to carry this class each, character for character
- * apart from the kind's name: three codecs for one document, three compare-and-set loops with two retry policies,
- * and one kind without the multi-path guard the other two had grown. A kind is a name now; what differs between
- * kinds is how its subjects are found and explained, and that stays with the kind.
+ * <p>The KEV, licence and reachability sweeps share this class rather than carrying a copy each - one codec for the
+ * document, one compare-and-set loop, one multi-path guard. A kind is a name; what differs between kinds is how its
+ * subjects are found and explained, and that stays with the kind.
  *
  * <p>Every write is a compare-and-set under {@link Retries}, and a lost override throws rather than returning: it
  * would durably re-expose a released artifact to a re-hold. Nothing here reads an artifact blob - only the tiny

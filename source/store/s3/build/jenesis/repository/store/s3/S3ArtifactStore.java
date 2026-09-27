@@ -198,9 +198,9 @@ public final class S3ArtifactStore extends S3CompatibleArtifactStore {
         }
         // Spooled to an owner-only file first, as write(..) is, never handed to the SDK as the stream it came as: the
         // SDK retries a PutObject the service refused with a retryable status - a 503 under load, a dropped
-        // connection - by reading the body again, and a plain stream has nothing left to give. Measured on two nodes
-        // publishing 256 versions of one Go module into MinIO: a retried PUT failed with "Content input stream does
-        // not support mark/reset, and was already read once" and the publish answered 500. The file gives every
+        // connection - by reading the body again, and a plain stream has nothing left to give: a retried PUT fails
+        // with "Content input stream does not support mark/reset, and was already read once" and the publish answers
+        // 500. The file gives every
         // attempt the whole body and the heap holds none of it, which is what the streaming clause is for.
         Path temporary = spool();
         try {

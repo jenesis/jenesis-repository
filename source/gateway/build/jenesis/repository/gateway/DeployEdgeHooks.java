@@ -27,7 +27,7 @@ import io.micrometer.observation.ObservationRegistry;
  *       assigned the freshly-stored blob its {@code hash} but before the format lays it out, a re-point of an
  *       already-published immutable RELEASE coordinate at DIFFERENT bytes is refused. The refusal short-circuits the
  *       write (the edge answers it and lays nothing out, fires no {@code published()}), so the original bytes keep
- *       serving. Reads only the incumbent pointer's hash, never the body ({@link ReleaseImmutability} §1).</li>
+ *       serving. Reads only the incumbent pointer's hash, never the body ({@link ReleaseImmutability}).</li>
  *   <li>{@link #held} records the {@link QuarantineDispatch} replay context around the {@code QUARANTINE} {@code 202},
  *       so a later review release can replay {@code plugin.handle} from the stored publish envelope and actually
  *       materialise the version rather than link a raw envelope blob. This is the concern whose absence on the free
@@ -56,9 +56,9 @@ public final class DeployEdgeHooks implements EdgeHooks {
     }
 
     /**
-     * Release-version immutability (§9): BEFORE the format lays out the version, refuse a re-point of an
+     * Release-version immutability: BEFORE the format lays out the version, refuse a re-point of an
      * already-published immutable RELEASE coordinate at DIFFERENT bytes (default-on, {@code allow-redeploy} opt-out).
-     * The check reads only the incumbent {@code publish/<path>} pointer's hash (§1, never the body) and is origin-blind
+     * The check reads only the incumbent {@code publish/<path>} pointer's hash (never the body) and is origin-blind
      * (keys off the pointer, not how the incumbent arrived), so a {@code 409} refusal fires here and nothing is laid out
      * or re-pointed. A same-hash re-publish, a first publish, a snapshot/mutable coordinate, or an opted-out tenant fall
      * through and lay out as before.

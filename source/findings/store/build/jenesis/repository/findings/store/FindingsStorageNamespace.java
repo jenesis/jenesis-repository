@@ -9,7 +9,7 @@ import build.jenesis.repository.maintenance.StorageNamespace;
  * The findings module's storage manifest. The per-coordinate findings rows are the {@code findings} section of the
  * consolidated metadata document ({@code meta}, owned by {@code MetadataStorageNamespace}), so this manifest declares
  * only the repository-level {@code findings/scanned} freshness stamp and {@code findings/evicted} eviction epoch -
- * repo-level singletons kept outside the document (§8) - and the durable findings-filter index. Per-coordinate
+ * repo-level singletons kept outside the document - and the durable findings-filter index. Per-coordinate
  * reclamation rides the document: the inventory's {@code evict} deletes the whole {@code meta} document with the
  * artifact, and a discarded quarantine hold drops just its findings section through the
  * {@link DiscardedHoldFindingsObserver}.
@@ -18,7 +18,7 @@ public final class FindingsStorageNamespace implements StorageNamespace {
 
     @Override
     public Set<String> repositoryPrefixes() {
-        // Two repo-level singletons kept outside the document (§8): the findings scan-freshness stamp and the eviction
+        // Two repo-level singletons kept outside the document: the findings scan-freshness stamp and the eviction
         // epoch the vulnerability rank index folds into its rebuild stamp (bumped when a version's findings are
         // reclaimed by eviction, so an evicted line drops on the next rank-index pass, not the next scan); plus the
         // durable findings-filter index, a derived, bounded, generation-reclaimed view (like healthrank/vulnrank) that

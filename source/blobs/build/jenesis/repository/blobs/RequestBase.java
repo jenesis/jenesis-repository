@@ -10,9 +10,8 @@ import build.jenesis.repository.server.spi.Authorization;
  *
  * <p>Five formats - npm, Composer, Cargo, CocoaPods and NuGet - rewrite the URLs inside a packument, a p2
  * document, a sparse-index entry, a podspec and a service index, so this decides where a client is told to fetch
- * from. Each carried a byte-identical private copy of it. One copy is not a style preference here: a defect in it
- * has to be fixed once rather than five times, and a sixth format inheriting a flaw from a copy-paste is exactly
- * how this spread.
+ * from. One copy is not a style preference here: a defect in it has to be fixed once rather than five times, and a
+ * sixth format must not inherit a flaw from a copy-paste.
  *
  * <p>The formats that emit <em>relative</em> URLs instead - PyPI's rewritten hrefs, conda, Debian, RPM, gems, Go,
  * Conan, HuggingFace - need no base at all and do not call this. That is the better answer where a format allows

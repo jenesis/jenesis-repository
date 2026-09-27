@@ -21,8 +21,8 @@
  * the boot layer refuses to resolve, with {@code ResolutionException: Modules jakarta.el and
  * org.apache.tomcat.embed.el export package jakarta.el}.
  *
- * <p>Measured 2026-08-26 by removing the exclusion from all five modules that carry it and booting the console's
- * tests. <b>Removing it from one module proves nothing:</b> an exclusion is inherited by consumers, so a single
+ * <p>The failure shows only once the exclusion is gone from all five modules that carry it and the console's tests
+ * boot. <b>Removing it from one module proves nothing:</b> an exclusion is inherited by consumers, so a single
  * module's copy is masked by its siblings' and the build stays green - which is exactly the misreading that lets
  * a redundant-looking line survive unexamined. All five have to go before the failure appears.
  *
@@ -48,9 +48,9 @@ open module build.jenesis.repository.server {
     requires jakarta.servlet;
     requires micrometer.observation;
     // The Prometheus registry, here rather than downstream, because scraping metrics is a Spring Boot feature and
-    // not an edition's. It used to be pinned only in a downstream module, so this core had no /actuator/prometheus
-    // to expose and its exposure list omitted it - which read as a policy decision and was only a decision about
-    // where a dependency happened to sit. The endpoint it auto-configures is gated like every other actuator
+    // not an edition's - pinned only in a downstream module, this core would have no /actuator/prometheus to expose,
+    // which would read as a policy decision and be only a decision about where a dependency happened to sit. The
+    // endpoint it auto-configures is gated like every other actuator
     // surface: RepositoryAuthorizationManager binds the /actuator subtree to a deployment-wide grant.
     requires micrometer.registry.prometheus;
     // Micrometer's histogram backing, adopted under a name so it reaches the module path: it carries neither a

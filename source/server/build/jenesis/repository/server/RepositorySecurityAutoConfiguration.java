@@ -150,10 +150,10 @@ public class RepositorySecurityAutoConfiguration {
                         // summarized state - UP or DOWN - and are open because a kubelet has no credential to
                         // present and a probe that needs one is a probe that fails the pod.
                         //
-                        // It used to be /actuator/health/** , which also opened every PER-COMPONENT path
+                        // Not /actuator/health/** , which would also open every PER-COMPONENT path
                         // (/actuator/health/db, /actuator/health/diskSpace). Those report which component is
                         // unhealthy and why, which is a map of the deployment's internals to anyone who can
-                        // reach the port. They fall through to the authorization manager now, which binds the
+                        // reach the port. They fall through to the authorization manager, which binds the
                         // /actuator subtree to a wildcard grant, so an operator still reads them with a key.
                         //
                         // The narrow list is the guarantee. show-details is a second line - and a weaker one,

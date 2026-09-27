@@ -26,7 +26,7 @@ import javax.xml.stream.XMLStreamWriter;
  * pure function of the version set and the checksum a client cached still matches a re-fetch. The matching
  * {@code .sha1} / {@code .md5} are computed from those same bytes.
  *
- * <p>Deriving is no longer the default: a {@code maven-metadata.xml} a client publishes is stored verbatim
+ * <p>Deriving is not the default: a {@code maven-metadata.xml} a client publishes is stored verbatim
  * like any artifact and served back byte-for-byte, so a publisher-authored document round-trips untouched. The
  * derivation above is the opt-in {@link #COMPUTE_SETTING} computation instead - {@link #computed} reconciles a stored
  * document's version list against the folders (leaving every other field verbatim) and falls back to a full
@@ -198,7 +198,7 @@ public final class MavenMetadata {
         String coordinatePath = coordinatePath(documentPath);
         List<String> folders = versions(coordinatePath);
         List<String> listed = listedVersions(xml.substring(contentStart, contentEnd));
-        // Screen the versions the STORED document itself lists, not only the folders (F5): a version withheld after
+        // Screen the versions the STORED document itself lists, not only the folders: a version withheld after
         // the publisher authored the document must vanish from the reconciled <versions> too - its name must not
         // survive in the served bytes - so reconcile can now REMOVE a held version, not only add a newly published
         // folder. The screen stats no blob (HIDE_WITHHELD), so a fake-hash / no-blob / non-jar version the publisher
@@ -220,7 +220,7 @@ public final class MavenMetadata {
                 union.add(version);
             } else {
                 // A version the publisher's stored document lists has since been withheld: it drops from the
-                // reconciled <versions>, and (F5) its name must also not survive in <latest>/<release>, which the
+                // reconciled <versions>, and its name must also not survive in <latest>/<release>, which the
                 // stored document preserves verbatim. Re-derive those below over the screened set only.
                 withheldAny = true;
             }

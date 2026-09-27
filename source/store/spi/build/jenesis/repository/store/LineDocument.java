@@ -47,7 +47,7 @@ public final class LineDocument {
 
     /**
      * Read a stored document, or empty when it does not open with {@code magic} - a foreign object, a torn one, or
-     * one from before this codec - or when its version line does not parse.
+     * one of another shape - or when its version line does not parse.
      */
     public static Optional<LineDocument> parse(byte[] bytes, String magic) {
         String text = new String(bytes, StandardCharsets.UTF_8);

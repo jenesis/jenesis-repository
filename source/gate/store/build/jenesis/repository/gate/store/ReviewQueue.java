@@ -10,11 +10,10 @@ import build.jenesis.repository.gate.QuarantineLog;
 /**
  * The quarantine review queue as both operator surfaces render it: one bounded page of the artifacts a repository
  * currently holds, each with when and why it was held and the retroactive hold kinds standing on its coordinate. The
- * API ({@code GET /api/quarantine}) and the console's compliance review used to compose this page separately from the
- * same three reads, and had drifted: one placed a hold whose audit row was lost under a {@code QUARANTINE} verdict
- * with a one-line reason, the other under a verdict that read "audit row missing" with no reasons; one reported an
- * uninstalled kind in a separate list, the other as a marked entry. The page is composed here once, and a surface
- * only decides how to draw it.
+ * API ({@code GET /api/quarantine}) and the console's compliance review compose this page from the same three reads,
+ * and two compositions drift - down to placing a hold whose audit row was lost under different verdicts and reporting
+ * an uninstalled kind in different shapes. The page is composed here once, and a surface only decides how to draw
+ * it.
  *
  * <p>The queue is keyed off the live {@code /quarantine} hold pointers ({@link QuarantineLog#reviewQueue}) and only
  * enriched from the log, so a hold whose log row was lost or never landed still surfaces and stays releasable. The

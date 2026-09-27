@@ -2,10 +2,11 @@
  * Event webhooks as a plugin module: it turns the discovered {@link build.jenesis.repository.events.EventSink}
  * seam into per-tenant outbound HTTP callbacks, so an external system (CI, chat, a SIEM) reacts to a publish,
  * quarantine, finding or promotion without polling. It is a pure <em>delivery</em> module: every event reaches it
- * through the seam's own {@code emit} fan-out, including the publish and unpublish legs it used to produce for itself
- * out of a {@link build.jenesis.repository.store.PublicationObserver} of its own (moved that producer beside the
- * seam, where every installed sink can see it). It never blocks the request path - the {@link
- * build.jenesis.repository.webhook.WebhookSink} it provides only leaves a small
+ * through the seam's own {@code emit} fan-out, including the publish and unpublish legs, whose producer lives beside
+ * the seam where every installed sink can see it rather than in a
+ * {@link build.jenesis.repository.store.PublicationObserver} of this module's own. It never blocks the request path -
+ * the
+ * {@link build.jenesis.repository.webhook.WebhookSink} it provides only leaves a small
  * note in a store-backed {@link build.jenesis.repository.webhook.WebhookOutbox} under the event's own scoped store
  * (store-only state, no database) - and a discovered {@link build.jenesis.repository.maintenance.MaintenanceTaskProvider}
  * answering to {@code webhook} drains it under an exclusive lease, delivering each queued event to the tenant's

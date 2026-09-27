@@ -11,16 +11,12 @@ import build.jenesis.repository.store.ArtifactStoreProvider;
 /**
  * The cache storage: the repository's own store, under one segment.
  *
- * <p>There used to be four providers here - {@code filesystem}, {@code s3}, {@code gcs}, {@code azure-blob} - each
- * naming a backend and each resolving the artifact store of the same name, selected by a
- * {@code jenreg.cache-storage} key of the cache's own. That second selection was never intended and nothing reached
- * it: the Helm chart offers no cache backend at all, so no deployment could choose one, and the only consumers of
- * the three object-store providers were the contract legs written for them.
- *
- * <p>What it cost was ambiguity of the kind that loses data. Both roles read the same {@code jenreg.s3.*} keys, so a
- * deployment with the repository on disk and the cache in a bucket configured two backends at once - and nothing
- * could tell that apart from a misconfiguration. With one selection there is one store, and "nothing configured"
- * and "more than one configured" become answerable questions rather than indistinguishable ones.
+ * <p>There is one provider, naming no backend, rather than one per backend selected by a cache-storage key of the
+ * cache's own. A second selection costs ambiguity of the kind that loses data: both roles would read the same
+ * {@code jenreg.s3.*} keys, so a deployment with the repository on disk and the cache in a bucket would configure
+ * two backends at once - and nothing could tell that apart from a misconfiguration. With one selection there is one
+ * store, and "nothing configured" and "more than one configured" are answerable questions rather than
+ * indistinguishable ones.
  *
  * <p><b>A segment, not a second root.</b> The cache takes one space inside the repository's store rather than
  * a root of its own. Pointing it at the root is a known failure with a name: the cache reads every top-level
@@ -37,9 +33,8 @@ import build.jenesis.repository.store.ArtifactStoreProvider;
  * to keep in step, where a plain {@code cache} would have needed a place on a list of forbidden words and would
  * have been offered as a tenant on the day someone forgot.
  *
- * <p><b>This is a layout change and there is no shim.</b> A filesystem cache used to live at
- * {@code jenreg.cache.root}, defaulting to a relative {@code data} directory; it now lives under the store. An
- * existing deployment's cache is not migrated - it is a cache, so it refills.
+ * <p><b>There is no shim for a cache kept anywhere else.</b> A filesystem cache lives under the store; a cache
+ * found elsewhere is not migrated - it is a cache, so it refills.
  */
 public final class DelegatingCacheStorageProvider implements CacheStorageProvider {
 

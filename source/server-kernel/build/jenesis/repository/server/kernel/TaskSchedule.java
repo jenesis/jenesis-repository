@@ -7,11 +7,11 @@ import build.jenesis.repository.maintenance.MaintenanceTask;
 /**
  * The maintenance scheduler's <em>due-time and run bookkeeping</em>, split out of {@link MaintenanceScheduler} so the
  * arithmetic that decides "which pass is due, and how long may the worker sleep" is a deterministic, storeless,
- * threadless object a test can drive against an injected clock (the maintenance-kernel spike's R4/R8).
+ * threadless object a test can drive against an injected clock.
  *
  * <p>It reads its inputs off {@link ScheduledTask} - the task paired with the name and cadence captured once at
- * resolution - rather than off the {@link MaintenanceTask} itself, and that is load-bearing rather than cosmetic
- *: every method here runs on the one worker loop <em>outside</em> its per-task containment, so a discovered
+ * resolution - rather than off the {@link MaintenanceTask} itself, and that is load-bearing rather than cosmetic:
+ * every method here runs on the one worker loop <em>outside</em> its per-task containment, so a discovered
  * task whose {@code name()} or {@code interval()} threw from in here would take the deployment's only maintenance
  * thread down with it, silently. Nothing in this class calls into a task at all.
  *
@@ -117,8 +117,8 @@ public final class TaskSchedule {
      * pass finished, however long the pass took. Re-arming from the moment a task became due - the rule above, right
      * for a pass shorter than its interval - makes a pass longer than its interval due again the instant it ends,
      * and the node that just released the lease re-takes it before a peer polling at the same cadence ever finds it
-     * free. Measured 2026-09-06 in the fleet: a restarted node never joined a minute-long walk repeating every two
-     * seconds within four minutes. The yield is what hands the lease round.
+     * free - a restarted node might never join a minute-long walk repeating every two seconds. The yield is what
+     * hands the lease round.
      */
     synchronized void yield(String task, Instant notBefore) {
         due.merge(task, notBefore, (current, later) -> current.isAfter(later) ? current : later);

@@ -15,11 +15,11 @@ import build.jenesis.repository.server.kernel.LiveConfig;
 /**
  * Release-version immutability, enforced on the deploy path <em>before</em> a screened upload is
  * laid out. A re-publish of an immutable RELEASE coordinate whose bytes DIFFER from the incumbent is refused with a
- * loud, named {@code 409} (§9) rather than silently re-pointing the {@code publish/<path>} pointer at the new
+ * loud, named {@code 409} rather than silently re-pointing the {@code publish/<path>} pointer at the new
  * content - the supply-chain / dependency-confusion hazard this closes. Default-ON; an operator relaxes it per
  * tenant with {@code allow-redeploy=true} ({@link LiveConfig#allowRedeploy}).
  *
- * <p><b>Streaming (§1).</b> The check never materialises the body: it reads the incumbent's <em>pointer</em> - the
+ * <p><b>Streaming.</b> The check never materialises the body: it reads the incumbent's <em>pointer</em> - the
  * small {@code publish/<path>} document - through {@link Publication#blob(String)} and compares its stored hash to
  * the hash the gate already assigned the freshly-stored blob. No blob bytes are re-read on either side.
  *
@@ -49,8 +49,8 @@ public final class ReleaseImmutability {
 
     private static final Logger LOGGER = LoggerFactory.getLogger(ReleaseImmutability.class);
 
-    /** Release re-point refusals raised since boot - the loud {@code jenreg.immutability.refused} counter
-     *  (§9), mirroring the hardened proxy's drift counter, so a refused re-point is observable, not silent. */
+    /** Release re-point refusals raised since boot - the loud {@code jenreg.immutability.refused} counter,
+     *  mirroring the hardened proxy's drift counter, so a refused re-point is observable, not silent. */
     private static final AtomicLong REFUSALS = new AtomicLong();
 
     private final LiveConfig live;
@@ -69,7 +69,7 @@ public final class ReleaseImmutability {
      * pointer exists, it names DIFFERENT bytes, the coordinate is an immutable release, and the tenant has not enabled
      * {@code allow-redeploy}. A first publish (no incumbent), a same-hash re-publish (idempotent), a snapshot/mutable
      * coordinate, or an opted-out tenant all return {@code false} (the publish proceeds). Reads only the pointer, never
-     * the body (§1).
+     * the body.
      */
     public boolean refusesRepoint(RepositoryFormat plugin, ArtifactStore store, String tenant, String path,
                                   String screenedHash) throws IOException {
@@ -95,12 +95,12 @@ public final class ReleaseImmutability {
         return live.allowRedeploy(tenant);
     }
 
-    /** Record and log the loud, named refusal (§9), returning the client-facing message. Called by the deploy path
+    /** Record and log the loud, named refusal, returning the client-facing message. Called by the deploy path
      *  once it has decided to answer {@code 409}. The {@code store} is read for the incumbent's ORIGIN:
      *  the incumbent pointer's hash keys the {@link OriginSection origin} record, so the message can name whether the
      *  colliding version arrived by a hand upload or was cached from a named fallback - the audit fact the operator
      *  needs to choose the remedy (evict the cached copy, or {@code allow-redeploy}). Both reads are of tiny pointer
-     *  and section objects, never the artifact body (§1). */
+     *  and section objects, never the artifact body. */
     public String recordRefusal(RepositoryFormat plugin, ArtifactStore store, String path) throws IOException {
         REFUSALS.incrementAndGet();
         String coordinate = coordinate(plugin, path);
@@ -120,9 +120,8 @@ public final class ReleaseImmutability {
      * {@code local-upload} row yields "uploaded at &lt;instant&gt;", and an unrecorded or unreadable origin yields the
      * empty clause (the message then degrades to the plain wording). The origin lookup asks
      * {@link HardenedScreen#originCoordinate} for the key rather than deriving one, so it cannot fall behind the
-     * writer: this javadoc used to say it was "keyed exactly as the fallback-fetch path records it" and then restate
-     * that derivation, which stopped being true the moment the row moved to the format coordinate - the clause would
-     * have gone quietly missing from every 409 on a format-claimed path. Best-effort read (&sect;10): never fails the
+     * writer - a restated derivation would stop being true the moment the row's key moved, and the clause would go
+     * quietly missing from every 409 on a format-claimed path. Best-effort read: never fails the
      * already-decided 409.
      */
     private String incumbentOrigin(ArtifactStore store, String path) {
@@ -149,13 +148,13 @@ public final class ReleaseImmutability {
             }
             return "";
         } catch (IOException | RuntimeException e) {
-            // Render-what-you-have (§10): a metadata read failure only costs the origin phrase, never the loud 409.
+            // Render-what-you-have: a metadata read failure only costs the origin phrase, never the loud 409.
             LOGGER.warn("Could not name the incumbent origin for " + path, e);
             return "";
         }
     }
 
-    /** The loud, named {@code 409} message (§9), now origin-aware: {@code originClause} names how the
+    /** The loud, named {@code 409} message, now origin-aware: {@code originClause} names how the
      *  incumbent arrived (a cached fallback copy vs a hand upload) when the origin record has it, or is empty (the plain
      *  wording) when it does not. Origin-blind by construction - the message is richer, the refusal unchanged. */
     private static String message(String coordinate, String path, String originClause) {

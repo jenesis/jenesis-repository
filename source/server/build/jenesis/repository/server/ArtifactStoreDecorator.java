@@ -9,10 +9,10 @@ import build.jenesis.repository.store.ArtifactStore;
  * node already learned, or to add any other concern that belongs around every store call - without redeclaring
  * the store bean and rebuilding the stack underneath it.
  *
- * <p><strong>Why a seam rather than a replacement.</strong> A composition that wanted metering used to declare
- * its own {@code artifactStore} bean, which meant restating the resolution, the quota wrapper and the read-only
- * wrapper in order to add one layer - and the restatement drifted: the deployment-wide quota was dropped from
- * the copy, so a cap an operator set was silently not applied there. A contribution cannot drift from the stack
+ * <p><strong>Why a seam rather than a replacement.</strong> A composition declaring its own {@code artifactStore}
+ * bean would restate the resolution, the quota wrapper and the read-only wrapper in order to add one layer - and a
+ * restatement drifts: a copy that dropped the deployment-wide quota would silently not apply a cap an operator set.
+ * A contribution cannot drift from the stack
  * it is layered into, because it does not contain it.
  *
  * <p>Decorators apply in {@link org.springframework.core.annotation.Order} order, innermost first: the one with

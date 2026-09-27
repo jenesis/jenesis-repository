@@ -28,7 +28,7 @@ import build.jenesis.repository.icon.IconContributor;
  *     store or throws - it never returns {@code null}, and a provider returning {@code null} from {@link #create}
  *     fails loudly naming the provider class. {@link #name()} and {@link #requiredConfig()} may not return
  *     {@code null} either; an empty {@link #requiredConfig()} means "needs nothing".</li>
- * <li><b>Selection failure (&sect;9).</b> An explicitly selected backend that no provider answers to - its module is
+ * <li><b>Selection failure.</b> An explicitly selected backend that no provider answers to - its module is
  *     off the module path, or the name is misspelled - throws {@link IllegalStateException} at resolution naming the
  *     selection, the {@code filesystem} default it refuses to fall back to, and the installed provider names. A
  *     selected backend whose {@link #requiredConfig()} is unset likewise throws, naming <em>every</em> missing key at
@@ -36,7 +36,7 @@ import build.jenesis.repository.icon.IconContributor;
  *     {@code jenreg.store=s3} with the s3 module absent must not boot against the local disk, publishing
  *     into ephemeral storage while every artifact in the intended bucket 404s. Only an <em>unselected</em> deployment
  *     gets the {@code filesystem} default, and its required configuration is checked just the same.</li>
- * <li><b>Error visibility (&sect;9).</b> Nothing is swallowed. Two providers answering to one name, or one provider
+ * <li><b>Error visibility.</b> Nothing is swallowed. Two providers answering to one name, or one provider
  *     registered twice, are packaging errors and throw rather than letting module-path order pick the backend a
  *     deployment persists into. Configuration problems surface as one message naming the keys, never as a degraded
  *     store.</li>
@@ -47,7 +47,7 @@ import build.jenesis.repository.icon.IconContributor;
  * <li><b>Ordering / determinism.</b> The resolved backend is a function of the configured name and the installed
  *     providers only - never of {@link ServiceLoader} discovery order. Providers are matched by name
  *     case-insensitively and every diagnostic lists them in one stable, name-sorted order.</li>
- * <li><b>Transport security (&sect;13).</b> A backend an operator points at an <em>endpoint</em> requires that
+ * <li><b>Transport security.</b> A backend an operator points at an <em>endpoint</em> requires that
  *     endpoint to be {@code https}, and refuses a plaintext one at resolution with an {@link IllegalStateException}
  *     whose message <b>names the opt-out key</b> - because credentials and every artifact byte would otherwise travel
  *     in clear with no operator signal, and the operator running a local emulator needs to be told what to set. It is
@@ -125,10 +125,9 @@ public interface ArtifactStoreProvider extends IconContributor {
      * other backend while every artifact the operator expects to find is somewhere nobody reads.
      *
      * <p><b>Why "fully configured" and not "any key present".</b> Probing for any stray key would fire on a key an
-     * operator never set. The shipped properties files used to declare every backend's keys - on the belief that a
-     * key had to be declared for relaxed binding to reach it, which is not so - and each such line set the key to
-     * the value its own code already defaulted to, so every backend read as partly configured on every deployment.
-     * Those lines are gone; a backend is taken as configured only when every key of its {@link #requiredConfig()}
+     * operator never set - a shipped properties file declaring a backend's keys at their defaults would make every
+     * backend read as partly configured on every deployment. A backend is taken as configured only when every key of
+     * its {@link #requiredConfig()}
      * is present - a bucket, a connection string - which is precisely the set an operator cannot supply by
      * accident, and which no shipped file sets. Ambient cloud credentials are not
      * consulted at all: the check reads this product's own keys, never {@code AWS_*}, so a CI box or a laptop with

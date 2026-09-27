@@ -9,9 +9,9 @@ import module java.base;
  *
  * <p>A content-addressed store keeps a blob it already holds and drops the upload, so a publish of bytes a collector
  * has condemned relies on the condemned blob. The collector deletes such a blob only on a later pass than the one that
- * condemned it, and until now the last guard was a re-read of the marker just before the delete: a publish clearing
- * the marker between that read and the delete was missed, and its pointer named nothing - answered {@code 201} and
- * served {@code 404} from then on. The marker now decides it:
+ * condemned it, and a re-read of the marker just before the delete is not enough: a publish clearing the marker
+ * between that read and the delete would be missed, and its pointer would name nothing - answered {@code 201} and
+ * served {@code 404} from then on. So the marker decides it:
  *
  * <ul>
  *   <li>A sweep {@linkplain #claim claims} the marker, writing it over the token it judged the blob by, and deletes

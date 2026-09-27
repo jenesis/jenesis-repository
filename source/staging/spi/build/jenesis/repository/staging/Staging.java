@@ -34,10 +34,9 @@ public interface Staging {
      * recorded state marker first, then any live held tree whose marker is absent (a pre-marker deploy, or a
      * marker lost out of band), so a staged tree is never invisible purely because its lifecycle marker is
      * missing - and whether more exist. This is the listing face, and it is the implementation's to answer from
-     * a bounded read: there is no whole listing beside it any more. It used to default to paging a complete
-     * {@code ids()} - a million open stagings in heap to show the first two hundred, and the API's list took the
-     * whole listing outright and walked every staging's tree for its count; the staging-reap canary measured that
-     * read at a million stagings and it did not answer.
+     * a bounded read: there is no whole listing beside it. A default paging a complete id set would hold a million
+     * open stagings in heap to show the first two hundred, and a list that walked every staging's tree for its count
+     * does not answer at a million stagings.
      */
     Window ids(int limit) throws IOException;
 

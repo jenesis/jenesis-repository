@@ -32,7 +32,7 @@ import org.springframework.core.env.Environment;
  * The background-worker wiring split out of {@link RepositoryConfig}: the discovered download- and
  * key-usage trackers (off in read-only mode), the {@link MaintenanceScheduler} whose task list is re-resolved live,
  * and the {@link SettingsRefresh} convergence pass that re-seeds the live gate, the stored-settings source and the
- * scheduler on each tick. Every bean is copied verbatim from the former monolith; the split is behaviour-preserving.
+ * scheduler on each tick.
  */
 @Configuration(proxyBeanMethods = false)
 public class WorkersConfig {
@@ -120,7 +120,7 @@ public class WorkersConfig {
     }
 
     /**
-     * The single-writer maintenance lease's ttl. Deliberately fail-fast and named (&sect;9), unlike a task's cadence
+     * The single-writer maintenance lease's ttl. Deliberately fail-fast and named, unlike a task's cadence
      * dial: a cadence that will not parse degrades to the announced default because the pass still has a correct thing
      * to do, but a lease ttl that will not parse - or that is zero or negative - would leave the deployment believing
      * it holds an exclusion it does not have. {@code LeaseGuard} refuses the degenerate values; this refuses the

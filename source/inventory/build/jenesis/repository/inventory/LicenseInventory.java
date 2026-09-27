@@ -52,9 +52,9 @@ public final class LicenseInventory {
      * <p>The union folds into the document's {@code licenses} section and, for a published member, the
      * {@code identity/rollup} is re-folded once that document write has committed: from the fingerprint of the section
      * the write replaced to the one it wrote - the transition the compare-and-set made linear, so two records of one
-     * version telescope (old to a, a to b) rather than cancel. The re-fold used to be grouped into the document's batch
-     * as one unretried compare-and-set on the first attempt only, and was dropped whenever the document or the rollup
-     * conflicted, which under concurrent publishers was most of the time.
+     * version telescope (old to a, a to b) rather than cancel. Grouped into the document's batch as one unretried
+     * compare-and-set, the re-fold would be dropped whenever the document or the rollup conflicted, which under
+     * concurrent publishers is most of the time.
      */
     public void record(String ecosystem, String coordinate, String version, List<Declared> licenses)
             throws IOException {
@@ -110,7 +110,7 @@ public final class LicenseInventory {
     /**
      * The licenses a coordinate version declares, or empty when none has been recorded for it yet (so the sweep knows
      * to backfill from stored metadata rather than treat the artifact as license-free): the document's
-     * {@code licenses} section. A read never writes (§10).
+     * {@code licenses} section. A read never writes.
      */
     public Optional<List<Declared>> read(String ecosystem, String coordinate, String version) throws IOException {
         return metadata.read(ecosystem, coordinate, version)

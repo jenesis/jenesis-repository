@@ -89,13 +89,12 @@ public interface SignerTrust {
      * What this coordinate's earlier versions established <em>for one signature scheme</em>, or empty for a
      * coordinate never seen signed that way before.
      *
-     * <p><b>The scheme is part of the question, and leaving it out was a defect.</b> An artifact may carry
+     * <p><b>The scheme is part of the question.</b> An artifact may carry
      * signatures of several schemes at once - a Maven release carries a detached OpenPGP signature its layout
      * requires and may carry a Sigstore bundle beside it - and those are two independent facts about who signed.
-     * With one expectation per coordinate the two overwrote each other, and whichever was recorded last made the
-     * other read as a signer change: the continuity dial then held every properly signed release that happened to
-     * carry both. Measured 2026-09-15 by the end-to-end Sigstore leg, which is the only tier where both signatures
-     * of one artifact reach the gate in the order a client sends them.
+     * With one expectation per coordinate the two would overwrite each other, and whichever was recorded last would
+     * make the other read as a signer change: the continuity dial would then hold every properly signed release that
+     * happened to carry both.
      *
      * <p>Comparing an OpenPGP fingerprint against a keyless identity is a category error in any case: they are not
      * the same kind of name, so neither can contradict the other. What continuity means is "the same OpenPGP key
@@ -200,9 +199,9 @@ public interface SignerTrust {
         // Flattened: a composite handed in contributes its sources, never itself. The parts a caller chooses among
         // - the inspector picking the source whose material holds a signer, then asking that source's pins - must be
         // the sources themselves; a nested composite among them has a pooled material and answers anyone's trusts,
-        // which is exactly the widening choosing by source exists to prevent. Measured 2026-09-14 with two providers
-        // installed: the provider's own composite sat as one part beside the format keyring's, so a signature the
-        // provenance part admitted was recorded as admitted by "configured" - the composite's default source.
+        // which is exactly the widening choosing by source exists to prevent. With two providers installed, a
+        // provider's own composite sitting as one part beside the format keyring's would record a signature the
+        // provenance part admitted as admitted by "configured" - the composite's default source.
         List<SignerTrust> present = sources.stream()
                 .filter(Objects::nonNull)
                 .flatMap(source -> source.parts().stream())

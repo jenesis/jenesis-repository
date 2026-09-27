@@ -48,10 +48,9 @@ public abstract class TenantScope {
      * signed-in tenant - the same seam {@link CredentialService} uses. Best-effort by the trail's contract: a
      * failed write never fails the mutation it audits.
      *
-     * <p>The console and its {@code /api} twin audit a privileged mutation under the same {@code action}
-     * (§9). This javadoc used to simply assert that, which is worth exactly what any restated rule is
-     * worth: the two names were separate literals in separate modules and nothing would have failed on the day
-     * they diverged. They are now single values on
+     * <p>The console and its {@code /api} twin audit a privileged mutation under the same {@code action}.
+     * Asserting that in prose is worth exactly what any restated rule is worth: two separate literals in separate
+     * modules would diverge with nothing failing. They are single values on
      * {@link build.jenesis.repository.audit.AuditActions}, and the build fails a module that spells one out for
      * itself, so the property is held by the code rather than by this sentence.
      */

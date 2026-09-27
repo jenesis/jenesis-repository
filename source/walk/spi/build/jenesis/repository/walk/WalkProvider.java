@@ -31,14 +31,14 @@ import build.jenesis.repository.store.Providers;
  *     consumer must then degrade visibly (nothing enumerates, the capability surface says so) rather than
  *     hand-rolling its own listing loop. {@link #create} declines with an empty {@link Optional}; {@code null} is
  *     never a legal return from it, from {@link #name()} or from {@link #requiredConfig()}.</li>
- * <li><b>Selection failure (&sect;9).</b> An <em>explicitly selected</em> {@code jenreg.walk=<name>} that
+ * <li><b>Selection failure.</b> An <em>explicitly selected</em> {@code jenreg.walk=<name>} that
  *     no installed provider answers to, or whose provider declines, throws {@link IllegalStateException} at
  *     resolution naming the selection and the installed provider names. It does <em>not</em> resolve to empty:
  *     silently answering "no walk installed" to an operator who named one turns every sweep that rides the walk -
  *     garbage collection, reconcile, retroactive hold enforcement - into a no-op that looks like a healthy idle
  *     system. An explicit selection outranks the {@code jenreg.<name>=false} toggle. Only an
  *     <em>unselected</em> deployment degrades to the empty sentinel.</li>
- * <li><b>Error visibility (&sect;9).</b> Nothing is swallowed. Duplicate provider names, one provider registered
+ * <li><b>Error visibility.</b> Nothing is swallowed. Duplicate provider names, one provider registered
  *     twice, and more than one <em>enabled</em> walk with no selection to disambiguate them all throw, naming the
  *     candidates and the setting that resolves them - the walk a deployment gets is never decided by module-path
  *     order. A provider's own settings parse eagerly in {@link #create} and a malformed value fails loudly rather
@@ -96,7 +96,7 @@ public interface WalkProvider {
 
     /** The single enabled walk discovered via {@link ServiceLoader}, resolved through the shared
      *  {@link Providers#optionalUnique} policy: an explicit {@code jenreg.walk=<name>} selects one by name
-     *  and a selection nothing answers to <em>throws</em> rather than degrading (&sect;9), a
+     *  and a selection nothing answers to <em>throws</em> rather than degrading, a
      *  {@code jenreg.<name>=false} switches one off, more than one enabled walk is ambiguous rather than a
      *  discovery-order winner, and only an <em>unselected</em> deployment with no walk installed resolves to empty -
      *  the degrade-gracefully signal, never {@code null}. */

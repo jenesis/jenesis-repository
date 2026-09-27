@@ -49,8 +49,8 @@ public final class NuGetFormat implements RepositoryFormat, ProxyLeg, BlobLayout
 
     // A hostile .nupkg cannot force a large allocation: a .nuspec is small metadata XML, read under the product's one
     // archive-inflation ceiling, ArchiveInflation.largestEntry(), settable at jenreg.archive.largest-entry - the same
-    // bound the NuGetQualityInspector applies, because it is now one bound rather than two constants that agreed by
-    // convention (RepositoryFormat contract clause 15 /, §13 cross-format parity).
+    // bound the NuGetQualityInspector applies, because it is one bound rather than two constants that agree by
+    // convention (RepositoryFormat contract clause 15, cross-format parity).
 
     // How far the walk for the .nuspec may run is the product's one archive-walk bound, ArchiveWalk.largestWalk(),
     // settable at jenreg.archive.largest-walk - not a private constant of this format's, and not a number the
@@ -221,11 +221,11 @@ public final class NuGetFormat implements RepositoryFormat, ProxyLeg, BlobLayout
         String rest = exchange.path().substring("/nuget/".length());
         if (exchange.method().equals("PUT")) {
             // A push goes to the one resource the service index advertises as PackagePublish/2.0.0, and nowhere else
-            // The coordinate comes from the .nuspec rather than from the path, so this branch used to take
-            // EVERY PUT under /nuget/ as a package push - one at a mistyped or invented endpoint, and one at a read
-            // address like v3/index.json or a flat-container file, all published and all answered 201. None of them
-            // is a traversal (those are 404'd above since) and none of them lands a wrong key either, because
-            // the layout reads the coordinate out of the package. What it costs is the honest refusal: a client
+            // The coordinate comes from the .nuspec rather than from the path, so without this check EVERY PUT under
+            // /nuget/ would be a package push - one at a mistyped or invented endpoint, and one at a read address like
+            // v3/index.json or a flat-container file, all published and all answered 201. None of them is a traversal
+            // (those are 404'd above) and none of them lands a wrong key either, because the layout reads the
+            // coordinate out of the package. What it costs is the honest refusal: a client
             // configured against an endpoint this repository never offered is told its push succeeded, and only much
             // later does anyone notice the packages went somewhere nobody was pointed at. An unadvertised address
             // names nothing here, so it is this format's own 404 (contract clause 6).
@@ -356,10 +356,10 @@ public final class NuGetFormat implements RepositoryFormat, ProxyLeg, BlobLayout
      * marker. <b>The commit point is the {@code .nupkg} pointer link</b> - before it nothing serves and the flat
      * container answers a miss; after it the package is downloadable and its registration reads a precomputed sidecar.
      *
-     * <p>This is the ordering fix: the former code linked the {@code .nupkg} pointer <em>first</em> and
-     * only then wrote {@code dependencies.json} and {@code nuget/.hosted}, so a crash in between left a servable
-     * package whose registration read had to re-crack the archive, and a version index that had not yet been switched
-     * on. Now every parse result lands before anything serves.
+     * <p>The order matters: linking the {@code .nupkg} pointer <em>first</em> and only then writing
+     * {@code dependencies.json} and {@code nuget/.hosted} would let a crash in between leave a servable package whose
+     * registration read had to re-crack the archive, and a version index that had not yet been switched on. So every
+     * parse result lands before anything serves.
      *
      * <p><b>This is the format's screening choke point</b>. Because {@link #screened()} is {@code false} the
      * shared ingress edge dispatches the push straight here, so the operation is constructed with the
@@ -488,24 +488,24 @@ public final class NuGetFormat implements RepositoryFormat, ProxyLeg, BlobLayout
      * marker clear a retroactive KEV/licence hold's release is - one hold-release mechanism for this format, not two.
      * The shared commit operation runs its accepted layout only on {@code ACCEPT}, so a screen-time {@code QUARANTINE}
      * would otherwise store the package, link nothing and index nothing: {@code HoldLifecycle.release} would then
-     * resolve the hold and materialise no version at all, which is the regression this closes.
+     * resolve the hold and materialise no version at all.
      *
      * <p><b>The review pointer is re-keyed onto the package, and that is load-bearing rather than cosmetic.</b> A NuGet
      * coordinate lives in the {@code .nuspec} <em>inside</em> the package, so the descriptor the screen assessed carries
-     * the push ENDPOINT - one path every push shares - and {@code Publication.screen} therefore linked the review
-     * pointer at {@code /quarantine/nuget/v3/package}. That was harmless while a held push laid nothing out; it is not
-     * harmless now. The withhold marker is content-addressed and the {@code withheld-reconcile} backstop lifts a marker
+     * the push ENDPOINT - one path every push shares - and {@code Publication.screen} therefore links the review
+     * pointer at {@code /quarantine/nuget/v3/package}. Since a held push lays the package out, that is not
+     * harmless. The withhold marker is content-addressed and the {@code withheld-reconcile} backstop lifts a marker
      * that no live {@code /quarantine} pointer aliases once a live coordinate claims its bytes - which the layout below
      * makes true - so a second held push, overwriting the shared endpoint pointer, would strand the first package's
      * marker as "holderless" and the backstop would <em>un-withhold an unreviewed package</em>. Re-keying gives every
      * held package the same stable, per-artifact review handle npm, PyPI and Cargo screen under natively: the pointer
-     * follows the artifact, two concurrent holds no longer share one handle, and the release resolves the coordinate
+     * follows the artifact, two concurrent holds never share one handle, and the release resolves the coordinate
      * (so it lifts the marker instead of stranding a phantom {@code publish/} pointer at the endpoint). The endpoint
      * pointer is removed rather than kept beside it: the release's cross-alias guard treats any OTHER live pointer
-     * carrying the hash as a still-standing hold, so leaving it would block the very release this fix exists to enable.
+     * carrying the hash as a still-standing hold, so leaving it would block the very release the re-keying enables.
      * The {@code QuarantineLog} row is still written by the gate under the endpoint path - the reviewer's reasons and
-     * the review handle disagree on the path for a held NuGet push, which is a separate, pre-existing consequence of
-     * the coordinate living inside the artifact and is recorded as its own defect.
+     * the review handle disagree on the path for a held NuGet push, a separate consequence of the coordinate living
+     * inside the artifact.
      *
      * <p>The order is the load-bearing part of the layout itself: the dependency sidecar is written first (a derived
      * document, nothing serves it), then {@link Withheld#mark} retracts the package's own hash, and only then is the
@@ -616,9 +616,9 @@ public final class NuGetFormat implements RepositoryFormat, ProxyLeg, BlobLayout
             }
         } else {
             // Streamed with the rewrite folded in, never as one byte array: a package's document is every version
-            // of it, and answering it whole held the packument the publish had just streamed into - the
-            // shape the npm-packument canary showed as a 500 at fifty thousand versions under 512 MiB, an OutOfMemoryError on the read
-            // after the write was fixed. The length is not declared, since the rewrite changes it.
+            // of it, and answering it whole would hold in heap what the publish had just streamed - an
+            // OutOfMemoryError on the read at fifty thousand versions under 512 MiB. The length is not declared,
+            // since the rewrite changes it.
             try (OutputStream out = exchange.respond(200, -1L)) {
                 document.copyTo(out, NuGetListings.BASE, base);
             }
@@ -646,10 +646,9 @@ public final class NuGetFormat implements RepositoryFormat, ProxyLeg, BlobLayout
         }
         // The search document is a stored listing every push maintains - one record per package id with its
         // servable versions. A search is one sequential pass over it through the codec's streaming reader, keeping
-        // only the page asked for and a count, so the query never holds the document, whose size is the feed's. It
-        // used to read the document whole and split every record into a map before filtering - three copies of the
-        // feed in heap per query, which the nuget-search-memory canary showed as a 500 with an OutOfMemoryError at
-        // half a million packages in a 512 MiB container.
+        // only the page asked for and a count, so the query never holds the document, whose size is the feed's.
+        // Reading the document whole and splitting every record into a map before filtering would put three copies
+        // of the feed in heap per query - an OutOfMemoryError at half a million packages in a 512 MiB container.
         Optional<StoredListing.Served> served = StoredListing.open(blobs.store(),
                 new NuGetListings(blobs).searchSpec());
         // A repository that has never had a package answers 404 rather than an empty result set, which is the ruling
@@ -776,13 +775,12 @@ public final class NuGetFormat implements RepositoryFormat, ProxyLeg, BlobLayout
      * The two paths a package's own bytes are ever in hand at: the file it serves from, and the one endpoint every
      * package is pushed to.
      *
-     * <p>The push is what this used to miss. A coordinate lives in the {@code .nuspec} inside the archive rather
-     * than in the path, so the descriptor a push hands the screen carries the endpoint's address and nothing else -
-     * {@value #PUSH_ROUTE}, the same string for every package there will ever be. Keyed on the served name alone,
-     * the expectation was empty at the one moment the bytes were in front of the gate, and the signature entry
-     * inside the archive went unread on every publish. Measured 2026-09-15 over the shipped image: a package whose
-     * chain reached a configured anchor and one signed by an authority nobody named both served, and neither had a
-     * recorded signature at all.
+     * <p>The push is the one that is easy to miss. A coordinate lives in the {@code .nuspec} inside the archive
+     * rather than in the path, so the descriptor a push hands the screen carries the endpoint's address and nothing
+     * else - {@value #PUSH_ROUTE}, the same string for every package there will ever be. Keyed on the served name
+     * alone, the expectation would be empty at the one moment the bytes are in front of the gate, and the signature
+     * entry inside the archive would go unread on every publish - a package whose chain reached a configured anchor
+     * and one signed by an authority nobody named would both serve with no recorded signature at all.
      */
     private static boolean signable(String path) {
         return !path.contains("..")
@@ -1001,8 +999,8 @@ public final class NuGetFormat implements RepositoryFormat, ProxyLeg, BlobLayout
      *  standard v3 chain), or a leaf carrying no SHA-512 {@code packageHash}.
      *  {@linkplain ProxyRelay.Declared#unreadable Unreadable} when a hop could not be read - a transport failure, a
      *  {@code 429}/{@code 5xx}/auth challenge, a body that is not JSON - and also when the outbound
-     *  screen <b>refuses</b> an advertised {@code @id}: that hop is chosen by the upstream, and a refused one used to
-     *  read as "this upstream publishes no hash", which is the fail-open the screen exists to prevent (the rpm leg's
+     *  screen <b>refuses</b> an advertised {@code @id}: that hop is chosen by the upstream, and a refused one read as
+     *  "this upstream publishes no hash" would be the fail-open the screen exists to prevent (the rpm leg's
      *  {@code RefusedTarget} shape). */
     private static ProxyRelay.Declared nupkgChecksum(String root, String id, String version,
             ProxyFormat.Fetcher fetcher, boolean allowInternal) throws IOException {
@@ -1060,10 +1058,10 @@ public final class NuGetFormat implements RepositoryFormat, ProxyLeg, BlobLayout
      *  is one this deployment could not issue a request to at all - the floor beneath the screen, which the dial does
      *  not lift.
      *
-     *  <p>Two things changed here, and both tightened this leg. The exemption is now on the upstream's own
-     *  ORIGIN rather than its bare host name: this method used to trust any hop naming the same HOST, so a compromised
-     *  upstream could pivot the proxy onto any other PORT of its own box ({@code https://mirror.internal:9200/} under
-     *  an {@code https://mirror.internal/} upstream), which is a real if narrow SSRF and is gone. And a hop naming no
+     *  <p>The exemption is on the upstream's own ORIGIN rather than its bare host name: trusting any hop naming the
+     *  same HOST would let a compromised upstream pivot the proxy onto any other PORT of its own box
+     *  ({@code https://mirror.internal:9200/} under an {@code https://mirror.internal/} upstream), a real if narrow
+     *  SSRF. And a hop naming no
      *  host is refused by the floor rather than by this leg's own null check, because whether a URL names a host is a
      *  fact about {@code HttpRequest.newBuilder} and not a policy this leg gets to hold privately. */
     private static boolean unsafeUpstreamUrl(String url, URI upstream, boolean allowInternal) {

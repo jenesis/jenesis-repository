@@ -29,11 +29,11 @@ import module java.base;
  * <li><b>Absence sentinel.</b> An empty repository is a walk that reports no asset and one terminal {@code null}
  *     checkpoint, never an exception. A {@code null} cursor means "complete"; a non-{@code null} one means "resume
  *     here".</li>
- * <li><b>Streaming (&sect;1).</b> {@link Content#open} is deferred and unbuffered: the asset's bytes are not fetched
+ * <li><b>Streaming.</b> {@link Content#open} is deferred and unbuffered: the asset's bytes are not fetched
  *     while it is enumerated, and when it is opened the stream comes straight off the network, so the consumer's copy
  *     to storage is the only pass over the body. A whole-repository listing is itself streamed where the incumbent
  *     serves one document for it.</li>
- * <li><b>Error visibility (&sect;9).</b> An incumbent that refuses, is absent or cannot answer surfaces as an
+ * <li><b>Error visibility.</b> An incumbent that refuses, is absent or cannot answer surfaces as an
  *     {@link ImportFailure} carrying its {@link ImportFailure.Kind} - auth, missing, transient and protocol are
  *     distinguishable without reading the message. A malformed <em>entry</em> is different: an incomplete or
  *     traversal-laced listing row is skipped and the walk continues, because one bad row must not abort a migration.</li>
@@ -52,9 +52,8 @@ import module java.base;
  *     hostile, and a walk that quietly omits the asset reports the same "nothing here" as an empty repository.
  *     <p>Stated on this side as well as on {@code ImportSourceProvider}'s clause 10 because the two halves are
  *     enforced in different places and a contract that constrains what a provider is <em>given</em> but not what a
- *     source may <em>do</em> with it leaves the more dangerous half unstated - which is structurally why the
- *     download-URL screen was once per-connector and drifted into three different answers across the
- *     connectors.</li>
+ *     source may <em>do</em> with it leaves the more dangerous half unstated - and a download-URL screen left
+ *     per-connector drifts into different answers across the connectors.</li>
  * <li><b>Ordering / concurrency.</b> The enumeration order is deterministic for a given source state, because that is
  *     what makes a cursor mean anything: a resumed walk must be able to skip exactly what the interrupted one
  *     completed. {@link Checkpoint#reached} is called only after every asset of a batch has been fully consumed, so a
@@ -103,7 +102,8 @@ public interface ImportSource {
         /**
          * A row the connector refused to carry, and why.
          *
-         * <p>It exists because a drop was invisible: every connector {@code continue}s past a traversal-laced path,
+         * <p>It exists because a drop is otherwise invisible: every connector {@code continue}s past a traversal-laced
+         * path,
          * an incomplete listing row or a malformed URL, and the consumer only ever counted what it received. A
          * listing whose every row is laced therefore finished {@code completed, imported: 0, skipped: 0} - which
          * reads exactly like migrating an empty source. "Nothing was there" and "everything was refused" were the

@@ -35,13 +35,13 @@ import build.jenesis.repository.store.Durations;
  * neutral {@code jenreg.<task>=false} toggle (plus the required-config self-disable) that
  * {@link MaintenanceTaskProvider#resolve} applies before a provider is even asked, and the provider's own enablement
  * setting, which returns an empty {@code create}. Letting a cadence of zero mean "off" would give one dial two
- * meanings and turn a typo into a pass that is installed, listed and never runs - the silently-incomplete state
- * &sect;5 forbids. This is deliberately <em>not</em> the convention the retention-age dials use
+ * meanings and turn a typo into a pass that is installed, listed and never runs - a silently-incomplete state
+ * presented as whole. This is deliberately <em>not</em> the convention the retention-age dials use
  * ({@link RetentionSetting}), where a zero {@code ttl}/{@code max-age} does mean "reap nothing": that is a policy
  * value, not a cadence, and the two families stay distinct.
  *
  * <p><strong>One line, once.</strong> A rejected value is logged at {@code WARNING} naming the key, the offending
- * value and the cadence actually in effect - the &sect;9 shape {@code GateDimension} landed for the gate dials, since
+ * value and the cadence actually in effect - the shape {@code GateDimension} uses for the gate dials, since
  * an operator whose sweep quietly runs hourly instead of every ten minutes otherwise learns nothing. It is announced
  * once per {@code key=value} pair, because the enabled task list is re-resolved on every settings-convergence tick and
  * a bad dial would otherwise print a line every thirty seconds; the same log-once idiom (and the same reason) as the

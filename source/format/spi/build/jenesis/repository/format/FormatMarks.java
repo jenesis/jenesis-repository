@@ -30,7 +30,7 @@ import build.jenesis.repository.icon.Marks;
  * re-scanned the format list and re-decoded the same constant bytes on every row.
  *
  * <p>Presentation only: it maps a format identity to its mark, holds no domain state, reads no store and performs no
- * I/O (&sect;10) - it is called on a render path.
+ * I/O - it is called on a render path.
  */
 public final class FormatMarks {
 

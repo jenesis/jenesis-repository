@@ -12,9 +12,9 @@ import build.jenesis.repository.store.Features;
  * <p>The retention family's twin of {@link IntervalSetting}, and the one rule that keeps the two families distinct
  * is the meaning of zero. A cadence of zero would be a pass that is installed, listed and never runs, so the cadence
  * dial refuses it; a retention of zero is a policy an operator may legitimately hold - keep everything - so here
- * blank, zero and negative all mean exactly that. Seven reapers had grown the same fifteen lines to say so, each
- * citing a sibling as the rule to mirror, and one of them had drifted: the audit trail read zero as the default year
- * rather than as "keep forever", so one value meant opposite things on two dials of one family.
+ * blank, zero and negative all mean exactly that. Every reaper reads its dial through here rather than restating the
+ * rule, so one value cannot mean opposite things on two dials of one family - zero as a default year on one and as
+ * "keep forever" on another.
  *
  * <p><strong>{@code resolve} never throws</strong>, for the cadence dial's reason: an unchecked throw out of a
  * pass's dial parse does not disable one reaper, it fails the whole pass - or, for a dial read while a provider is

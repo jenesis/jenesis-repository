@@ -40,7 +40,7 @@ public final class CondaImporter implements RepositoryImporter {
     public Optional<ArtifactDescriptor> importTarget(String path) {
         // RepositoryImporter clause 4: a source path is as client-supplied as a request path, so a
         // traversal-shaped one is refused by name rather than echoed into the descriptor the import edge
-        // screens and the trail records (the fix retrofitted here - §13).
+        // screens and the trail records, as every importer does.
         String relative = RepositoryImporter.importablePath(path, "conda");
 
         // The package's target coordinate under /conda/conda/<subdir>/<file>, the same channel path importArtifact
@@ -53,7 +53,7 @@ public final class CondaImporter implements RepositoryImporter {
     public void importArtifact(String path, InputStream content, ArtifactStore store) throws IOException {
         // RepositoryImporter clause 4: a source path is as client-supplied as a request path, so a
         // traversal-shaped one is refused by name rather than echoed into the descriptor the import edge
-        // screens and the trail records (the fix retrofitted here - §13).
+        // screens and the trail records, as every importer does.
         String relative = RepositoryImporter.importablePath(path, "conda");
         String lower = relative.toLowerCase(Locale.ROOT);
         if (!lower.endsWith(".conda") && !lower.endsWith(".tar.bz2")) {

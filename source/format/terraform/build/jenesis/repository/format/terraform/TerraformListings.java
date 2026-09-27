@@ -95,8 +95,8 @@ final class TerraformListings {
     /**
      * The {@code SHA256SUMS} of one provider release, with its detached signature derived after every write.
      *
-     * <p>The signature is <b>binary</b>, not armoured - measured against {@code registry.terraform.io}, whose own
-     * {@code .sig} is a raw OpenPGP packet stream.
+     * <p>The signature is <b>binary</b>, not armoured - {@code registry.terraform.io}'s own {@code .sig} is a raw
+     * OpenPGP packet stream.
      */
     StoredListing.Spec shaSumsSpec(String repo, String namespace, String type, String version) {
         return StoredListing.Spec.materialising(shaSums(repo, namespace, type, version), SHA256SUMS,

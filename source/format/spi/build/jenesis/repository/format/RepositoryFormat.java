@@ -27,7 +27,7 @@ import build.jenesis.repository.store.Providers;
  * <h2>Contract</h2>
  * Most clauses below are executable: {@code FormatContract} in the format testkit states one once and each format runs
  * it through a {@code FormatFixture}, so it is proven for Maven, the Jenesis module layout, OCI and raw alike rather
- * than being re-interpreted per format (&sect;13 - a guard one format applies to a shared concern is applied by every
+ * than being re-interpreted per format (a guard one format applies to a shared concern is applied by every
  * format with that concern). The enforcement is named per clause, because it is not uniform:
  * <ul>
  *   <li><b>kit-proven</b> - clauses 2, 3 and 4 ({@code PUBLISH_SERVES_EXACT_BYTES}, {@code HEAD_ANSWERS_FROM_METADATA}),
@@ -57,12 +57,12 @@ import build.jenesis.repository.store.Providers;
  *     {@code null}, an empty {@code 200} body or an escaping exception: an unpublished, withheld or reclaimed path is
  *     a {@code 404}, and a path whose <em>shape</em> this format cannot address is a {@code 404} too (clause 6).
  *     {@link #handles} is a pure predicate over the path and never touches the store.</li>
- * <li><b>Streaming (&sect;1).</b> An artifact body is never materialised: a write streams the request body into the
+ * <li><b>Streaming.</b> An artifact body is never materialised: a write streams the request body into the
  *     content-addressed store (hash-on-write), a read streams the stored blob to the response with the length taken
  *     from the store's metadata, and a {@code HEAD} answers <em>from that metadata without opening the blob at all</em>
  *     - so a {@code HEAD} of a multi-gigabyte artifact costs a stat. Only a small generated document (an index, a
  *     metadata file, a manifest) may be buffered whole, and a format that buffers one bounds it explicitly.</li>
- * <li><b>Tenant scoping (&sect;6).</b> The {@link ArtifactStore} handed to {@link #handle} is already scoped to one
+ * <li><b>Tenant scoping.</b> The {@link ArtifactStore} handed to {@link #handle} is already scoped to one
  *     tenant and repository, and it is the only storage a format may touch: every key a format composes stays under
  *     its own namespace within that scope, so no request path can address another format's or another tenant's keys.</li>
  * <li><b>Traversal refusal.</b> A request path is client-supplied and is refused before it becomes a store key. A path
@@ -76,15 +76,15 @@ import build.jenesis.repository.store.Providers;
  *     caps still bind: a path that maps to a key beyond {@link ArtifactStore#MAX_SEGMENTS} or
  *     {@link ArtifactStore#MAX_KEY_BYTES} is refused by {@link ArtifactStore#key} with an
  *     {@link IllegalArgumentException} and nothing is stored.</li>
- * <li><b>Withhold-on-enumeration (&sect;4).</b> Every surface that materialises published <em>names</em> - a directory
+ * <li><b>Withhold-on-enumeration.</b> Every surface that materialises published <em>names</em> - a directory
  *     listing, a generated version index, a tag or catalog listing - routes its disclosure decision through the shared
  *     {@code ServableNames} screen (in practice by enumerating with {@code ScreenedNames}), so a version a hold
  *     retracts from serving leaves every enumeration surface in the same instant. A listing may never disclose a name
  *     whose {@code GET} answers {@code 404}.</li>
- * <li><b>Read purity (&sect;10).</b> {@link #handle} on a {@code GET}/{@code HEAD} renders durably stored state only.
+ * <li><b>Read purity.</b> {@link #handle} on a {@code GET}/{@code HEAD} renders durably stored state only.
  *     Fetching an upstream is the separate, opt-in {@link ProxyFormat} capability, never something the hosted read
  *     path does on a miss.</li>
- * <li><b>Error visibility (&sect;9).</b> Nothing on a correctness-bearing path is swallowed: a store failure while
+ * <li><b>Error visibility.</b> Nothing on a correctness-bearing path is swallowed: a store failure while
  *     serving or accepting surfaces rather than degrading to a {@code 404}, or to a {@code 201} that stored nothing.</li>
  * <li><b>Lifecycle / ownership.</b> The dispatcher discovers formats through {@link ServiceLoader} and keeps them for
  *     the life of the process; a format owns no thread, no client and no cache, and closes nothing. A format whose
@@ -99,7 +99,7 @@ import build.jenesis.repository.store.Providers;
  * <li><b>Ordering / concurrency.</b> Two requests against one path may run concurrently; a format's pointer writes are
  *     compare-and-set, so a concurrent republish resolves last-writer-wins rather than tearing. A format imposes no
  *     ordering on the dispatcher and behaves identically whatever order the other formats were discovered in.</li>
- * <li><b>Bounded work / cancellation (&sect;7).</b> Every enumeration is paged and capped: no surface materialises a
+ * <li><b>Bounded work / cancellation.</b> Every enumeration is paged and capped: no surface materialises a
  *     whole namespace, and reaching a cap yields an explicit continuation (a {@code Link} header, a cursor) or fails by
  *     name - never a plausible-but-partial index, which a resolver reads as "that version does not exist". A generated
  *     document is a pure function of the stored state it renders, so the bytes are stable across two serves of
@@ -141,7 +141,7 @@ import build.jenesis.repository.store.Providers;
  *     </ul>
  *     A pull-through cache fill is deliberately <em>outside</em> this: see {@link ProxyFormat}'s own contract for what
  *     gates a proxied body and what does not.</li>
- * <li><b>Archive inflation cap (&sect;13).</b> A format that decompresses part of an artifact to read a declaration -
+ * <li><b>Archive inflation cap.</b> A format that decompresses part of an artifact to read a declaration -
  *     a jar manifest, a {@code module-info.class}, a control member, an embedded index - bounds the <b>decompressed</b>
  *     size of each entry it materialises, not merely the stored one, because the ratio is the attacker's to choose: a
  *     kilobyte blob can inflate to gigabytes and the read happens on the publish thread of a shared JVM. Entries the
@@ -188,14 +188,14 @@ import build.jenesis.repository.store.Providers;
  * <li><b>Console mark (the inherited {@link IconContributor} half).</b> A format may lend the console a small SVG
  *     mark, and {@link #name()} is the identity that mark is attributed to. Both obligations are stated once on
  *     {@link IconContributor} rather than restated here, because a format is only one of the families that carry
- *     them; the two that bind hardest on a format are worth naming at this seam anyway. <b>Read purity
- *     (&sect;10):</b> {@link IconContributor#icon()} performs no I/O at all - it is called once per rendered row on
+ *     them; the two that bind hardest on a format are worth naming at this seam anyway. <b>Read purity:</b>
+ *     {@link IconContributor#icon()} performs no I/O at all - it is called once per rendered row on
  *     a console page, so the document is a constant in the format's own module, never a classpath resource read
  *     when first asked. <b>The mark stays in the format's module:</b> the core holds no brand mark, and a format
  *     that declares none does not invent a placeholder - {@link Marks} answers with the generated figure derived
  *     from {@link #name()}, so "this format declares no mark" is one fact with one rendering rather than as many as
- *     there are formats. A format's mark is deployment-static and carries no tenant or repository data
- *     (&sect;6), which is why a serving endpoint may hand it out open, immutable and cached.</li>
+ *     there are formats. A format's mark is deployment-static and carries no tenant or repository data, which is
+ *     why a serving endpoint may hand it out open, immutable and cached.</li>
  * </ol>
  */
 public interface RepositoryFormat extends IconContributor {
@@ -248,11 +248,9 @@ public interface RepositoryFormat extends IconContributor {
      * <p><b>Why the screen is here rather than in each format.</b> A request path carrying a {@code .} or
      * {@code ..} segment addresses nothing in any format's namespace, so it is a {@code 404} - and if it is not
      * refused at the request seam it reaches the store's own key screen, where it surfaces as an
-     * {@code IllegalArgumentException} that escapes as an unmapped {@code 500}. Thirteen formats used to open
-     * {@code handle} with this same four-line screen, each with its own comment explaining that the request seam
-     * and the store's write screen must not disagree about which shapes are refused. That is two screens that have
-     * to agree, maintained in thirteen places, with no test asserting any of them - and a fourteenth format would
-     * have had to know to write it. One screen, applied by the seam every caller goes through, cannot be forgotten
+     * {@code IllegalArgumentException} that escapes as an unmapped {@code 500}. The same four-line screen opening
+     * each format's {@code handle} would be two screens that have to agree, maintained in every format, with a new
+     * format having to know to write it. One screen, applied by the seam every caller goes through, cannot be forgotten
      * by a format that does not know it exists.
      */
     default void handle(FormatExchange exchange, ArtifactStore store) throws IOException {
@@ -347,9 +345,8 @@ public interface RepositoryFormat extends IconContributor {
     /** Every {@link Features#active switched-on, fully configured} format in the deployment's one configuration
      *  ({@link Features#configure}) - the set that serves, dispatches, imports, promotes and screens, so a format
      *  configured off ({@code jenreg.<name>=false}) or with required config unset is absent exactly as a missing
-     *  module is, on every one of those paths alike. Measured before this was the one lookup: an import, a staging
-     *  promotion, the gate's sibling read and a hold's replay each discovered the formats raw and served a
-     *  switched-off one.
+     *  module is, on every one of those paths alike. An import, a staging promotion, the gate's sibling read or a
+     *  hold's replay that discovered the formats raw would serve a switched-off one.
      *
      *
      *  <p>Several installed formats may declare the <em>same</em> {@link EcosystemLayout#ecosystem() ecosystem}, and

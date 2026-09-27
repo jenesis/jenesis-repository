@@ -325,10 +325,10 @@ public final class RubyGemsFormat implements RepositoryFormat, ProxyLeg, BlobLay
      * serves, {@code /info/<name>} is a structural miss and the compact index does not name the gem; after the last
      * declared step the gem downloads, {@code /info} lists it and {@code /versions} carries it.
      *
-     * <p>This is the ordering fix for RubyGems: the former code linked the {@code .gem} pointer
-     * <em>first</em> and only then wrote the compact-index line, the quick spec and the rolled-forward
-     * {@code /versions} document - so a crash in between left a downloadable gem whose {@code gem install} could not
-     * find its spec. Now the one parse result that is not itself a serving surface, the quick spec, lands before
+     * <p>The order matters: linking the {@code .gem} pointer <em>first</em> and only then writing the compact-index
+     * line, the quick spec and the rolled-forward {@code /versions} document would let a crash in between leave a
+     * downloadable gem whose {@code gem install} could not find its spec. So the one parse result that is not itself
+     * a serving surface, the quick spec, lands before
      * anything serves, and the three writes that <em>are</em> visibility are declared to the operation in order:
      * <ol>
      *   <li>the {@code .gem} pointer - the download, and the commit point;</li>
@@ -572,17 +572,15 @@ public final class RubyGemsFormat implements RepositoryFormat, ProxyLeg, BlobLay
      *
      * <p><b>Streamed, and the word is load-bearing.</b> The compact-index {@code /versions} is the one enumeration
      * document in this product that is tens of megabytes - every gem the source has ever carried, one line per
-     * version - and bundler waits for its first byte under {@code BUNDLE_TIMEOUT}, ten seconds by default. This
-     * leg used to buffer it whole through {@code ProxyRelay.fetchFresh} before answering, so the first byte reached
-     * the client only after the whole upstream body had, and on a loaded machine that was longer than bundler waits.
-     * Measured 2026-09-12 in two full lanes of six: bundler dropped the connection about thirteen seconds in (the
-     * server logged a {@code Broken pipe} on this leg), fell back to the legacy full index it keeps for sources
-     * without a compact index, asked for {@code specs.4.8.gz} - which this leg does not serve, because no client
-     * reaches for it while the compact index answers - and exited 17 on the 404. The proxy fetch metric said
-     * {@code negative} four times and nothing about which of those two facts it was. Relayed through
-     * {@link ProxyRelay#streamFresh} the first byte leaves as soon as the upstream's does, which is what the
-     * streaming clause of {@link ProxyFormat.Fetcher} is for; the {@link ProxyRelay.Document} classification, the
-     * conditional-request forwarding and the {@code 304} relay are the same as before, in the shared control flow.
+     * version - and bundler waits for its first byte under {@code BUNDLE_TIMEOUT}, ten seconds by default. Buffered
+     * whole before answering, the first byte would reach the client only after the whole upstream body had, and on a
+     * loaded machine that is longer than bundler waits: bundler drops the connection (a {@code Broken pipe} on this
+     * leg), falls back to the legacy full index it keeps for sources without a compact index, asks for
+     * {@code specs.4.8.gz} - which this leg does not serve, because no client reaches for it while the compact index
+     * answers - and exits 17 on the 404. Relayed through {@link ProxyRelay#streamFresh} the first byte leaves as soon
+     * as the upstream's does, which is what the streaming clause of {@link ProxyFormat.Fetcher} is for; the
+     * {@link ProxyRelay.Document} classification, the conditional-request forwarding and the {@code 304} relay run in
+     * the shared control flow.
      *
      * <p>The legacy index ({@code specs.4.8.gz}, {@code latest_specs.4.8.gz}, {@code prerelease_specs.4.8.gz}) is
      * deliberately still not proxied: a client only asks for it once the compact index has failed it, so serving it
@@ -605,8 +603,7 @@ public final class RubyGemsFormat implements RepositoryFormat, ProxyLeg, BlobLay
             // Hugging Face already have and this leg did not. Resolved on a miss only (once per gem, since the .gem is
             // then cached).
             // The /info/<gem> document is a SEPARATE fetch from the .gem below, so an index this repository could not
-            // read is not "this mirror publishes no checksum for the version" and must not become an unverified fill
-            //.
+            // read is not "this mirror publishes no checksum for the version" and must not become an unverified fill.
             URI target = URI.create(root + rest);
             ProxyRelay.Declared expected = gemChecksum(root, file, fetcher);
             if (!expected.readable()) {

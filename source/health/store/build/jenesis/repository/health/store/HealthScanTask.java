@@ -124,7 +124,7 @@ public final class HealthScanTask implements MaintenanceTask {
             }
         });
         // A full pass in which every record landed stamps the ledger's freshness so every view shows how stale its
-        // rendered health is (Principle 10) - and only that, because the stamp is the claim "the scores you are
+        // rendered health is - and only that, because the stamp is the claim "the scores you are
         // reading are as of now": writing it over a walk whose upserts were refused would state the opposite of
         // what happened (clause 4), and an incremental pass cannot make the claim at all.
         cadence.completed(context.now(), !failed.any());

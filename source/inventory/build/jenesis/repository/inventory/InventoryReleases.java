@@ -281,10 +281,9 @@ final class InventoryReleases {
         if (blobLayouts.isEmpty()) {
             return List.of();
         }
-        // The bare-hex resolution that lived here (resolve blobKeys, keep bare-hex pointer bodies) is now the
-        // BlobLayout.blobHashes default, so a blobs-namespace format whose digests are NOT bare-hex pointer bodies (OCI:
-        // sha256:-prefixed tag pointer, config/layer digests inside the manifest JSON) can override it to derive its own
-        // set. Behaviour is byte-identical for every bare-hex format (npm/PyPI/NuGet/RubyGems/Debian/Go).
+        // The bare-hex resolution (resolve blobKeys, keep bare-hex pointer bodies) is the BlobLayout.blobHashes
+        // default, so a blobs-namespace format whose digests are NOT bare-hex pointer bodies (OCI: sha256:-prefixed
+        // tag pointer, config/layer digests inside the manifest JSON) can override it to derive its own set.
         List<String> hashes = new ArrayList<>();
         for (BlobLayout blobLayout : blobLayouts) {
             hashes.addAll(blobLayout.blobHashes(coordinate, version, store));

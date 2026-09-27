@@ -47,7 +47,7 @@ public final class RepositoryRequests {
      * <p>A {@code null} is rejected rather than passed over. Every caller guards a value that is about to be
      * concatenated into a store key, so an absent one is a malformed request, and the callers turn this exception
      * into a {@code 400} - which is the answer a missing required parameter deserves, and better than the
-     * {@code NullPointerException} that reading it as a {@code 500} used to produce.
+     * {@code 500} a {@code NullPointerException} would produce.
      *
      * <p>Use {@link #rejectRawTraversal} instead where the value is taken from the raw request URI; that is a
      * different question and a weaker check there is a real hole rather than a redundant one.
@@ -92,8 +92,8 @@ public final class RepositoryRequests {
      *  the traversal guard above - misreads it; a legitimate artifact, {@code /api} or {@code /actuator} route never
      *  carries such a segment, so a request that does is rejected rather than classified. A trailing single slash (an
      *  empty <em>terminal</em> segment) is left alone - it does not shift a prefix match - so directory-style listing
-     *  paths are unaffected. It used to live on the enforcing manager and was read from here; it lives here because
-     *  the manager is in the tenancy module and the kernel is what both read. */
+     *  paths are unaffected. It lives here rather than on the enforcing manager because the kernel is what both
+     *  read. */
     public static boolean normalized(String path) {
         return !path.contains("//")
                 && !path.contains("/./") && !path.contains("/../")

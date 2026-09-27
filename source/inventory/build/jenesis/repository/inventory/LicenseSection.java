@@ -18,7 +18,7 @@ import build.jenesis.repository.metadata.Signal;
  * inspected, none declared) versus a derived one carrying declarations. The {@code data} payload is
  * {@code {"declared":[{"name":..,"url":..}]}} - a stable, order-independent shape - so the search-index sweep and the
  * rollup identity join a release to its declared licenses without re-parsing an artifact. All methods are pure; a
- * mutation returns a fresh {@link Section} and never touches its argument (§11).
+ * mutation returns a fresh {@link Section} and never touches its argument.
  */
 public final class LicenseSection {
 
@@ -117,7 +117,7 @@ public final class LicenseSection {
 
     /**
      * The rollup-identity fingerprint of a licenses section - the bytes {@link InventoryIdentity#member} folds into the
-     * per-version member digest, re-pointed from the old {@code licenses/} sidecar bytes onto this section. It is
+     * per-version member digest. It is
      * a <em>canonical</em>, order-independent encoding of the declared set (sorted, length-delimited), so an incremental
      * re-fold and a full {@link StoreRepositoryInventory#rebuildIdentity} agree on the member regardless of the order
      * two sibling publishes happened to union in. Returns empty for an absent section (never inspected), and a present

@@ -31,7 +31,7 @@ public final class ArtifactSbomCache {
 
     /** A cache holding at most {@code capacity} distinct blobs' graphs. Its maintenance runs on the caller's
      *  thread, so the bound holds the moment a graph past it lands rather than after the common pool's next
-     *  turn - measured: three graphs through a bound of two were all still served until that turn came. */
+     *  turn; on the common pool, three graphs through a bound of two would all still be served until that turn came. */
     public ArtifactSbomCache(int capacity) {
         this.cache = Caffeine.newBuilder().maximumSize(capacity).executor(Runnable::run).build();
     }

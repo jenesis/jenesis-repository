@@ -12,12 +12,10 @@ import build.jenesis.repository.walk.WalkProvider;
  * <p><b>The feature name is not {@code store}, though the walk descends the store's own key layout, because a
  * provider name <em>is</em> a configuration key</b>. {@code Features} spends one namespace on two shapes:
  * {@code jenreg.<spi>=<name>} selects a singleton implementation and
- * {@code jenreg.<name>=false} switches a discovered one off. A walk named {@code store} therefore keyed
- * its toggle to {@code jenreg.store} - the artifact store's own selection key, which every deployment
- * already sets ({@code application.properties} binds it to {@code ${JENREG_STORE:filesystem}}). The two never
- * disagreed only because a backend name is not the literal {@code false}: setting the documented off-switch for this
- * walk would have selected an artifact-store backend called {@code false} and refused to boot (&sect;9), so the
- * toggle could not be used at all. {@code paged-descent} names what the walk does - bounded {@code startAfter} paging
+ * {@code jenreg.<name>=false} switches a discovered one off. A walk named {@code store} would key its toggle to
+ * {@code jenreg.store} - the artifact store's own selection key, which every deployment sets - and setting that
+ * off-switch would select an artifact-store backend called {@code false} and refuse to boot, so the toggle could not
+ * be used at all. {@code paged-descent} names what the walk does - bounded {@code startAfter} paging
  * over an ordered depth-first descent - and owns its own key.
  *
  * <p>Settings, read through the config lookup:

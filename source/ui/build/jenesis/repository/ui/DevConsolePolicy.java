@@ -9,13 +9,13 @@ import org.springframework.security.config.annotation.web.configurers.AuthorizeH
  * What an edition supplies to the one development sign-in chain: the URL space that chain guards, and the
  * authorization matrix it applies. Nothing else.
  *
- * <p>There used to be two dev chains, one per console, and they had drifted in exactly the way two copies do. The
- * free one pointed form login at {@code /login} - a page that lists mechanisms and carries no credential form - so
- * dev sign-in there simply did not work; the admin one fell back to Spring Security's <em>generated</em> login
- * page, a second sign-in page nobody designed and no console styling reaches; and the loopback guard that exists
- * because a dev profile enables an in-memory backdoor was on one of them and not the other, though both enable one.
+ * <p>A dev chain per console drifts in exactly the way two copies do: form login pointed at {@code /login} - a page
+ * that lists mechanisms and carries no credential form - so dev sign-in does not work; a fall-back to Spring
+ * Security's <em>generated</em> login page, a second sign-in page nobody designed and no console styling reaches; and
+ * the loopback guard that exists because a dev profile enables an in-memory backdoor present on one and not the
+ * other, though both enable one.
  *
- * <p>Every one of those differences was in the mechanism, and the only real differences between the two consoles
+ * <p>Every one of those differences is in the mechanism, and the only real differences between the two consoles
  * are the two things named here - which is the test for whether a pair should be merged: they differ in policy, so
  * the mechanism is shared and the policy is the seam.
  */

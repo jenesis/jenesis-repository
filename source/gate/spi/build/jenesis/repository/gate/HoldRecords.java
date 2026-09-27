@@ -12,41 +12,38 @@ import build.jenesis.repository.inventory.StoreRepositoryInventory;
 
 /**
  * The single owner of the durable {@code holds/<kind>/<eco>/<coord>/<ver>} key space, and the reason "is this artifact
- * held" no longer depends on which modules happen to be installed.
+ * held" does not depend on which modules happen to be installed.
  *
  * <p><b>The record is the hold; the provider only explains it.</b> A retroactive hold is a statement an enforcement
  * sweep wrote into the store. Whether the module that wrote it is installed right now is a <em>rendering</em>
  * question, not a <em>validity</em> question - the same distinction the console's finding marks draw, where a row
- * whose plug-in is gone is shown as orphaned and never dropped. Before this class,
- * {@link HoldReleaseObserver#anyHolds} and {@link HoldReleaseObserver#heldByAnotherKind} answered by fanning out over
- * the discovered providers alone, so uninstalling (or switching off) a compliance module made both answer
- * {@code false} while that kind's records survived by design - and both callers consume the answer permissively
- * ({@code ComplianceScreen} then treats a {@code /quarantine} pointer as not sweep-owned, so an accepted re-publish
- * clears it; {@link HoldClears} then lifts a withhold marker the absent kind still needs). Uninstalling a compliance
- * module silently released everything it was holding: fail-open, and against this product's standing rule that module
- * absence must never trigger deletion or release.
+ * whose plug-in is gone is shown as orphaned and never dropped. Answered by fanning out over the discovered providers
+ * alone, {@link HoldReleaseObserver#anyHolds} and {@link HoldReleaseObserver#heldByAnotherKind} would answer
+ * {@code false} once a compliance module was uninstalled (or switched off) while that kind's records survived by
+ * design - and both callers consume the answer permissively ({@code ComplianceScreen} would treat a
+ * {@code /quarantine} pointer as not sweep-owned, so an accepted re-publish clears it; {@link HoldClears} would lift a
+ * withhold marker the absent kind still needs). Uninstalling a compliance module would silently release everything
+ * it was holding: fail-open, and against this product's standing rule that module absence must never trigger
+ * deletion or release.
  *
  * <p>So the durable records are authoritative, and this class is what makes the store able to answer without the
  * provider list. <b>The key space's owner is one module down</b> - {@link HoldMarkers} in the inventory, which
  * composes every key, enumerates the kind index and answers the coordinate-keyed read; this class delegates those
- * three and keeps everything that needs discovery. It had to come down because a second consumer needs the same
+ * three and keeps everything that needs discovery. It lives one module down because a second consumer needs the same
  * answer and cannot depend on the gate: the inventory's name-enumeration screen has to know whether a version of an
  * ecosystem NO installed format can place is held, which is exactly when both of its own withholding faces - both
- * layout-resolved - go silent. It moved to the module that already owns every sibling per-version key space, for the
- * same reason {@code OverrideRecords} did. The read is answerable at all because the layout is uniform and always
- * was: {@link HoldReleaseObserver#kind()} is defined
+ * layout-resolved - go silent. That module already owns every sibling per-version key space, as it does for
+ * {@code OverrideRecords}. The read is answerable at all because the layout is uniform:
+ * {@link HoldReleaseObserver#kind()} is defined
  * as "the {@code <kind>} segment of its {@code holds/<kind>/<eco>/<coord>/<ver>} keys", which makes the second segment
- * an enumerable index of kinds ({@link #kinds}) and the remaining three a constructible probe ({@link #key}). The one
- * change needed to make it answerable was to converge the three kinds' key builders here: KEV and license used to
- * URL-encode only the coordinate while reachability encoded all three segments, so no single construction could find
- * all three. Every kind now writes the fully-encoded spelling reachability already used, whose reason stands on its
- * own - an un-encoded version or ecosystem carrying a {@code /} (or empty) splices extra segments into the key and
- * lets one release's record collide with another's. The sibling {@code overrides/<kind>/} space has the same single
- * owner one module down, {@code OverrideRecords} in the inventory: the claim once made here - that an override is
- * read only by the kind that wrote it, so it needs no kind-neutral construction - was false, because a version's
- * eviction and the reconcile sweep both reap that space kind-neutrally, and while each writer spelled its own key the
- * reaper deleted one nobody wrote and stranded the rest. It lives in the inventory rather than here because
- * the inventory is what reaps it and already owns every sibling per-version key space.
+ * an enumerable index of kinds ({@link #kinds}) and the remaining three a constructible probe ({@link #key}). Every
+ * kind's key is built here, in one fully-encoded spelling, so a single construction finds all of them - and an
+ * un-encoded version or ecosystem carrying a {@code /} (or empty) would splice extra segments into the key and let
+ * one release's record collide with another's. The sibling {@code overrides/<kind>/} space has the same single
+ * owner one module down, {@code OverrideRecords} in the inventory: an override is not read only by the kind that
+ * wrote it - a version's eviction and the reconcile sweep both reap that space kind-neutrally, and with each writer
+ * spelling its own key the reaper would delete one nobody wrote and strand the rest. It lives in the inventory
+ * rather than here because the inventory is what reaps it and already owns every sibling per-version key space.
  *
  * <p><b>Fail-closed.</b> Every read here propagates its {@link IOException} rather than answering {@code false}: a
  * caller that cannot prove no hold covers a path must not clear it. The probes go through
@@ -122,14 +119,14 @@ public final class HoldRecords {
      * all - a checksum, generated metadata, a raw upload - which is a real answer: with no coordinate there is no
      * record key to look under, because there is no versioned artifact to hold.
      *
-     * <p><b>This used to be the last dependence on an installed format left standing, and it is
-     * closed.</b> The route from a request path to a coordinate is the owning format's layout reverse mapping, so
-     * uninstalling a <em>format</em> module made this answer empty while the coordinate-keyed records it should have
-     * found sat there intact - a hold that reads as released because a module is absent. Nothing already persisted
-     * could stand in ({@code publish/<path>} is a bare content hash by design; {@code holds/dispatch<path>} carries a
-     * format name and a body hash but no coordinate, and only the screen-time legs write it; the quarantine index
-     * fuses coordinate and version into one string with no ecosystem and is best-effort and age-pruned; every other
-     * per-version space is keyed <em>by</em> the triple with no reverse index), so the record was invented:
+     * <p><b>This answer does not depend on an installed format.</b> The route from a request path to a coordinate is
+     * the owning format's layout reverse mapping, so with that alone uninstalling a <em>format</em> module would make
+     * this answer empty while the coordinate-keyed records it should find sit there intact - a hold that reads as
+     * released because a module is absent. Nothing else persisted can stand in ({@code publish/<path>} is a bare
+     * content hash by design; {@code holds/dispatch<path>} carries a format name and a body hash but no coordinate,
+     * and only the screen-time legs write it; the quarantine index fuses coordinate and version into one string with
+     * no ecosystem and is best-effort and age-pruned; every other per-version space is keyed <em>by</em> the triple
+     * with no reverse index), so the record is its own:
      * {@link HeldSubjects}, written where a hold is placed - screen-time and retroactive alike - and reclaimed with
      * the hold. It is affordable precisely because every consumer is a hold path, so it is bounded by the review
      * queue rather than by the repository.

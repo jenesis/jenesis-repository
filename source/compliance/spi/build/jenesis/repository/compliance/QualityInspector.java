@@ -38,7 +38,7 @@ import build.jenesis.repository.store.Limits;
  * what a claimed path that is not one of the format's own publish or download <em>routes</em> answers:
  * an inspector re-derives the route from the path and returns the sentinel for anything else it claims, rather than
  * parsing every body that reaches it as a package - the generated index documents that live under a format's prefix
- * would otherwise be refused as malformed packages, which is a &sect;13 divergence from every peer even though it
+ * would otherwise be refused as malformed packages, which is a divergence from every peer format even though it
  * errs closed.</li>
  *
  * <li><b>Selection failure.</b> Not applicable: inspectors are an additive family, never explicitly selected by
@@ -259,16 +259,15 @@ public interface QualityInspector {
     /**
      * What a deployment does with an artifact that runs past {@link #prefixInspectionLimit()}.
      *
-     * <p>Until this existed there was one answer and nobody had chosen it: the screen read the prefix, the
-     * inspectors concluded from a head, and a claimed artifact whose declaration sat beyond the bound fell back to a
-     * coordinate derived from its own request path. That is sound as far as it goes - it never reads as a clean
-     * screening - but it makes an artifact's verdict depend on where in its archive the format happened to put a
-     * declaration, and for the formats that store theirs at the back it is the wrong verdict on the shipped
-     * defaults. Measured 2026-09-15 through real clients: a 1.5 GiB NuGet package and a {@code .deb} of the same
-     * size both published and were then held, because the signature material each carries INSIDE itself sits past
-     * the bound and an unreadable signature is scored with the untrusted dial.
+     * <p>Reading only the prefix, the inspectors conclude from a head, and a claimed artifact whose declaration sits
+     * beyond the bound falls back to a coordinate derived from its own request path. That is sound as far as it goes
+     * - it never reads as a clean screening - but it makes an artifact's verdict depend on where in its archive the
+     * format happened to put a declaration, and for the formats that store theirs at the back it is the wrong verdict
+     * on the shipped defaults: a 1.5 GiB NuGet package or a {@code .deb} of the same size is held, because the
+     * signature material each carries INSIDE itself sits past the bound and an unreadable signature is scored with
+     * the untrusted dial.
      *
-     * <p>So the bound stays what it always was - the most an inspector is ever handed in one heap array - and the
+     * <p>So the bound stays the most an inspector is ever handed in one heap array - and the
      * question of what to do when an artifact exceeds it becomes the operator's:
      *
      * <ul>
@@ -352,14 +351,13 @@ public interface QualityInspector {
      * SPI asks, and the work happens only where the answer yields something. An inspector that overrides the spooled
      * leg returns {@code true} and owes that leg an honest {@link Inspection#complete()}.
      *
-     * <p><b>Which inspectors need it, measured rather than assumed.</b> Most formats keep their declaration where
+     * <p><b>Which inspectors need it.</b> Most formats keep their declaration where
      * the container fixes it - a {@code .nuspec} at the zip root, a gem's metadata as the first tar member, a
      * wheel's {@code METADATA} - so a front prefix carries it whatever the artifact's size, and those inspectors
      * stay bridged because reading further would buy nothing. Three shapes do not, and all three say so: a jar's
      * embedded descriptor is wherever the packager wrote it, a {@code .deb}'s DEP-5 copyright is behind every file
-     * the package installs, and signature material and secrets can be anywhere at all. Driving every ecosystem's
-     * matrix row at 1.5 GiB on 2026-09-15 is what separated the two lists; a format that grows a declaration whose
-     * position its container does not fix belongs on this side of it.
+     * the package installs, and signature material and secrets can be anywhere at all. A format that grows a
+     * declaration whose position its container does not fix belongs on this side.
      */
     default boolean streams() {
         return false;
@@ -384,10 +382,10 @@ public interface QualityInspector {
      *
      * <p><b>Why the multiplier is 2.</b> A content scan is CPU-bound, not heap-bound: it streams, so the bound exists
      * to cap the <em>work</em> one artifact may demand of a publish or proxy thread, and the ceiling is whatever that
-     * work budget affords. Measured on the maintained secret ruleset, a scan costs on the order of 100 ms per MiB
-     * scanned, so this tier is about eight seconds of worst-case scan for an artifact deliberately shaped to reach it -
-     * four times what the previous, ad-hoc 16 MiB scanner budget allowed, and the same order as the other bounds a
-     * single hostile artifact may already spend. Doubling again would double that. The value also lands exactly on the
+     * work budget affords. On the maintained secret ruleset a scan costs on the order of 100 ms per MiB scanned, so
+     * this tier is about eight seconds of worst-case scan for an artifact deliberately shaped to reach it - the same
+     * order as the other bounds a single hostile artifact may already spend. Doubling again would double that. The
+     * value also lands exactly on the
      * archive-walk tier ({@link build.jenesis.repository.store.ArchiveWalk#LARGEST_WALK}), the product's answer to "how much of one
      * artifact may a screen chew through", so the four tiers span three numbers rather than four: a full-body scan that
      * stopped earlier than a prefix-tier inspector's archive walk over the same body would be the same inversion one
@@ -540,7 +538,7 @@ public interface QualityInspector {
 
     /**
      * A re-openable handle to a fully-spooled artifact body - the whole artifact staged on the hardening proxy's spool,
-     * streamable from byte zero without ever being pulled whole into a heap {@code byte[]} (§1). The
+     * streamable from byte zero without ever being pulled whole into a heap {@code byte[]}. The
      * full-body inspection tier reads through this rather than a bounded prefix.
      */
     interface Content {
@@ -570,8 +568,8 @@ public interface QualityInspector {
      *       entire, because half a POM or half an envelope is worthless. It takes no caller bound because the caller
      *       has no use for a partial answer, so it carries the supplier's own ceiling and past it it <b>throws</b>. It
      *       never returns a prefix: handing back part of a document the caller believes is whole is the
-     *       silently-incomplete answer &sect;5 and &sect;9 forbid, and reading with no ceiling at all turns
-     *       an inspector into an out-of-memory lever (&sect;1). Both shipped screens key that ceiling to the free
+     *       silently-incomplete answer that must never be served as whole, and reading with no ceiling at all turns
+     *       an inspector into an out-of-memory lever. Both shipped screens key that ceiling to the free
      *       core's {@link build.jenesis.repository.store.PublishInterceptor.Content#LARGEST_SIBLING} rather than
      *       restating a number, so the publish and proxy legs cannot drift on what "too large to read whole" means.</li>
      *   <li>{@link #fetchBounded(String, int)} is the <em>bounded-fact</em> read - give me at most this many bytes and
@@ -581,14 +579,13 @@ public interface QualityInspector {
      *       sibling comes back as a {@code limit}-length prefix flagged {@link Bounded#truncated()}, which is
      *       bound-fails-visibly as an explicit result rather than an exception.</li>
      * </ul>
-     * <p><b>Why there is no default for the bounded read.</b> This interface used to give
-     * {@code fetchBounded} a default that routed through {@link #fetch} and trimmed the result in heap. That default
-     * was the defect, not a convenience: it inherited the whole-document ceiling, so a caller asking for 32 MiB got an
-     * exception above 8 MiB on the publish leg while the proxy leg - which overrode it - streamed and answered
-     * {@code truncated}. The same sibling therefore degraded on one leg and raised on the other, and it buffered the
-     * whole companion before deciding to discard most of it. No arithmetic rescues that shape, so the method is
-     * abstract: every supplier owes a read really capped at its source, and this interface is deliberately no longer a
-     * {@code @FunctionalInterface}. A supplier with nothing to read at all answers {@link #none()}.
+     * <p><b>Why there is no default for the bounded read.</b> A default that routed {@code fetchBounded} through
+     * {@link #fetch} and trimmed the result in heap would inherit the whole-document ceiling, so a caller asking for
+     * 32 MiB would get an exception above 8 MiB on a leg that kept the default while a leg that overrode it streamed
+     * and answered {@code truncated}. The same sibling would degrade on one leg and raise on the other, and it would
+     * buffer the whole companion before deciding to discard most of it. No arithmetic rescues that shape, so the
+     * method is abstract: every supplier owes a read really capped at its source, and this interface is deliberately
+     * not a {@code @FunctionalInterface}. A supplier with nothing to read at all answers {@link #none()}.
      *
      * <h2>Contract</h2>
      * <ol>

@@ -13,7 +13,7 @@ import build.jenesis.repository.store.StoredListing;
  * Keeps the Debian {@linkplain DebianListings stored listings} in step with the transitions that happen off the push
  * path: a hold placed on a published package (and its release), a yank or its reversal, and a removal. Each re-decides
  * the one stanza's membership in its {@code Packages} document - the write-path counterpart of the per-stanza screen
- * the on-read generation used to apply. A transition whose subject names neither a pool path nor a Debian coordinate
+ * an on-read generation would apply. A transition whose subject names neither a pool path nor a Debian coordinate
  * cannot be mapped to a stanza, so the repository's listings are regenerated in place.
  */
 public final class DebianListingObserver implements ListingObserver {

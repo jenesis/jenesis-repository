@@ -21,7 +21,7 @@ import build.jenesis.repository.walk.WalkConsumer;
  * provider that threw, a process that died after the coordinate landed - is a published Maven jar whose module view is
  * missing, and that is exactly what this consumer re-derives. It is also the back-fill for the capability being
  * switched on late: a repository that carries modular jars published before any {@code ModuleView} provider was on the
- * module path gains their views on the first pass (&sect;5), with no re-import.
+ * module path gains their views on the first pass, with no re-import.
  *
  * <p><b>What it deliberately does not repair.</b> Only the version-addressed view, through
  * {@link ModuleView#rebuild} - never the "latest" pointer, which records which version was published last and is

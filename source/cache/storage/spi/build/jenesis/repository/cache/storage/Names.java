@@ -114,7 +114,7 @@ public final class Names {
                 && file.indexOf('\\') < 0
                 && !file.equals(".")
                 && !file.equals("..")
-                // The store SPI's rule for a segment, which this used to state without: a CR or LF in a name is a
+                // The store SPI's rule for a segment, stated here too: a CR or LF in a name is a
                 // header-splitting or log-forging vector before it is anything else, and a name that the store's
                 // own safeSegment would refuse must not be accepted one layer up.
                 && file.chars().noneMatch(character -> character < 0x20);

@@ -37,7 +37,8 @@ public record WebhookEndpoint(URI url, Set<EventType> events, String secret) {
      * Whether the delivery signs its body for this endpoint - true exactly when a shared secret is configured.
      *
      * <p><strong>An unsigned endpoint is delivered, not refused, and that is deliberate.</strong> Signing is an
-     * absence here, not an unhonourable selection: nothing was asked for and denied, so &sect;9's refusal rule does not
+     * absence here, not an unhonourable selection: nothing was asked for and denied, so the fail-fast refusal rule does
+     * not
      * reach it. More decisively, the product cannot <em>positively judge</em> an unsigned endpoint unsafe - a great
      * many real receivers (chat and CI incoming-webhook URLs above all) authenticate by possession of a secret-bearing
      * {@code https} URL, and this side cannot tell such a URL from a public one. A refusal must rest on something the
@@ -80,9 +81,9 @@ public record WebhookEndpoint(URI url, Set<EventType> events, String secret) {
      * The reason {@code url} must not be delivered to with the current settings, or {@code null} when it may be: the
      * shared {@link PrivateHostGuard#refusalReason(URI, boolean)} outbound-target screen, which is both halves of the
      * question - the transport must be {@code https} and the host must not resolve internally - and which the
-     * forwarding leg screens its own operator-supplied targets against. Reusing the one home is the point: this module
-     * previously ran only the host half, so a per-tenant {@code http://} endpoint was accepted and delivered to
-     * unchanged while its forwarding peer refused the identical URL.
+     * forwarding leg screens its own operator-supplied targets against. Reusing the one home is the point: running
+     * only the host half here would accept a per-tenant {@code http://} endpoint and deliver to it while its
+     * forwarding peer refused the identical URL.
      *
      * <p>{@code allowInternal} is the {@code webhook-allow-internal} opt-out and bypasses both halves. It is
      * deployment-global on purpose: endpoints are a per-tenant dial, so a tenant-scoped opt-out would let a tenant

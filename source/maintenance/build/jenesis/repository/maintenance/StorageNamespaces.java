@@ -186,11 +186,11 @@ public final class StorageNamespaces {
             }
             for (String repository : store.list(tenant)) {
                 // The same predicate every other enumeration derives repositories with: a tenant's children include
-                // its reserved key spaces beside its repositories, and only Scopes can tell them apart. This used to
-                // skip dot-prefixed names alone, which is most of the rule but not the rule: `quota` is a
-                // declared reserved name inside a tenant, carries no leading dot, and was therefore walked as if it
-                // were a repository - so a module declaring a repository-scoped prefix had `<tenant>/quota/<prefix>`
-                // in its plan, and so in its purge's blast radius.
+                // its reserved key spaces beside its repositories, and only Scopes can tell them apart. Skipping
+                // dot-prefixed names alone is most of the rule but not the rule: `quota` is a declared reserved name
+                // inside a tenant, carries no leading dot, and would be walked as if it were a repository - so a
+                // module declaring a repository-scoped prefix would have `<tenant>/quota/<prefix>` in its plan, and
+                // so in its purge's blast radius.
                 if (!Scopes.valid(repository)) {
                     continue;
                 }

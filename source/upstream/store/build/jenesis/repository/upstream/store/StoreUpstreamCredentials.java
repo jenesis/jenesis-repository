@@ -23,8 +23,8 @@ import build.jenesis.repository.upstream.UpstreamTokenIssuer;
  * header value - a live secret - so, like a SECRET setting, the stored value is
  * envelope-encrypted with the shared {@link SecretCipher} (AES-256-GCM, {@value SecretCipher#ENV} master key) before
  * it reaches {@code config/upstream-auth}: only the {@code enc:v1:} ciphertext is ever persisted (the header
- * <em>name</em> is not a secret and stays in the clear beside it). A write with no master key configured is refused
- * (§9), so plaintext never reaches the store; a read on the proxy-fetch path decrypts and, failing closed (§9), throws
+ * <em>name</em> is not a secret and stays in the clear beside it). A write with no master key configured is refused,
+ * so plaintext never reaches the store; a read on the proxy-fetch path decrypts and, failing closed, throws
  * rather than send a value it could not decrypt - a stored value that is not an {@code enc:v1:} envelope (a
  * plaintext credential) is invalid and must be re-entered, never sent as the literal header.
  */
@@ -98,7 +98,7 @@ public final class StoreUpstreamCredentials implements UpstreamCredentialSource 
     /** The usable header value of a stored credential: decrypted when it is an {@code enc:v1:} envelope (fail-closed
      *  through {@link SecretCipher#decrypt} - a wrong/absent key or tampered value throws rather than reading back the
      *  ciphertext); and refused when it is not an envelope, because a plaintext or tampered credential is invalid
-     *  and must be re-entered - it is never sent as a plaintext header (§9). Throwing here aborts the
+     *  and must be re-entered - it is never sent as a plaintext header. Throwing here aborts the
      *  proxied fetch, so no upstream call is ever made with a credential this node could not decrypt. */
     private String decrypted(String value) {
         if (SecretCipher.isEnvelope(value)) {
@@ -116,7 +116,7 @@ public final class StoreUpstreamCredentials implements UpstreamCredentialSource 
 
     @Override
     public void set(String host, String name, String value) throws IOException {
-        // Encrypt the credential before it reaches the store, refusing the write (§9) when no master key is
+        // Encrypt the credential before it reaches the store, refusing the write when no master key is
         // configured so plaintext is never persisted (the header name is not secret and stays in the clear).
         if (!cipher.configured()) {
             throw new IllegalStateException("setting an upstream credential for '" + host + "' requires "

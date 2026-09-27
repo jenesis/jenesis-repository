@@ -6,11 +6,11 @@
  * ({@code JENREG_UI_GITHUB_CLIENT_ID} / {@code JENREG_UI_OIDC_ISSUER_URI} and their credentials - the same keys
  * as before the split). Another mechanism is added the same way - as its own module.
  *
- * <p><b>LDAP bind exists beside these two, and what it costs is still true.</b> An LDAP <em>bind</em> - the
+ * <p><b>LDAP bind exists beside these two, and what it costs is real.</b> An LDAP <em>bind</em> - the
  * application taking a username and password and binding to the directory as that user - lets the application see
  * the password, which is the entire difference from SAML and OIDC, where a credential never reaches the relying
  * party. It also puts MFA out of reach (a bind cannot express a challenge), removes step-up and central session
- * revocation, and adds one more place a credential can leak. It was added anyway, as {@code auth/ldap}, because a
+ * revocation, and adds one more place a credential can leak. It exists anyway, as {@code auth/ldap}, because a
  * directory is what many deployments have and every incumbent binds against one; that module refuses a plaintext
  * connection by default and holds nothing about the password. Where SAML or OIDC is
  * available it remains the better choice, and nothing here should steer an operator away from it.

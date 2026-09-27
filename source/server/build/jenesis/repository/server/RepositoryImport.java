@@ -141,8 +141,8 @@ public final class RepositoryImport {
      * {@code published()} once the artifact is laid out, so its listings are maintained as the walk runs. An
      * importer that describes none is laid out unscreened and fires nothing - OCI, which owns its own manifest
      * choke point, and it is the only one - so a migrated registry ends the walk with every tag pointer present
-     * and no tag list. The first client request would then generate it inline: measured at 200,000 tags,
-     * <b>35 seconds</b> on a request thread, against 186 ms once the document exists.
+     * and no tag list. The first client request would then generate it inline: at 200,000 tags, on the order of
+     * <b>35 seconds</b> on a request thread, against a fraction of a second once the document exists.
      *
      * <p>The maintenance pass repairs that within a day, which is right for a store that drifts and wrong for one
      * an operator has just finished migrating and is about to point a build at. Doing it here closes the window to
@@ -190,7 +190,7 @@ public final class RepositoryImport {
         Optional<ArtifactDescriptor> described = importer.importTarget(path);
         if (described.isEmpty()) {
             // No target coordinate to screen against (OCI owns its own manifest choke point): lay the asset out from
-            // the source stream unchanged, exactly as before this edge screened.
+            // the source stream unchanged.
             try (InputStream in = content.open()) {
                 importer.importArtifact(path, in, store);
             }
@@ -279,15 +279,15 @@ public final class RepositoryImport {
      * @param dropped rows the connector refused to carry at all, by reason - a laced path, an incomplete listing
      *                entry, an unparseable URL. Empty on a clean source.
      *                <p>It is a component rather than a log line because the number is the whole point: without it a
-     *                listing whose every row was refused finished {@code completed, imported: 0, skipped: 0}, which
-     *                reads exactly like migrating an empty repository. An operator could not tell "nothing was there"
-     *                from "everything was refused", and the second is the one that means the source is hostile.
+     *                listing whose every row was refused would finish {@code completed, imported: 0, skipped: 0},
+     *                which reads exactly like migrating an empty repository. An operator could not tell "nothing was
+     *                there" from "everything was refused", and the second is the one that means the source is
+     *                hostile.
      */
     public record Result(int imported, int skipped, int held, int rejected, Set<String> skippedFormats,
                          Map<ImportSource.Reason, Integer> dropped) {
 
-        /** The five-component form, for a caller that reports no drops. Delegating rather than replaced, so existing
-         *  callers keep compiling - the shape {@code ArtifactDescriptor} took when it absorbed its ninth component. */
+        /** The five-component form, for a caller that reports no drops. */
         public Result(int imported, int skipped, int held, int rejected, Set<String> skippedFormats) {
             this(imported, skipped, held, rejected, skippedFormats, Map.of());
         }

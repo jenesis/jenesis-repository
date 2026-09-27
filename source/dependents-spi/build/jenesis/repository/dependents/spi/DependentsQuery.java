@@ -111,8 +111,8 @@ public interface DependentsQuery {
 
     /**
      * The instant the reverse-dependency index was last rebuilt for this repository - the completion stamp a sweep
-     * writes when it commits, so a query surface shows how fresh its rendered blast radius is (Principle 10:
-     * staleness is visible; the reverse-dependency analogue of the findings ledger's scan stamp). This is the
+     * writes when it commits, so a query surface shows how fresh its rendered blast radius is (staleness is
+     * visible; the reverse-dependency analogue of the findings ledger's scan stamp). This is the
      * primitive behind {@link #built()}: a present stamp <em>is</em> the built signal, so the two can never disagree.
      * Empty means no sweep has committed here (rendered "not yet built", never as freshly built); it is also what an
      * implementation that keeps no such marker inherits, so such an implementation reads as never-built until it
@@ -133,7 +133,7 @@ public interface DependentsQuery {
      * <p><strong>There is deliberately no {@code default}, and that is the contract.</strong> A default could
      * only be written over {@link #coordinates()} - the whole reverse-dependency key set, neutralised and filtered -
      * so an implementation that said nothing would inherit a whole-graph materialisation on a <em>request-path
-     * render</em>, which is the "the default IS the defect" shape already found once, one seam over. An implementation
+     * render</em> - a default that is itself the defect. An implementation
      * must therefore say how it answers a bounded question boundedly; the store-backed reader shards on the neutral
      * spelling and reads only the {@code min(k, 256)} shards the query set addresses, and an in-memory index answers
      * from its own map.

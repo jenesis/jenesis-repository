@@ -5,9 +5,9 @@ import module java.base;
 /**
  * Every command the CLI answers to, declared once.
  *
- * <p><b>Why a registry rather than a printed banner.</b> The usage text used to be one string literal beside a
- * separate verb map, so the two drifted the moment either was edited alone - a verb with no line, a line for a verb
- * that had been renamed, and nothing to say so. Here the help <em>is</em> the registry: {@link Cli} renders it, so a
+ * <p><b>Why a registry rather than a printed banner.</b> A usage string beside a separate verb map drifts the
+ * moment either is edited alone - a verb with no line, a line for a verb that has been renamed, and nothing to say
+ * so. Here the help <em>is</em> the registry: {@link Cli} renders it, so a
  * verb that exists is documented by construction and one that is documented exists.
  *
  * <p><b>Why each noun names its module.</b> This product is assembled from modules a deployment may or may not

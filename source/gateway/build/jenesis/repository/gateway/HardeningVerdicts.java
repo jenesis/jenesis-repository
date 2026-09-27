@@ -14,7 +14,7 @@ import build.jenesis.repository.store.ArtifactStore;
  * {@link QuarantineLog} (the leg records each {@link HardenedScreen.Refusal} as a {@code REJECT} row prefixed
  * {@link HardenedScreen#REFUSAL_REASON_PREFIX}), and the gateway-wide drift alarm counter
  * ({@link HardenedScreen#driftEvents()}, the same count {@link HardeningObservability} reports) - so the read stands
- * when the upstream is down and never pays for a screen (§10 reads render, §7 the reader pays for nothing).
+ * when the upstream is down and never pays for a screen (reads render stored state; the reader pays for nothing).
  *
  * <p>Every accessor is a pure durable-state read: {@link #view(String, int)} looks the coordinate's recorded verdict up
  * by a single metadata section read (the same {@link HardenedScreen.Coordinate coordinate derivation} the leg keys its
@@ -22,7 +22,7 @@ import build.jenesis.repository.store.ArtifactStore;
  * {@link QuarantineLog}, and folds in the drift counter. A missing metadata module (no persistence installed) leaves
  * the verdict {@code null} - the leg records none in that mode, so the console shows exactly what is durable, an
  * un-screened rather than a fabricated verdict. The recorded {@code screenedAt} instant is surfaced verbatim so a
- * caller sees how stale the rendered verdict is (§10's staleness line): {@code null} reads as "never screened", never
+ * caller sees how stale the rendered verdict is: {@code null} reads as "never screened", never
  * as "clean".
  */
 public final class HardeningVerdicts {
@@ -112,7 +112,7 @@ public final class HardeningVerdicts {
         }
 
         /** Whether a verdict has ever been recorded for this coordinate - false renders as "never screened", never as
-         *  "clean" (§10). */
+         *  "clean". */
         public boolean screened() {
             return verdict != null;
         }

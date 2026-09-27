@@ -73,9 +73,9 @@ public class QuarantineController {
         // A REFUSED artifact keeps no bytes and links no pointer, so it is in the queue above at no point in its life -
         // the durable QuarantineLog row is its entire record. Surface every recent REJECT row from that same
         // ledger, a bounded read of the recent page (no re-screen, no fetch): the licence the publish gate denied
-        // pre-commit, the proxy screen's refusal, and the hardened leg's typed structural ones alike. It used to be
-        // filtered to the hardened leg's rows, so a publish the gate refused outright appeared in NEITHER list and the
-        // only party who ever learnt of it was the publisher, from its 422.
+        // pre-commit, the proxy screen's refusal, and the hardened leg's typed structural ones alike. Filtered to the
+        // hardened leg's rows, a publish the gate refused outright would appear in NEITHER list and the only party
+        // who ever learnt of it would be the publisher, from its 422.
         List<ReviewQueue.Row> refusals = new ArrayList<>();
         for (QuarantineLog.Event refusal : log.refusals(REFUSAL_LIMIT)) {
             // A refusal holds no bytes and therefore no hold record: it carries no kinds by construction.

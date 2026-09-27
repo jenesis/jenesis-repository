@@ -32,7 +32,7 @@ public final class PyPiImporter implements RepositoryImporter {
         // not a recognised distribution - the walk lays it out unscreened and importArtifact imports the rest.
         // RepositoryImporter clause 4: a source path is as client-supplied as a request path, so a
         // traversal-shaped one is refused by name rather than echoed into the descriptor the import edge
-        // screens and the trail records (the fix retrofitted here - §13).
+        // screens and the trail records, as every importer does.
         String relative = RepositoryImporter.importablePath(path, "pypi");
         String filename = relative.substring(relative.lastIndexOf('/') + 1);
         String project = normalize(project(filename));
@@ -46,7 +46,7 @@ public final class PyPiImporter implements RepositoryImporter {
     public void importArtifact(String path, InputStream content, ArtifactStore store) throws IOException {
         // RepositoryImporter clause 4: a source path is as client-supplied as a request path, so a
         // traversal-shaped one is refused by name rather than echoed into the descriptor the import edge
-        // screens and the trail records (the fix retrofitted here - §13).
+        // screens and the trail records, as every importer does.
         String relative = RepositoryImporter.importablePath(path, "pypi");
         String filename = relative.substring(relative.lastIndexOf('/') + 1);
         if (!(filename.endsWith(".whl") || filename.endsWith(".tar.gz")

@@ -8,14 +8,13 @@ import module java.base;
  * implementation switched on, and which one did the operator select?"; {@code Providers} answers "given the
  * discovered implementations and that policy, which instance does the caller get, and what happens when the answer
  * is ambiguous, missing or duplicated?". Both are pure {@code java.base}, so an SPI contract module keeps its
- * java.base-light shape (&sect;2) while sharing the resolution logic that was previously hand-rolled once per SPI.
+ * java.base-light shape while sharing the resolution logic rather than hand-rolling it once per SPI.
  *
- * <p><strong>Why this exists.</strong> Roughly fifteen SPIs each re-implemented the same
- * "iterate, filter, create, take the first, otherwise fall back" loop. Every copy silently degraded an
- * <em>explicitly selected</em> implementation that turned out to be absent, switched off or misconfigured into the
- * unselected default - the silent-fallback class &sect;9 forbids, whose exemplar is {@code store=s3} booting against
- * the local disk. The copies also disagreed on ordering: "the first enabled implementation in discovery order" is a
- * different implementation on a different module path. These primitives fix both once.
+ * <p><strong>Why this exists.</strong> A hand-rolled "iterate, filter, create, take the first, otherwise fall back"
+ * loop silently degrades an <em>explicitly selected</em> implementation that turns out to be absent, switched off or
+ * misconfigured into the unselected default - a silent fallback, whose exemplar is {@code store=s3} booting against
+ * the local disk. Copies also disagree on ordering: "the first enabled implementation in discovery order" is a
+ * different implementation on a different module path. These primitives settle both once.
  *
  * <p><strong>These are primitives, not one algorithm.</strong> The SPIs do <em>not</em> share a resolution policy, so
  * this class exposes one primitive per policy rather than one {@code resolve} with flags. The policy names match the
@@ -60,7 +59,7 @@ import module java.base;
  *     mapping that onto the SPI's own declared sentinel is deliberately left to the SPI, so this class cannot
  *     silently choose semantics an SPI never specified. {@link #namedUnique} and {@link #exclusiveWithDefault} have
  *     no absence outcome at all - they throw.</li>
- * <li><b>Selection failure (&sect;9).</b> An <em>explicitly selected</em> implementation that cannot be honoured
+ * <li><b>Selection failure.</b> An <em>explicitly selected</em> implementation that cannot be honoured
  *     throws {@link IllegalStateException} at resolution, naming the selection, distinguishing "no provider answers
  *     to that name" (module absent or name misspelled) from "the provider answered but yielded nothing" (switched
  *     off, or required configuration unset), and listing the installed provider names. There is no silent fallback
@@ -68,7 +67,7 @@ import module java.base;
  *     to the empty {@link Optional} its SPI turns into a sentinel. An explicit selection deliberately outranks the
  *     enablement predicate: naming an implementation that is also switched off is contradictory configuration, and
  *     the selection wins rather than silently resolving to something else.</li>
- * <li><b>Error visibility (&sect;9).</b> Nothing is swallowed. Duplicate provider names and duplicate provider
+ * <li><b>Error visibility.</b> Nothing is swallowed. Duplicate provider names and duplicate provider
  *     classes are packaging errors and throw - for <em>every</em> primitive, including the additive one, and
  *     including duplicates among implementations that are switched off - because a duplicate resolved by discovery
  *     order is a silently chosen winner. Exceptions from a caller-supplied {@code enabled}, {@code create} or
@@ -357,7 +356,7 @@ public final class Providers {
     private record Named<P>(P provider, String name) {
     }
 
-    /** Resolve one explicitly selected implementation, or throw naming the selection and what is missing (&sect;9). */
+    /** Resolve one explicitly selected implementation, or throw naming the selection and what is missing. */
     private static <P, T> T select(String spi,
                                    List<Named<P>> providers,
                                    String selection,

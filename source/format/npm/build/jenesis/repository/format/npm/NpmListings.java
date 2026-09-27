@@ -60,9 +60,9 @@ final class NpmListings {
 
             /** The versions - and, when the tags are stored, the tags - one member at a time through a streaming
              *  parser: the listing mechanism reads the packument through this on every publish into the package,
-             *  and without it fell back to reading the whole document into heap and splitting it as a tree - a
-             *  package's every version several times over in heap per publish, which the npm-packument canary
-             *  showed as a failed publish at fifty thousand versions in a 512 MiB container. */
+             *  and without it falls back to reading the whole document into heap and splitting it as a tree - a
+             *  package's every version several times over in heap per publish, a failed publish at fifty thousand
+             *  versions in a 512 MiB container. */
             @Override
             public Reader read(InputStream in, long ignored) throws IOException {
                 JsonParser parser = NpmFormat.MAPPER.createParser(in);

@@ -21,14 +21,14 @@ import build.jenesis.repository.store.Providers;
  * <li><b>Absence sentinel.</b> {@link #installed()} answers an empty {@link Optional} when no index module is on the
  *     module path; that is the capability signal the endpoint answers {@code 501} on and the console hides the panel
  *     for. {@code null} is never a legal return from {@link #installed()} or {@link #over}.</li>
- * <li><b>Selection failure (&sect;9).</b> This SPI has <em>no</em> selection key: nothing names an index by name, so
+ * <li><b>Selection failure.</b> This SPI has <em>no</em> selection key: nothing names an index by name, so
  *     there is no explicitly-selected miss to fail on. The one resolution failure is ambiguity - two installed
  *     providers make module-path order decide which read model the query surface serves, so
  *     {@link #installed()} <em>throws</em> naming both rather than picking a discovery-order winner. Resolution runs
  *     through the shared {@link Providers#optionalUnique} primitive, never a hand-rolled loop.</li>
- * <li><b>Tenant scoping (&sect;6).</b> The provider never resolves a tenant: the caller hands in an
+ * <li><b>Tenant scoping.</b> The provider never resolves a tenant: the caller hands in an
  *     already-scoped store and the query may read nothing outside it.</li>
- * <li><b>Read purity (&sect;10).</b> {@link #over} and the query it returns render stored index state only - no
+ * <li><b>Read purity.</b> {@link #over} and the query it returns render stored index state only - no
  *     external fetch, no index build on the read path. An index that has never been built answers empty rather
  *     than building itself.</li>
  * <li><b>Lifecycle / ownership.</b> The caller resolves the provider once (a final field) and calls {@link #over}

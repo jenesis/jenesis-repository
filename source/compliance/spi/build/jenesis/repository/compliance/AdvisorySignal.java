@@ -21,21 +21,21 @@ import module java.base;
  *     about this advisory", never {@code null} and never a fabricated zero-with-display. The returned list is
  *     <em>index-aligned</em> with the input and therefore always the same length: a shorter list would silently
  *     re-associate every value after the gap with the wrong advisory.</li>
- * <li><b>Error visibility (&sect;9) - fail soft.</b> A report column is a display, so a signal that cannot answer
+ * <li><b>Error visibility - fail soft.</b> A report column is a display, so a signal that cannot answer
  *     renders {@link Value#ABSENT} rather than failing the report. The blast radius is bounded by that: a lost value
  *     can only under-report a concern, never hide a served artifact or a hold, both of which are the gate's business
  *     and decided elsewhere. A signal that also answers a gate contract on the same object (the known-exploited
  *     catalogue does) still owes that contract's own, stricter, fail mode there.</li>
- * <li><b>Bounded work (&sect;12).</b> Evaluation is batch-shaped by design: a network-backed signal answers one
+ * <li><b>Bounded work.</b> Evaluation is batch-shaped by design: a network-backed signal answers one
  *     query for the whole report rather than one per advisory, so a report of a thousand advisories costs a bounded
  *     number of upstream calls rather than a thousand.</li>
- * <li><b>Read purity (&sect;10).</b> The intent is that rendering a column reads stored state. <b>Met by the
+ * <li><b>Read purity.</b> The intent is that rendering a column reads stored state. <b>Met by the
  *     known-exploited column</b>, which renders the mirrored catalogue's committed snapshot; the EPSS column still
  *     evaluates by consulting its underlying feed, so re-rendering a report can re-query a vendor. Recorded rather
- *     than implied (&sect;13).</li>
+ *     than implied.</li>
  * <li><b>Staleness.</b> {@link SignalSource#freshness()} carries it, and this is the contract that most needed it:
  *     a column of blanks is ambiguous between "nothing to report" and "the signal could not be consulted", which is
- *     exactly the &sect;10 ambiguity the staleness rule exists to remove. A report renders the column's freshness
+ *     exactly the ambiguity the staleness rule exists to remove. A report renders the column's freshness
  *     beside the column - its {@link Freshness#refreshed() instant} as the "as of" of every cell, and a column whose
  *     signal is not {@link Freshness#authoritative() authoritative} marked as unavailable rather than blank, since
  *     blank claims the signal looked and found nothing. A signal that also answers a gate contract on the same
@@ -44,7 +44,7 @@ import module java.base;
  *     column order is fixed by declaration and never by discovery order; two signals may share an {@link #order} and
  *     are then separated by name. {@link #name} is the stable machine key - a persisted finding refers to it - while
  *     {@link #label} is display text and may change.</li>
- * <li><b>Tenant scoping (&sect;6).</b> None: a signal is a deployment-wide column over public data.</li>
+ * <li><b>Tenant scoping.</b> None: a signal is a deployment-wide column over public data.</li>
  * </ol>
  */
 public interface AdvisorySignal extends SignalSource {

@@ -18,13 +18,11 @@ import org.slf4j.LoggerFactory;
 final class CocoaPodsListings {
 
     /**
-     * Every write of a pod's shard line and every membership decision behind it, at DEBUG. The soak read shard
-     * lines that lacked versions the pod document had - three consecutive publishes of one pod left its line at
-     * the snapshot before them for over half a minute (2026-09-12) - and nothing in the run could say who wrote
-     * that line or from which document sequence. This trace did: every stale line was written by the maintenance
-     * worker, the listing-rebuild pass regenerating the pod document beside a publish, and the regeneration ran
-     * outside the listing's lane, so its derivation and the publish's raced into the shard. A rebuild rides the
-     * lane now ({@code StoredListing.rebuild}). Switched on for the soak's node; silent elsewhere.
+     * Every write of a pod's shard line and every membership decision behind it, at DEBUG, so a shard line that
+     * lacks versions the pod document has can be traced to who wrote it and from which document sequence - a
+     * rebuild regenerating the pod document outside the listing's lane would race a publish's derivation into the
+     * shard, which is why a rebuild rides the lane ({@code StoredListing.rebuild}). Switched on for the soak's node;
+     * silent elsewhere.
      */
     private static final Logger LOGGER = LoggerFactory.getLogger(CocoaPodsListings.class);
 

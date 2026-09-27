@@ -20,7 +20,7 @@ import module java.base;
 public final class Webhooks {
 
     /**
-     * §11 exception - boot-time enablement latch: set once per scheduler boot via configure(boolean) and read
+     * Immutability exception - boot-time enablement latch: set once per scheduler boot via configure(boolean) and read
      * lock-free by the webhook sink and task. Feature wiring, not shared mutable data.
      */
     private static volatile boolean enabled;

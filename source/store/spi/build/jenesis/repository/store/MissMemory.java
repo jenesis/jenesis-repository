@@ -9,7 +9,7 @@ import com.github.benmanes.caffeine.cache.Caffeine;
  * found absent, so the same probe is answered from memory rather than from the store for {@code jenreg.cache.miss-ttl}.
  * The read it spares is the pointer read at the head of every download - a build tool probing a version range, a
  * missing snapshot or an optional classifier across a group's members asks the same question of the same
- * repositories many times in a row, and each asked the store until now.
+ * repositories many times in a row, and each would otherwise ask the store.
  *
  * <h2>What it remembers, and what it never does</h2>
  * Only a clean absence is remembered: a pointer read that answered empty. A pointer that exists, whatever its

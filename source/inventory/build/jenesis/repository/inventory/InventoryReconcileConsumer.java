@@ -11,8 +11,8 @@ import build.jenesis.repository.walk.WalkPass;
  * The inventory reconcile as a listener of the one walk: the forward leg on every served pointer, withheld ones
  * included (a held artifact still has its facts), the reverse leg on every row under the published root, the
  * derived leg on every download stamp, license record, override and pin - and, once a pass completed, the rollup
- * identity rebuilt from the converged set. It used to be three walks of its own every hour; a healthy repository
- * never needs any of them, and a crash asks for the walk that carries this.
+ * identity rebuilt from the converged set. It rides the walk rather than running three walks of its own every hour;
+ * a healthy repository never needs any of them, and a crash asks for the walk that carries this.
  *
  * <p>Per key it does exactly what the three legs did, through {@link InventoryReconciler}; per store it keeps the
  * inventory it judges through for the length of one pass, keyed by the store's identity, and lets it go at the end.

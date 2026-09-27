@@ -115,9 +115,9 @@ public final class OpenPgpSigner {
      * rather than remembered beside it.
      *
      * <p>It exists so a format can publish the public key belonging to <em>the secret key it actually holds</em>.
-     * The formats used to publish the one they generated in the same breath, which is the same thing only until two
-     * first publishes race: then one pair's secret is stored and the other pair's public is served, and every
-     * signature is refused by a client that is doing its job. Deriving makes the pairing structural.
+     * Publishing the one generated in the same breath is the same thing only until two first publishes race: then
+     * one pair's secret is stored and the other pair's public is served, and every signature is refused by a client
+     * that is doing its job. Deriving makes the pairing structural.
      *
      * <p>It is deliberately not a replacement for the stored public keyring, which a rotation <em>merges</em> into
      * rather than overwrites - a client has to keep trusting a signature made with the key being retired. This is
@@ -190,8 +190,8 @@ public final class OpenPgpSigner {
      * How a detached signature is encoded, which the client decides and not this class.
      *
      * <p>It is stated at every call site rather than defaulted, because the two are not interchangeable and a
-     * client given the wrong one reports a broken signature rather than a wrong encoding. Measured against the
-     * reference implementations: apt's {@code Release.gpg} and dnf's {@code repomd.xml.asc} are armoured, and
+     * client given the wrong one reports a broken signature rather than a wrong encoding. In the reference
+     * implementations, apt's {@code Release.gpg} and dnf's {@code repomd.xml.asc} are armoured, and
      * {@code registry.terraform.io} serves a {@code SHA256SUMS.sig} that is 566 raw bytes beginning {@code c2 c1}
      * - an OpenPGP packet header, with no {@code BEGIN PGP SIGNATURE} anywhere in it.
      */

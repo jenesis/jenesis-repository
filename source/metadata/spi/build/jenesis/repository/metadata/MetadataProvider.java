@@ -24,12 +24,12 @@ import build.jenesis.repository.store.Providers;
  * <li><b>Absence.</b> A composition without a persistence module is a composition error, not a mode:
  *     {@link #installed()} throws {@link IllegalStateException} naming the module to add. {@code null} is never a
  *     legal return.</li>
- * <li><b>Selection failure (&sect;9).</b> This SPI has <em>no</em> selection key - nothing names a document store
+ * <li><b>Selection failure.</b> This SPI has <em>no</em> selection key - nothing names a document store
  *     by name - so there is no explicitly-selected miss to fail on. The one resolution failure is ambiguity: two
  *     installed providers would make module-path order decide which document store every subsystem's sections land
  *     in, so {@link #installed()} <em>throws</em> naming both rather than picking a discovery-order winner.
  *     Resolution runs through the shared {@link Providers#singleton} primitive, never a hand-rolled loop.</li>
- * <li><b>Tenant scoping (&sect;6).</b> The provider never resolves a tenant: the caller hands in an already-scoped
+ * <li><b>Tenant scoping.</b> The provider never resolves a tenant: the caller hands in an already-scoped
  *     store and the document store reads and writes nothing outside it.</li>
  * <li><b>Staleness.</b> Each {@link Section} carries its own {@code updated} instant and {@code state}, so a
  *     surface distinguishes "derived and empty" from "never derived" without guessing.</li>

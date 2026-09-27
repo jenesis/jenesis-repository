@@ -68,21 +68,21 @@ import module java.base;
  *     exception there: {@link UncheckedIOException} on the filesystem, the SDK's own type on the object stores.
  *     Widening those signatures would not help, because the object stores fail with unchecked SDK types either
  *     way.</li>
- * <li><b>Streaming (&sect;1).</b> {@link #write}, {@link #writeBlob}, {@link #read} and {@link #open} are the
+ * <li><b>Streaming.</b> {@link #write}, {@link #writeBlob}, {@link #read} and {@link #open} are the
  *     artifact-sized paths and must not materialise a body: a backend that needs a length or a hash before it can
  *     upload spools to disk, never to the heap, so the JVM stays bounded under a multi-gigabyte publish.
  *     {@link #readVersioned} / {@link #writeVersioned} are the small-object paths and do
  *     materialise, so only pointers, indexes and metadata may travel through them. A {@link RangedSink} passed to
  *     {@link #read} is a request to transfer only that window; a backend that cannot seek still writes the whole
  *     blob through and the sink forwards only the window, so the answer is correct either way.</li>
- * <li><b>Tenant scoping (&sect;6).</b> {@link #scope} is the only tenancy seam: the returned view confines every key
+ * <li><b>Tenant scoping.</b> {@link #scope} is the only tenancy seam: the returned view confines every key
  *     to that subspace, a sibling scope can neither read nor enumerate across it, and scopes nest. The segment is
  *     screened through {@link #segment}, and a key through {@link #key}, so neither a traversal-shaped scope name nor
  *     a traversal-shaped key can address storage outside the subspace it was handed. <b>Both screens count {@code \}
  *     as a path separator</b>, because it is one on a Windows-hosted filesystem backend and a literal on the object
  *     stores: a screen that read only {@code /} would call {@code a\..\b} traversal-free and let it walk a level up on
  *     the one backend where it can.</li>
- * <li><b>Error visibility (&sect;9).</b> Nothing on a correctness-bearing path is swallowed. Only a genuine
+ * <li><b>Error visibility.</b> Nothing on a correctness-bearing path is swallowed. Only a genuine
  *     object-level miss reads as absent: a throttle, an authorization failure, a permission refusal, a missing
  *     bucket/container or a stale mount must surface, never degrade {@link #exists} to {@code false}, {@link #size}
  *     to {@code -1}, {@link #list} or {@link #page} to an empty child set, {@link #readVersioned} to
@@ -156,9 +156,9 @@ public interface ArtifactStore {
      * {@link StoredCounter} key their entries; every walk consumer keys the per-repository state it carries across a
      * pass; and the search index <em>hashes it into the name of a durable index</em>.
      *
-     * <p><b>There is no default, and that is the whole of the design here.</b> It used to fall back to the instance
-     * itself, described as staying correct and merely coalescing nothing - which was true of the one consumer it was
-     * written for and of none of the fourteen that arrived afterwards. An instance identity makes every new store
+     * <p><b>There is no default, and that is the whole of the design here.</b> Falling back to the instance itself
+     * would stay correct only for a consumer that merely coalesces, and most consumers do more. An instance identity
+     * makes every new store
      * object a new key: a long-lived map grows without bound, a gauge that sums its values counts stale entries, and
      * an index name changes when nothing about the repository did. Whether a future consumer merely coalesces or
      * durably names cannot be known from here, and the failure is silent in both directions - nothing throws, a
@@ -194,8 +194,8 @@ public interface ArtifactStore {
      * <p>The predicate behind {@link #segment(String)}, public because callers outside the write path ask the same
      * question and need an answer rather than an exception - a format deciding whether to store a version under a
      * key, an inspector deciding whether a segment read out of a request path is one the repository could hold.
-     * Three copies of this rule existed and had already drifted: both callers rejected control characters and the
-     * store's own guard did not.
+     * One rule rather than a copy per caller, so the store's own guard and its callers cannot disagree about control
+     * characters.
      */
     static boolean safeSegment(String value) {
         // One segment is a traversal-free path with no separator in it: the same refusals, stated once, in
@@ -231,7 +231,7 @@ public interface ArtifactStore {
      * <p>A key carrying a {@code .} or {@code ..} segment, or a {@code \} anywhere, is rejected here too, for the same
      * reason {@link #segment(String)} refuses one: on a filesystem such a key walks out of the subspace it was
      * addressed in, and on an object store it lands a literal key that no other backend can then address - so the same
-     * publish would be refused on one backend and silently accepted on another (&sect;13). Screening it at the one write
+     * publish would be refused on one backend and silently accepted on another. Screening it at the one write
      * choke point every backend already calls keeps the four backends interchangeable, which is what makes a store
      * migration a configuration change. No stored key is deeper or longer, so every descent over the store takes
      * these caps as its own bounds.
@@ -281,19 +281,18 @@ public interface ArtifactStore {
      * character on the three object stores, so {@code a\..\b} walks a level up on one backend and names a single
      * literal object on the others, and {@code a\b} is a nested key on one and a flat one on the others. Judging that
      * shape "traversal-free" would let the very publish this screen exists to refuse through on the one backend where
-     * it escapes, and would break the interchangeability {@link #key(String)} is here to keep (&sect;13). Nothing below
+     * it escapes, and would break the interchangeability {@link #key(String)} is here to keep. Nothing below
      * this line re-screens it: the {@code segment}/{@code ArtifactLayout.addressable}/{@code RepositoryImporter}
-     * seams above all refuse a backslash already, and this was the one place that did not.
+     * seams above all refuse a backslash, and so does this.
      *
      * <p><b>A C0 control character is refused too</b>, and for the reason the backslash is: it is a character that
      * means one thing here and another somewhere downstream. A {@code NUL} truncates the key at the first C API that
      * touches it, so a key screened whole is acted on in part; a {@code CR} or {@code LF} forges a line in every log
      * record, generated index and listing document the key later reaches, so a coordinate can write rows that read as
      * the server's own. Neither is part of a legitimate coordinate in any ecosystem this product serves, so the cost
-     * of refusing them is nothing, and this was the last shape screened nowhere - not here, not in
-     * {@link #key(String)}, not in {@link #segment(String)} - while the downstream request guard had
-     * refused it since it was written. Two layers disagreeing about which shapes are legal is the divergence this
-     * predicate exists to prevent, so the rule is stated here and the downstream guard delegates to it (&sect;2).
+     * of refusing them is nothing. Two layers disagreeing about which shapes are legal is the divergence this
+     * predicate exists to prevent, so the rule is stated here - for {@link #key(String)} and
+     * {@link #segment(String)} alike - and the downstream request guard delegates to it.
      * The boundary is the C0 range: {@code 0x7F} and the C1 range are left out deliberately, because widening beyond
      * the rule being lifted would be a second, unproven change riding a first.
      *
@@ -500,8 +499,8 @@ public interface ArtifactStore {
     /**
      * The page a drain of a level takes - a pass that must follow a level to exhaustion, paging with
      * {@link #page}. On the filesystem store every page rescans its directory, so for such a walk the page width is
-     * the number of rescans: a thousand a page over a million names was a thousand scans of a million, measured by
-     * the memory canaries as a pass that never finished, and ten thousand a page a hundred scans - the arithmetic the
+     * the number of rescans: a thousand a page over a million names is a thousand scans of a million, a pass that
+     * never finishes, and ten thousand a page a hundred scans - the arithmetic the
      * walk module's {@code BoundedChildren} records in full. Every drain in the product pages at this width through
      * {@link Names}, and this is the one place the number is written.
      */
@@ -517,9 +516,8 @@ public interface ArtifactStore {
      * <p><strong>This is the names-only view of {@link #pageListed}, and only that.</strong> A backend implements
      * {@code pageListed} - the filesystem scans a directory in bounded strides, the three object stores use their own
      * start-after pagination - and this form derives from it losslessly, the child's name being the last segment of
-     * its key. It used to be the other way round on paper and both ways in practice: four backends each carried the
-     * identical three-line override and the identical {@code name} helper to express this over that one, which is
-     * the shape a default exists for. The contract kit's {@code NATIVE_PAGING} property still proves a backend pages
+     * its key - the shape a default exists for, rather than an identical override and {@code name} helper in every
+     * backend. The contract kit's {@code NATIVE_PAGING} property still proves a backend pages
      * natively, and a backend that overrides neither inherits {@code pageListed}'s bounded listing fallback, which
      * refuses past {@link #MAX_INHERITED_CHILDREN} children rather than pretending to page.
      */
@@ -554,7 +552,7 @@ public interface ArtifactStore {
      * materialises the container's whole child set to do it, the opposite of what paging is for - so it refuses
      * rather than pretending: past {@link #MAX_INHERITED_CHILDREN} children it throws an {@link IllegalStateException}
      * naming the inheriting class, the prefix and the remedy, instead of quietly turning one page request into an
-     * unbounded heap allocation (&sect;9, and the "bounds fail visibly" gate). It reports no metadata, because it has
+     * unbounded heap allocation (fail fast, and bounds fail visibly). It reports no metadata, because it has
      * none it did not ask for. An implementation whose whole child set genuinely <em>is</em> in memory (a map-backed
      * test double, an in-process spool) may call {@link #pageByListing} by name from its {@code page}: the cost is then
      * a decision at the call site rather than an accident of inheritance.
@@ -711,19 +709,16 @@ public interface ArtifactStore {
      * back to {@link #size}, {@link #delete} or {@link #readVersioned}, so a scan that reported names would make
      * every caller re-compose them. {@code startAfter} is one of those keys, handed back verbatim.
      *
-     * <p><strong>Abstract, deliberately, and this used to be a default.</strong> The default was
+     * <p><strong>Abstract, deliberately, rather than a default.</strong> The obvious default would be
      * {@link #scanByListing}, which walks {@link #list} recursively into heap and refuses past
-     * {@link #MAX_INHERITED_CHILDREN} keys. That is a reasonable <em>fallback</em> and it was a terrible
-     * <em>default</em>: a store that did not think about scanning silently got the materialising one, and the
-     * failure only appears once a prefix is large - by which time it is a deployment, not a test.
+     * {@link #MAX_INHERITED_CHILDREN} keys. That is a reasonable <em>fallback</em> and a terrible
+     * <em>default</em>: a store that did not think about scanning would silently get the materialising one, and the
+     * failure only appears once a prefix is large - by which time it is a deployment, not a test. A decorator that
+     * overrides {@code page} and forgets {@code scan} would replace its backend's native bounded listing with the
+     * fallback, and a point read with a page limit of one reaching it through such a decorator materialises the
+     * whole prefix and refuses.
      *
-     * <p>It cost exactly that. Three decorators - metering, quota and read-only - each overrode {@code page} for
-     * this very reason and each forgot {@code scan}, so all three replaced their backend's native bounded listing
-     * with the fallback. A tenant existence probe, already written as a point read with a page limit of one,
-     * reached it through the metering decorator, materialised 10,001 keys and refused - and the image
-     * stopped booting over any store holding more than ten thousand keys.
-     *
-     * <p>Made abstract, none of that can recur quietly: a store that does not implement this does not compile, and
+     * <p>Abstract, none of that can happen quietly: a store that does not implement this does not compile, and
      * a decorator that forgets it does not compile either. What a decorator wants is one line delegating to what it
      * wraps; what a store whose key space is already materialised wants is {@link #scanByListing}, named out loud.
      * A test double that never scans wants whichever is shorter - and either way it had to decide.

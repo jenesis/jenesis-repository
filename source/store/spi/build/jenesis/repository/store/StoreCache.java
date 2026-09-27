@@ -12,8 +12,8 @@ import build.jenesis.repository.observation.Signals;
  * every point read the product repeats goes through: a credential's grants, a settings document, a rate-limit
  * ceiling, a quota counter. On an object store a point read is a round trip and a bill, and the product's model
  * (a repository is read far more than written, and a read has to reach the blob store anyway) holds only while a
- * request pays for nothing twice; three uncached reads authorised every download before this existed, a third of
- * the read path's operations.
+ * request pays for nothing twice; uncached, three reads would authorise every download, a third of the read path's
+ * operations.
  *
  * <p><b>Read-through</b>: a miss reads the store and keeps the answer - an absent key included, so a storm of
  * requests with an unprovisioned key does not re-ask the store per request. <b>Write-through</b>: a write or delete

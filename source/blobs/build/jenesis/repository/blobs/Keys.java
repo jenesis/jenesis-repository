@@ -13,7 +13,7 @@ import build.jenesis.repository.store.ArtifactStore;
  * two layers stay independent - a format that forgets this guard still cannot inject a path, and this guard still
  * returns a clean {@code 400} rather than deferring to the store's exception. A {@code null} value is unsafe.
  *
- * <p>Two shapes, one definition of what a hostile character is - and that definition is no longer here. It is
+ * <p>Two shapes, one definition of what a hostile character is - and that definition is not here. It is
  * {@link ArtifactStore#traversalFree}, which screens the traversal segments, the backslash and the C0
  * control characters together, and which the store's own write screen is stated in terms of. {@link #unsafe} judges a
  * <em>single name part</em> a format splices into a key (a package name, a version, an upstream-chosen filename), so
@@ -22,10 +22,9 @@ import build.jenesis.repository.store.ArtifactStore;
  * exactly the core question, kept as a named seam because the shared request screen reads better asking
  * {@code Keys.unsafePath} at a request boundary than negating a store predicate.
  *
- * <p><b>This class used to carry its own copy of the character rule</b>, because the core screened neither the
- * backslash nor the control characters when it was written. The core has both now, so the copy was two statements of
- * one rule that could only drift - the &sect;2 shape - and the front door and the store boundary would then have
- * disagreed about which publishes are legal, each believing the other agreed.
+ * <p><b>This class carries no copy of the character rule</b>: two statements of one rule could only drift, and the
+ * front door and the store boundary would then disagree about which publishes are legal, each believing the other
+ * agreed.
  */
 public final class Keys {
 
@@ -53,7 +52,7 @@ public final class Keys {
      * generated index that key later reaches. Neither is part of a legitimate coordinate in any of the fourteen
      * ecosystems, so refusing them costs nothing.
      *
-     * <p>This method is now a pure delegation, and that is the point: the request seam and the store's write screen
+     * <p>This method is a pure delegation, and that is the point: the request seam and the store's write screen
      * ask one predicate, so they cannot refuse different shapes. It stays as a named method rather than being
      * inlined at its call site because {@code unsafePath} says what a request boundary is asking, and because a
      * future request-only rule - one that has no business in a store key screen - would land here.

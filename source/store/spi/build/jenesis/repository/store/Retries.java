@@ -8,25 +8,23 @@ import module java.base;
  *
  * <p>A lost compare-and-set is a peer writing the same key at the same moment - several identical publishes of one
  * version, the files of one revision arriving one after the other, a sweep and a publish meeting on a marker. Three
- * immediate retries were enough for two writers and not for four: with no pause between tries, the losers re-read
- * and re-write in lock step and lose again, and the writer that gave up answered a {@code 500} for a publish whose
+ * immediate retries are enough for two writers and not for four: with no pause between tries, the losers re-read
+ * and re-write in lock step and lose again, and the writer that gives up answers a {@code 500} for a publish whose
  * bytes had landed. Twelve tries with a short, jittered pause between them spread the writers out; the pause stays
  * under a tenth of a second so the request that waits never waits long.
  *
  * <p>{@link #update} and {@link #tryUpdate} are the policy applied: read the key, let a {@link Mutation} decide the
  * new body from what is there, write it against the token that was read, and on a lost race back off and go round
- * again. Before they existed the loop was written out at some thirty-five sites with three, four, five, eight or
- * sixteen tries and no pause between them - the exact shape this class's own paragraph explains does not work - and
- * three different endings for the same exhaustion: throw, return silently, or spin. There are two endings now and a
- * caller picks one by name: {@link #update} throws, because a writer that gives up a compare-and-set has usually
+ * again, rather than a loop written out per site with its own try count, no pause and its own ending for the same
+ * exhaustion. There are two endings and a caller picks one by name: {@link #update} throws, because a writer that gives
+ * up a compare-and-set has usually
  * lost something the caller must know about; {@link #tryUpdate} returns {@code false}, for the few writes whose loss
  * a later pass repairs - and a caller choosing it says in its javadoc which pass that is.
  *
  * <p>{@link #decide} and {@link #tryDecide} are the same policy for a write that has more to say than a body: the
  * {@link Decision} hands back a {@link Verdict} - write this body, or keep the key as it is - together with a value
  * the caller needs from the try that landed (the pointer that was replaced, whether a publish was the first, the
- * transition a re-fold is made from). Twenty-five loops still stood after the first sweep, most of them written out
- * only to keep such a value in a local; a loop that keeps a value is not a reason to keep a loop.
+ * transition a re-fold is made from); a loop that keeps a value is not a reason to keep a loop.
  *
  * <p><b>There is no delete verdict.</b> The store has no conditional delete, so a key deleted because the deciding try
  * found its set empty loses whatever a peer wrote into it between that read and the delete - an alias appended to a
@@ -213,10 +211,9 @@ public final class Retries {
      * against its own bytes and writes again - once per retry, one read and one write each - which is why the
      * symptom is a publish whose read and write counts rise by <em>exactly the same</em> amount.
      *
-     * <p>Measured 2026-09-11/12 by {@code StoreOperationsE2ETest}'s two-size claim: a serial publish - no peer,
-     * nothing it could honestly lose to - paying twelve extra read-write pairs on azure-blob in one lane, eleven
-     * on s3 two lanes later, and none on the filesystem in any of them. An SDK is the one thing an object store
-     * has in that path and the filesystem does not.
+     * <p>{@code StoreOperationsE2ETest}'s two-size claim shows it: a serial publish - no peer, nothing it could
+     * honestly lose to - can pay a dozen extra read-write pairs on an object store and none on the filesystem. An SDK
+     * is the one thing an object store has in that path and the filesystem does not.
      *
      * <p>So a refusal is re-read once before it is believed - and the question asked of the re-read is not "are
      * these my bytes" but "does this mutation still have anything to do". The mutation is applied to what the key
@@ -244,8 +241,8 @@ public final class Retries {
      * <p><b>What it therefore cannot do, deliberately.</b> A mutation whose re-application is not a fixed point
      * cannot be rescued from an SDK replay by reading the store, because the evidence that separates "my PUT
      * landed" from "a peer wrote the same bytes" is not in the store: both leave one key holding one body. Such a
-     * mutation retries, and double-applies on a replay exactly as it did before this check existed. The paths the
-     * replay cost was measured on - a publish's pointers, its blobs, its inventory sections, its listings - are
+     * mutation retries, and double-applies on a replay. The paths the replay cost falls on - a publish's pointers,
+     * its blobs, its inventory sections, its listings - are
      * every one of them fixed points, which is why the repair reaches the cost without reaching the correctness.
      * A mutation whose rendering is not deterministic is not one either, and that is a trap worth naming because
      * it is invisible at the call site: {@link Properties#store(java.io.OutputStream, String)} writes a
@@ -341,8 +338,8 @@ public final class Retries {
      *
      * <p>Kept apart from {@link #lostUnsettled()} because the two answer different questions. On a serial publish -
      * no peer, nothing to lose to - this figure must stay at zero on every backing; one that climbs there is a store
-     * refusing a write it did not, in fact, refuse for a reason this loop can see. Measured on the store-operations
-     * canary of 2026-09-12 the question was open, because the two verdicts were one counter that nothing read.
+     * refusing a write it did not, in fact, refuse for a reason this loop can see - a question one combined counter
+     * could not answer.
      */
     public static long lostToPeer() {
         return LOST_TO_PEER.sum();

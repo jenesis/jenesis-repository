@@ -101,10 +101,9 @@ public final class ReadOnlyArtifactStore implements ArtifactStore, Observability
      * merely lose performance: it *replaces* the backend's native, genuinely bounded prefix listing with that
      * fallback, so a bounded question asked through the decorator becomes an unbounded one.
      *
-     * <p>Measured rather than reasoned: this was missing from every decorator at once, and the image
-     * stopped booting over a store holding more than ten thousand keys. A tenant existence probe - already written
-     * as a point read with a page limit of one - reached this fallback through the decorator and materialised
-     * 10,001 keys to answer it.
+     * <p>Without it, a tenant existence probe - written as a point read with a page limit of one - reaches this
+     * fallback through the decorator and materialises 10,001 keys to answer it, and the image does not boot over a
+     * store holding more than ten thousand keys.
      */
     @Override
     public Scan scan(String prefix, String startAfter, int limit, Consumer<Listed> consumer) throws IOException {

@@ -38,8 +38,9 @@ public final class Withheld {
      *  are no-ops and raise no event.
      *
      *  <p>The transition is gated on the store's atomic-create CAS - {@code writeVersioned} with an expected-absent
-     *  token - not a read-then-write: two concurrent marks of one hash both formerly observed "absent" and both fired
-     *  the transition-ON leg (violating the documented exactly-once). Now exactly the observer whose conditional write
+     *  token - not a read-then-write, under which two concurrent marks of one hash would both observe "absent" and
+     *  both fire the transition-ON leg (violating the documented exactly-once). Exactly the observer whose conditional
+     *  write
      *  lands (the store serialises the create) fires the notify; the loser's write returns {@code false} - the marker is
      *  already present - and it stays silent, the same transition-only CAS the pointer face {@link Publication#link}
      *  uses ({@code prior.isEmpty()} on a versioned write). */
@@ -75,14 +76,14 @@ public final class Withheld {
      * queue could not be enumerated, the module that would have answered is not installed - is <em>not</em> a
      * {@link Known.Determined} and therefore does not fit this parameter at all: a release that cannot prove
      * holderlessness is a compile error at the call site rather than a marker lifted on a guess. That is the whole
-     * mechanism; there is deliberately no overload taking a bare {@code boolean} or no proof at all, because the
-     * guard used to live in each caller and a caller that forgot it discloses held bytes.
+     * mechanism; there is deliberately no overload taking a bare {@code boolean} or no proof at all, because a guard
+     * left to each caller is one a caller can forget, and a caller that forgets it discloses held bytes.
      *
      * <p>Deliberately NOT gated on the marker body: a marker may carry a non-empty disposition body (an OCI/older hold
      * writes {@code REJECT} or similar), and any present marker - whatever its body - clears. The clear is a present
      * read-then-delete rather than a CAS on the transition edge, so under a rare concurrent double-clear both observers
      * could fire {@code onWithholdCleared}; that is bounded and idempotent (the feed consumer re-derives from truth),
-     * and it is what P3 shipped - the exactly-once discipline the {@link #mark} CAS enforces is only required on the
+     * and accepted - the exactly-once discipline the {@link #mark} CAS enforces is only required on the
      * transition-ON leg (the actual finding).
      *
      * <p>The clear is still a read-then-write against a concurrent enforcement sweep, so a caller that must close
@@ -117,8 +118,8 @@ public final class Withheld {
      *  so one hash backs many paths and a hold on it would have to fan out over every alias, including the ones no
      *  hold writer enumerated - which is the disclosure the marker exists to close. Nor can it be cached on a node:
      *  a hold placed on one node would then not be honoured on a peer until the entry lapsed, which is not a trade
-     *  to make on a security control. The one design that was costed instead (2026-09-12) - a tiny versioned holds
-     *  epoch, cached, with the markers consulted only when it moves - does not pay for itself: the epoch either is
+     *  to make on a security control. A tiny versioned holds epoch, cached, with the markers consulted only when it
+     *  moves, does not pay for itself either: the epoch either is
      *  read on every serve, which is this read under another key, or is cached, which is the same staleness under
      *  another name. Three reads is where a download stops. */
     public static boolean is(ArtifactStore store, String hash) throws IOException {

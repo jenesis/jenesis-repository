@@ -44,10 +44,9 @@ import build.jenesis.repository.observation.ObservabilitySource;
  *
  * <p>A {@linkplain #rebuild regeneration} rides the same lane as a change, and the reason is the derivation. A
  * document's twin is written from the document the writer just produced, so two writers of one document produce
- * two twins, and only the lane orders them: a rebuild that ran outside it wrote a twin from an older snapshot after
- * the publish's twin had landed. Measured 2026-09-12 under load: a CocoaPods shard line fell behind its pod
- * document by up to three publishes for half a minute at a time, every time the listing-rebuild pass regenerated
- * the pod document beside a publish, and the node's conflict counter showed the two writers meeting.
+ * two twins, and only the lane orders them: a rebuild outside it would write a twin from an older snapshot after the
+ * publish's twin had landed - under load a CocoaPods shard line falls behind its pod document by several publishes,
+ * every time the listing-rebuild pass regenerates the pod document beside a publish.
  *
  * <h2>Entries derived from another document carry its sequence</h2>
  *
@@ -55,9 +54,9 @@ import build.jenesis.repository.observation.ObservabilitySource;
  * info document, a catalogue built from every image's tag list - has two writers of one entry: the source
  * document's {@link Derivation}, which puts the entry the moment the source is written, and the rebuild pass, which
  * regenerates the whole derived document from a walk over the sources. The walk is a snapshot, and a snapshot can
- * be a beat behind: measured 2026-09-13 under the sixth soak, a shard regenerated from a pod document one version
- * old landed after the publish had put the pod's fresh line, and the shard lacked the version until the next
- * publish rewrote the line. So an entry may carry the <em>sequence of the source document it was derived from</em>
+ * be a beat behind: a shard regenerated from a pod document one version old can land after the publish has put the
+ * pod's fresh line, and the shard would then lack the version until the next publish rewrote the line. So an entry
+ * may carry the <em>sequence of the source document it was derived from</em>
  * ({@link Changes#put(String, byte[], long)}, {@link Generator.Sink#accept(String, byte[], long)}), the document
  * keeps every entry's source in a trailer after its body - invisible to a reader, since the header's size bounds
  * what is served - and a write of an entry lands only at or above the source the stored entry carries: a stale
@@ -147,8 +146,8 @@ public final class StoredListing {
          * Read the entries of a stored document of {@code length} bytes out of {@code in}, one at a time.
          *
          * <p>The counterpart of {@link #split}: the same entries, in the same order, without the document. The
-         * default reads the stream whole and splits it - exactly what the caller did before this existed - so a
-         * codec that has not implemented streaming is never wrong for it, only as heavy as it always was.
+         * default reads the stream whole and splits it, so a codec that has not implemented streaming is never wrong
+         * for it, only heavier.
          *
          * <p>{@code length} is the document's stored size. A framed codec needs it to know where its footer
          * begins, since a stream cannot be read from the end; a codec that does not need it ignores it.
@@ -471,8 +470,8 @@ public final class StoredListing {
      *
      * <h2>Order is the generator's obligation</h2>
      *
-     * <p><b>Entries must be emitted in ascending id order.</b> A {@link SortedMap} used to supply that for free and
-     * now nothing does. The store's paged faces are the way to keep it: {@link ArtifactStore#page} takes a cursor,
+     * <p><b>Entries must be emitted in ascending id order.</b> Nothing supplies that for free. The store's paged faces
+     * are the way to keep it: {@link ArtifactStore#page} takes a cursor,
      * and a cursor is only meaningful over a total order, so paging a prefix yields its children in order without
      * holding them - which is precisely what {@link ArtifactStore#list} cannot offer, since it sorts by
      * materialising everything.
@@ -602,7 +601,7 @@ public final class StoredListing {
      *                <p>It is recorded because emptiness is a question the read path has to answer and could not:
      *                a format whose listing is <em>present with zero entries</em> is a repository that holds nothing,
      *                which several clients must be told about, and the alternative was splitting the document to
-     *                count it - materialising exactly the thing that is allowed to be large (&sect;1). A derived twin
+     *                count it - materialising exactly the thing that is allowed to be large. A derived twin
      *                carries {@link #UNKNOWN}: it is computed from bytes alone, and inventing a count for it would be
      *                worse than admitting there is none.
      */
@@ -734,10 +733,10 @@ public final class StoredListing {
 
         /**
          * This document as the {@link Derived} a derivation reads - the header, and the body opened once, streaming.
-         * A rebuild-path re-derivation used to take {@link #read} and hand its {@link Document} over, which holds
-         * the whole body in heap; for a repository-wide index that is every package in the suite, and the
-         * debian-gzip canary measured the twin's derivation failing at three hundred thousand stanzas under 512 MiB.
-         * A derivation streams from {@link Derived#open}, so it reads this exactly as it reads a document written a
+         * A rebuild-path re-derivation that took {@link #read} and handed its {@link Document} over would hold the
+         * whole body in heap; for a repository-wide index that is every package in the suite, and the twin's
+         * derivation fails at three hundred thousand stanzas under 512 MiB. A derivation streams from
+         * {@link Derived#open}, so it reads this exactly as it reads a document written a
          * moment ago, and holds a buffer.
          */
         public Derived derived() {
@@ -835,7 +834,7 @@ public final class StoredListing {
      * The stored document alone, opened for streaming, without generating one that is absent.
      *
      * <p>The counterpart of {@link #open} for a reader that must not walk. A repository-wide listing's generator
-     * enumerates the whole store, and &sect;10 puts that off the request path - so a read that would otherwise
+     * enumerates the whole store, and that belongs off the request path - so a read that would otherwise
      * materialise answers "not built yet" instead and leaves the work to the rebuild pass. Absent here means
      * absent, never "about to be expensive".
      */
@@ -860,8 +859,9 @@ public final class StoredListing {
      *
      * <p>A listing is absent exactly when nobody has read or written it yet - which is when a burst of readers is
      * most likely, because whatever made the repository interesting just happened. Ten of them arriving together
-     * used to run ten generations of the same document: each probed, found nothing, and walked the store. One
-     * write won the compare-and-set and the other nine were thrown away, having cost the same as the winner. On a
+     * would otherwise run ten generations of the same document: each probing, finding nothing, and walking the
+     * store, with one write winning the compare-and-set and the other nine thrown away, having cost the same as the
+     * winner. On a
      * document that takes tens of seconds to generate, that is the difference between one slow request and ten.
      *
      * <p>So the first caller builds and the rest wait on it. They are not given the result - they return to the
@@ -1006,8 +1006,8 @@ public final class StoredListing {
      * {@link #update} with a change set, which may also remove every entry under an id prefix.
      *
      * <p><b>A stated property, not an accident:</b> one update rewrites the whole document, streamed, so its cost is
-     * the document's size - one second for a Debian index of a hundred thousand stanzas, eleven for a million,
-     * measured by the Debian rewrite canary. That is inherent to a listing a client fetches as one document whose
+     * the document's size - about one second for a Debian index of a hundred thousand stanzas, eleven for a million.
+     * That is inherent to a listing a client fetches as one document whose
      * entry must be visible before the publish answers; the lane above coalesces writers that arrive at once, and
      * a caller that writes many entries at once - a rebuild, a migration - collects them under {@link #batching}
      * so the document is written once per batch rather than once per entry.
@@ -1054,8 +1054,8 @@ public final class StoredListing {
      * <p>This exists for the rebuild pass. Rebuilding a per-package listing fires its derivation, and a derivation
      * that keeps a repository-wide index (the OCI catalog, RubyGems' compact {@code versions}, NuGet's search
      * document, winget's index) puts that package's one entry into it - so a pass over P packages rewrote a P-entry
-     * document P times. The listing-rebuild canary counts those rewrites through {@code jenreg.listing.updates} and
-     * was red at twenty thousand images before this: the pass now rewrites the index once per batch of entries.
+     * document P times. Batched, the pass rewrites the index once per batch of entries; the listing-rebuild canary
+     * counts those rewrites through {@code jenreg.listing.updates}.
      *
      * <p>Only single-entry changes are batched; a change carrying a prefix removal is applied at once, since a
      * prefix's effect depends on its order against the puts around it and a merged batch has no order. A thread
@@ -1403,12 +1403,12 @@ public final class StoredListing {
      * this regenerate again. A generator or derivation rebuilding the listing it belongs to is refused as a
      * re-entrant update, exactly as an update from there is.
      *
-     * <p>It used to run outside the lane, as a compare-and-set loop of its own. The document was safe that way -
-     * the token decides - but its <em>derivation</em> was not ordered against a concurrent change's: the
-     * listing-rebuild pass, regenerating a CocoaPods pod document beside a publish of that pod, wrote the pod's
-     * shard line from the older document after the publish had written it from the newer one, and the shard then
-     * lacked versions the pod document listed until the next publish rewrote the line. The class comment carries
-     * the measurement.
+     * <p>It runs in the lane rather than as a compare-and-set loop of its own. The document would be safe either way -
+     * the token decides - but its <em>derivation</em> would not be ordered against a concurrent change's: the
+     * listing-rebuild pass, regenerating a CocoaPods pod document beside a publish of that pod, would write the pod's
+     * shard line from the older document after the publish had written it from the newer one, and the shard would
+     * then lack versions the pod document listed until the next publish rewrote the line. The class comment says
+     * more.
      */
     public static Header rebuild(ArtifactStore store, Spec spec) throws IOException {
         Applied applied = enqueue(store, spec, new Pending(Map.of(), Set.of(), true, new CompletableFuture<>()));
@@ -1429,10 +1429,9 @@ public final class StoredListing {
      * like the first materialisation: this is the daily repair pass, and it regenerates a repository-wide listing
      * whole. Rebuilt per attempt rather than hoisted, because a lost compare-and-set below means the store moved
      * and the document has to be produced against it again. Rendered outside heap - this is the DAILY pass's path
-     * for every listing in the deployment, so it is the one that meets the largest documents most often, and it
-     * was the half left buffering when materialise() was streamed, which is a defect the attribution build found
-     * by never finishing: a repository-wide rebuild simply ran out of memory on its own thread, where the only
-     * symptom a reader sees is a document that never appears.
+     * for every listing in the deployment, so it is the one that meets the largest documents most often. Buffered, a
+     * repository-wide rebuild would simply run out of memory on its own thread, where the only symptom a reader sees
+     * is a document that never appears.
      *
      * <p><b>A generator that states its sources does not replace the stored document; it is merged into it.</b>
      * The class comment says why: the walk it ran over the sources is a snapshot, and an entry a source's own
@@ -1714,9 +1713,9 @@ public final class StoredListing {
         }
         LOGGER.warn("listing {} could not be updated after {} version conflicts; regenerating it in place", key,
                 ATTEMPTS);
-        // A stated bound, measured: two nodes over one bucket publishing four hundred packages from sixteen writers
-        // into one suite lost seventy-seven races between them and exhausted none - the lanes absorb a fleet's
-        // races within the retries above - and a regeneration here costs one rewrite of the document, the same order
+        // A stated bound: two nodes over one bucket publishing four hundred packages from sixteen writers into one
+        // suite lose dozens of races between them and exhaust none - the lanes absorb a fleet's races within the
+        // retries above - and a regeneration here costs one rewrite of the document, the same order
         // as the publish that lost it. It stays on the publishing thread for the reason update() states: the entry
         // must be visible when the publish answers.
         FORGOTTEN.increment();
@@ -2358,8 +2357,8 @@ public final class StoredListing {
     /**
      * Hand the document just written to its derivation, as a file rather than as bytes.
      *
-     * <p>{@link Derivation#NONE} is still short-circuited, so a spec with no twin touches nothing. What changed is
-     * the spec that HAS one: this used to read the rendered file back whole, which put a document sized by the
+     * <p>{@link Derivation#NONE} is short-circuited, so a spec with no twin touches nothing. A spec that HAS one is
+     * handed the file, never the rendered file read back whole, which would put a document sized by the
      * repository into heap immediately after taking the trouble not to. The file is the caller's and is deleted
      * when the write returns - which is clause 1 of {@link Derived}, and why a deferring derivation copies first.
      */
@@ -2457,7 +2456,7 @@ public final class StoredListing {
 
     /** The sequence a document written after {@code priorSeq} carries. Monotone per document, and past any
      *  sequence a forgotten predecessor could have reached (a wall-clock floor), so a derived document written
-     *  against the old sequence never outranks the regenerated one. A first write passes {@code 0}. */
+     *  against an earlier sequence never outranks the regenerated one. A first write passes {@code 0}. */
     private static long sequence(long priorSeq) {
         return Math.max(priorSeq + 1, System.currentTimeMillis());
     }
@@ -2575,14 +2574,14 @@ public final class StoredListing {
          * were created; the default creates none, so a format is never wrong for not implementing this.
          *
          * <p><b>Why this is not covered by {@link #rebuild}.</b> The repair pass walks the listing namespace and
-         * asks each rebuilder to claim what it finds, so it regenerates documents that <em>exist</em>. That was
-         * held to be sufficient because a format's listing is created by a publish through that format - and it is
-         * not: a <em>migration</em> lays content out directly. After an import from an incumbent manager the tag
-         * pointers are all there and the tag list is not, so the daily pass has nothing to claim and the first
-         * client request generates it inline. Measured at 200,000 tags: <b>35 seconds</b> on a request thread,
-         * against 186 ms once the document exists.
+         * asks each rebuilder to claim what it finds, so it regenerates documents that <em>exist</em>. That is not
+         * sufficient, even though a format's listing is created by a publish through that format: a
+         * <em>migration</em> lays content out directly. After an import from an incumbent manager the tag pointers
+         * are all there and the tag list is not, so the daily pass has nothing to claim and the first client request
+         * would generate it inline - at 200,000 tags, on the order of <b>35 seconds</b> on a request thread against a
+         * fraction of a second once the document exists.
          *
-         * <p>So this is &sect;5's clause said for stored listings - derived state converges from the durable store
+         * <p>So this is self-healing said for stored listings - derived state converges from the durable store
          * rather than being paid for by whoever asks first. It runs on the maintenance pass, which is where a walk
          * of a format's namespace belongs; a format whose content only ever arrives by publish through itself has
          * nothing to add and inherits the empty default.

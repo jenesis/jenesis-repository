@@ -44,14 +44,14 @@ public class CacheServer {
     /**
      * The management surface of a cache running alone: the probe paths and nothing else.
      *
-     * <p>This composition used to serve {@code /actuator/prometheus} to anyone, and its own suite asserted so -
-     * with {@code jenreg_cache_requests_total} labelled by {@code tenant} and {@code project}, that hands every
-     * tenant and project name to whoever can reach the port. It happened because the only chain here claims
-     * {@code /build/**} and this launcher excludes the repository's security auto-configuration by name, so
-     * everything under {@code /actuator} was matched by no chain at all and passed with no security filters. A
-     * request nothing matches is not a request nothing governs; it is a request governed by nothing.
+     * <p>Without this chain, {@code /actuator/prometheus} would answer anyone - with
+     * {@code jenreg_cache_requests_total} labelled by {@code tenant} and {@code project}, that hands every tenant and
+     * project name to whoever can reach the port - because the only other chain here claims {@code /build/**} and
+     * this launcher excludes the repository's security auto-configuration by name, so everything under
+     * {@code /actuator} would be matched by no chain at all. A request nothing matches is not a request nothing
+     * governs; it is a request governed by nothing.
      *
-     * <p>The fix is not to authenticate it. There is no deployment-wide authorization on this node to authenticate
+     * <p>The answer is not to authenticate it. There is no deployment-wide authorization on this node to authenticate
      * against - the repository's authorization manager arrives with beans this launcher deliberately excludes -
      * and there does not need to be, because <b>this is not a deployment</b>. There is no cache-only image: a
      * deployment that wants only the build cache runs the ordinary node with every format switched off, and there
@@ -61,9 +61,9 @@ public class CacheServer {
      * <p><b>It lives on the launcher rather than in {@code CacheSecurityConfig}, and that is load-bearing.</b>
      * {@code CacheNode} excludes this class from the scan that pulls the cache into a composing launcher, so a
      * bean declared here reaches the standalone composition and only that one. Declared in the shared security
-     * config instead, it reached the merged node too - and an ordered chain over a narrower space wins over the
-     * repository's unmatched-scope chain, so it denied the actuator surface of the node an operator actually runs.
-     * Measured, not reasoned: {@code ServerToggleE2ETest} failed with a {@code 403} on the merged node's scrape.
+     * config instead, it would reach the merged node too - and an ordered chain over a narrower space wins over the
+     * repository's unmatched-scope chain, so it would deny the actuator surface of the node an operator actually
+     * runs, a {@code 403} on the merged node's scrape that {@code ServerToggleE2ETest} holds against.
      *
      * <p>What stays open is what a container platform probes, for the reason it is open everywhere else: a kubelet
      * carries no credential, and a probe that needs one is a probe that fails the pod.
@@ -88,9 +88,9 @@ public class CacheServer {
      * than merely visible. Booting the whole bundle into that bound would measure the bundle's footprint instead.
      *
      * <p><b>This is not a {@code main} and the distinction is the point.</b> The harness starts a node by naming a
-     * module and a main class, which used to force the entry point to be a product class; a class with a
-     * {@code main} reads as a product whatever its javadoc says, and the cache is a segment of the bundle, imported
-     * as {@code CacheNode}. The entry point is a test-owned launcher now - the deliberate exception to
+     * module and a main class; a class with a {@code main} reads as a product whatever its javadoc says, and the
+     * cache is a segment of the bundle, imported as {@code CacheNode}. The entry point is a test-owned launcher - the
+     * deliberate exception to
      * {@code ServerRuntime.isHarness} - and it is what makes the boot-time decisions a harness-booted node owes,
      * the licence report among them. Nothing here decides anything: this method boots and returns.
      */

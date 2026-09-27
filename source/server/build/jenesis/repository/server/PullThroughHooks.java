@@ -13,7 +13,7 @@ import build.jenesis.repository.store.ArtifactStore;
  * rather than forking a second proxy controller; the core binds {@link #NONE}, so serving is byte-for-byte
  * unchanged (every hook is a serve-through/identity no-op that reads nothing).
  *
- * <p>Two capabilities, one per real #79 gap:
+ * <p>Two capabilities, one per leg a pull-through serves:
  * <ul>
  *   <li>{@link #screenFetch} decorates the upstream fetcher for the MISS leg - the seam the screening firewall
  *       ({@code ProxyScreen}/{@code HardenedScreen}) plugs into on paths that do not pass through the routed gateway
@@ -26,7 +26,7 @@ import build.jenesis.repository.store.ArtifactStore;
  * </ul>
  *
  * <p>The seam decides before any response byte, so the hit path's streaming {@link PullThroughCache} {@code Deferred}
- * is untouched - it never wraps, buffers or observes the served stream (§1). The default and any well-behaved
+ * is untouched - it never wraps, buffers or observes the served stream. The default and any well-behaved
  * implementation decide from pointer/metadata reads or a re-openable streamed read of the local blob, never by
  * buffering the whole body.
  */
@@ -54,7 +54,7 @@ public interface PullThroughHooks {
      * cache should proceed. The default returns {@link HitDecision#serveThrough()} - the local-first serve runs
      * exactly as today, and (because the downstream treats "nothing durably local" as serve-through too) a path with no
      * cached blob simply flows on to the miss leg. An implementation reads only pointers/metadata or a re-openable
-     * streamed read of the local blob to decide; it must never buffer the whole body (§1).
+     * streamed read of the local blob to decide; it must never buffer the whole body.
      *
      * <p>Called with the claiming {@code format}, the request {@code path} and the tenant-and-repository-scoped
      * {@code store}, so an implementation can resolve the local pointer and its verdict record without the exchange.

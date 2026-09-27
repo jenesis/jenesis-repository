@@ -26,14 +26,14 @@ import build.jenesis.repository.store.Providers;
  *     feature as not installed rather than failing obscurely. {@link TokenExchange#NONE} exchanges nothing, so
  *     absence is fail-closed. {@link #create} declines with an empty {@link Optional}; {@code null} is never a legal
  *     return from it, from {@link #name()} or from {@link #requiredConfig()}.</li>
- * <li><b>Selection failure (&sect;9).</b> An <em>explicitly selected</em>
+ * <li><b>Selection failure.</b> An <em>explicitly selected</em>
  *     {@code jenreg.token-exchange=<name>} that no installed provider answers to, or whose provider
  *     declines, throws {@link IllegalStateException} at resolution naming the selection and the installed provider
  *     names - it does <em>not</em> resolve to {@link TokenExchange#NONE}. A deployment that configured workload
  *     identity and silently got none would have every CI job fall back to a long-lived static credential. An explicit
  *     selection outranks the {@code jenreg.<name>=false} toggle. Only an <em>unselected</em> deployment
  *     degrades to the sentinel.</li>
- * <li><b>Error visibility (&sect;9).</b> Nothing is swallowed at resolution: duplicate provider names, one provider
+ * <li><b>Error visibility.</b> Nothing is swallowed at resolution: duplicate provider names, one provider
  *     registered twice, and more than one <em>enabled</em> exchange with no selection to disambiguate them all throw,
  *     naming the candidates and the setting that resolves them - which protocol admits a workload token is never
  *     decided by module-path order. On the exchange path a validation failure is refused, never downgraded to an
@@ -66,7 +66,7 @@ public interface TokenExchangeProvider {
 
     /** The single enabled exchange discovered via {@link ServiceLoader}, resolved through the shared
      *  {@link Providers#optionalUnique} policy: an explicit {@code jenreg.token-exchange=<name>} selects
-     *  one by name and a selection nothing answers to <em>throws</em> rather than degrading (&sect;9), a
+     *  one by name and a selection nothing answers to <em>throws</em> rather than degrading, a
      *  {@code jenreg.<name>=false} switches one off, more than one enabled exchange is ambiguous rather
      *  than a discovery-order winner, and only an <em>unselected</em> deployment with no exchange installed resolves
      *  to {@link TokenExchange#NONE}. */

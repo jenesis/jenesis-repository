@@ -121,13 +121,9 @@ public final class Documents {
      * bytes - which is what lets a store dedupe them, a reader compare them, and a refused compare-and-set be
      * recognised as a write that landed rather than retried on the chance that it did not.
      *
-     * <p><b>It said all of that before, in three places, and none of them was true.</b>
-     * {@link Properties#store(OutputStream, String)} writes a {@code #<date>} line whether or not a comment was
-     * asked for - passing {@code null} suppresses the caller's comment and not that one - so a document written
-     * twice a second apart differed in its first line. This class, the store walk's private copy and the
-     * delegating cache storage's each carried a sentence promising byte-equality over the same wrong call, the
-     * last one spelling out why it mattered. Measured rather than reasoned: the same three keys, rendered a
-     * second apart, differ.
+     * <p><b>{@link Properties#store(OutputStream, String)} does not give that.</b> It writes a {@code #<date>} line
+     * whether or not a comment was asked for - passing {@code null} suppresses the caller's comment and not that one
+     * - so a document written twice a second apart differs in its first line.
      *
      * <p>What is <em>not</em> a hazard, having been checked rather than assumed: the key order. Since the
      * internal map stopped being a bucket-ordered {@code Hashtable} the rendering is independent of the order the

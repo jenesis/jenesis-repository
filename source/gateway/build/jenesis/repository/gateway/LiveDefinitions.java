@@ -57,7 +57,7 @@ public final class LiveDefinitions implements RepositoryDefinitions {
     }
 
     /**
-     * The boot-time definition sweep (§9): parse EVERY configured repository definition and
+     * The boot-time definition sweep: parse EVERY configured repository definition and
      * fail the boot LOUD, naming the offending repository and the remedy, on any one that does not parse. The swept set
      * is every {@code repositories.<name>} the deployment names - the file-configured
      * {@code jenreg.repositories.<name>} defaults and the runtime-stored {@code repositories.<name>}
@@ -88,7 +88,7 @@ public final class LiveDefinitions implements RepositoryDefinitions {
             }
             // The outbound screen on the operator-configured upstream, applied here as well as at every write
             // surface. This is the backstop that makes the refusal structural rather than a habit: a definition
-            // written straight into the file configuration, or one stored before this shipped, never passes through a
+            // written straight into the file configuration, or one stored without this screen, never passes through a
             // write API - and it must not serve a credentialed pull-through in cleartext because of that.
             String refused = RepositoryDefinition.upstreamRefusal(definition, allowInternal);
             if (refused != null) {

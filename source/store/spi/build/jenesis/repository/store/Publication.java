@@ -24,8 +24,8 @@ import module org.slf4j;
  *
  * <h2>Why this class is {@code final}, and what that costs</h2>
  * The {@code final} is deliberate and load-bearing, not a habit. This class exists to be the product's <em>one</em>
- * hosted-publish choreography - the plan's third design gate ("extend the existing choke point; never add a parallel
- * one") and &sect;2's single-edge rule are both statements about it - and an interface seam, or a subclass, is exactly
+ * hosted-publish choreography - "extend the existing choke point; never add a parallel one" and the single-edge rule
+ * are both statements about it - and an interface seam, or a subclass, is exactly
  * how a second commit sequence enters a codebase. An embedder that needs different behaviour injects a different
  * {@link PublishInterceptor} chain or a different {@link AcceptedLayout}; it does not get to reorder store, screen,
  * gate, lay out, link and notify. Those two constructor seams are the sanctioned variation, and they are enough for
@@ -126,11 +126,10 @@ public final class Publication {
     /**
      * The pointer subtree a hold writer links a review pointer under: {@code publish/quarantine}.
      *
-     * <p>Public, and the one place it is spelled. Fourteen classes across both trees composed
-     * {@code Publication.quarantineKey(path)} themselves - the gate, the inventory browse, four maintenance sweeps, two
-     * contract kits and this module's own {@code ServableNames}. They agreed, and agreeing is not the same as
-     * having an owner: the space is the largest un-owned one in the tree, and its direct ancestor is a defect where
-     * two pushes shared one pointer path. It lives here because this module owns {@code publish/} and every
+     * <p>Public, and the one place it is spelled - the gate, the inventory browse, the maintenance sweeps, the
+     * contract kits and this module's own {@code ServableNames} all read it rather than composing it, because callers
+     * agreeing is not the same as a space having an owner. It lives here because this module owns {@code publish/} and
+     * every
      * caller sits above this module, which is what "a shared thing goes below everything that needs it" means when
      * a suitable module already exists.
      */
@@ -200,10 +199,8 @@ public final class Publication {
     /** As {@link #located}, with the blob's length beside the key - the face a {@code GET} sets its
      *  {@code Content-Length} from and a {@code HEAD} answers from. The length is read off the pointer, where
      *  {@link #link} recorded it, so a serve probes the blob not at all: it opens the blob for the bytes, and the
-     *  open is what proves it present. Measured before: a Maven download read the pointer, the withheld marker, the
-     *  blob's existence, then its length, then its bytes - two round trips for one fact - and then, once the length
-     *  came out of the existence probe, four reads and a stat that only proved what the open proves anyway. A
-     *  pointer written before the length was recorded answers {@code -1}, and a serve answers it without a length
+     *  open is what proves it present - no separate existence probe or stat that only proves what the open proves
+     *  anyway. A pointer that carries no length answers {@code -1}, and a serve answers it without a length
      *  rather than through a stat; the reconcile pass regenerates such a pointer. */
     public Optional<Located> locate(String requestPath) throws IOException {
         // Delegate the servable-vs-not discrimination to the one enumeration seam so serve and enumeration can never
@@ -250,7 +247,7 @@ public final class Publication {
     public Blob stored(InputStream content) throws IOException {
         // The edge restreams an accepted body into the format's layout through a Stored stream; the bytes are in the
         // store already, so the layout's own store answers the hash it carries and neither reads nor writes.
-        // Measured before: every screened publish wrote its blob twice and read it once more for the second write.
+        // Without this, every screened publish would write its blob twice and read it once more for the second write.
         if (content instanceof Stored stored) {
             return new Blob(stored.hash(), stored.size());
         }
@@ -432,7 +429,7 @@ public final class Publication {
      * and this is where the serving pointer learns of it: after the review pointer lands, the serving pointer at
      * {@code <path>}, if one exists, is rewritten with its {@link ServableNames.Pointer#held() hold flag} set
      * ({@link #suppress}), and {@link #unpublish} of the review pointer lifts it again. A serve therefore answers a
-     * held path off the pointer it reads anyway, where every download used to probe the review pointer as a second
+     * held path off the pointer it reads anyway, rather than every download probing the review pointer as a second
      * key. An ordinary link keeps the flag its predecessor carried - a republish under a hold stays held - and a
      * first link of a path whose review pointer already stands is written held, one read of that pointer on the
      * first link of a path only, so a clean re-publish over a pending review is not served past the hold. The
@@ -486,8 +483,8 @@ public final class Publication {
         }
         // Any prior pointer counts, INCLUDING one naming the same blob. A byte-identical re-publish replaces a
         // contribution with an equal one, so a consumer folding a delta must see it and compute zero; filtering it
-        // out here as "nothing was replaced" is what makes such a publish count twice, and is the defect this value
-        // exists to close.
+        // out here as "nothing was replaced" would make such a publish count twice, which is what this value exists
+        // to prevent.
         return prior.map(versioned -> ServableNames.hash(versioned.content()))
                 .filter(previous -> !previous.isEmpty())
                 .orElse(null);
@@ -571,8 +568,8 @@ public final class Publication {
      * alias holds it, which is the only answer that entitles a caller to lift the marker; it is the exact
      * {@link Known.Determined} {@link Withheld#clear} demands. {@link Known.Unknown} means at least one node of the
      * subtree could not be read - an encoding-hostile pointer key a backend cannot resolve, an unreadable container -
-     * so the scan saw a prefix of the queue and "no other alias" is precisely the claim it cannot make. That state
-     * used to be a {@code false}, indistinguishable from a clean negative, and a {@code false} here lifts a hold.
+     * so the scan saw a prefix of the queue and "no other alias" is precisely the claim it cannot make. Reported as a
+     * {@code false} it would be indistinguishable from a clean negative, and a {@code false} here lifts a hold.
      *
      * <p>The scan is a bounded depth-first walk of the {@code publish/quarantine} pointer subtree only - the review
      * queue, bounded by the number of currently held paths, never the whole repository - with an early exit on the first
@@ -812,22 +809,23 @@ public final class Publication {
 
     /**
      * <b>The one containment behind every after-commit observer notify.</b> Six faces - published, deleted,
-     * and the two withhold transitions in their instance and static forms - used to carry six copies of this loop,
+     * and the two withhold transitions in their instance and static forms - share this loop rather than a copy each,
      * and a copy is a place where one of them quietly stops matching the others; this is the same
      * one-choke-point move {@code EventSink.emit} makes for its own fan-out.
      *
-     * <p>Three properties, and the middle one is what a census of the contract kits found missing.
+     * <p>Three properties, and the middle one is the easiest to lose.
      * <ol>
      *   <li><b>An ordinary failure is contained and named, and the next observer still runs.</b> These fire after the
      *       publish has committed, so a notification that could not be filed must never retract an artifact that is
      *       already linked and serving - but it must not vanish either, so the observer's class and the subject are
-     *       logged at {@code WARNING} (&sect;9: a fail-soft still emits a diagnostic).</li>
+     *       logged at {@code WARNING} (a fail-soft still emits a diagnostic).</li>
      *   <li><b>An {@link Error} is attributed and then propagates.</b> It is the runtime or the module graph giving
      *       way rather than a notification failing to file, and filing it as one observer's contained failure would
-     *       leave a deployment serving artifacts on a broken runtime with a WARNING to show for it. It used to
-     *       propagate with <em>no</em> line at all, which is the product's rule for an Error - attributed and escalated - half-applied: an operator learned that
-     *       the publish 500ed and nothing about which of N installed observers had given way. The propagation
-     *       direction is deliberately unchanged - it is arguable, because the publish HAS committed and the client
+     *       leave a deployment serving artifacts on a broken runtime with a WARNING to show for it. Propagating with
+     *       <em>no</em> line at all would half-apply the product's rule for an Error - attributed and escalated: an
+     *       operator would learn that the publish 500ed and nothing about which of N installed observers had given
+     *       way. The propagation direction is deliberate - it is arguable, because the publish HAS committed and the
+     *       client
      *       is told it failed, and that argument is a separate decision from this diagnosis.</li>
      *   <li><b>The identity is the observer's class, read before the call.</b> This SPI carries no {@code name()},
      *       so there is nothing to re-enter - but reading it up front is what keeps it that way, and it is the same
@@ -956,8 +954,8 @@ public final class Publication {
             // once each send the artifact before its signature, so each is screened while no signature is stored
             // and each verdict is a hold; the first signature to land releases the path, and the other client's
             // hold - decided before that release, landing after it - would hold the path again with its signature
-            // present and nothing left to re-assess it (measured 2026-09-12 under soak load: twelve of 1,541 such
-            // versions ended served and unlisted). Identical bytes are one artifact, and the release that judged
+            // present and nothing left to re-assess it, leaving the version served and unlisted. Identical bytes are
+            // one artifact, and the release that judged
             // them with their signature is not undone by a verdict reached over the same bytes while the signature
             // was in flight - so the upload is accepted as the identical artifact already admitted, its layout lands
             // the same state again, and the interceptors hear ACCEPT with their own verdict still in hand, which is
@@ -996,7 +994,7 @@ public final class Publication {
      * The republish conflict / idempotency policy an ingress edge hands {@link #commit} as <em>data</em>, so a format
      * never re-implements "is this coordinate already taken" beside the layout it actually owns. The policy is
      * evaluated once, <em>before</em> the accepted layout writes anything, so a refused republish fails loudly with
-     * nothing half-written (&sect;9).
+     * nothing half-written.
      *
      * <p>{@code pointer} is the store key whose body is the currently published content hash - a format's own serving
      * pointer, since the coordinate a republish collides on is the format's, not this primitive's. A {@code null}
@@ -1143,7 +1141,7 @@ public final class Publication {
         ArtifactStore store();
 
         /** Reopen the accepted blob. A fresh stream each call, so a layout that parses and then re-reads never holds
-         *  the artifact in memory (&sect;1); the caller closes it. */
+         *  the artifact in memory; the caller closes it. */
         InputStream open() throws IOException;
 
         /** Write one parse result / derived document beside the accepted artifact, <em>before</em> any serving pointer

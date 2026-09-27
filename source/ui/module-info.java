@@ -10,10 +10,7 @@
  * contributed here produces markup. Login mechanisms plug in the same way through the
  * {@code LoginContributor} bean seam.
  *
- * <p>There was a second registration SPI beside it - {@code ConsoleCard}, an overview page composed of cards, with
- * four of them bundled. It was never the extension seam; it was this shell's own home page, and the product serves
- * one console now, whose home page is its own. The seam and its cards are gone rather than carried as a second
- * way to add to the GUI.
+ * <p>There is no second registration SPI beside it: a second way to add to the GUI reads as a choice.
  *
  * <p>It requires the format SPI for one reason: the browse card marks each published namespace with the mark of the
  * format that owns it, resolved through the shared {@code Marks} every contributing plug-in family renders through,

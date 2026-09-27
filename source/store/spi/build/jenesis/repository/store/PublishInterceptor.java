@@ -8,7 +8,7 @@ import module java.base;
  * (it {@code extends PublicationObserver}), so the whole publication surface is discovered through a single
  * {@code uses PublicationObserver} clause: {@link Publication} splits the one discovered list by
  * {@code instanceof PublishInterceptor}, driving the interceptor subset through the assess/withheld/committed
- * chain while still notifying every observer (interceptors included) after commit. A plugin author no longer picks
+ * chain while still notifying every observer (interceptors included) after commit. A plugin author does not pick
  * between two near-identical seams: implement {@code PublicationObserver} to ride an accepted publish, and opt into
  * a verdict by implementing this sub-interface instead - one concept, one discovery clause.
  *
@@ -64,13 +64,13 @@ import module java.base;
  * <li><b>Selection failure.</b> None: the chain is additive - every discovered interceptor participates, there is
  *     nothing to select and so nothing to fail at resolution. A screen that must not run is one whose module is off
  *     the module path.</li>
- * <li><b>Streaming (&sect;1).</b> A screen is handed a descriptor and a {@link Content} view, never the upload's
+ * <li><b>Streaming.</b> A screen is handed a descriptor and a {@link Content} view, never the upload's
  *     bytes: the body was hashed on write into {@code blobs/<hash>} <em>before</em> the chain ran, so {@link
  *     Content#open} re-streams the stored blob and a screen that must look inside consumes that stream under its own
  *     bound rather than materialising the artifact. The two sibling reads answer a bound differently <em>by design</em>,
  *     and the difference is contractual: the whole-document {@link Content#sibling(String)} <b>throws</b> past
  *     {@link Content#LARGEST_SIBLING}, because its caller wants the document entire and a prefix presented as whole is
- *     the silently-incomplete answer &sect;5 forbids; the bounded {@link Content#sibling(String, int)} <b>never fails
+ *     a silently-incomplete answer; the bounded {@link Content#sibling(String, int)} <b>never fails
  *     on size</b>, honours the caller's own limit and reports the overflow through
  *     {@link Content.Bounded#truncated()}. The <em>forbidden</em> composition is therefore one-directional, and it is
  *     the one the {@link Content} javadoc argues against: the bounded read must not be expressed over the
@@ -81,11 +81,11 @@ import module java.base;
  *     {@link Content#LARGEST_SIBLING}, refusing a truncated result, which never materialises more than the ceiling and
  *     still fails loudly rather than returning a prefix. What an implementation owes is the two behaviours, not a
  *     particular pair of method bodies.</li>
- * <li><b>Tenant scoping (&sect;6).</b> {@link Content#store()} and the store handed to {@link #committed} and
+ * <li><b>Tenant scoping.</b> {@link Content#store()} and the store handed to {@link #committed} and
  *     {@link #withheld} are the same doubly-scoped (tenant/repository) view the publication routed through, and they
  *     are the only storage a screen may touch. A verdict recorded against a store from anywhere else is a verdict
  *     recorded for the wrong repository.</li>
- * <li><b>Error visibility (&sect;9) - the clause that reverses the base contract.</b> The three verdict-bearing legs
+ * <li><b>Error visibility - the clause that reverses the base contract.</b> The three verdict-bearing legs
  *     <b>propagate</b>: an exception out of {@link #assess} or {@link #committed} fails the publish and leaves nothing
  *     servable, and one out of {@link #withheld} fails the read closed rather than serving a path the chain could not
  *     clear. That is the whole point of the sub-interface - a gate that cannot render a verdict must never let an
@@ -96,7 +96,7 @@ import module java.base;
  *     escapes on <em>either</em> side; and where the enumeration seam calls {@link #withheld} over a hostile or
  *     unresolvable request path, {@code ServableNames} catches and treats the path as withheld - the same fail-closed
  *     direction reached by a different route.</li>
- * <li><b>Read purity (&sect;10).</b> {@link #withheld} is a read-path call: it runs inside {@link Publication#located}
+ * <li><b>Read purity.</b> {@link #withheld} is a read-path call: it runs inside {@link Publication#located}
  *     on <em>every</em> serve and, through {@code ServableNames}, on every enumeration surface. It therefore renders
  *     durably stored state only - no upstream fetch, no scanner call, no lazy refresh and no write - it must be cheap
  *     enough to sit on that path (a keyed probe, never a scan), and it must answer the same when every external system
@@ -180,9 +180,8 @@ public interface PublishInterceptor extends PublicationObserver {
      *       document entire, because a fraction of it is worthless (half a POM, half a manifest, half an attestation
      *       envelope). It has no caller-supplied bound because the caller has no useful answer for a partial read - so
      *       it carries the seam's own ceiling, {@link #LARGEST_SIBLING}, and past it it <b>throws</b>. That is the only
-     *       honest outcome: silently handing back a prefix the caller believes is whole is the silently-incomplete view
-     *       &sect;5 and &sect;9 forbid, and reading without a ceiling turns a gate into an out-of-memory
-     *       lever (&sect;1).</li>
+     *       honest outcome: silently handing back a prefix the caller believes is whole is a silently-incomplete view
+     *       served as whole, and reading without a ceiling turns a gate into an out-of-memory lever.</li>
      *   <li>{@link #sibling(String, int)} is the <em>bounded-fact</em> read: give me at most this many bytes and tell
      *       me whether there were more, because the caller only needs a bounded fact off the companion (a digest, a
      *       size, the head of a large document) and has a defined answer for "there was more". It honours the
@@ -313,10 +312,9 @@ public interface PublishInterceptor extends PublicationObserver {
      * Whether <em>any</em> of {@code interceptors} withholds {@code path} - the whole-chain probe every serving edge
      * asks, with one answer to what a failing probe means.
      *
-     * <p>There were three answers and none of them was stated. One edge caught {@link IOException} and returned
-     * {@code true} for the <b>whole chain</b>, so a transient store read failure under the first interceptor made
-     * every path read as withheld - the edge stopped serving entirely - and every later interceptor's hold became
-     * unreachable for that request. Another propagated. The kit did something else again. Fail-closed is the right
+     * <p>Catching {@link IOException} and returning {@code true} for the <b>whole chain</b> would let a transient
+     * store read failure under the first interceptor make every path read as withheld - the edge would stop serving
+     * entirely - and every later interceptor's hold would be unreachable for that request. Fail-closed is the right
      * direction for a probe that decides whether an unscreened artifact serves; aborting the chain is not that
      * direction, it is a different failure wearing its clothes.
      *

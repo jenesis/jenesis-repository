@@ -19,12 +19,10 @@ import org.springframework.context.annotation.Import;
 /**
  * The console, as one thing an application either carries or does not.
  *
- * <p>There were two nodes once - this one and the shell's own, which imported the shared screens and supplied a
- * default for every seam this console overrides. Nothing ever imported it, so it was a second console that no
- * image served, and the {@link #GATE} an operator reads as "the console" was declared on it. The shell is a
- * library now: the layout, the url space, the extension seams and the screens both consoles rendered. What is
- * gone is its wiring, and a composition scanning both would have registered two
- * {@code SecurityConfig} classes under one bean name and fail the context outright.
+ * <p>This is the one console node, and the {@link #GATE} an operator reads as "the console" is declared here. The
+ * shell is a library: the layout, the url space, the extension seams and the shared screens, with no wiring of its
+ * own - a composition scanning a second node would register two {@code SecurityConfig} classes under one bean name
+ * and fail the context outright.
  *
  * <p>The gate is read as the context starts, never from the settings store: it decides whether the console's
  * controllers and its deny-by-default security chain <em>exist</em>, and a stored setting is read by beans that

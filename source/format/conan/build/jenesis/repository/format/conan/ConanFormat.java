@@ -122,8 +122,9 @@ public final class ConanFormat implements RepositoryFormat, ArtifactLayout, Prox
         // directory is a Blobs.write pointer with a bare-hex body, so the BlobLayout.blobHashes default resolves the
         // withhold set from them (the time/commit/latest markers live OUTSIDE files/ and are never collected). A
         // retroactive KEV/license hold marks those hashes - the file serve and the revision's files listing both gate on
-        // the marker - and an eviction deletes these exact keys; before this the empty return made a hold a silent no-op
-        // (no marker, no review handle) and a KEV-listed recipe/package kept serving. Every level under the version is
+        // the marker - and an eviction deletes these exact keys; an empty return would make a hold a silent no-op
+        // (no marker, no review handle) and a KEV-listed recipe/package would keep serving. Every level under the
+        // version is
         // attacker-publishable, so it is PAGED a page at a time (store.page), never list()ed whole (a whole
         // listing there is a denial-of-service lever); the tree depth is fixed
         // (user/channel/rrev[/pkg/pid/prev]/files), so the walk is bounded, not recursive over an attacker-controlled

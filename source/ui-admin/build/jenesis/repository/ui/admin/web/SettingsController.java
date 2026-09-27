@@ -84,7 +84,7 @@ public class SettingsController {
      *  re-read and a restart-bound one on their next boot (the row says which). Super-admin, under {@code /settings/**}. */
     @GetMapping("/ui/settings/modules")
     public String modules(Model model) throws IOException {
-        // Bind to the memoised orphaned-data snapshot (Principle 10: the render reads stored derived state, never a
+        // Bind to the memoised orphaned-data snapshot (the render reads stored derived state, never a
         // fresh deployment-wide store walk per render) and show its as-of instant, read right after so it reflects
         // the same snapshot the rows carry.
         model.addAttribute("modules", settings.modules());
@@ -212,7 +212,7 @@ public class SettingsController {
      * {@code MultipartFile}. Spring's {@code MultipartResolver} is switched off in <em>every</em> app because
      * it, and {@code FormContentFilter}, would drain an artifact upload body before the format handler read it - twine's
      * PyPI upload and {@code dotnet nuget push} are both {@code multipart/form-data} - so the console cannot depend on
-     * it and used to be simply broken wherever it was off (the combined single-node image). The console now walks the
+     * it and would be simply broken wherever it is off (the combined single-node image). The console walks the
      * same bounded, streaming reader the NuGet and PyPI publish paths walk, which keeps that switch global and leaves
      * the browser form a plain file upload.
      *

@@ -33,7 +33,7 @@ import build.jenesis.repository.metadata.State;
  *
  * <p><b>Reader-tolerant, row-carrying.</b> A mutation parses only the built-in fields it owns and carries every other
  * row - and every unrecognised field on a row it touches - verbatim (the row-level carry {@code findings} has), so
- * a newer writer's row survives an older node untouched. All methods are pure and return a fresh {@link Section} (§11);
+ * a newer writer's row survives an older node untouched. All methods are pure and return a fresh {@link Section};
  * the section carries a {@link Signal#NEUTRAL neutral} signal - the gate does not consume origin.
  */
 public final class OriginSection {
@@ -154,9 +154,9 @@ public final class OriginSection {
     /**
      * Record a fallback fetch through the walk's fallback-fetch path, for both a store and a no-store fallback:
      * append a {@code fallback} row for {@code (fallback, sha256)} when absent (the first acquisition of these bytes,
-     * {@code serves}=1, {@code lastServed}={@code at} - the synchronous first write, §9), else <em>update</em> the
+     * {@code serves}=1, {@code lastServed}={@code at} - the synchronous first write), else <em>update</em> the
      * existing row's {@code lastServed} and increment {@code serves} (a repeated no-copy serve of unchanged bytes - the
-     * best-effort coalesced refresh, §4). A digest change is a new {@code sha256} and so appends a new row. The
+     * best-effort coalesced refresh). A digest change is a new {@code sha256} and so appends a new row. The
      * fallback identity/policy fields are set on first acquisition and preserved on refresh. Re-derivable each CAS
      * attempt.
      */

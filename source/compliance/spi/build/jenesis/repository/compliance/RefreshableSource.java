@@ -4,8 +4,8 @@ import module java.base;
 
 /**
  * The role a {@link SignalSource} takes when it <em>mirrors</em> its vendor rather than querying it per lookup: its
- * query path renders what is durably stored, and the fetch is this separate, explicit, write-role entry point
- * (&sect;10). Detected by {@code instanceof} on an already-created source, the way {@code ProxyFormat} and
+ * query path renders what is durably stored, and the fetch is this separate, explicit, write-role entry point.
+ * Detected by {@code instanceof} on an already-created source, the way {@code ProxyFormat} and
  * {@code ArtifactLayout} are detected on a {@code RepositoryFormat} - a provider does not declare it in
  * {@link SignalSourceProvider#signals()}, because it is not a kind of signal a consumer resolves for; it is how one
  * signal keeps its read path pure.
@@ -25,14 +25,14 @@ import module java.base;
  *     safe, which is what lets the scheduler treat it as an ordinary convergent sweep.</li>
  * <li><b>Absence sentinel.</b> The returned {@link Freshness} is never {@code null}; a refresh that could not draw
  *     anything answers the source's unchanged reading rather than a fabricated one.</li>
- * <li><b>Error visibility (&sect;9).</b> A vendor that cannot be reached is <em>fail-soft and visible</em>: nothing is
+ * <li><b>Error visibility.</b> A vendor that cannot be reached is <em>fail-soft and visible</em>: nothing is
  *     committed, the prior-good data keeps serving, and the returned {@link Freshness} says the attempt did not land,
  *     which is what the driving sweep counts as a failed pass. A failure of the <em>store</em> - the durable side the
  *     mirror commits into - is an {@link IOException}, because that is a wiring or infrastructure fault rather than a
  *     vendor outage and must not read as "the feed is down".</li>
- * <li><b>Read purity (&sect;10).</b> This is the method that is <em>allowed</em> to fetch, and the only one. Its
+ * <li><b>Read purity.</b> This is the method that is <em>allowed</em> to fetch, and the only one. Its
  *     existence is what lets the source's query methods promise they render.</li>
- * <li><b>Durability / delivery (&sect;13).</b> The commit point is the snapshot space's own compare-and-set pointer
+ * <li><b>Durability / delivery.</b> The commit point is the snapshot space's own compare-and-set pointer
  *     move. An incomplete refresh commits nothing and leaves the prior-good data serving with its true age; a crash
  *     between writing a body and moving the pointer leaves unreferenced bytes rather than a pointer naming data that
  *     is not there.</li>

@@ -94,11 +94,10 @@ public class RepositoryProperties {
      * abusive client instead of serving unlimited requests, while staying well clear of legitimate parallel CI. An
      * operator raises it, lowers it, or sets {@code 0} to restore unlimited.
      *
-     * <p><strong>It lives here, and it used to differ by edition.</strong> This core shipped {@code 0} and the
-     * downstream edition's own properties flipped it to {@code 6000}, so which posture a deployment got depended on
-     * which image it ran - and both javadocs argued their side sincerely, which is how a difference like that
-     * survives. A downstream edition adds capability; it does not change what this core decided. So the floor is
-     * the decision, it is made once, and it is made here.
+     * <p><strong>It lives here, and it does not differ by edition.</strong> A downstream edition flipping it in its own
+     * properties would make the posture a deployment gets depend on which image it runs. A downstream edition adds
+     * capability; it does not change what this core decided. So the floor is the decision, it is made once, and it is
+     * made here.
      */
     public static final long DEFAULT_RATE_LIMIT = 6000;
 
@@ -131,10 +130,7 @@ public class RepositoryProperties {
     private boolean proxyEnabled = Boolean.parseBoolean(CoreDefaults.PROXY_ENABLED);
 
     /** Per-repository backing definitions, by name, in the clause grammar
-     *  {@code ( writable | fallback <source> [nocache] [harden] [unscreened] )*} - nothing else parses. Named
-     *  {@code repositories} rather than {@code repository} because a scalar of that name used to hold the
-     *  fixed-space name, and one prefix cannot be both a string and a map; the scalar is gone and the plural
-     *  stays, since renaming a live key to reclaim a dead one would move every deployment's configuration. */
+     *  {@code ( writable | fallback <source> [nocache] [harden] [unscreened] )*} - nothing else parses. */
     private Map<String, String> repositories = new LinkedHashMap<>();
 
     /** Tenant a request resolves to when its key carries none (anonymous or keyless). */
@@ -180,19 +176,18 @@ public class RepositoryProperties {
      *  server-side and a private-host target would be a server-side request against an internal service or cloud
      *  metadata (an SSRF). A single-tenant / {@code fixed} operator migrating from an internal Nexus/Artifactory at a
      *  private address opts out <em>explicitly</em> (this field, or the stored {@code block-private-import-hosts}
-     *  setting, set to {@code false}) - the old tenancy-derived "off for fixed" default was the SSRF hole and is gone.
+     *  setting, set to {@code false}) - a tenancy-derived "off for fixed" default would be an SSRF hole.
      *  This field is only the middle layer: resolve through {@link #importHostsGuarded(Boolean)} (stored setting over
      *  this env-field over the fail-closed default), which folds it into the {@link ImportHostGuard} both import legs
      *  share, never the raw field. */
     private Boolean blockPrivateImportHosts;
 
-    // The three licence dials (license-allowed, license-denied, license-unknown) used to be fields here, with their
-    // defaults written out a second time beside the ones the dimension actually applies. They are gone. Licence is a
+    // The three licence dials (license-allowed, license-denied, license-unknown) are not fields here. Licence is a
     // discovered plugin dimension: its dials reach the gate through the settings lookup layered over the Spring
-    // environment, so a jenreg.license-* set in a properties file or as an environment variable always worked without
-    // this bean, and binding it here only created a second value that had to equal the first. It did not: moving the
-    // unknown-licence default left this class saying QUARANTINE while the gate served, and the deployment-info
-    // surface reported this one. A dial the server itself binds (malware-action, vulnerability-threshold,
+    // environment, so a jenreg.license-* set in a properties file or as an environment variable works without this
+    // bean, and binding it here would only create a second value that had to equal the first - and would drift from
+    // it, with the deployment-info surface reporting the copy. A dial the server itself binds (malware-action,
+    // vulnerability-threshold,
     // proxy-enabled below) still belongs here, because LiveConfig really does read it as the core gate's fallback.
     /** Reject vulnerabilities at or above this CVSS band (NONE disables the vulnerability check). Defaults to
      *  {@code CRITICAL} - the secure floor: a fresh deployment with an advisory feed active gates the most severe

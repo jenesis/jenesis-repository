@@ -20,10 +20,10 @@ import module java.base;
  * {@link #largestWalk(long, long)} and states its ratio at its own call site.
  *
  * <p><strong>Why this is shared rather than per format.</strong> Exactly the argument {@link ArchiveInflation}
- * records, one dimension over: before this existed, every format that cracked an artifact carried its own private
- * byte-counting {@link FilterInputStream} and its own private ceiling - parallel by convention, keyed to nothing an
- * operator can set, and inherited by nothing. A new format then arrived not with a different bound but with
- * <em>none</em>, because there was nothing to inherit it from.
+ * records, one dimension over: a private byte-counting {@link FilterInputStream} and a private ceiling per format
+ * would be parallel by convention, keyed to nothing an operator can set, and inherited by nothing. A new format
+ * would then arrive not with a different bound but with <em>none</em>, because there would be nothing to inherit it
+ * from.
  *
  * <p><strong>Reaching the bound is a fact, not a silence.</strong> A walk answers in the same two words a bounded
  * member read and a bounded store traversal answer in - {@link ArchiveInflation.Outcome#EXHAUSTED} (the archive
@@ -86,7 +86,7 @@ public final class ArchiveWalk {
      * read and a test can move it.
      *
      * @throws IllegalArgumentException when the key is set to something that is not a positive number of bytes - an
-     *         operator who raised a cap and got the spelling wrong must not be left believing they raised it (&sect;9)
+     *         operator who raised a cap and got the spelling wrong must not be left believing they raised it
      */
     public static long largestWalk() {
         return Limits.positive(LARGEST_WALK_KEY, LARGEST_WALK);

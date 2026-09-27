@@ -84,7 +84,7 @@ import build.jenesis.repository.dependency.DependencyLicense;
  * Gradle publishes a JSON descriptor beside the POM from version 6 onward, and every Gradle consumer of that
  * coordinate reads it in preference to the POM. It is claimed here rather than left un-inspected, so the descriptor is
  * screened under the same Maven coordinate as its POM and its jar - the operator deny-list, the immaturity hold and
- * the advisory dimensions all bite on it - instead of streaming through as unclaimed content the way it used to.
+ * the advisory dimensions all bite on it - instead of streaming through as unclaimed content.
  *
  * <h3>What the descriptor feeds, and what it does not</h3>
  * It feeds <b>nothing</b> into licence or dependency derivation. That is a decision, not an omission, and it rests on
@@ -99,7 +99,8 @@ import build.jenesis.repository.dependency.DependencyLicense;
  *       and capabilities. A publish-time screen has no consumer. Folding them in would therefore mean either unioning
  *       every variant - holding a publish over a dependency no consumer of that artifact will ever resolve, a false
  *       hold that breaks publishers - or picking one arbitrarily, which is an under-screen that hides a real
- *       vulnerability. Both are the §9 wrong-answer shape, in opposite directions. The two closure sources this
+ *       vulnerability. Both are a wrong answer served as a right one, in opposite directions. The two closure
+ *       sources this
  *       inspector already has (the sibling CycloneDX attachment, then the resolver) are consumer-independent and stay
  *       the answer.</li>
  *   <li><b>Capabilities are a resolution concept, not a compliance one.</b> They express which components conflict
@@ -115,9 +116,9 @@ import build.jenesis.repository.dependency.DependencyLicense;
  * reason an unparseable POM is not (the coordinate comes from the path, not the body) - and for one further reason
  * specific to this file. Withholding a {@code .module} is not a safe default: its POM keeps serving, and Gradle then
  * <em>silently</em> resolves the POM's variant instead of the descriptor's, which is a wrong answer with no error
- * anywhere. Serving a broken descriptor, by contrast, makes Gradle refuse it and fail the build loudly. Measured with
- * the real client: a missing {@code .module} changed the resolved artifact and the resolved dependency set with a
- * {@code BUILD SUCCESSFUL}, while a corrupt one failed the build outright. So a repository must never turn "this
+ * anywhere. Serving a broken descriptor, by contrast, makes Gradle refuse it and fail the build loudly: with the
+ * real client a missing {@code .module} changes the resolved artifact and the resolved dependency set with a
+ * {@code BUILD SUCCESSFUL}, while a corrupt one fails the build outright. So a repository must never turn "this
  * descriptor is broken" into "this descriptor is absent"; the failure is logged here and left visible to the client.
  *
  * <h2>The Jenesis module layout</h2>
@@ -161,8 +162,7 @@ public final class MavenQualityInspector implements QualityInspector {
      *  derived declaration, and the bytes are served either way. */
     private static final String GRADLE_MODULE_MAJOR = "1.";
 
-    /** The parser for the {@code .module} descriptor. A maintained JSON library rather than a hand-rolled reader
-     *  (§8) - the document is publisher-authored JSON reaching a screening path. */
+    /** The parser for the {@code .module} descriptor - publisher-authored JSON reaching a screening path. */
     private static final JsonMapper JSON = JsonMapper.builder().build();
 
     /** The Maven attachment a Jenesis build publishes beside the pom and jar, in both serialisations the emitter
@@ -568,11 +568,11 @@ public final class MavenQualityInspector implements QualityInspector {
      * the artifact screens on its own coordinate.
      *
      * <p>The root is not one of its own dependencies. The resolver's closure carries the root POM's coordinate in
-     * {@code dependencies()} beside everything it reaches, so a walk that succeeds used to answer the artifact a
+     * {@code dependencies()} beside everything it reaches, so a walk that succeeds would answer the artifact a
      * second time - with the same licences and no place on the graph, since it is the graph's origin - beside the
-     * subject the POM itself yields. The declared closure never did, because a CycloneDX document's components
+     * subject the POM itself yields. The declared closure never does, because a CycloneDX document's components
      * exclude its metadata component. The root POM is resolved under {@link #ROOT} so the closure names it, and it
-     * is skipped here; found 2026-09-20 by a hermetic suite whose walk had reached a proxy.
+     * is skipped here.
      */
     private static List<ComplianceGate.Subject> transitive(byte[] pom) {
         try (ExecutorService executor = Executors.newVirtualThreadPerTaskExecutor()) {

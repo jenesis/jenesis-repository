@@ -4,8 +4,8 @@ import org.springframework.boot.context.properties.ConfigurationProperties;
 
 /**
  * A generic OpenID Connect provider, bound from {@code jenreg.ui.oidc.*} ({@code JENREG_UI_OIDC_ISSUER_URI} /
- * {@code _CLIENT_ID} / {@code _CLIENT_SECRET} / {@code _NAME}) - the same keys as before this mechanism was a
- * module. Configured by its issuer URI (the rest - authorization, token and user-info endpoints, JWK set - is
+ * {@code _CLIENT_ID} / {@code _CLIENT_SECRET} / {@code _NAME}). Configured by its issuer URI (the rest - authorization,
+ * token and user-info endpoints, JWK set - is
  * discovered). When the issuer or client id is blank, OIDC login is disabled. Members are keyed
  * {@code oidc/<sub>}; {@code name} labels the button.
  */

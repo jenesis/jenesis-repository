@@ -99,9 +99,9 @@ final class RubyGemsListings {
     /**
      * Emit a compact-index line per gem, in the order the scan yields them.
      *
-     * <p>The compact index names every gem in the repository, so collecting the lines into a map held the
-     * repository. The scan's order is the sink's order - the store's lexicographic child order, which is what the
-     * sorted map used to supply.
+     * <p>The compact index names every gem in the repository, so collecting the lines into a map would hold the
+     * repository. The scan's order is the sink's order - the store's lexicographic child order, which is the order
+     * the document needs.
      */
     private void generateVersions(StoredListing.Generator.Sink sink) throws IOException {
         ENTRIES.scan(store, "rubygems", name -> {

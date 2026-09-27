@@ -334,7 +334,7 @@ public final class RepositoryClient {
         return pagedVulnerabilities(repo, reachability, applicability, false);
     }
 
-    /** The explicit re-scan (Principle 10's write path): query the enabled feeds for every published coordinate,
+    /** The explicit re-scan (the write path that refreshes): query the enabled feeds for every published coordinate,
      *  persist the findings, and return the refreshed report - the read-only {@link #vulnerabilities(String)}
      *  renders the durable ledger only, so a vulnerability declared after the last sweep appears here first. */
     public VulnerabilityReport rescanVulnerabilities(String repo) throws IOException, InterruptedException {
@@ -1227,7 +1227,7 @@ public final class RepositoryClient {
     // ---------------------------------------------------------------------------------------------------------
     // Operations, compliance and lifecycle reads the console had and this client did not. Each is the same shape as
     // everything above it: one request, the body handed back as text or parsed into a record. They are grouped here
-    // rather than interleaved because they arrived together, closing the surface gap the parity census measured.
+    // rather than interleaved because they close one gap: the console's reads this client lacked.
     // ---------------------------------------------------------------------------------------------------------
 
     /** The read caches of the node this client is pointed at. */
@@ -1679,7 +1679,7 @@ public final class RepositoryClient {
     public void markLifecycle(String repository, String coordinate, String version, String state, String message)
             throws IOException, InterruptedException {
         // Query parameters, and a version: a mark names one version, which is what the endpoint binds and what the
-        // stored flag carries. This sent a JSON body of its own shape until 2026-09, and was refused every time.
+        // stored flag carries; the endpoint refuses a JSON body.
         HttpResponse<String> response = send("POST", "/api/lifecycle?repository=" + enc(repository)
                 + "&coordinate=" + enc(coordinate)
                 + "&version=" + enc(version)

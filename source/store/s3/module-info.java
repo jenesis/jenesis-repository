@@ -9,8 +9,8 @@
  *
  * <p>Netty 4.2 split {@code netty-codec} into codecs whose descriptors require their optional peers without
  * {@code static} - {@code netty-codec-marshalling} wants {@code org.jboss.marshalling}, {@code netty-codec-protobuf}
- * wants {@code protobuf.javanano} - so a module-path boot layer carrying them fails on the missing module (measured
- * 2026-09-13: twenty-one test JVMs through this store's closure). The S3 SDK pulls netty for its async client,
+ * wants {@code protobuf.javanano} - so a module-path boot layer carrying them fails on the missing module. The S3 SDK
+ * pulls netty for its async client,
  * which this store never uses; the exclusion below drops the two codecs from what it brings in.
  *
  * @jenesis.release 25

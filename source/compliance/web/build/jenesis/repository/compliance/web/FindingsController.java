@@ -182,7 +182,7 @@ public class FindingsController {
         }
         ArtifactStore store = repositories.store(tenant, repo);
         Findings ledger = findings.get().over(store);
-        // A bounded slice, never the whole ledger per GET (Principle 7/§10): the paged overload stops the key-tree
+        // A bounded slice, never the whole ledger per GET: the paged overload stops the key-tree
         // walk one row past the requested window, and `more` tells the client whether another page remains.
         Findings.Page page = ledger.all(new Findings.Filter(
                 blankToNull(coordinate), kindFilter, blankToNull(source), blankToNull(category), severityFilter,
@@ -191,7 +191,7 @@ public class FindingsController {
         for (Findings.Located located : page.located()) {
             views.add(FindingView.of(located));
         }
-        // The instant the served list is honestly as-of (Principle 10). A selective query served from the
+        // The instant the served list is honestly as-of. A selective query served from the
         // eventually-consistent findings-filter index carries the index's own build-time scan freshness, so the view is
         // never labelled fresher than the built index it came from - render that stamp (blank means never scanned, so
         // null). Only on the live-walk path (a coordinate/bare filter, or a not-yet-built index falling back to the
@@ -357,7 +357,7 @@ public class FindingsController {
 
     /** The ledger's answer; {@code available} distinguishes an installed-but-empty ledger from the {@code 501} an
      *  uninstalled module answers. {@code lastScanned} is the instant the advisory sweep or an explicit rescan last
-     *  refreshed this repository's findings against the feeds (Principle 10's staleness signal), {@code null} when the
+     *  refreshed this repository's findings against the feeds (the staleness signal), {@code null} when the
      *  repository was never scanned - rendered as such, never as "clean". */
     public record FindingsView(boolean available, List<FindingView> findings, boolean more, Instant lastScanned) {
     }

@@ -26,7 +26,7 @@ public final class OciImporter implements RepositoryImporter {
     @Override
     public Optional<ArtifactDescriptor> importTarget(String sourcePath) {
         // RepositoryImporter clause 4, before the empty answer below: empty means "lay this out unscreened", so a
-        // traversal-shaped source path must be refused rather than granted that permission (§13 - the same screen raw
+        // traversal-shaped source path must be refused rather than granted that permission (the same screen raw
         // and maven apply, applied by the importer whose answer is the most permissive of the three).
         RepositoryImporter.importablePath(sourcePath, "oci");
         // Structural exception: an OCI push is not a single-body write - a manifest references blobs pushed as their
@@ -74,7 +74,7 @@ public final class OciImporter implements RepositoryImporter {
             OciManifests.ingest(name, reference, content, mediaType(content), store);
         } catch (OciManifests.InvalidManifest invalid) {
             // An oversized/unparseable source manifest is a refused entry: logged and skipped, storing/laying out
-            // nothing (F4) - the migration continues rather than half-ingesting a manifest whose layers no later hold
+            // nothing - the migration continues rather than half-ingesting a manifest whose layers no later hold
             // could enumerate. The MAX_MANIFEST cap above already refuses the oversized case with an IOException; this is
             // the parse belt at the shared choke point.
             LOGGER.log(System.Logger.Level.WARNING, "skipping unparseable imported OCI manifest "

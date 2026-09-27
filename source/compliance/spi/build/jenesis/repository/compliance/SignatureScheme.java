@@ -11,18 +11,16 @@ import build.jenesis.repository.format.ArtifactSignatures;
  *
  * <h2>Why a service and not a switch</h2>
  *
- * The inspector used to dispatch on the scheme enum with one branch per verifier, each importing its library's
- * module: five branches over Bouncy Castle and one over sigstore-java, all in the module that also owns trust, the
- * signer index and the sweeps. Every scheme added since arrived as a seventh copy of the same forty lines - read the
- * facts, pick the trust source that holds the signer, verify over the bounded body, name the signer, grade - with
- * one library call different in each, and the inspector's module acquired every verifier's dependency. As a
- * service the forty lines are written once in the inspector and a scheme contributes only its library calls, from
- * the module that already loads the library; a deployment carrying no verifier for a scheme reports evidence of it
- * as unreadable - "no verifier is installed" - rather than pretending to have checked it, exactly as before.
+ * A branch per verifier in the inspector would repeat the same forty lines per scheme - read the facts, pick the
+ * trust source that holds the signer, verify over the bounded body, name the signer, grade - with one library call
+ * different in each, and the inspector's module would acquire every verifier's dependency. As a service the forty
+ * lines are written once in the inspector and a scheme contributes only its library calls, from the module that
+ * already loads the library; a deployment carrying no verifier for a scheme reports evidence of it as unreadable -
+ * "no verifier is installed" - rather than pretending to have checked it.
  *
- * <p>The scheme enum stays where it is. It is the vocabulary a <em>format</em> speaks about the shape of its
- * evidence, and a format must be able to name a scheme this deployment has no verifier for - the honest report
- * above depends on it. What moved is the verifier, not the name.
+ * <p>The scheme enum is the vocabulary a <em>format</em> speaks about the shape of its evidence, and a format must
+ * be able to name a scheme this deployment has no verifier for - the honest report above depends on it. The
+ * verifier is the service, not the name.
  *
  * <h2>The two steps, and why they are separate</h2>
  *
@@ -205,7 +203,7 @@ public interface SignatureScheme {
     /**
      * The discovered schemes, resolved once. A holder rather than a {@code ServiceLoader.load} in the method for the
      * reason {@link SignerTrustProvider} records: both screens verify per artifact, and a walk of the module graph's
-     * service declarations per artifact was measured as a proxy too slow to serve a large index. First use rather
+     * service declarations per artifact makes a proxy too slow to serve a large index. First use rather
      * than class-init, so a composition that never verifies pays nothing.
      */
     final class Installed {

@@ -10,7 +10,7 @@ import build.jenesis.repository.store.Lease;
 /**
  * The maintenance scheduler's <em>single-writer guard</em>, split out of {@link MaintenanceScheduler} so the
  * acquire &rarr; renew &rarr; run &rarr; release cycle around a {@link Lease} is one object a contention test can drive
- * directly as well as through a live pass (the maintenance-kernel spike's R7).
+ * directly as well as through a live pass.
  *
  * <p>It is deliberately <strong>store-light and tenant-blind</strong>: it knows a lease object, a holder id, a ttl and
  * a renewal timer, and nothing about tenants, repositories, tasks or meters. It is <strong>not a second exclusion
@@ -20,9 +20,9 @@ import build.jenesis.repository.store.Lease;
  *
  * <h2>What a lost lease means</h2>
  * A renewal that returns {@code false} means this node stalled past its own ttl and a rival legitimately took the lock:
- * two sweepers are now live over one store. That used to be <em>logged only</em> - the pass ran to completion,
- * its failure counter and task status untouched, so the dashboard showed a clean sweep while the fleet double-swept.
- * The semantics chosen here, and the reason:
+ * two sweepers are now live over one store. Logged only, the pass would run to completion with its failure counter
+ * and task status untouched, so the dashboard would show a clean sweep while the fleet double-swept. The semantics
+ * chosen here, and the reason:
  * <ol>
  *   <li><b>It is a pass failure, not a skip.</b> {@link Holding#lost()} flips and stays flipped, and the caller counts
  *       the pass as failed - so {@code jenreg.maintenance.failures} rises and the task reports FAILED.
@@ -31,8 +31,8 @@ import build.jenesis.repository.store.Lease;
  *   <li><b>The pass stops enlarging the window.</b> The caller polls {@link Holding#lost()} between fan-out batches and
  *       submits no further work, bounding the double-sweep to the units already in flight.</li>
  *   <li><b>It is not cancellation.</b> A {@link build.jenesis.repository.maintenance.MaintenanceTask} has no
- *       cancellation seam, so an in-flight unit runs to completion. That residual window is the honest claim
- *       (design gate 5) - and the lease was always best-effort over the store's compare-and-set anyway.</li>
+ *       cancellation seam, so an in-flight unit runs to completion. That residual window is the honest claim - and
+ *       the lease is best-effort over the store's compare-and-set anyway.</li>
  * </ol>
  *
  * <h2>Contract</h2>
@@ -44,7 +44,7 @@ import build.jenesis.repository.store.Lease;
  *   <li><b>Absence sentinel.</b> An empty {@link Optional} means "not acquired - a rival (or this node's own live pass)
  *       holds it"; it never means the body ran and returned nothing. A body returning {@code null} is a programming
  *       error and fails loudly rather than being reported as a refused acquisition.</li>
- *   <li><b>Selection failure (&sect;9).</b> A degenerate ttl - non-positive, or so short that the renewal cadence
+ *   <li><b>Selection failure.</b> A degenerate ttl - non-positive, or so short that the renewal cadence
  *       ({@code ttl/2}) rounds to zero - is refused at construction naming {@code cleanup-lease}. It is operator input
  *       that removes single-writer exclusion outright <em>and</em> makes every exclusive pass throw; a silent fallback
  *       would leave a deployment believing it has a lease it does not have.</li>
@@ -100,8 +100,8 @@ public final class LeaseGuard implements AutoCloseable {
     /** This node's lease holder id - hostname plus a per-incarnation uuid, so a restarted node never mistakes a
      *  previous incarnation's lease for its own. The hostname is the one the operating system was given, read from
      *  {@code HOSTNAME} when the resolver cannot map it to an address: a container named by its deployment on a host
-     *  network has a name nothing resolves, and a fleet's lease holders all read {@code node/...} before this, which
-     *  told an operator nothing about which node holds a pass. */
+     *  network has a name nothing resolves, and a fleet whose lease holders all read {@code node/...} would tell an
+     *  operator nothing about which node holds a pass. */
     private static String node() {
         String host;
         try {
@@ -165,7 +165,7 @@ public final class LeaseGuard implements AutoCloseable {
     }
 
     /** The live single-writer status of one running pass: {@code true} once a renewal was refused, meaning a rival took
-     *  the lock and this pass is no longer the only sweeper. Never resets - a pass that lost the lease has lost it. */
+     *  the lock and this pass is not the only sweeper. Never resets - a pass that lost the lease has lost it. */
     interface Holding {
 
         boolean lost();

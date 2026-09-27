@@ -9,11 +9,11 @@ import build.jenesis.repository.maintenance.MaintenanceTask;
 import build.jenesis.repository.maintenance.RepositoryContext;
 
 /**
- * The scheduled write-role half of &sect;10 for the signal family: it draws whatever a
+ * The scheduled write-role half of "reads render, writes refresh" for the signal family: it draws whatever a
  * {@link RefreshableSource mirroring signal source} has to draw, so the sources' <em>query</em> paths can render a
- * persisted snapshot and never fetch. Before it existed the one mirroring signal - the CISA known-exploited catalogue -
- * refreshed from inside {@code contains(cve)}, which put a multi-megabyte download on the publish thread and made a
- * gate decision depend on the vendor being reachable at the moment somebody uploaded.
+ * persisted snapshot and never fetch. A mirror refreshed from inside {@code contains(cve)} would put a
+ * multi-megabyte download on the publish thread and make a gate decision depend on the vendor being reachable at
+ * the moment somebody uploaded.
  *
  * <p>Deployment-global, not per repository. A signal source is a deployment singleton by its SPI's own tenant-scoping
  * clause - the CISA catalogue is the same public data for every tenant - so the work happens once per pass in
@@ -30,8 +30,8 @@ import build.jenesis.repository.maintenance.RepositoryContext;
  * could not do its work must throw rather than return quietly, or an index unrebuilt for a week is indistinguishable
  * from a healthy one. So a source whose refresh did not land is named in an {@link IOException} the scheduler logs and
  * counts on {@code jenreg.maintenance.failures}. The refresh itself stays fail-soft where it must be: the
- * prior-good catalogue keeps serving and the gate keeps deciding, exactly as before - what changed is that an outage
- * is now <em>counted</em> instead of being a silent lazy-load nobody watched.
+ * prior-good catalogue keeps serving and the gate keeps deciding - but an outage is <em>counted</em> instead of being
+ * a silent lazy-load nobody watches.
  */
 public final class SignalRefreshTask implements MaintenanceTask {
 
@@ -105,10 +105,10 @@ public final class SignalRefreshTask implements MaintenanceTask {
                 //
                 // Throwable rather than IOException | RuntimeException. An Error out of one mirror is the
                 // likeliest failure a plugged-in feed module actually produces - a NoClassDefFoundError from a
-                // half-installed optional dependency - and it used to leave this loop, so the mirrors sorted after
-                // it never drew at all. The scheduler now survives that, which is precisely what made it
-                // quiet: the pass was counted as failing without ever naming which signal, and every OTHER signal's
-                // catalogue stayed undrawn for the life of the process while the gate kept screening against it.
+                // half-installed optional dependency - and leaving this loop on it would mean the mirrors sorted
+                // after it never draw at all. The scheduler survives that, which would make it quiet: the pass would
+                // count as failing without naming which signal, and every OTHER signal's catalogue would stay
+                // undrawn for the life of the process while the gate kept screening against it.
                 // Containing it here is not swallowing it - the product's rule is that an Error is attributed rather
                 // than filed as the guest's answer, and the escalation question is decided by who the caller is:
                 // this method's caller is the maintenance worker, which has none, so the escalation goes to the

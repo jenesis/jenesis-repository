@@ -41,26 +41,24 @@ import org.springframework.web.bind.annotation.RestController;
  * server's dials through and the console's Security-posture screen reads. So an advisory reflects a live setting change
  * rather than only the boot value, <em>and</em> it reflects the value that is actually in force.
  *
- * <p>This read used to resolve stored-over-environment and never above a pin, which on this surface fails open rather
- * than merely disagreeing: for a key an operator has pinned <b>and</b> the store also holds, the stored value is inert -
- * the server runs on the pin - so the report described the deployment as configured instead of as running. With
- * {@code jenreg.auth} pinned {@code false} and {@code true} left in the store, the report carried no
+ * <p>Resolving stored-over-environment and never above a pin would fail open on this surface rather than merely
+ * disagree: for a key an operator has pinned <b>and</b> the store also holds, the stored value is inert - the server
+ * runs on the pin - so the report would describe the deployment as configured instead of as running. With
+ * {@code jenreg.auth} pinned {@code false} and {@code true} left in the store, the report would carry no
  * {@code jenreg.auth.open} row while every request, including the one reading the report, was being served with no
- * credential at all. A headless operator was told the deployment was safe when it was not, and the console - which read
- * the right chain - disagreed with it. {@link SpiCatalogController} carried the same shape and took the same retrofit.
+ * credential at all. {@link SpiCatalogController} reads the same chain for the same reason.
  *
  * <h2>One <em>named</em> tenant, never all of them</h2>
- * The console's Security-posture screen was given the selected tenant's own advisories - conditions about a tenant's
- * admission policy, raised at {@link Scope#TENANT} against that tenant's effective chain. This read held no tenant, so
- * it dropped them entirely and a headless operator could not obtain what the console shows, although the API and the
- * console are documented as equal administration surfaces (&sect;13).
+ * The console's Security-posture screen shows the selected tenant's own advisories - conditions about a tenant's
+ * admission policy, raised at {@link Scope#TENANT} against that tenant's effective chain. A read holding no tenant
+ * drops them entirely, and the API and the console are documented as equal administration surfaces.
  *
- * <p>{@code ?tenant=<name>} closes that, and closes it the only way the {@code SafetyAdvisor} contract allows. The
- * refusal that made this endpoint tenant-less is <b>not</b> relaxed: enumerating every tenant's effective gate on one
- * request is the unbounded fan-out clause 12 forbids, and there is still no way to ask for "all tenants" - the
- * parameter takes exactly one name, the read costs the same whatever the deployment's tenant count, and an omitted
- * parameter is the deployment-wide view, never a sweep. What changes is only that an operator who <em>knows</em> which
- * tenant they are administering can name it, which is precisely what the console session does when it selects one.
+ * <p>{@code ?tenant=<name>} gives this read a tenant the only way the {@code SafetyAdvisor} contract allows:
+ * enumerating every tenant's effective gate on one request is the unbounded fan-out clause 12 forbids, and there is
+ * no way to ask for "all tenants" - the parameter takes exactly one name, the read costs the same whatever the
+ * deployment's tenant count, and an omitted parameter is the deployment-wide view, never a sweep. An operator who
+ * <em>knows</em> which tenant they are administering can name it, which is precisely what the console session does
+ * when it selects one.
  *
  * <p>Both scoping layers the console applies are applied here too, because a report is a fan-out over discovered
  * providers and an advisory names its own tenant:
@@ -82,11 +80,11 @@ import org.springframework.web.bind.annotation.RestController;
  * {@code ScopedPosture} makes exactly this pair against a report that really carries two tenants' rows, which is the
  * only shape in which dropped scoping is observable, and its {@code ScopedPostureTest} is where that falsification
  * lives. {@code ScopedPosture} itself is a console view model on the console node's module path, and requiring it here
- * would drag the console's domain services onto a repository node (&sect;2), which is why this repeats two
+ * would drag the console's domain services onto a repository node, which is why this repeats two
  * calls rather than the type.
  *
  * <p>The name is validated as a store-safe tenant segment before it is used, and a malformed one is refused with a
- * {@code 400} naming it rather than silently answered as though no tenant had been asked for (&sect;9). A well-formed
+ * {@code 400} naming it rather than silently answered as though no tenant had been asked for. A well-formed
  * name that has overridden nothing is <em>not</em> refused: its effective chain is the deployment's, which is exactly
  * what that tenant's gate would resolve, and {@code TenantPosture} is explicit that a deployment whose baseline is
  * unsafe shows the row in every tenant's view because every tenant's gate really is open. Answering it costs one
@@ -156,7 +154,7 @@ public class PostureAdminController {
     }
 
     /** A malformed {@code ?tenant=} is refused rather than quietly answered as the deployment-wide report, and the
-     *  refusal names what was asked for and what the endpoint does offer (&sect;9). */
+     *  refusal names what was asked for and what the endpoint does offer. */
     @ExceptionHandler(IllegalArgumentException.class)
     public void badRequest(IllegalArgumentException refused, HttpServletResponse response) throws IOException {
         response.setStatus(400);

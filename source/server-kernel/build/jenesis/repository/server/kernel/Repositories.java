@@ -26,10 +26,10 @@ import build.jenesis.repository.store.QuotaArtifactStore;
  *
  * <p>What this hands out is the scoped store, the quota and the two answers a definition gives
  * ({@link RepositoryDefinitions}); the staging lifecycle and the retention engine, both SPIs, are resolved once and
- * offered here because every surface that promotes or sweeps asks the same question. It used to hand out the
- * inventory, the quarantine log and the gated repository as well - each a {@code new X(store)} over the scoped store
- * - which made the kernel require the inventory, the gate and the router for three one-line factories, and every
- * web adapter drag them. A feature's own factory is the feature's: {@code new StoreRepositoryInventory(store)},
+ * offered here because every surface that promotes or sweeps asks the same question. It does not hand out the
+ * inventory, the quarantine log or the gated repository - each a {@code new X(store)} over the scoped store - which
+ * would make the kernel require the inventory, the gate and the router for three one-line factories, and every web
+ * adapter drag them. A feature's own factory is the feature's: {@code new StoreRepositoryInventory(store)},
  * {@code new QuarantineLog(store)}, {@code new GatedRepository(writable)} over the store this resolves.
  */
 public final class Repositories {

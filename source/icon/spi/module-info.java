@@ -14,7 +14,7 @@
  * ({@code RepositoryFormat}, which extends {@link build.jenesis.repository.icon.IconContributor}) and the plug-ins
  * that contribute findings (advisory feeds, inspectors, gate policies, classifiers, scan markers). Neither may
  * depend on the other, and a console that resolved each family through its own copy of the fallback, the rendering
- * rule and the generated scheme would be the parallel mechanism the shared-infrastructure rule (&sect;2) exists to
+ * rule and the generated scheme would be the parallel mechanism the shared-infrastructure rule exists to
  * refuse: the second family would arrive not with a different scheme but with a second one. The seam therefore sits
  * below both, is {@code java.base}-only, and is registry-free - it discovers nothing, so it never becomes a second
  * discovery pipeline beside the family clauses that already find these implementations.

@@ -362,8 +362,8 @@ final class AdminCommands {
                 System.out.println("no importer for: " + String.join(", ", status.skippedFormats()));
             }
             // Printed even when zero rows were imported - especially then. A completed job reading
-            // "imported: 0, skipped: 0" with no further line is exactly how a wholly refused source used to look
-            // identical to an empty one.
+            // "imported: 0, skipped: 0" with no further line would make a wholly refused source look identical to an
+            // empty one.
             if (status.droppedTotal() > 0) {
                 System.out.println("dropped:  " + status.droppedTotal() + " row(s) the source offered were refused");
                 status.dropped().forEach((reason, count) ->

@@ -63,8 +63,8 @@ public class AdminController {
         audit.record(current.name(), actor.name(), action, target);
     }
 
-    /** How many members one console page renders. The membership is a key space, one small object per member
-     *, so the screen pages it rather than reading a tenant's whole directory to draw a table. */
+    /** How many members one console page renders. The membership is a key space, one small object per member,
+     *  so the screen pages it rather than reading a tenant's whole directory to draw a table. */
     private static final int MEMBERS_PAGE = 200;
 
     /** How many seen principals the id field offers. A suggestion list, not a directory: it is an aid to typing an
@@ -87,7 +87,7 @@ public class AdminController {
         // This tenant's groups, read through the same Authorization the API's group routes use.
         model.addAttribute("groups", groups());
         // Everyone this deployment has seen sign in, offered on the id fields. An administrator otherwise has to be
-        // told an opaque provider subject out of band, which is the reason sign-in no longer refuses a person the
+        // told an opaque provider subject out of band, which is the reason sign-in does not refuse a person the
         // deployment has never seen: the sign-in is what produces the id to grant to.
         model.addAttribute("knownPrincipals", known.page(null, KNOWN_PAGE));
         model.addAttribute("scimConfigured", new ScimTokens(tenantDocuments()).configured());

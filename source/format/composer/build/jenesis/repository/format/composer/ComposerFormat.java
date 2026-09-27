@@ -348,7 +348,7 @@ public final class ComposerFormat implements RepositoryFormat, ArtifactLayout, P
 
     /** The Composer-v2 {@code list} endpoint: {@code {"packageNames": [...]}}, every {@code <vendor>/<package>} this
      *  registry has indexed. This is the one read that walks the index (a migration/enumeration reads it), so the
-     *  per-root scan the resolve path used to pay is confined here - a normal {@code composer require} reads
+     *  per-root scan is confined here and the resolve path never pays it - a normal {@code composer require} reads
      *  {@code packages.json} (a constant) then the per-package {@code p2} files, and never touches this endpoint. On a
      *  proxy registry it lists only the locally cached packages, which is honest for enumeration and does not affect
      *  resolution (the resolver drives off the lazy {@code metadata-url}, not this list). */
@@ -464,9 +464,9 @@ public final class ComposerFormat implements RepositoryFormat, ArtifactLayout, P
             }
         } else {
             // Streamed with the rewrite folded in, never as one byte array: a package's document is every version
-            // of it, and answering it whole held the packument the publish had just streamed into - the
-            // shape the npm-packument canary showed as a 500 at fifty thousand versions under 512 MiB, an OutOfMemoryError on the read
-            // after the write was fixed. The length is not declared, since the rewrite changes it.
+            // of it, and answering it whole would hold in heap what the publish had just streamed - an
+            // OutOfMemoryError on the read at fifty thousand versions under 512 MiB. The length is not declared,
+            // since the rewrite changes it.
             try (OutputStream out = exchange.respond(200, -1L)) {
                 document.copyTo(out, ComposerListings.BASE, base);
             }

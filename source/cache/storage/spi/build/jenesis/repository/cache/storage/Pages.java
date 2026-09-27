@@ -7,12 +7,12 @@ import build.jenesis.repository.walk.Traversal;
 /**
  * The cache SPI's paging mechanics: how a cursor is read, what order a container enumerates in, and how a page of
  * names becomes a {@link Traversal.Result}. Stated once here rather than in each backend, for the reason the
- * addressability screens moved into {@link Names}: four hand-written copies of "what does this cursor mean" are four
+ * addressability screens live in {@link Names}: four hand-written copies of "what does this cursor mean" are four
  * chances to disagree, and a backend that reads a cursor one segment differently from its siblings does not fail - it
  * quietly skips or re-delivers a page, which is precisely the silent incompleteness paging exists to remove.
  *
  * <p>The outcome vocabulary is deliberately <em>not</em> defined here. {@link Traversal.Result} is the store's,
- * shared with every bounded traversal in the product (&sect;2), and it is the type in which "truncated without a
+ * shared with every bounded traversal in the product, and it is the type in which "truncated without a
  * continuation cursor" and "exhausted with one" cannot be constructed at all. This class only assembles one.
  *
  * <p><strong>A cursor is a key.</strong> Exactly as it is for the store's traversals: the cursor an enumeration

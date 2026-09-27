@@ -24,14 +24,14 @@ import module java.base;
  *     {@code null} is never legal. "No feed is active" is the identity-comparable {@link #NONE}, which
  *     {@link #resolve} folds an empty candidate set into - a caller can therefore tell an unscreened deployment from
  *     a clean package by identity, which no list value could express.</li>
- * <li><b>Error visibility (&sect;9) - fail closed.</b> This is the clause the whole family turns on. A feed that
+ * <li><b>Error visibility - fail closed.</b> This is the clause the whole family turns on. A feed that
  *     cannot answer must <em>raise</em>, never return the empty list: an outage that reads as "no advisories" is
  *     indistinguishable from a clean package, and a vulnerability nobody reported would publish. That covers a
  *     rejected status (an exhausted rate limit, a refused credential), a body the parser cannot read, and a body
  *     that is well formed but arrived under a bad status - the last of which is why an implementation checks the
  *     status <em>before</em> it parses. Contrast {@link ExploitProbabilitySource}, whose absent score is safe and
  *     which therefore fails soft.
- *     <p><b>A warm cache is not an exemption, and this is the half that used to be left unsaid</b>. An
+ *     <p><b>A warm cache is not an exemption</b>. An
  *     implementation may hold an answer for a declared window and serve it without asking again - that is what a
  *     window <em>is</em>, and the gate is entitled to an answer up to that old. What it may not do is serve an answer
  *     from <em>past</em> that window because the refresh that should have replaced it failed. Nobody screened the
@@ -48,22 +48,22 @@ import module java.base;
  *     their aged value ({@link KnownExploitedSource} clause 6, {@link HealthSource} clause 7), because there the
  *     neutral answer is the loosest one and discarding aged evidence for it would loosen rather than tighten.
  *     {@link FeedCache#failClosed} is where an implementation takes this position rather than re-deriving it.</li>
- * <li><b>Bounded work / cancellation (&sect;12).</b> A paginated feed draws every page before it answers - an
+ * <li><b>Bounded work / cancellation.</b> A paginated feed draws every page before it answers - an
  *     advisory that only appears on page two of a widely-affected package must not be invisible to the gate - and
  *     bounds that draw with a page cap, a per-request timeout, a whole-fetch deadline and a response byte cap.
  *     Reaching any of them is a <em>named failure</em>, never a shorter list: a plausible-but-incomplete answer is
  *     worse than an outage, because the gate cannot tell it from a clean package.</li>
- * <li><b>Read purity (&sect;10).</b> The intent is that {@link #advisories} renders what a refresh already stored, so
+ * <li><b>Read purity.</b> The intent is that {@link #advisories} renders what a refresh already stored, so
  *     a gate decision stands while the vendor is down. <b>No implementation meets this today</b>: every
  *     installed feed fetches on the query path - two of the eight feeds with no cache at all, the rest behind
  *     a process-local TTL cache that dies with the JVM - so an advisory answer currently depends on the vendor being
  *     reachable, and clause 4 is what keeps that honest rather than dangerous. Recorded here rather than left
- *     implicit, because an undocumented divergence on a shared concern is a defect (&sect;13); /d migrate the
- *     feeds onto the feed client's snapshot path, which is where this clause becomes true.</li>
+ *     implicit, because an undocumented divergence on a shared concern is a defect; the clause becomes true once
+ *     the feeds move onto the feed client's snapshot path.</li>
  * <li><b>Staleness.</b> {@link SignalSource#freshness()} carries it, for this contract as for the whole family: a
  *     consumer reads the instant the advisories behind an answer were fetched, so an empty list beside a fetch
  *     instant is "screened, nothing found" and an empty list beside {@link Freshness#NEVER} is "this feed has never
- *     answered" (&sect;10). It does not replace clause 4 and must not be read as softening it - an unreachable feed
+ *     answered". It does not replace clause 4 and must not be read as softening it - an unreachable feed
  *     still <em>raises</em> rather than answering emptily, so the gate never sees the ambiguous pair at all. What
  *     freshness adds here is the display half: a console rendering "no advisories" can say when that was last true,
  *     and the identity-comparable {@link #NONE} reports {@link Freshness#NEVER} so an unscreened deployment reads as
@@ -73,12 +73,12 @@ import module java.base;
  *     screens again or its retry window lapses, and never clears because a <em>different</em> coordinate answered -
  *     the vendor having answered for B says nothing about the A it could not answer for. Recording successes only is
  *     the shape this forbids: it leaves a feed that has failed every lookup for three days rendering as authoritative
- *     beside a three-day-old instant, which is exactly the ambiguity &sect;10 exists to remove.
+ *     beside a three-day-old instant, which is exactly the ambiguity a view's last-fetch instant exists to remove.
  *     {@link FreshnessTracker} is where an implementation takes this rather than re-deriving it.</p></li>
  * <li><b>Ordering / determinism.</b> {@link #combined} merges feeds by advisory id and CVE alias, keeping the richer
  *     record when two feeds report the same vulnerability, and is order-insensitive by construction - so which feeds
  *     a deployment installs changes what is reported, but the order they were discovered in never does.</li>
- * <li><b>Tenant scoping (&sect;6).</b> None, deliberately: an advisory about a package is the same fact for every
+ * <li><b>Tenant scoping.</b> None, deliberately: an advisory about a package is the same fact for every
  *     tenant. {@link SignalSourceProvider} carries no tenant and offers no way to supply one.</li>
  * </ol>
  */

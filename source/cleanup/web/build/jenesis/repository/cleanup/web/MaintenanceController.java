@@ -99,8 +99,8 @@ public class MaintenanceController {
             respondRetentionNotInstalled(response);
             return null;
         }
-        // The on-demand sweep takes the same single-writer lease name the scheduled cleanup pass historically locked
-        // on, so two admin-triggered runs never sweep the same deployment concurrently; a held lease is a 409, not a
+        // The on-demand sweep takes the scheduled cleanup pass's single-writer lease name, so two admin-triggered
+        // runs never sweep the same deployment concurrently; a held lease is a 409, not a
         // wait. (The scheduled pass itself cooperates over the shared walk's segment claims where a walk is
         // installed, and the provider-resolved collector is safe under a concurrent pass by its condemn-then-collect
         // contract - the lease here keeps the on-demand endpoint single-shot, not the fleet.)
@@ -355,7 +355,7 @@ public class MaintenanceController {
      *  {@code refusal} - why the pass declined to judge anything at all, when it did.
      *
      *  <p>{@code refusal} is what tells the operator's two "nothing happened" answers apart, and it is why this view
-     *  no longer carries a hand-made REFUSED constant beside {@code of(GcPlan)}. A pass another node still holds
+     *  carries no hand-made REFUSED constant beside {@code of(GcPlan)}. A pass another node still holds
      *  segments of and a pass refused because an ecosystem's roots cannot be named both report
      *  {@code complete=false} with zero counters; only the second is an action item, and only the second names the
      *  module to reinstall. It is the empty string when the pass was not refused - the whole of the ordinary case. */
@@ -377,7 +377,7 @@ public class MaintenanceController {
     public record PinsView(List<String> pinned) {
     }
     /** The repository's stored retention policy, or the deployment's live default where none was written - the
-     *  read the kernel used to make for every surface, and now the retention surface's own. */
+     *  retention surface's own read. */
     private RetentionPolicy retention(String tenant, String repo) throws IOException {
         return new StoreRepositoryInventory(repositories.store(tenant, repo)).readRetention().orElse(live.retention());
     }

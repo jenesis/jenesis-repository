@@ -42,10 +42,10 @@ import io.micrometer.observation.Observation;
  * logs and traces from one instrumentation point. A leg that asked the upstream also carries what the upstream
  * <em>answered</em> as {@code upstream}: the status of the last request the fetcher made ({@code 200},
  * {@code 404}, {@code 503}), {@code unreachable} where the transport got no answer, and {@code unasked} where the
- * format's leg declined the path before any request was sent. A {@code negative} alone was a verdict without its
- * observation: the proxy answered {@code 404} for a path rubygems.org was serving {@code 200} at that moment, and
- * the metric could only say the fetch had failed - an hour of reproduction to learn that the format had never asked
- * (it does not serve the legacy {@code specs.4.8.gz} index), which this tag now says in the log line. Given an {@link ObservationRegistry#NOOP NOOP} registry (the
+ * format's leg declined the path before any request was sent. A {@code negative} alone is a verdict without its
+ * observation: a proxy answering {@code 404} for a path the upstream serves {@code 200} could only say the fetch had
+ * failed, where this tag says in the log line whether the format ever asked (the RubyGems format does not serve the
+ * legacy {@code specs.4.8.gz} index, for one). Given an {@link ObservationRegistry#NOOP NOOP} registry (the
  * default constructor, and every test that builds this directly) the wrapper is inert.
  */
 public final class PullThroughCache {
@@ -313,9 +313,9 @@ public final class PullThroughCache {
 
     /**
      * Fire the after-commit {@link build.jenesis.repository.store.PublicationObserver}s once a proxy leg has fetched,
-     * stored and served an upstream miss, so a proxy-publish is observed exactly like a direct publish. Today the event
-     * rides the format's embedded publish on the proxy path; as that embedded publish is retired the observer event
-     * would otherwise be lost, so it is fired here at the point the fetched body is committed to the store. Best-effort
+     * stored and served an upstream miss, so a proxy-publish is observed exactly like a direct publish. It is fired
+     * here, at the point the fetched body is committed to the store, so it does not depend on a format's own publish
+     * path firing it. Best-effort
      * and contained: it fires only when the artifact is actually published ({@link Publication#located located} - so a
      * quarantined or rejected proxy leg is not observed) and any failure building the event is swallowed, never failing
      * the serve.

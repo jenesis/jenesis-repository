@@ -20,21 +20,21 @@ import org.apache.commons.fileupload2.core.ParameterParser;
  * {@code FormContentFilter} - would drain an <em>artifact</em> request body before the format handler ever read it:
  * twine's upload and {@code dotnet nuget push} are both {@code multipart/form-data}. So the console cannot use the
  * resolver, and the two formats already could not. One reader, in a module of its own, is what lets all five share the
- * mechanism (&sect;2: shared mechanism is reused, never copied) without the console reaching a format module or a
+ * mechanism (shared mechanism is reused, never copied) without the console reaching a format module or a
  * format reaching the console.
  *
  * <p>The module stays {@code java.base}-light on purpose: {@code java.base} plus the one already-pinned, permissively
- * licensed parser both formats were using ({@code org.apache.commons.fileupload2.core}, &sect;8 - the
- * boundary scan is not something to hand-roll over binary bodies), and nothing else. It names no format, no server, no
+ * licensed parser both formats use ({@code org.apache.commons.fileupload2.core} - the boundary scan is not something
+ * to hand-roll over binary bodies), and nothing else. It names no format, no server, no
  * Spring type and no store.
  *
- * <h2>Streaming (&sect;1)</h2>
+ * <h2>Streaming</h2>
  * {@link Part#stream()} returns {@link MultipartInput#newInputStream() the part's own bounded view} of the request
  * body, so an uploaded artifact is copied network-to-store in bounded chunks and is never materialised. Nothing here
  * ever holds a file part; the only heap read is {@link Part#bytes(int)}, and it is bounded by a limit the caller
  * states.
  *
- * <h2>Bounds, and what happens at one (&sect;1, Contract clause 12)</h2>
+ * <h2>Bounds, and what happens at one (Contract clause 12)</h2>
  * <ul>
  *   <li><b>A file part is unbounded, deliberately.</b> A {@code .nupkg} or a wheel has no size cap - a multi-gigabyte
  *       package that no heap could hold still publishes, because it only ever streams. That is what the publish paths
@@ -47,9 +47,8 @@ import org.apache.commons.fileupload2.core.ParameterParser;
  *       {@code ArchiveInflation#entry}, the one archive-inflation read and the same doctrine; it is
  *       restated rather than required here because a multipart FIELD is not an archive member - the shared bound is
  *       about how far one archive entry may inflate, and this is about how long a form field may be.</li>
- *   <li><b>Before this reader existed there was no field bound at all:</b> the PyPI upload accumulated its
- *       {@code name} field into an unbounded {@code ByteArrayOutputStream}, so a body that declared a gigabyte-long
- *       form field was buffered whole. {@link #FIELD_LIMIT} is that hole closed.</li>
+ *   <li><b>A field is bounded:</b> accumulated into an unbounded buffer, a body that declared a gigabyte-long form
+ *       field would be buffered whole. {@link #FIELD_LIMIT} closes that hole.</li>
  *   <li><b>Part count is not bounded</b> - a part the caller does not read is drained to the next boundary and
  *       discarded, so an envelope with many parts costs time but not heap, exactly as before.</li>
  * </ul>
@@ -77,8 +76,7 @@ public final class MultipartBody {
      * {@code MultipartInput}'s boundary scanner assumes each read fills its buffer; a raw socket (or a
      * {@code SequenceInputStream} across parts) returns short reads, which makes it mis-scan a boundary when a part is
      * preceded by another part - splitting the streamed body and dropping bytes. A small buffered wrapper restores
-     * fill-complete reads without holding the body whole. Both format copies carried this workaround separately; it
-     * now lives once, here, so a new caller cannot forget it.
+     * fill-complete reads without holding the body whole. It lives once, here, so a new caller cannot forget it.
      */
     private static final int READ_BUFFER = 64 * 1024;
 
@@ -117,7 +115,7 @@ public final class MultipartBody {
      * {@code dotnet nuget push} envelope are both recognised from the delimiter the sender wrote into the body. Both
      * derived it by hand, with two different answers for the same question: one accepted a bare {@code LF} where the
      * other demanded {@code CRLF}, and one required a non-empty boundary where the other did not. That is a shared
-     * concern answered twice (&sect;13), and the third copy of a hand-scan whose other two copies were already removed.
+     * concern answered twice, and the third copy of a hand-scan whose other two copies were already removed.
      *
      * <p>The boundary must be non-empty, as RFC 2046 requires (1-70 characters): a body whose first line is exactly
      * {@code --} announces no envelope, and is an ordinary body that happens to begin with two dashes rather than a

@@ -26,8 +26,8 @@ import build.jenesis.repository.walk.WalkPass;
  * to the layout as {@link BlobLayout#describePointer} and this walks every pointer once for all of them.
  *
  * <p><strong>A layout that cannot name a key is not a failure.</strong> {@code describePointer} answers empty by
- * default, so a format that has not implemented it is exactly as repairable as it was before this existed - which
- * is the honest position, because a layout that answered <em>wrongly</em> would write a row naming the wrong
+ * default, so a format that has not implemented it is simply not repaired here - which is the honest position,
+ * because a layout that answered <em>wrongly</em> would write a row naming the wrong
  * coordinate, and retention ages by that row.
  *
  * <p><strong>Two layouts that disagree stop rather than pick.</strong> Several installed formats may declare one

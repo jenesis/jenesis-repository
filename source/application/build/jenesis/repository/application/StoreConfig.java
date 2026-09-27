@@ -43,8 +43,7 @@ import org.springframework.core.env.Environment;
  * (a backend chosen by name through {@code ArtifactStoreProvider}, wrapped for metering then read-only), the
  * {@link Authorization}, the store-backed {@link Settings}, the discovered token-exchange and audit-trail plugins,
  * the settings-precedence probe, the tenant directory and the {@link Repositories} tenant kernel, and the boot-time
- * storage-namespace registration. Every bean is copied verbatim from the former monolith; the split is
- * behaviour-preserving. The store's wrap order is not this class's business: it contributes layers through
+ * storage-namespace registration. The store's wrap order is not this class's business: it contributes layers through
  * {@link ArtifactStoreDecorator} and the declaration that resolves the store applies them, along with the quota
  * and read-only wrappers this class must not restate.
  */
@@ -56,10 +55,9 @@ public class StoreConfig {
      * This composition's two layers over the resolved store, contributed rather than declared as a second
      * {@code artifactStore} bean.
      *
-     * <p>They used to arrive by redeclaring that bean, which meant restating the resolution and the wrappers
-     * around it - and the restatement had dropped the deployment-wide {@code jenreg.quota} cap, so an operator
-     * who set one on the image and swapped in this one lost it with nothing to read. A contribution cannot
-     * drop what it does not contain.
+     * <p>Redeclaring that bean would mean restating the resolution and the wrappers around it, and a restatement
+     * can drop one of them - the deployment-wide {@code jenreg.quota} cap, say - with nothing to read. A
+     * contribution cannot drop what it does not contain.
      *
      * <p>Order is the point: the meter sits closest to the backend and the node's memories above it, so a read
      * the memory answers is a read the meter does not count - which is what "a read spared" means. Read-only and
@@ -173,7 +171,7 @@ public class StoreConfig {
         // "secrets-key"
         // (the env var JENREG_SECRETS_KEY via Spring relaxed binding) is a first-class, allowlisted
         // bootstrap config read rather than a stranded key. A malformed value fails fast here (at boot), naming the
-        // variable (§9).
+        // variable.
         UnaryOperator<String> config = Features.namespaced(environment::getProperty);
         return new Settings(store, SecretCipher.of(config.apply("secrets-key")));
     }

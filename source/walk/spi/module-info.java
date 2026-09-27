@@ -11,7 +11,7 @@
  * per item. An implementation ships as its own module that {@code provides} a {@code WalkProvider}, discovered with
  * {@code ServiceLoader} and selected with {@code jenreg.walk=<name>}; with none installed
  * {@code WalkProvider.resolve} is empty and every walk-riding surface degrades gracefully, while a selection nothing
- * answers to fails at resolution rather than silently turning every sweep into a no-op (&sect;9). {@code WalkConsumer} is
+ * answers to fails at resolution rather than silently turning every sweep into a no-op. {@code WalkConsumer} is
  * the walk half of the two-route derived-metadata contract (steady state = publication events; back-fill, periodic
  * refresh and self-heal = the walk), discovered the same way and driven by the shared {@code RebuildPass} - one
  * enumeration of the pointer roots feeding every discovered consumer.

@@ -102,7 +102,7 @@ public interface AuditTrail {
     /**
      * A bounded page of a tenant's events, newest first: at most {@code limit} of them from {@code offset}, filtered
      * exactly as {@link #query(String, Instant, Instant, String)} - so a console or API render serves a slice rather
-     * than the whole trail on every request (§7).
+     * than the whole trail on every request.
      *
      * <p>The {@code default} delegates to {@link #pageByQuery}, which materialises the whole trail and slices it, and
      * carries the same visible ceiling as {@link #stream}: past what {@link InheritedBound} permits it throws rather

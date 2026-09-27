@@ -250,7 +250,7 @@ public final class NpmFormat implements RepositoryFormat, ProxyLeg, BlobLayout, 
      * What a publish of an already-published version does. npm's own registry refuses it, and this product documents
      * release-version immutability as on by default with {@code allow-redeploy} as the operator's opt-out.
      *
-     * <p>This used to be {@link Publication.Republish#overwrite()} unconditionally, which quietly exempted npm from
+     * <p>Not {@link Publication.Republish#overwrite()} unconditionally, which would quietly exempt npm from
      * that guarantee: {@code ReleaseImmutability} keys on the request path, and an npm publish PUTs the packument
      * root, which carries no version for it to protect. The versioned writes happen inside this format, so this is
      * where the dial is honoured - as the edge resolved it for the publishing tenant
@@ -273,10 +273,10 @@ public final class NpmFormat implements RepositoryFormat, ProxyLeg, BlobLayout, 
 
     /**
      * Publish streaming, so the tarball is never materialised. npm's publish protocol carries the tarball inline
-     * (base64 under {@code _attachments.<file>.data}) in one JSON document; the former code read the whole body into a
-     * {@code byte[]}, built a Jackson tree over it, pulled the base64 out as a {@code String} and decoded that to
-     * another {@code byte[]} - four copies of the tarball on the heap ({@code ~3-4x}), capped at 512 MiB and unable to
-     * even represent a package past the array limit. Instead the body is parsed with the streaming
+     * (base64 under {@code _attachments.<file>.data}) in one JSON document; reading the whole body into a
+     * {@code byte[]}, building a tree over it, pulling the base64 out as a {@code String} and decoding that to another
+     * {@code byte[]} would be four copies of the tarball on the heap ({@code ~3-4x}), unable to even represent a
+     * package past the array limit. Instead the body is parsed with the streaming
      * {@link JsonParser}: the small metadata subtrees ({@code versions}, {@code dist-tags}) are read whole (index
      * metadata, allowed), while each attachment's {@code data} value is base64-decoded straight into the
      * shared commit operation's hash-on-write ({@link #commitTarball}), never held whole. A multi-gigabyte tarball
@@ -286,9 +286,8 @@ public final class NpmFormat implements RepositoryFormat, ProxyLeg, BlobLayout, 
      * Each attachment's {@code data} is base64-decoded <em>through</em> the shared hosted-publish operation
      * ({@code Publication.commit}): the decoded stream is the operation's accepted body, so the tarball flows through
      * {@code writeBlob} exactly once and <b>the hash the interceptor chain assesses is the hash {@code npm install}
-     * downloads</b>. Before this it was stored by the format and the surrounding packument was what the ingress edge
-     * hashed and gated - the envelope-vs-artifact gap. Re-reading the stored blob to feed a second commit would have
-     * been the easy fix and is rejected here: it would double the write of a multi-gigabyte tarball, which
+     * downloads</b>, never the surrounding packument - the envelope-vs-artifact gap. Re-reading the stored blob to
+     * feed a second commit is rejected here: it would double the write of a multi-gigabyte tarball, which
      * {@code NpmPublishStreamingTest} pins against ("streamed through the store exactly once").
      *
      * <h2>Content first, index after (preserved)</h2>
@@ -913,7 +912,7 @@ public final class NpmFormat implements RepositoryFormat, ProxyLeg, BlobLayout, 
      * <p>The accepted layout links the tarball pointer and nothing else: every index write is deferred to
      * {@link #index}. Before it declares, it joins the decoder and checks its outcome - a base64 run that broke
      * mid-stream would otherwise reach the store as a self-consistent <em>truncated</em> tarball and be linked before
-     * the failure surfaced, so a failed decode declares nothing and the error is rethrown here (&sect;9: a publish never
+     * the failure surfaced, so a failed decode declares nothing and the error is rethrown here (a publish never
      * answers success having stored something else). Any failure on the helper thread is carried back the same way.
      */
     private static Publication.Commit commitTarball(JsonParser parser, String name, String file, Blobs blobs,
@@ -971,7 +970,7 @@ public final class NpmFormat implements RepositoryFormat, ProxyLeg, BlobLayout, 
         // downloadable; every npm read keys on that marker - the download ({@link Blobs#size}/{@link Blobs#read}), the
         // packument's per-version screen and the dist-tags screen - so the version is stored, reviewable and invisible
         // until {@code HoldLifecycle.release} lifts it. Without the layout a release would have nothing to make
-        // servable, which is the regression this closes; without the marker-first order the layout is the disclosure.
+        // servable; without the marker-first order the layout is the disclosure.
         switch (commit.disposition()) {
             case QUARANTINE -> {
                 // A hold never replaces a released tarball: refused before the mark, so nothing is left held.
@@ -1135,9 +1134,9 @@ public final class NpmFormat implements RepositoryFormat, ProxyLeg, BlobLayout, 
                 return;
             }
             // Streamed with the rewrite folded in, never as one byte array: a package's document is every version
-            // of it, and answering it whole held the packument the publish had just streamed into - the
-            // npm-packument canary's 500 at fifty thousand versions under 512 MiB, an OutOfMemoryError on the read
-            // after the write was fixed. The length is not declared, since the rewrite changes it.
+            // of it, and answering it whole would hold in heap what the publish had just streamed - an
+            // OutOfMemoryError on the read at fifty thousand versions under 512 MiB. The length is not declared,
+            // since the rewrite changes it.
             try (OutputStream out = exchange.respond(200, -1L)) {
                 document.copyTo(out, NpmListings.BASE, tarballBase);
             }

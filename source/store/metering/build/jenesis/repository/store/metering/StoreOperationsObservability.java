@@ -15,11 +15,9 @@ import build.jenesis.repository.store.Retries;
  * <p>Beside them, what the compare-and-set loops made of the writes the store refused, under
  * {@code jenreg.store.cas.*}: how many conditional writes were tried, how many refusals turned out to have landed
  * ({@code replayed}), how many found a peer's bytes on the key ({@code lost.peer}) and how many found this node's
- * bytes but work still outstanding ({@code lost.unsettled}). {@link Retries} counted the verdicts for months and
- * nothing read them, which left the object-store canary arguing about lost writes from read and write totals
- * alone - and the totals turned out to be a deferred counter flush, not a refused write. A canary prints these
- * per window now, so "the store refused a write it had accepted" is a number on a serial publish rather than a
- * theory about one.
+ * bytes but work still outstanding ({@code lost.unsettled}). Read and write totals alone cannot tell a lost write
+ * from a deferred counter flush; with these verdicts reported, "the store refused a write it had accepted" is a
+ * number on a serial publish rather than a theory about one.
  */
 public final class StoreOperationsObservability implements ObservabilitySource {
 
@@ -71,15 +69,14 @@ public final class StoreOperationsObservability implements ObservabilitySource {
     /**
      * A key family as signal segments: the separators a layout uses are not the separators a signal name may carry.
      *
-     * <p><b>It has to be total, and the first cut was not.</b> A signal segment is {@code [a-z][a-z0-9]*} - it must
-     * begin with a letter - and this is the one place in the report where a name is derived from a store key rather
-     * than written by an author, so whatever a key contains has to come out the other side as a legal name. The
-     * first cut cleaned non-alphanumerics to dots and stopped, which is legal only while no key family carries a
-     * segment that starts with a digit. An audit trail keyed by date does: {@code .system/audit/2026-09-09} folds to
-     * {@code .system/audit/<n>-09-09} and cleaned to {@code system.audit.n.09.09}, whose {@code 09} the grammar
-     * refuses - and a refused {@link Metric} name is not one missing metric, it throws, and the report drops this
-     * whole source as unavailable. Measured 2026-09-09: switching {@code jenreg.store-families} on made a node
-     * report NO {@code jenreg.store.ops.*} counters at all, which read as "this node's store is not metered".
+     * <p><b>It has to be total.</b> A signal segment is {@code [a-z][a-z0-9]*} - it must begin with a letter - and
+     * this is the one place in the report where a name is derived from a store key rather than written by an author,
+     * so whatever a key contains has to come out the other side as a legal name. Cleaning non-alphanumerics to dots
+     * and stopping is legal only while no key family carries a segment that starts with a digit. An audit trail keyed
+     * by date does: {@code .system/audit/2026-09-09} folds to {@code .system/audit/<n>-09-09} and cleaned to
+     * {@code system.audit.n.09.09}, whose {@code 09} the grammar refuses - and a refused {@link Metric} name is not
+     * one missing metric, it throws, and the report drops this whole source as unavailable: switching
+     * {@code jenreg.store-families} on would make a node report NO {@code jenreg.store.ops.*} counters at all.
      *
      * <p>So every part is made to begin with a letter, and the cleaning is ASCII-only - {@code Character.isLetterOrDigit}
      * is Unicode-aware and would pass an accented letter straight into a name the grammar also refuses.

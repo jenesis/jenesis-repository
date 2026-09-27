@@ -22,20 +22,20 @@ import build.jenesis.repository.store.Providers;
  *     with the installed provider declining, no credential is ever attached and the management surface says so.
  *     {@link #create} declares "I decline" with an empty {@link Optional}; {@code null} is never a legal return
  *     from it or from {@link #name()}.</li>
- * <li><b>Selection failure (&sect;9).</b> This SPI has <em>no</em> selection key - nothing names a credential
+ * <li><b>Selection failure.</b> This SPI has <em>no</em> selection key - nothing names a credential
  *     backing by name - so there is no explicitly-selected miss to fail on. The one resolution failure is
  *     ambiguity: two installed providers would make module-path order decide which secret store the proxies
  *     authenticate from, so {@link #resolve} <em>throws</em> naming both rather than picking a discovery-order
  *     winner. Resolution runs through the shared {@link Providers#optionalUnique} primitive, never a hand-rolled
  *     loop.</li>
- * <li><b>Tenant scoping (&sect;6).</b> The source is built over the deployment's <em>root</em> store and its
+ * <li><b>Tenant scoping.</b> The source is built over the deployment's <em>root</em> store and its
  *     credentials are deployment-global by design, keyed by upstream host: they authenticate the deployment's own
  *     outbound fetches, never one tenant's data.</li>
- * <li><b>Error visibility (&sect;9).</b> Nothing is swallowed: a provider whose {@link #create} throws
+ * <li><b>Error visibility.</b> Nothing is swallowed: a provider whose {@link #create} throws
  *     {@link IOException} - an unreachable secret manager, an unreadable credential space - fails resolution as an
  *     {@link UncheckedIOException} naming the provider rather than degrading to the NONE sentinel, because a proxy
  *     that silently drops its credentials fetches anonymously and 401s or, worse, fetches the wrong artifact.</li>
- * <li><b>Read purity (&sect;10).</b> A credential lookup renders stored state; a stored secret is never echoed
+ * <li><b>Read purity.</b> A credential lookup renders stored state; a stored secret is never echoed
  *     back to a management surface, only its presence.</li>
  * <li><b>Lifecycle / ownership.</b> The composition resolves the source once and owns it; {@link #resolve} builds
  *     at most one instance per call, caches nothing and closes nothing.</li>

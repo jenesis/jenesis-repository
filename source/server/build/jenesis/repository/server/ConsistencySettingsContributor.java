@@ -24,14 +24,14 @@ public final class ConsistencySettingsContributor implements SettingsContributor
     private static final String GROUP = "Consistency";
 
     /**
-     * <strong>None of these is live, and they used to say they were.</strong> {@code Setting}'s {@code live} flag
+     * <strong>None of these is live.</strong> {@code Setting}'s {@code live} flag
      * means "applies on the next scheduled re-read, or only on the next restart", and the authoritative reader -
      * the {@code NodeConsistency} bean behind {@code /api/consistency} - resolves them once at boot through the
      * Spring environment. A stored edit reaches that reader through {@code SettingsEnvironmentLayer}, which exists
      * precisely for "values that cannot change live"; the live values go through {@code LiveConfig} instead, and
      * these do not.
      *
-     * <p>What made the wrong flag worse than harmless is that one reader <em>is</em> per call:
+     * <p>A {@code live} flag here would be worse than harmless because one reader <em>is</em> per call:
      * {@code NodeDivergenceAdvisor} re-resolves them every time the posture screen renders. So an operator could
      * edit {@code dead-after}, watch the posture advisory change, conclude it had taken effect - and find
      * {@code /api/consistency}, which that class's own javadoc calls the authoritative read, still on the boot

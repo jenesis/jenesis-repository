@@ -26,7 +26,7 @@ import module java.base;
  *     signal anything gates on and answers a weaker question than {@code resolve} (see the method).
  *     {@link #create} declares "I decline" with an empty {@link Optional};
  *     {@code null} is never a legal return from it, from {@link #name()} or from {@link #requiredConfig()}.</li>
- * <li><b>Selection failure (&sect;9).</b> An <em>explicitly selected</em> {@code jenreg.tenants=<name>}
+ * <li><b>Selection failure.</b> An <em>explicitly selected</em> {@code jenreg.tenants=<name>}
  *     that no installed provider answers to, or whose provider declines, throws {@link IllegalStateException} at
  *     resolution naming the selection and the installed provider names - it does <em>not</em> degrade to the fixed
  *     single-tenant directory. Degrading would collapse a multi-tenant deployment onto one tenant and hide every
@@ -47,7 +47,7 @@ import module java.base;
  *     catalogue badges {@code default-tenant} as applying on restart so the surface says what the code does.
  *     <p>A provider must therefore <em>not</em> resolve this value per call in an attempt to be helpful: a
  *     directory that tracked the dial while its sibling did not would reintroduce exactly the divergence above.</li>
- * <li><b>Tenant scoping (&sect;6).</b> The directory is deployment-global by construction - it is the thing that
+ * <li><b>Tenant scoping.</b> The directory is deployment-global by construction - it is the thing that
  *     enumerates tenants - and is built over the deployment's <em>root</em> store, before any tenant scope is
  *     applied. It answers which tenants exist and creates them; it never reads a tenant's artifacts, and a caller
  *     scopes the store itself before touching content.
@@ -59,7 +59,7 @@ import module java.base;
  *     not scoped itself yet. A console or API view is likewise always a <em>tenant</em> view - implicitly so when
  *     {@link #installed()} is {@code false} and the fixed directory names the single tenant, which is why a
  *     single-tenant deployment shows no tenancy chrome rather than a different data model.</li>
- * <li><b>Error visibility (&sect;9).</b> Nothing is swallowed. Two providers answering to one name, one provider
+ * <li><b>Error visibility.</b> Nothing is swallowed. Two providers answering to one name, one provider
  *     registered twice, and more than one enabled directory with no selection to disambiguate them are all
  *     configuration errors that throw, naming the candidates and the setting that resolves them - never a
  *     discovery-order winner, because which directory a deployment gets decides which tenants exist.</li>
@@ -111,7 +111,7 @@ public interface TenantsProvider {
 
     /** The single enabled directory discovered via {@link ServiceLoader}, resolved through the shared
      *  {@link Providers#optionalUnique} policy: an explicit {@code jenreg.tenants=<name>} selects one by
-     *  name and a selection nothing answers to <em>throws</em> rather than degrading (&sect;9), a
+     *  name and a selection nothing answers to <em>throws</em> rather than degrading, a
      *  {@code jenreg.<name>=false} switches one off, more than one enabled directory is ambiguous rather
      *  than a discovery-order winner, and only an <em>unselected</em> deployment with no directory installed gets the
      *  {@link Tenants#fixed fixed} directory over the configured {@code tenant}. */

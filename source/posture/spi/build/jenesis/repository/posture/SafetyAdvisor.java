@@ -43,11 +43,11 @@ import module java.base;
  *       {@link PostureReport#from} reports a duplicated advisory id (clause 11) rather than merging or dropping. A
  *       module switches its own advisories off by having its feature off and returning nothing, which is the
  *       "disabled contributes nothing" rule, not a toggle this SPI owns.</li>
- *   <li><b>Tenant scoping (&sect;6).</b> An advisory declares its {@link Scope}: {@code DEPLOYMENT} for a property of
+ *   <li><b>Tenant scoping.</b> An advisory declares its {@link Scope}: {@code DEPLOYMENT} for a property of
  *       the whole deployment, {@code TENANT} naming the tenant it concerns, which only that tenant's admins see
  *       ({@link PostureReport#forTenant}). An advisor must not fold a tenant's data into a deployment-scoped row, and
  *       the constructor enforces the id/scope/tenant consistency so a tenant row cannot arrive unattributed.</li>
- *   <li><b>Error visibility (&sect;9).</b> A throw is <b>contained to this advisor</b>: {@link PostureReport#from}
+ *   <li><b>Error visibility.</b> A throw is <b>contained to this advisor</b>: {@link PostureReport#from}
  *       collects through {@code Contributions}, so an advisor that throws (or answers {@code null}) is replaced by a
  *       {@link Severity#WARN} {@code jenreg.posture.unavailable.<advisor>} advisory naming this class and the
  *       exception <em>type</em>, every other advisor is still evaluated, the console header badge and
@@ -59,7 +59,7 @@ import module java.base;
  *       to raise is a decision, and silence must mean the condition does not hold. An {@link Error} is <em>not</em>
  *       contained (a {@link LinkageError} from a half-installed module is a broken graph, not an advisor declining to
  *       answer).</li>
- *   <li><b>Read purity (&sect;10).</b> {@link #advise} reads the effective {@link Configuration} and nothing else: no
+ *   <li><b>Read purity.</b> {@link #advise} reads the effective {@link Configuration} and nothing else: no
  *       store read, no network, no filesystem, no scan and no write. Observing posture never changes posture, and the
  *       report must stand when every external source the deployment uses is down. This is why the SPI is handed a
  *       configuration lookup rather than a store.</li>

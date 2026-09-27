@@ -5,24 +5,18 @@ import module java.base;
 /**
  * The one duration grammar a deployment may write, wherever it writes it.
  *
- * <p>There were two, and they disagreed in the direction that wastes an operator's afternoon. A cadence dial read
- * from the environment accepted the suffixed style an environment variable naturally carries - {@code 6h},
- * {@code 90s}, {@code 500ms} - and said so in its own rejection message: <em>"Accepted: an ISO-8601 duration (PT1H,
- * P1D) or a suffixed one (500ms, 90s, 5m, 6h, 2d)"</em>. The same key set through the console or
- * {@code PUT /api/config} was validated by a bare {@code Duration.parse}, which refuses every suffixed form. So the
- * product printed a grammar one of its own surfaces would not accept, and {@code JENREG_<KEY>=6h} was honoured while
- * typing {@code 6h} into the settings screen was not.
- *
- * <p>Two components each correct alone: the reader is permissive on purpose, the validator strict on purpose, and
- * neither knew about the other. The validator is the odd one out - the suffixed style is what an environment
- * variable carries - so the grammar widens rather than the message narrowing, and it is stated here once, in the
- * module both the validator and the readers can see.
+ * <p>Two grammars would disagree in the direction that wastes an operator's afternoon: a reader of the environment
+ * accepting the suffixed style an environment variable naturally carries - {@code 6h}, {@code 90s},
+ * {@code 500ms} - while the console or {@code PUT /api/config} validated with a bare {@code Duration.parse}, which
+ * refuses every suffixed form, so {@code JENREG_<KEY>=6h} would be honoured while typing {@code 6h} into the
+ * settings screen was not. The suffixed style is what an environment variable carries, so the grammar takes both
+ * ISO-8601 and suffixed forms, and it is stated here once, in the module both the validator and the readers can
+ * see.
  *
  * <p>It lives beside {@link Features} in the store SPI - the module every other one already requires - rather than
  * in the settings catalogue, because the store's own dials read it too: the rebuild driver's cadence, the proxy's
- * request timeout and negative-cache window, the collector's grace, a credential's lifetime. When the grammar lived
- * in a downstream settings catalogue, each of those carried a parser of its own, and three of them read a bare number as
- * seconds while the catalogue refused it.
+ * request timeout and negative-cache window, the collector's grace, a credential's lifetime - none of which may
+ * carry a parser of its own.
  *
  * <p>A bare number is refused everywhere, deliberately: Spring's relaxed binding reads {@code 30} as milliseconds,
  * an operator who writes it usually means seconds, and a dial that guesses is wrong by a factor of a thousand in

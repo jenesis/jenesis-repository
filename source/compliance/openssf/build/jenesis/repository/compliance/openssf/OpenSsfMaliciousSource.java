@@ -27,7 +27,7 @@ import build.jenesis.repository.feed.Osv;
  * lets a deployment screen for curated malware without adopting the whole vulnerability feed.
  *
  * <p>The transport half is the {@link FeedClient}'s: the HTTP client and its timeouts, the whole-fetch deadline,
- * the non-200 branch, the response byte cap (this feed previously read an unbounded {@code ofString()} body), the
+ * the non-200 branch, the response byte cap (never an unbounded {@code ofString()} body), the
  * retry schedule honouring {@code Retry-After}, the page cap and the fail-closed policy are shared with every other
  * feed rather than re-rolled here. What stays is the dataset's own half: the query URL, the request body, the
  * {@code next_page_token} cursor and the field mapping. The dataset pages a large result set behind that token - the
@@ -107,10 +107,10 @@ public final class OpenSsfMaliciousSource implements AdvisorySource {
     }
 
     /** The reading is display-only for this feed - it fails <em>closed</em>, so an outage raises rather than
-     *  answering with a degraded value - but it is derived per coordinate exactly as every other feed's is
-     *  (&sect;13): while a coordinate this feed could not screen is inside its retry window the reading is not
-     *  authoritative, so a console can no longer read "authoritative, last consulted three days ago" over a feed
-     *  whose every lookup has failed since. It clears when that coordinate screens again or its window lapses; a
+     *  answering with a degraded value - but it is derived per coordinate exactly as every other feed's is: while a
+     *  coordinate this feed could not screen is inside its retry window the reading is not authoritative, so a
+     *  console never reads "authoritative, last consulted three days ago" over a feed whose every lookup has failed
+     *  since. It clears when that coordinate screens again or its window lapses; a
      *  different coordinate answering says nothing about it. */
     @Override
     public Freshness freshness() {

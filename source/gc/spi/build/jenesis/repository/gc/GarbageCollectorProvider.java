@@ -33,13 +33,13 @@ import build.jenesis.repository.store.Providers;
  *     artifact walk) is absent, so a deployment without enumeration never gets a collector that enumerates its own
  *     way. {@code null} is never a legal return from {@link #create}, {@link #name()} or
  *     {@link #requiredConfig()}.</li>
- * <li><b>Selection failure (&sect;9).</b> An <em>explicitly selected</em> {@code jenreg.gc=<name>} that no
+ * <li><b>Selection failure.</b> An <em>explicitly selected</em> {@code jenreg.gc=<name>} that no
  *     installed provider answers to, or whose provider declines, throws {@link IllegalStateException} at resolution
  *     naming the selection and the installed provider names - it does not resolve to the no-op default. An operator
  *     who named a collector and silently got none would believe reclamation is running while storage grows without
  *     bound. An explicit selection outranks the {@code jenreg.<name>=false} toggle. Only an
  *     <em>unselected</em> deployment degrades to empty.</li>
- * <li><b>Error visibility (&sect;9).</b> Nothing is swallowed. Duplicate provider names, one provider registered
+ * <li><b>Error visibility.</b> Nothing is swallowed. Duplicate provider names, one provider registered
  *     twice, and more than one <em>enabled</em> collector with no selection to disambiguate them all throw, naming
  *     the candidates and the setting that resolves them - which collector deletes a deployment's data is never
  *     decided by module-path order. Malformed settings ({@code jenreg.gc.stride}, {@code jenreg.gc.grace}) fail
@@ -94,7 +94,7 @@ public interface GarbageCollectorProvider {
 
     /** The single enabled collector discovered via {@link ServiceLoader}, resolved through the shared
      *  {@link Providers#optionalUnique} policy: an explicit {@code jenreg.gc=<name>} selects one by name
-     *  and a selection nothing answers to <em>throws</em> rather than degrading (&sect;9), a
+     *  and a selection nothing answers to <em>throws</em> rather than degrading, a
      *  {@code jenreg.<name>=false} switches one off, more than one enabled collector is ambiguous rather
      *  than a discovery-order winner, and only an <em>unselected</em> deployment with no collector installed resolves
      *  to empty - the no-op default, never {@code null}. */

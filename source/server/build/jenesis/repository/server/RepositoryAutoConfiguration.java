@@ -117,7 +117,7 @@ public class RepositoryAutoConfiguration {
     @ConditionalOnMissingBean
     public Authorization authorization(RepositoryProperties properties, ArtifactStore store) {
         // Secure-defaults principle: an insecure configuration must be loud, not silent. The auth=false open-deployment
-        // WARN is no longer an ad-hoc line here; it is the jenreg.auth.open security-posture advisory
+        // WARN is not an ad-hoc line here; it is the jenreg.auth.open security-posture advisory
         // (SecurityPosture), logged once at boot by logSecurityPosture(...) and surfaced on the console and
         // GET /api/posture - one source of truth, no divergent second list.
         String anonymousRights = properties.getAnonymousRights().strip();
@@ -346,10 +346,10 @@ public class RepositoryAutoConfiguration {
      * The routing, resolved through {@link RepositoryRoutingProvider} rather than constructed here.
      *
      * <p>This core installs one provider - the fixed-tenant routing, which is also the default - so on its own the
-     * answer is the same object it was when this method built it directly. What changes is that it is now the
-     * <em>seam's</em> answer: a deployment that adds a routing provider to the module path gets it here, without a
-     * composition written against the routings by name. That is the arrangement every other extension point in
-     * this product has, and the one the downstream editions' three routings now arrive through too.
+     * answer is the fixed routing. It is still the <em>seam's</em> answer: a deployment that adds a routing provider
+     * to the module path gets it here, without a composition written against the routings by name. That is the
+     * arrangement every other extension point in this product has, and the one the downstream editions' routings
+     * arrive through too.
      */
     @Bean
     @ConditionalOnMissingBean
@@ -547,8 +547,8 @@ public class RepositoryAutoConfiguration {
      * mapping override. It is registered only when {@link FreeImportEdgeCondition no ImportEdgeProvider is
      * installed}: when a distribution ships an {@link ImportEdgeProvider} - the downstream edition's tenant-scoped,
      * audited import edge - this bean is not created, so its mapping never joins the handler mapping and the
-     * distribution's own controller is the only import edge, retiring the {@code WebMvcRegistrations}
-     * mapping-suppression stopgap. With no provider installed (the product) the edge is served exactly as before.
+     * distribution's own controller is the only import edge, with no {@code WebMvcRegistrations} mapping
+     * suppression. With no provider installed (the product) this bean serves the edge.
      * Named so an embedder can still contribute its own {@code importEdgeController} bean and have this back off.
      */
     @Bean

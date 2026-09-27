@@ -9,7 +9,7 @@ import module java.net.http;
  * The one network operation a feed makes, isolated so that everything above it - request shaping, caps, backoff,
  * pagination, fail-mode policy, snapshot persistence - is exercised without a socket. A contract suite hands in a
  * transport answering from recorded responses, or one that throws on any call at all to prove a read path performs
- * no I/O (&sect;10); production hands in {@link #jdk(Duration)}.
+ * no I/O; production hands in {@link #jdk(Duration)}.
  *
  * <p>A transport is a pure "send this, give me the answer" seam: it never retries, never follows a redirect into
  * another origin, never inspects the status. Those are {@link FeedClient}'s, so every feed gets them identically.

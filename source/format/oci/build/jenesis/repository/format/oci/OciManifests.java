@@ -141,7 +141,7 @@ final class OciManifests {
      * {@code blobs/<hex>}, so clearing it is a visibility write and belongs in the accepted layout's declared
      * visibility, beside the tag link and before the observers.
      *
-     * <p>Do NOT clear it while a retroactive hold's review pointer still stands on this path (&sect;6 Q-D): a
+     * <p>Do NOT clear it while a retroactive hold's review pointer still stands on this path: a
      * screen-time ACCEPT must not tear down a standing KEV/license/reachability hold on the same bytes. The chain probe
      * ({@code ServableNames.disclosable} under {@code HIDE_WITHHELD} - the {@code /quarantine<path>} review pointer
      * face, no blob stat) narrows the clear; where the OCI request path carries no such pointer the guard passes and
@@ -154,7 +154,8 @@ final class OciManifests {
      * manifest's own served path still holds the hash. Fail-closed - it only ever NARROWS the clear, so worst case a
      * marker that should clear waits for the review flow.
      *
-     * <p>The scan answers three ways and each one is written out here, because the third used to be the second. A
+     * <p>The scan answers three ways and each one is written out here, because the third is easy to read as the
+     * second. A
      * review queue that did not enumerate whole cannot claim "no other alias holds these bytes", and that claim is
      * exactly what lifts a content-addressed hold - so an unenumerable queue leaves the marker and says so. The two
      * unknown arms below are deliberately <em>opposite</em>: before the clear it means do not clear, after the clear
@@ -185,14 +186,14 @@ final class OciManifests {
             // links a /quarantine pointer for this hash AFTER the guard read but before this clear would leave
             // that hold's still-live claim with its content-addressed marker gone - and the OCI serve gate keys
             // withheld on the MARKER, so the held image would disclose for up to one enforce interval. This is
-            // the request-path twin of the reconcile-vs-enforce race #207 closed on the WithheldReconcileTask
-            // path with a post-clear re-verify. Re-run the FULL guard face against fresh truth now that the clear
+            // the request-path twin of the reconcile-vs-enforce race the WithheldReconcileTask closes with a
+            // post-clear re-verify. Re-run the FULL guard face against fresh truth now that the clear
             // has landed and RE-MARK if a hold reappeared on the hash by ANY route - covering both landing sites:
             //  - the pointer face (quarantineAlias with an EMPTY exclusion set): a /quarantine pointer for
-            //    the hash on ANY served path, including THIS manifest's own path. The earlier reverify re-ran the
-            //    cross-alias probe with `path` EXCLUDED (Set.of(path)) - mirroring the guard, which relies on the
-            //    interceptor face below to cover this path - so a same-path enforce that links /quarantine<path>
-            //    in the window was invisible to it and the marker stayed wrongly cleared. The
+            //    the hash on ANY served path, including THIS manifest's own path. Re-running the cross-alias probe
+            //    with `path` EXCLUDED (Set.of(path)) - mirroring the guard, which relies on the interceptor face
+            //    below to cover this path - would make a same-path enforce that links /quarantine<path> in the
+            //    window invisible, and the marker would stay wrongly cleared. The
             //    empty exclusion catches the same-path pointer too, and it stays testable without an interceptor.
             //    (A clean ACCEPT writes no /quarantine<path> pointer, so the no-race case still finds nothing.)
             //  - the interceptor face (!disclosable(path)): a downstream deployment's hold interceptor withholds

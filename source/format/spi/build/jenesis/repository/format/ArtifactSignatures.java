@@ -27,7 +27,8 @@ import build.jenesis.repository.store.PublishInterceptor;
  * the bytes that signature commits to}. Those are the two things every scheme has and the only two that differ per
  * format. Verification, trust, grading and indexing sit above this seam and name no ecosystem.
  *
- * <p>{@link Signed} being reopenable rather than a {@code byte[]} is what keeps &sect;1 intact: a package is unbounded,
+ * <p>{@link Signed} being reopenable rather than a {@code byte[]} is what keeps the body streamed: a package is
+ * unbounded,
  * a signature is kilobytes, and the two-pass read ({@code _gpgorigin} lifted first, the large members streamed into the
  * verifier afterwards) is how a multi-gigabyte {@code .deb} is verified in bounded heap today.
  *
@@ -58,8 +59,8 @@ import build.jenesis.repository.store.PublishInterceptor;
  * presents an archive's signature as a maintainer's. Debian's proxy leg is the implementor; this deployment's own
  * indexes are its own signatures (the first paragraph).
  *
- * <p>A format in that family can only answer {@code expects} with {@code OPTIONAL} or nothing at all - or, since
- * 2026-09-12, with {@link Coverage#REQUIRED_WHEN_TRUSTED}, which is what {@code DebianFormat} declares: an ordinary
+ * <p>A format in that family can only answer {@code expects} with {@code OPTIONAL} or nothing at all - or with
+ * {@link Coverage#REQUIRED_WHEN_TRUSTED}, which is what {@code DebianFormat} declares: an ordinary
  * Debian package carries no signature and reporting every well-run archive as unsigned would be worse than saying
  * nothing, but a deployment that has provisioned a keyring of trusted Debian signers has opted in to per-package
  * signatures, and an unsigned package is then a finding. That declaration is still pure - it reads no store - and
@@ -85,18 +86,18 @@ import build.jenesis.repository.store.PublishInterceptor;
  *     an empty list when the artifact carries no signature material; {@code null} is never returned. An empty
  *     {@code evidence} for a path that {@code expects} something is the ordinary "unsigned" outcome and is the caller's
  *     to judge, never this seam's.</li>
- * <li><b>Read purity (&sect;10).</b> {@link #expects} derives from the request path <em>alone</em> - no store read, no
+ * <li><b>Read purity.</b> {@link #expects} derives from the request path <em>alone</em> - no store read, no
  *     blob opened - so a serving read path may call it freely. {@link #evidence} reads only through the
  *     {@link Material} it is handed and writes nothing.</li>
- * <li><b>Streaming (&sect;1).</b> {@link #evidence} never materialises an artifact body. It may read the small
+ * <li><b>Streaming.</b> {@link #evidence} never materialises an artifact body. It may read the small
  *     signature material whole - bounded by {@link Material#LARGEST_SIGNATURE} - and must express everything else as a
  *     {@link Signed} the caller opens. A format that buffered the body to compose {@code signed} would put the package
  *     on the publish thread's heap, which is the defect this shape exists to prevent.</li>
- * <li><b>Bounded work (&sect;12).</b> Every sibling read goes through {@link Material#sibling} with an explicit limit
+ * <li><b>Bounded work.</b> Every sibling read goes through {@link Material#sibling} with an explicit limit
  *     and a short answer is reported rather than assumed whole; an archive walked to find an embedded member is walked
  *     iteratively under the format's own inflation bound. Reaching a bound is an outcome - the evidence is simply not
  *     produced - never a truncated signature offered as a whole one.</li>
- * <li><b>Error visibility (&sect;9).</b> Material that is <em>present but unreadable</em> - a truncated sidecar, an
+ * <li><b>Error visibility.</b> Material that is <em>present but unreadable</em> - a truncated sidecar, an
  *     archive that will not parse, a store failure - propagates as an {@link IOException}. It must never be folded into
  *     an empty list, because the caller distinguishes "carries no signature" from "we could not read the signature",
  *     and collapsing the second into the first turns a tampered artifact into an unsigned one.</li>
@@ -326,7 +327,7 @@ public interface ArtifactSignatures extends EcosystemLayout {
          * declines to produce evidence rather than asserting something about a prefix.
          *
          * <p>The bounded pair is the store contract's own record rather than a third copy of two values that
-         * already exist twice in this build (&sect;8).
+         * already exist twice in this build.
          */
         Optional<PublishInterceptor.Content.Bounded> sibling(String path, int limit) throws IOException;
 

@@ -15,14 +15,14 @@ import build.jenesis.repository.store.Providers;
  * import controller - a composition's tenant-scoped {@code /api/repository/import} with its audited,
  * SSRF-screened choreography - is the <em>only</em> import edge at boot.
  *
- * <p>This retires a cross-layer stopgap: the downstream edition previously dropped the free
- * import mapping with a {@code WebMvcRegistrations} bean (a bean/mapping override reaching across the layer). With
- * this hook the downstream instead ships an {@code ImportEdgeProvider} service - its mere presence on the module path
+ * <p>No cross-layer stopgap is needed: rather than dropping the free import mapping with a
+ * {@code WebMvcRegistrations} bean (a bean/mapping override reaching across the layer), a downstream edition ships an
+ * {@code ImportEdgeProvider} service - its mere presence on the module path
  * makes the built-in edge yield - and contributes its own controller bean, so the two contribute
  * <em>separate, non-colliding</em> controllers with no mapping-suppression bean and no endpoint-mapping collision.
  *
- * <p>With no provider installed (the product) the import edge is served exactly as before, byte-for-byte
- * unchanged - the same guarantee the {@link CapabilityContributor} zero-contributor case gives. Discovery honours the
+ * <p>With no provider installed (the product) the built-in import edge serves - the same guarantee the
+ * {@link CapabilityContributor} zero-contributor case gives. Discovery honours the
  * shared {@link Features} enable/disable convention (a {@code jenreg.<name>=false} switch and the
  * required-config self-disable), so a provider that is present but not configured for is inert, exactly as a missing
  * module would be.
@@ -38,7 +38,7 @@ import build.jenesis.repository.store.Providers;
  *       without this SPI. Neither {@link #name()} nor {@link #requiredConfig()} may return {@code null}.</li>
  *   <li><b>Selection failure.</b> There is nothing to select: this is a presence signal, not a named capability, so no
  *       configuration can name an edge that is absent. Unlike the named singleton SPIs beside it there is no
- *       {@code jenreg.import-edge=<name>} key, so the §9 "explicitly selected but unavailable" case
+ *       {@code jenreg.import-edge=<name>} key, so the "explicitly selected but unavailable" case
  *       cannot arise here and setting such a key changes nothing. A provider that is installed but inert (switched
  *       off, required config unset) is indistinguishable from an absent module <em>by design</em>, and yielding the
  *       edge back to the controller is the intended outcome rather than a silent fallback.</li>
@@ -48,7 +48,7 @@ import build.jenesis.repository.store.Providers;
  *   <li><b>Error visibility.</b> A throw from either method propagates out of {@link #installed()} and fails the boot.
  *       That is deliberate and must not be softened: a swallowed failure here would silently register <em>both</em>
  *       import edges or <em>neither</em>, and an import surface that is quietly missing or quietly duplicated is worse
- *       than a refused start (§9).</li>
+ *       than a refused start.</li>
  *   <li><b>Lifecycle / ownership.</b> The core owns the lifecycle: every {@link #installed()} call loads the
  *       service afresh through {@link ServiceLoader}, so instances are created, consulted and discarded - they are not
  *       cached and never closed. A provider must therefore be a cheap, stateless declaration: it may not open threads,

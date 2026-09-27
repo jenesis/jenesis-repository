@@ -9,8 +9,8 @@ import com.google.api.client.http.LowLevelHttpResponse;
 import com.google.api.client.util.StreamingContent;
 
 /**
- * The storage client's HTTP over the product's own client, where Google's {@code NetHttpTransport} - a URL
- * connection - used to be: the store's requests leave the way every other outbound call does.
+ * The storage client's HTTP over the product's own client, in place of Google's {@code NetHttpTransport} - a URL
+ * connection: the store's requests leave the way every other outbound call does.
  *
  * <p>Two headers of the client library's are not sent. Its {@code User-Agent} and its {@code x-goog-api-client}
  * name the Java version, the library's own versions and the operating system; the request carries the product's

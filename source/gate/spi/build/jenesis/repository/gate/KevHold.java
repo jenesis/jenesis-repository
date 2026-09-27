@@ -11,9 +11,8 @@ import build.jenesis.repository.store.ArtifactStore;
  * only a <em>new, different</em> KEV CVE holds a released version again; a KEV delisting never auto-releases. The
  * record is also the signal that a hold is a known-exploited one, so a sweep gauge counts only its own holds.
  *
- * <p>This class used to recover a publish-time hold's CVEs from the quarantine log's reason text by regular
- * expression, because the gate wrote no record; the finding names its kind now, so the recovery and the duplicated
- * reason-prefix literal it matched on are gone.
+ * <p>A publish-time hold's CVEs come from the finding, which names its kind - never from the quarantine log's reason
+ * text by regular expression.
  */
 public final class KevHold {
 

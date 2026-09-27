@@ -38,11 +38,9 @@ import org.springframework.web.util.UriUtils;
  *       tenant administering its own keys cannot repoint an upstream, relax the policy or read every tenant's logs.</li>
  * </ul>
  *
- * <p><b>There was a weaker twin, and this is no longer it.</b> This manager used to take the repository rights on
- * every {@code /api/} route, so on the image that shipped it a key with a wildcard publish right administered the
- * deployment, while a second manager beside it in the other edition's tenancy module held the rules above. The two
- * are one now: the rules are this class's, every composition decides with it, and a richer policy still plugs in
- * through {@link AuthorizationManagerProvider}.
+ * <p><b>There is no weaker twin.</b> Taking the repository rights on every {@code /api/} route would let a key with
+ * a wildcard publish right administer the deployment. The rules above are this class's, every composition decides
+ * with it, and a richer policy plugs in through {@link AuthorizationManagerProvider}.
  *
  * <p>The computed {@link Authorization.Decision} is recorded on the request so
  * {@link RepositoryAuthorizationEntryPoint} can answer {@code 401} for an unauthorized request (no key, a malformed

@@ -42,7 +42,7 @@ module build.jenesis.repository.compliance.scan {
 
     exports build.jenesis.repository.compliance.scan to build.jenesis.repository.compliance.web,
             build.jenesis.repository.ui.store,
-            // the admin console's own suite, which names the report's types now that the console assembles
+            // the admin console's own suite, which names the report's types because the console assembles
             // through the same service the API does rather than building a second report of its own
             build.jenesis.repository.ui.admin.installed.test,
             build.jenesis.repository.server.kernel.test, build.jenesis.repository.recovery.test,

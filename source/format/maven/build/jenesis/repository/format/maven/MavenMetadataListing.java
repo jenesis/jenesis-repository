@@ -68,8 +68,7 @@ final class MavenMetadataListing {
              * <p>{@code StoredListing.spooling} does not rescue this: a spool defers the opening bytes, it does
              * not reorder the body. The document is one coordinate's versions, so what is held is bounded by a
              * coordinate rather than by the repository - which is why this is acceptable and why it is written
-             * down, since a codec silently lacking an appender is the defect that made a streaming generator
-             * write into a buffer in six other formats.
+             * down, since a codec silently lacking an appender makes a streaming generator write into a buffer.
              */
             @Override
             public byte[] join(SortedMap<String, byte[]> entries) {
@@ -120,7 +119,7 @@ final class MavenMetadataListing {
                 });
     }
 
-    /** The reconciled document the read used to compute, split into its entries - the first materialisation and the
+    /** The reconciled document, split into its entries - the first materialisation and the
      *  reset a metadata upload makes. */
     private SortedMap<String, byte[]> generate(String coordinatePath, StoredListing.Codec codec) throws IOException {
         Optional<byte[]> computed = metadata.computed("/maven/" + coordinatePath + "/maven-metadata.xml");
@@ -157,7 +156,7 @@ final class MavenMetadataListing {
         }
         StoredListing.Changes changes = new StoredListing.Changes().remove(version);
         // A held or yanked version must not survive in <latest>/<release> either: when the template names it, the
-        // name is re-derived from the versions that remain (the F5 rule of the on-read reconciliation).
+        // name is re-derived from the versions that remain (the rule of the on-read reconciliation).
         Optional<StoredListing.Document> current = StoredListing.read(store, spec);
         if (current.isPresent()) {
             SortedMap<String, byte[]> entries = spec.codec().split(current.get().body());

@@ -41,7 +41,7 @@ import build.jenesis.repository.icon.Marks;
  * have none, or refusing a mark to writers that are demonstrably present - and the second is exactly the confusion
  * between "installed, declares no mark" and "gone" that the three states exist to prevent.
  *
- * <p>Presentation only, and pure: it holds no domain state, reads no store, and performs no I/O (&sect;10) - it is
+ * <p>Presentation only, and pure: it holds no domain state, reads no store, and performs no I/O - it is
  * called once per rendered finding row. Each source's answer is resolved once and memoized, because discovery is
  * static for the life of the JVM and a mark is a constant in its contributor's module, so a page of two hundred rows
  * from a handful of feeds decodes each feed's document once rather than per row.

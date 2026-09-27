@@ -28,7 +28,7 @@ module build.jenesis.repository.blobs {
     requires build.jenesis.repository.server.spi;
     // OutboundTargets delegates the two dangerous halves rather than restating them: the transport half, the dial and
     // the http(s)/host capability floor are PrivateHostGuard's, the blocked address ranges are PrivateHosts
-    // table above. This module contributes only the wrapper the legs used to copy.
+    // table above. This module contributes only the wrapper around them, once for every leg.
     requires build.jenesis.repository.settings;
     exports build.jenesis.repository.blobs;
 }

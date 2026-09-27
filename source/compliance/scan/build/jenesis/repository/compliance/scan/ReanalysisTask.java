@@ -48,13 +48,13 @@ import build.jenesis.repository.store.Publication;
  * than reading as a clean convergence over a ledger that took none of its rows (clause 4).
  *
  * <p><b>An automated release never runs on an answer nothing could give.</b> Two questions stand between
- * the cleared intel and the re-point, and both used to be spent as their empty case: whether any OTHER registered hold
- * kind still holds the version, and which request paths the version serves. The first is now asked of the COORDINATE
+ * the cleared intel and the re-point, and neither may be spent as its empty case: whether any OTHER registered hold
+ * kind still holds the version, and which request paths the version serves. The first is asked of the COORDINATE
  * this sweep already has, so the durable {@code holds/<kind>/<eco>/<coord>/<ver>} records answer it with no format
  * involved; the second is three-valued, and a version whose ecosystem no installed format can place holds every
- * position - the KEV record is kept, the {@code /quarantine} pointers stay, and the pass logs why. Before this, an
- * uninstalled format made {@code paths()} empty, which skipped the kind-neutral guard entirely (its loop never ran) and
- * then dropped the KEV record while re-pointing nothing.
+ * position - the KEV record is kept, the {@code /quarantine} pointers stay, and the pass logs why. Read as empty, an
+ * uninstalled format would skip the kind-neutral guard entirely (its loop never runs) and then drop the KEV record
+ * while re-pointing nothing.
  *
  * <p>Exclusive - it re-points hold pointers, so a replicated deployment runs it on one node per interval under the
  * {@code reanalyze} lease, beside the non-exclusive gauge {@code scan} and the exclusive {@code kev-enforce}. It rides
@@ -126,8 +126,8 @@ public final class ReanalysisTask implements MaintenanceTask {
         // repository with millions of versions must not materialise them all just to re-confirm KEV holds on a sweep.
         long[] released = {0};
         // A refused findings write is contained per release so one coordinate does not cost the rest of the walk its
-        // convergence, then named and raised below: a contained failure is still the unit's failure (clause 4,
-        //). The release convergence itself has always propagated and still does.
+        // convergence, then named and raised below: a contained failure is still the unit's failure (clause 4).
+        // The release convergence itself propagates.
         UnitFailures failed = context.failures("The re-analysis sweep of " + context.tenant() + '/'
                 + context.repository(),
                 "The findings substrate misses this pass's known-exploited status for those coordinates - a "
@@ -193,13 +193,13 @@ public final class ReanalysisTask implements MaintenanceTask {
             }
             // Which request paths the version serves is layout knowledge, and both legs below need it: the kind-neutral
             // guard's provider fan-out is asked per path, and releaseHeld re-points and clears the /quarantine pointer
-            // per path. With the owning format's module off the graph inventory.paths() answered the EMPTY LIST, and
-            // emptiness was spent twice over: the guard loop never ran a single iteration, so the kind-neutral question
-            // was skipped rather than answered, and releaseHeld then re-pointed nothing while KevHold.cleared
-            // dropped the record - an automated sweep deleting the durable statement that this version is held because
-            // a module was absent, with the /quarantine pointers still standing for a later accepted re-publish to
-            // launder past a registry that no longer names the kind. Three-valued now (knownPaths): an
-            // enumeration that could not be made holds every position, and the pass says so.
+            // per path. With the owning format's module off the graph an EMPTY LIST would be spent twice over: the
+            // guard loop would never run, so the kind-neutral question would be skipped rather than answered, and
+            // releaseHeld would re-point nothing while KevHold.cleared dropped the record - an automated sweep
+            // deleting the durable statement that this version is held because a module was absent, with the
+            // /quarantine pointers still standing for a later accepted re-publish to launder past a registry that no
+            // longer names the kind. So the answer is three-valued (knownPaths): an enumeration that could not be
+            // made holds every position, and the pass says so.
             Known<List<String>> known = inventory.knownPaths(eco, coordinate, version);
             if (known instanceof Known.Unknown<List<String>> unknown) {
                 LOGGER.warn("Holding the KEV auto-release of {}/{} {}:{}: {} - neither the kind-neutral hold guard nor "

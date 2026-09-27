@@ -24,7 +24,7 @@ import build.jenesis.repository.store.Providers;
  *     {@link #resolve} alike: the cleanup and retention endpoints answer {@code 501} and the console hides the
  *     surface. {@code null} is never a legal return from {@link #name()}, {@link #create} or
  *     {@link #requiredConfig()}.</li>
- * <li><b>Selection failure (&sect;9).</b> An explicit {@code jenreg.retention=<name>} that no installed
+ * <li><b>Selection failure.</b> An explicit {@code jenreg.retention=<name>} that no installed
  *     engine answers to - its module is off the path, its name is misspelled - or whose provider declines because
  *     its {@link #requiredConfig() required configuration} is unset throws {@link IllegalStateException} at
  *     resolution, naming the selection and the installed engine names. It does <em>not</em> degrade to
@@ -33,9 +33,9 @@ import build.jenesis.repository.store.Providers;
  *     {@code jenreg.<name>=false} toggle; only an <em>unselected</em> deployment degrades to empty, and
  *     two <em>enabled</em> engines with no selection are ambiguous and throw rather than resolving by discovery
  *     order.</li>
- * <li><b>Tenant scoping (&sect;6).</b> The sweeper applies its plan through a repository's own inventory, so every
+ * <li><b>Tenant scoping.</b> The sweeper applies its plan through a repository's own inventory, so every
  *     eviction is scoped to the tenant and repository the caller names.</li>
- * <li><b>Error visibility (&sect;9).</b> An eviction that fails is surfaced rather than swallowed: retention
+ * <li><b>Error visibility.</b> An eviction that fails is surfaced rather than swallowed: retention
  *     deletes durable content, so a partially applied plan must be visible in the sweep's outcome rather than
  *     reported as a clean pass.</li>
  * <li><b>Lifecycle / ownership.</b> The composition resolves the sweeper once and owns it; {@link #resolve} builds
@@ -68,7 +68,7 @@ public interface RetentionProvider {
 
     /** The configured engine, resolved through the shared {@link Providers#optionalUnique} policy: an explicit
      *  {@code jenreg.retention=<name>} selects one by name and a selection nothing can honour
-     *  <em>throws</em> rather than degrading to no-retention (§9), a
+     *  <em>throws</em> rather than degrading to no-retention, a
      *  {@code jenreg.<name>=false} or an unset {@link #requiredConfig()} switches one off, more than one
      *  enabled engine is ambiguous rather than a discovery-order winner, and only an <em>unselected</em> deployment
      *  with nothing enabled degrades to empty. */

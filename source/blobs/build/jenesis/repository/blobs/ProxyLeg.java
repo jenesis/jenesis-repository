@@ -12,23 +12,17 @@ import build.jenesis.repository.store.ArtifactStore;
  * implements this rather than {@link ProxyFormat} directly, so the screen a proxy leg owes its request
  * path is a property of <em>the seam</em> instead of a line each of the fourteen legs had to remember to write.
  *
- * <p>It exists because they did not all remember. The request-path screen was found split two ways: every leg
- * refused a {@code .}/{@code ..} segment through {@link ArtifactStore#traversalFree}, but only four of them
- * additionally refused a {@code \} or a control character through {@link Keys#unsafe} - a divergence on a shared
- * concern, which &sect;13 calls a bug even when no leg is exploitable today, and one the store boundary below does not
- * re-screen. The parity fix could have been eight more copies of the same line; instead {@link #proxy} is
+ * <p>A screen each leg writes for itself splits: a divergence on a shared concern is a bug even when no leg is
+ * exploitable, and one the store boundary below does not re-screen. So {@link #proxy} is
  * {@code default} and {@code final} in spirit - it screens, then hands control to {@link #pullThrough}, which is the
  * only method a format writes. A fifteenth format cannot get this wrong by omission, because there is nothing left for
  * it to omit.
  *
- * <p>The screen was the <em>stricter</em> of the two that were in use when this seam was written, and that
- * difference is gone: {@link Keys#unsafePath} is today a pure delegation to {@code ArtifactStore.traversalFree},
- * which itself refuses a backslash and a C0 control character alongside the {@code .}/{@code ..} segments. So this
- * seam and the layouts' own request screens refuse exactly the same shapes, and there is one predicate rather
- * than two that agree.
+ * <p>{@link Keys#unsafePath} is a pure delegation to {@code ArtifactStore.traversalFree}, which refuses a backslash
+ * and a C0 control character alongside the {@code .}/{@code ..} segments. So this seam and the layouts' own request
+ * screens refuse exactly the same shapes, and there is one predicate rather than two that agree.
  *
- * <p>Said plainly because the older wording read as a live divergence and cost a reader an investigation: the value
- * of {@code unsafePath} is no longer that it is stricter, but that a request boundary names what it is asking. A
+ * <p>The value of {@code unsafePath} is not that it is stricter, but that a request boundary names what it is asking. A
  * future request-only rule - one with no business in a store key screen - would land there, and until one does the
  * two are the same question.
  *
@@ -45,16 +39,14 @@ import build.jenesis.repository.store.ArtifactStore;
  *     deliberately not a {@code 400}: a proxy leg runs <em>after</em> a local miss, so the truthful answer is that the
  *     path names nothing here, and a throw out of this seam would surface as an unmapped {@code 500} where a
  *     {@code 404} is the truth ({@link RepositoryFormat}'s traversal clause).</li>
- * <li><b>An enumeration is not an artifact, and its absence is an answer (&sect;13).</b> {@link ProxyFormat} clause 2
+ * <li><b>An enumeration is not an artifact, and its absence is an answer.</b> {@link ProxyFormat} clause 2
  *     makes one {@code false} carry an unproxyable path, an upstream miss, a transport failure <em>and</em> a refused
  *     body, so a leg that could not reach its upstream answers exactly as a leg whose upstream said "no such thing".
  *     On a version-pinned or content-addressed document that is right - the {@code 404} says "not cached here", the
  *     client re-pulls, and nothing about a build's resolution is decided by the absence. On an <em>enumeration</em> -
  *     a packument, a PEP 503 simple index, a {@code repodata} / {@code Packages} index, a versions endpoint - it is
  *     not: there the {@code 404} <b>is</b> the answer, an empty enumeration a build resolves against, so a network
- *     blip reaches the client as the fact that a package has no versions, indistinguishable from the truth. A Go
- *     version list that answered empty this way under load was once investigated for a day as an enumeration
- *     regression.
+ *     blip reaches the client as the fact that a package has no versions, indistinguishable from the truth.
  *     <p><b>So every relay names which of the two it is</b>, as
  *     {@link ProxyRelay.Document#ENUMERATION} or {@link ProxyRelay.Document#PINNED}, and the <em>rule</em> - upstream
  *     {@code 404}/{@code 410} is a real miss and the local {@code 404} stands; a transport failure or any other
@@ -65,7 +57,7 @@ import build.jenesis.repository.store.ArtifactStore;
  *     classification <em>unskippable</em> - there is no relay helper that does not take a {@link ProxyRelay.Document}
  *     - and the enumeration clause below requires a row from every leg
  *     naming its enumeration and pinned paths, so a fifteenth format cannot get it wrong by silence.</li>
- * <li><b>A digest we could not read is not a digest the upstream does not publish (&sect;13).</b> The same split, one
+ * <li><b>A digest we could not read is not a digest the upstream does not publish.</b> The same split, one
  *     layer down, on the <em>integrity</em> surface - where it is not a wrong answer but a silent fail-open.
  *     {@link ProxyFormat} clause 5 licenses one fall-back and gives the reason for it: an ecosystem that advertises no
  *     digest proxies unverified rather than fabricating a check. That reasoning was written for the upstream having
@@ -94,10 +86,10 @@ import build.jenesis.repository.store.ArtifactStore;
  *     ({@link RepositoryFormat#handles} answers {@code false}) is declined here rather than being allowed to compose a
  *     key from a prefix it never verified - the dispatcher already guarantees the claim, and the screen states it
  *     rather than trusting it.</li>
- * <li><b>Error visibility (&sect;9).</b> Nothing is swallowed. The screen decides before any store or network call and
+ * <li><b>Error visibility.</b> Nothing is swallowed. The screen decides before any store or network call and
  *     returns a value; it never catches an exception out of {@link #pullThrough}, so a transport or store failure
  *     surfaces exactly as it did when each leg screened for itself.</li>
- * <li><b>Read purity (&sect;10).</b> The screen performs no store read, no fetch and no write, so a refusal costs a
+ * <li><b>Read purity.</b> The screen performs no store read, no fetch and no write, so a refusal costs a
  *     string scan and reaches neither the upstream nor the store. This is the property that makes the screen safe to
  *     run unconditionally on every proxied request.</li>
  * <li><b>Ordering / concurrency.</b> The screen runs exactly once per request, before {@link #pullThrough}, and its
@@ -108,7 +100,7 @@ import build.jenesis.repository.store.ArtifactStore;
  *     the request line. There is no bound to breach and therefore no truncation to report.</li>
  * <li><b>Durability / delivery.</b> Unchanged: {@link #pullThrough} owns the cache fill and its pointer-last commit
  *     point. A screened-out request commits nothing at all, so it opens no crash window.</li>
- * <li><b>Outbound targets (&sect;13).</b> The screen above judges the <em>request</em> path. It says nothing about the
+ * <li><b>Outbound targets.</b> The screen above judges the <em>request</em> path. It says nothing about the
  *     <em>outbound</em> URL a leg then fetches, and that is a second, separate obligation this seam does not
  *     structurally discharge - so it is stated here and verified per leg by
  *     the proxy contract kit and by the principle checkup. A leg
@@ -123,7 +115,7 @@ import build.jenesis.repository.store.ArtifactStore;
  *     deployment's credentials and inside its network. A redirect <em>hop</em> is not a leg's to screen at all: the
  *     transport owns it ({@code FetcherProvider}'s redirect-policy and SSRF clauses). A leg that composes every target
  *     and follows nothing advertised satisfies this clause by construction and says so.
- *     <p><b>The screen is two halves and a floor</b>, and only the host half used to be in place on every leg. The
+ *     <p><b>The screen is two halves and a floor</b>. The
  *     <em>transport</em> half ({@code https}) and the <em>host</em> half (not internal) are run in one call under one
  *     dial - {@link #ALLOW_INTERNAL}, read through {@link #allowInternalTargets(FormatExchange)}. Underneath both sits
  *     the capability floor the dial does not lift: an advertised URL naming no http(s) transport, or no host at all, is

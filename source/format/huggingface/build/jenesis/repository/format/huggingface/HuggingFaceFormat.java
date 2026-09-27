@@ -138,7 +138,7 @@ public final class HuggingFaceFormat implements RepositoryFormat, ArtifactLayout
         // bare-hex blob hash, so the BlobLayout.blobHashes default resolves the withhold set from them (the time/commit
         // markers live OUTSIDE files/ and are never collected). A retroactive hold marks those hashes - the resolve
         // serve, the repo-info siblings list and the file tree all gate on the marker - and an eviction deletes these
-        // exact keys; before this the empty return made a hold a silent no-op and a KEV-listed model/dataset kept
+        // exact keys; an empty return would make a hold a silent no-op and a KEV-listed model/dataset would keep
         // serving. The files listing is attacker-publishable, so it is PAGED, never list()ed whole (a whole
         // listing there is a denial-of-service lever).
         List<HuggingFaceFile> files = huggingFaceFiles(coordinate, version, store);
@@ -518,8 +518,8 @@ public final class HuggingFaceFormat implements RepositoryFormat, ArtifactLayout
                 respondJson(exchange, root);
                 return;
             }
-            // The validator the dispatcher used to derive from the bytes it was handed. Streaming means it never
-            // holds them, so the format attaches its own - the document's stored sha256, which costs no
+            // The validator: streaming means the dispatcher never holds the bytes to derive one from, so the format
+            // attaches its own - the document's stored sha256, which costs no
             // materialisation to read. Every other format's listing already does this.
             Listings.serve(exchange, document, null);
         }
@@ -560,12 +560,11 @@ public final class HuggingFaceFormat implements RepositoryFormat, ArtifactLayout
 
     /** Whether any file is stored under a revision - a bounded ONE-child probe of the revision's {@code files} prefix,
      *  never a whole-directory {@code list()}. {@link #resolveRevision} is called from the hot single-file download
-     *  ({@link #file}) on EVERY read, and its only question of a revision is "does it hold any file?"; the former
-     *  {@code store.isEmpty(...)} materialised the revision's ENTIRE (attacker-publishable) file listing just to
-     *  test emptiness, so a revision with many thousands of files heap-blew on each download. This answers the same
-     *  question in O(1) by paging at most one child, the paged existence idiom the store walks use
-     *  against that denial of service; the branch/commit resolution semantics are unchanged (empty revision -&gt; null
-     *  -&gt; 404). */
+     *  ({@link #file}) on EVERY read, and its only question of a revision is "does it hold any file?"; materialising
+     *  the revision's ENTIRE (attacker-publishable) file listing just to test emptiness would heap-blow a revision
+     *  with many thousands of files on each download. This answers the question in O(1) by paging at most one child,
+     *  the paged existence idiom the store walks use against that denial of service (empty revision -&gt; null -&gt;
+     *  404). */
     private static boolean hasStoredFiles(ArtifactStore store, String filesPrefix) {
         if (!Blobs.nameable(filesPrefix)) {
             // A prefix composed from a client-shaped model/revision name can exceed the store's key cap, and nothing
@@ -646,10 +645,9 @@ public final class HuggingFaceFormat implements RepositoryFormat, ArtifactLayout
      * move while its version stays. It is how Artifactory's and Nexus's Hugging Face proxies keep a model, and it is
      * what lets {@link #describePointer} name a proxied pointer's version from its key.
      *
-     * <p>The resolution is the one HEAD the leg made before this seam existed, moved here; the leg reads the commit
-     * off the kept path and asks nothing again. A {@code HEAD} records nothing, so it keeps its path and its single
-     * upstream probe, and a branch the upstream cannot resolve to a commit keeps its path and is declined by the leg
-     * as before.
+     * <p>The resolution is one HEAD; the leg reads the commit off the kept path and asks nothing again. A {@code HEAD}
+     * records nothing, so it keeps its path and its single upstream probe, and a branch the upstream cannot resolve to
+     * a commit keeps its path and is declined by the leg.
      */
     @Override
     public Optional<String> keptAs(FormatExchange exchange, URI upstream, ProxyFormat.Fetcher fetcher)

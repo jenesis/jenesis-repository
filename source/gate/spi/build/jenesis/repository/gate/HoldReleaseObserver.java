@@ -7,10 +7,10 @@ import build.jenesis.repository.store.ArtifactStore;
 /**
  * A hook run when a reviewer releases a quarantined path, discovered with {@link ServiceLoader} so the set of
  * side-effects a release triggers is declared in one place ({@code provides}) rather than hardcoded at every release
- * surface. Before this, both the free-repository review side ({@code GatedRepository.release}) and the console's review
- * side ({@code ComplianceReview.releaseQuarantined}) named {@link KevHold} and {@link LicenseHold} by hand and had to be
- * kept in lock-step; now each surface calls {@link #released} once and a new retroactive-hold kind joins by adding a
- * provider, with no edit to the release surfaces.
+ * surface. Each release surface - the free-repository review side ({@code GatedRepository.release}) and the console's
+ * review side ({@code ComplianceReview.releaseQuarantined}) - calls {@link #released} once rather than naming
+ * {@link KevHold} and {@link LicenseHold} by hand, and a new retroactive-hold kind joins by adding a provider, with no
+ * edit to the release surfaces.
  *
  * <p>An observer promotes a retroactive hold record into an override marker so a subsequent enforcement sweep never
  * re-holds a release a human has cleared. It is a no-op for a path it never held (a plain publish-time gate hold leaves
@@ -82,10 +82,10 @@ import build.jenesis.repository.store.ArtifactStore;
  *     {@link #onDiscarded} are <em>no-ops</em> for a path this hook's own kind never held, so registering a provider
  *     for a hold kind a deployment does not use is harmless, and neither invents a record or an override for such a
  *     path. Proven by {@code A_HOOK_IS_A_NO_OP_FOR_A_PATH_IT_NEVER_HELD}.</li>
- * <li><b>Selection failure (&sect;9).</b> The policy is {@code ALL} and there is nothing to select: every discovered
+ * <li><b>Selection failure.</b> The policy is {@code ALL} and there is nothing to select: every discovered
  *     hook runs, there is no selection key, and no arrangement of providers is a resolution error. Absence is the
  *     boundary case that matters, and it is <b>asymmetric</b>. Adding a provider is harmless (clause 4). Removing one
- *     used to be fail-open, and is not any more: <b>a hold survives its module's absence, because the durable
+ *     is not fail-open: <b>a hold survives its module's absence, because the durable
  *     {@code holds/<kind>/} record - not the provider list - is what "is this held" is answered from.</b>
  *     {@link #anyHolds} and {@link #heldByAnotherKind} read {@link HoldRecords} first and only then fan out over the
  *     discovered hooks, so they answer {@code true} for a kind whose module is no longer installed, exactly as they do
@@ -110,12 +110,12 @@ import build.jenesis.repository.store.ArtifactStore;
  *     says why. A release site that already holds the coordinate - which every enforcement sweep does - must instead
  *     use {@link #heldByAnotherKind(ArtifactStore, String, String, String, Collection, String)}, whose authoritative
  *     leg is coordinate-keyed and needs no format at all.</li>
- * <li><b>Tenant scoping (&sect;6).</b> A hook carries no tenant and must never derive one. The handed
+ * <li><b>Tenant scoping.</b> A hook carries no tenant and must never derive one. The handed
  *     {@link ArtifactStore} is already tenant-and-repository scoped by the review surface, and every key a hook reads
  *     or writes must be relative to it. A hook must not open a second store, and must not read a coordinate's state
  *     from anywhere but the store it was handed - a cross-tenant read here would let one tenant's release clear
  *     another tenant's hold.</li>
- * <li><b>Error visibility (&sect;9).</b> Fail-closed, in both directions. A checked {@link IOException} and any
+ * <li><b>Error visibility.</b> Fail-closed, in both directions. A checked {@link IOException} and any
  *     {@link RuntimeException} propagate out of {@link #released}/{@link #discarded} unchanged - there is no
  *     {@code try}/{@code catch} on either fan-out - so the release or discard fails and <em>nothing</em> is mutated.
  *     That is the required behaviour, not a leak: "I could not record the override" and "the artifact is released"
@@ -125,7 +125,7 @@ import build.jenesis.repository.store.ArtifactStore;
  *     Proven by {@code A_THROWING_HOOK_PROPAGATES_AND_LEAVES_THE_HOLD_SAFE} (a poisoned hook) and
  *     {@code A_STORE_FAULT_MID_FAN_OUT_LEAVES_THE_HOLD_SAFE} (a fault-injected backend), both of which re-read the
  *     hold from durable state rather than from what the surface remembered.</li>
- * <li><b>Read purity (&sect;10) and write scope.</b> {@link #holds} and {@link #kind()} are pure reads: store reads
+ * <li><b>Read purity and write scope.</b> {@link #holds} and {@link #kind()} are pure reads: store reads
  *     and layout {@code describe} only, no external I/O, no network, and no mutation - {@link #anyHolds} is called on
  *     the accepted-publish hot path by {@code ComplianceScreen} and inside {@code HoldClears}' marker-clear guard,
  *     where a write or a network call would be a second gate. {@link #onReleased}/{@link #onDiscarded} are the write
@@ -151,7 +151,7 @@ import build.jenesis.repository.store.ArtifactStore;
  *     during the fan-out, and no hook may depend on running before or after another. What <em>is</em> ordered is the
  *     surface: every hook completes before the release becomes visible, so a fan-out that fails part-way never serves
  *     a half-released artifact. Proven by {@code THE_RELEASE_IS_VISIBLE_ONLY_AFTER_EVERY_HOOK_SUCCEEDED}.</li>
- * <li><b>Bounded work / cancellation (&sect;9).</b> Both fan-outs run synchronously on the reviewer's request thread,
+ * <li><b>Bounded work / cancellation.</b> Both fan-outs run synchronously on the reviewer's request thread,
  *     with no timeout, no interruption protocol and no cap on the number of hooks - the release surface holds no
  *     lease and offers no cancellation, so any time a hook spends blocked is time a reviewer's HTTP request spends
  *     blocked. Each hook must therefore bound its own work in-band and against the size of the review state rather
@@ -185,8 +185,8 @@ public interface HoldReleaseObserver {
 
     /** Whether this observer's hold kind currently holds a retroactive record for {@code path}'s coordinate version -
      *  the read the accepted-re-publish guard consults so a re-upload of a held version never clears a sweep-owned
-     *  hold pointer of <em>any</em> kind (before this, only the KEV kind was consulted, and an accepted re-publish
-     *  declaring clean metadata laundered a license-retro hold). Default {@code false} for an observer without a
+     *  hold pointer of <em>any</em> kind (consulting only one kind would let an accepted re-publish declaring clean
+     *  metadata launder another kind's retroactive hold). Default {@code false} for an observer without a
      *  per-version record. */
     default boolean holds(ArtifactStore store, String path) throws IOException {
         return false;
@@ -235,10 +235,9 @@ public interface HoldReleaseObserver {
      * point of a kind-neutral guard - then the discovered providers, so a future hold kind joins by writing a record
      * or adding a provider, with no edit to any release site.
      *
-     * <p><b>The durable leg no longer needs an installed format.</b> It used to: with the owning format's
-     * module off the graph nothing could turn the request path into a coordinate, so this answered {@code false} for a
-     * hold that was standing - the same dependence the hold records once had. {@link
-     * HoldRecords#heldKinds(ArtifactStore, String)} now falls back to the durable {@code subjects/} record the hold
+     * <p><b>The durable leg does not need an installed format.</b> With the owning format's module off the graph
+     * nothing can turn the request path into a coordinate, so
+     * {@link HoldRecords#heldKinds(ArtifactStore, String)} falls back to the durable {@code subjects/} record the hold
      * wrote when it was placed, so an uninstalled format costs this guard nothing. The <em>provider</em> leg keeps the
      * describe-dependence, because every observer's {@link #holds} is path-keyed and resolves its own coordinate; it
      * only ever widens the answer, so what it loses is coverage of a hook keying on state other than its own record,
@@ -350,17 +349,16 @@ public interface HoldReleaseObserver {
      * The installed hooks - the <b>one</b> {@code ServiceLoader} call for this SPI, which every no-hook-argument
      * static above delegates to.
      *
-     * <p>Each of those statics used to load for itself, which made the fan-out impossible to substitute: a test
-     * could hand-fan its own hooks, or it could call the real choreography, but not both - calling the real one
-     * re-discovered the genuine hook and ran it a second time. Four hold-release hooks were consequently held to a
-     * contract that read a hook the test never constructed, which is why the two roles that <em>do</em> take their
-     * collaborators as an argument are the two whose omission mutations all bite.
+     * <p>One load rather than one per static, so the fan-out can be substituted: a static that loaded for itself would
+     * let a test hand-fan its own hooks or call the real choreography, but not both - calling the real one would
+     * re-discover the genuine hook and run it a second time, and a contract would then read a hook the test never
+     * constructed.
      */
     static Iterable<HoldReleaseObserver> discovered() {
         // Through the shared primitive, which is what makes a duplicate kind a packaging error rather than a silent
         // winner. A kind is not a label: it names the hook's own holds/<kind>/ and overrides/<kind>/ key space, so two
         // observers answering to one kind make ONE HOOK'S RELEASE CLEAR ANOTHER'S HOLD - the fail-open direction
-        // once closed from the removed-provider side and reachable again from the duplicated-provider side.
+        // closed from the removed-provider side and reachable from the duplicated-provider side.
         //
         // Sorting by kind is a side effect and a welcome one. The ordering clause below says fan-out order is
         // discovery order and is deliberately NOT part of the contract, precisely because hooks must be mutually

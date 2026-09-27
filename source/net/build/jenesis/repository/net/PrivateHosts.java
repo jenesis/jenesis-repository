@@ -22,8 +22,8 @@ import module java.base;
  * everywhere, and it is bounded to the most recent {@value #REMEMBERED} hosts.
  *
  * <p><b>The table is here; the policy is not.</b> This module carries nothing but {@code java.base}, deliberately,
- * so that anything above it may require it - which is the point: the classifier previously lived in the format SPI,
- * and a caller that could not reach that SPI kept a second copy of the same ranges instead. What each caller does
+ * so that anything above it may require it - which is the point: a caller that could not reach a classifier living
+ * in the format SPI would keep a second copy of the same ranges instead. What each caller does
  * about a host that will not resolve, or a URI with no host at all, is theirs and genuinely differs - the format
  * legs admit, the downstream webhook and forwarding guards refuse. Only the range question lives here, because
  * that is the half where two answers is a defect rather than a decision.

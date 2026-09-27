@@ -9,8 +9,7 @@ import build.jenesis.repository.store.ArtifactStore;
 import build.jenesis.repository.store.Names;
 
 /**
- * Reclaims provenance attestations whose artifact is gone - the sweep half of a reaper that only ever had an
- * event-driven half.
+ * Reclaims provenance attestations whose artifact is gone - the sweep half beside the reaper's event-driven half.
  *
  * <p>{@link ProvenanceAttestationReaper} deletes an attestation off the {@code onDeleted} notification, which is
  * sound and covers the ordinary case. What it cannot reach is everything the notification does not carry, and its own
@@ -27,7 +26,7 @@ import build.jenesis.repository.store.Names;
  * <p>An attestation whose blob is still live but whose particular path no longer serves it is <b>not</b> reclaimed
  * here. Deciding that needs a hash-to-paths reverse index the store does not offer ({@code BlobLayout.servedPaths} is
  * keyed by coordinate, not by content), and the alternative - inferring it from an enumeration that might be
- * incomplete - is the failure this plan keeps returning to: absence read as evidence. Under-reclaiming leaves a small
+ * incomplete - is absence read as evidence. Under-reclaiming leaves a small
  * derived record; over-reclaiming destroys the provenance of a live artifact. The sweep errs the first way and says
  * so rather than guessing.
  *
@@ -44,7 +43,7 @@ public final class ProvenanceAttestationSweep implements MaintenanceTask {
      *  and nothing else: the unpaged listing this replaced held every hash, and the first {@code 500} of it was all a
      *  pass ever examined - "resumable by construction" said the javadoc, and there was no cursor, so an orphan behind
      *  five hundred live attestations was never reached. The healing suite proves it with six hundred. A pass is
-     *  one point probe per hash, which is what a daily walk may cost (&sect;1). */
+     *  one point probe per hash, which is what a daily walk may cost. */
     static final int PAGE = 500;
 
     private final Duration interval;

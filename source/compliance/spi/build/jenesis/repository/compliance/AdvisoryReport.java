@@ -51,12 +51,12 @@ public final class AdvisoryReport {
         List<List<AdvisorySignal.Value>> columns = new ArrayList<>();
         // Each signal's identity is read ONCE, here, before it is evaluated, and every later use - the shape refusal
         // below and every cell of its column - reads that capture. Two reasons, and the first is the one that
-        // matters: the refusal below exists to name a signal that answered the wrong number of values, and it used to
-        // ask that very signal what it is called, so a signal broken enough to mis-answer and then throw from name()
-        // defeated the diagnostic written to report it - a guest's throw escaping, in the handler of the surface that
-        // renders /api/vulnerabilities and the console's compliance review. The second is arithmetic: name() and
-        // label() were read once per CELL, so a page of 200 advisories over 6 signals re-entered each signal 1200 times
-        // to ask it two constants.
+        // matters: the refusal below exists to name a signal that answered the wrong number of values, and asking
+        // that very signal what it is called there would let a signal broken enough to mis-answer and then throw from
+        // name() defeat the diagnostic written to report it - a guest's throw escaping, in the handler of the surface
+        // that renders /api/vulnerabilities and the console's compliance review. The second is arithmetic: read once
+        // per CELL, name() and label() would re-enter each signal 1200 times for a page of 200 advisories over 6
+        // signals to ask it two constants.
         List<String> names = new ArrayList<>(signals.size());
         List<String> labels = new ArrayList<>(signals.size());
         for (AdvisorySignal signal : signals) {

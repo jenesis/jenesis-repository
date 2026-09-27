@@ -28,14 +28,14 @@ import build.jenesis.repository.store.Providers;
  *     contributes a planner; the preview surface then answers {@code 501}. {@code null} is never a legal return
  *     from {@link #installed()} or {@link #plan} - a repository with nothing to hold answers an empty
  *     {@link Plan}, which is a different statement from "no planner is installed".</li>
- * <li><b>Selection failure (&sect;9).</b> This SPI has <em>no</em> selection key - nothing names a planner by name -
+ * <li><b>Selection failure.</b> This SPI has <em>no</em> selection key - nothing names a planner by name -
  *     so there is no explicitly-selected miss to fail on. The one resolution failure is ambiguity: two installed
  *     planners would make module-path order decide which policy the operator previews, so {@link #installed()}
  *     <em>throws</em> naming both rather than picking a discovery-order winner. Resolution runs through the shared
  *     {@link Providers#optionalUnique} primitive, never a hand-rolled loop.</li>
- * <li><b>Tenant scoping (&sect;6).</b> The caller hands in an already-scoped repository store; the plan may read
+ * <li><b>Tenant scoping.</b> The caller hands in an already-scoped repository store; the plan may read
  *     nothing outside it.</li>
- * <li><b>Read purity (&sect;10).</b> The plan is read-only: it enumerates {@code published/} sidecars and reads
+ * <li><b>Read purity.</b> The plan is read-only: it enumerates {@code published/} sidecars and reads
  *     {@code licenses/} sidecars and hold/override markers, never an artifact blob, never an external fetch and
  *     never a write. A preview must stand when the license feeds are down.</li>
  * <li><b>Bounded work / cancellation.</b> The plan walks an existing corpus, so it is bounded by the repository's

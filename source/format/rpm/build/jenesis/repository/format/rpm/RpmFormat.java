@@ -156,8 +156,8 @@ public final class RpmFormat implements RepositoryFormat, ArtifactLayout, ProxyL
         // (<version>-<release>.<arch>); recover the coordinate-scoped keys by walking the repo's pool tree for every
         // .rpm whose filename NEVRA re-describes to the SAME (coordinate, version) - a NEVRA may sit under several pool
         // locations, and all are the version's keys - so blobHashes/servedPaths/eviction reach a hosted RPM version and
-        // a retroactive KEV/license hold actually retracts serving (before this, an unconditional empty made the hold a
-        // silent no-op; finding #1).
+        // a retroactive KEV/license hold actually retracts serving (an unconditional empty would make the hold a
+        // silent no-op).
         if (!BlobLayout.addressable(coordinate, version)) {
             // A traversal-shaped repo, package name or NEVRA maps nowhere: these keys are what an eviction DELETES,
             // and ArtifactStore.delete is not screened. The shared per-part screen, so the two-segment <repo>/<name>
@@ -221,12 +221,11 @@ public final class RpmFormat implements RepositoryFormat, ArtifactLayout, ProxyL
      *
      * <p>This is the format's <em>only</em> descent of a pool tree. It has two consumers with nothing else in common -
      * the stanza back-fill, which re-reads each package's header, and the {@link BlobLayout} coordinate seam, which
-     * matches each filename's NEVRA - and they turned out to be two descents of the same tree: the back-fill already
-     * ran on the shared {@link PagedTreeWalk} primitive while {@code blobKeys} still hand-rolled an explicit cursor
-     * stack over {@code store.page}. The hand-rolled one was bounded and paged, so it was never a correctness defect;
-     * it was a second implementation of a shared mechanism, and the bounds it did <em>not</em> have are the reason
-     * folding it in is worth doing - it had no step budget and no depth ceiling, so a pathological pool tree cost an
-     * unbounded number of store round-trips silently, where {@link #POOL} now refuses it by name.
+     * matches each filename's NEVRA - and both are descents of the same tree, so both run on the shared
+     * {@link PagedTreeWalk} primitive. A hand-rolled cursor stack over {@code store.page} would be a second
+     * implementation of a shared mechanism without its bounds - no step budget and no depth ceiling, so a
+     * pathological pool tree would cost an unbounded number of store round-trips silently, where {@link #POOL}
+     * refuses it by name.
      *
      * <p>The pool tree is publish-plantable to arbitrary depth and width, so the descent stays the shared iterative,
      * paged one - never self-recursion over an unpaged {@code list()}. A caller accumulating what it is handed is

@@ -16,8 +16,8 @@ import org.springframework.security.oauth2.client.registration.ClientRegistratio
  * <p><b>Why this takes values rather than a properties object.</b> The registrations are the same wherever the
  * console runs, but where the values come from is not - one deployment binds them under one prefix, another under
  * per-provider prefixes with a different principal model behind them. Passing the values in keeps the part that is
- * genuinely shared in one place while leaving each console free to bind its own configuration, which is what stopped
- * this from being one builder before: it was copied instead, and the copies then drifted on the requested scopes.
+ * genuinely shared in one place while leaving each console free to bind its own configuration, rather than a copy of
+ * the builder per console drifting on the requested scopes.
  *
  * <p>The scopes are a parameter for that reason. {@code openid} is already set by discovery and is what marks the
  * login OIDC rather than plain OAuth2; a console that also renders display names asks for {@code profile} and

@@ -5,7 +5,7 @@ import module java.base;
 /**
  * One HTTP answer a {@link FeedTransport} hands back: the status, the response headers and the body as a
  * <em>stream</em>. The body is never a {@code String} or a {@code byte[]}, because a catalogue feed answers with a
- * multi-megabyte document a reader must parse incrementally (&sect;1) - {@link FeedClient} additionally wraps the
+ * multi-megabyte document a reader must parse incrementally - {@link FeedClient} additionally wraps the
  * stream in the policy's byte cap before a reader ever sees it, so a feed cannot spend unbounded heap by answering
  * with an unbounded body.
  *

@@ -287,7 +287,7 @@ public final class LiveConfig {
 
     /**
      * Whether {@code tenant} has opted out of release-version immutability - {@code allow-redeploy=true}, letting a
-     * release coordinate be re-pointed at different bytes. Default {@code false} (immutability default-ON, §the 
+     * release coordinate be re-pointed at different bytes. Default {@code false} (immutability default-ON, the
      * secure default). Tenant-overridable, so a tenant may relax it for its own artifact space (an operator pin above
      * the store still wins, as it does for every live dial). Resolved on demand off cheap in-memory settings, exactly
      * as the per-tenant gate is - a publish is not the hot read path. */

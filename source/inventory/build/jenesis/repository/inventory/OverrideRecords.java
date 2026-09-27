@@ -7,23 +7,20 @@ import build.jenesis.repository.store.ArtifactStore;
  * The single owner of the durable {@code overrides/<kind>/<eco>/<coord>/<ver>} key space - the marker a human's
  * release of a hold writes, saying "this kind's finding on this stored version has been cleared, do not re-hold it".
  *
- * <p><b>Why one owner.</b> The space had four independent spellings of the same key. {@code KevHold} and
- * {@code LicenseHold} URL-encoded only the coordinate ({@code overrides/kev/<raw eco>/<enc coord>/<raw ver>});
- * {@code ReachabilityHold} encoded all three segments; {@code InventoryEviction} reaped by the first spelling and
- * {@code InventoryReconciler} parsed it back the same way. So evicting a version <em>stranded</em> its reachability
- * override: the reaper composed a key the writer never wrote, deleted nothing, and left a marker behind that outlived
- * the version it was about - and would silently suppress the re-screen of a later re-publish of the same coordinate.
- * The same divergence in {@code holds/} was what made a hold un-findable by a kind-neutral reader until 
- * converged that space onto {@code HoldRecords.key}; this class is that convergence for {@code overrides/}, and the
- * reason there is now nowhere left for a fifth spelling to appear.
+ * <p><b>Why one owner.</b> The writers ({@code KevHold}, {@code LicenseHold}, {@code ReachabilityHold}), the
+ * eviction reaper and the reconcile parser all need the same key. With a spelling each, evicting a version would
+ * <em>strand</em> an override: the reaper would compose a key the writer never wrote, delete nothing, and leave a
+ * marker behind that outlived the version it was about - and would silently suppress the re-screen of a later
+ * re-publish of the same coordinate. {@code HoldRecords.key} is the one spelling for {@code holds/}; this class is
+ * the one spelling for {@code overrides/}, so there is nowhere for another to appear.
  *
  * <p><b>The spelling is the fully-encoded one</b>, for the reason {@code HoldRecords} already states: an un-encoded
  * version or ecosystem carrying a {@code /} (or empty) splices extra segments into the key, so one release's marker
  * can land on another's - and a kind-neutral reader (this space has two: the eviction reaper and the reconcile sweep)
  * cannot construct a key it cannot predict. Override records are transient by construction - they exist between a
- * human's release and the eviction of the version they are about - so the previous spellings are simply gone rather
- * than read as a fallback; a pre-existing marker written the old way is left where it lies and reaped, like any other
- * unowned row, by the operator purge of the {@code overrides} namespace.
+ * human's release and the eviction of the version they are about - so no other spelling is read as a fallback; a
+ * marker written any other way is left where it lies and reaped, like any other unowned row, by the operator purge
+ * of the {@code overrides} namespace.
  *
  * <p><b>What lives here and what does not.</b> This class owns the <em>key</em> - construction, the kind index, and
  * the parse back - and nothing else. An override's <em>body</em> stays the private vocabulary of the kind that wrote

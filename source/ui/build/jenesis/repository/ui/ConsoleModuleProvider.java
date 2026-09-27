@@ -26,22 +26,22 @@ import build.jenesis.repository.icon.IconContributor;
  *     mechanism, the machine-facing SCIM API) returns the empty {@link #navEntries()} and {@link #repositoryPages()}
  *     lists, never {@code null} and
  *     never a placeholder entry. Absence of a capability is expressed by the module being absent from the path -
- *     which is itself the capability gate the shell reads (&sect;3).</li>
- * <li><b>Selection failure (&sect;9).</b> This is an {@code ALL} SPI: every installed module contributes and there is
+ *     which is itself the capability gate the shell reads.</li>
+ * <li><b>Selection failure.</b> This is an {@code ALL} SPI: every installed module contributes and there is
  *     nothing to select. A <em>collision</em> is still a packaging error: two providers answering to one
  *     {@link #name()}, or one provider class registered twice, make {@link #installed()} and {@link #enabled} throw
  *     naming the colliding classes rather than letting module-path order pick a winner - two modules on one name
  *     share the single {@code jenreg.<name>} toggle, so switching one off switches both off. Two
  *     providers naming one {@link #configuration()} class is equally a packaging error, refused by the contract suite
  *     because the configuration class is this SPI's own concept rather than the shared discovery primitive's.</li>
- * <li><b>Tenant scoping (&sect;6).</b> A provider carries no tenant and is resolved once per JVM: it declares a
+ * <li><b>Tenant scoping.</b> A provider carries no tenant and is resolved once per JVM: it declares a
  *     deployment's installed console surface, not a tenant's. Its {@link NavEntry#access()} floor is a coarse role
  *     gate the shell resolves server-side against the current tenant per request; a finer, per-tenant capability
  *     stays the screen's own concern behind the link.</li>
- * <li><b>Error visibility (&sect;9).</b> Nothing here is best-effort. An exception from any of the four methods, or
+ * <li><b>Error visibility.</b> Nothing here is best-effort. An exception from any of the four methods, or
  *     a {@link #configuration()} class that cannot be loaded or instantiated, fails the context refresh rather than
  *     dropping one module quietly out of a console that then renders a screen-less shell.</li>
- * <li><b>Read purity (&sect;10).</b> None of the four performs I/O. They are declarations read during context
+ * <li><b>Read purity.</b> None of the four performs I/O. They are declarations read during context
  *     refresh and at nav-discovery time; a provider that reached the store or the network to decide its name or its
  *     links would make the rendered shell depend on something else being up.</li>
  * <li><b>Lifecycle / ownership.</b> {@code ServiceLoader} instances are created by {@link #installed()} and
@@ -132,9 +132,8 @@ public interface ConsoleModuleProvider extends IconContributor {
      *
      * <p>A module states its own default rather than the reader assuming one, because the reader governs every
      * console module and the exceptions are per module: the manual upload screen writes into repositories and
-     * ships off, and key-based sign-in once shipped off too - reading such a module through the ordinary
-     * on-unless-off rule made the code answer ENABLED on a deployment that had never stored the key while the
-     * console rendered it off. Declaring
+     * ships off - reading such a module through the ordinary on-unless-off rule would make the code answer ENABLED on
+     * a deployment that had never stored the key while the console rendered it off. Declaring
      * it here keeps the code's answer and the catalogue's {@code defaultValue} in one place per module instead of
      * two places that can disagree silently.
      */

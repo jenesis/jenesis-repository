@@ -23,7 +23,7 @@ import module java.base;
  *     as an element, or from {@link #settings()} itself - is never a legal return. A module absent from the
  *     deployment contributes no keys at all, which is the SPI's whole no-op-by-absence contract: its dials vanish
  *     from every surface with no change to neutral code.</li>
- * <li><b>Key ownership (&sect;2, &sect;12).</b> A key is <em>lowercase dotted</em> - lowercase alphanumeric segments
+ * <li><b>Key ownership.</b> A key is <em>lowercase dotted</em> - lowercase alphanumeric segments
  *     joined by {@code -} or {@code .} - and has exactly <b>one</b> owner. Two contributors declaring one key is a
  *     packaging error, not a merge: the loser would lose its scope, its module attribution and its stored document,
  *     silently. Every static below therefore refuses it, naming the key and both declaring classes, rather than
@@ -39,7 +39,7 @@ import module java.base;
  *     document, and they are deliberately absent from {@link #attribution()}, {@link #modules()} and
  *     {@link #scopes()} - so a core dial adds no modules-console row and keeps its {@link SettingsScopes}
  *     classification.</li>
- * <li><b>Tenant scoping (&sect;6).</b> A contributor declares each setting's {@link Setting.Scope}; the classifier
+ * <li><b>Tenant scoping.</b> A contributor declares each setting's {@link Setting.Scope}; the classifier
  *     every write guard consults is {@link SettingsScopes#scopeOf}, which layers the core classification over the
  *     declaration. A plugin key's declared scope is therefore what {@code scopeOf} must answer - a plugin may not
  *     declare a key the core classification already claims.</li>
@@ -48,7 +48,7 @@ import module java.base;
  *     offers exactly the values its code honours, in both directions: a value the code honours but
  *     the list omits is reachable only by environment variable, and one the list offers that the code refuses fails
  *     the operator's write on a value the product itself listed.</li>
- * <li><b>Error visibility (&sect;9).</b> None of the failures above degrade. A duplicate key, like a contributor
+ * <li><b>Error visibility.</b> None of the failures above degrade. A duplicate key, like a contributor
  *     that throws from {@link #settings()}, surfaces as an {@link IllegalStateException} out of the statics below and
  *     takes the administration surface with it, because a half-built catalogue would render a dial that edits
  *     nothing.</li>
@@ -122,9 +122,9 @@ public interface SettingsContributor {
      * A settings surface that is wrong about scope while looking complete is worse than one that is plainly down.
      *
      * <p>So the position is: these four are all-or-nothing, and a broken contributor is a broken deployment that
-     * an operator fixes by removing the module, not a row the console renders in red. It is stated here because the
-     * duplicate-key refusal a few lines below is argued at length and this was not, which made the silence read as
-     * an oversight rather than as the decision it is. {@code SettingsFanOutFailsWholeTest} is the leg.
+     * an operator fixes by removing the module, not a row the console renders in red. It is stated here, beside the
+     * duplicate-key refusal argued below, so the choice does not read as an oversight.
+     * {@code SettingsFanOutFailsWholeTest} is the leg.
      */
     static List<Setting> all() {
         return all(installed().stream().map(ServiceLoader.Provider::get).toList());

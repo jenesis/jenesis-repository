@@ -16,8 +16,8 @@ import build.jenesis.repository.walk.ArtifactWalk;
 
 /**
  * The scheduled cleanup: finished import jobs past their TTL are auto-dismissed per repository, and a quota'd
- * tenant's usage counter is reconciled afterwards - the two legs of the old pass that are neither a walk nor a
- * repair. Retention, garbage collection and the browse's subtree-size roll-up left this pass for the walk: the
+ * tenant's usage counter is reconciled afterwards - the two cleanup legs that are neither a walk nor a
+ * repair. Retention, garbage collection and the browse's subtree-size roll-up ride the walk instead: the
  * {@link RetentionConsumer} judges the inventory rows as the walk streams them, the {@code GcConsumer} and the
  * {@code RollUpConsumer} run at the end of a pass that carries them, and the {@code retention} entry of the walks
  * setting carries all three daily by default. So this task's interval is the reaps' cadence, daily by default, and
@@ -82,8 +82,8 @@ public final class CleanupTask implements MaintenanceTask {
      * Auto-dismiss the repository's finished jobs of one kind - migration imports and exports alike: a job whose state
      * is no longer {@code running} - its {@code imports/<id>} record and the console's remembered
      * {@code import-source/<id>}, or its {@code exports/<id>} record - is removed once it has sat terminal for its
-     * kind's TTL, so a fleet of one-shot jobs does not accumulate a job object per run forever (before this, only a
-     * manual dismiss removed them). The job record carries no timestamp, so the sweep stamps an expiry marker
+     * kind's TTL, so a fleet of one-shot jobs does not accumulate a job object per run forever. The job record
+     * carries no timestamp, so the sweep stamps an expiry marker
      * ({@code import-expiry/<id>}, {@code export-expiry/<id>}) when it <em>first observes</em> the
      * terminal state and dismisses a full TTL later - conservative (never sooner than the TTL after finishing) and
      * idempotent. A marker whose job was manually dismissed is dropped; one whose job is running again (a resume)

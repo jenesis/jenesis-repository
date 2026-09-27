@@ -36,13 +36,13 @@ public class AdminSecurityConfig {
      * The console's chain, scoped to the console's own paths.
      *
      * <p>Named, ordered and matched, which is what {@code scimSecurityFilterChain} already does over
-     * {@code /scim/**} and the cache's does over {@code /build/**}. It used to be an unnamed catch-all, and that had
-     * two consequences worth stating because neither announced itself. It suppressed the repository chain by
-     * type, so on a node carrying both - which this one is, since {@code ui.admin} requires the repository server
-     * module and auto-configuration registers its controller here - an artifact request to {@code /repository/**}
-     * was governed by a browser-session chain and bounced to {@code /login} rather than authenticated by its key.
-     * And two unordered catch-alls in one context have no defined precedence between them, so which governed what
-     * was an accident of registration order.
+     * {@code /scim/**} and the cache's does over {@code /build/**}. An unnamed catch-all would have two consequences
+     * worth stating because neither announces itself. It would suppress the repository chain by type, so on a node
+     * carrying both - which this one is, since {@code ui.admin} requires the repository server module and
+     * auto-configuration registers its controller here - an artifact request to {@code /repository/**} would be
+     * governed by a browser-session chain and bounced to {@code /login} rather than authenticated by its key. And two
+     * unordered catch-alls in one context have no defined precedence between them, so which governed what would be
+     * an accident of registration order.
      *
      * <p>The matcher is {@link AdminUrlSpace}, which is checked against the routes this console actually maps -
      * a screen added outside it would otherwise fall to the repository's chain and answer a browser with a keyless

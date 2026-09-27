@@ -288,8 +288,8 @@ public final class DebianFormat implements RepositoryFormat, ProxyLeg, BlobLayou
      *  primitive keeps it iterative (O(depth) frames, never a call stack an attacker-planted depth can overflow) and
      *  pages every level, so an arbitrarily wide level streams page by page.
      *
-     *  <p>The leaf test moves from an inference to a fact: this used to call a {@code .deb}-suffixed prefix that paged
-     *  EMPTY a pool pointer, so a {@code .deb}-named directory left empty by a partial delete was collected as a stored
+     *  <p>The leaf test is a fact rather than an inference: calling a {@code .deb}-suffixed prefix that pages EMPTY a
+     *  pool pointer would collect a {@code .deb}-named directory left empty by a partial delete as a stored
      *  {@code .deb} that eviction would then fail to find. {@link Trees} decides leaf-ness with
      *  {@link ArtifactStore#exists}, so only a key that really holds bytes is matched. */
     private static void collectDebs(ArtifactStore store, String root, String coordinate, String fileVersion,
@@ -416,11 +416,10 @@ public final class DebianFormat implements RepositoryFormat, ProxyLeg, BlobLayou
      * Whether a suite has anything left to show - the membership question {@code GET /debian/dists/} is actually
      * asking, answered from the suite's own manifest where that manifest is current.
      *
-     * <p>The screened enumeration this used to ask could not answer it. It probes {@code debian/<suite>/index} for a
-     * disclosable child, but the children there are component <em>containers</em>, not pointers, so there is no
-     * {@code withheld/<hash>} marker for the screen to find and the answer degrades to "does this suite carry an index
-     * at all". A suite whose every package is held therefore still listed, and its own {@code Release} then announced
-     * no components.
+     * <p>The screened enumeration cannot answer it. It probes {@code debian/<suite>/index} for a disclosable child,
+     * but the children there are component <em>containers</em>, not pointers, so there is no {@code withheld/<hash>}
+     * marker for the screen to find and the answer degrades to "does this suite carry an index at all". A suite whose
+     * every package is held would still list, and its own {@code Release} would then announce no components.
      *
      * <p>The manifest answers it exactly, and for free: it holds one line per component/architecture index that
      * carries <b>at least one servable package</b> - {@code generateManifest} skips an index whose {@code Packages}
@@ -429,10 +428,10 @@ public final class DebianFormat implements RepositoryFormat, ProxyLeg, BlobLayou
      *
      * <p><b>Only when it is current</b>, which is the part that makes this safe. The manifest is a deferred
      * derivation, so a suite whose {@code Packages} landed a moment ago has none yet - and listing off a stale
-     * manifest would drop a freshly published suite from the autoindex, a failure the old screen did not have. Inside
-     * that window this falls back to the old probe: no worse than today, exact outside it. It deliberately does
+     * manifest would drop a freshly published suite from the autoindex, a failure the screened probe does not have.
+     * Inside that window this falls back to that probe; outside it the answer is exact. It deliberately does
      * <em>not</em> call {@code announce} to catch the suite up the way a {@code Release} read may: that read is one
-     * suite, and doing it here is a write on a read (&sect;10) fanned out over every suite in the repository.
+     * suite, and doing it here is a write on a read fanned out over every suite in the repository.
      */
     private static boolean disclosable(DebianListings listings, Blobs blobs, String suite) throws IOException {
         // header(), not read(): read() is specified to MATERIALISE a listing that is absent, so asking it whether a
@@ -447,7 +446,7 @@ public final class DebianFormat implements RepositoryFormat, ProxyLeg, BlobLayou
             }
         }
         // No derivation has run for this suite yet (or it lags): fall back to the screened probe. Inside that window
-        // the answer is exactly today's - "does this suite carry an index" - which is no worse than the status quo.
+        // the answer is "does this suite carry an index".
         return ScreenedNames.keys(blobs.servableNames(), ServableNames.Policy.HIDE_WITHHELD)
                 .any(blobs.store(), "debian/" + suite + "/index");
     }
@@ -548,10 +547,9 @@ public final class DebianFormat implements RepositoryFormat, ProxyLeg, BlobLayou
      *  from then on the signature dimension expects every pushed {@code .deb} to carry an embedded signature that
      *  verifies against one of these keys - an unsigned package is a {@code signature-missing} finding, one signed
      *  by another key {@code signature-untrusted}, a signature that does not stand {@code signature-invalid}, each
-     *  decided by its dial. This format itself judges nothing on push: it used to refuse such a package with a
-     *  {@code 403} beside the dimension's verdict, two judgements of one upload that disagreed in shape (a refusal
-     *  stores nothing to review and nothing to release), and the keyring this writes is what the dimension's Debian
-     *  trust reads. */
+     *  decided by its dial. This format itself judges nothing on push: a {@code 403} beside the dimension's verdict
+     *  would be two judgements of one upload that disagree in shape (a refusal stores nothing to review and nothing
+     *  to release), and the keyring this writes is what the dimension's Debian trust reads. */
     private void addTrustedKey(Blobs blobs, FormatExchange exchange) throws IOException {
         byte[] key = exchange.requestStream().readNBytes(MAX_TRUSTED_KEY + 1);
         if (key.length > MAX_TRUSTED_KEY) {
@@ -939,7 +937,7 @@ public final class DebianFormat implements RepositoryFormat, ProxyLeg, BlobLayou
      *
      * <p>Absence is not a refusal. apt fetches the index before the package, so in the ordinary flow the record is
      * there; a first-ever pool fetch by something that skipped the index (a script, a container build step) still
-     * gets the bytes, unverified, exactly as it did before this existed. Refusing it instead would turn a cache miss
+     * gets the bytes, unverified. Refusing it instead would turn a cache miss
      * into an outage for a client the registry has no complaint about.
      */
     private static ProxyRelay.Declared recordedDigest(String poolPath, ArtifactStore store) {

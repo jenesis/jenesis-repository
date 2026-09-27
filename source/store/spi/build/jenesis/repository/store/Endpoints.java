@@ -9,7 +9,7 @@ import module java.base;
  * HMAC secret, an Azure account key - and every artifact byte over a plaintext transport a MITM can read and tamper
  * with, and nothing anywhere says so, because a plaintext exchange succeeds.
  *
- * <p><strong>One mechanism, three key spellings (&sect;2).</strong> The rule was written out three times - once in
+ * <p><strong>One mechanism, three key spellings.</strong> The rule was written out three times - once in
  * {@code S3ArtifactStoreProvider}, once in {@code GcsArtifactStoreProvider}, once in
  * {@code AzureArtifactStoreProvider} - each parsing the {@link URI}, testing the scheme, reading the opt-out through
  * {@link Boolean#parseBoolean} and composing its own refusal message, so the three refusals read differently for the
@@ -46,7 +46,7 @@ public final class Endpoints {
      * @return the endpoint as a {@link URI}, so a caller screens and parses in one step and cannot use an unscreened
      *         one by accident, or {@code null} when {@code endpoint} was {@code null}.
      * @throws IllegalStateException when the endpoint is not {@code https} and the opt-out is not set - at
-     *         resolution, before any client is built or any credential is signed with (&sect;9).
+     *         resolution, before any client is built or any credential is signed with.
      */
     public static URI secure(String endpointKey, String endpoint, String allowKey, String allowInsecure) {
         if (endpoint == null) {

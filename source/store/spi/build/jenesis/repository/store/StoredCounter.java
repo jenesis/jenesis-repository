@@ -15,14 +15,12 @@ import module java.base;
  * acceptable where an identity rollup's is not: a stale byte count is a stale number on a screen, a stale identity is
  * a wrong {@code 304}. That difference in failure model is why this is not the rollup's class and never will be.
  *
- * <p>The quota decorator and the subtree-size observer each wrote this - the same parse, the same floor, the same
- * {@link Retries#tryUpdate}, the same warning shape - and the observer's javadoc said "exactly as the quota does" three
- * times over. One class, one test.
+ * <p>The quota decorator and the subtree-size observer both count this way - the same parse, the same floor, the same
+ * {@link Retries#tryUpdate}, the same warning shape. One class, one test.
  *
  * <p>A pass cadence is this counter too: a task that reconciles every {@code n}th pass reads {@code read() + 1 >= n},
- * {@code add(1)}s on an incremental pass and {@code set(0)}s after the full one. That used to be a second class,
- * {@code PassCounter}, with the same key, the same decimal body and a plain read-then-write where this one
- * compare-and-sets; a lost race there cost at most one pass of cadence, which the compare-and-set costs never.
+ * {@code add(1)}s on an incremental pass and {@code set(0)}s after the full one - compare-and-set rather than a plain
+ * read-then-write, so a lost race never costs a pass of cadence.
  *
  * <p><b>A delta may be deferred.</b> {@link #addLater} keeps the delta in this process and a flusher folds every
  * pending delta of a key into one compare-and-set per {@code jenreg.counters.flush} (a minute by default) and on
@@ -145,11 +143,11 @@ public final class StoredCounter {
      * through the {@link Settling} bean its composition root declares.
      *
      * <p>The flusher is one per process and keeps a closed node's deltas beside a live node's, keyed by store, so
-     * without this a delta pending when a node stopped was written at the next tick into a store that was gone. In
-     * a test JVM that boots servers over temporary directories that is a directory recreated under one JUnit has
+     * without this a delta pending when a node stopped would be written at the next tick into a store that was gone.
+     * In a test JVM that boots servers over temporary directories that is a directory recreated under one JUnit has
      * just deleted, reported as {@code Failed to close extension context} with a {@code DirectoryNotEmptyException}
-     * naming a repository nobody wrote to after the suite ended - the shape measured 2026-09-12 on
-     * {@code RoutedServingE2ETest}, a suite that never mentions a counter. Forgetting every entry rather than the
+     * naming a repository nobody wrote to after the suite ended - in a suite that never mentions a counter.
+     * Forgetting every entry rather than the
      * closing store's alone is deliberate: an early flush of a live node's delta is always correct, and matching a
      * scoped view's identity to its root's is a per-backend question this class should not have to answer.
      */

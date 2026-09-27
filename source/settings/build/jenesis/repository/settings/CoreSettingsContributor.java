@@ -7,9 +7,8 @@ import build.jenesis.repository.scope.Scopes;
  * The neutral core's own {@link SettingsContributor} - the product's built-in runtime dials (the compliance verdict
  * knobs and deny list, the pull-through proxy toggle and immaturity hold, the maintenance lease and the deployment
  * defaults), dogfooding the same SPI 28 plugin modules already use rather than being inlined by hand in every
- * administration surface. Before this, the catalogue was duplicated byte-for-byte in the {@code /api/settings} adapter
- * and the console's {@code SettingsAdmin}; now both collapse to {@link SettingsContributor#all()} and the core is
- * described once, here.
+ * administration surface. The {@code /api/settings} adapter and the console's {@code SettingsAdmin} both read
+ * {@link SettingsContributor#all()}, so the core is described once, here.
  *
  * <p>The defaults are the product defaults - the same values a pristine {@code RepositoryProperties} carries - held as
  * constants so this contributor needs nothing but {@code java.base}, like every other contract in this module. It is

@@ -4,7 +4,7 @@ import org.springframework.boot.context.properties.ConfigurationProperties;
 
 /**
  * GitHub OAuth client credentials, bound from {@code jenreg.ui.github.*} ({@code JENREG_UI_GITHUB_CLIENT_ID} /
- * {@code _SECRET}) - the same keys as before this mechanism was a module. When the client id is blank, GitHub login
+ * {@code _SECRET}). When the client id is blank, GitHub login
  * is disabled.
  */
 @ConfigurationProperties(prefix = "jenreg.ui.github")

@@ -30,20 +30,20 @@ import build.jenesis.repository.icon.IconContributor;
  *     that fails later - when the request is missing something this source needs (an ecosystem format it declared
  *     through {@link #requiresFormat}, a root that does not answer at all). The caller reports that as a bad request.
  *     Every other accessor answers a value; {@link #requiredConfig} answers an empty set, never {@code null}.</li>
- * <li><b>Selection failure (&sect;9).</b> Providers are additive ({@code ALL}), so there is nothing to select among
+ * <li><b>Selection failure.</b> Providers are additive ({@code ALL}), so there is nothing to select among
  *     them: a submitted source name reaches the first provider that {@link #handles} it and an unhandled name is a bad
  *     request. A provider whose {@link #requiredConfig} keys are unset <em>self-disables at discovery</em>
  *     ({@code Features.active}) rather than being discovered and failing per migration, so an operator sees one line at
  *     boot naming the missing keys instead of a runtime failure per submission.</li>
- * <li><b>Streaming (&sect;1).</b> The source this builds streams every asset: bytes go from the incumbent to storage
+ * <li><b>Streaming.</b> The source this builds streams every asset: bytes go from the incumbent to storage
  *     through {@link ImportSource.Content#open} without being materialised, and the credentials wrapper a provider puts
  *     around the fetcher must not turn a streaming {@code download} into a buffered {@code fetch}.</li>
- * <li><b>Tenant scoping (&sect;6).</b> A provider is deployment-wide and holds no tenant state; the tenant rides the
+ * <li><b>Tenant scoping.</b> A provider is deployment-wide and holds no tenant state; the tenant rides the
  *     store the write half of the migration is given, never the request or the source.</li>
- * <li><b>Error visibility (&sect;9).</b> Nothing is swallowed. An incumbent that refuses, is absent or cannot answer
+ * <li><b>Error visibility.</b> Nothing is swallowed. An incumbent that refuses, is absent or cannot answer
  *     surfaces from the walk as an {@link ImportFailure} carrying its {@link ImportFailure.Kind}, so a job can tell a
  *     bad credential from a throttle rather than string-matching one {@code IOException}.</li>
- * <li><b>Read purity (&sect;10).</b> {@link #create} may probe the root to decide whether to build a source at all
+ * <li><b>Read purity.</b> {@link #create} may probe the root to decide whether to build a source at all
  *     (that probe is what makes a typo'd URL a synchronous bad request), but it writes nothing and imports nothing;
  *     every asset read happens inside the walk.</li>
  * <li><b>Staleness.</b> An import is a point-in-time walk with no cached view of its own; the cursor a walk checkpoints
@@ -117,8 +117,7 @@ public interface ImportSourceProvider extends IconContributor {
 
     /** Every {@link Features#active switched-on, fully configured} source in the deployment's one configuration -
      *  the set an edge builds a source from, so a connector configured off is unreachable by name on every edge
-     *  alike. Measured before: the console's import job discovered the connectors raw and ran a switched-off one,
-     *  while the API's edge refused it. */
+     *  alike - an edge that discovered the connectors raw would run a switched-off one another edge refuses. */
     static List<ImportSourceProvider> installed() {
         return installed(Features.settings());
     }

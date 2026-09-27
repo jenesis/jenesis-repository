@@ -19,7 +19,7 @@ import build.jenesis.repository.store.Publication;
  * {@link #requestStream()} is a fresh stream that opens {@code blobs/<hash>} lazily on the first read - so a large
  * artifact goes from storage to the format's layout write without being materialised in memory, and a layout that
  * only stores what it was given stores nothing: {@link Publication#storeBlob} recognises the stream and answers the
- * hash. Measured before that: every screened publish wrote its blob twice and read it once more to do so.
+ * hash - so a screened publish writes its blob once, not twice with a read in between.
  */
 public final class RestreamExchange implements FormatExchange {
 

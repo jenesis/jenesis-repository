@@ -13,17 +13,15 @@ import build.jenesis.repository.settings.CoreDefaults;
  * refuse less - and an operator softens it to {@link Verdict#QUARANTINE} to hold such a package for review, or to
  * {@link Verdict#ALLOW}.
  *
- * <p><b>This default used to be {@link Verdict#QUARANTINE}, and it was a second default for one decision.</b> Every
+ * <p><b>This default is the one {@code malware-action} declares, never a second default for one decision.</b> Every
  * composition that ships reads {@code malware-action}, whose declared default is {@code REJECT} in the setting
- * catalogue, in the generated reference and in the properties the server binds - so the value here was one no
- * deployment ever ran, while this javadoc, the format fixtures' prose and the soak's own expectation all described
- * it as the product's behaviour. The soak reported it as 2111 anomalies across all twenty formats, every one of
- * them the gate doing exactly what the operator's dial says. A default belongs with the code that reads it;
- * {@code MalwareActionDefaultTest} now holds the three places to one value.
+ * catalogue, in the generated reference and in the properties the server binds - so a different value here would
+ * be one no deployment ever runs, described as the product's behaviour. A default belongs with the code that reads
+ * it; {@code MalwareActionDefaultTest} holds the three places to one value.
  *
- * <p><b>{@link Verdict#ALLOW} evaluates and permits; it does not switch the dimension off</b> (the rule
- * already settled for the seven discovered {@link GatePolicyProvider} dimensions, which this core one was outside the
- * reach of - it is not a discovered provider, so no fixture and no census covered it). A flagged advisory is still
+ * <p><b>{@link Verdict#ALLOW} evaluates and permits; it does not switch the dimension off</b> (the rule the
+ * discovered {@link GatePolicyProvider} dimensions follow, stated here because this core one is not a discovered
+ * provider, so no fixture and no census covers it). A flagged advisory is still
  * matched and still reported, as {@code Finding(ALLOW, "Malicious package: <id>")} - the shape
  * {@link ComplianceGate} already uses for a VEX-suppressed or waived advisory. Returning before looking at the
  * advisories would make a permitted package's assessment byte-identical to one no feed flagged, so the findings

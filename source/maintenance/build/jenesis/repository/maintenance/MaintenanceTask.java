@@ -18,10 +18,10 @@ import module java.base;
  *       {@link #completed} only after those.</li>
  *   <li><b>Idempotency / replay.</b> A pass is re-run on every interval and may be re-run on demand, so it must
  *       converge rather than accumulate: the same store contents must produce the same derived state. It must also
- *       back-fill from durable truth when the capability is switched on late (&sect;5) - a pass that only reacts to new
+ *       back-fill from durable truth when the capability is switched on late - a pass that only reacts to new
  *       writes leaves a deployment silently incomplete.</li>
  *   <li><b>Tenant scoping.</b> A unit reads and writes only through the {@link RepositoryContext}/{@link TenantContext}
- *       store it is handed, which is already scoped; reaching outside it is a cross-tenant read (&sect;6). Its
+ *       store it is handed, which is already scoped; reaching outside it is a cross-tenant read. Its
  *       <em>settings</em> are equally the unit's, and are read per pass through that same context's
  *       {@link RepositoryContext#config() config()} - resolved for the unit's own tenant, so a tenant-overridable dial
  *       takes effect where the tenant set it and a deployment-wide one resolves identically for every unit. A dial a
@@ -44,7 +44,7 @@ import module java.base;
  *       ({@link UnitFailures} is the shared idiom, {@code SignalRefreshTask} the worked example). And a unit that did
  *       not do its work may not <em>stamp</em> it: a freshness instant, a marker flip or any other "this view is
  *       current" claim is written only over a subject set that really landed, because that stamp is what every
- *       downstream read takes as the statement that the data is current (&sect;10). Stamping fresh over a failed
+ *       downstream read takes as the statement that the data is current. Stamping fresh over a failed
  *       sweep is worse than the silent return it usually accompanies - it does not merely hide the outage, it
  *       actively asserts the opposite.</li>
  *   <li><b>Ordering / concurrency (exclusion).</b> {@link #exclusion()} <em>names</em> the single-writer mechanism that
@@ -79,8 +79,8 @@ public interface MaintenanceTask {
     /**
      * Which single-writer mechanism owns this pass. The declaration <em>produces</em> the behaviour - the scheduler
      * takes {@code locks/<name>} exactly for {@link Exclusion#LEASE} - so a pass cannot hold a lease it declared it
-     * does not need, and the answer is a reviewable statement rather than a boolean nobody re-derives. It was measured
-     * as three mutually inconsistent shapes across five walk-riders before it was named.
+     * does not need, and the answer is a reviewable statement rather than a boolean nobody re-derives - left implicit,
+     * it drifts into mutually inconsistent shapes across the walk-riders.
      *
      * <p>The scheduler asks once per pass and must get the same answer every time: a task whose owner depends on what
      * is installed - the shared walk being present or absent - reads that from the state it was constructed with, so

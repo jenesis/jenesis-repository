@@ -35,8 +35,8 @@ import module java.base;
  * graph or a dying JVM rather than a contributor failing to answer, and reporting it as one degraded row on an
  * otherwise healthy-looking page would misreport it. It is nonetheless <b>attributed on its way out</b>, at
  * {@code ERROR}, with the contributor's class: the product's rule is that an {@code Error} is attributed
- * <em>and</em> escalated, and this class used to do the second half only - so an operator whose console 500ed learned
- * that something on the page had given way and nothing about which of N plugins it was. Nor is this class for a
+ * <em>and</em> escalated - escalated alone, an operator whose console 500ed would learn that something on the page
+ * had given way and nothing about which of N plugins it was. Nor is this class for a
  * <em>verdict-bearing</em> seam: a gate,
  * screen or interceptor that decides whether an artifact is accepted must fail closed and propagate. Containment is for
  * observers and report contributors, never for a gate.
@@ -52,7 +52,7 @@ import module java.base;
  *     that answers {@code null} is a bug in the caller and throws, because there is then nothing to put on the surface.
  *     A {@code null} element in {@code contributors} throws - a null in a discovered list is a packaging error with no
  *     identity to attribute a degraded row to.</li>
- * <li><b>Error visibility (&sect;9).</b> Nothing is swallowed: every contained failure both reaches the returned list
+ * <li><b>Error visibility.</b> Nothing is swallowed: every contained failure both reaches the returned list
  *     as the caller's degraded contribution and is logged once with the contributor's class name and the exception.
  *     The blast radius of a contained failure is exactly one contributor's rows; the surface and every other
  *     contributor stand.</li>

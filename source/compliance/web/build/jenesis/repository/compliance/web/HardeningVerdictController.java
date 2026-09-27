@@ -16,8 +16,9 @@ import org.springframework.web.bind.annotation.RestController;
  * a hardened repository, so an operator can see the full-body screening it enforces. For a coordinate it surfaces the
  * digest-pinned {@code verdict} record, the repository's recent typed {@code refusals} (oversize/stalled/drift/
  * unparseable/inspector-error) and the gateway-wide {@code drift} alarm - all assembled by {@link HardeningVerdicts}
- * from the durable metadata document and {@code QuarantineLog}, <b>never re-screening or re-fetching a byte</b> (§10
- * reads render only durable state; §7 the reader pays for nothing a screen already did). The recorded {@code screenedAt}
+ * from the durable metadata document and {@code QuarantineLog}, <b>never re-screening or re-fetching a byte</b> (a
+ * read renders only durable state, and the reader pays for nothing a screen already did). The recorded
+ * {@code screenedAt}
  * instant rides along so a caller sees how stale the rendered verdict is - a caller lacking the write role sees no
  * refresh control yet still sees the staleness.
  *

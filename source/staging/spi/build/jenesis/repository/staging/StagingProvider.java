@@ -23,12 +23,12 @@ import build.jenesis.repository.store.Providers;
  * <li><b>Absence sentinel.</b> An empty {@link Optional} is the sentinel, from {@link #create} and from
  *     {@link #resolve} alike: staging degrades, the endpoints answer {@code 501} and the console hides the surface.
  *     {@code null} is never a legal return from {@link #name()}, {@link #create} or {@link Factory#over}.</li>
- * <li><b>Selection failure (&sect;9).</b> This SPI has <em>no</em> selection key - nothing names a staging
+ * <li><b>Selection failure.</b> This SPI has <em>no</em> selection key - nothing names a staging
  *     implementation by name - so there is no explicitly-selected miss to fail on. The one resolution failure is
  *     ambiguity: two installed providers would make module-path order decide which lifecycle a promotion runs
  *     through, so {@link #resolve} <em>throws</em> naming both rather than picking a discovery-order winner.
  *     Resolution runs through the shared {@link Providers#optionalUnique} primitive, never a hand-rolled loop.</li>
- * <li><b>Tenant scoping (&sect;6).</b> {@link Factory#over} receives an already-scoped repository store; the
+ * <li><b>Tenant scoping.</b> {@link Factory#over} receives an already-scoped repository store; the
  *     staging operations may read and write nothing outside it.</li>
  * <li><b>Durability / delivery.</b> The commit point of a promotion is the release-layout pointer write; the
  *     staged blobs exist beforehand, so a crash between them leaves unreferenced content the reclamation sweep

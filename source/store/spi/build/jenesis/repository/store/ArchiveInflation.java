@@ -16,10 +16,10 @@ import module java.base;
  * a jar's {@code MANIFEST.MF} and {@code module-info.class}, a {@code .nuspec}, a gemspec, a {@code control} member, an
  * embedded index - reads it on the publish thread of a shared JVM, and the compression ratio is the attacker's to
  * choose: a kilobyte of stored blob can inflate to gigabytes. Every format that reads one therefore needs the same
- * bound, which is exactly the shape a shared mechanism belongs in (&sect;13 - a guard one format applies to a shared
- * concern is applied by every format with that concern). Before this existed each reading module held its own private
- * constant, so the numbers were parallel by convention and a new format arrived not with a different bound but with
- * <em>none</em>: there was nothing to inherit. The bound now has a name, a home, an operator key and a build guard
+ * bound, which is exactly the shape a shared mechanism belongs in (a guard one format applies to a shared concern is
+ * applied by every format with that concern). A private constant per reading module would keep the numbers parallel
+ * by convention only, and a new format would arrive not with a different bound but with <em>none</em>: there would
+ * be nothing to inherit. The bound has a name, a home, an operator key and a build guard
  * - a format that ignores it is wrong against this clause rather than silently unbounded.
  *
  * <p><strong>Reaching the bound is a fact, not a silence.</strong> {@link Entry} answers in the same two words the
@@ -78,7 +78,6 @@ public final class ArchiveInflation {
      *
      * @throws IllegalArgumentException when the key is set to something that is not a positive number of bytes -
      *         an operator who raised a cap and got the spelling wrong must not be left believing they raised it
-     *         (&sect;9)
      */
     public static int largestEntry() {
         return Limits.positive(LARGEST_ENTRY_KEY, LARGEST_ENTRY);

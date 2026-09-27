@@ -74,7 +74,7 @@ public final class RawFormat implements RepositoryFormat, ProxyFormat, Repositor
             // would" includes its headers: the Content-Type and the Content-Length are read from the store's metadata
             // (never by opening the blob), so a client sizing an artifact before pulling it gets the same answer here
             // as from the GET below - the HEAD-from-metadata shape MavenFormat, JenesisFormat and OciFormat already
-            // carry, which this leg alone was missing (§13).
+            // carry, which this leg alone was missing.
             case "HEAD" -> {
                 Optional<Publication.Located> located = publication.locate(path);
                 if (located.isEmpty()) {

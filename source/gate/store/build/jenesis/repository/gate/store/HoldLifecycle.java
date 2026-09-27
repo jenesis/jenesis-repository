@@ -25,8 +25,8 @@ import build.jenesis.repository.gate.HeldElsewhere;
 
 /**
  * The one release/discard primitive every review surface delegates to, so the HTTP API ({@code GatedRepository})
- * and the console ({@code RepositoryAdmin}) cannot disagree on crash-window ordering - before this each carried its
- * own copy with <em>opposite</em> orderings, and the API-side copy could re-hold a release a human had just cleared.
+ * and the console ({@code RepositoryAdmin}) cannot disagree on crash-window ordering - two copies with opposite
+ * orderings would let one surface re-hold a release a human had just cleared on the other.
  * Both operations are idempotent and converge on re-run after a crash at any point:
  *
  * <ul>
@@ -102,7 +102,7 @@ public final class HoldLifecycle {
         // to publish the second and third - one publish created them and one sweep held them - so a reviewer clearing
         // the artifact clears all of them, and the alias views are not review items of their own.
         //
-        // They go FIRST, and that ordering is the fix rather than an incidental. The marker lift below refuses when
+        // They go FIRST, and that ordering is load-bearing rather than incidental. The marker lift below refuses when
         // another live /quarantine pointer still names these bytes, which is exactly what a held alias is; and
         // clearVersionWithholds' othersStillHeld sees an alias's pointer as a sibling of the version still under
         // review and keeps every version-wide marker standing. Clearing the aliases before either runs leaves both
@@ -156,7 +156,8 @@ public final class HoldLifecycle {
         // when no OTHER coordinate sharing this hash is still held, or clearing it would un-withhold that byte-identical
         // sibling (the blobs-namespace serve gate keys withheld on the marker, not the per-path pointer). Routed through
         // the HoldClears owner: it re-runs the cross-alias guard after the clear and re-marks if a sibling was held in
-        // the window (the #207 race, cross-alias form). The excluded set is this coordinate's own served paths, so its
+        // the window (the reconcile-vs-enforce race, cross-alias form). The excluded set is this coordinate's own
+        // served paths, so its
         // own still-present /quarantine pointer (unpublished just below) never triggers a false re-mark.
         HoldClears.clearReleased(store, held.get(), releasingCoordinatePaths(inventory, path), "hold-release " + path,
                 inventory.describe(path).orElse(ArtifactDescriptor.at(null, path)));
@@ -394,13 +395,13 @@ public final class HoldLifecycle {
      * The refusal a screen-quarantined release raises when the module that would materialise it is gone,
      * naming the held coordinate from the durable {@link HeldSubjects} record where one was written.
      *
-     * <p>The replay legs used to degrade to {@code Publication.link(path, hash)} - "so the hold still resolves" - and
-     * that was wrong twice over. The held blob of an envelope-bodied format is the publish <em>envelope</em> (an npm
-     * packument, a NuGet/PyPI multipart), so linking it materialises no version at all: nothing is installable and the
-     * release reports success. And for a blobs-namespace format it strands the phantom {@code publish/} pointer
-     * already closed on the sibling branch - an entry no format serves and retention's layout reverse-mapping never
-     * reclaims. The release surface is a human's decision about a review item, so the honest answer is the one already
-     * settled for the other branch: keep the hold, say why, and let reinstalling the module make the release exact.
+     * <p>Degrading the replay to {@code Publication.link(path, hash)} - "so the hold still resolves" - would be wrong
+     * twice over. The held blob of an envelope-bodied format is the publish <em>envelope</em> (an npm packument, a
+     * NuGet/PyPI multipart), so linking it materialises no version at all: nothing is installable and the release
+     * reports success. And for a blobs-namespace format it strands a phantom {@code publish/} pointer - an entry no
+     * format serves and retention's layout reverse-mapping never reclaims. The release surface is a human's decision
+     * about a review item, so the honest answer is the one the other branch gives: keep the hold, say why, and let
+     * reinstalling the module make the release exact.
      * Nothing has been mutated at this point beyond the pre-commit override promotion, which a re-run converges on.
      */
     private static IOException refusedReplay(ArtifactStore store, String path, String missing) throws IOException {
@@ -632,7 +633,7 @@ public final class HoldLifecycle {
      *
      * <p>Best-effort per alias and contained: a record naming a path that no longer exists, or an alias whose own
      * clear fails, must not fail a release whose subject has already been decided by a human. What it costs is a
-     * marker left standing - the state before this existed - rather than a disclosure.
+     * marker left standing rather than a disclosure.
      */
     private static void releaseAlias(ArtifactStore store, Publication publication, String released,
                                      String alias, Iterable<HoldReleaseObserver> hooks) {

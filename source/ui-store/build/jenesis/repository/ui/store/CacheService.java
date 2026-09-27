@@ -211,8 +211,8 @@ public class CacheService {
      * <p>The projects enumeration is paged and its remainder is <em>followed</em> to exhaustion rather than reported
      * as a bound, and that is a decision rather than an oversight: a project is created by an operator through this
      * very screen, so the set is provisioned and not client-inflatable, and the screen is a listing of all of them -
-     * offering a truncated one with no way to page it would be a worse answer than the round-trips cost. What was
-     * unbounded before, and is now not, is what sits <em>inside</em> each project: {@link Eviction#stats} streams a
+     * offering a truncated one with no way to page it would be a worse answer than the round-trips cost. What is
+     * bounded is what sits <em>inside</em> each project: {@link Eviction#stats} streams a
      * project's entries page by page instead of enumerating them into a list, so this screen's footprint is the
      * project set, never the cached-entry set behind it.
      */

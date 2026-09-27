@@ -88,11 +88,10 @@ public final class HeldElsewhere {
      *  <p><b>Answered from the index the holds write</b> ({@link HeldBy}): the served paths recorded under {@code H},
      *  each checked live by one point read of its review pointer. A hold's link records the hash its pointer names,
      *  and a retroactive sweep records every served path of the version under every content hash it serves - the
-     *  full-hash form, since a multi-file coordinate's pointer advertises only its first hash (A1-F1) - so the
-     *  answer is exact for a sibling whose format has since been uninstalled, which the former descent could only
-     *  call unjudgeable. It used to be answered by descending every review pointer in the repository, on every
-     *  release and once more to re-verify, and by every reconcile page twice; the descent is now taken once per
-     *  repository, as the {@linkplain #backfill backfill} that indexes the holds from before the index.
+     *  full-hash form, since a multi-file coordinate's pointer advertises only its first hash - so the answer is
+     *  exact even for a sibling whose format has since been uninstalled. Nothing descends every review pointer in
+     *  the repository per release or per reconcile page; the descent is taken once per repository, as the
+     *  {@linkplain #backfill backfill} that indexes holds the index does not yet carry.
      *
      *  <p><b>Three-valued, and that is what makes the clear seam safe.</b> A {@code boolean} here fused
      *  <em>"nothing else holds these bytes"</em> with <em>"I could not establish that"</em>, and {@code Withheld.clear}
@@ -120,7 +119,7 @@ public final class HeldElsewhere {
      * the reason {@link HeldBy} gives.
      *
      * <p>A repository from before the index has review pointers nothing indexed, and the first question asked of
-     * it {@linkplain #backfill backfills} them by the descent this used to make on every release; until that
+     * it {@linkplain #backfill backfills} them by a descent of the review pointers; until that
      * descent has enumerated every pointer and stamped the repository, the answer comes from the descent itself, so
      * no release lifts a marker on an index that is not yet complete. The reconcile backstop asks this for every
      * marker of a page, twice - the judgement and the re-verification after the clear - which is why the page form
@@ -234,8 +233,8 @@ public final class HeldElsewhere {
 
 
     /** The hashes the still-held sibling coordinate behind the review pointer at {@code servedPath} still needs - its
-     *  full {@link StoreRepositoryInventory#blobHashes} set, not merely the first hash its pointer body advertises
-     *  (A1-F1) - which the backfill records and the reconcile judges a page of markers against. Three-valued, not
+     *  full {@link StoreRepositoryInventory#blobHashes} set, not merely the first hash its pointer body advertises,
+     *  which the backfill records and the reconcile judges a page of markers against. Three-valued, not
      *  two: a path a format DID place and that names no versioned artifact resolves no hash set, and contributes
      *  nothing - that is an answer, {@link Known.Absent}. A path <em>no installed format can place at all</em> is not:
      *  the review pointer is standing there, something is held behind it, and with the owning format's module off
@@ -248,10 +247,9 @@ public final class HeldElsewhere {
         if (described.isEmpty()) {
             // A path an installed format handles but no layout describes belongs to a format without coordinates -
             // a raw asset, an OCI upload, a blobs-namespace publish envelope - and such a pointer keeps no sibling
-            // hashes: its own hash was compared before this was asked. Answering Unknown here was measured
-            // 2026-09-12 as 3,102 releases in a quarter of an hour leaving every marker they should have lifted
-            // standing, behind one CocoaPods pointer at its publish path; only a path no installed format claims at
-            // all is a pointer nobody can judge.
+            // hashes: its own hash was compared before this was asked. Answering Unknown here would leave every
+            // marker a release should lift standing behind one such pointer; only a path no installed format claims
+            // at all is a pointer nobody can judge.
             for (RepositoryFormat format : RepositoryFormat.installed()) {
                 if (format.handles(servedPath)) {
                     return Known.absent();

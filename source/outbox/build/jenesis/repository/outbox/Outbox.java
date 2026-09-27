@@ -324,8 +324,8 @@ public class Outbox<E extends Outbox.Entry<E>> {
      * <p>It moves from the parked backlog back into the active queue. When a rival has already landed a fresh
      * <em>active</em> entry at the same id while an older one sat parked, the active entry is the current one and
      * wins: the stale parked twin is dropped rather than moved over it, which would overwrite the newer delivery with
-     * the superseded one. A parked entry still sitting in the active queue - a leftover from before parked entries
-     * were moved out of the scan - is reset in place, so an upgrade self-heals.
+     * the superseded one. A parked entry found sitting in the active queue is reset in place, so such a leftover
+     * self-heals.
      *
      * @return {@code false} when nothing parked is queued at {@code id}, so a retry endpoint can report a miss
      */

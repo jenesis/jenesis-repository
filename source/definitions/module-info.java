@@ -5,11 +5,11 @@
  * parse-time switches the redirect modules flip so a {@code redirect} serve token or a {@code dns} source keyword
  * parses only where the module that serves it is installed.
  *
- * <p>It exists because the model was a nested type of the router until 2026-09-20, so every surface that rendered
- * or validated a definition - the console's settings store, the configuration API, the three redirect modules -
- * required the router and with it the gate, the compliance SPI, the inventory, the metadata store and the
- * maintenance seam. Measured that day: thirty-seven uses across those modules, none of which resolved anything.
- * What the model needs is the shared outbound-target rule ({@code blobs}), the cleartext rule ({@code settings})
+ * <p>It exists so that a surface that renders or validates a definition - the console's settings store, the
+ * configuration API, the three redirect modules - does not require the router and with it the gate, the compliance
+ * SPI, the inventory, the metadata store and the maintenance seam, none of which such a use resolves anything
+ * through. What the model needs is the shared outbound-target rule ({@code blobs}), the cleartext rule ({@code
+ * settings})
  * and the artifact descriptor a {@code match=} predicate reads ({@code store}). The router requires this module and
  * walks the record; nothing here requires the router.
  *

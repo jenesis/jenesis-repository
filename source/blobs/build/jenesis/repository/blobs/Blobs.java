@@ -259,8 +259,7 @@ public final class Blobs {
      * blob: the value is the note itself, last writer wins, and a lost race is a peer writing the same note, which
      * the re-read finds and leaves. A note's body is never a content hash, so a collector reading pointers skips it.
      * A note that loses every retry to a peer writing a <em>different</em> value throws, as every other pointer
-     * write here does: this loop used to fall out silently, so a reverse-index entry could go missing with nothing
-     * said, against the stance the rest of the class takes.
+     * write here does, so a reverse-index entry never goes missing with nothing said.
      */
     public void note(String key, String value) throws IOException {
         requireSafeKey(key);
@@ -286,10 +285,9 @@ public final class Blobs {
      * question that must have one. A signing key is the case that bites: every caller that generated one goes on to
      * use the value it generated, so a lost race means signing with a key nobody can verify against.
      *
-     * <p><b>Measured, not theorised.</b> Four formats provisioned a key exactly that way - {@code if absent,
-     * generate, write the secret, write the public} - and a full lane caught apk's: two first publishes interleaved
-     * so the stored public half came from one pair and the private half from the other, and the index this
-     * repository signed no longer verified against the key it served. It passed every time the module ran alone.
+     * <p>Provisioning a key as {@code if absent, generate, write the secret, write the public} lets two first
+     * publishes interleave so the stored public half comes from one pair and the private half from the other, and
+     * the index this repository signs then does not verify against the key it serves.
      *
      * <p>The loser's generated value becomes an unreferenced blob, which is what a collector is for. Paying that on
      * a genuine race is the cheap side of the trade; the expensive side is two keys.
@@ -356,8 +354,7 @@ public final class Blobs {
      * the blob's length read off the pointer where {@link #link} recorded it ({@code -1} for a pointer written before
      * it was, which is served without a length until the reconcile pass regenerates it), and the {@link #serve} that
      * follows opens the blob for its bytes: that open is what proves the blob present, so a pointer whose blob is
-     * gone answers a clean 404 there rather than a truncated 200 here. Measured 2026-09-12: the stat this used to
-     * make was the fifth of a download's five reads on every backing.
+     * gone answers a clean 404 there rather than a truncated 200 here, and the download pays no separate stat.
      */
     public Optional<Located> locate(String key) throws IOException {
         Optional<String> content = contentHash(key);
@@ -466,8 +463,8 @@ public final class Blobs {
      *  fail-closed: a hostile pointer key (or a stored pointer whose target carries a NUL / encoding-hostile char, so
      *  {@code FilesystemArtifactStore.resolve} throws {@link java.nio.file.InvalidPathException}) is treated as
      *  undisclosable - i.e. withheld - rather than propagating an uncaught {@code RuntimeException} that would 500 every
-     *  later packument GET. The former hand-rolled {@code hash(key)} did an UNWRAPPED {@code store.readVersioned(key)}
-     *  ahead of the fail-closed {@code withheldHash}, losing the seam's fail-closed guarantee at this choke point.
+     *  later packument GET. An unwrapped {@code store.readVersioned(key)} ahead of the fail-closed check would lose
+     *  the seam's fail-closed guarantee at this choke point.
      *  {@code disclosableKey} returns whether the key is disclosable; withheld is its negation, preserving this method's
      *  contract for every normal case (absent pointer / servable hash =&gt; not withheld; withheld hash =&gt; withheld). */
     public boolean withheld(String key) throws IOException {
@@ -500,8 +497,8 @@ public final class Blobs {
      * <p>This is a derived fact, not a swallowed failure, and the distinction is the whole reason it is written here
      * rather than as a {@code catch}. Asking the backend about an unnameable prefix gets a different answer from each
      * one: an object store pages nothing, while a filesystem raises {@code ENAMETOOLONG} - which the default store
-     * used to answer as an empty listing along with every other {@code IOException}, and which it now
-     * correctly raises, because "I could not look" is not "there is nothing here". Neither answer belongs at a
+     * raises rather than answering an empty listing, because "I could not look" is not "there is nothing here".
+     * Neither answer belongs at a
      * request seam: the correct one is knowable without the round trip, so it is taken before it.
      *
      * <p>Deliberately only the byte cap, and not {@link ArtifactStore#key}'s full screen. The segment and

@@ -86,9 +86,8 @@ public interface ArtifactWalk {
      *
      * <p>For a caller that needs to know only whether the pass it is acting under still stands - a lease fence
      * immediately before a destructive act - where reading every segment to use one number off the manifest is
-     * pure cost. Measured 2026-09-08: the collector's sweep asked {@code pass} before every blob it deleted, at a
-     * manifest read and up to thirty two segment reads each, which on a node counting by key family was 4.64
-     * reads per blob held and the largest single line of a collection.
+     * pure cost: asked through {@code pass} before every blob a collector deletes, it costs a manifest read and up to
+     * thirty two segment reads each, the largest single line of a collection.
      *
      * <p>The default assembles the whole pass, so an implementation that cannot answer more cheaply is correct
      * without doing anything; a store-backed one reads the manifest alone.

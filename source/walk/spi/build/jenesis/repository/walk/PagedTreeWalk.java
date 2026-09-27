@@ -75,8 +75,8 @@ import build.jenesis.repository.store.ArtifactStore;
  *       bound. Neither degrades to an empty result.</li>
  *   <li><b>Streaming.</b> Nothing is materialised: leaves stream to {@link Leaves} one key at a time and at most one
  *       {@link #page()}-wide sibling page per open container is held, so the resident cost is O(depth + page), never
- *       O(subtree). A consumer that accumulates into an unbounded list re-introduces exactly the defect this
- *       primitive removes; accumulate at most {@link #entries()} of them.</li>
+ *       O(subtree). A consumer that accumulates into an unbounded list re-introduces exactly the unbounded cost this
+ *       primitive exists to avoid; accumulate at most {@link #entries()} of them.</li>
  *   <li><b>Tenant scoping.</b> The traversal is confined to {@code root} and its descendants and can never compose a
  *       key outside it, so a caller that hands it a tenant-scoped {@link ArtifactStore} (or a tenant-rooted prefix)
  *       cannot read another tenant's keys. The segment screen is what makes that airtight against a backend returning

@@ -54,11 +54,10 @@ public class ManagementController {
     }
 
     // The credential routes are the CORE's: build.jenesis.repository.server.CredentialsController owns list,
-    // mint, grant, revoke, expiry, rotate and the source-IP allowlist, and every one of them was already a thin
-    // call onto Authorization, which holds the logic. They used to be restated here purely to resolve the tenant
-    // through Repositories and to write an audit row - neither of which is logic - so both are supplied through
-    // CredentialContext instead and the routes exist once. Two implementations of "issue a credential" would
-    // drift, and the drift would be in an authorization surface.
+    // mint, grant, revoke, expiry, rotate and the source-IP allowlist, and every one of them is a thin call onto
+    // Authorization, which holds the logic. Resolving the tenant through Repositories and writing an audit row are
+    // not logic, so both are supplied through CredentialContext and the routes exist once, not restated here. Two
+    // implementations of "issue a credential" would drift, and the drift would be in an authorization surface.
 
     @GetMapping("/api/policy")
     @ResponseBody
@@ -96,9 +95,9 @@ public class ManagementController {
                          HttpServletResponse response) throws IOException {
         String tenant = repositories.tenant(key);
         authorization.setQuota(tenant, request == null ? 0L : request.maxBytes());
-        // The usage total is NOT recomputed here. It used to be, and that walked every blob of every repository the
-        // tenant owns while the caller waited - so the cost of setting a limit grew with the tenant, which is the
-        // one thing a request must not do (&sect;10). The cleanup pass already recomputes it for any tenant that has
+        // The usage total is NOT recomputed here: that walks every blob of every repository the tenant owns while
+        // the caller waits - so the cost of setting a limit would grow with the tenant, which is the one thing a
+        // request must not do. The cleanup pass already recomputes it for any tenant that has
         // a limit, so deferring costs a window rather than the number: enforcement runs on the previous total until
         // the next pass, and a limit lowered mid-window can be briefly over-admitted against. That is the trade,
         // taken deliberately, and it is the reason the pass runs unconditionally rather than only on change.

@@ -10,8 +10,8 @@ import build.jenesis.repository.walk.WalkPass;
 
 /**
  * The published index rebased at the end of a walk: a fresh chunk chain re-derived from every served pointer, in
- * path order, which the scheduled pass used to do every {@code index-rebase-interval} on its own clock over its own
- * walk of the publish tree. The pass keeps the two rebases an event demands - no chain yet, and a chain with a
+ * path order, riding the walk rather than a clock and a walk of the publish tree of its own. The pass keeps the two
+ * rebases an event demands - no chain yet, and a chain with a
  * hole or a retraction flag on it - and appends only what the dirty feed marked between; this consumer is the
  * scheduled one, weekly on the rebuild entry by default. It still enumerates the pointers over its own ordered
  * walk at completion, because a chunk chain is one artifact committed whole and a segmented pass cannot hand it

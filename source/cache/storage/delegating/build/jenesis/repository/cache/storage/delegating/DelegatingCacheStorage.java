@@ -15,22 +15,20 @@ import build.jenesis.repository.walk.Traversal;
  *
  * <h2>Why this exists</h2>
  *
- * The cache used to ship its own {@code s3}, {@code gcs}, {@code azure-blob} and {@code filesystem} backends - about
- * two thousand lines that were a second copy of the artifact store's: the same SDK client build, the same endpoint
- * screen, the same credential chain, the same conditional write, the same paginator. Two copies of one thing drift,
- * and these had: until the settings were unified they read the same values under different key spellings, so an
- * operator who configured by property rather than by environment variable configured one and left the other empty.
+ * The cache has no backends of its own: {@code s3}, {@code gcs}, {@code azure-blob} and {@code filesystem} cache
+ * backends would be a second copy of the artifact store's - the same SDK client build, the same endpoint screen, the
+ * same credential chain, the same conditional write, the same paginator - and two copies of one thing drift, down to
+ * reading the same values under different key spellings.
  *
  * <p>{@link CacheStorage} stays an SPI, because a cache store that is genuinely NOT an artifact store - a Redis tier,
  * an ephemeral node-local disk with different durability - is a thing a deployment could want, and the seam is cheap
- * to keep and expensive to reintroduce. What goes is the duplicated storage beneath it, not the interface above it.
+ * to keep and expensive to reintroduce. What is not duplicated is the storage beneath it.
  *
  * <h2>The mapping</h2>
  *
  * A cache entry is the key {@code <project>/<step>/<inputs>}; a project's policy is {@code <project>/cache.properties};
- * the console's access tree is the {@code .users/} paths it already used. Those are the keys the cache backends wrote
- * before this class existed, at the same prefix under the same tenant scope, so the layout is unchanged and no
- * deployment migrates anything. The one exception is deliberate and is the provider's business, not this class's: the
+ * the console's access tree is the {@code .users/} paths, at the same prefix under the same tenant scope. The one
+ * exception is deliberate and is the provider's business, not this class's: the
  * filesystem cache root and the artifact-store root are different directories by design.
  *
  * <h2>What this class may not cost</h2>
@@ -294,7 +292,7 @@ public final class DelegatingCacheStorage implements CacheStorage {
 
     /** The deletion token: the entry's store key and the stamps that go with it, so a delete leaves no stamp behind
      *  for an entry that is gone. Opaque to every caller, which is why it may carry more than a key; its text is the
-     *  key alone, which is what a caller that shows a token has always shown. */
+     *  key alone. */
     private record Located(String key, List<String> stamps) {
 
         @Override
@@ -353,8 +351,8 @@ public final class DelegatingCacheStorage implements CacheStorage {
      * that IS the project's existence: without it, a project an operator created and has not yet pushed to would
      * vanish from the console the moment the page reloaded.
      *
-     * <p>It carries {@code created}, which nothing recorded before - a project's age was previously unknowable, and
-     * a marker that exists anyway may as well answer the question. A description or anything else an operator sets
+     * <p>It carries {@code created}, so a project's age is knowable: a marker that exists anyway may as well answer
+     * the question. A description or anything else an operator sets
      * later lives here too, and is read back through the ordinary {@link #readConfig}, so this needs no new API.
      *
      * <p>Provisioning does NOT define existence, only guarantees it: {@link #projectExists} asks whether anything is

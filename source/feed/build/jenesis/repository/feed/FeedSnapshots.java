@@ -25,7 +25,7 @@ import build.jenesis.repository.store.Documents;
  *
  * <p><strong>The prior-good snapshot is retained.</strong> {@link #defer} - what a failed refresh calls - moves only
  * {@code nextRefreshAt}. The snapshot reference and its fetch instant are copied through untouched, so a failing feed
- * keeps serving its last complete catalogue while a reader sees, exactly, how old it is (&sect;10).
+ * keeps serving its last complete catalogue while a reader sees, exactly, how old it is.
  *
  * <h2>Contract</h2>
  * <ol>
@@ -45,13 +45,13 @@ import build.jenesis.repository.store.Documents;
  * <li><b>Error visibility.</b> Every write failure propagates. The single exception is {@link #prune} of superseded
  *     bodies, which is best-effort and logged: an orphan body wastes space, it can never change what is served, and
  *     failing a completed commit over a failed cleanup would be strictly worse.</li>
- * <li><b>Read purity (&sect;8/&sect;10).</b> {@link #current()}, {@link #open} and {@link #due} render stored state
+ * <li><b>Read purity.</b> {@link #current()}, {@link #open} and {@link #due} render stored state
  *     only. Nothing here reaches the network - this class holds no transport - so a read path built on it stands
  *     when the vendor is down.</li>
- * <li><b>Staleness (&sect;9/&sect;10).</b> {@link Snapshot#fetchedAt()} is the instant the committed catalogue was
+ * <li><b>Staleness.</b> {@link Snapshot#fetchedAt()} is the instant the committed catalogue was
  *     drawn, and {@link Refresh#nextRefreshAt()} when it should be drawn again. Both survive a restart, so staleness is
  *     a durable property of the data rather than of the process that happens to be running.</li>
- * <li><b>Durability / delivery (&sect;13).</b> The commit point is the pointer's compare-and-set. Before it, nothing
+ * <li><b>Durability / delivery.</b> The commit point is the pointer's compare-and-set. Before it, nothing
  *     is visible; after it, the whole snapshot is. The crash windows are: before the body write (nothing changed),
  *     between body and pointer (an unreferenced body, healed by the next prune), and after the pointer (done). The
  *     durable source of truth is the pointer object itself.</li>
@@ -135,7 +135,7 @@ public final class FeedSnapshots {
 
     /**
      * Open the committed snapshot body for streaming, or empty when the stamp carries none. The body is handed back
-     * as a stream, never as a {@code byte[]}: a mirrored catalogue is parsed incrementally (&sect;1). The caller
+     * as a stream, never as a {@code byte[]}: a mirrored catalogue is parsed incrementally. The caller
      * closes it.
      */
     public Optional<InputStream> open(Refresh stamp) throws IOException {

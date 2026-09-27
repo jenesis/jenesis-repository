@@ -19,12 +19,12 @@ import build.jenesis.repository.store.ServableNames;
 import build.jenesis.repository.store.Publication;
 
 /**
- * The late-enablement migration re-screen sweep for a hardening proxy (§5 self-healing).
+ * The late-enablement migration re-screen sweep for a hardening proxy (self-healing when enabled late).
  *
- * <p><b>Amortizer, not sole defense.</b> The request-time fail-closed <em>guarantee</em> now lives at
+ * <p><b>Amortizer, not sole defense.</b> The request-time fail-closed <em>guarantee</em> lives at
  * the serve boundary: {@link HardenedHitVerify} verifies every hardened cache hit against the current gate BEFORE it
- * serves (the {@link build.jenesis.repository.server.PullThroughHooks} seam #79 closes), so an unverdicted or
- * stale-verdicted hit is never served unverified. This sweep is the §5 bulk <em>complement</em> - it pre-records the
+ * serves (the {@link build.jenesis.repository.server.PullThroughHooks} seam), so an unverdicted or
+ * stale-verdicted hit is never served unverified. This sweep is the bulk <em>complement</em> - it pre-records the
  * digest-pinned verdicts so a steady-state hit-verify is one cheap metadata read rather than a full local re-screen, and
  * it proactively evicts bad cached artifacts including ones never requested again (healing cold corners the on-read
  * verify never reaches). The two share the identical {@link HardenedScreen#serveVerified} local re-screen; neither
@@ -40,7 +40,7 @@ import build.jenesis.repository.store.Publication;
  *
  * <p><b>What it does per hardened repository.</b>
  * <ol>
- *   <li><b>Enumerate the needs-screening set (§7).</b> The already-cached artifacts are enumerated by prefix listing
+ *   <li><b>Enumerate the needs-screening set.</b> The already-cached artifacts are enumerated by prefix listing
  *       through the store - never a full scan - as {@link Cached}{@code (path, digest, content, eviction)} tuples (the
  *       default {@link #inventoryCache()} source). For each, the {@link VerdictSection verdict
  *       lookup} decides "needs screening": an artifact whose recorded verdict is <em>absent</em>, or pinned to a
@@ -49,8 +49,8 @@ import build.jenesis.repository.store.Publication;
  *       re-run).</li>
  *   <li><b>Re-screen from local bytes.</b> Each needs-screening artifact is re-screened from its <em>local cached
  *       bytes</em> through {@link HardenedScreen#serveVerified} - the same full-body screen path the live hardened leg
- *       uses, over a {@link QualityInspector.Content} handle on the local blob - which records the digest-pinned verdict
- *. No upstream fetch: these bytes are already local.</li>
+ *       uses, over a {@link QualityInspector.Content} handle on the local blob - which records the digest-pinned
+ *       verdict. No upstream fetch: these bytes are already local.</li>
  *   <li><b>Evict/quarantine a bad cached artifact.</b> On a non-{@code ALLOW} verdict (the pre-harden serve let through
  *       a secret or a policy-hit) the sweep does not keep serving it: {@code serveVerified} already recorded the
  *       refusal in the durable {@code QuarantineLog} (and copied a held body under {@code /quarantine}) like the live
@@ -59,7 +59,7 @@ import build.jenesis.repository.store.Publication;
  *       serve-boundary {@link HardenedHitVerify}, so it is evicted, not merely withheld on the next read.</li>
  * </ol>
  *
- * <p><b>Idempotent, self-healing, single-writer (§4/§5).</b> The sweep holds no state - it converges from the store on
+ * <p><b>Idempotent, self-healing, single-writer.</b> The sweep holds no state - it converges from the store on
  * every pass. It is {@link #exclusion() lease-owned}, so the neutral scheduler runs it under the single-writer
  * {@code locks/migration-rescreen} lease and two replicas never sweep the same store concurrently. A completed sweep is
  * cheap to re-run: every already-verdicted artifact is skipped by the digest-pinned check, so a second pass re-screens
@@ -71,8 +71,8 @@ import build.jenesis.repository.store.Publication;
  * skipped: a repository with no fallbacks, a grouped view, a plain caching proxy and a {@code nocache} pass-through all
  * have nothing to back-fill.
  *
- * <p><b>Each artifact is re-screened through the gate flavour it was reached by.</b> The pass used to run the
- * PROXY gate over everything the store held, which is right for a repository that accepts no upload but wrong for the
+ * <p><b>Each artifact is re-screened through the gate flavour it was reached by.</b> Running the PROXY gate over
+ * everything the store held would be right for a repository that accepts no upload but wrong for the
  * hybrid {@code writable} + hardened-fallback shape {@link #hardenedProxy} deliberately covers: an upload re-screened
  * through the proxy flavour meets PROXY_ONLY dimensions that have nothing to say about it (and is <em>evicted</em> on
  * their verdict) and softened ones the publish gate would not have softened. {@link RescreenFlavor} makes that one
@@ -94,7 +94,7 @@ public final class MigrationRescreenTask implements MaintenanceTask {
 
     /** A hardened artifact already cached in a repository's store, as the sweep needs to re-screen it: the request
      *  {@code path} the live leg keys its verdict off, the content {@code digest} of the cached bytes, a re-openable
-     *  {@code content} handle on the local blob (never a heap {@code byte[]}, §1), and an {@code eviction} that removes
+     *  {@code content} handle on the local blob (never a heap {@code byte[]}), and an {@code eviction} that removes
      *  the cached pointer so a subsequent request misses and re-fetches through the hardened leg. */
     public record Cached(String path, String digest, QualityInspector.Content content, Eviction eviction) {
     }

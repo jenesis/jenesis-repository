@@ -27,7 +27,7 @@ public interface Findings {
      * <em>eviction</em> - the "dirty" signal the vulnerability rank index folds into its rebuild stamp so an evicted
      * version's line drops on the next rank-index pass rather than lingering until the next <em>scan</em> moves
      * {@link #scanned scan stamp}. It is deliberately NOT the scan stamp: an eviction is not a scan, so bumping the freshness
-     * stamp would both misreport the report's as-of instant (Principle 10) and make the eventually-consistent read fall
+     * stamp would both misreport the report's as-of instant and make the eventually-consistent read fall
      * back - the two failure modes this separate epoch avoids.
      */
     String EVICTED = PREFIX + "/evicted";
@@ -57,11 +57,11 @@ public interface Findings {
             throws IOException;
 
     /**
-     * A batch of same-{@code (coordinate, version)} writes committed in <em>one</em> mutation (§4a): the rows to
+     * A batch of same-{@code (coordinate, version)} writes committed in <em>one</em> mutation: the rows to
      * {@link #record} (append-or-refresh, categorize-never-discard) and the labels to attach to existing rows. This is
      * the shape that collapses the per-row CAS storms - a scan pass's advisory rows, an AI sweep's per-finding labels
      * plus its queryable judgement row - from one read-modify-write per row into one per (coordinate-version, pass).
-     * Immutable: both lists are copied defensively, and the batch never changes after construction (§11).
+     * Immutable: both lists are copied defensively, and the batch never changes after construction.
      */
     record Batch(List<Finding> records, List<Annotation> annotations) {
 
@@ -102,7 +102,7 @@ public interface Findings {
     }
 
     /**
-     * Apply a {@link Batch} of records and labels to one coordinate version in a single commit (§4a). The default
+     * Apply a {@link Batch} of records and labels to one coordinate version in a single commit. The default
      * applies each write in turn (a mutation each) so a simple implementation stays correct; the store overrides it to
      * fold the whole batch into <em>one</em> compare-and-set against the coordinate's document.
      *
@@ -129,7 +129,7 @@ public interface Findings {
     /**
      * A bounded page of the repository-wide walk: the findings matching the filter from {@code offset}, at most
      * {@code limit} of them, so a large repository's view is served a slice at a time rather than the whole ledger
-     * materialised on every request (§7). A coordinate-scoped filter still resolves by direct key-prefix lookup.
+     * materialised on every request. A coordinate-scoped filter still resolves by direct key-prefix lookup.
      *
      * <p><strong>A ledger pages its own walk; the inherited body is a small-ledger fallback and says so out loud.</strong>
      * The {@code default} delegates to {@link #pageByListing}, which materialises {@link #all(Filter)} and slices it:
@@ -244,7 +244,7 @@ public interface Findings {
      *  {@code Instant} string, or blank for a never-scanned repository). {@code builtScanStamp} is {@code null} on a
      *  page the live walk produced (or a not-yet-built index falling back to it), signalling the reader to render the
      *  live scan stamp; a non-null value is the index's own as-of instant, so a selective query served from a built
-     *  index is never labelled fresher than the index it came from (Principle 10, mirroring the health/vulnerability
+     *  index is never labelled fresher than the index it came from (mirroring the health/vulnerability
      *  rank indexes' {@code builtScanStamp} split). */
     record Page(List<Located> located, boolean more, String builtScanStamp) {
 

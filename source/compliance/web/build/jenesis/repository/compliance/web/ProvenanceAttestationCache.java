@@ -14,7 +14,7 @@ import build.jenesis.repository.store.ArtifactStore;
  * cache serves the attestation minted on first generation instead.
  *
  * <p>The cache is content-addressed: the key carries the artifact's SHA-256, so a path re-pointed to different bytes
- * never serves the old bytes' attestation (Principle 5). The full attestation is persisted - the envelope <em>and</em>
+ * never serves the old bytes' attestation. The full attestation is persisted - the envelope <em>and</em>
  * the verification material bound to it at signing time (the certificate chain and the transparency-log entry) - so the
  * material endpoint serves the same signing-time material a re-sign would have rotated, from the one certificate that
  * signed. It is stored as the log's own JSON shapes (hex hashes, base64 body and receipt), read back the way

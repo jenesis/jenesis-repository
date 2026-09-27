@@ -25,7 +25,7 @@ import build.jenesis.repository.maintenance.MaintenanceTask;
  * <p>The cadence is captured for the same reason and costs nothing: the SPI already requires a provider to resolve
  * its dial inside {@code create} ({@code IntervalSetting}), and a dial changed through the settings re-creates the
  * task on the next {@code refresh()}, so the captured value is the same value {@code interval()} would return - but
- * it can no longer be read from inside {@code TaskSchedule}, which runs <em>outside</em> the per-task containment and
+ * it is never read from inside {@code TaskSchedule}, which runs <em>outside</em> the per-task containment and
  * would take the loop down with it.
  *
  * <p>A task that cannot be named or timed is refused here, at resolution, naming its class - it can neither take a

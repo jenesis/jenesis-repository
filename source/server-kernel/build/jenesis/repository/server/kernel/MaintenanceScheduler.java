@@ -63,8 +63,8 @@ import io.micrometer.core.instrument.MeterRegistry;
  *       {@code FAILED} through the observability seam. See {@link Escalation} for where an {@code Error} goes and why
  *       the answer differs between the worker loop and {@link #runNow(Instant)}.</li>
  *   <li><b>A handler never re-enters the task it is reporting.</b> Names come from {@link ScheduledTask}, captured at
- *       resolution - the old handler called {@code task.name()} twice inside its own catch block, so a throwing
- *       {@code name()} defeated the containment from inside the very task being contained.</li>
+ *       resolution - a handler calling {@code task.name()} inside its own catch block would let a throwing
+ *       {@code name()} defeat the containment from inside the very task being contained.</li>
  *   <li><b>The worker says whether it is running.</b> {@link #worker()} stamps every completed scheduling iteration,
  *       due work or not, and records why the loop stopped if it ever does - so "maintenance is not running" and
  *       "maintenance found nothing to do" are different readings rather than the same silence.</li>
@@ -106,11 +106,11 @@ public final class MaintenanceScheduler implements AutoCloseable {
      *  hooks resolve through it; the deployment-global {@link #config()} accessor (the on-demand endpoints'
      *  provider lookup) stays tenant-agnostic. */
     private final BiFunction<String, String, String> tenantConfig;
-    /** The single-writer guard (R7): the one owner of {@code locks/<task>} for the whole deployment. */
+    /** The single-writer guard: the one owner of {@code locks/<task>} for the whole deployment. */
     private final LeaseGuard leases;
-    /** The due-time and run bookkeeping (R4, R8) - storeless, threadless, driven by the one worker loop below. */
+    /** The due-time and run bookkeeping - storeless, threadless, driven by the one worker loop below. */
     private final TaskSchedule schedule = new TaskSchedule();
-    /** The Micrometer sink (R9, R10) - the only meter-aware collaborator. */
+    /** The Micrometer sink - the only meter-aware collaborator. */
     private final PassMetrics metrics;
     /** The bounded pool the (tenant, repository) units of a pass fan out across, so a large fleet's sweep is not one
      *  serial walk; daemon-threaded so a test that never closes the scheduler still lets its JVM exit. */
@@ -206,7 +206,7 @@ public final class MaintenanceScheduler implements AutoCloseable {
         this.tenantConfig = tenantConfig;
         this.nodeId = NodeFingerprintPublisher.nodeId(config);
         // A degenerate lease ttl is refused here, naming cleanup-lease: it removes single-writer exclusion outright and
-        // makes every exclusive pass throw, so it must never resolve to a scheduler that looks healthy (§9).
+        // makes every exclusive pass throw, so it must never resolve to a scheduler that looks healthy.
         this.leases = new LeaseGuard(root, leaseTtl);
         this.metrics = new PassMetrics(registry);
         this.workers = Executors.newFixedThreadPool(Math.max(1, workers), runnable -> {
@@ -249,10 +249,10 @@ public final class MaintenanceScheduler implements AutoCloseable {
      * <em>completed</em> a scheduling iteration, how many it has completed, and (once it is no longer running) why it
      * stopped.
      *
-     * <p>This exists because "maintenance is not running" and "maintenance found nothing to do" were previously
+     * <p>This exists because "maintenance is not running" and "maintenance found nothing to do" are otherwise
      * indistinguishable from outside (the drain depth gauges' problem, on the loop): a task that
      * has never been due reports {@code UNKNOWN}/"has not completed a run yet" whether the worker is sweeping every
-     * thirty seconds or died an hour ago, and the only signal that it died was one stack trace from the default
+     * thirty seconds or died an hour ago, and the only signal that it died would be one stack trace from the default
      * uncaught-exception handler. The iteration stamp advances on <em>every</em> pass round the loop, due work or not,
      * so it reads as liveness rather than as work.
      */
@@ -277,10 +277,9 @@ public final class MaintenanceScheduler implements AutoCloseable {
 
     /**
      * Start the worker thread. <strong>Idempotent</strong>: a second call over a live worker is a no-op rather than a
-     * second loop. This method once called {@code startWorker()} unconditionally while {@link #refresh()}
-     * guarded, so a second {@code start()} overwrote the thread field while the old loop kept running against a
-     * {@code running} flag that was still true - two worker loops on one node, each taking and releasing the same
-     * leases.
+     * second loop. Starting unconditionally would let a second {@code start()} overwrite the thread field while the
+     * first loop kept running against a {@code running} flag that was still true - two worker loops on one node, each
+     * taking and releasing the same leases.
      */
     public synchronized void start() {
         running = true;
@@ -319,7 +318,7 @@ public final class MaintenanceScheduler implements AutoCloseable {
 
     /** Pair every resolved task with the name and cadence read off it once, refusing one that cannot supply either
      *  (see {@link ScheduledTask}). This is the single point at which a {@link MaintenanceTask} becomes something this
-     *  scheduler will drive - design gate 3's "extend the existing choke point" applied to identity. */
+     *  scheduler will drive - "extend the existing choke point" applied to identity. */
     private static List<ScheduledTask> scheduled(List<MaintenanceTask> resolved) {
         List<ScheduledTask> scheduled = new ArrayList<>(resolved.size());
         for (MaintenanceTask task : resolved) {
@@ -509,8 +508,8 @@ public final class MaintenanceScheduler implements AutoCloseable {
          * "rethrow" means letting the {@code Error} out of {@code Thread.run()}, which kills the deployment's
          * <em>only</em> maintenance loop, stops every other sweep, drain and GC until a settings {@code refresh()} or
          * a restart, counts nothing, and reports itself as one stack trace on stderr from the default
-         * uncaught-exception handler. Measured against what the ruling actually wanted - the failure attributed rather
-         * than swallowed, and visible to whoever can act - that is strictly worse on every axis: <em>less</em>
+         * uncaught-exception handler. Against what the ruling wants - the failure attributed rather than swallowed,
+         * and visible to whoever can act - that is strictly worse on every axis: <em>less</em>
          * visible than an ERROR through the configured appenders, uncounted, and with a blast radius thirty passes
          * wide for what is most often one plugin module's {@code NoClassDefFoundError}.
          *
@@ -520,8 +519,8 @@ public final class MaintenanceScheduler implements AutoCloseable {
          * the observability seam. Nothing is swallowed - what changes is who the report goes to. The pass keeps its
          * schedule rather than being withdrawn, deliberately: a {@code StackOverflowError} on one pathological tree
          * or an {@code OutOfMemoryError} under load is often transient, and permanently withdrawing (say) the garbage
-         * collector because the JVM was briefly out of memory would <em>cause</em> the outage this ticket exists to
-         * prevent. A pass that keeps breaking keeps saying so, every interval.
+         * collector because the JVM was briefly out of memory would <em>cause</em> the outage this escalation exists
+         * to prevent. A pass that keeps breaking keeps saying so, every interval.
          */
         OPERATOR
     }
@@ -536,8 +535,8 @@ public final class MaintenanceScheduler implements AutoCloseable {
     /**
      * Run {@code attempt} on behalf of {@code task}, containing its failure to that task. {@code task} is the name
      * captured at resolution, never a fresh {@code name()} call - the handler must not have to re-enter a broken task
-     * to find out what to blame, which is precisely how the old handler could be defeated from inside the very task
-     * it was reporting (it called {@code name()} twice, once to log and once to count).
+     * to find out what to blame, or a throwing {@code name()} could defeat it from inside the very task it is
+     * reporting.
      *
      * <p>An ordinary failure - a checked exception, a {@link RuntimeException}, one smuggled past a {@code throws}
      * clause - is a unit of work failing: contained, named at {@code WARNING} and counted. An {@link Error} is
@@ -593,12 +592,12 @@ public final class MaintenanceScheduler implements AutoCloseable {
     }
 
     /**
-     * One scheduled or on-demand exclusive pass: run under the task's single-writer lease, and - the fix -
-     * count the pass as FAILED when the lease was lost mid-pass. A refused <em>acquisition</em> (this returns
+     * One scheduled or on-demand exclusive pass: run under the task's single-writer lease, and count the pass as
+     * FAILED when the lease was lost mid-pass. A refused <em>acquisition</em> (this returns
      * {@code false}) stays a normal, uncounted skip: in a fleet exactly one node runs the pass and the others skip. But
      * a lease this node <em>held</em> and then lost means it stalled past its own ttl and a rival legitimately took
-     * over, so two sweepers were live over one store - which was previously logged only, leaving the dashboard showing
-     * a clean sweep. The fan-out additionally stops submitting further batches the moment that happens; see
+     * over, so two sweepers were live over one store - and logging it only would leave the dashboard showing a clean
+     * sweep. The fan-out additionally stops submitting further batches the moment that happens; see
      * {@link LeaseGuard}.
      */
     private boolean exclusivePass(ScheduledTask task, Instant now, Escalation escalate) throws IOException {
@@ -754,7 +753,7 @@ public final class MaintenanceScheduler implements AutoCloseable {
                     }
                     // A unit runs on a pool thread, which has no caller either, so an Error is escalated to the
                     // operator here too (Escalation.OPERATOR): letting it out would only be captured by the
-                    // FutureTask and re-surface as the ExecutionException runUnits used to discard in silence.
+                    // FutureTask and re-surface as an ExecutionException in runUnits.
                     contain(task.name(), "for " + tenant + "/" + repository, Escalation.OPERATOR,
                             () -> {
                                 PassRepositoryContext context =
@@ -787,11 +786,9 @@ public final class MaintenanceScheduler implements AutoCloseable {
      *  shutting down (a close raced this pass) rejects the batch, and the units then run inline so the pass still
      *  completes.
      *
-     *  <p>Neither residual catch is silent any more. An {@link Error} out of a unit used to be captured by the
-     *  {@link FutureTask} and re-surface here as an {@link ExecutionException} that was discarded without a word - the
-     *  one place in this class where a broken runtime produced no diagnostic at all - and the inline fallback caught
-     *  {@code Exception}, so an {@code Error} there escaped into the worker thread instead. The unit body now contains
-     *  both, and what reaches this method is logged rather than dropped. */
+     *  <p>Neither residual catch is silent. An {@link Error} out of a unit would be captured by the {@link FutureTask}
+     *  and re-surface here as an {@link ExecutionException}; the unit body contains it, as it does on the inline
+     *  fallback, and what reaches this method is logged rather than dropped. */
     private void runUnits(List<Callable<Void>> units) {
         if (units.isEmpty()) {
             return;

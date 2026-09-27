@@ -47,7 +47,7 @@ public final class MaintenanceObservability implements ObservabilitySource {
         // A provider whose create() threw on a settings-convergence tick is CONTAINED by
         // MaintenanceTaskProvider.resolveContained so the running deployment's other passes still schedule - but a
         // contained pass must be reported FAILED, not silently absent from a shorter list, or the containment would
-        // trade a loud failure for exactly the silently-incomplete state §5 forbids. (At boot there is nothing to
+        // trade a loud failure for a silently-incomplete state presented as whole. (At boot there is nothing to
         // report: MaintenanceTaskProvider.resolve is strict, so a provider that cannot build fails the context.)
         scheduler.unavailable().forEach((task, cause) -> statuses.add(unavailable(task, cause)));
         return statuses;
@@ -62,7 +62,7 @@ public final class MaintenanceObservability implements ObservabilitySource {
      *       a different statement from a worker that should be running and is not.</li>
      *   <li>Enabled and the thread is alive: {@code IDLE}, stamped with the instant the loop last <em>completed</em> a
      *       scheduling iteration. That stamp advances every idle-poll window whether or not a pass was due, so it
-     *       reads as liveness rather than as work - the property the drain depth gauges were found to lack.</li>
+     *       reads as liveness rather than as work - the property the drain depth gauges lack.</li>
      *   <li>Enabled and the thread is not alive: {@code FAILED}, naming why it stopped. Every sweep, drain and GC on
      *       this node is stopped, and that is the sentence an operator needs to read.</li>
      * </ul>

@@ -14,10 +14,10 @@ import build.jenesis.repository.store.OwnerOnly;
  * files under {@code .cas} at the root, held from the compare to the move - so several nodes on one shared mount
  * (NFS, EFS, a host path) lose no update to one another. The stripe is chosen from the key relative to the root and
  * not from the absolute path, so two nodes mounting one share at different paths meet on the same lock; the lock
- * files are the store's own and no listing, page or scan reports them. Measured before the file lock existed: two JVMs each making
- * three thousand compare-and-set increments to one key over one directory came up short, both having passed the
- * compare with one token and both moved, the second move discarding the first write; and two containerised nodes
- * publishing versions of one Go module into one directory dropped a version from the module's list. The lock is
+ * files are the store's own and no listing, page or scan reports them. Without the file lock, two JVMs each making
+ * three thousand compare-and-set increments to one key over one directory come up short, both having passed the
+ * compare with one token and both moved, the second move discarding the first write; and two nodes publishing
+ * versions of one Go module into one directory drop a version from the module's list. The lock is
  * advisory, as file locks are: a mount that does not honour them (an NFS export without its lock daemon) is one the
  * deployment must not share.
  */
@@ -270,10 +270,9 @@ public final class FilesystemArtifactStore implements ArtifactStore {
      * be a second store to keep consistent with the first - and what it decides for a caller is the page width. A
      * request-path read that renders one window pays one scan whatever its width, so it keeps the default; a walk
      * that drains a level - follows the continuation to exhaustion - pays one scan per page, the level's width
-     * squared over the page's, and takes {@code BoundedChildren.DRAIN_PAGE}, ten times the default. Measured by
-     * the refresh-walk canary over the findings ledger: a bounded read of twenty thousand entries from a
-     * million-entry level, a thousand a page, rescanned the directory some sixty times and answered in 29 s; at
-     * the drain width it is a handful of scans.
+     * squared over the page's, and takes {@code BoundedChildren.DRAIN_PAGE}, ten times the default: a bounded read
+     * of twenty thousand entries from a million-entry level, a thousand a page, rescans the directory some sixty
+     * times; at the drain width it is a handful of scans.
      */
     @Override
     public void pageListed(String prefix, String startAfter, int limit, Consumer<Listed> consumer) {
@@ -304,7 +303,7 @@ public final class FilesystemArtifactStore implements ArtifactStore {
         } catch (NoSuchFileException | NotDirectoryException _) {
             return; // mirror list(): a vanished container, or one that is itself a stored object, pages as empty
         } catch (IOException failure) {
-            // NOT mirrored from the old list(): a short page is how the shared walk learns a container is drained,
+            // NOT mirrored from list(): a short page is how the shared walk learns a container is drained,
             // so an unreadable directory paging as empty ends a traversal early and reports it as exhausted.
             throw new UncheckedIOException("Cannot page the children of " + dir, failure);
         }
@@ -401,13 +400,12 @@ public final class FilesystemArtifactStore implements ArtifactStore {
                 // enumeration that omits a file which no longer exists is not short - it is correct, because a
                 // deleted file is exactly what a listing is entitled not to report.
                 //
-                // Measured by the cache soak before this was so: under sustained publishing the reaper's project
-                // walk aborted on a NoSuchFileException for a .upload*.tmp and logged "cache reaper sweep failed;
-                // retrying next interval" - so the sweep was skipped whenever a write was in flight, which under
-                // continuous load is every interval. The cap then stops being enforced by the mechanism whose
-                // whole job is to enforce it, silently, with nothing but a warning to say so.
+                // Aborting on it instead - a NoSuchFileException for a .upload*.tmp under sustained publishing -
+                // would skip the cache reaper's sweep whenever a write was in flight, which under continuous load is
+                // every interval. The cap would then stop being enforced by the mechanism whose whole job is to
+                // enforce it, silently, with nothing but a warning to say so.
                 //
-                // Every other failure still throws, and for the original reason: a short scan is how a sweep
+                // Every other failure still throws: a short scan is how a sweep
                 // learns a prefix is drained, so a file that is THERE and cannot be read must fail the call rather
                 // than silently shorten it into a claim of completeness.
                 if (failure instanceof NoSuchFileException) {
@@ -522,12 +520,12 @@ public final class FilesystemArtifactStore implements ArtifactStore {
      * this token's, because {@code toMillis()} truncates to it; and it is reachable through the plain SPI, where
      * {@link #delete} plus a create-if-absent {@link #writeVersioned} on the same key is how a revoked credential's
      * metadata, a swept garbage-collection marker and a feed snapshot pointer are all re-created. Two writes inside one
-     * tick were already handled (the stamp is nudged forward below); the deleted-and-re-created incarnation was the
-     * case that hack could not see, because there is no earlier stamp left to compare against.
+     * tick are handled by nudging the stamp forward (below); the deleted-and-re-created incarnation is the case that
+     * nudge cannot see, because there is no earlier stamp left to compare against.
      *
      * <p>Folding the content in closes it without inventing a rule: an S3 or Azure ETag <em>is</em> a content
      * identity, and a GCS generation is a per-incarnation counter, so this is the filesystem reaching the identity its
-     * three peer backends already have rather than a fourth semantics (&sect;13). What remains identical across an
+     * three peer backends already have rather than a fourth semantics. What remains identical across an
      * incarnation boundary is a key deleted and re-created with byte-identical content at the same stamp - where the
      * stored state a stale token still passes against is the state its holder read, so the compare-and-set concedes
      * nothing.
@@ -657,7 +655,7 @@ public final class FilesystemArtifactStore implements ArtifactStore {
      * kernel's {@code F_SETLKW}, and POSIX record locks belong to the <em>process</em>: when two threads of one node
      * wait on two stripes the other node's threads hold, the kernel reads a cycle between the two processes where
      * there is none between the four threads and refuses one waiter with {@code EDEADLK} - "Resource deadlock
-     * avoided", which a fleet suite measured as a publish answering 500 under two nodes on one directory. The
+     * avoided", a publish answering 500 under two nodes on one directory. The
      * non-blocking {@code tryLock()} carries no such detection, so the waiter polls it at a millisecond, bounded so
      * a holder that never returns fails the write loudly rather than parking it for ever.
      */
@@ -695,7 +693,7 @@ public final class FilesystemArtifactStore implements ArtifactStore {
      *
      * <p>It exists because a path is resolved through the JVM's file-name encoding ({@code sun.jnu.encoding}),
      * which follows the process locale: under a POSIX or C locale it is ASCII, and {@code Path.resolve} of a key
-     * carrying a non-ASCII character throws {@code InvalidPathException} - measured 2026-09-20 on a node whose
+     * carrying a non-ASCII character throws {@code InvalidPathException} - on a node whose
      * locale was unset, where a Maven version folder named {@code na\u00efve} could not be published, listed or
      * served while the same store on a UTF-8 node held it. A repository's keys are the client's coordinates, and
      * whether one can be stored must not depend on how the node's shell was started; nor may two nodes over one

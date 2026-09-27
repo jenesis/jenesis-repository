@@ -10,25 +10,22 @@
  * <p><b>What is deliberately not here: any feature.</b> This module requires contract homes and the seams beneath
  * them - the server and its SPI, the store, the settings, maintenance and compliance contracts, the staging,
  * retention and upstream-credential SPIs, the blobs view and the metering decorator - and no implementation of
- * anything. It used to require the router, the gate, the inventory, the metadata store and the import SPI as well,
- * for six classes: {@code LiveConfig} parsed the router's definitions, {@code Repositories} handed out the gated
- * repository, the quarantine log and the inventory as one-line factories, {@code ReleaseImmutability} and
- * {@code DeployEdgeHooks} were the write edge's gate concerns. Measured 2026-09-20: every one of the 21 web
- * adapters requires this module, so each dragged seventeen modules through it while three quarters of
- * what they called was {@code tenant()} and {@code store()}. The definitions parser, the two edge classes and the
- * live definitions are the gateway's now, and the kernel asks a definition only the two questions it has
- * ({@code RepositoryDefinitions}). The toggle catalogue ({@code ModuleTogglesSettingsContributor}) stays: it
+ * anything - not the router, the gate, the inventory, the metadata store or the import SPI. Every web adapter
+ * requires this module, and most of what they call is {@code tenant()} and {@code store()}, so anything required
+ * here is dragged through every one of them. The definitions parser, the release-immutability guard, the deploy
+ * edge's hooks and the live definitions are the gateway's, and the kernel asks a definition only the two questions
+ * it has ({@code RepositoryDefinitions}). The toggle catalogue ({@code ModuleTogglesSettingsContributor}) stays: it
  * enumerates every provider family, but every family it names is a contract home this module requires anyway,
  * and a settings contributor's module names the document its values are stored in
- * ({@code config/settings/<module>.json}) - moving it would have stranded every toggle an operator ever wrote. A feature's factory is the feature's own: {@code new
- * StoreRepositoryInventory(store)}, {@code new QuarantineLog(store)}, {@code new GatedRepository(writable)}.
+ * ({@code config/settings/<module>.json}) - moving it would strand every toggle an operator ever wrote. A feature's
+ * factory is the feature's own: {@code new StoreRepositoryInventory(store)}, {@code new QuarantineLog(store)},
+ * {@code new GatedRepository(writable)}.
  *
  * <p><b>Nor tenancy.</b> The three multi-tenant routings ({@code multi}, {@code host},
  * {@code path}) and the enforcing {@code RepositoryAuthorizationManager} - the one that knows an operator tenant, a
  * path-routed repository segment and the tenant a key's usage is charged to - live in
- * {@code build.jenesis.repository.server.tenancy}, which requires this module and never the reverse. They used to be
- * seven classes in this package, and the split was measured before it was made: nothing here read them but a path
- * normaliser the manager carried, which moved to {@code RepositoryRequests} where both halves read it. The kernel is
+ * {@code build.jenesis.repository.server.tenancy}, which requires this module and never the reverse. Nothing here
+ * reads them; the path normaliser both halves read lives in {@code RepositoryRequests}. The kernel is
  * therefore the part a single-tenant deployment is entirely served by, and the tenancy module the part that can be
  * left out of one - the routing is the fixed one and the authorization manager backs off to the tenancy
  * module's by bean name, so a composition without it is the plain chain over this kernel.

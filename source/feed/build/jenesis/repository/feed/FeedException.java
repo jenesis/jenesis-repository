@@ -7,8 +7,8 @@ import module java.base;
  * machine-readable {@link Reason}, the HTTP status where there was one, how many attempts were spent, and the delay
  * the vendor asked for where it named one. Every bound this client enforces answers with one of these rather than
  * with a plausible-but-incomplete result: a pagination cap is {@link Reason#PAGE_CAP}, an over-long body is
- * {@link Reason#RESPONSE_CAP}, an over-budget fetch is {@link Reason#DEADLINE} (&sect;9, and the "bounds fail
- * visibly" gate).
+ * {@link Reason#RESPONSE_CAP}, an over-budget fetch is {@link Reason#DEADLINE} (fail fast, and bounds fail
+ * visibly).
  *
  * <p>It extends {@link IOException} so it travels the same path a feed's own I/O failure already travels, and so a
  * fail-closed consumer that catches {@code IOException} keeps failing closed.

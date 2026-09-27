@@ -8,7 +8,7 @@ import build.jenesis.repository.format.FormatExchange;
  * A {@link FormatExchange} synthesized for a publish that has no request behind it: a {@code PUT} of one body at one
  * path, with the format's status captured and whatever it writes discarded.
  *
- * <p>Two callers publish this way and they used to have an exchange each. {@link BatchIngestion} explodes an archive
+ * <p>Two callers publish this way and share this one exchange. {@link BatchIngestion} explodes an archive
  * and publishes every entry, and the admin console's deploy screen publishes an operator's upload - both name a path
  * and hand over a stream, and neither has a socket to answer on. Sharing one implementation is what keeps them
  * answering the same way: the batch manifest and the console's verdict message are both reading a status that came

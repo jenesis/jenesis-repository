@@ -117,13 +117,12 @@ public final class HeldSubjects {
      * writable at all, and the sibling spaces that spell a path into a key are the evidence: appending the path
      * ({@code holds/dispatch<path>}) grows the key by one segment per path segment and walks towards the store's
      * 64-segment cap, while URL-encoding it into one segment triples every separator and walks straight past a
-     * filesystem's 255-byte name limit - a real, deep pool path is unwritable either way. The gate's own
-     * {@code audit/quarantine-index} was the second of those and has since taken this fix; the first still
-     * stands. A hold is placed on whatever path an ecosystem serves, including a pathological one, and a record that a
+     * filesystem's 255-byte name limit - a real, deep pool path is unwritable either way. A hold is placed on
+     * whatever path an ecosystem serves, including a pathological one, and a record that a
      * deep path cannot be written for is exactly the hold this class exists to keep answerable. A digest is
      * fixed-width, so neither bound can be reached and the two faces stay symmetric.
      *
-     * <p>The trade is that a key no longer reads back as a path, which costs one thing and buys nothing back: the
+     * <p>The trade is that a key does not read back as a path, which costs one thing and buys nothing back: the
      * version face's enumeration reads each row's body rather than decoding its name. That is a point read per held
      * path of one coordinate version - bounded by the review queue, like everything else here.
      */

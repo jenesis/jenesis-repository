@@ -8,13 +8,11 @@ import build.jenesis.repository.store.ArchiveInflation;
  * The bounded heap reads a {@link QualityInspector} makes while it screens an artifact, and the shared inspection
  * tiers those reads are bounded by.
  *
- * <h2>The manifest tier moved out</h2>
- * This class used to own the manifest tier too - a private {@code MANIFEST_LIMIT} of 4 MiB and a {@code readComplete}
- * that applied it. That was a second copy of a bound that has since been given one home, one operator key
- * and one build guard: {@link ArchiveInflation}. Two shared per-member readers with the same never-a-prefix doctrine
- * and two different numbers is the shape that was removed, so the manifest tier is now
- * {@link ArchiveInflation#largestEntry()}, settable at {@link ArchiveInflation#LARGEST_ENTRY_KEY}, and an inspector
- * that reads one archive member calls {@link ArchiveInflation#entry(InputStream)} directly. What is left here is the
+ * <h2>The manifest tier is not here</h2>
+ * The manifest tier has one home, one operator key and one build guard: {@link ArchiveInflation}. Two shared
+ * per-member readers with the same never-a-prefix doctrine would carry two different numbers, so the manifest tier
+ * is {@link ArchiveInflation#largestEntry()}, settable at {@link ArchiveInflation#LARGEST_ENTRY_KEY}, and an inspector
+ * that reads one archive member calls {@link ArchiveInflation#entry(InputStream)} directly. What is here is the
  * two <em>prefix-tier</em> helpers, which are about how much of the ARTIFACT an inspector sees rather than how far one
  * of its members may inflate.
  *
@@ -59,9 +57,9 @@ public final class BoundedBodyReader {
      *
      * <p>The two inspection legs hold an artifact differently - the bounded one has a {@code byte[]} that is at most
      * a front prefix, the streamed one a re-openable handle on the stored blob - and an inspector that reads the same
-     * thing on both needs one way to say "open it" that does not care which. Two inspectors wrote that interface
-     * privately within a day of each other (Debian's licence walk and Maven's jar rungs), which is the shape &sect;2
-     * exists to stop: it is stated here once, beside the tiers it is read under.
+     * thing on both needs one way to say "open it" that does not care which. Debian's licence walk and Maven's jar
+     * rungs both need it, and shared mechanism has one home: it is stated here once, beside the tiers it is read
+     * under.
      *
      * <p>Deliberately NOT {@link QualityInspector.Content}, which is the streamed leg's own handle: that contract
      * promises {@link QualityInspector.Content#size()} is the artifact's full length, and a bounded leg holding a

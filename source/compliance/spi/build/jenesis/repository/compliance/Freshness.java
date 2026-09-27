@@ -7,19 +7,17 @@ import module java.base;
  * pair the whole signal family answers, so an outage, a stale snapshot and a genuinely clean answer are three
  * different values rather than one.
  *
- * <p>Before this type the family had half of the question in one place and none of it in the others:
- * {@link KnownExploitedSource} carried an {@code available()} boolean and the other four contracts carried nothing at
- * all, so an unscored CVE and an unreachable FIRST.org were the same map, an unrated coordinate and an unreachable
- * deps.dev were the same {@link Optional#empty()}, and no contract could say <em>when</em> anything had last been
- * fetched. {@link SignalSource#freshness()} replaces both gaps with one value, and the two components answer the two
+ * <p>Without it, an unscored CVE and an unreachable FIRST.org would be the same map, an unrated coordinate and an
+ * unreachable deps.dev the same {@link Optional#empty()}, and no contract could say <em>when</em> anything had last
+ * been fetched. {@link SignalSource#freshness()} answers both with one value, and the two components answer the two
  * questions a consumer actually asks:
  *
  * <ul>
  * <li>{@link #authoritative()} - <b>may I act on this?</b> A real answer stands behind the value; the source is not
  *     serving the fail-soft empty it falls back to when it cannot reach its vendor. This is the component a consumer
  *     that <em>loosens</em> must read (the re-analysis auto-release, an operator's EPSS threshold, a health floor):
- *     a value that reads as clean during an outage is the &sect;9 silent fallback, one layer up.</li>
- * <li>{@link #refreshed()} - <b>how old is it?</b> The instant the data behind the answer was fetched, so &sect;10's
+ *     a value that reads as clean during an outage is a silent fallback, one layer up.</li>
+ * <li>{@link #refreshed()} - <b>how old is it?</b> The instant the data behind the answer was fetched, so the rule
  *     "every derived or externally-sourced view shows its last fetch instant, so an empty panel is never ambiguous
  *     between clean and never-scanned" can be met by rendering it. Absent means nothing was ever fetched - either
  *     because no fetch has succeeded yet ({@link #NEVER}) or because this source does not fetch at all

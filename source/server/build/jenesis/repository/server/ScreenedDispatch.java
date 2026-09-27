@@ -93,7 +93,7 @@ public final class ScreenedDispatch {
         // with its next request (DeferredResponse records what that cost).
         DeferredResponse[] answer = new DeferredResponse[1];
         // The one hosted-publish choreography: Publication.commit screens once, hands the accepted blob to the layout
-        // below, and fires published() itself once visibility has committed - so this edge no longer re-assembles the
+        // below, and fires published() itself once visibility has committed - so this edge does not re-assemble the
         // screen/layout/notify sequence by hand, and cannot get its order wrong.
         Publication.Commit commit = new Publication(store).commit(descriptor, exchange.requestStream(),
                 // No probe before the layout: a format whose releases are immutable refuses a republish inside it,

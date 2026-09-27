@@ -14,7 +14,7 @@
  * client can verify the checksums that name its zip's digest, so the first provider publish generates the
  * repository's OpenPGP key through {@code format/signing} - the same key handling the Debian and RPM formats use -
  * and every {@code SHA256SUMS} write derives a fresh detached signature. That signature is <b>binary</b> rather
- * than armoured, measured against {@code registry.terraform.io} rather than assumed.
+ * than armoured, which is what {@code registry.terraform.io} serves.
  *
  * <p><b>The indexes are maintained, not generated.</b> Each version list and each {@code SHA256SUMS} is a
  * {@link build.jenesis.repository.store.StoredListing} whose entry a publish re-decides and whose

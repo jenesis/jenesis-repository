@@ -11,7 +11,7 @@ package build.jenesis.repository.format.debian.keys;
  *
  * <p>Note for anyone moving one of these: javac inlines a {@code static final String} into every reader, so a
  * changed value reaches a module only when that module is recompiled. They are values a store already holds
- * under the old spelling, so changing one is a migration rather than an edit.
+ * under the current spelling, so changing one is a migration rather than an edit.
  */
 public final class DebianKeyring {
 

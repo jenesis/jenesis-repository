@@ -76,9 +76,9 @@ public final class StoredReport {
      *
      * <p>The run holds a {@link Lease} named for the report in the repository's own {@code .system/locks} space, so
      * two nodes asked for the same report at the same moment start one run, not two: the stored {@code RUNNING}
-     * status used to be the only guard, and two nodes reading "not running" in the same instant both computed. The
-     * lease's ttl is the hour the status used to be believed for, and a finished run releases it so the next request
-     * can start at once.
+     * status alone cannot guard it, because two nodes reading "not running" in the same instant would both compute.
+     * The lease's ttl is the hour a {@code RUNNING} status is believed for, and a finished run releases it so the
+     * next request can start at once.
      */
     public static boolean compute(ArtifactStore store, String name, Pass pass) throws IOException {
         Lease lease = new Lease(store, STALE_RUN);
@@ -143,8 +143,8 @@ public final class StoredReport {
     }
 
     /** The report's own name on its first line, so a torn or foreign object reads as unreadable rather than as a
-     *  report; this used to be positional lines with no name and no version, the one stored shape a reader could not
-     *  tell from garbage. */
+     *  report; positional lines with no name and no version would be a stored shape a reader could not tell from
+     *  garbage. */
     private static final String MAGIC = "jenesis-report";
 
     private static byte[] serialize(Report report) {

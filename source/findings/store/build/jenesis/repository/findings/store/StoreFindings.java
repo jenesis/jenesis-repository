@@ -30,7 +30,7 @@ import build.jenesis.repository.walk.BoundedChildren;
  * row-carry is preserved inside {@link FindingsSection}: a row a newer node wrote that this one cannot parse rides
  * every mutate untouched.
  *
- * <p><strong>Batched commit (§4a).</strong> {@link #commit} folds a whole batch of rows and labels into <em>one</em>
+ * <p><strong>Batched commit.</strong> {@link #commit} folds a whole batch of rows and labels into <em>one</em>
  * section mutate, so a scan pass's advisory rows or an AI sweep's per-finding labels cost one compare-and-set for the
  * coordinate version, not one per row.
  */
@@ -336,17 +336,16 @@ public final class StoreFindings implements Findings {
      * the paged and Visitor legs are both implemented over this walk - so neither the entry cap nor the step budget
      * may end it; what it bounds is <b>heap</b>, one page of names at a time.
      *
-     * <p>That is the fix, and it is the health ledger's twin one level deeper. An unfiltered walk materialised
-     * the whole coordinate list of an ecosystem (through the coordinate-segment step, which listed the ecosystem's
-     * subtree when the filter named no coordinate) and then the whole version list of each coordinate - so the sink
-     * form the two bounded legs are built on was itself two whole listings deep. A coordinate-filtered call resolves
-     * by direct key and never enumerated anything; the unfiltered one is the ledger scan.
+     * <p>It is the health ledger's twin one level deeper. An unfiltered walk that materialised the whole coordinate
+     * list of an ecosystem and then the whole version list of each coordinate would make the sink form the two
+     * bounded legs are built on itself two whole listings deep. A coordinate-filtered call resolves by direct key and
+     * never enumerates anything; the unfiltered one is the ledger scan.
      */
     /** The ledger's walk pages at the drain page rather than the primitive's default: a filesystem cannot seek a
      *  directory, so every page rescans its container, and the level under {@code meta/<ecosystem>} holds one child
      *  per coordinate. Paged a thousand at a time, the bounded pre-index read (twenty thousand examined, two kinds,
-     *  plus the served-ledger probe) rescanned a million-entry directory some sixty times and answered in 29 s -
-     *  measured by the refresh-walk canary; ten times wider it is a handful of rescans. */
+     *  plus the served-ledger probe) rescans a million-entry directory some sixty times; ten times wider it is a
+     *  handful of rescans. */
     private static final BoundedChildren LEDGER =
             BoundedChildren.bounded().entries(Integer.MAX_VALUE).steps(Integer.MAX_VALUE)
                     .page(BoundedChildren.DRAIN_PAGE);

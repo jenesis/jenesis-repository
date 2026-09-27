@@ -10,7 +10,7 @@
  * {@code protobuf.javanano}), so a module-path boot layer carrying them fails on the missing module. The S3 SDK pulls
  * netty for its async client, which this store never uses, and this module's flattened POM is where every consumer
  * of the S3 stores meets that closure - so the exclusion below is declared here as well as on the S3 store, since a
- * Maven exclusion drops an artifact only from the path it names (measured 2026-09-13).
+ * Maven exclusion drops an artifact only from the path it names.
  *
  * @jenesis.release 25
  * @jenesis.exclude software.amazon.awssdk.services.s3 io.netty/netty-codec-marshalling io.netty/netty-codec-protobuf

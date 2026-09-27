@@ -34,7 +34,7 @@ import build.jenesis.repository.store.Publication;
  * throws a {@link RuntimeException} - a hostile / non-ASCII key a store backend cannot even
  * {@code resolve} ({@code FilesystemArtifactStore.resolve} does {@code root.resolve(key)} and throws
  * {@link java.nio.file.InvalidPathException} on an encoding-hostile name) - is treated as NOT disclosable and logged,
- * never rethrown. One hostile name in a page can therefore no longer 500 a whole listing, and it is never disclosed
+ * never rethrown. One hostile name in a page can therefore never 500 a whole listing, and it is never disclosed
  * either. Checked {@link IOException}s (an interceptor that fails closed on the publish path, a store I/O failure)
  * propagate exactly as they do through {@link Publication#located} today.
  *
@@ -164,8 +164,8 @@ public final class ServableNames {
      *  artifacts (main jar + pom + sources + javadoc + classifiers) each with up to five checksum/signature sidecars,
      *  a few dozen leaves at the extreme - so the exact fast path below (probe every leaf when the folder fits the cap)
      *  still covers every genuine release. Only a pathologically wide folder exceeds it, and past the cap
-     *  {@link #disclosableVersionFolder} now fails CLOSED (screens the folder) rather than the former fail-OPEN, so an
-     *  interceptor-only-withheld leaf beyond the probe bound can no longer leak its version name into maven-metadata. */
+     *  {@link #disclosableVersionFolder} fails CLOSED (screens the folder) rather than open, so an
+     *  interceptor-only-withheld leaf beyond the probe bound can never leak its version name into maven-metadata. */
     private static final int PROBE_CAP = 512;
 
     /** The first-class discrimination {@link Publication#located} conflates into an empty {@link Optional}. */
@@ -229,7 +229,7 @@ public final class ServableNames {
         if (location.state() != State.SERVABLE) {
             return location.state();
         }
-        // The stat the serve no longer pays: an enumeration face asking for serve parity (browse, the raw listing,
+        // The stat the serve does not pay: an enumeration face asking for serve parity (browse, the raw listing,
         // /assets) still distinguishes a torn pointer from a servable one, because it lists rather than opens.
         return store.exists("blobs/" + location.hash()) ? State.SERVABLE : State.BLOB_GONE;
     }
@@ -270,9 +270,8 @@ public final class ServableNames {
             if (pointer.get().held()) {
                 // The path half of a hold, read off the pointer the serve reads anyway: the /quarantine review pointer
                 // that placed it is the queue and the authority, and this flag is its copy on the serving pointer
-                // (Publication.link writes it, unpublish lifts it, the rebuild walk reconciles the two). Measured
-                // 2026-09-12 as the first of a download's four reads on every backing - the probe of a second key
-                // this copy retires.
+                // (Publication.link writes it, unpublish lifts it, the rebuild walk reconciles the two), so a
+                // download does not probe a second key for it.
                 return new Location(State.WITHHELD, null, -1L);
             }
             String hash = pointer.get().hash();
@@ -289,8 +288,7 @@ public final class ServableNames {
             // The blob's length comes off the pointer, never off the blob: a serve sets its Content-Length from it
             // and opens the blob for the bytes, and that open is what proves the blob present (a pointer whose blob
             // is gone answers a clean 404 from the open, never a truncated 200). Step (5) of the javadoc above - the
-            // stat - is therefore the enumeration faces' alone, in state(); measured 2026-09-12 as the fifth of a
-            // download's five reads on every backing, and the one this location no longer pays.
+            // stat - is therefore the enumeration faces' alone, in state(); this location does not pay it.
             return new Location(State.SERVABLE, hash, pointer.get().size());
         } catch (RuntimeException hostile) {
             LOGGER.warn("servable-name probe of {} failed; treating as withheld (fail-closed)", requestPath, hostile);
@@ -341,12 +339,12 @@ public final class ServableNames {
      *
      *  <p><b>The one place this seam does not read the marker.</b> Leg (b) probes the chain per leaf and deliberately
      *  does NOT add the per-leaf pointer read plus {@link Withheld withheld/&lt;hash&gt;} probe {@link #state} and
-     *  {@link #disclosable} now make, because this is the only fan-out face: it would turn one generated
-     *  {@code maven-metadata.xml} into two extra store round-trips per leaf per version, on a read path (&sect;7). It
+     *  {@link #disclosable} make, because this is the only fan-out face: it would turn one generated
+     *  {@code maven-metadata.xml} into two extra store round-trips per leaf per version, on a read path. It
      *  is not a gap for any hold a writer places today - every retroactive sweep links a {@code /quarantine<path>}
      *  pointer beside the marker for a path that carries a {@code publish/} pointer, so leg (a) already screens the
      *  folder - but it is a genuine residual disagreement for a byte-identical SIBLING coordinate, whose version name
-     *  keeps listing while its download now 404s on the marker. Left open, with the cost that decides it, rather
+     *  keeps listing while its download 404s on the marker. Left open, with the cost that decides it, rather
      *  than paid here unmeasured. */
     public boolean disclosableVersionFolder(String folder) throws IOException {
         try {
@@ -372,12 +370,12 @@ public final class ServableNames {
             }
             for (String leaf : leaves) {
                 // held(), not publication.withheld(): both halves of a hold, which is what state() and
-                // disclosable() do and what this face used to lack. The chain alone screens every hold a writer places
+                // disclosable() do. The chain alone screens every hold a writer places
                 // today, because each retroactive sweep links a /quarantine<path> review pointer beside the marker -
                 // so leg (a) above already catches those. What it misses is a byte-identical SIBLING coordinate:
                 // g:b:1.0 publishing the same bytes as a held g:a:1.0 carries no review pointer of its own and no
-                // chain withhold, yet 404s on download because the marker is keyed by content. Its version name kept
-                // listing in maven-metadata.xml - the listing/download disagreement this class exists to prevent.
+                // chain withhold, yet 404s on download because the marker is keyed by content. Its version name would
+                // keep listing in maven-metadata.xml - the listing/download disagreement this class exists to prevent.
                 if (held(folder + "/" + leaf)) {
                     return false;
                 }
@@ -461,12 +459,12 @@ public final class ServableNames {
      * What a serving pointer's body says: the content hash it names, the blob's stored length where the writer
      * recorded one - {@code -1} where it did not - and whether the path is {@linkplain #held held} from serving.
      *
-     * <p>The body of a {@code publish/} or blobs-namespace pointer is the lower-case SHA-256 hex followed, since
-     * 2026-09-12, by a space and the blob's length in decimal bytes: {@code <hash> <length>}. The length is a pure
+     * <p>The body of a {@code publish/} or blobs-namespace pointer is the lower-case SHA-256 hex followed by a space
+     * and the blob's length in decimal bytes: {@code <hash> <length>}. The length is a pure
      * function of an immutable hash - no authority moves, nothing can go stale - and recording it costs no write,
      * the pointer being written anyway; reading it is what lets a download set its {@code Content-Length} without
-     * a stat of the blob, and a {@code HEAD} answer without touching the blob at all. A pointer written before the
-     * length was recorded parses with {@code -1}: it is served without a length (a chunked body, a {@code HEAD}
+     * a stat of the blob, and a {@code HEAD} answer without touching the blob at all. A pointer without a length
+     * parses with {@code -1}: it is served without a length (a chunked body, a {@code HEAD}
      * without {@code Content-Length}) until the reconcile pass regenerates it with one, and is never read through a
      * stat on the request path - a fallback there would be the very read the length exists to remove. The OCI
      * tag-pointer dialect ({@code sha256:<hex>}) carries no length and never will; its blobs are served by digest
@@ -476,7 +474,7 @@ public final class ServableNames {
      * path half of a hold, copied onto the serving pointer from the {@code /quarantine<path>} review pointer that
      * placed it - written when that review pointer is linked, lifted when it is unpublished, and brought back into
      * line by the rebuild walk should a crash separate the two writes - so a serve answers 404 for a held path off
-     * the one pointer it reads anyway, where it used to probe the review pointer as a second key on every download.
+     * the one pointer it reads anyway, rather than probing the review pointer as a second key on every download.
      * The review pointer stays the queue and the authority (the review screens, the hold lifecycle and the miss-path
      * guard read it); the flag is the read path's copy of it and nothing decides from the flag alone but a serve.
      * A body carrying only the hash and the token ({@code <hash> held}) is a held pointer whose length was never
@@ -558,8 +556,8 @@ public final class ServableNames {
 
     // ---- the enumeration face lives beside the bounded traversal primitives ----
     //
-    // There is deliberately no "decorate my page consumer" helper here any more. A decorator is opt-in: a surface that
-    // pages the store itself can always forget to wrap its consumer, which is the disclosure class (C3) this seam
+    // There is deliberately no "decorate my page consumer" helper here. A decorator is opt-in: a surface that
+    // pages the store itself can always forget to wrap its consumer, which is the disclosure class this seam
     // exists to end. The screened-enumeration face is build.jenesis.repository.walk.ScreenedNames, which owns the
     // paging - a caller hands it a container and receives ONLY disclosable names, and cannot obtain the raw ones - and
     // routes every per-name verdict back through the methods above. It lives in the walk module because that is where

@@ -51,7 +51,7 @@ import module java.base;
  *       same clause instead of declaring its own.</li>
  *   <li><b>Streaming.</b> The callback receives a descriptor and the scoped store, never the artifact bytes. An
  *       observer that needs content re-opens {@code blobs/<hash>} through the store and streams it; it must never
- *       materialise an artifact (&sect;1), and anything slow belongs in a background worker this callback only leaves
+ *       materialise an artifact, and anything slow belongs in a background worker this callback only leaves
  *       a small durable note for.</li>
  *   <li><b>Tenant scoping.</b> The {@link ArtifactStore} handed in is already scoped to the tenant and repository the
  *       artifact was published into; an observer records its derived state through that store and must not reach for

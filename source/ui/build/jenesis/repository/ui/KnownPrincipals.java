@@ -10,10 +10,10 @@ import build.jenesis.repository.server.spi.Authorization;
  *
  * <h2>The problem it exists for</h2>
  * A person is named here by a provider-qualified stable id - {@code oidc/8f3c1a...}, a subject an identity provider
- * mints and nobody can guess, remember or type. Granting access therefore used to need somebody to obtain that
- * opaque string out of band, and the console made it worse by refusing the sign-in that would have produced it: the
- * deployment had never seen the person, so there was nothing to grant to, and there never would be. That is the
- * chicken-and-egg an open sign-in dissolves, and this is the half that turns it into an administrator's list rather
+ * mints and nobody can guess, remember or type. Granting access would need somebody to obtain that opaque string out
+ * of band, and a console that refused the sign-in that would produce it would make it worse: the deployment would
+ * never have seen the person, so there would be nothing to grant to, ever. That is the chicken-and-egg an open
+ * sign-in dissolves, and this is the half that turns it into an administrator's list rather
  * than a string somebody has to be told.
  *
  * <h2>Where a sighting lives</h2>

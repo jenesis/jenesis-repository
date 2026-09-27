@@ -9,11 +9,10 @@ import build.jenesis.repository.store.ArtifactStore;
  * The trust a deployment gets from its own configuration: the keys an operator supplied and the signers they pinned.
  *
  * <p>It reads the effective per-tenant lookup it is handed - the same one every gate dimension is built from - rather
- * than the process environment or a store of its own. That distinction cost real time: a dial written through
+ * than the process environment or a store of its own. The distinction matters: a dial written through
  * {@code PUT /api/settings/{key}} reaches the gate through the live snapshot and never changes the boot environment,
- * so an earlier version reading {@code Features.settings()} answered "no keys configured" for a deployment whose
- * operator had configured them, and every signature reported untrusted while the settings screen showed the keyring
- * plainly.
+ * so reading {@code Features.settings()} would answer "no keys configured" for a deployment whose operator had
+ * configured them, and every signature would report untrusted while the settings screen showed the keyring plainly.
  *
  * <p>It holds no durable state, so the store is ignored here: continuity - who signed a coordinate's earlier versions
  * - is a store-backed provider's to answer.

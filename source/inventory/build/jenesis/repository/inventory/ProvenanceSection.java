@@ -11,18 +11,18 @@ import build.jenesis.repository.metadata.Signal;
  * The {@code provenance} summary section codec of the consolidated metadata document: the per-coordinate
  * <em>summary</em> of a version's provenance - whether its attestation verified against a trusted signer and the
  * SHA-256 of the subject it bound - pointing at, but never duplicating, the content-keyed attestation cache
- * ({@code provenance-attestation/<sha256>/<path digest>}) that stays separate by design (§8). Unlike the {@code licenses} and
- * {@code published} sections, this summary has no prior sidecar to migrate: it is newly derived at publish from the
- * gate's attestation verdict, so the cutover ships its codec and its publish-time write with no migration sweep.
+ * ({@code provenance-attestation/<sha256>/<path digest>}) that stays separate by design. Unlike the
+ * {@code licenses} and {@code published} sections, this summary is derived at publish from the gate's attestation
+ * verdict alone.
  *
  * <p>The {@code data} payload is {@code {"verified":<bool>, "sha256":<hex>}}. The section's {@link Signal} realises the
- * §6 gate-mirror at the envelope: an <em>unverified</em> summary carries a <strong>non-blocking WARNING</strong>
+ * gate-mirror at the envelope: an <em>unverified</em> summary carries a <strong>non-blocking WARNING</strong>
  * signal, a verified one is neutral. The {@link Severity} enum has no {@code WARNING} band, so the warning maps to
  * {@link Severity#LOW} - the lowest visible band, deliberately below any "reject HIGH and above" gate threshold, so the
  * signal surfaces and can contribute to a verdict without ever hard-failing a release on its own. Admission enforcement
  * (holding an unsigned artifact) stays the gate's own {@code AttestationPolicy} hold path, untouched; this summary is a
  * durable, GUI-facing fact plus a soft signal, not a second blocking verdict. All methods are pure and return a fresh
- * {@link Section} (§11).
+ * {@link Section}.
  */
 public final class ProvenanceSection {
 
@@ -61,7 +61,7 @@ public final class ProvenanceSection {
     }
 
     /** A provenance summary section for the given verdict: neutral when verified, a non-blocking WARNING
-     *  ({@link Severity#LOW}) when not (§6 gate-mirror). */
+     *  ({@link Severity#LOW}) when not (the gate-mirror). */
     public static Section section(boolean verified, String sha256, Instant updated) {
         ObjectNode data = JSON.createObjectNode();
         data.put(VERIFIED_FIELD, verified);

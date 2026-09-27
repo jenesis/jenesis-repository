@@ -10,10 +10,10 @@ import build.jenesis.repository.store.ArtifactStore;
  * The {@link PullThroughHooks} for the dispatcher-direct proxy leg (demo seeding, the {@link
  * build.jenesis.repository.server.FormatDispatcher} loop) whose {@code screenFetch} decorates the miss-leg fetcher with
  * the DEFAULT-strength {@link ProxyScreen} over a supplied gate and store - the SAME decorator the router's DEFAULT
- * fallbacks screen through. It closes the #79 gap that a demo/dispatcher-direct proxy leg pulls through
- * <em>unscreened</em> since the embedded per-format publish screen was demoted to layout-only: no screening code is
- * added to {@code DemoSeeder}/{@code FormatDispatcher}, and no embedded per-format publish screen is
- * reintroduced - the compliance gate screens the proxy leg exactly like production.
+ * fallbacks screen through. Without it a demo/dispatcher-direct proxy leg would pull through <em>unscreened</em>,
+ * since a format's own publish path only lays out: no screening code is added to
+ * {@code DemoSeeder}/{@code FormatDispatcher}, and no per-format publish screen is embedded - the compliance gate
+ * screens the proxy leg exactly like production.
  *
  * <p>The gate is resolved lazily per request, so a gate armed just before a seed (the demo gate config the {@code demo}
  * flag layers in) is the one that screens, and on the serving dispatcher it is the requesting tenant's own ({@link

@@ -23,9 +23,8 @@ import build.jenesis.repository.store.LineDocument;
  *
  * <p>The marker is a {@link LineDocument} - a magic and a version, then a named field per line - so this primitive
  * stays in a {@code java.base}-light module beside {@link InheritedBound} rather than pulling a JSON library in for
- * three fields, and does not carry its own codec for them: it used to, as three positional lines under the magic,
- * which was the shape {@code LineDocument} was written to absorb. A marker that does not parse - a torn write, an
- * older positional or JSON marker from before this shape - reads as <em>unbuilt</em>, exactly as an absent one does:
+ * three fields, and does not carry its own codec for them. A marker that does not parse - a torn write, a marker
+ * of another shape - reads as <em>unbuilt</em>, exactly as an absent one does:
  * the next rebuild writes a fresh generation and the read falls back until it lands, which is the same self-heal a
  * torn generation already had.
  */

@@ -14,9 +14,8 @@ import org.springframework.context.annotation.Import;
 /**
  * Boots the repository AND the console as one application, off the bundle module path.
  *
- * <p>There used to be two launchers here, selected by {@code MAINCLASS}: this one for the server and a
- * {@code Console} beside it, each with its own config file and its own port. One image that has to be told which
- * half to be is an indirection nobody wants - so there is now one entry point, one config file
+ * <p>One image that has to be told which half to be is an indirection nobody wants - so there is one entry point,
+ * one config file
  * ({@code bundle.properties}, named explicitly because two modules on this path carry a root
  * {@code application.properties}) and one port.
  *

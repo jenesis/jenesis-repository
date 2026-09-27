@@ -29,12 +29,12 @@ import module java.base;
  *       decision an additive SPI needs before it can be guarded. The one discovery site is
  *       {@link ObservabilityReport#discover()}; a consumer that needs to control the set collects through
  *       {@link ObservabilityReport#from} with an explicit list instead of loading the service a second time.</li>
- *   <li><b>Tenant scoping (§6).</b> The report is deployment-global: it is collected once per scrape or render with no
+ *   <li><b>Tenant scoping.</b> The report is deployment-global: it is collected once per scrape or render with no
  *       tenant in scope and is served to an operator, so a signal's name, description and value must carry no
  *       tenant's artifact content and no per-tenant identifier. A plugin whose state is per-tenant reports the
  *       deployment-level roll-up here (a count, a worst-of health) and leaves the per-tenant breakdown to a
  *       tenant-scoped surface.</li>
- *   <li><b>Read purity.</b> These are read-path methods (§10): they render state the plugin has already
+ *   <li><b>Read purity.</b> These are read-path methods: they render state the plugin has already
  *       computed and must perform no external fetch, no scan, no store write and no blocking I/O. A health check
  *       reports what the last refresh recorded, so the overview still stands when the source it describes is down.</li>
  *   <li><b>Staleness.</b> A signal derived from a periodic refresh carries its own freshness rather than leaving an

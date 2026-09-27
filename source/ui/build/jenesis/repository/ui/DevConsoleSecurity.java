@@ -16,13 +16,12 @@ import org.springframework.security.web.SecurityFilterChain;
  * it, and a chain scoped and authorized by the edition's own {@link DevConsolePolicy}. Active only under the
  * {@code dev} profile; the production chains are {@code @Profile("!dev")} and are untouched by this.
  *
- * <h2>One chain, because two had drifted</h2>
+ * <h2>One chain, because two drift</h2>
  *
- * <p>Each console used to declare its own. They agreed on nothing that mattered and nobody could see it, because
- * the differences were all in the dev profile: form login pointed at a page with no form on it in one and at
- * Spring Security's generated page in the other, and the loopback guard was on one of them. The guard is the sharp
- * one - a dev profile enables in-memory accounts with known passwords, and both do, so binding either to a routable
- * interface is the same mistake.
+ * <p>A chain per console would drift where nobody sees it, because the differences are all in the dev profile: form
+ * login pointed at a page with no form on it, or at Spring Security's generated page, and the loopback guard on one
+ * of them only. The guard is the sharp one - a dev profile enables in-memory accounts with known passwords, and both
+ * consoles do, so binding either to a routable interface is the same mistake.
  *
  * <h2>The form is a mechanism, not a special case</h2>
  *

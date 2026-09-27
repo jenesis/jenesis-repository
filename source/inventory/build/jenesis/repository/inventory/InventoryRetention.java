@@ -11,11 +11,11 @@ import build.jenesis.repository.store.ArtifactStore;
  * operator must never get. The facade owns the seam - {@code readRetention}/{@code writeRetention} delegate here - and
  * this class shares the facade's compare-and-set {@code writeVersioned}.
  *
- * <p><strong>The key sits at repository scope, where the data does.</strong> It used to be
- * {@code config/retention} - a per-repository object spelled with the name of the deployment-global reserved root, so
- * it read like a shared claim while being nothing of the kind, and it sat outside {@link InventoryStorageNamespace}'s
- * declaration because no declaration could describe it: {@code config/} is not a per-repository space. Under
- * {@code retention} it is an ordinary owned prefix beside {@code downloaded}, {@code identity} and {@code sizes}, so
+ * <p><strong>The key sits at repository scope, where the data does.</strong> Spelled under {@code config/} - the
+ * name of the deployment-global reserved root - it would read like a shared claim while being nothing of the kind,
+ * and no {@link InventoryStorageNamespace} declaration could describe it, since {@code config/} is not a
+ * per-repository space. Under {@code retention} it is an ordinary owned prefix beside {@code downloaded},
+ * {@code identity} and {@code sizes}, so
  * purging the inventory module reclaims every repository's deletion policy instead of leaving it behind.
  */
 final class InventoryRetention {

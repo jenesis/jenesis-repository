@@ -42,7 +42,7 @@ public final class ProxyScreen {
 
     /** The most bytes screened from a claimed proxied artifact: a claimed artifact is a metadata document or a small
      *  archive by the inspectors' nature, whose declaration sits at the front, so a bounded prefix carries everything
-     *  they read while a pathologically large jar can no longer be pulled whole into a {@code byte[]} to gate it on
+     *  they read while a pathologically large jar is never pulled whole into a {@code byte[]} to gate it on
      *  the proxy leg. Beyond the cap the remainder streams straight through to the client/store, never buffered.
      *  <p>It is the SPI's prefix tier itself, not a screen-local copy of the same number: the {@code byte[]} legs are
      *  contractually handed at most that much, and {@link #assessSubjects} decides whether the inspectors saw the
@@ -57,12 +57,9 @@ public final class ProxyScreen {
      *  fails the read loudly rather than pulling a multi-gigabyte companion into a heap {@code byte[]} on the gateway
      *  thread. A bounded read is capped at its own requested limit by {@link SiblingLookup#fetchBounded}, streamed from
      *  the source, and is not subject to this ceiling at all.
-     *  <p>It <em>is</em> the sibling cap rather than a copy of the same number. This constant used to hold
-     *  its own {@code 8 * 1024 * 1024} and a comment saying it "mirrors" free {@code Publication.LARGEST_SIBLING},
-     *  which was all the equality could ever be while the constant was private - two numbers that had to be kept
-     *  equal by hand across two repositories. The free core now publishes it, so the publish leg (which reads through
-     *  {@link build.jenesis.repository.store.PublishInterceptor.Content#sibling(String)}, capped there) and this proxy
-     *  leg now cannot drift on what "too large to read whole" means. */
+     *  <p>It <em>is</em> the sibling cap rather than a copy of the same number, so the publish leg (which reads
+     *  through {@link build.jenesis.repository.store.PublishInterceptor.Content#sibling(String)}, capped there) and
+     *  this proxy leg cannot drift on what "too large to read whole" means. */
     static final int SIBLING_LIMIT = PublishInterceptor.Content.LARGEST_SIBLING;
 
     /** The reason line an incompletely screened artifact carries - one constant, so the durable {@link QuarantineLog}
@@ -71,7 +68,7 @@ public final class ProxyScreen {
             + "before the whole artifact was screened, so this decision covers only the part that was read";
 
     /** Screens that reached an {@code ALLOW} over an artifact an inspector could not read to the end, since the
-     *  gateway started - the {@code jenreg.gateway.screen.incomplete} counter (§9). Static so every per-request screen
+     *  gateway started - the {@code jenreg.gateway.screen.incomplete} counter. Static so every per-request screen
      *  contributes to the one gateway-wide count {@link HardeningObservability} reports, exactly as the hardened leg's
      *  drift alarm does. It counts the served ones only: a withheld artifact already carries the fact in its durable
      *  quarantine row. */
@@ -167,8 +164,8 @@ public final class ProxyScreen {
             public Optional<ProxyFormat.Head> head(URI url, Map<String, String> headers) throws IOException {
                 // Delegated to the transport's real HTTP HEAD, never derived: a derivation would open (and this screen
                 // would then READ) an artifact body to answer a question about metadata, screening a prefix and even
-                // quarantining/logging from a request that asked for no bytes (Principle 1: a HEAD answers from
-                // metadata). A screen is a decorator, so it is never a Fetcher.Buffered.
+                // quarantining/logging from a request that asked for no bytes (a HEAD answers from metadata). A
+                // screen is a decorator, so it is never a Fetcher.Buffered.
                 Optional<ProxyFormat.Head> head = delegate.head(url, headers);
                 if (head.isEmpty() || head.get().status() != 200) {
                     return head;   // a transport failure or an upstream miss - nothing exists to screen or disclose
@@ -287,7 +284,7 @@ public final class ProxyScreen {
             subjects = inspect(path, body);
         } catch (MalformedArtifactException malformed) {
             // A proxied artifact an inspector claimed but could not parse (a corrupt .nupkg/.gem/.rpm/.deb pulled from
-            // upstream) must never 500 the fetch nor be served silently (§5, §9, §10). Screen it from its
+            // upstream) must never 500 the fetch nor be served silently. Screen it from its
             // path-derived coordinate against the operator deny-list (so a deny-listed coordinate delivered as a corrupt
             // body is still withheld), with the immaturity hold on top, and log the failure - never a silent serve.
             // (The hardened proxy leg is stricter: it REFUSES an unparseable body rather than falling back - see
@@ -367,7 +364,7 @@ public final class ProxyScreen {
         if (!inspection.complete()) {
             // The screen reached a decision over less than the whole artifact. It is recorded on the outcome either
             // way, so a withholding names it among its reasons and an ALLOW is counted and logged rather than filed as
-            // a clean whole-body screen (§9: a fact that would change what a reviewer concludes is never swallowed).
+            // a clean whole-body screen (a fact that would change what a reviewer concludes is never swallowed).
             // It deliberately does not change the verdict: an inspector whose bound was reached may only under-declare
             // (the CONTENT_FINDINGS reading), so withholding every artifact a scanner could not finish would hold the
             // repository closed on ordinary large ones.

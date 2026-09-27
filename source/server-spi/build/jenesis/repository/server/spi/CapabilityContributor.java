@@ -13,8 +13,8 @@ import module java.base;
  * then {@link #merge merges} every discovered contributor into it. With no contributor installed - the product -
  * the served map is exactly the base map, byte-for-byte unchanged. A distribution adds capabilities simply by shipping
  * a module that {@code provides build.jenesis.repository.server.spi.CapabilityContributor with ...}; the server already
- * {@code uses} it, so no core change is needed. It replaces the former {@code WebMvcRegistrations} mapping-suppression
- * stopgap that dropped the mapping so a downstream controller could own the same path.
+ * {@code uses} it, so no core change is needed, and no downstream controller has to suppress the mapping to own the
+ * same path.
  *
  * <h2>Merge / precedence rule</h2>
  * Contributors <b>extend</b> the base map; they never shadow it. On a key conflict the <b>base key always wins</b>, and
@@ -31,19 +31,19 @@ import module java.base;
  * outcome and additionally <b>names every contribution it refused</b>, in the returned {@link Merged} report and in the
  * served body itself, under {@value #CONFLICTS_KEY}.
  *
- * <p><b>Why it reports rather than throws.</b> Throwing on a collision was the other candidate, and on the face of it
- * the more fail-fast one (&sect;9). It loses on where this code runs. {@code merge} is not a resolution or startup step
+ * <p><b>Why it reports rather than throws.</b> Throwing on a collision is the other candidate, and on the face of it
+ * the more fail-fast one. It loses on where this code runs. {@code merge} is not a resolution or startup step
  * that could refuse a bad deployment before it serves anything; it runs <em>inside the request</em>, on every GET of
  * {@code /api/capabilities}. An exception there is not a boot failure that an operator fixes once - it is a permanent
  * 500 on the one endpoint whose entire job is to tell a client what this deployment can do, and the first casualties
  * are the base flags the precedence rule exists to protect: a console could no longer learn that the deployment is
- * read-only or that auth is on, because an optional plugin misspelled a key. That is precisely &sect;3's line - an
- * optional module must never be able to take a core surface down, its presence no more than its absence - and a
+ * read-only or that auth is on, because an optional plugin misspelled a key. An optional module must never be able
+ * to take a core surface down, its presence no more than its absence - and a
  * contributor's key-naming mistake is not worth the product's own capability advertisement.
  *
- * <p>Reporting satisfies &sect;9 on its own terms: the silent-drop &sect;9 forbids is a failure whose loss changes what
+ * <p>Reporting satisfies fail-fast on its own terms: the forbidden silent drop is a failure whose loss changes what
  * is served with nothing logged, countered or surfaced, and this is logged, returned as data, and surfaced in the body.
- * It is also the shape the plan's bound-visibility gate already prescribes for exactly this class of outcome - an
+ * It is also the shape the bound-visibility rule prescribes for exactly this class of outcome - an
  * explicit result the caller cannot miss, rather than an exception - and it leaves fail-fast available where fail-fast
  * is safe: a contributor that knows a priori which keys it may not claim can still refuse at the point it builds its
  * contribution, long before the merge sees it.
@@ -53,7 +53,7 @@ import module java.base;
  * not swallowing it - nothing about the failure is lost, it is simply delivered as data instead of as a dead endpoint.
  * The one failure that is deliberately <em>not</em> contained here is a contributor that will not instantiate at all:
  * that is a {@link ServiceLoader} resolution failure over a module path the operator assembled, it raises before this
- * method is reached, and per &sect;9 a selected-but-unusable module must fail loudly rather than quietly serve less.
+ * method is reached, and a selected-but-unusable module must fail loudly rather than quietly serve less.
  *
  * <h2>Contract</h2>
  * <ol>
@@ -70,8 +70,8 @@ import module java.base;
  *       no-op-by-absence guarantee.</li>
  *   <li><b>Selection failure.</b> There is no selection: the policy is additive, every discovered contributor is
  *       merged, and there is no configuration key that names one. A contributor module the operator put on the path
- *       but that cannot be instantiated fails at {@link ServiceLoader} resolution and is not silently skipped
- *       (&sect;9); a contributor that instantiates but cannot compute is contained and reported (see above).
+ *       but that cannot be instantiated fails at {@link ServiceLoader} resolution and is not silently skipped;
+ *       a contributor that instantiates but cannot compute is contained and reported (see above).
  *       <p>Unlike the named singleton SPIs beside it, this one does <em>not</em> resolve through the shared
  *       {@code Providers} primitives. Not because it could not be keyed: {@code Providers.all} takes the name as a
  *       function rather than requiring a {@code name()} method, and this merge already computes a per-contributor
@@ -92,7 +92,7 @@ import module java.base;
  *       every other contribution are served intact.</li>
  *   <li><b>Read purity.</b> {@link #capabilities} answers a GET, so it renders state the process already holds -
  *       installed modules, resolved settings, discovered providers. It performs no external fetch, no scan and no
- *       write, and the endpoint must still answer when an upstream a capability describes is down (&sect;10).</li>
+ *       write, and the endpoint must still answer when an upstream a capability describes is down.</li>
  *   <li><b>Lifecycle / ownership.</b> Instances are created by {@link ServiceLoader} from a public no-arg constructor
  *       and are not cached across requests, so a contributor owns no threads, clients or connections and has nothing
  *       to close. A contributor needing live application state bridges it in through a static holder rather than
@@ -101,11 +101,11 @@ import module java.base;
  *       appended in <b>contributor-class-name order</b>, then the diagnostic keys last. Among contributors the
  *       first in that order wins a contested key. The reports are deterministic: conflicts appear in contributor class-name order and, within one
  *       contribution, sorted by key, so an unordered contributed map cannot make the report shuffle between
- *       requests. The determinism now holds <em>across module paths</em> too, which it did not while the winner
- *       was whichever module the loader happened to see first: two distributions claiming one key still must not,
- *       but when they do they now disagree reproducibly rather than per deployment. The conflict report is emitted
- *       either way - it was never the alternative to a stable winner, only the thing that makes the collision
- *       visible once there is one.</li>
+ *       requests. The determinism holds <em>across module paths</em> too, which it would not if the winner were
+ *       whichever module the loader happened to see first: two distributions claiming one key still must not, but
+ *       when they do they disagree reproducibly rather than per deployment. The conflict report is emitted either
+ *       way - it is not the alternative to a stable winner, only the thing that makes the collision visible once
+ *       there is one.</li>
  *   <li><b>Bounded work / cancellation.</b> {@link #capabilities} is on the request path and must be cheap and
  *       bounded - a handful of already-known flags, not an enumeration of stored artifacts. It is given no
  *       cancellation signal, so it must not block.</li>
@@ -179,9 +179,8 @@ public interface CapabilityContributor {
      * <p>It does not cache - this SPI's lifecycle clause says so, and that is the convention: a caller on a
      * repeated path holds the list itself and hands it to {@link #merge}. {@code GET /api/capabilities} is such a
      * caller, and a busy one: the CLI reads that endpoint on every {@code 404} to tell a capability this
-     * deployment does not carry from a coordinate that is simply absent, which is what its exit code 3 means. It
-     * held nothing before this existed, because the only way in was {@link #resolve}, which discovers on every
-     * call.
+     * deployment does not carry from a coordinate that is simply absent, which is what its exit code 3 means.
+     * {@link #resolve} discovers on every call, so this is the face such a caller holds.
      */
     static List<CapabilityContributor> installed() {
         return ServiceLoader.load(CapabilityContributor.class).stream()

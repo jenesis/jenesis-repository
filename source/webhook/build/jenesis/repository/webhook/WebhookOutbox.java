@@ -14,7 +14,7 @@ import tools.jackson.databind.json.JsonMapper;
  * <p>What is the webhook module's here is the {@link Entry} - the event, its detail and which endpoints have taken
  * it - and its identity, a stamp of the occurrence milli and a digest of the event so distinct events never collide
  * and an exact re-emit within the same milli dedupes to one entry. The id is already a safe object name, so it is
- * stored under itself. The protocol is the shared class's; this file no longer carries a copy of it.
+ * stored under itself. The protocol is the shared class's; this file carries no copy of it.
  */
 public final class WebhookOutbox extends build.jenesis.repository.outbox.Outbox<WebhookOutbox.Entry> {
 

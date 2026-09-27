@@ -5,10 +5,10 @@ import module java.base;
 /**
  * Why a migration walk stopped, classified rather than collapsed.
  *
- * <p>Every connector used to answer the same {@link IOException} whichever way an incumbent refused it, so the only
- * difference between "your token expired", "that repository does not exist" and "the instance is restarting" was the
- * prose in the message - and a caller (an import job deciding whether to retry, a console deciding what to tell the
- * operator, an edition wiring a backoff) had nothing to key on but string matching. This exception carries the one
+ * <p>A bare {@link IOException} whichever way an incumbent refused would leave the prose in the message as the only
+ * difference between "your token expired", "that repository does not exist" and "the instance is restarting" - and
+ * a caller (an import job deciding whether to retry, a console deciding what to tell the operator, an edition wiring
+ * a backoff) would have nothing to key on but string matching. This exception carries the one
  * fact those callers need:
  *
  * <ul>

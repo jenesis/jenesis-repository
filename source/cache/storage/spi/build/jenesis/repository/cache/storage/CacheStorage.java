@@ -40,7 +40,7 @@ import build.jenesis.repository.walk.Traversal;
  *     the one place this SPI does use {@code null} as a sentinel, deliberately, because a version token is opaque
  *     and has no "absent" value of its own. {@link #read} is the exception: streaming an absent entry throws
  *     {@link IOException} rather than producing an empty body a client would cache as a hit.</li>
- * <li><b>Addressability (&sect;6, &sect;13).</b> An address that cannot be stored is refused before any I/O, by the
+ * <li><b>Addressability.</b> An address that cannot be stored is refused before any I/O, by the
  *     one shared predicate every backend already applies when it enumerates: {@link #store} rejects an entry that
  *     is not a {@link Names#isEntry valid project plus two hex segments}, and the config-tree methods reject a path
  *     that is not a {@link Names#isPath traversal-free relative path} (or, for the project-config pair, a
@@ -49,13 +49,13 @@ import build.jenesis.repository.walk.Traversal;
  *     readable and deletable. Without this clause a filesystem backend refuses what an object store stores
  *     literally - and an object stored at a non-hex or traversal-shaped key is invisible to every enumeration, so
  *     it is never counted toward a size cap, never aged out by the ttl and never reclaimed.</li>
- * <li><b>Streaming (&sect;1).</b> {@link #read} and {@link #store} stream: an entry blob is never fully materialised
+ * <li><b>Streaming.</b> {@link #read} and {@link #store} stream: an entry blob is never fully materialised
  *     in heap by the backend, whatever its size. Only the small {@link Properties} documents are read whole.</li>
- * <li><b>Tenant scoping (&sect;6).</b> {@link #scope} is the only tenant boundary and it is a confinement, not a
+ * <li><b>Tenant scoping.</b> {@link #scope} is the only tenant boundary and it is a confinement, not a
  *     hint: a scoped view can neither read nor write outside its subspace, and a sibling scope observes none of its
  *     projects, entries or config files. The tenant must be a {@link Names#isTenant valid tenant name}, which is
  *     what makes it a traversal-free segment; anything else throws {@link IllegalArgumentException}.</li>
- * <li><b>Error visibility (&sect;9).</b> {@link #delete}, {@link #stamp} and the {@code read*} methods are
+ * <li><b>Error visibility.</b> {@link #delete}, {@link #stamp} and the {@code read*} methods are
  *     best-effort and may swallow a backend failure: their blast radius is an entry that stays stored a little
  *     longer, a recency stamp that does not advance, or a project treated as unconfigured. A failure on
  *     {@link #store}, {@link #writeConfig}, {@link #writeFile} or {@link #writeFileVersioned} must surface, because
@@ -65,7 +65,7 @@ import build.jenesis.repository.walk.Traversal;
  *     to run out of" and therefore switches the sweep off entirely, letting the volume ratchet toward a permanent
  *     {@code 507}. A backend that has a volume and cannot measure it throws naming what it could not measure; it
  *     never borrows the sentinel of a backend that has no volume at all.</li>
- * <li><b>Read purity (&sect;10).</b> Every read renders stored state; no read path provisions containers, rewrites
+ * <li><b>Read purity.</b> Every read renders stored state; no read path provisions containers, rewrites
  *     recency-bearing metadata beyond {@link #stamp}, or reaches outside the backend.</li>
  * <li><b>Staleness.</b> {@link Stored#recency} is the answer to "when was this last used": the newest stamp where the
  *     entry has one and the write time the backend reports where it has none, on every backend alike, so an

@@ -5,7 +5,7 @@ import module tools.jackson.databind;
 import module org.slf4j;
 
 /**
- * The consolidated, versioned, tagged per-coordinate metadata document (§5): a top-level {@code format} version and
+ * The consolidated, versioned, tagged per-coordinate metadata document: a top-level {@code format} version and
  * a {@code sections} object mapping each contributor's tag to its {@link Section} envelope. This value type owns
  * the reader-tolerance and round-trip-fidelity contract - the generalisation of {@code StoreFindings}' carried-rows
  * model to the <em>section</em> level.

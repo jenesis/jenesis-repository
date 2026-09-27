@@ -37,9 +37,9 @@ final class OciListings {
      * as it answers {@code false}.
      *
      * <p>The document is consumed in the parser's bounded read buffer and never materialised. That is the whole
-     * point: {@code tags/list} and {@code _catalog} answer a window of a few names, and the code that cut that
-     * window used to read the entire document into a byte array and split it into a map of every name in it - so
-     * a repository with half a million tags paid for all of them to answer a request for a hundred. A visitor that
+     * point: {@code tags/list} and {@code _catalog} answer a window of a few names, and reading the entire document
+     * into a byte array and splitting it into a map of every name in it would make a repository with half a million
+     * tags pay for all of them to answer a request for a hundred. A visitor that
      * stops also means the parse ends at the window rather than at the end of the document.
      */
     static void names(InputStream body, String member, NameVisitor visitor) throws IOException {
@@ -224,15 +224,14 @@ final class OciListings {
      * Every servable tag of one image, emitted as the store pages them.
      *
      * <p>Paged rather than {@code list}ed, and emitted rather than collected: a tag list is bounded by nothing but
-     * how many tags a user has pushed at one image, so the map this used to build was sized by that and so was the
-     * {@code list} that filled it. The scan hands back children in the store's lexicographic order, which is the
+     * how many tags a user has pushed at one image, so a map or a {@code list} here would be sized by that. The scan
+     * hands back children in the store's lexicographic order, which is the
      * ascending order a {@code Sink} owes and the order the codec and the cursor paging both read the document in.
      *
-     * <p><b>It drains, and saying so is the fix for a ceiling nobody had written down.</b> Unbounding the entry cap
-     * alone left the default thousand round-trips in place, so a thousand pages of a thousand names put a hard stop
-     * at a million tags - and the stop was a {@code STEPS} traversal failure surfacing as a 500, not a short answer.
-     * Memory was never the problem: the canary that found this reported no {@code OutOfMemoryError} at all, because
-     * the generator streams exactly as intended. It was the guard around the streaming that could not go that far.
+     * <p><b>It drains.</b> Unbounding the entry cap alone would leave the default thousand round-trips in place, so a
+     * thousand pages of a thousand names would put a hard stop at a million tags - a {@code STEPS} traversal failure
+     * surfacing as a 500, not a short answer. Memory is not the constraint, because the generator streams; the guard
+     * around the streaming is.
      */
     private void generateTags(String name, StoredListing.Generator.Sink sink) throws IOException {
         BoundedChildren.draining()
@@ -302,8 +301,8 @@ final class OciListings {
      * <p>The case this exists for is a <b>migration</b>. {@link OciImporter} lays a source registry out directly -
      * a tag becomes an {@code oci/<name>/tags/<tag>} pointer without a push through this format - so after an
      * import every pointer is present and no tag list is. The repair pass regenerates listings that exist and so
-     * has nothing to claim, and the first {@code tags/list} generates the document inline: measured at 200,000
-     * tags, <b>35 seconds</b> on a request thread against 186 ms once it exists.
+     * has nothing to claim, and the first {@code tags/list} generates the document inline: at 200,000 tags, on the
+     * order of <b>35 seconds</b> on a request thread against a fraction of a second once it exists.
      *
      * <p>Under {@link StoredListing.Rebuilder.Scope#MISSING} an image whose tag list is already stored is skipped
      * on a header probe, so a converged registry does no work and the repair pass stays read-first. Under

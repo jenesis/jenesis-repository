@@ -14,11 +14,11 @@ import build.jenesis.repository.store.PublicationObserver;
  * counterpart without this module knowing which of them happened. A format's own deploy, a staging promotion and a
  * proxied caching all feed it without the event seam touching a format.
  *
- * <p><b>Why this lives in the SPI's home module rather than in a delivery module.</b> It used to be
- * {@code WebhookPublicationObserver}, provided by {@code webhook}, and it wrote its note straight into
- * {@code WebhookOutbox} - so {@code PUBLISH} and {@code UNPUBLISH} never travelled {@link EventSink#emit} at all, and
- * a second sink added to a deployment would silently have received five of the seven {@link EventType} constants while
- * the seam's own preamble claimed every installed sink observes the event. A producer belongs beside the seam it
+ * <p><b>Why this lives in the SPI's home module rather than in a delivery module.</b> An observer inside one
+ * delivery module that wrote straight into that module's outbox would keep {@code PUBLISH} and {@code UNPUBLISH}
+ * off {@link EventSink#emit}, so a second sink added to a deployment would silently receive only some of the
+ * {@link EventType} constants while the seam claimed every installed sink observes the event. A producer belongs
+ * beside the seam it
  * produces into, not inside one of its consumers: here, every installed sink sees a publish, and a deployment that
  * swaps its delivery module keeps its publish notifications. The events module is required by every producer module,
  * so the producer is present exactly when the seam is.

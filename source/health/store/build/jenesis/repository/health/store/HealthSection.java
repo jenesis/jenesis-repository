@@ -16,12 +16,12 @@ import build.jenesis.repository.metadata.State;
  * ({@code {"sourceRepository"?:.., "overall":.., "maintenance":.., "review":.., "provenance":..}}); the instant the
  * health was scored rides the envelope's {@code updated} field, the same freshness instant that gates the merge.
  *
- * <p><strong>The monotonic guard is now the section's merge semantics.</strong> A record already carrying a
+ * <p><strong>The monotonic guard is the section's merge semantics.</strong> A record already carrying a
  * {@code scannedAt} (its {@code updated}) newer than or equal to an incoming write is left standing - a stale refresh
  * (a slow sweep finishing after a fresh rescan) never rolls a coordinate's health backwards - preserving the
- * {@code StoreHealthLedger} guard exactly, now as the section owner's own merge inside the shared section-scoped
+ * {@code StoreHealthLedger} guard exactly, as the section owner's own merge inside the shared section-scoped
  * compare-and-set. Idempotent and re-derivable each CAS attempt, as {@link SectionMutation} requires. All methods are
- * pure and never touch their argument (§11).
+ * pure and never touch their argument.
  */
 public final class HealthSection {
 

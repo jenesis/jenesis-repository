@@ -42,7 +42,7 @@ import com.google.api.services.storage.model.StorageObject;
  * A blob is the object at its key; a tenant or repository is a key prefix (see {@link #scope}). A read streams from
  * the media response and a ranged read is a real {@code Range} GET; an upload goes from an owner-only spool file,
  * because the API wants the length up front and the client re-reads the body when it retries a request, which a
- * plain stream cannot give - the shape the S3 store measured as a publish answering 500 under two nodes' contention.
+ * plain stream cannot give - a publish would answer 500 under two nodes' contention.
  *
  * <p>The version token is the object <em>generation</em>: GCS's per-incarnation number, which a delete and re-create
  * never re-issues, so a compare-and-set from before the delete is refused. {@link #writeVersioned} is an insert under

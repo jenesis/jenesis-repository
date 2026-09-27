@@ -246,9 +246,8 @@ public final class Authorization {
     /**
      * A credential lifetime, a rotation overlap or a trust's token ttl as an operator writes it on any surface:
      * blank is none, so the caller's default applies; otherwise a duration in the deployment's one grammar
-     * ({@code P90D}, {@code 90d}, {@code PT12H}). The API, the console and the management surface used to carry
-     * one copy each of this line and of {@link #expiry}, which is how one of them came to accept a spelling the
-     * others refused.
+     * ({@code P90D}, {@code 90d}, {@code PT12H}). The API, the console and the management surface all parse through
+     * this and {@link #expiry}, so none of them can accept a spelling the others refuse.
      */
     public static Duration lifetime(String value) {
         return value == null || value.isBlank() ? null : Durations.parse(value);
@@ -959,8 +958,8 @@ public final class Authorization {
     /** One page of a tenant's credential hashes, in key order: at most {@code limit} names strictly after
      *  {@code after} ({@code null} from the start) and the name to continue from, {@code null} on the last page. The
      *  face a management surface pages through, never the whole listing. It names credentials and nothing else:
-     *  they used to sit directly under the tenant beside its {@code policy} and {@code quota} objects, so this
-     *  listing returned those too and a caller had to know that {@link #credential} answers empty for them. */
+     *  they sit under a kind segment, apart from the tenant's {@code policy} and {@code quota} objects, so a caller
+     *  never has to know that {@link #credential} answers empty for those. */
     public CredentialPage credentials(String tenant, String after, int limit) {
         if (store == null) {
             return new CredentialPage(List.of(), null);
@@ -1385,10 +1384,10 @@ public final class Authorization {
     /**
      * Set the rights for {@code scope} on any subject, replacing any held for that scope.
      *
-     * <p>This was private until each kind became enforceable, on the rule that a caller able to grant to a subject
-     * {@link #authorize} does not resolve would write a row that reads as access and confers none. That is now
-     * true of every kind but {@link Kind#ANONYMOUS}, which still takes its rights from configuration and is
-     * therefore still refused - a security surface may answer "no", but it may not answer "yes" and mean nothing.
+     * <p>A caller able to grant to a subject {@link #authorize} does not resolve would write a row that reads as
+     * access and confers none. Every kind is enforceable but {@link Kind#ANONYMOUS}, which takes its rights from
+     * configuration and is therefore refused - a security surface may answer "no", but it may not answer "yes" and
+     * mean nothing.
      *
      * <p>A {@link Kind#GROUP} grant re-derives the group's members before it returns, so it is in force on the
      * next request rather than at the next repair. That is the cost of the grant rather than of the requests
@@ -1864,10 +1863,10 @@ public final class Authorization {
     /**
      * Read a document, change it, write it back - under compare-and-set, re-reading on a loss.
      *
-     * <p>These writes used to be a plain read-modify-write: read the grants object, set one scope, put the whole
-     * object back unconditionally. Two administrators granting <em>different</em> scopes to one subject at the same
-     * moment therefore raced, and the loser's grant was overwritten with no error and nothing to notice it by -
-     * on the object that decides what a caller may do. It is the shape the project's own rule names: a
+     * <p>A plain read-modify-write - read the grants object, set one scope, put the whole object back
+     * unconditionally - would let two administrators granting <em>different</em> scopes to one subject at the same
+     * moment race, and the loser's grant would be overwritten with no error and nothing to notice it by - on the
+     * object that decides what a caller may do. It is the shape the project's own rule names: a
      * read-modify-write on a store with no atomic update is a compare-and-set through {@link Retries}, which
      * re-reads and re-applies rather than clobbering, and throws when it has genuinely lost rather than pretending
      * it kept the record.
@@ -1971,11 +1970,10 @@ public final class Authorization {
     /**
      * Where one subject's documents live: {@code .system/auth/<tenant>/<kind>/<id>}.
      *
-     * <p>The kind segment is what makes a grant's holder part of the key rather than a convention, and it also
-     * repairs a listing that was wrong: credentials used to sit directly under the tenant, beside that tenant's
-     * {@code policy}, {@code quota} and {@code roles} objects, so enumerating them returned those too and
-     * {@link #credential} answered empty for them. Under a kind segment the enumeration names credentials and
-     * nothing else.
+     * <p>The kind segment is what makes a grant's holder part of the key rather than a convention, and it also keeps
+     * a listing right: directly under the tenant, credentials would sit beside that tenant's {@code policy},
+     * {@code quota} and {@code roles} objects, and enumerating them would return those too. Under a kind segment the
+     * enumeration names credentials and nothing else.
      */
     private static String subjectPath(String tenant, Subject subject) {
         return kindPrefix(tenant, subject.kind()) + "/" + segment(subject.id());
@@ -1984,10 +1982,8 @@ public final class Authorization {
     /**
      * One subject id as one key segment: a slash becomes {@code %2F} and everything else is left alone.
      *
-     * <p>Deliberately the identity for an id that needs no encoding, which is what makes it safe to introduce
-     * over a store that already holds credentials: a hash is hex, so its key is byte-for-byte the key it was
-     * before this existed. Only a principal's provider-qualified id - {@code github/octocat} - is rewritten, and
-     * it had no key before.
+     * <p>Deliberately the identity for an id that needs no encoding: a hash is hex, so its key is the hash itself.
+     * Only a principal's provider-qualified id - {@code github/octocat} - is rewritten.
      *
      * <p>A percent is escaped first, so the encoding is reversible and two different ids cannot collide on one
      * key: without it {@code a%2Fb} and {@code a/b} would both key as {@code a%2Fb}, which on an authorization

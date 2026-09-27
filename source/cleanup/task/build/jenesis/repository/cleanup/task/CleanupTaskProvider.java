@@ -29,8 +29,8 @@ public final class CleanupTaskProvider implements MaintenanceTaskProvider {
      *  build-scan-retention, staging-reap, test-history-retention), so one operator switch paces the whole retention
      *  family; the shared default is stated here in each of them. */
     /** The reaps' cadence, hourly: the whole retention family's dial - four more reapers read the same key with
-     *  the same default, so it has one. Retention, collection and the roll-up no longer run on it; they are
-     *  listeners of the walk, and the reaps left here list their own small spaces. */
+     *  the same default, so it has one. Retention, collection and the roll-up do not run on it; they are
+     *  listeners of the walk, and the reaps here list their own small spaces. */
     static final IntervalSetting INTERVAL = IntervalSetting.of("cleanup-interval", "PT1H");
 
     @Override

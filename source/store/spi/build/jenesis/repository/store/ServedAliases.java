@@ -17,8 +17,8 @@ import java.util.TreeSet;
  * belong to one artifact - and a reviewer who releases the coordinate leaves the module views held, because every
  * mechanism that could have lifted them is reasoning about something else.
  *
- * <p><b>Why the relation has to be recorded rather than inferred.</b> Two inferences were written and measured, and
- * both are unsound. Neither content hash nor coordinate version identifies an alias:
+ * <p><b>Why the relation has to be recorded rather than inferred.</b> Both inferences are unsound. Neither content
+ * hash nor coordinate version identifies an alias:
  *
  * <ul>
  *   <li><b>Same hash is not the same file.</b> Several distinct files of one version routinely share a hash - the

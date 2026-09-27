@@ -53,7 +53,7 @@ import build.jenesis.repository.format.ProxyFormat;
  * A refusal <b>fails the walk</b> rather than dropping the asset. A dropped asset is counted nowhere - not as
  * imported, not as skipped - so a migration off a source aiming its downloads at a metadata service reported
  * {@code completed} over an import that had silently taken nothing. The job records the refusal as its error and keeps
- * its cursor, so an operator reads what was refused and resumes once the source is fixed (&sect;9).
+ * its cursor, so an operator reads what was refused and resumes once the source is fixed.
  *
  * <h2>What this is not</h2>
  * It is not an integrity check, and none is available. The only checksums a migration can see - the Nexus listing's
@@ -78,8 +78,8 @@ public final class ImportScreen implements ProxyFormat.Fetcher {
      * connector, and the reason a connector needs no screen of its own.
      *
      * <p>A missing {@code authorised} URL throws rather than passing the transport through unscreened: there is no
-     * level to judge against, and a screen that quietly becomes a no-op is the failure mode this whole class is about
-     * (&sect;9). {@link ProxyFormat.Fetcher#NONE} is the one thing not wrapped, because it reaches no network at all.
+     * level to judge against, and a screen that quietly becomes a no-op is the failure mode this whole class is about.
+     * {@link ProxyFormat.Fetcher#NONE} is the one thing not wrapped, because it reaches no network at all.
      */
     public static ProxyFormat.Fetcher around(ProxyFormat.Fetcher fetcher, URI authorised) {
         if (fetcher == ProxyFormat.Fetcher.NONE) {

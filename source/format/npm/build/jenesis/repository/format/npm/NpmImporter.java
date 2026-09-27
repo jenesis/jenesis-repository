@@ -42,7 +42,7 @@ public final class NpmImporter implements RepositoryImporter {
     public Optional<ArtifactDescriptor> importTarget(String path) {
         // RepositoryImporter clause 4: a source path is as client-supplied as a request path, so a
         // traversal-shaped one is refused by name rather than echoed into the descriptor the import edge
-        // screens and the trail records (the fix retrofitted here - §13).
+        // screens and the trail records, as every importer does.
         String relative = RepositoryImporter.importablePath(path, "npm");
         // The tarball's target serving coordinate under /npm/<name>/-/<file>, so the import edge screens it against the
         // real npm coordinate NpmFormat parses (the same one the packument points at). Empty for a source
@@ -54,7 +54,7 @@ public final class NpmImporter implements RepositoryImporter {
     public void importArtifact(String path, InputStream stream, ArtifactStore store) throws IOException {
         // RepositoryImporter clause 4: a source path is as client-supplied as a request path, so a
         // traversal-shaped one is refused by name rather than echoed into the descriptor the import edge
-        // screens and the trail records (the fix retrofitted here - §13).
+        // screens and the trail records, as every importer does.
         String relative = RepositoryImporter.importablePath(path, "npm");
         if (!relative.endsWith(".tgz")) {
             return;

@@ -40,10 +40,10 @@ import build.jenesis.repository.store.Features;
  * deployment may reach is an egress decision made where the process is started, not a runtime dial, and an air-gapped
  * deployment sets it {@code off} so no fill waits on a name that cannot resolve.
  *
- * <p>It was also, until it was given one, the last <b>operator-configured outbound target in the product with no screen
- * at all</b>. {@link #base(boolean)} did the &sect;9 half well - a value that is not an http(s) base URL throws at
- * read, naming the key, so an operator who misspelt it is not left believing verification is running - and then
- * admitted plain {@code http}. No credential rides to the checksum database, so this is not the credential-in-cleartext
+ * <p>It is also an <b>operator-configured outbound target, and it is screened</b>. {@link #base(boolean)} fails fast -
+ * a value that is not an http(s) base URL throws at read, naming the key, so an operator who misspelt it is not left
+ * believing verification is running - and it does not admit plain {@code http} without the opt-in. No credential
+ * rides to the checksum database, so this is not the credential-in-cleartext
  * hazard of a proxy upstream; it is the other one, and on this leg it is sharper. A cleartext {@code lookup} is an
  * active intermediary's opportunity to answer <em>every</em> integrity question itself, and this repository then holds
  * a proxied {@code .zip} to whatever that answer said - so one attacker on the path chooses both the module bytes (from
@@ -92,8 +92,8 @@ public final class GoChecksumDatabase {
      * @throws IllegalArgumentException when the key is set to something that is not an {@code http}/{@code https} URL,
      *         or to a cleartext one this deployment has not opted into - an operator who pointed at their own database
      *         and got the spelling (or the scheme) wrong must not be left believing the verification is running
-     *         (&sect;9). It throws rather than declining because this is a <em>configuration</em> fault and not an
-     *         upstream-chosen target: the same shape the malformed-value refusal beside it has always had
+     *         (fail fast). It throws rather than declining because this is a <em>configuration</em> fault and not an
+     *         upstream-chosen target: the same shape the malformed-value refusal beside it has
      */
     public static URI base(boolean allowInternal) {
         String configured = Features.lookup().apply(DATABASE_KEY);

@@ -74,7 +74,7 @@ public final class Lifecycle {
      * {@linkplain #page(ArtifactStore, Disclosure, String, int) flat listing} routes each mark through - the
      * servable-name enumeration seam face (typically
      * {@code inventory.disclosableDisplay(coordinate + ":" + version, HIDE_WITHHELD)}) the operator surface supplies, so
-     * a withheld version's mark is not disclosed on the served view (plan &sect;8 Q3, served-view parity). It is injected
+     * a withheld version's mark is not disclosed on the served view (served-view parity). It is injected
      * rather than reached for here so this dependency-minimal, pure-JDK helper stays free of the inventory: the decision
      * that needs the ecosystem/layout lives in the {@code web} adapter that already carries it. A mark whose coordinate/
      * version the seam classifies not-disclosable (held) is dropped from the listing; every other mark - a

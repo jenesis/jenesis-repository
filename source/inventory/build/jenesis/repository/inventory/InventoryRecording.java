@@ -115,8 +115,7 @@ final class InventoryRecording {
      * One compare-and-set of the version's document carrying every section the recording holds, then one fold of
      * the identity index: on a first publish the member joins with the fingerprint of the licences the document now
      * records, and on a re-publish whose union changed the recorded set the member is re-folded from the old set to
-     * the new, exactly as the separate licence write used to do after its own commit. The recent-releases feed sees
-     * a first publish only, as before.
+     * the new. The recent-releases feed sees a first publish only.
      */
     void commit(Recording recording) throws IOException {
         Instant now = Clocks.now();
@@ -218,10 +217,9 @@ final class InventoryRecording {
      *  re-publish of an existing member refreshes the instant/prerelease (preserving the pin) and returns
      *  {@code false}.
      *
-     *  <p>The fold used to ride the document write's batch as one compare-and-set attempt on the first try only,
-     *  and its outcome was never read: a batch is not a transaction, so under concurrent publishers the document
-     *  committed while the rollup conflicted and the member was gone from the identity until the next reconcile -
-     *  what the identity-drift canary measured over thirty-two writers. Folding after the commit, through the
+     *  <p>The fold does not ride the document write's batch as one unread compare-and-set attempt: a batch is not a
+     *  transaction, so under concurrent publishers the document would commit while the rollup conflicted and the
+     *  member would be gone from the identity until the next reconcile. Folding after the commit, through the
      *  retrying compare-and-set, is one small extra write per first publish. */
     private boolean recordPublishedSection(String ecosystem, String coordinate, String version, boolean prerelease,
                                            Instant published, String originSha256) throws IOException {
@@ -307,7 +305,7 @@ final class InventoryRecording {
     }
 
     /** The publish facts of one coordinate version as a point read of its document's {@code published} section. A
-     *  read never writes (§10). */
+     *  read never writes. */
     Optional<PublishedSection.Facts> publishedFacts(String ecosystem, String coordinate, String version)
             throws IOException {
         Optional<Section> section = metadata.section(ecosystem, coordinate, version, PublishedSection.TAG);

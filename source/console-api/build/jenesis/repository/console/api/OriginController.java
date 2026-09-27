@@ -25,7 +25,7 @@ import org.springframework.web.bind.annotation.RestController;
  * format-coordinate document (a hand upload's {@code local-upload} row) and its path-derived document (a fallback fetch's
  * {@code fallback} row, keyed off the request path its verdict sibling shares), so an uploaded artifact, a
  * fallback-fetched one, and a hybrid's locally-shadowed fallback all read back their full acquisition history here,
- * including a no-store fallback's row that survives durably beside transient bytes that never landed (§1: only the two
+ * including a no-store fallback's row that survives durably beside transient bytes that never landed (only the two
  * small sections are read, never the artifact body).
  */
 @RestController

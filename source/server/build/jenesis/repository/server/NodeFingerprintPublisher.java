@@ -19,9 +19,8 @@ import build.jenesis.repository.store.TenantsProvider;
  * fleet to compare against; the write is a single compare-and-set on this node's own key, so it never contends with
  * another node.
  *
- * <p>The heartbeat runs on this bean's own daemon scheduler, which it starts and closes: it is one of the two
- * periodic drivers core/AGENTS.md names as keeping a private timer rather than riding the composition root's scheduler,
- * because it owns its own lifecycle.
+ * <p>The heartbeat runs on this bean's own daemon scheduler, which it starts and closes: it keeps a private timer
+ * rather than riding the composition root's scheduler because it owns its own lifecycle.
  *
  * <p>The fingerprint is cheap to build: the config generation is a hash over the must-match settings <em>and the
  * tenant set</em>, read through the {@link Tenants} view on every heartbeat (a directory read, never a scan) so a node
@@ -38,10 +37,9 @@ public final class NodeFingerprintPublisher implements AutoCloseable {
     private static final Logger LOGGER = LoggerFactory.getLogger(NodeFingerprintPublisher.class);
 
     /** The settings that must be byte-for-byte identical on every node, so a differing value on any is a real split:
-     *  the store backend, the default tenant, the operator tenant, the authorization mode and the read-only flag. Two compositions used to fold two different subsets of this list, so the two peers of one
-     *  mechanism disagreed about what a split is; a setting unset on a deployment folds as blank on every node,
-     *  which is why the union costs nothing. It named a second tenant/repository pair beside these while two keys
-     *  meant one space; that pair is gone and this one always did the deciding. */
+     *  the store backend, the default tenant, the operator tenant, the authorization mode and the read-only flag. One
+     *  list for every composition, so no two peers of one mechanism disagree about what a split is; a setting unset
+     *  on a deployment folds as blank on every node, which is why the union costs nothing. */
     static final List<String> MUST_MATCH = List.of("jenreg.store", "jenreg.operator-tenant",
             "jenreg.default-tenant", "jenreg.auth", "jenreg.read-only");
 
@@ -203,15 +201,13 @@ public final class NodeFingerprintPublisher implements AutoCloseable {
     /**
      * The heartbeat cadence, in the deployment's one duration grammar.
      *
-     * <p>It used to take a bare millisecond count and <strong>swallow</strong> anything else, returning the default -
-     * so an operator who typed {@code 2s} into it got a five-second heartbeat they did not choose, silently, and a
-     * fleet judged nodes late on it. That is the &sect;9 fault its five siblings in {@code jenreg.consistency.*} were
-     * fixed for; this one was missed, which left two grammars inside one family of dials and the only one still
-     * spelled in bare milliseconds anywhere in the product.
+     * <p>Swallowing an unreadable value and returning the default would give an operator who typed a value the
+     * grammar does not take a heartbeat they did not choose, silently, and a fleet would judge nodes late on it -
+     * a silent fallback, and a second grammar inside one family of dials.
      *
-     * <p>Set-but-unreadable now throws naming the key, the value and the default, exactly as
-     * {@code NodeConsistency} does. A clean cutover: a deployment carrying the old bare-number spelling fails at
-     * boot with a message that says what to write instead, rather than running at a cadence nobody chose.
+     * <p>Set-but-unreadable throws naming the key, the value and the default, exactly as {@code NodeConsistency}
+     * does: a deployment carrying a spelling the grammar does not take fails at boot with a message that says what to
+     * write instead, rather than running at a cadence nobody chose.
      */
     private static long millis(UnaryOperator<String> config, String key, long fallback) {
         String value = config.apply(key);

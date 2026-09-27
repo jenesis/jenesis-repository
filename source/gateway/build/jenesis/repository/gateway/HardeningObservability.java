@@ -9,7 +9,7 @@ import build.jenesis.repository.observation.ObservabilitySource;
 /**
  * The discovered {@link ObservabilitySource} for the hardening proxy leg's untrusted-upstream alarms: a
  * thin, ServiceLoader-instantiated adapter that surfaces {@link HardenedScreen}'s gateway-wide drift counter as a
- * visible signal (§9 fail-fast, errors visible). A re-fetch of an <em>immutable</em> coordinate whose bytes drifted
+ * visible signal (errors visible). A re-fetch of an <em>immutable</em> coordinate whose bytes drifted
  * from the previously screened, digest-pinned verdict is upstream tampering: it is refused and logged loudly, and the
  * count of such alarms is reported here as {@code jenreg.gateway.hardened.drift} so an operator sees the alarm on the
  * overview, not only in a log line. Stateless - it reads the node-wide drift counter, what this node's screens have

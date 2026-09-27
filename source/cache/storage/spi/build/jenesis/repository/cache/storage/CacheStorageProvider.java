@@ -35,7 +35,7 @@ import build.jenesis.repository.icon.IconContributor;
  *     storage or throws - it never returns {@code null}, and a provider returning {@code null} from {@link #create}
  *     fails loudly naming the provider class. {@link #name()} and {@link #requiredConfig()} may not return
  *     {@code null} either; an empty {@link #requiredConfig()} means "needs nothing".</li>
- * <li><b>Selection failure (&sect;9).</b> An explicitly selected backend that no provider answers to - its module is
+ * <li><b>Selection failure.</b> An explicitly selected backend that no provider answers to - its module is
  *     off the module path, or the name is misspelled - throws {@link IllegalStateException} at resolution naming the
  *     selection, the {@code filesystem} default it refuses to fall back to, and the installed provider names. A
  *     selected backend whose {@link #requiredConfig()} is unset likewise throws, naming <em>every</em> missing key
@@ -43,11 +43,11 @@ import build.jenesis.repository.icon.IconContributor;
  *     may: falling back would persist the cache against the wrong backend - objects land in ephemeral local storage
  *     while the intended bucket stays empty and every read misses. Only an <em>unselected</em> deployment gets the
  *     {@code filesystem} default, and its required configuration is checked just the same.</li>
- * <li><b>Error visibility (&sect;9).</b> Nothing is swallowed. Two providers answering to one name, or one provider
+ * <li><b>Error visibility.</b> Nothing is swallowed. Two providers answering to one name, or one provider
  *     registered twice, are packaging errors and throw rather than letting module-path order pick the backend a
  *     deployment persists into. Configuration problems surface as one message naming the keys, never as a degraded
  *     storage.</li>
- * <li><b>Tenant scoping (&sect;6).</b> {@link #resolve} builds the deployment's <em>root</em> storage; a caller
+ * <li><b>Tenant scoping.</b> {@link #resolve} builds the deployment's <em>root</em> storage; a caller
  *     scopes it per tenant before any content is read or written, and a backend must honour that scoping as a
  *     traversal-guarded key prefix rather than a hint.</li>
  * <li><b>Lifecycle / ownership.</b> The composition owns the storage: {@link #resolve} constructs exactly one
@@ -96,15 +96,12 @@ public interface CacheStorageProvider extends IconContributor {
     /**
      * Resolve the cache storage. There is no name to pass: the cache has no backend of its own.
      *
-     * <p>It used to take one, and four providers answered to it - {@code filesystem}, {@code s3}, {@code gcs},
-     * {@code azure-blob} - each resolving the artifact store of the same name through a
-     * {@code jenreg.cache-storage} key. That second selection was never intended, nothing could reach it (no
-     * deployment path offered a cache backend), and it made the product's storage configuration ambiguous: both
-     * roles read the same {@code jenreg.s3.*} keys, so a repository on disk with a cache in a bucket was
+     * <p>A second selection beside the artifact store's would make the product's storage configuration ambiguous:
+     * both roles read the same {@code jenreg.s3.*} keys, so a repository on disk with a cache in a bucket would be
      * indistinguishable from a misconfiguration. One selection means one store.
      *
-     * <p>The policy is unchanged in kind - exactly one implementation always resolves, and its required
-     * configuration is validated before it is built - it simply has nothing to choose between. A distribution that
+     * <p>Exactly one implementation always resolves, and its required configuration is validated before it is
+     * built - there is simply nothing to choose between. A distribution that
      * ships its own provider replaces the bundled one by answering to the same name.
      */
     static CacheStorage resolve(UnaryOperator<String> config) {

@@ -11,16 +11,15 @@ import module java.base;
  * rolls the whole repository up into per-category and per-SPDX-id facet counts for the license inventory view.
  *
  * <h2>Bounded, and the bound is visible</h2>
- * This surface used to answer {@code List<String> search(String query)} "up to a bounded result cap", with the cap
- * living in the Lucene implementation rather than here. Both halves of that were defects. A caller past the cap got a
- * short list with <em>nothing to distinguish it from a complete one</em> and no way to ask for the rest - the silent
- * truncation binding design gate 4 forbids - and a second implementation was free to honour no cap at all, because the
- * contract stated none. So the bound is now the caller's own {@code limit}, clamped by the {@link #MAX_PAGE} ceiling
+ * A cap hidden in an implementation would hand a caller past it a short list with <em>nothing to distinguish it from
+ * a complete one</em> and no way to ask for the rest - a silent truncation - and a second implementation would be
+ * free to honour no cap at all, because the contract stated none. So the bound is the caller's own {@code limit},
+ * clamped by the {@link #MAX_PAGE} ceiling
  * this contract declares, and what remains past a page is named by {@link Hits#nextCursor()}: a caller either resumes
  * or states plainly that it stopped.
  *
- * <p>The absence signal moved for the same reason. Both legs documented {@code null} as "no usable index yet", which
- * the SPI contract rule forbids outright (clause 3 - {@code null} is never a legal return), and it is load-bearing
+ * <p>The absence signal is explicit for the same reason. "No usable index yet" is never {@code null}, which the SPI
+ * contract rule forbids outright (clause 3 - {@code null} is never a legal return), and it is load-bearing
  * rather than cosmetic: it is what makes a caller fall back to the live substring scan instead of rendering a
  * false-empty result. An empty {@link Optional} says exactly that, and the compiler makes the caller say which case it
  * is handling.

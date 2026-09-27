@@ -25,12 +25,12 @@ import build.jenesis.repository.store.Providers;
  * <li><b>Absence sentinel.</b> {@link #installed()} answers an empty {@link Optional} when no persistence module is
  *     on the module path; every writer then skips persistence and every surface says the store is absent.
  *     {@code null} is never a legal return from {@link #installed()} or {@link #over}.</li>
- * <li><b>Selection failure (&sect;9).</b> This SPI has <em>no</em> selection key - nothing names a ledger by name -
+ * <li><b>Selection failure.</b> This SPI has <em>no</em> selection key - nothing names a ledger by name -
  *     so there is no explicitly-selected miss to fail on. The one resolution failure is ambiguity: two installed
  *     providers would make module-path order decide which ledger the gate reads, so {@link #installed()}
  *     <em>throws</em> naming both rather than picking a discovery-order winner. Resolution runs through the shared
  *     {@link Providers#optionalUnique} primitive, never a hand-rolled loop.</li>
- * <li><b>Tenant scoping (&sect;6).</b> The provider never resolves a tenant: the caller hands in an already-scoped
+ * <li><b>Tenant scoping.</b> The provider never resolves a tenant: the caller hands in an already-scoped
  *     store and the ledger may read and write nothing outside it.</li>
  * <li><b>Staleness.</b> Every row carries its first- and last-seen instants, so a surface can always say when a
  *     finding was last confirmed rather than presenting an empty ledger ambiguously as "clean".</li>

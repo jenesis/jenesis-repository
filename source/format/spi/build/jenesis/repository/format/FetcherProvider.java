@@ -28,14 +28,14 @@ import build.jenesis.repository.store.Providers;
  *     rather than by a failing fetch. The deployment then serves local content only: no upstream is consulted and an
  *     import is refused. {@link #create} declines with an empty {@link Optional}; {@code null} is never a legal
  *     return from it, from {@link #name()} or from {@link #requiredConfig()}.</li>
- * <li><b>Selection failure (&sect;9).</b> An <em>explicitly selected</em> {@code jenreg.fetcher=<name>}
+ * <li><b>Selection failure.</b> An <em>explicitly selected</em> {@code jenreg.fetcher=<name>}
  *     that no installed provider answers to, or whose provider declines, throws {@link IllegalStateException} at
  *     resolution naming the selection and the installed provider names - it does <em>not</em> resolve to
  *     {@link ProxyFormat.Fetcher#NONE}. An operator who named a transport and silently got none would see every
  *     proxy route answer 404 as if upstream held nothing. An explicit selection outranks the
  *     {@code jenreg.<name>=false} toggle. Only an <em>unselected</em> deployment degrades to the
  *     sentinel.</li>
- * <li><b>Streaming (&sect;1).</b> The fetcher is on the artifact download path: a proxied artifact must be streamed
+ * <li><b>Streaming.</b> The fetcher is on the artifact download path: a proxied artifact must be streamed
  *     through to the caller and the store, never fully materialised. Only small index/metadata documents may be read
  *     whole. The three {@link ProxyFormat.Fetcher} legs are not interchangeable, and none of them is inherited: all
  *     three are <b>abstract</b> on the interface, so a transport declares each and the compiler asks the question
@@ -56,12 +56,12 @@ import build.jenesis.repository.store.Providers;
  *     {@code Buffered}: it would discard the real streaming and {@code HEAD} legs of the fetcher it wraps and
  *     substitute derivations, silently collapsing a deployment's streaming path - so a wrapper delegates all three
  *     legs.</li>
- * <li><b>Error visibility (&sect;9).</b> Nothing is swallowed at resolution: duplicate provider names, one provider
+ * <li><b>Error visibility.</b> Nothing is swallowed at resolution: duplicate provider names, one provider
  *     registered twice, and more than one <em>enabled</em> fetcher with no selection to disambiguate them all throw,
  *     naming the candidates and the setting that resolves them - the transport a deployment proxies through is never
  *     decided by module-path order. On the fetch path an upstream failure is reported to the caller as a failure; it
  *     is never turned into an empty-but-successful answer, which would look like "upstream does not have it".</li>
- * <li><b>Read purity (&sect;10).</b> {@link #name()} and {@link #requiredConfig()} are pure declarations - no
+ * <li><b>Read purity.</b> {@link #name()} and {@link #requiredConfig()} are pure declarations - no
  *     network, no store, no lazy initialisation. Network I/O belongs to the returned fetcher's own {@code fetch},
  *     which a read path only reaches on an explicit proxy miss.</li>
  * <li><b>Lifecycle / ownership.</b> The composition owns the resolved fetcher: {@link #resolve} builds at most one
@@ -137,7 +137,7 @@ public interface FetcherProvider {
 
     /** The single enabled fetcher discovered via {@link ServiceLoader}, resolved through the shared
      *  {@link Providers#optionalUnique} policy: an explicit {@code jenreg.fetcher=<name>} selects one by
-     *  name and a selection nothing answers to <em>throws</em> rather than degrading (&sect;9), a
+     *  name and a selection nothing answers to <em>throws</em> rather than degrading, a
      *  {@code jenreg.<name>=false} switches one off, more than one enabled fetcher is ambiguous rather
      *  than a discovery-order winner, and only an <em>unselected</em> deployment with no fetcher installed resolves to
      *  {@link ProxyFormat.Fetcher#NONE}. */

@@ -17,8 +17,8 @@ import build.jenesis.repository.store.Providers;
  *
  * <h2>Contract</h2>
  *
- * <p>The delivery class is settled: <b>{@code DURABLE_AFTER_ENQUEUE}</b>, decided by &sect;7 against the one
- * installed sink rather than assumed. It is not {@code BEST_EFFORT_REPAIRED}, because that class requires an
+ * <p>The delivery class is settled: <b>{@code DURABLE_AFTER_ENQUEUE}</b>, decided against the installed sink rather
+ * than assumed. It is not {@code BEST_EFFORT_REPAIRED}, because that class requires an
  * <em>executable</em> repair and an event is not re-derivable - nothing in the store records "an event occurred at T
  * that was not announced". It is not {@code COMMIT_COUPLED_AT_LEAST_ONCE}, because {@link #emit} is a static fan-out
  * called from six different mutation choreographies, each after its own durable write, so commit-coupling it would
@@ -28,7 +28,7 @@ import build.jenesis.repository.store.Providers;
  *
  * <p><b>Resolution and delivery are two different failure classes, and the split is the spine of clauses 4 and 7.</b>
  * Resolving the sinks is a <em>packaging</em> question - which providers this deployment declares, and whether they
- * are coherent - and a packaging error there fails visibly (&sect;9), taking the observed mutation with it, because
+ * are coherent - and a packaging error there fails visibly, taking the observed mutation with it, because
  * the alternative is a deployment whose notifications silently reach the wrong set of subscribers. Delivering to a
  * resolved sink is a <em>best-effort</em> question, and a sink's own failure never fails the observed mutation. The
  * boundary is exact: everything {@link Providers#all} does happens before the first {@link #accept} call, and
@@ -54,7 +54,7 @@ import build.jenesis.repository.store.Providers;
  *     decline an event silently when its own feature dial is off, and that is not a failure. {@code null} is not
  *     accepted either: a {@code null} event is a producer bug, not an absence, and fails fast at {@link #emit}
  *     rather than surfacing as a {@link NullPointerException} from inside a sink or a diagnostic.</li>
- * <li><b>Selection failure (&sect;9).</b> The policy is {@code ALL} and there is no selection key: every discovered
+ * <li><b>Selection failure.</b> The policy is {@code ALL} and there is no selection key: every discovered
  *     sink observes every event and no <em>choice</em> of provider is a resolution error. {@link #name()} is an
  *     <em>identity</em> - the token {@link #installed()} enumerates, and the one every contained-failure diagnostic
  *     attributes a drop to - rather than a selection key, and no console or API gates a surface on it (see
@@ -64,19 +64,19 @@ import build.jenesis.repository.store.Providers;
  *     third hand-rolled check: {@link #emit} and {@link #installed()} both resolve through the shared
  *     {@link Providers} primitives ({@link Providers#all} and {@link Providers#installedNames}), whose clause 5
  *     refuses a duplicate name or a doubly-registered class for the additive policy too. Two sinks named
- *     {@code webhook} used to fire twice each while {@link #installed()} collapsed them to one entry - an
+ *     {@code webhook} would otherwise fire twice each while {@link #installed()} collapsed them to one entry - an
  *     enumeration under-reporting a really-installed sink, and a subscriber base nobody could enumerate. That is a
  *     packaging error, so it throws; the blast radius is stated in clause 7.</li>
- * <li><b>Streaming (&sect;1).</b> An event never carries an artifact body - only the coordinate, the request path and
+ * <li><b>Streaming.</b> An event never carries an artifact body - only the coordinate, the request path and
  *     a handful of short detail strings - so there is nothing to stream and nothing to materialise. A sink must not
  *     open the artifact the event names in order to deliver it: this seam is a metadata hop, and a sink that read a
  *     blob would put the store's read path inside the mutation path.</li>
- * <li><b>Tenant scoping (&sect;6).</b> The event deliberately carries no tenant and no repository. Scope arrives with
+ * <li><b>Tenant scoping.</b> The event deliberately carries no tenant and no repository. Scope arrives with
  *     the {@link ArtifactStore}, which is already tenant-and-repository scoped by the producer, so a store-backed
  *     sink queues its note in that same scope and the delivery drain stamps tenant and repository from the
  *     authoritative pass context rather than trusting a producer to thread them through. A sink must never derive a
  *     tenant from the event's path and must never write outside the store it was handed.</li>
- * <li><b>Error visibility (&sect;9).</b> Three outcomes, decided by <em>who</em> broke rather than by which
+ * <li><b>Error visibility.</b> Three outcomes, decided by <em>who</em> broke rather than by which
  *     {@code catch} clause happens to match:
  *     <ul>
  *     <li><b>A sink's own delivery failure is contained.</b> {@link #emit} catches everything a sink's
@@ -85,7 +85,7 @@ import build.jenesis.repository.store.Providers;
  *         sink</em>, so one failing sink neither fails the observed operation nor starves a later sink. It names the
  *         dropped event (its type and coordinate/path) and the sink that dropped it at {@code WARN}, because a
  *         fail-soft that emits no diagnostic is a silent loss. The name in that diagnostic is the one captured at
- *         resolution, never a fresh {@link #name()} call, so a sink whose {@code name()} throws can no longer defeat
+ *         resolution, never a fresh {@link #name()} call, so a sink whose {@code name()} throws cannot defeat
  *         the containment from inside the handler.</li>
  *     <li><b>An {@link Error} is not the sink's answer, it is the ground giving way, and it propagates.</b> An
  *         {@link OutOfMemoryError}, a {@link StackOverflowError} or a {@link NoClassDefFoundError} from inside
@@ -108,13 +108,12 @@ import build.jenesis.repository.store.Providers;
  *     </ul>
  *     All three legs are asserted by {@code test/events} ({@code EmitSwallowTest}, {@code EmitFanOutTest},
  *     {@code EmitContainmentTest}) and {@code test/events/discovery} ({@code EventSinkDiscoveryTest}).</li>
- * <li><b>Read purity (&sect;10) and non-blocking.</b> {@link #accept} is a write leg, and the rule on it is the
+ * <li><b>Read purity and non-blocking.</b> {@link #accept} is a write leg, and the rule on it is the
  *     inverse of read purity: it must perform <em>no</em> outbound I/O. It records a durable note in the handed store
  *     and returns; the latency-bearing delivery - an HTTP callback, a queue publish - belongs to the sink's own
  *     background drain, discovered as a {@code MaintenanceTaskProvider}. A sink that delivered inline would put a
  *     third party's availability inside the publish path and would have no delivery class the kit could hold it to,
- *     since an inline effect is neither enqueued nor repaired. Nothing structurally prevents an inline delivery
- *.</li>
+ *     since an inline effect is neither enqueued nor repaired. Nothing structurally prevents an inline delivery.</li>
  * <li><b>Lifecycle / ownership.</b> {@link #emit} and {@link #installed()} each perform their own
  *     {@link ServiceLoader} lookup and cache nothing, so a sink is constructed afresh on every emitted event. A sink
  *     must therefore have a cheap public no-argument constructor, own no threads, clients or connections, and keep no
@@ -128,7 +127,7 @@ import build.jenesis.repository.store.Providers;
  *     mutation order, but each is delivered independently with its own retry and backoff, so a subscriber may see a
  *     {@code release} before the {@code quarantine} it resolves. A subscriber that needs order must reconcile against
  *     the durable ledger (clause 12), not against arrival order.</li>
- * <li><b>Bounded work / cancellation (&sect;9).</b> {@link #emit} fans out synchronously on the producer's thread,
+ * <li><b>Bounded work / cancellation.</b> {@link #emit} fans out synchronously on the producer's thread,
  *     with no timeout, no interruption protocol and no cap on the number of sinks, so every millisecond a sink spends
  *     in {@link #accept} is a millisecond added to a publish, a gate decision or a reviewer's release. A sink owes an
  *     in-band bound of its own: one small store write, sized by the event rather than by the repository. Nothing
@@ -144,10 +143,9 @@ import build.jenesis.repository.store.Providers;
  *     records, the findings document, staging records, and the serving pointers themselves), so a lost event
  *     under-notifies and never hides a served artifact or a hold. <b>The documented answer to "I cannot miss one" is
  *     therefore reconciliation, not delivery</b>: a subscriber that must be complete polls the corresponding ledger
- *     and treats the webhook as an accelerator (&sect;9 D-6). That pairing is named per event type by
- *     {@link EventReconciliation}, and rendered for an operator on {@code GET /api/webhook} - because this clause
- *     asserted the counterparts existed without naming any of them, which left an integrator with a true statement
- *     and no route. Losing an event must never be made to look like
+ *     and treats the webhook as an accelerator. That pairing is named per event type by
+ *     {@link EventReconciliation}, and rendered for an operator on {@code GET /api/webhook}, so an integrator has a
+ *     route and not only a true statement. Losing an event must never be made to look like
  *     an event that did not happen, and this seam must never be strengthened by inventing one - an intent record that
  *     could not distinguish an orphan from a real publish would announce artifacts that never became visible, which
  *     is a worse guarantee, not a stronger one.</li>
@@ -174,7 +172,7 @@ public interface EventSink {
     String SPI = "event-sink";
 
     /** Names the notification a best-effort {@link #emit} contained, so a store/sink outage dropping a publish /
-     *  unpublish / quarantine / finding / promotion is visible rather than silent (§9). */
+     *  unpublish / quarantine / finding / promotion is visible rather than silent. */
     Logger LOGGER = LoggerFactory.getLogger(EventSink.class);
 
     /** Observe one event that occurred in {@code store} (a tenant-and-repository scoped store). Best-effort and
@@ -214,11 +212,11 @@ public interface EventSink {
             } catch (Throwable failure) {
                 // Best-effort: a notification is never allowed to fail the operation it observes - so the failure is
                 // contained here, never rethrown to the caller. But containing it silently would lose a publish /
-                // quarantine / finding / promotion notification with zero diagnostic (§9: a fail-soft
+                // quarantine / finding / promotion notification with zero diagnostic (a fail-soft
                 // still emits a diagnostic), so name the lost event - its kind and coordinate/path - and the sink
                 // that dropped it at WARNING, so an operator can see a store/sink outage swallowing notifications
                 // instead of guessing. The sink's name is the one resolution captured: re-asking a broken sink for
-                // its name is how the containment used to be defeated from inside its own handler.
+                // its name would let the containment be defeated from inside its own handler.
                 LOGGER.warn(
                         "event sink '" + sink.getKey() + "' dropped a " + event.type().wire() + " notification for "
                               + describe(event) + " - contained to keep the observed operation non-failing", failure);
@@ -228,7 +226,8 @@ public interface EventSink {
 
     /**
      * The discovered sinks, each paired with the name resolution read from it - the one resolution both statics
-     * share, through the shared {@code ALL}-policy primitive rather than a third hand-rolled loop (design gate 3).
+     * share, through the shared {@code ALL}-policy primitive rather than a hand-rolled loop (extend the existing
+     * choke point).
      * Pairing the name here is what makes the containment above unbreakable: the handler never re-enters a sink to
      * ask what it is called. Two sinks answering to one name, or one sink registered twice, throw out of here before
      * any sink is called (clause 4).

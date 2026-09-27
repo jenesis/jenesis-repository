@@ -8,10 +8,10 @@ import module java.base;
  * identity index folds once, with the licences the document ends up holding. The gate builds one per accepted
  * publish from what it already knows and commits it.
  *
- * <p>Before this the same facts arrived through three faces of the inventory, each a read-modify-write of the same
- * document - three reads and two writes where one of each does, measured key by key - and the identity index folded
- * on the first write with a licence fingerprint the second had yet to record, so a first publish sat in the index
- * with an empty fingerprint until the re-fold caught up. A recording is built, filled and committed on the thread
+ * <p>Delivered through separate faces of the inventory, each a read-modify-write of the same document, the same
+ * facts would cost three reads and two writes where one of each does, and the identity index would fold on the first
+ * write with a licence fingerprint the second had yet to record, so a first publish would sit in the index with an
+ * empty fingerprint until the re-fold caught up. A recording is built, filled and committed on the thread
  * that publishes; it is not shared.
  */
 public final class Recording {

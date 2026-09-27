@@ -50,10 +50,9 @@ public record ModuleCapability(String module, boolean installed, String enableKe
      * The deployment's plug-in surface grouped by SPI: the shared module-graph walk, decorated with what this
      * deployment knows about each implementation's module.
      *
-     * <p>The walk itself is not here. There were two of them - one in the console that could report only which
-     * providers existed, and one here that also knew each module's installed and enabled state - enumerating the same
-     * graph with the same filter and the same ordering into two records the same screen was written against twice.
-     * This supplies the half a deployment reading stored settings can add; the enumeration is
+     * <p>The walk itself is not here: one walk serves both the console, which can report only which providers exist,
+     * and this, which also knows each module's installed and enabled state. This supplies the half a deployment
+     * reading stored settings can add; the enumeration is
      * {@link SpiCatalog#of(ModuleLayer, SpiCatalog.Decoration)}.
      *
      * <p>{@code effective} answers the effective value of a settings key - an operator's pin over the stored value

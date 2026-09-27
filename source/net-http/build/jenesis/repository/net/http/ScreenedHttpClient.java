@@ -23,7 +23,7 @@ import org.eclipse.jetty.util.thread.ScheduledExecutorScheduler;
 
 /**
  * A {@link HttpClient} whose connections are made by Jetty's client: every outbound call this product makes goes
- * through one, built by {@link #newBuilder()} where the JDK's {@code HttpClient.newBuilder()} used to be, and the
+ * through one, built by {@link #newBuilder()} in place of the JDK's {@code HttpClient.newBuilder()}, and the
  * caller's {@link HttpRequest}, {@link HttpResponse.BodyHandler} and {@link HttpRequest.BodyPublisher} are the JDK's
  * own, bridged onto Jetty's.
  *

@@ -55,10 +55,10 @@ public final class TornWriteReconciler {
     /** Names fetched per {@link ArtifactStore#page} call when streaming the flat {@code blobs/} namespace. */
     /**
      * The hashes the pointer walk saw a stored blob for, held to judge the blob walk against - as sixty-four-bit
-     * prefixes in one sorted primitive array rather than as a hash set of strings. A referenced blob used to cost a
-     * few hundred bytes of heap here (the hex string, the set's entry, the node), so a million published artifacts
-     * were more than the heap of a server that sets no {@code -Xmx}, and the torn-write canary measured the pass
-     * failing at a million pointers under 512 MiB. Eight bytes per referenced blob is the stated bound now: a
+     * prefixes in one sorted primitive array rather than as a hash set of strings. As strings a referenced blob would
+     * cost a few hundred bytes of heap here (the hex string, the set's entry, the node), so a million published
+     * artifacts would be more than the heap of a server that sets no {@code -Xmx} - the pass would fail at a million
+     * pointers under 512 MiB. Eight bytes per referenced blob is the stated bound: a
      * million blobs are eight megabytes, and the array grows by doubling and is sorted once, when the pointer walk
      * ends and the blob walk begins.
      *

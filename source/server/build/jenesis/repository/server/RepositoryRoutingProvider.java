@@ -8,11 +8,10 @@ import build.jenesis.repository.store.Providers;
  * Discovers the {@link RepositoryRouting} a deployment runs on, so tenancy is an extension point rather than a
  * composition choice.
  *
- * <p>It was neither before this. Four routings existed - one here, three downstream - with no
- * {@code uses} or {@code provides} clause between them, selected by an {@code if}-chain over {@code jenreg.tenancy}
- * inside a Spring configuration. So the <em>setting</em> was real and the <em>seam</em> was not: a deployment could
- * pick one of four, and a fifth could only be added by editing the chain that names the other four. Everything else
- * in this product that has several implementations and one selection is discovered; this is that shape.
+ * <p>An {@code if}-chain over {@code jenreg.tenancy} inside a Spring configuration would make the <em>setting</em>
+ * real and the <em>seam</em> not: a deployment could pick one of the routings it names, and another could only be
+ * added by editing the chain. Everything else in this product that has several implementations and one selection is
+ * discovered; this is that shape.
  *
  * <h2>Contract</h2>
  *

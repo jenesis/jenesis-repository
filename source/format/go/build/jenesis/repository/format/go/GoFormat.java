@@ -96,7 +96,7 @@ import build.jenesis.repository.format.Semver;
  *     never as a prefix of the versions - "a plausible-but-incomplete answer, and {@code @v/list} is what a
  *     build resolves against". A version list that is incomplete because the store could not be walked and one that is
  *     empty because the upstream could not be reached are the same failure wearing different clothes; both now refuse
- *     instead of answering (&sect;5, &sect;9).</li>
+ *     instead of answering.</li>
  * </ol>
  */
 public final class GoFormat implements RepositoryFormat, ProxyLeg, BlobLayout, RepositoryImporter, RepositoryExporter {
@@ -343,7 +343,7 @@ public final class GoFormat implements RepositoryFormat, ProxyLeg, BlobLayout, R
             // against. So only an upstream that ANSWERED 404/410 reaches the client as one; a transport failure or
             // any other status is a question this repository could not put to its upstream and refuses visibly. That
             // is the very thing list() refuses to do below, where the local list is served whole from its stored
-            // document and never as a prefix of the versions (§5, §9). The rule is ProxyRelay's, shared with the twelve
+            // document and never as a prefix of the versions. The rule is ProxyRelay's, shared with the twelve
             // peer legs by; only this classification is the go protocol's own.
             ProxyRelay.Answer answer = ProxyRelay.fetchFresh(fetcher, target, ProxyRelay.conditionalHeaders(exchange),
                     exchange, ProxyRelay.Document.ENUMERATION);
@@ -451,7 +451,7 @@ public final class GoFormat implements RepositoryFormat, ProxyLeg, BlobLayout, R
     /** The {@code h1:} dirhash the checksum database advertises for the module version a {@code <module>/@v/<file>}
      *  request names. {@link ProxyRelay.Declared#NONE} when it advertises none for that shape (contract clause 3);
      *  {@linkplain ProxyRelay.Declared#unreadable unreadable} when neither the database nor the upstream's mirror of it
-     *  could be read, which is the case that used to log at DEBUG and cache the module unverified anyway.
+     *  could be read, which must never log at DEBUG and cache the module unverified anyway.
      *  The dirhash is a composed string rather than a raw digest, so it rides as a {@link ProxyRelay.Declared#text}
      *  declaration and is compared as text against the walk of the stored archive. */
     private static ProxyRelay.Declared advertisedDirhash(String rest, URI upstream, ProxyFormat.Fetcher fetcher,
@@ -597,9 +597,9 @@ public final class GoFormat implements RepositoryFormat, ProxyLeg, BlobLayout, R
      *  (empty, {@code .}/{@code ..}, or a backslash/control character), so a hostile module path becomes a clean 400
      *  rather than an {@code IllegalArgumentException} escaping from the store boundary as a 500.
      *
-     *  <p>One qualification, because the reach changed under this text: a backslash in a <em>whole request path</em>
-     *  no longer arrives here at all. The core folded {@code \} into {@code ArtifactStore.traversalFree}, which the
-     *  shared request screen runs first, so that shape is already a 404 before this method is asked. What this rule
+     *  <p>One qualification: a backslash in a <em>whole request path</em> never arrives here. The core screens
+     *  {@code \} in {@code ArtifactStore.traversalFree}, which the shared request screen runs first, so that shape is
+     *  already a 404 before this method is asked. What this rule
      *  still owns is the per-<em>segment</em> judgement - {@code Keys.unsafe} never consults {@code traversalFree} -
      *  and the 400 it promises is for the segment-level shapes, not for the path-level backslash. */
     private static boolean unsafeModule(String modulePath) {

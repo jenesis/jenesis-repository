@@ -192,7 +192,7 @@ public final class WaiverLabels {
      * {@link Waivers} overlay the compliance gate consults - the coordinate-scoped counterpart of {@link #overlay}.
      * Where {@code overlay} walks the whole repository ledger to project every standing waiver, this reads only each
      * inspected subject's own finding record (a point lookup per coordinate - {@link Findings#of}), so a publish into a
-     * busy repository no longer pays an {@code O(ledger)} walk before the gate assesses. A waiver on any other
+     * busy repository never pays an {@code O(ledger)} walk before the gate assesses. A waiver on any other
      * coordinate is irrelevant to this publish (the gate only produces findings for the subjects it is handed), so
      * scoping to the subjects is exactly the overlay the gate needs and no suppression is lost. Duplicate coordinates
      * among the subjects are read once; a subject whose coordinate carries no standing waiver contributes nothing.

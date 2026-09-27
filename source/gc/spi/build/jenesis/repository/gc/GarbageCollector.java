@@ -60,15 +60,15 @@ import build.jenesis.repository.store.Known;
  *     unremarkable pass is {@link GcPlan#complete()} with zero counters, a pass that could not finish is
  *     {@code complete() == false} with an empty {@link GcPlan#refusal()}, and a refused pass carries the
  *     {@link Known.Unknown} that caused it. An empty answer is never evidence that a store is clean.</li>
- * <li><b>Selection failure (&sect;9).</b> Which collector runs is {@link GarbageCollectorProvider}'s business, not
+ * <li><b>Selection failure.</b> Which collector runs is {@link GarbageCollectorProvider}'s business, not
  *     this interface's; a deployment with no collector installed reclaims nothing rather than falling back to a
  *     default sweeper.</li>
- * <li><b>Streaming (&sect;1).</b> No artifact body is ever read. A collector reads pointer leaves and its own
+ * <li><b>Streaming.</b> No artifact body is ever read. A collector reads pointer leaves and its own
  *     bookkeeping objects - small objects - and judges blobs by key, never by content.</li>
- * <li><b>Tenant scoping (&sect;6).</b> The {@link ArtifactStore} handed in is the scope the pass runs over, and the
+ * <li><b>Tenant scoping.</b> The {@link ArtifactStore} handed in is the scope the pass runs over, and the
  *     pointer roots are keys within it. A collector composes no key outside that scope, so a tenant-scoped store
  *     collects exactly one tenant's blobs and a root store collects the deployment-global layout.</li>
- * <li><b>Error visibility (&sect;9).</b> A store failure propagates as {@link IOException}; nothing on the judging
+ * <li><b>Error visibility.</b> A store failure propagates as {@link IOException}; nothing on the judging
  *     path is caught and turned into an empty or complete-looking answer, because a pass that saw nothing because
  *     the backend was down must never read as a pass that found nothing to do. The one failure that is <em>not</em>
  *     an exception is the unanswerable root set, which is reported as a refusal rather than thrown because it is a

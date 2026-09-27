@@ -7,7 +7,7 @@ import build.jenesis.repository.compliance.Severity;
  * The negative "scanned clean at T" marker the vulnerability report persists for a coordinate the advisory feeds
  * reported nothing for, so a known-clean coordinate is served from the durable ledger rather than triggering a full
  * live rescan of every feed on every read. Without it a clean coordinate stores no row, so {@code stored.isEmpty()}
- * stays true forever and each render re-queries the feeds - a read-first violation (§7): the reader pays for a scan a
+ * stays true forever and each render re-queries the feeds - a read-first violation: the reader pays for a scan a
  * prior read already did.
  *
  * <p>The marker is an ordinary categorize-never-discard finding of {@link Finding.Kind#CLEAN} under the reserved

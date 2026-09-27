@@ -243,13 +243,13 @@ public final class WingetFormat implements RepositoryFormat, ArtifactLayout, Blo
         // An installer belongs to a version, and a version exists only once its manifest has been accepted. Without
         // this the two halves of a publish are screened independently and only one of them can be: the manifest
         // carries the licence and the metadata a gate reads, an installer is opaque bytes. So a manifest refused
-        // for its licence, or held for review, was followed by an installer PUT that answered 201 and stored the
-        // bytes anyway - at a path this format serves back, so they were fetchable under a coordinate the manifest
-        // never established. Measured by the soak: 232 anomalies in a quarter of an hour, every one this.
+        // for its licence, or held for review, would be followed by an installer PUT that answered 201 and stored
+        // the bytes anyway - at a path this format serves back, so they would be fetchable under a coordinate the
+        // manifest never established.
         //
         // A point read, taken BEFORE the body is consumed, so a refusal costs neither a stored blob nor a buffer.
         // It does not undo the two-request split - that split is what lets an installer stream instead of reaching
-        // heap, and it stays exactly as it was.
+        // heap.
         if (!blobs.exists(manifestKey(repo, identifier, version))) {
             exchange.respond(404);
             return;
@@ -310,8 +310,8 @@ public final class WingetFormat implements RepositoryFormat, ArtifactLayout, Blo
         List<String> filters = matchValues(request.path("Filters"));
         // One sequential pass over the index through the codec's streaming reader, keeping only the results and
         // examining at most EXAMINED_CAP entries: the query never holds the index, whose size is the repository's.
-        // It used to read the index whole and split every line into a map first - the shape the nuget-search-memory
-        // canary showed as an OutOfMemoryError on NuGet's twin of this document.
+        // Reading the index whole and splitting every line into a map first would put the repository in heap per
+        // query, an OutOfMemoryError at scale.
         Optional<StoredListing.Served> index = StoredListing.open(blobs.store(),
                 new WingetListings(blobs).indexSpec(repo));
         ArrayNode data = MAPPER.createArrayNode();

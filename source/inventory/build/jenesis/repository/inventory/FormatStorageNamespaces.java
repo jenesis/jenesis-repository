@@ -11,10 +11,11 @@ import build.jenesis.repository.store.StoredListing;
  * attributed to the format's own JPMS module, naming the artifact spaces that format's data lives in - its
  * {@code publish/<name>} pointer mirror and the {@code publish/quarantine/<name>} review mirror beside it, its
  * stored listings, and (for a blobs-namespace format) each declared blob root with its listings. A format module
- * carried none of this itself, so a format dropped from an image - or toggled off with {@code jenreg.<name>=false},
- * which the reclaiming passes treat identically - held data no manifest entry described: invisible to the orphaned-
- * data diagnostic, unreachable for the explicit purge, and the repository it lived in stayed refused by the
- * collector forever. With the entry persisted while the format is installed, its absence later reads exactly like
+ * carries none of this itself, so without it a format dropped from an image - or toggled off with
+ * {@code jenreg.<name>=false}, which the reclaiming passes treat identically - would hold data no manifest entry
+ * described: invisible to the orphaned-data diagnostic, unreachable for the explicit purge, and the repository it
+ * lived in refused by the collector forever. With the entry persisted while the format is installed, its absence
+ * later reads exactly like
  * any other module's: the modules console names the leftovers, and {@code POST /api/admin/purge} reaps them after
  * the mandatory dry run.
  *

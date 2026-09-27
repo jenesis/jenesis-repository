@@ -6,10 +6,9 @@ import module java.base;
  * Refreshing every mirroring advisory feed, and saying which ones did not come back.
  *
  * <p>Two surfaces draw the feeds before they report on a repository - the console's rescan and the API's explicit
- * refresh - and each had written the loop itself. They had drifted into opposite failure behaviour over the same
- * SPI: the API logged a warning per feed it could not draw, and the console caught the same exceptions into an
- * empty block, so one deployment surface said nothing at all about a feed that never loaded. That is the shape
- * &sect;2 exists to prevent, and the reason this is one helper rather than a tidier copy of either loop.
+ * refresh. Two copies of the loop drift into opposite failure behaviour over the same SPI - one logging a warning
+ * per feed it could not draw, the other catching the same exceptions into an empty block, so one surface says
+ * nothing at all about a feed that never loaded. That is why this is one helper rather than a copy per surface.
  *
  * <p><b>The exception a draw throws is ours, not the vendor's.</b> {@link RefreshableSource#refresh} documents its
  * {@code IOException} as "a wiring or infrastructure fault, never a vendor outage, which is fail-soft and shows up

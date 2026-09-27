@@ -507,7 +507,7 @@ public final class PyPiFormat implements RepositoryFormat, ProxyLeg, BlobLayout,
                 // publish no .metadata at all, so a 404 here is the ordinary, legal answer and pip acts on it: it
                 // downloads the whole wheel and reads METADATA out of it, and reports success. Spelling a refusal the
                 // same way therefore does not withhold the sidecar, it substitutes a different resolution for it
-                // silently - the repository detected a corrupted document and the build went green over it (§9).
+                // silently - the repository detected a corrupted document and the build went green over it.
                 // Exactly the Maven .module split, on the one PyPI path with the same property.
                 //
                 // The distribution keeps the plain decline: a wheel's absence is a loud answer that fails an install,
@@ -586,7 +586,7 @@ public final class PyPiFormat implements RepositoryFormat, ProxyLeg, BlobLayout,
      *
      *  <p>PEP 658 also allows a bare {@code true} - "a sidecar exists here" - which vouches for nothing and is
      *  deliberately NOT read as a digest: treating it as one would have to invent a value, and the honest handling of
-     *  an index that publishes no digest is the unverified write that was the behaviour for every sidecar before this.
+     *  an index that publishes no digest is the unverified write.
      *  Only a declared digest narrows anything. */
     private static String digest(String attributes, Pattern attribute) {
         Matcher matcher = attribute.matcher(attributes);
@@ -629,10 +629,10 @@ public final class PyPiFormat implements RepositoryFormat, ProxyLeg, BlobLayout,
      * <b>The commit point is the {@code pypi/<project>/files/<filename>} pointer link</b> - before it nothing serves
      * and the Simple index answers a miss; after it the distribution downloads and the project index lists it.
      *
-     * <p>This is the ordering fix for PyPI: the former code linked the distribution pointer <em>first</em>
-     * and only then stamped {@code pypi/<project>/.hosted}, so a crash in between left a downloadable file whose
+     * <p>The order matters: linking the distribution pointer <em>first</em> and only then stamping
+     * {@code pypi/<project>/.hosted} as a separate step would let a crash in between leave a downloadable file whose
      * project index had not yet been switched on. The marker gates a listing surface, so it is a visibility write and
-     * is now declared beside the pointer - after it, never before, so the index is never switched on ahead of the
+     * is declared beside the pointer - after it, never before, so the index is never switched on ahead of the
      * bytes it would list.
      *
      * <p>The distribution file (the multipart {@code content} part) is the one unbounded part - a wheel or sdist of
@@ -747,8 +747,7 @@ public final class PyPiFormat implements RepositoryFormat, ProxyLeg, BlobLayout,
      * same marker clear a retroactive KEV/licence hold's release is - one hold-release mechanism for this format, not
      * two. The shared commit operation runs its accepted layout only on {@code ACCEPT}, so a screen-time
      * {@code QUARANTINE} would otherwise store the wheel, link nothing and index nothing:
-     * {@code HoldLifecycle.release} would then resolve the hold and materialise no distribution at all, which is the
-     * regression this closes.
+     * {@code HoldLifecycle.release} would then resolve the hold and materialise no distribution at all.
      *
      * <p>The envelope is finished first - exactly as the accepted layout finishes it - because a client may send the
      * {@code name} field <em>after</em> the file part, and the project is what every key below is built from. Then

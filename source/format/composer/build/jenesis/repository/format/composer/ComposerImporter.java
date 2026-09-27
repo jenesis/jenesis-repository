@@ -50,7 +50,7 @@ public final class ComposerImporter implements RepositoryImporter {
     public Optional<ArtifactDescriptor> importTarget(String path) {
         // RepositoryImporter clause 4: a source path is as client-supplied as a request path, so a
         // traversal-shaped one is refused by name rather than echoed into the descriptor the import edge
-        // screens and the trail records (the fix retrofitted here - §13).
+        // screens and the trail records, as every importer does.
         String relative = RepositoryImporter.importablePath(path, "composer");
         if (!relative.toLowerCase(Locale.ROOT).endsWith(ZIP)) {
             return Optional.empty();
@@ -78,7 +78,7 @@ public final class ComposerImporter implements RepositoryImporter {
     public void importArtifact(String path, InputStream content, ArtifactStore store) throws IOException {
         // RepositoryImporter clause 4: a source path is as client-supplied as a request path, so a
         // traversal-shaped one is refused by name rather than echoed into the descriptor the import edge
-        // screens and the trail records (the fix retrofitted here - §13).
+        // screens and the trail records, as every importer does.
         String relative = RepositoryImporter.importablePath(path, "composer");
         if (!relative.toLowerCase(Locale.ROOT).endsWith(ZIP)) {
             // Only the package zip archives are migrated; a p2/*.json or packages.json metadata asset is derived

@@ -32,12 +32,12 @@ import build.jenesis.repository.store.ArtifactStore;
  *     A target holding <em>different</em> bytes for it is a failure naming the version - never an overwrite.</li>
  * <li><b>Absence sentinel.</b> A version with nothing servable - every file withheld, or nothing stored under it -
  *     answers {@link Exported#WITHHELD}, never {@code null} and never an exception.</li>
- * <li><b>Streaming (&sect;1).</b> An artifact streams from the store to the target; it is never read into memory
+ * <li><b>Streaming.</b> An artifact streams from the store to the target; it is never read into memory
  *     whole. A document a format must rebuild to publish (npm's publish envelope, Cargo's publish metadata) may be
  *     assembled in memory only under the cap its own importer applies.</li>
- * <li><b>Error visibility (&sect;9).</b> A version the target refused throws an {@link IOException} carrying the
+ * <li><b>Error visibility.</b> A version the target refused throws an {@link IOException} carrying the
  *     target's status and message; it is not reported as exported.</li>
- * <li><b>Read purity (&sect;10).</b> An exporter reads the repository and writes nothing to it.</li>
+ * <li><b>Read purity.</b> An exporter reads the repository and writes nothing to it.</li>
  * <li><b>Lifecycle / ownership.</b> The exporter owns no client and no thread: every request goes through the
  *     {@link ExportTarget} it is handed.</li>
  * </ol>

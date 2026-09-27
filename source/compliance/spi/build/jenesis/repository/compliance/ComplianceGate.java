@@ -75,7 +75,7 @@ public final class ComplianceGate {
     /** This gate reading maintainer-health from {@code health} rather than each health-aware dimension's own source:
      *  the deployment overlays the durable health ledger here at screen time (the screen has the request's scoped store,
      *  the boot-built policy does not), so the health dimension scores off the persisted answer instead of a live
-     *  deps.dev probe (Principle 10: a read renders what is durably there; a never-scored coordinate resolves to the
+     *  deps.dev probe (a read renders what is durably there; a never-scored coordinate resolves to the
      *  same safe default - no finding - the live probe produces for one it cannot resolve). Every discovered
      *  {@link HealthAware} dimension is rebound to {@code health}; a non-health dimension is untouched. Order-independent
      *  and idempotent, so it composes with {@link #vex}/{@link #waivers} in any order; {@link HealthSource#none()} (or a

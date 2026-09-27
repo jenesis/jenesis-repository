@@ -32,8 +32,8 @@ import build.jenesis.repository.store.PublicationObserver;
  *
  * <p><b>A lost signal is lost for good, which is why the backstop's cadence has a maximum.</b> The withhold legs fire
  * only on an actual transition, so a replay's re-mark or re-link is an idempotent converge and raises nothing - a
- * signal dropped in the durable-write-to-notify window is never re-emitted ({@link PublicationObserver} clause 11,
- *). This flag is therefore best-effort in the strong sense: when it is set the retraction lands on the next pass,
+ * signal dropped in the durable-write-to-notify window is never re-emitted ({@link PublicationObserver} clause 11).
+ * This flag is therefore best-effort in the strong sense: when it is set the retraction lands on the next pass,
  * and when it is missed the only route back is {@code PublishedIndexTask}'s wall-clock rebase. That cadence
  * (the walk's {@code index-rebase} consumer) is consequently what carries it when the flag is missed.
  */

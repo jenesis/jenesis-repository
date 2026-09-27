@@ -50,13 +50,13 @@ import build.jenesis.repository.store.ArtifactStore;
  *     the screen and the record at a coordinate the asset will never occupy. The read half is contract-bound never to
  *     report such a path ({@code ImportSource.safePath}); this is the belt behind that brace, and it is the one
  *     {@link ArtifactLayout#addressable} screen the coordinate seam already uses rather than a second definition.</li>
- * <li><b>Streaming (&sect;1).</b> {@link #importArtifact} copies its stream straight to storage; an artifact is never
+ * <li><b>Streaming.</b> {@link #importArtifact} copies its stream straight to storage; an artifact is never
  *     materialised. An importer that must parse a coordinate or a manifest out of the content may buffer it only under
  *     an explicit cap (the OCI manifest limit is the reference), never a whole artifact.</li>
- * <li><b>Read purity (&sect;10).</b> {@link #imports} and {@link #importTarget} derive from their arguments alone - no
+ * <li><b>Read purity.</b> {@link #imports} and {@link #importTarget} derive from their arguments alone - no
  *     store read, no network - so the edge can call {@link #importTarget} before it has spent a byte of bandwidth on
  *     the asset.</li>
- * <li><b>Error visibility (&sect;9).</b> {@link #importArtifact} throws rather than swallowing: an asset that could not
+ * <li><b>Error visibility.</b> {@link #importArtifact} throws rather than swallowing: an asset that could not
  *     be laid out must not be counted as imported. Only a refusal the format itself renders (an unparseable OCI
  *     manifest) may be logged and skipped, and only because nothing was laid out.</li>
  * <li><b>Lifecycle / ownership.</b> The importer is the {@code ServiceLoader}-discovered format instance itself; the
@@ -82,7 +82,7 @@ public interface RepositoryImporter {
      * <p>Deliberately {@link ArtifactLayout#addressable} applied segment by segment rather than a second screen: the
      * coordinate seam already refuses exactly these shapes through that predicate, and a source path is the same kind
      * of semi-trusted, client-supplied name one segment at a time. Stating it here means a new importer inherits the
-     * guard instead of being the next one to compose {@code "/raw/" + "../x"} (&sect;13).
+     * guard instead of being the next one to compose {@code "/raw/" + "../x"}.
      */
     static boolean importable(String sourcePath) {
         if (sourcePath == null) {
@@ -124,7 +124,7 @@ public interface RepositoryImporter {
     /** Lay one <em>already-screened</em> asset out - its path within the source repository and its content stream -
      *  into the content-addressed store. The content reaching here has already passed the import edge's screen (or is
      *  explicitly unscreenable, when {@link #importTarget} returned empty), so this only lays the bytes out in the format's
-     *  namespace: it no longer screens or renders a verdict. On an edge {@code ACCEPT} the stream is the restreamed
+     *  namespace: it does not screen or render a verdict. On an edge {@code ACCEPT} the stream is the restreamed
      *  {@code blobs/<hash>} the screen stored, not the raw source download. The stream copies straight to storage; an
      *  importer that must inspect the content (to parse a manifest or a coordinate) may read it into a buffer, but a
      *  plain blob streams through unbuffered. The caller closes the stream. */

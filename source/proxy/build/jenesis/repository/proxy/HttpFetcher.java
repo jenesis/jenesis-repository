@@ -154,14 +154,12 @@ public final class HttpFetcher implements ProxyFormat.Fetcher {
      * Open the exchange, reporting every way the upstream can fail to answer as the contract's transport failure -
      * clause 6's empty {@link Optional} - rather than as an exception.
      *
-     * <p>This used to be a timeout and nothing else, and the gap it left was not academic. A refused connection, an
-     * unresolvable host and a dead route are the three commonest ways a public mirror is down, and each arrived as a
-     * raw {@link IOException} indistinguishable at a catch site from "this index is malformed" - so the one shape the
-     * contract asks every adapter to classify was the one shape it could not see. Clause 2's whole apparatus, and
-     * {@code ProxyRelay}'s enumeration-versus-pinned split with it, keys on the empty answer; a transport that hands
-     * out an exception instead routes around all of it. {@code github.com/pkg/errors} was served as a module with no
-     * versions because a five-second connect timeout did reach that split - and a connection refused a moment earlier
-     * would not have.
+     * <p>A timeout is not the only such failure. A refused connection, an unresolvable host and a dead route are the
+     * three commonest ways a public mirror is down, and as a raw {@link IOException} each is indistinguishable at a
+     * catch site from "this index is malformed" - the one shape the contract asks every adapter to classify. Clause
+     * 2's whole apparatus, and {@code ProxyRelay}'s enumeration-versus-pinned split with it, keys on the empty
+     * answer; a transport that hands out an exception instead routes around all of it, and a module whose mirror
+     * refused the connection would be served as one with no versions.
      *
      * <p>Deliberately narrow. It folds the failures of <em>establishing the exchange</em>, so a body that dies
      * mid-transfer still throws from the caller's read and a truncated response is never cached as a whole one. A TLS

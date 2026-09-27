@@ -78,7 +78,7 @@ public final class RescreenFlavor {
      * The gate flavour {@code digest}, stored at request path {@code path}, must be re-screened through:
      * {@link GatePolicyProvider.Path#PUBLISH} when the coordinate's {@code origin} trail carries a
      * {@code local-upload} row for exactly those bytes, {@link GatePolicyProvider.Path#PROXY} otherwise. A read
-     * failure answers {@code PROXY} - the unchanged default - and is logged rather than swallowed (§9).
+     * failure answers {@code PROXY} - the unchanged default - and is logged rather than swallowed.
      *
      * <p>{@code inventory} is taken rather than built here because constructing one runs a {@link java.util.ServiceLoader}
      * scan ({@code MetadataProvider.installed()} caches nothing, by its own contract), and the sweep asks this question

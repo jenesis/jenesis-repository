@@ -39,7 +39,7 @@ import build.jenesis.repository.store.Features;
  *     its own staging, session and sidecar spaces, or a key under another format's root it was handed anyway - and
  *     {@code null} is never a legal return. Empty means "this key keeps no further blob alive", never "I could not
  *     tell".</li>
- * <li><b>Error visibility (&sect;9) - never degrade to a short list, and say which refusal it is.</b> A key the format
+ * <li><b>Error visibility - never degrade to a short list, and say which refusal it is.</b> A key the format
  *     recognises but cannot resolve (a stored document that is absent-but-expected, unparseable, or past the format's
  *     own parse bound) <em>throws</em>. It must never answer a partial set: the caller cannot distinguish a short list
  *     from a complete one, and every hash omitted is a live blob the next sweep deletes. Throwing fails the
@@ -62,14 +62,14 @@ import build.jenesis.repository.store.Features;
  *     One derivation, two postures, chosen by the caller and not by the format - this is deliberately the opposite
  *     posture to a retroactive hold's blob-set derivation, where degrading to fewer hashes under-enforces a hold;
  *     here it destroys data.</li>
- * <li><b>Read purity (&sect;10).</b> The methods read the store and nothing else - no network, no write, not even a
+ * <li><b>Read purity.</b> The methods read the store and nothing else - no network, no write, not even a
  *     repair. Unlike the other layout seams they <em>may</em> open a stored blob, because a format whose references
  *     live inside a document has nowhere else to read them; that read is bounded (clause 6) and this seam is never
  *     called from a serving read path.</li>
  * <li><b>Ordering / determinism.</b> The answer is a function of the key and the durable store contents only, never of
  *     discovery order, and is stable across repeated calls over an unchanged store - a mark pass replayed after a
  *     crash must re-derive the same reference set.</li>
- * <li><b>Bounded work (&sect;7, &sect;1).</b> A document read to derive references is capped at the same bound the
+ * <li><b>Bounded work.</b> A document read to derive references is capped at the same bound the
  *     format enforces when it ingests one, and a document that names further documents is expanded with an explicit
  *     work-list and an emitted set, never self-recursion - a hostile nesting must not overflow the sweep's stack or
  *     read a multi-gigabyte blob into it. Reaching a bound is clause 3's throw, never a short list.</li>
@@ -144,7 +144,7 @@ public interface BlobReferences {
     /**
      * Every installed format that lends its reference sets, discovered through the same {@link ServiceLoader}
      * {@code uses RepositoryFormat} clause the dispatcher and the layout seams ride - never a second registry or a
-     * second {@code provides} clause per format (design gate 3). A format switched off
+     * second {@code provides} clause per format. A format switched off
      * ({@code jenreg.<name>=false}, {@link Features}) is skipped exactly as a missing module is, so a
      * disabled format lends nothing.
      *
@@ -176,13 +176,12 @@ public interface BlobReferences {
      * Every root a live pointer can sit under: the {@code publish/} tree plus each installed lender's own
      * blob roots.
      *
-     * <p><b>One computation, because two of them is a deletion bug waiting for a divergence.</b> This was derived
-     * independently in two places - a garbage collector asking {@code installed()} for its lenders, and a walk
-     * asking the discovered formats which ones were blob-rooted - and the two filters are not the same question:
-     * one accepts any installed {@link BlobReferences}, the other only the ones that are also a format wearing a
-     * particular sub-interface. They happen to agree today. On the day they do not, the walk enumerates a smaller
-     * set than the collector judges against, every pointer under the missing root reads as absent, and the blobs
-     * beneath it are condemned and then deleted. There is no test that would fail first; the artifacts would
+     * <p><b>One computation, because two of them is a deletion bug waiting for a divergence.</b> A garbage collector
+     * asking {@code installed()} for its lenders and a walk asking the discovered formats which ones are blob-rooted
+     * are not the same question: one accepts any installed {@link BlobReferences}, the other only the ones that are
+     * also a format wearing a particular sub-interface. Derived twice, on the day they disagree the walk enumerates a
+     * smaller set than the collector judges against, every pointer under the missing root reads as absent, and the
+     * blobs beneath it are condemned and then deleted. There is no test that would fail first; the artifacts would
      * simply be gone.
      *
      * <p>So the set has one home, and callers that need it as a plain list and callers that need it wrapped in a

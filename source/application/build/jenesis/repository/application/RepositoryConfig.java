@@ -13,17 +13,15 @@ import org.springframework.scheduling.annotation.EnableScheduling;
  * source), the gated publish path, the store-backed staging and inventory, and the retention policy. Every bean is
  * plain domain code reused as-is; Spring only assembles them.
  *
- * <p>The former monolith is split into five focused, same-package {@code @Configuration} classes,
- * grouped by concern - this class is now the thin shell that carries the context-level annotations
- * ({@link EnableConfigurationProperties}, {@link EnableScheduling}) and {@link Import}s the groups. The split is a
- * pure mechanical, behaviour-preserving extraction (mirror): every bean keeps the same name, type,
- * {@code initMethod}/{@code destroyMethod} lifecycles and {@code proxyBeanMethods = false} semantics. The singleton
- * graph is preserved by construction: the monolith contained no direct inter-{@code @Bean} method calls (which
- * {@code proxyBeanMethods = false} already forbade from returning shared instances) - every collaborator is
- * method-parameter injected, so Spring supplies the one singleton across the new config-class boundaries exactly as
- * it did within the one class, and no bean is defined twice ({@code @Import} and the same-package component scan
- * dedupe configuration classes by class name). In particular the metering / read-only artifact-store wrap order
- * is applied where the store is declared, which this composition layers into, and the demo seed still depends
+ * <p>The wiring is split into five focused, same-package {@code @Configuration} classes,
+ * grouped by concern - this class is the thin shell that carries the context-level annotations
+ * ({@link EnableConfigurationProperties}, {@link EnableScheduling}) and {@link Import}s the groups. The singleton
+ * graph holds by construction: no {@code @Bean} method calls another (which {@code proxyBeanMethods = false}
+ * forbids from returning shared instances) - every collaborator is method-parameter injected, so Spring supplies
+ * the one singleton across the config-class boundaries, and no bean is defined twice ({@code @Import} and the
+ * same-package component scan dedupe configuration classes by class name). In particular the metering / read-only
+ * artifact-store wrap order is applied where the store is declared, which this composition layers into, and the
+ * demo seed depends
  * on every {@link build.jenesis.repository.store.PublishPathWiring} bean by parameter so the publish path is armed
  * before the seed publishes.
  *

@@ -24,8 +24,8 @@ import org.springframework.web.bind.annotation.RestController;
  * and the CLI cannot reach at all. The console panel and this answer come from the same
  * {@link SignatureSummaries} read, so neither can drift from the other about what a path's signature is.
  *
- * <p>It re-verifies nothing: the answer is the durable summary recorded when the artifact was published (&sect;10,
- * reads render only stored state). Re-running the cryptography here would cost more the more the page is looked at,
+ * <p>It re-verifies nothing: the answer is the durable summary recorded when the artifact was published (reads
+ * render only stored state). Re-running the cryptography here would cost more the more the page is looked at,
  * and would disagree with the verdict the gate actually reached the moment a key changed.
  *
  * <p>A path naming no coordinate, or one for which nothing was recorded, answers {@code 204}. A version published

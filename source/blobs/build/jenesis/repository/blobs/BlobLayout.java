@@ -17,8 +17,8 @@ import build.jenesis.repository.store.ServableNames;
  * <p>Extends {@link BlobRoots} (the reference-scan seam garbage collection needs) with the full coordinate-to-pointer
  * mapping enforcement needs, and declares that mapping with NO defaults: a format that serves from the blobs namespace
  * must map its coordinates to their pointers, or it cannot compile. There is no empty-default posture in which a format
- * serves a coordinate whose hold cannot retract it - that state (which shipped unenforceable retroactive holds in five
- * formats) is now undeclarable. A format that genuinely wires no enforcement implements only {@code BlobRoots}, a
+ * serves a coordinate whose hold cannot retract it - that state (an unenforceable retroactive hold) is undeclarable.
+ * A format that genuinely wires no enforcement implements only {@code BlobRoots}, a
  * reviewed decision rather than a silent omission.
  *
  * <p>The mapping seams:
@@ -53,7 +53,7 @@ import build.jenesis.repository.store.ServableNames;
  *     a neighbouring key space. It is deliberately the same rule the {@code ArtifactLayout.addressable} states
  *     for the {@code publish/}-namespace layouts, applied per {@code /}-separated part so a legitimately multi-segment
  *     coordinate (an npm {@code @scope/name}, a Go module path, an RPM {@code <repo>/<name>}) still resolves.</li>
- * <li><b>Read purity (&sect;10).</b> {@link #describe} derives from the request path <em>alone</em> - no store read, no
+ * <li><b>Read purity.</b> {@link #describe} derives from the request path <em>alone</em> - no store read, no
  *     blob opened - so a serving read path may call it freely. {@link #blobKeys} / {@link #servedPaths} read the store,
  *     but only its small pointers ({@code readVersioned}, {@code list}, {@code page}); no artifact body is ever opened
  *     to answer them, and neither method writes anything.</li>
@@ -62,14 +62,14 @@ import build.jenesis.repository.store.ServableNames;
  *     to that same path, and {@link #blobKeys} must report the pointer keys carrying <em>that</em> version's bytes and
  *     no sibling version's. A layout whose two directions disagree makes a retroactive hold mark the wrong bytes (or
  *     none), which is a hold that silently does nothing.</li>
- * <li><b>Bounded work (&sect;7).</b> Every enumeration behind these methods is paged and bounded - a pool or registry
+ * <li><b>Bounded work.</b> Every enumeration behind these methods is paged and bounded - a pool or registry
  *     tree is descended iteratively through {@code ArtifactStore.page}, never self-recursion over an unpaged
  *     {@code list()} - and a bound that binds raises a named failure rather than returning a short list: a pointer key
  *     these methods omit is a held version that keeps serving.</li>
- * <li><b>Error visibility (&sect;9).</b> A store failure while resolving a coordinate propagates. Answering an empty
+ * <li><b>Error visibility.</b> A store failure while resolving a coordinate propagates. Answering an empty
  *     list because a probe failed would report "this version has no live pointer", which a hold reads as "nothing to
  *     retract" - the one wrong answer these methods must never invent.</li>
- * <li><b>Reference agreement (&sect;13).</b> Every hash {@link #blobHashes} reports for a live version must also be
+ * <li><b>Reference agreement.</b> Every hash {@link #blobHashes} reports for a live version must also be
  *     reachable to the collector's reference scan while that version is live - either as the bare-hex body of one of
  *     the version's pointer keys, which the scan reads for itself, or lent back by
  *     {@link build.jenesis.repository.format.BlobReferences#references} for a key beneath one of the
@@ -95,7 +95,7 @@ public interface BlobLayout extends BlobRoots {
      * multi-segment for several formats (npm's {@code @scope/name}, a Go module path, RPM's {@code <repo>/<name>}),
      * so screening the whole string would refuse every scoped package while screening nothing extra. Stated once here
      * for all fourteen layouts rather than re-derived per format, exactly as {@code ArtifactLayout.addressable} is
-     * stated once for the {@code publish/}-namespace ones (&sect;13). The rule carries the control-character
+     * stated once for the {@code publish/}-namespace ones. The rule carries the control-character
      * screen the request seam already applies, so the two seams refuse the same shapes.
      */
     static boolean addressable(String coordinate, String version) {
@@ -110,11 +110,9 @@ public interface BlobLayout extends BlobRoots {
         return addressablePart(version);
     }
 
-    /** One name part: a single addressable path segment by the shared rule, which is the whole rule. It used to add
-     *  {@code && !Keys.unsafe(part)} because the shared screen said nothing about control characters and this one
-     *  did; the shared screen carries them now, so the second half was the same question asked twice - and
-     *  keeping it would have hidden the gap in the shared screen rather than closed it, which is exactly what it had been
-     *  doing. */
+    /** One name part: a single addressable path segment by the shared rule, which is the whole rule. The shared
+     *  screen carries the control characters itself, so adding {@code && !Keys.unsafe(part)} would ask the same
+     *  question twice - and would hide a gap in the shared screen rather than close it. */
     private static boolean addressablePart(String part) {
         return ArtifactLayout.addressable(part);
     }
@@ -130,7 +128,7 @@ public interface BlobLayout extends BlobRoots {
      *  retroactive withhold marks under the {@code withheld/<hash>} convention, and the set a name-enumeration screen
      *  probes to hide a held version. The default resolves {@link #blobKeys} and keeps only the pointer bodies that are a
      *  bare lower-case 64-hex SHA-256 (a format's small timestamp/revision marker under the same root never counts as a
-     *  hash) - byte-for-byte the resolution the store-backed inventory made inline before this seam. A format whose
+     *  hash). A format whose
      *  content digests are NOT reachable as bare-hex pointer bodies overrides this to derive its own set: OCI's tag
      *  pointer body is {@code sha256:<hex>} (not bare hex) and its config/layer digests live INSIDE the manifest JSON
      *  behind no pointer key at all, so without an override a held OCI image would never be marked or screened. */
@@ -150,9 +148,9 @@ public interface BlobLayout extends BlobRoots {
 
     /** The format-neutral coordinate a request path carries, from the path alone - the blobs-namespace twin of
      *  {@code ArtifactLayout.describe}, and what lets the inventory write the {@code published/} sidecar
-     *  for a blobs-namespace publish so the retroactive enforcement sweeps enumerate the version (before this, a
-     *  KEV-listed npm or PyPI package admitted before its CVE landed was invisible to every sweep while the "held"
-     *  gauge reported the repository clean). Empty for a path that names no versioned artifact - an index, a
+     *  for a blobs-namespace publish so the retroactive enforcement sweeps enumerate the version (without it, a
+     *  KEV-listed npm or PyPI package admitted before its CVE landed would be invisible to every sweep while the
+     *  "held" gauge reported the repository clean). Empty for a path that names no versioned artifact - an index, a
      *  packument, a metadata read. */
     /**
      * The store key that SERVES {@code requestPath}, or empty when this layout stores nothing there.
@@ -160,9 +158,9 @@ public interface BlobLayout extends BlobRoots {
      * <p>The inverse of {@link #servedPaths}, and the direction a reader needs rather than a sweeper. A request
      * path otherwise resolves through the generic {@code publish/<path>} pointer, which is the whole story for a
      * format that publishes through it - and no story at all for one that keeps its own key space, which is every
-     * format implementing this interface. Before this, anything asking "what is stored at this path" outside the
-     * format itself got {@link Optional#empty()} for npm, PyPI, Go, Conan and Hugging Face alike, however plainly
-     * the artifact was being served.
+     * format implementing this interface. Without it, anything asking "what is stored at this path" outside the
+     * format itself would get {@link Optional#empty()} for npm, PyPI, Go, Conan and Hugging Face alike, however
+     * plainly the artifact was being served.
      *
      * <p>The caller that needed it first is the compliance screen's SIBLING read: an inspector holding one file of a
      * publish asks for the document beside it that declares the licence - a Hugging Face model card, and the same
@@ -282,7 +280,7 @@ public interface BlobLayout extends BlobRoots {
      * <p>A format that overrides this is stating that its served path is a pure function of the coordinate, and it
      * owes the two forms agreement: for a version that IS live, this must be exactly what the store-backed overload
      * enumerates. An override that drifted would key a hold's records at a path nothing serves, which is worse than
-     * the endpoint they used to sit at. {@code FormatHoldContractTest} holds every layout to that agreement, so the
+     * keying them at the push endpoint. {@code FormatHoldContractTest} holds every layout to that agreement, so the
      * cheapest safe answer - not overriding at all - stays the default and costs a format at most a hold recorded under
      * its push endpoint rather than under the package.
      */

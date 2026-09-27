@@ -2,12 +2,12 @@
  * The repository server's BOOT MODULE (kernel/boot split): the {@code @SpringBootApplication}
  * composition root - {@code RepositoryApplication}, the focused {@code @Configuration} groups (store, gate wiring,
  * serving, workers, demo and the {@code RepositoryConfig} import shell), the security composition, the discovered
- * feature-module bridge ({@code ServerModuleImports}/{@code ServerModulesConfig}) and the boot-time probes - split
- * out of {@code build.jenesis.repository.server.kernel}, which is now the shared runtime KERNEL this module composes
+ * feature-module bridge ({@code ServerModuleImports}/{@code ServerModulesConfig}) and the boot-time probes - apart
+ * from {@code build.jenesis.repository.server.kernel}, which is the shared runtime KERNEL this module composes
  * over ({@code Repositories}, {@code Settings}, {@code LiveConfig}, {@code RepositoryProperties}, the maintenance
  * scheduler and the authorization manager). Nothing in the product depends on this module: feature-web modules
  * require the kernel and are discovered from here through {@code ServerModuleProvider}, and only the {@code bundle}
- * (and the test suites) name it - stated by the extension contract (G2). Component scan covers ONLY this
+ * (and the test suites) name it - stated by the extension contract. Component scan covers ONLY this
  * package: every kernel bean that must be Spring-visible is registered by an explicit {@code @Bean} method here
  * (notably {@code repositoryAuthorizationManager} in {@code RepositorySecurityConfig} - the free chain's back-off contract is
  * on that bean name). Open so Spring can reflect over the beans and controllers.
@@ -40,15 +40,14 @@ open module build.jenesis.repository.application {
     requires build.jenesis.repository.ui;
     requires jakarta.servlet;
     // the rich-capabilities contribution to the ONE /api/capabilities, discovered by the
-    // free RepositoryController's ServiceLoader.load(server.CapabilityContributor) - retiring the WebMvcRegistrations
-    // capabilities mapping-suppression stopgap in favour of the free-core contributor SPI (a common-SPI hook, not a
-    // bean override).
+    // free RepositoryController's ServiceLoader.load(server.CapabilityContributor) - the free-core contributor SPI (a
+    // common-SPI hook, not a bean override or a WebMvcRegistrations mapping suppression).
     provides build.jenesis.repository.server.spi.CapabilityContributor
             with build.jenesis.repository.application.DeploymentCapabilities;
     // Claim the free-core import edge on module presence, so the free ImportEdgeController (conditionally
     // registered by FreeImportEdgeCondition when no provider is installed) is never created and this composition's
-    // tenant-scoped ImportController is the sole import edge - retiring the WebMvcRegistrations mapping-suppression
-    // stopgap in favour of the free ImportEdgeProvider SPI.
+    // tenant-scoped ImportController is the sole import edge - through the free ImportEdgeProvider SPI rather than a
+    // WebMvcRegistrations mapping suppression.
     provides build.jenesis.repository.server.spi.ImportEdgeProvider
             with build.jenesis.repository.application.RoutedImportEdge;
     requires micrometer.observation;

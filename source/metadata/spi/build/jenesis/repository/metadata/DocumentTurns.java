@@ -9,8 +9,8 @@ import build.jenesis.repository.store.ArtifactStore;
  * <p>A version's document is written by every publish of that version - its published section, its origin row, its
  * licences - and rivals publishing one release at once (a CI job and its retries, a fan-out of builds) each run a
  * read-transform-compare-and-set on it together. Only one of them can win each round, so with more rivals than the
- * store's compare-and-set tries the rest ran out and their publishes failed with a {@code 500}; measured at
- * thirty-two rivals on one release through the containerised image. Taking a turn per document first leaves the
+ * store's compare-and-set tries the rest would run out and their publishes fail with a {@code 500} - thirty-two
+ * rivals on one release are enough. Taking a turn per document first leaves the
  * compare-and-set only the writers of other nodes to arbitrate, which is the contention it was sized for.
  *
  * <p>Every writer of the document takes it - the section-scoped mutate and the inventory's own publish and licence

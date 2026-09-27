@@ -51,7 +51,7 @@ import build.jenesis.repository.format.Listings;
  * {@code --allow-untrusted}, which switches verification off for every repository that client uses. So the first
  * publish generates an RSA key pair, every derived archive carries a {@code .SIGN.RSA256.} member, and the public
  * half is served at {@code GET /apk/keys/jenesis.rsa.pub} for an operator to place in {@code /etc/apk/keys/}. See
- * {@link ApkSigner} for the scheme and how each part of it was measured.
+ * {@link ApkSigner} for the scheme and how each part of it was checked against a real client.
  */
 public final class ApkFormat implements RepositoryFormat, ArtifactLayout, BlobLayout, ArtifactSignatures, RepositoryExporter,
         RepositoryImporter, ProxyLeg {

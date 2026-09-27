@@ -42,7 +42,8 @@ public final class PostureController {
     public void posture(HttpServletRequest request, HttpServletResponse response) throws IOException {
         PostureReport report = PostureReport.discover(Configuration.of(environment::getProperty));
         // Deployment-wide rows for everyone; a tenant's rows only for a key that belongs to that tenant. Rendering
-        // report.advisories() handed every TENANT-scoped advisory to any repository:read caller - the §6 leak, on
+        // report.advisories() would hand every TENANT-scoped advisory to any repository:read caller - a cross-tenant
+        // leak, on
         // the surface whose whole job is to enumerate the deployment's weaknesses. A caller with no key (auth off,
         // or an anonymous read) resolves to no tenant and sees the deployment rows alone, which is the fail-closed
         // direction. This is the same composition the downstream console's ScopedPosture performs; the primitives

@@ -35,9 +35,8 @@ import org.springframework.web.server.ResponseStatusException;
  * {@link RepositoryAutoConfiguration}). When a distribution ships an {@code ImportEdgeProvider} - the downstream
  * edition's tenant-scoped {@code /api/repository/import} with its audited, SSRF-screened choreography - this
  * free controller is simply not created, so its mapping never joins the handler mapping and the distribution's
- * controller is the only import edge: the downstream edition no longer needs a {@code WebMvcRegistrations} bean to
- * suppress the mapping. With no provider installed (the product) the edge is served exactly as before,
- * byte-for-byte unchanged.
+ * controller is the only import edge, with no {@code WebMvcRegistrations} bean needed to suppress the mapping. With
+ * no provider installed (the product) this controller serves the edge.
  *
  * <p>Authorization is not done here: {@link RepositorySecurityAutoConfiguration} gates the wire through the
  * {@link Authorization} credential model, exactly as it does for the rest of {@link RepositoryController}'s surface.

@@ -8,8 +8,7 @@
  * and what keeps the serving - one read and one store over the same cache, the metering and the refusals - in the
  * one place every protocol funnels into rather than reimplemented per tool. The single dependency beyond
  * {@code java.base} is the {@code Providers}/{@code Features} resolution, so this family is discovered and
- * validated by the same primitives as every other (&sect;2 - shared mechanism has one home and is reused, never
- * copied).
+ * validated by the same primitives as every other (shared mechanism has one home and is reused, never copied).
  *
  * @jenesis.release 25
  * @jenesis.bom pin-repository.properties

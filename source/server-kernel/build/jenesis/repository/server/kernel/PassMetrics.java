@@ -8,9 +8,9 @@ import io.micrometer.core.instrument.Tags;
 
 /**
  * The maintenance scheduler's <em>meter sink</em>, split out of {@link MaintenanceScheduler} so the one Micrometer-aware
- * piece of the maintenance kernel is a single object (the maintenance-kernel spike's R9/R10).
+ * piece of the maintenance kernel is a single object.
  *
- * <p>This is the boundary the spike measured and deliberately left in place: <strong>no maintenance task imports
+ * <p>This is a deliberate boundary: <strong>no maintenance task imports
  * Micrometer</strong> - a pass reports through the framework-free
  * {@code RepositoryContext.gauge/counter(String name, String description, Map<String,String> tags, double value)} seam,
  * and this class is the only place those rows become {@link MultiGauge} rows and {@link Counter} increments. Splitting
@@ -30,7 +30,7 @@ import io.micrometer.core.instrument.Tags;
  *       dashboard instead of serving its last value forever; a counter accumulates and is incremented straight onto the
  *       registry rather than collected and flushed.</li>
  *   <li><b>Bounded work.</b> Meter names and tag keys come from the tasks, whose names are a small fixed set; the
- *       {@code task} tag on the failure counter is therefore bounded, as &sect;3 requires of a {@code jenreg.*} meter.</li>
+ *       {@code task} tag on the failure counter is therefore bounded, as a {@code jenreg.*} meter's tags must be.</li>
  * </ol>
  */
 public final class PassMetrics {

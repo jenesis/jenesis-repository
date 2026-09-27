@@ -12,9 +12,9 @@
  * per-incarnation number, and a conditional write is {@code ifGenerationMatch} on the insert, so a lost
  * compare-and-set is the service's 412 (see {@code GcsArtifactStore}).
  *
- * <p>Why the API client and not the Cloud Client Library ({@code google-cloud-storage}): measured 2026-09-05 against
- * 2.73.0, its closure is 91 jars and 57 MB with the gRPC transport, 48 and 20 MB without, and it cannot load on the
- * module path either way - {@code google-cloud-core} and {@code proto-google-common-protos} both own the package
+ * <p>Why the API client and not the Cloud Client Library ({@code google-cloud-storage}): its closure is ninety-odd
+ * jars with the gRPC transport and about half that without, and it cannot load on the module path either way -
+ * {@code google-cloud-core} and {@code proto-google-common-protos} both own the package
  * {@code com.google.cloud} (the latter through two compute-only classes), and the common protos are reached from
  * gax's exception path, so neither can be excluded; the JDK refuses the graph with a {@code ResolutionException}.
  * The API client resolves cleanly once four jars this backend never loads are dropped: the Apache HTTP transport
@@ -27,9 +27,9 @@
  * that depends on the same client - because an exclusion is scoped to the path it is declared on, and the client's
  * own requirement resolves in a second pass once it is aliased (the alias names the artifact, since the hosted module
  * index maps {@code google.api.client} 2.9.1 to another artifact), by which time the service's path has reached the
- * client without it. Measured 2026-09-14: aliasing the client alone brought the Apache transport back through the
- * service's path and the two annotation jars through the client's own second-pass subtree, which the exclusion
- * under {@code com.google.auth.oauth2} no longer reached.
+ * client without it. Aliasing the client alone brings the Apache transport back through the service's path and the
+ * two annotation jars through the client's own second-pass subtree, which the exclusion under
+ * {@code com.google.auth.oauth2} does not reach.
  *
  * @jenesis.release 25
  * @jenesis.alias google.api.client com.google.api-client/google-api-client

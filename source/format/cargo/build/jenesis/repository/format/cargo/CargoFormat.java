@@ -170,9 +170,9 @@ public final class CargoFormat implements RepositoryFormat, ArtifactLayout, Prox
      * choreography ({@code Publication.commit}). The frame is {@code [u32 json-len][json][u32 crate-len][.crate]};
      * only the small, bounded JSON metadata at the front is materialised, and the {@code .crate} that follows it is
      * handed to the operation as the accepted body, so it streams hash-on-write into the content-addressed store and
-     * <b>the hash the chain assesses is the hash the download later serves</b>. It matters because the
-     * former code stored the crate with a raw {@link ArtifactStore#writeBlob} while the edge gated the surrounding
-     * frame, so an artifact whose <em>content</em> a screen would refuse published anyway.
+     * <b>the hash the chain assesses is the hash the download later serves</b>. It matters because storing the crate
+     * with a raw {@link ArtifactStore#writeBlob} while the edge gated the surrounding frame would publish an artifact
+     * whose <em>content</em> a screen would refuse.
      *
      * <p>The metadata is read <em>before</em> the crate, so unlike NuGet this format knows its coordinate up front:
      * the descriptor carries the real {@code name}/{@code vers} and the crate's own download path, which is what a
@@ -296,7 +296,7 @@ public final class CargoFormat implements RepositoryFormat, ArtifactLayout, Prox
      * marker clear a retroactive KEV/licence hold's release is - one hold-release mechanism for this format, not two.
      * The shared commit operation runs its accepted layout only on {@code ACCEPT}, so a screen-time {@code QUARANTINE}
      * would otherwise store the crate, link nothing and index nothing: {@code HoldLifecycle.release} would then resolve
-     * the hold and materialise no version at all, which is the regression this closes.
+     * the hold and materialise no version at all.
      *
      * <p>The order is the load-bearing part. The derived sparse-index line is content-addressed first (a blob, not a
      * pointer - nothing serves it), then {@link Withheld#mark} retracts the crate's own hash, and only then are the two
@@ -482,9 +482,8 @@ public final class CargoFormat implements RepositoryFormat, ArtifactLayout, Prox
             // request the fetcher's redirect-only screen never inspects. A CROSS-ORIGIN target at a private/loopback/
             // metadata host (169.254.169.254, an internal control plane) must not be reached server-side, and neither
             // may a plaintext one: decline so the local 404 stands. A target on the operator's own upstream ORIGIN
-            // (where the index itself lives) is admitted. The old comment here claimed the same-origin shape was what
-            // "the NuGet/PyPI/Composer/CocoaPods proxy legs" do while three of those four refused it outright; 
-            // settled it, and the claim is now true by construction - every one of them makes THIS call.
+            // (where the index itself lives) is admitted - the same answer every proxy leg gives, by construction,
+            // because every one of them makes THIS call.
             return false;
         }
         // Point-integrity: the sparse index publishes the .crate's SHA-256 as its `cksum`, so read that sibling line

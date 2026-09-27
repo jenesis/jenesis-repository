@@ -35,8 +35,8 @@ import build.jenesis.repository.store.SingleFlight;
  * <h2>What an <em>aged</em> entry is worth, and why the two answers differ</h2>
  * The window is the cache's whole promise: an entry inside it is an answer the source stands behind, and an entry past
  * it is not an answer at all until a refresh lands. The interesting case is the refresh that then <em>fails</em>, and
- * this cache had one answer for it - keep serving the last good value and re-extend it by {@link FreshnessTracker#RETRY} -
- * which is right for one half of the family and wrong for the other. It is now <b>declared per cache</b>
+ * one answer for it - keep serving the last good value and re-extend it by {@link FreshnessTracker#RETRY} - is right
+ * for one half of the family and wrong for the other. So it is <b>declared per cache</b>
  * ({@link Aged}), with no default, because the two halves fail in opposite directions:
  *
  * <ul>

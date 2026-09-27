@@ -69,8 +69,8 @@ final class PyPiListings {
      * does not exist yet, which is a request path.
      *
      * <p>The scan's order is the sink's order, which is what the generator contract requires. That is not a
-     * coincidence to rely on quietly: the map was where the ordering came from before, and it is gone, so the
-     * guarantee now rests on {@code BoundedChildren} delivering children in the store's lexicographic order -
+     * coincidence to rely on quietly: no map sorts here, so the guarantee rests on {@code BoundedChildren}
+     * delivering children in the store's lexicographic order -
      * which it documents, which every shipped backend implements natively, and which the store contract kit's
      * native-paging property proves for each of them.
      */

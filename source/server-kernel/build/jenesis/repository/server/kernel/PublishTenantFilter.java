@@ -12,11 +12,9 @@ import org.springframework.web.filter.OncePerRequestFilter;
 /**
  * Binds the request's tenant to the publishing thread for the artifact write/serve surfaces, so the discovered
  * compliance gate resolves that tenant's own policy without the publication-interceptor chain carrying a
- * tenant name. This is the tenant-resolution concern the retired {@code DeployController} used to open inline around its
- * {@code Publication.screen} call: the fork bound {@link PublishTenant#open the scope} itself, but with writes
- * now flowing through {@code RepositoryController} the binding must be opened <em>around</em> that controller -
- * so it moves to this servlet filter, which wraps the whole dispatch on the one request thread the screening and the
- * publish run on.
+ * tenant name. Writes flow through {@code RepositoryController}, so the binding ({@link PublishTenant#open the
+ * scope}) must be opened <em>around</em> that controller - by this servlet filter, which wraps the whole dispatch on
+ * the one request thread the screening and the publish run on.
  *
  * <p>The filter matches the surfaces a write can land on: {@code /repository/**}, the host-rooted OCI registry
  * {@code /v2/**} (whose manifest choke point publishes too), a staged upload under {@code /staging/**}, and a

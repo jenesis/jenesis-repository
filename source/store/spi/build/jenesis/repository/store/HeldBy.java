@@ -8,8 +8,8 @@ import module java.base;
  * served path itself - named by the path's digest because a served path runs longer than a filesystem allows one
  * name segment to be and as long as an object key may be at all. A hold is one marker for
  * the bytes wherever they are served, so a release has to answer "does another live hold still need these bytes"
- * before it lifts the marker - and the answer used to be found by descending every review pointer in the
- * repository, on every release, and once more to re-verify. This index answers it by one page of point reads.
+ * before it lifts the marker. This index answers it by one page of point reads rather than a descent of every review
+ * pointer in the repository on every release.
  *
  * <p>It is written where holds are placed, never where artifacts are published: the pointer link writes the entry
  * for the hash the pointer names, and a retroactive sweep that marks every content hash a version serves records
@@ -25,12 +25,12 @@ import module java.base;
  * linked and unlinked through {@link Publication}, which is what makes the index complete once backfilled.
  *
  * <p><b>The mapping lives at the hold, not in the {@code withheld/} marker</b>, because the store has no versioned
- * delete: a marker that recorded its own holders was clobbered by a concurrent release's unversioned delete on the
- * first run of the race case, and the holder it lost was a live hold with nothing left to say so.
+ * delete: a marker that recorded its own holders would be clobbered by a concurrent release's unversioned delete,
+ * and the holder it lost would be a live hold with nothing left to say so.
  *
- * <p>A repository from before the index has review pointers nothing indexed; the first reader to ask backfills
- * every pointer by the descent it used to make, then {@linkplain #completed stamps} the repository, and the descent
- * is never taken again there. Until the stamp stands a reader answers by the descent, as before, so no release
+ * <p>A repository whose review pointers nothing indexed yet is backfilled by the first reader to ask, by one
+ * descent, which then {@linkplain #completed stamps} the repository, and the descent is never taken again there.
+ * Until the stamp stands a reader answers by the descent, so no release
  * lifts a marker on an index that is not yet complete.
  */
 public final class HeldBy {

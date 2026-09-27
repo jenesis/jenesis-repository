@@ -95,7 +95,7 @@ public final class PublishedIndexTask implements MaintenanceTask {
     private void pass(ArtifactStore store, Instant now, boolean forced, Gauges gauges) throws IOException {
         StoreRepositoryInventory inventory = new StoreRepositoryInventory(store);
         Publication publication = new Publication(store);
-        // Route the served-view screen through the servable-name seam (P-E3 E20): a published pointer is indexed only
+        // Route the served-view screen through the servable-name seam: a published pointer is indexed only
         // when a GET would serve it (SERVABLE) - a withheld hold/quarantine or a torn-blob pointer is skipped - composing
         // this pass's own Publication interceptor chain, the same discrimination the serve path makes.
         ServableNames servableNames = new ServableNames(store, publication);
@@ -311,9 +311,9 @@ public final class PublishedIndexTask implements MaintenanceTask {
                              StoreRepositoryInventory inventory, String relative, boolean rebase,
                              IndexDescriptor.Cursor watermark, Sink sink) throws IOException {
         String requestPath = "/" + relative;
-        // Served-view screen through the seam (E20): index a pointer only when a GET would serve it. A withheld
-        // hold/quarantine or a torn-blob pointer (BLOB_GONE) is skipped - the same WG discrimination located() made,
-        // now the one shared servable-name decision so an index stanza can never disagree with the serve path.
+        // Served-view screen through the seam: index a pointer only when a GET would serve it. A withheld
+        // hold/quarantine or a torn-blob pointer (BLOB_GONE) is skipped - the one shared servable-name decision, so
+        // an index stanza can never disagree with the serve path.
         if (servableNames.state(requestPath) != ServableNames.State.SERVABLE) {
             return;                                          // withheld (a hold/quarantine) or the blob is gone
         }

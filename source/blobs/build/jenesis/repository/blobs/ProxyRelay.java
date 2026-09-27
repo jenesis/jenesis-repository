@@ -98,7 +98,7 @@ public final class ProxyRelay {
          * apart: only an upstream that <em>answered</em> {@code 404}/{@code 410} may reach the client as a {@code 404},
          * because an origin said it. A transport failure, or an upstream that answered something other than the
          * document, is a question this repository could not put to its upstream, and it fails visibly with a
-         * {@code 502} instead of being answered "none" (&sect;5, &sect;9).
+         * {@code 502} instead of being answered "none".
          */
         ENUMERATION,
 
@@ -138,14 +138,10 @@ public final class ProxyRelay {
      * {@code true} - because the leg <em>did</em> serve a response, and the {@code false} that means "let the local
      * {@code 404} stand" would have let a lie stand.
      *
-     * <p>That lie is not hypothetical, which is why this is a seam and not a per-leg line. On a loaded full build one
-     * Go {@code @v/list} fetch ran 5.6 s - the shipped transport's connect timeout is five seconds, and it reports a
-     * timeout as the empty result - and {@code github.com/pkg/errors} was served to the client as a module with no
-     * versions. The {@code 404} was then investigated as an enumeration regression in the newly paged asset walk,
-     * because a network blip and a real absence are the same bytes on the wire. All thirteen proxying formats
-     * carried the hole, and so did the Maven leg; the fix lives here
-     * rather than thirteen times over so a fifteenth format cannot reopen it by writing the obvious
-     * {@code return false}.
+     * <p>That lie is not hypothetical, which is why this is a seam and not a per-leg line: on a loaded machine a fetch
+     * can outlast the shipped transport's five-second connect timeout, which reports a timeout as the empty result,
+     * and a network blip and a real absence are the same bytes on the wire. The rule lives here rather than once per
+     * proxying format so a new format cannot reopen the hole by writing the obvious {@code return false}.
      */
     public static boolean unanswered(URI target, FormatExchange exchange, Document document, String reason)
             throws IOException {
@@ -306,9 +302,9 @@ public final class ProxyRelay {
      * never throws: a proxy leg runs after a local miss, so a throw here would surface as an unmapped {@code 500} where
      * {@link ProxyLeg}'s clause 2 says the truthful answer is the {@code 404}.
      *
-     * <p>It is a {@code WARN} rather than a {@code DEBUG} because it is the operator-visible half of the fix. Two legs
-     * already logged this exact downgrade at {@code DEBUG} while still caching the artifact - the evidence was there
-     * and said nothing, since a line nobody reads beside a fill that happened anyway is not a refusal.
+     * <p>It is a {@code WARN} rather than a {@code DEBUG} because it is the operator-visible half of the refusal. A
+     * {@code DEBUG} line logged while still caching the artifact would be evidence that says nothing, since a line
+     * nobody reads beside a fill that happened anyway is not a refusal.
      *
      * @return {@code false} always, so a leg reads {@code return ProxyRelay.unverifiable(...)}
      */

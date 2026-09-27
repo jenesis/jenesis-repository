@@ -248,7 +248,7 @@ public class ConfigController {
         try {
             settings.set(key, value);
         } catch (IllegalStateException refused) {
-            // A SECRET write with no master key configured is refused (§9), naming the remedy; nothing was persisted.
+            // A SECRET write with no master key configured is refused, naming the remedy; nothing was persisted.
             refuseSecret(response, refused);
             return;
         }
@@ -374,7 +374,7 @@ public class ConfigController {
                 settings.importTenant(tenant, bundle);
             }
         } catch (IllegalArgumentException | IllegalStateException e) {
-            // IllegalStateException covers a restored SECRET the deployment cannot encrypt at rest (§9, no master key);
+            // IllegalStateException covers a restored SECRET the deployment cannot encrypt at rest (no master key);
             // nothing was persisted, and the message names the remedy.
             response.setStatus(400);
             response.setContentType("text/plain;charset=UTF-8");
@@ -467,7 +467,7 @@ public class ConfigController {
             response.setStatus(400);
             return;
         }
-        // Write-time validation (§9): run the SAME parser the boot sweep (
+        // Write-time validation: run the SAME parser the boot sweep (
         // LiveConfig.sweepDefinitions) uses BEFORE the definition is stored, so a broken definition never reaches the
         // store. The refusal is LOUD and NAMED - the repository, what is wrong, and the fix - not a bare 400: the
         // parse remedy is surfaced verbatim so the operator can correct it. The parser accepts the clause grammar
@@ -780,7 +780,7 @@ public class ConfigController {
         try {
             upstreamCredentials.set(host, credential.get());
         } catch (IllegalStateException refused) {
-            // An upstream credential write with no master key configured is refused (§9), naming the remedy; the
+            // An upstream credential write with no master key configured is refused, naming the remedy; the
             // credential is encrypted at rest like a SECRET setting, so nothing was persisted.
             refuseSecret(response, refused);
             return;
@@ -813,7 +813,7 @@ public class ConfigController {
     }
 
     /** Refuse a SECRET write the deployment cannot encrypt at rest (no master key configured): {@code 400} with the
-     *  §9 remedy from {@link Settings}, which names {@code JENREG_SECRETS_KEY}. Nothing was persisted. */
+     *  remedy from {@link Settings}, which names {@code JENREG_SECRETS_KEY}. Nothing was persisted. */
     private static void refuseSecret(HttpServletResponse response, IllegalStateException refused) throws IOException {
         response.setStatus(400);
         response.setContentType("text/plain;charset=UTF-8");

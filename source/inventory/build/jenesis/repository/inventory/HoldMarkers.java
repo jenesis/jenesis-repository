@@ -44,10 +44,10 @@ public final class HoldMarkers {
     public static final String DISPATCH = "dispatch";
 
     /** The squatter's whole root, {@code holds/dispatch}, composed here so the gate's {@code QuarantineDispatch}
-     *  builds it from this constant instead of re-spelling {@code "holds/"} beside it. Once only the second
-     *  segment was shared, so renaming {@link #ROOT} would have left the squat writing under the old root while
-     *  {@link #kinds} enumerated the new one - and the exclusion that keeps {@code dispatch} from reading as a hold
-     *  kind would have stopped excluding anything. */
+     *  builds it from this constant instead of re-spelling {@code "holds/"} beside it. Sharing only the second
+     *  segment would let a rename of {@link #ROOT} leave the squat writing under one root while {@link #kinds}
+     *  enumerated another - and the exclusion that keeps {@code dispatch} from reading as a hold kind would stop
+     *  excluding anything. */
     public static final String DISPATCH_ROOT = ROOT + "/" + DISPATCH;
 
     private HoldMarkers() {

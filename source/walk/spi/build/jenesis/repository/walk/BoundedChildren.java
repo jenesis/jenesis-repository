@@ -145,28 +145,26 @@ public record BoundedChildren(int steps, int entries, int page) {
      * time</em>. Draining a container of N names therefore costs N/page scans of N entries: quadratic, and only on
      * a filesystem.
      *
-     * <p>That is not a small effect at the sizes the canaries reach. Attribution's materialisation walks the
-     * inventory in {@value #PAGE}-name pages; at a million versions that is a thousand scans of a million entries.
-     * Measured, its convergence went from under 6.4 minutes at 400,000 versions to over 35.3 at 1,000,000 - more
-     * than five and a half times the work for two and a half times the versions, against the 6.25x a quadratic
-     * predicts.
+     * <p>That is not a small effect at the sizes a large deployment reaches. A walk of the inventory in
+     * {@value #PAGE}-name pages at a million versions is a thousand scans of a million entries: two and a half times
+     * the versions of a 400,000-version walk costs more than five times the work, as a quadratic predicts.
      *
      * <p>So a drain trades memory it can afford for scans it cannot: {@value #DRAIN_PAGE} names in hand instead of
-     * {@value #PAGE} cuts the scans by the same factor. Measured on the OCI tag canary at a million tags, on one
-     * warm machine, changing nothing else: <b>834 s at a {@value #PAGE} page, 188 s at {@value #DRAIN_PAGE}</b>.
+     * {@value #PAGE} cuts the scans by the same factor - at a million tags, <b>834 s at a {@value #PAGE} page against
+     * 188 s at {@value #DRAIN_PAGE}</b>, nothing else changed.
      *
-     * <p><b>A single pass was built and then thrown away, which is the more useful half of the measurement.</b>
-     * The obvious next step is for the store to drain in one sweep - read the directory once, spill sorted runs,
-     * merge them - and that was implemented and measured at the same million tags: <b>198 s</b>, against 188 for
-     * simply paging ten times wider. No better, and a k-way merge and a spool file worse to own. The reason is
+     * <p><b>A single-sweep drain is not worth owning at this size.</b> The obvious next step is for the store to
+     * drain in one sweep - read the directory once, spill sorted runs, merge them - and at the same million tags it
+     * takes <b>198 s</b>, against 188 for simply paging ten times wider. No better, and a k-way merge and a spool
+     * file worse to own. The reason is
      * arithmetic: at a {@value #DRAIN_PAGE} page a million names is only a hundred scans, so the quadratic term has
      * already stopped dominating and the remaining time is the work the walk feeds, not the walk.
      *
      * <p>That is a statement about <em>this</em> size, not about the shape. The term is still quadratic, so it
      * returns: at ten million names a {@value #DRAIN_PAGE} page is a thousand scans of ten million, and a single
      * pass would win by orders of magnitude. The fix to reach for then is a store that drains in one sweep - and
-     * it should be reached for when a canary shows the quadratic biting again, not before, which is why the code
-     * is not carried in the meantime.
+     * it should be reached for when the quadratic bites again, not before, which is why the code is not carried in
+     * the meantime.
      */
     public static final int DRAIN_PAGE = ArtifactStore.DRAIN_PAGE;
 

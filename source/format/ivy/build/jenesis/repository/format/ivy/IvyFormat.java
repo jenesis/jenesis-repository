@@ -47,7 +47,7 @@ import build.jenesis.repository.format.PublishedExport;
  *
  * <p>Coordinate rows therefore merge with Maven's, deliberately: they are the same coordinate in the same space,
  * one artifact served two ways. Every seam that maps an ecosystem back to a layout asks each format that declares
- * it and unions the answers, which is the rule that was written for this case before this format existed.
+ * it and unions the answers, which is the rule written for exactly this case.
  *
  * <h2>What the accepted layout has to satisfy, stated as properties</h2>
  *

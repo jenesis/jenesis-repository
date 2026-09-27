@@ -15,8 +15,8 @@ import build.jenesis.repository.gate.QuarantineLog;
  * held path is a path to), so the orphan diagnostic and the explicit operator purge know the key-spaces without a
  * hardcoded table.
  *
- * <p>{@code subjects} is declared here rather than by the inventory module for the same reason {@code overrides} is
- *: a declaration is ownership <em>for reclamation</em>, and what the space belongs to is the hold, which is
+ * <p>{@code subjects} is declared here rather than by the inventory module for the same reason {@code overrides} is:
+ * a declaration is ownership <em>for reclamation</em>, and what the space belongs to is the hold, which is
  * the gate's. Its key spelling has one owner one module down - {@code HeldSubjects} in the inventory, beside the
  * sibling per-version spaces and reachable from the name-enumeration screen that reads it.
  *

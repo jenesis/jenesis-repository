@@ -22,11 +22,10 @@ import tools.jackson.databind.json.JsonMapper;
  * object; a node reads with {@link ArtifactStore#readVersioned} and writes with {@link ArtifactStore#writeVersioned}
  * on its own key's token, so a stale-token retry only ever races the same node.
  *
- * <p>This is the one engine. A downstream telemetry module used to carry a second, wired beside this one under a
- * different bean name, writing a {@code key=value} document to a different prefix - so one deployment heartbeated two
- * disjoint node sets in two encodings and its posture advisor read one of them. The two differed in nothing but
- * where they wrote and how; what that copy did better (folding the live tenant set on every heartbeat, a
- * wider must-match set) is what the {@link NodeFingerprintPublisher} does now.
+ * <p>This is the one engine. A second one wired beside it under a different bean name, writing a different document
+ * to a different prefix, would make one deployment heartbeat two disjoint node sets in two encodings while its
+ * posture advisor read one of them. Folding the live tenant set on every heartbeat and the wider must-match set are
+ * what the {@link NodeFingerprintPublisher} does.
  */
 public final class NodeConsistency {
 
@@ -68,13 +67,11 @@ public final class NodeConsistency {
      * One {@code jenreg.consistency.*} duration dial, or its default when the operator left it unset.
      *
      * <p><b>It takes the same ISO-8601-or-suffixed form every other duration in this product takes</b>
-     * ({@code PT5M}, {@code 5m}, {@code 30s}), through the one shared {@link Durations#parse}. It used to take a
-     * bare count of milliseconds, which made these the only durations in the deployment spelled differently from
-     * all the others - so an operator writing the form they had just used for {@code cache.ttl} or {@code gc.grace}
-     * got something else entirely.
+     * ({@code PT5M}, {@code 5m}, {@code 30s}), through the one shared {@link Durations#parse}, so an operator writing
+     * the form they had just used for {@code cache.ttl} or {@code gc.grace} gets what they wrote.
      *
-     * <p><b>And a value that is set and unreadable throws rather than falling back</b> (&sect;9). It used to be
-     * caught and the default returned, which reads as robust and is not: the operator gets a window they did not
+     * <p><b>And a value that is set and unreadable throws rather than falling back</b>. Catching it and returning the
+     * default reads as robust and is not: the operator gets a window they did not
      * choose, no line saying so, and a fleet judging nodes dead on it. The same reasoning the bootstrap key's
      * malformed-value refusal already carries - someone who sets a value expects it to take effect, and a silently
      * dropped typo leaves behaviour they cannot account for and nothing to read. Unset is a choice and keeps the

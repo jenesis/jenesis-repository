@@ -12,9 +12,9 @@ import build.jenesis.repository.walk.Traversal;
  * simply a cache miss for the running server, so these sweeps are race-safe.
  *
  * <p><strong>Every sweep here streams; none of them holds a project.</strong> The SPI's enumerations are paged and
- * resumable, and this class is where that matters most: a size cap used to enumerate a project into one list and sort
- * it, which is an allocation proportional to whatever a build had cached, on the exact code path an operator reaches
- * when the volume is already tight. Each sweep now drives {@link CacheStorage#entries} page by page to exhaustion -
+ * resumable, and this class is where that matters most: a size cap that enumerated a project into one list and
+ * sorted it would allocate in proportion to whatever a build had cached, on the exact code path an operator reaches
+ * when the volume is already tight. Each sweep drives {@link CacheStorage#entries} page by page to exhaustion -
  * the remainder is always followed, never dropped, because a half-swept project would report a total the console
  * shows as fact and would leave a cap unenforced - and the only thing that outlives one page is a bounded
  * {@link #BATCH}-wide selection of what to delete.

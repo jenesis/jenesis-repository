@@ -11,10 +11,8 @@ import build.jenesis.repository.ui.ConsoleAdministrators;
  * the provider-verified stable id, never on a mutable display login (a reclaimable username or an unverified email),
  * so acquiring a super-admin's handle does not grant super-admin.
  *
- * <p><b>There is no {@code *} wildcard.</b> It used to be honoured under {@code jenreg.tenancy=fixed} - where a
- * super-admin of the one tenant is the same grant the single-tenant console's open-console opt-out hands out - and
- * refused under any multi-tenant routing, where it would make every member of any tenant an administrator of all
- * of them. It is refused everywhere now, and the tenancy mode no longer enters into it: an administrator is a
+ * <p><b>There is no {@code *} wildcard.</b> Under any multi-tenant routing it would make every member of any tenant
+ * an administrator of all of them, and it is refused under every routing alike: an administrator is a
  * holder of rights, and a wildcard names no holder, so there is nothing an operator can read back, revoke, or see
  * in a list of who administers this deployment. "Everyone this deployment authenticates holds X" is a real need
  * and gets a holder of its own; it does not get a magic value inside a list of ids.

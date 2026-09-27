@@ -3,8 +3,8 @@ package build.jenesis.repository.store;
 import module java.base;
 
 /** The one discovery of the publication hook class, at this holder's load: every {@link PublicationObserver} on the
- *  module path, and the two subsets consumers used to split off for themselves - the interceptors among them and the
- *  listing rebuilders. A holder rather than a field on the interface, so the load happens on first use of the list and
+ *  module path, and the two subsets consumers need - the interceptors among them and the listing rebuilders. A holder
+ *  rather than a field on the interface, so the load happens on first use of the list and
  *  not on the interface's own initialisation. Empty in the core (no provider on the module path). */
 final class Observers {
 

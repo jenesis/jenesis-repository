@@ -26,16 +26,16 @@ import build.jenesis.repository.store.Providers;
  *     is never a legal return from it or from {@link #name()}. Note that a trail configured
  *     <em>off</em> is not the sentinel: the store-backed trail still answers queries over what it recorded before,
  *     so switching audit off never hides history - only removing the module does.</li>
- * <li><b>Selection failure (&sect;9).</b> This SPI has <em>no</em> selection key: the {@code audit} setting is the
+ * <li><b>Selection failure.</b> This SPI has <em>no</em> selection key: the {@code audit} setting is the
  *     installed trail's own on/off dial, not a provider name, so there is no explicitly-selected miss to fail on.
  *     The one resolution failure is ambiguity - two installed providers would make module-path order decide where a
  *     deployment's compliance record lands, so {@link #resolve} <em>throws</em> naming both rather than picking a
  *     discovery-order winner. Resolution runs through the shared {@link Providers#optionalUnique} primitive, never
  *     a hand-rolled loop.</li>
- * <li><b>Tenant scoping (&sect;6).</b> The trail is built over the deployment's <em>root</em> store and carries the
+ * <li><b>Tenant scoping.</b> The trail is built over the deployment's <em>root</em> store and carries the
  *     tenant on each record, so it can answer "who did what to what, per tenant" without a per-tenant instance; a
  *     query names the tenant it may read.</li>
- * <li><b>Error visibility (&sect;9).</b> A lost audit record is a compliance gap, not a contained best-effort loss:
+ * <li><b>Error visibility.</b> A lost audit record is a compliance gap, not a contained best-effort loss:
  *     a write failure is surfaced rather than swallowed into a silent no-op.</li>
  * <li><b>Lifecycle / ownership.</b> The composition owns the trail: {@link #resolve} builds at most one instance
  *     per call and hands it over, caching nothing and closing nothing. Provider instances are created by

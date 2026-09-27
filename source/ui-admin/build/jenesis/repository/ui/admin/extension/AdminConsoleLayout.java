@@ -7,11 +7,11 @@ import java.util.Set;
 /**
  * The admin console's declaration that it is built on the base console's layout.
  *
- * <p>This is the whole of the fix, and it is deliberately small. The dependency it declares was already real -
- * every one of this console's templates renders through {@code base.html} - but it existed only as a Thymeleaf
- * fragment reference and a {@code requires} clause with no Java behind it. A module-graph tool saw an unused edge; a
- * reader saw a {@code requires} nothing seemed to need. Referencing {@link ConsoleLayout} here means removing that
- * dependency now fails to compile instead of failing at render time on every page.
+ * <p>Deliberately small. The dependency it declares is real - every one of this console's templates renders through
+ * {@code base.html} - but without it that would exist only as a Thymeleaf fragment reference and a {@code requires}
+ * clause with no Java behind it: a module-graph tool would see an unused edge, and a reader a {@code requires}
+ * nothing seemed to need. Referencing {@link ConsoleLayout} here means removing that dependency fails to compile
+ * instead of failing at render time on every page.
  *
  * <p>The fragment set is the ones this console's templates actually plug into, verified against the templates rather
  * than declared aspirationally - so a fragment dropped from the layout is a failure with a name attached.

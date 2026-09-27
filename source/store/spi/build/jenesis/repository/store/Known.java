@@ -9,12 +9,11 @@ import module java.base;
  * <em>"I could not ask"</em>, and every caller that then <b>deletes, releases or discloses</b> something reads the
  * fused value as the first.
  *
- * <p><strong>Why a type rather than a discipline.</strong> The same three-state answer had been invented five times
- * independently across this product - a {@code LIVE}/{@code GONE}/{@code UNJUDGEABLE} liveness, a
- * {@code MEMBER}/{@code ABSENT}/{@code UNJUDGEABLE} membership, a root set with a {@code complete()} flag, a
- * three-valued namespace, and an {@code Optional.empty()} standing in for "unenumerable" - each written after a
- * defect had already been shipped, and each unable to help the next site. One spelling, in the module every other
- * one already depends on, is what makes the fix durable rather than a fifth precedent.
+ * <p><strong>Why a type rather than a discipline.</strong> The same three-state answer arises all over this product -
+ * a {@code LIVE}/{@code GONE}/{@code UNJUDGEABLE} liveness, a {@code MEMBER}/{@code ABSENT}/{@code UNJUDGEABLE}
+ * membership, a root set with a {@code complete()} flag, a three-valued namespace, and an {@code Optional.empty()}
+ * standing in for "unenumerable" - and a local spelling of it cannot help the next site. One spelling, in the module
+ * every other one already depends on, is what makes the rule durable rather than one more precedent.
  *
  * <p><strong>Construction, not discipline.</strong> {@code Traversal.Result} is the mould:
  * there, "truncated" and "carries a cursor" are the same fact by constructor invariant, so an incomplete traversal
@@ -32,7 +31,7 @@ import module java.base;
  * </ul>
  *
  * <p><strong>There is deliberately no {@code isPresent()}, no {@code get()} and no {@code orElse()}.</strong>
- * Those are the reflex that produced the defect: a two-valued test over a three-valued answer, whose {@code else}
+ * Those are the reflex this type guards against: a two-valued test over a three-valued answer, whose {@code else}
  * branch silently absorbs the third state. The only ways out of a {@code Known} are an exhaustive
  * {@code switch} - which the sealing makes total, so a new state would break every caller rather than slip past a
  * {@code default} - and the two named narrowings below, each of which says out loud what it is doing:
@@ -113,7 +112,7 @@ public sealed interface Known<T> permits Known.Determined, Known.Unknown {
 
     /**
      * The question could not be answered. Never a "no": a caller that treats it as one has re-created the defect this
-     * type exists to end.
+     * type exists to prevent.
      *
      * @param cause  which of the three structural ways the answer was lost.
      * @param detail what was being asked and what stopped it, in a form an operator can act on - it is the log line.

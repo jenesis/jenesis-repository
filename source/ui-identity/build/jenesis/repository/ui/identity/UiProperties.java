@@ -7,10 +7,9 @@ import org.springframework.boot.context.properties.ConfigurationProperties;
  * {@code JENREG_UI_*} environment variable by relaxed binding, with the default beside the field rather than in a
  * properties file restating it.
  *
- * <p>Two keys are gone rather than moved. {@code jenreg.ui.root} was read by nothing at all, and the two
- * reclaim targets were fed from the build cache's {@code JENREG_CACHE_MIN_FREE*} variables - so setting the
- * cache's reaper target silently moved the console's global reclaim target too, which is a different decision
- * about a different sweep.
+ * <p>The console's reclaim targets are not fed from the build cache's {@code JENREG_CACHE_MIN_FREE*} variables:
+ * setting the cache's reaper target must not silently move the console's global reclaim target, which is a
+ * different decision about a different sweep.
  *
  *   jenreg.ui.admins            comma-separated provider-qualified ids SEEDED as deployment administrators on
  *                               every boot (JENREG_UI_ADMINS). It is not a mirror: an id dropped from it keeps

@@ -12,10 +12,9 @@ import build.jenesis.repository.ui.CurrentTenant;
  * {@link Authorization} store a minted key's grants live in.
  *
  * <h2>A person and a key hold rights the same way</h2>
- * A member used to be a small document of its own - {@code role} and {@code login} under the tenant's
- * {@code .users/members/} space - and a key's rights were a grants object under {@code .system/auth}. Two models
- * for one question, kept agreeing by hand, and only one of them was the vocabulary every other surface speaks.
- * A member is now {@code Subject.principal("<provider>/<id>")} holding rights at a scope, so a per-tenant
+ * A member is not a document of its own beside a key's grants object under {@code .system/auth} - two models for one
+ * question, kept agreeing by hand. A member is {@code Subject.principal("<provider>/<id>")} holding rights at a
+ * scope, the vocabulary every other surface speaks, so a per-tenant
  * {@code EDITOR} and a key scoped to that tenant with {@code repository:write,cache:write} are the same grant,
  * written the same way and matched by the same code.
  *
@@ -31,18 +30,18 @@ import build.jenesis.repository.ui.CurrentTenant;
  * store encodes it into one segment. The display login is the subject's label, which is what that field is for.
  *
  * <h2>One subject per member, which is what makes the enumeration bounded</h2>
- * Every member once lived in a single {@code .users/login.properties}: {@link #page} could not exist,
- * {@link #find(String)} was a whole-document read to answer one lookup, the cross-tenant role check behind every
- * request read it again, and a write re-read it on every lost compare-and-set - so provisioning two
- * <em>unrelated</em> users contended. With a subject per member, {@link #find} and the role check are point
+ * With every member in one document, {@link #page} could not exist, {@link #find(String)} would be a whole-document
+ * read to answer one lookup, the cross-tenant role check behind every request would read it again, and a write would
+ * re-read it on every lost compare-and-set - so provisioning two <em>unrelated</em> users would contend. With a
+ * subject per member, {@link #find} and the role check are point
  * reads, a write contends only with a write to the same member, and {@link #page} is a real bounded page.
  *
  * <h2>Its own module</h2>
  * The directory, the reverse index, the super-admin set, the login decision, the starter credential and the
- * console's properties are the identity layer three sign-in modules and the SCIM provisioner plug into. They lived
- * in the admin console's own module until 2026-09-20, so a sign-in module required the whole console - every
- * screen, every Spring surface - to reach five classes, and the console and its sign-in modules could only ever move
- * together. They are Spring-free here bar the two annotations a properties document needs, and
+ * console's properties are the identity layer three sign-in modules and the SCIM provisioner plug into. In the
+ * admin console's own module, a sign-in module would require the whole console - every screen, every Spring
+ * surface - to reach five classes, and the console and its sign-in modules could only ever move together. They are
+ * Spring-free here bar the two annotations a properties document needs, and
  * {@link ConsoleIdentityConfig} is the one place the console declares them as beans.
  */
 public class UserDirectory {
@@ -52,9 +51,8 @@ public class UserDirectory {
      * constant it is - so a console-plane module that already reads this package (key-login's tenant probe, the
      * SCIM provisioning guard) does not also have to require the domain module to name it.
      *
-     * <p>It survives the membership moving into the authorization store. That move changed where a MEMBER lives;
-     * it did not change what marks a tenant, and it did not change which modules can see the package that owns
-     * the marker.
+     * <p>Membership lives in the authorization store; that decides where a MEMBER lives, not what marks a tenant, nor
+     * which modules can see the package that owns the marker.
      */
     public static final String TENANT_FILE = TenantService.TENANT_FILE;
 
@@ -282,8 +280,8 @@ public class UserDirectory {
      * The role a tenant grants {@code id}: the rights its own grants hold together with those its groups confer - the
      * cross-tenant check every authenticated request makes. It reads the subject's grants and the union its group
      * memberships already derived, two point reads on keys composed from the id, so it costs the same whatever the
-     * tenant's user population. It used to read the subject's own grants alone, so a role granted to a group - by an
-     * operator, or through a directory's membership - reached the repository and never the console.
+     * tenant's user population. Reading the subject's own grants alone would let a role granted to a group - by an
+     * operator, or through a directory's membership - reach the repository and never the console.
      */
     public static Optional<Role> roleIn(Authorization authorization, String tenant, String id) {
         if (id == null || id.isBlank()) {

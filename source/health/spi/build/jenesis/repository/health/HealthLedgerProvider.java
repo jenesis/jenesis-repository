@@ -25,14 +25,14 @@ import build.jenesis.repository.store.Providers;
  * <li><b>Absence sentinel.</b> {@link #installed()} answers an empty {@link Optional} when no persistence module is
  *     on the module path; the sweep then records nothing, the endpoint answers that the store is absent, and the
  *     gate falls back to the live health source. {@code null} is never a legal return.</li>
- * <li><b>Selection failure (&sect;9).</b> This SPI has <em>no</em> selection key - nothing names a ledger by name -
+ * <li><b>Selection failure.</b> This SPI has <em>no</em> selection key - nothing names a ledger by name -
  *     so there is no explicitly-selected miss to fail on. The one resolution failure is ambiguity: two installed
  *     providers would make module-path order decide which ledger the gate reads, so {@link #installed()}
  *     <em>throws</em> naming both rather than picking a discovery-order winner. Resolution runs through the shared
  *     {@link Providers#optionalUnique} primitive, never a hand-rolled loop.</li>
- * <li><b>Tenant scoping (&sect;6).</b> The provider never resolves a tenant: the caller hands in an already-scoped
+ * <li><b>Tenant scoping.</b> The provider never resolves a tenant: the caller hands in an already-scoped
  *     store and the ledger reads and writes nothing outside it.</li>
- * <li><b>Read purity (&sect;10).</b> Reading the ledger renders stored verdicts only - it never probes the live
+ * <li><b>Read purity.</b> Reading the ledger renders stored verdicts only - it never probes the live
  *     health source. Refreshing is the sweep's or an explicit rescan's job.</li>
  * <li><b>Staleness.</b> A {@link HealthLedger#scanned health stamp} records the last refresh instant, so an empty panel is never
  *     ambiguous between "healthy" and "never scored". Every {@link HealthLedger#worstFirst} answer carries its own
@@ -52,8 +52,8 @@ import build.jenesis.repository.store.Providers;
  *     and the override, rather than buffering the whole ledger behind a streaming promise. {@code worstFirst} has no
  *     such fallback at all: with no committed ranking it reports {@code Ranking.NotBuilt} rather than deriving one on
  *     the request thread, so the ranked read is bounded by construction and never by a ceiling on a whole-ledger
- *     sort (a bounded sample would be the worst of an arbitrary prefix wearing a "worst overall" label - &sect;9's
- *     silent fallback, and what a ceiling here would have preserved).</li>
+ *     sort (a bounded sample would be the worst of an arbitrary prefix wearing a "worst overall" label - a silent
+ *     fallback, and what a ceiling here would preserve).</li>
  * </ol>
  */
 public interface HealthLedgerProvider {

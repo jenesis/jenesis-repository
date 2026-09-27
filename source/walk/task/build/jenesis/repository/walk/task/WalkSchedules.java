@@ -30,8 +30,8 @@ public final class WalkSchedules {
      * nights, and retention's daily walk - which runs by itself because a retention policy is a configuration
      * that runs, and which an operator opts out of by removing the entry.
      *
-     * <p><b>Collection is not among the daily consumers, deliberately.</b> It is the expensive one: measured
-     * 2026-09-08 over twenty thousand objects, a collection costs about 25 reads and 0.7 writes per object held,
+     * <p><b>Collection is not among the daily consumers, deliberately.</b> It is the expensive one: a collection
+     * costs about 25 reads and 0.7 writes per object held,
      * where every other consumer of a whole walk together costs about 33 reads and 1.4 writes - and on the
      * hyperscalers a write is priced at twelve to thirteen reads. Daily, that is the largest recurring line a
      * deployment on an object store has, larger than serving its users. It rides the weekly {@code rebuild}

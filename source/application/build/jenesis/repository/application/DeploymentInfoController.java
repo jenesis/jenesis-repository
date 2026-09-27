@@ -76,9 +76,9 @@ public class DeploymentInfoController {
         this.effective = pins.effective(settings, environment);
         // Bridge this Spring bean's live rich-capabilities view to the free-core CapabilityContributor SPI, which
         // is ServiceLoader-discovered (no Spring context) inside the free RepositoryController.capabilities(). The free
-        // controller now serves the ONE /api/capabilities, merging this contribution onto its base map - retiring the
-        // WebMvcRegistrations mapping-suppression stopgap that dropped the capabilities mapping so this controller
-        // could own the path. Installed last, after every field is assigned, so the supplier reads a fully-built bean.
+        // controller serves the ONE /api/capabilities, merging this contribution onto its base map, so no second
+        // controller owns the path. Installed last, after every field is assigned, so the supplier reads a fully-built
+        // bean.
         DeploymentCapabilities.install(this::capabilityMap);
     }
 
@@ -99,9 +99,9 @@ public class DeploymentInfoController {
         String licenseAllowed = dial("license-allowed", declared("license-allowed"));
         String licenseUnknown = dial("license-unknown", declared("license-unknown"));
         String threshold = dial("vulnerability-threshold", properties.getVulnerabilityThreshold());
-        // The first-run guided-hardening advice (audit P4), recomputed live from the stored settings so it renders the
+        // The first-run guided-hardening advice, recomputed live from the stored settings so it renders the
         // current posture and falls silent the moment anything is configured - a read that renders durable state, never
-        // a write (§10). The same FirstRunHardening.assess the boot log uses, so both surfaces agree.
+        // a write. The same FirstRunHardening.assess the boot log uses, so both surfaces agree.
         FirstRunHardening.Advice hardening = FirstRunHardening.assess(
                 FirstRunHardening.firstRun(settings), DECLARED, effective);
         return new ConfigView(properties.getStore(), proxy,
@@ -137,9 +137,8 @@ public class DeploymentInfoController {
     /** The rich-capabilities view as the flat, JSON-serialisable map the
      *  {@link build.jenesis.repository.server.spi.CapabilityContributor} merges onto {@code /api/capabilities}: the six
      *  {@link CapabilitiesView} components ({@code version}, {@code formats}, {@code importSources}, {@code signals},
-     *  {@code modules}, {@code features}) as top-level keys, preserving the exact shape the endpoint served before the
-     *  free controller took ownership of the mapping - the base keys ({@code readOnly}, {@code auth},
-     *  {@code anonymousRights}) are then added around it by the merge, a strict superset of the old body. Recomputed
+     *  {@code modules}, {@code features}) as top-level keys - the base keys ({@code readOnly}, {@code auth},
+     *  {@code anonymousRights}) are then added around it by the merge. Recomputed
      *  per call off the live settings, so a toggle re-resolves without a restart. */
     public Map<String, Object> capabilityMap() {
         CapabilitiesView view;
@@ -162,7 +161,7 @@ public class DeploymentInfoController {
 
     /** What this deployment carries - the installed formats, import sources, report columns and features - so a
      *  client (the CLI, a script) renders exactly what the modules on this module path provide instead of
-     *  hardcoding any backend. {@code version} lets a future shape change be detected. No longer mapped to
+     *  hardcoding any backend. {@code version} lets a future shape change be detected. Not mapped to
      *  {@code /api/capabilities} directly: the {@code RepositoryController} owns the single mapping and
      *  merges this view through the {@code CapabilityContributor} SPI ({@link #capabilityMap}), so there is no
      *  cross-layer mapping override. */

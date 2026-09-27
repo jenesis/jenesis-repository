@@ -47,10 +47,10 @@ import module org.slf4j;
  *     {@code null} from a {@link Reader} fails loudly. An unconfigured client answers {@link Status#SKIPPED} with
  *     the reason, a degraded fetch {@link Status#DEGRADED} with the failure, and only {@link Status#FETCHED} carries
  *     a value - the record makes the other combinations unrepresentable.</li>
- * <li><b>Selection failure (&sect;9).</b> A feed whose required configuration is unset builds an
+ * <li><b>Selection failure.</b> A feed whose required configuration is unset builds an
  *     {@link #unconfigured} client and self-skips cleanly, touching neither the network nor the store. It never
  *     degrades into "a feed that answers nothing", which a consumer would read as a clean result.</li>
- * <li><b>Streaming (&sect;1).</b> A response body reaches a {@link Reader} as an {@link java.io.InputStream}, capped
+ * <li><b>Streaming.</b> A response body reaches a {@link Reader} as an {@link java.io.InputStream}, capped
  *     at {@link FeedPolicy#maxResponseBytes()}, so a multi-megabyte catalogue is parsed incrementally and is never
  *     materialised. Only the reduced snapshot a {@link Reader} of {@code byte[]} yields is held whole, and that is
  *     bounded by {@link FeedPolicy#maxSnapshotBytes()}. {@link Reader#document} is the shared reader for the
@@ -58,18 +58,18 @@ import module org.slf4j;
  *     whole-body reader here, and its absence is deliberate</b>. A convenience answering the body as a
  *     {@code String} or a {@code byte[]} would be the one every feed reached for, and every feed would then spend
  *     heap proportional to what the vendor chose to send, inside the very client that exists to bound it.</li>
- * <li><b>Tenant scoping (&sect;6).</b> The client stores nothing by itself. {@link #refresh} writes only through the
+ * <li><b>Tenant scoping.</b> The client stores nothing by itself. {@link #refresh} writes only through the
  *     {@link FeedSnapshots} it is handed, whose store is already tenant-scoped; the client never scopes or discovers
  *     a store.</li>
- * <li><b>Error visibility (&sect;9).</b> Nothing is swallowed. Under {@link FeedPolicy.FailMode#CLOSED} every failure
+ * <li><b>Error visibility.</b> Nothing is swallowed. Under {@link FeedPolicy.FailMode#CLOSED} every failure
  *     is thrown as a {@link FeedException} naming the feed, the reason, the status and the attempts. Under
  *     {@link FeedPolicy.FailMode#SOFT} it is returned as {@link Status#DEGRADED} carrying that same exception and
  *     logged once - the blast radius being a ranking aid that is absent for this cycle, never an advisory answer
  *     that reads as clean.</li>
- * <li><b>Read purity (&sect;10).</b> This client is the <em>write</em> half of a feed: fetching is what a refresh
+ * <li><b>Read purity.</b> This client is the <em>write</em> half of a feed: fetching is what a refresh
  *     does. A read path renders {@link FeedSnapshots#current()} and {@link FeedSnapshots#open}, which reach no
  *     network at all - proven by handing a query path a transport that throws on any call.</li>
- * <li><b>Staleness (&sect;10).</b> A mirrored feed's staleness is durable, not process-local: {@link #refresh}
+ * <li><b>Staleness.</b> A mirrored feed's staleness is durable, not process-local: {@link #refresh}
  *     commits the fetch instant in the same store object as the snapshot it stamps, so a restart, a failover and a
  *     second replica all see the same answer to "when was this last refreshed", and a view can always show it.</li>
  * <li><b>Lifecycle / ownership.</b> The client owns nothing it did not create: the transport, its HTTP client, the
@@ -79,7 +79,7 @@ import module org.slf4j;
  *     a time - there is no fan-out and no parallelism to make results order-dependent. Two concurrent
  *     {@link #refresh} calls are arbitrated by the snapshot pointer's compare-and-set, and the loser adopts the
  *     winner's stamp.</li>
- * <li><b>Bounded work / cancellation (&sect;12).</b> Every dimension is capped and each cap has a <em>named</em>
+ * <li><b>Bounded work / cancellation.</b> Every dimension is capped and each cap has a <em>named</em>
  *     outcome: {@link FeedPolicy#maxPages()} pages ({@link FeedException.Reason#PAGE_CAP}),
  *     {@link FeedPolicy#maxResponseBytes()} per body ({@link FeedException.Reason#RESPONSE_CAP}),
  *     {@link FeedPolicy#maxSnapshotBytes()} per committed snapshot
@@ -89,7 +89,7 @@ import module org.slf4j;
  *     reaching one always fails, and under {@link FeedPolicy.FailMode#SOFT} the prior-good snapshot keeps serving.
  *     An interrupt is honoured promptly, restores the thread's interrupt flag and ends the fetch as
  *     {@link FeedException.Reason#INTERRUPTED}.</li>
- * <li><b>Durability / delivery (&sect;13).</b> {@link #fetch} is durable-free: it writes nothing. {@link #refresh}'s
+ * <li><b>Durability / delivery.</b> {@link #fetch} is durable-free: it writes nothing. {@link #refresh}'s
  *     commit point is the snapshot pointer's compare-and-set, pointer-last after the body is durable, so the
  *     visible states are exactly "the previous snapshot" and "the new snapshot" - never a mixture. A refresh that
  *     does not complete leaves the prior-good snapshot and its fetch instant untouched and only moves
@@ -447,8 +447,8 @@ public final class FeedClient {
          * @param parse turns the response body into the answer. Deliberately given the {@link InputStream} and not
          *              the bytes: there is no whole-body convenience here and there will not be one, because a
          *              catalogue body is megabytes and materialising it would spend the heap the policy's byte cap
-         *              exists to bound (&sect;1, which refuses a {@code readAllBytes}
-         *              on this path). A parse reads <em>from</em> the stream - a streaming JSON parse of one
+         *              exists to bound (a {@code readAllBytes} is refused on this path). A parse reads
+         *              <em>from</em> the stream - a streaming JSON parse of one
          *              document, or a record-per-line fold of a newline-delimited one - and must not retain it:
          *              the response is closed the moment the parse returns.
          */

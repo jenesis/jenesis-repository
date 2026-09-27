@@ -37,7 +37,7 @@ import build.jenesis.repository.store.SingleFlight;
  * mirror it recorded - each removal observed ({@code PublicationObserver.onDeleted}) with the coordinate this
  * eviction already resolved. The now-unreferenced content blobs are reclaimed by the discovered
  * {@code GarbageCollector} (resolved through its provider with the {@link #pointerRoots} this inventory derives from
- * the installed formats), no longer by any enumeration of this class - with no collector installed nothing is ever
+ * the installed formats), never by any enumeration of this class - with no collector installed nothing is ever
  * reclaimed, and the capability surfaces say so. Only versions the repository recorded, through a format that
  * describes its coordinates, are seen.
  *
@@ -46,7 +46,7 @@ import build.jenesis.repository.store.SingleFlight;
  * (publish/provenance/download recording and the publish-facts point reads), {@link InventoryPins} (force-keeps),
  * {@link InventoryRetention} (the retention-policy object), {@link InventoryBrowse} (children/describe/locate/paths),
  * {@link InventoryReleases} (the release/coordinate enumerations and blobs-namespace queries),
- * {@link InventoryEviction} (the unpublish + derived-row reap), {@link InventoryReconciler} (the §4/§5 convergence
+ * {@link InventoryEviction} (the unpublish + derived-row reap), {@link InventoryReconciler} (the convergence
  * sweep), {@link InventoryIdentity} (the rollup identity) and {@link SubtreeSizeRollUp} (the browse-size fold) - and
  * delegates each method to the one that owns it. The shared store-key/codec helpers ({@link #encode}/{@link #decode},
  * the {@code published/}/{@code downloaded/}/{@code pinned/} key builders, {@link #layoutsFor}/{@link #blobLayoutsFor},
@@ -79,14 +79,14 @@ public final class StoreRepositoryInventory implements RepositoryInventory {
     /** The consolidated metadata store the publish facts live in. The {@code published} section is the source of
      *  truth and the only one read: the publish instant, the prerelease flag and the pin, with set completeness
      *  back-filled by the reconcile
-     *  forward-repair (§5). */
+     *  forward-repair. */
     private final MetadataStore metadata;
 
     /** The subtree-size roll-up subsystem - its ~450-line CAS-fenced fold lives in a sibling class; the public
      *  {@link #rollUpSizes}/{@link #subtreeSize} seam delegates here. */
     private final SubtreeSizeRollUp rollUp;
 
-    /** The reconcile - the §4/§5 convergence backstop, extracted to a sibling class; the public
+    /** The reconcile - the convergence backstop, in a sibling class; the public
      *  {@link #reconcile} seam and the walk's {@link InventoryReconcileConsumer} delegate here. */
     private final InventoryReconciler reconciler;
 
@@ -190,7 +190,7 @@ public final class StoreRepositoryInventory implements RepositoryInventory {
     /** Record a coordinate version's provenance summary at publish: whether its inbound attestation
      *  verified and bound to this artifact, and the SHA-256 it bound - the durable, GUI-facing summary that points at
      *  the content-keyed attestation cache without duplicating it. A no-op when the consolidated metadata store is
-     *  absent (graceful, §3), since the summary has nowhere to live. */
+     *  absent (graceful), since the summary has nowhere to live. */
     public void recordProvenance(String ecosystem, String coordinate, String version, boolean verified, String sha256)
             throws IOException {
         recording.recordProvenance(ecosystem, coordinate, version, verified, sha256);
@@ -292,7 +292,7 @@ public final class StoreRepositoryInventory implements RepositoryInventory {
     /** A bounded page of the immediate children with the servable-name screen fused in: pages one level, forwards
      *  directory children unconditionally (their own leaves carry the screen), screens each non-folder leaf through the
      *  {@link ServableNames} seam under {@code policy}, and suppresses the reserved {@code quarantine} review subtree at
-     *  the root. This is the overload the P-E3 console/REST browse (and the P-E4 ratchet) use so a held or torn leaf
+     *  the root. This is the overload the console/REST browse uses so a held or torn leaf
      *  never appears in an enumeration; a child whose probe throws is skipped (fail-closed), so one hostile name in a page
      *  can never fail the whole listing.
      *
@@ -342,20 +342,20 @@ public final class StoreRepositoryInventory implements RepositoryInventory {
      *  {@link #disclosable(String, String, String, ServableNames.Policy)}. The {@code coordinate:version} split is
      *  probed at every colon right-to-left (not just the last), so a digest-pinned OCI display {@code <name>:sha256:<hex>}
      *  places on its {@code (<name>, sha256:<hex>)} split and screens rather than mis-splitting to {@code (<name>:sha256,
-     *  <hex>)} and leaking (A26-F5); the first split some ecosystem places wins. A hit no installed ecosystem places on
+     *  <hex>)} and leaking; the first split some ecosystem places wins. A hit no installed ecosystem places on
      *  any split is disclosable, since membership is the only truth there (the ghost-coordinate contract). The one eco-resolution the
      *  console {@code RepositoryBrowse} and the REST {@code /api/search} share, so both search surfaces screen a held
-     *  {@code coordinate:version} identically (A6-F2) rather than each re-implementing it. Reads
+     *  {@code coordinate:version} identically rather than each re-implementing it. Reads
      *  only the small {@code published/} sidecars and, under {@link ServableNames.Policy#HIDE_WITHHELD}, the tiny
      *  quarantine pointers / {@code withheld/<hash>} markers - never an artifact blob.
      *
      *  <p>A colon-less {@code display} (a bare name carrying no {@code :version}) is rejected with
      *  {@link IllegalArgumentException}: this is the {@code coordinate:version} face, and a name-level surface must
-     *  screen through {@code ServableNames} instead. Historically a colon-less argument returned {@code true}
-     *  unconditionally (the fail-open, where the right-to-left split loop never ran and the method fell
-     *  through to the ghost-coordinate {@code return true}); no live caller passes a bare name (every caller supplies a
-     *  {@code coordinate + ":" + version} or an already-versioned {@code group:name:version}), so the fail-open default
-     *  is closed here rather than left to leak. The colon-BEARING ghost-coordinate contract is preserved: a
+     *  screen through {@code ServableNames} instead. Answering {@code true} for it would be the fail-open, where the
+     *  right-to-left split loop never runs and the method falls through to the ghost-coordinate {@code return true};
+     *  no caller passes a bare name (every caller supplies a {@code coordinate + ":" + version} or an
+     *  already-versioned {@code group:name:version}), so it is refused rather than left to leak. The colon-BEARING
+     *  ghost-coordinate contract is preserved: a
      *  {@code coordinate:version} display no installed ecosystem places on any split still discloses (membership is the
      *  only truth there). Accepted residual: a cross-ecosystem {@code coordinate:version} collision resolves
      *  to the first ecosystem whose {@code published/} rows place the split, so two ecosystems that share an identical
@@ -435,8 +435,8 @@ public final class StoreRepositoryInventory implements RepositoryInventory {
      * <p>Asked of the FORMAT rather than of {@link #describe}, and the difference is not academic. That face is
      * empty in two unrelated cases - a format claims the path but cannot parse it, and no format claims it at all -
      * so a caller reading "no coordinate came back" as "path-addressed" also catches every malformed path under a
-     * layout, and every checksum beside a coordinate. Measured: a rebuild filtered that way indexed a second
-     * document for every artifact whose test fixture used a synthetic path, and thirty-one suites said so.
+     * layout, and every checksum beside a coordinate - a rebuild filtered that way would index a second document for
+     * every artifact at a synthetic path.
      *
      * <p>A format that IS an {@link ArtifactLayout} or a {@link BlobLayout} owns a coordinate space, so a path of
      * its own that resolves to nothing is malformed rather than coordinate-less. One that is neither - the raw
@@ -675,7 +675,7 @@ public final class StoreRepositoryInventory implements RepositoryInventory {
     }
 
     /** {@link #ecosystems()} over any repository-scoped store - the console's browse asks the same question of the
-     *  repository it is showing, and used to answer it with a second copy of this loop and this stride. */
+     *  repository it is showing, through this one loop and stride rather than a copy of its own. */
     public static SortedSet<String> ecosystems(ArtifactStore store) throws IOException {
         SortedSet<String> ecosystems = new TreeSet<>();
         Names names = Names.over(store, publishedRoot(), ECOSYSTEM_STRIDE);
@@ -756,8 +756,9 @@ public final class StoreRepositoryInventory implements RepositoryInventory {
 
     /** Reclaim a re-heatable cached fallback blob under quota/disk pressure while retaining its {@code origin} and
      *  {@code verdict} meta-document sections: the bytes are discarded (pointers
-     *  unpublished, the blob garbage-collected) but the audit records survive, so a pull-through can re-heat the entry
-     *  (§5). Returns {@code true} when the blob was reclaimed; {@code false} when the version is <b>not</b> re-heatable -
+     *  unpublished, the blob garbage-collected) but the audit records survive, so a pull-through can re-heat the
+     *  entry. Returns {@code true} when the blob was reclaimed; {@code false} when the version is <b>not</b>
+     *  re-heatable -
      *  a {@code local-upload}-origin blob is system-of-record and is never cache-evicted, and a version with no origin
      *  record is not a recognised cache entry - in which case nothing is touched. Like {@link #evict}, it is
      *  <b>refused</b> with a named {@link IOException} when no installed format can place the ecosystem: every
@@ -789,10 +790,10 @@ public final class StoreRepositoryInventory implements RepositoryInventory {
     }
 
     public static List<String> pointerRoots() {
-        // The one computation of this set, not a second one filtered differently. The two used to be
-        // derived independently - this asked the discovered formats which wore BlobRoots, while the collector
-        // asked BlobReferences.installed() - and a divergence would have the walk enumerate less than the
-        // collector judges, which condemns and then deletes what the walk did not see.
+        // The one computation of this set, not a second one filtered differently: derived independently - asking
+        // the discovered formats which wear BlobRoots while the collector asks BlobReferences.installed() - a
+        // divergence would have the walk enumerate less than the collector judges, which condemns and then deletes
+        // what the walk did not see.
         return BlobReferences.pointerRoots();
     }
 
@@ -878,8 +879,7 @@ public final class StoreRepositoryInventory implements RepositoryInventory {
      * knowledge is, and it has to be <em>enforced</em> at the deletion - which is why this hands back a
      * {@link Known}{@code <List<String>>} rather than a list plus a flag a caller must remember to read. A
      * {@link Known.Unknown} reaches {@code GarbageCollector.plan}/{@code collect} unchanged and the pass refuses
-     * itself, reporting the cause through {@code GcPlan.refusal()}; there is no longer a pre-check for a caller to
-     * forget.
+     * itself, reporting the cause through {@code GcPlan.refusal()}; there is no pre-check for a caller to forget.
      *
      * <p>Judged from the durable record rather than from discovery, exactly as the hold records and the reconcile
      * sweep judge theirs: the published set's own first level ({@link #publishedRoot}) names every ecosystem this
@@ -924,17 +924,14 @@ public final class StoreRepositoryInventory implements RepositoryInventory {
      * ({@link EcosystemLayout}) - matched on those two rather than on {@link BlobLayout}, so a roots-only format
      * (declared, deliberately, without coordinate-scoped enforcement) counts as placeable.
      *
-     * <p><b>Decided 2026-09-10, and the deferral it replaces was asking for something not expressible.</b> This
-     * used to be exactly the union's own filter: {@link #pointerRoots()} read its blob roots off {@link BlobRoots}
-     * too. The union now reads them off {@link BlobReferences}, the one computation, and the note here
-     * said the fix was to widen this test to {@code BlobReferences} as well.
+     * <p><b>This is not the union's own filter.</b> {@link #pointerRoots()} reads its blob roots off
+     * {@link BlobReferences}, the one computation, but this test cannot simply be widened to {@code BlobReferences}
+     * as well, because <b>{@code BlobReferences} carries no ecosystem</b>. It is the blob-lending seam and nothing
+     * more; {@code ecosystem()} arrives with {@link EcosystemLayout}, which {@link BlobRoots} extends and a bare
+     * lender does not. There is nothing to compare an ecosystem against on a plain {@code BlobReferences}.
      *
-     * <p>It is not, because <b>{@code BlobReferences} carries no ecosystem</b>. It is the blob-lending seam and
-     * nothing more; {@code ecosystem()} arrives with {@link EcosystemLayout}, which {@link BlobRoots} extends and a
-     * bare lender does not. There is nothing to compare an ecosystem against on a plain {@code BlobReferences}, so
-     * the stated widening could not have been written.
-     *
-     * <p>The case it worried about is also unreachable, for a reason worth writing down rather than re-deriving:
+     * <p>The case such a widening would address is also unreachable, for a reason worth writing down rather than
+     * re-deriving:
      * the one root-lending format that does not wear {@code BlobRoots} - the {@code OciFormat} - declares no
      * ecosystem <em>at all</em>. Nothing it publishes records one, so no ecosystem of its arrives in the set this
      * test is asked about, and there is no refusal for it to cause.
@@ -992,7 +989,7 @@ public final class StoreRepositoryInventory implements RepositoryInventory {
 
     public Reconciliation reconcile(ArtifactWalk walk, Instant now) throws IOException {
         Reconciliation reconciliation = reconciler.reconcile(walk, now);
-        // §5 self-heal: with the published/ and licenses/ spaces converged, recompute the rollup identity from that
+        // Self-heal: with the published/ and licenses/ spaces converged, recompute the rollup identity from that
         // truth, so any drift from a lost incremental fold (a crash between a sidecar write and its fold, or a
         // double-applied concurrent one) is repaired - the identity converges on the same schedule the sidecars do.
         rebuildIdentity();
@@ -1003,7 +1000,7 @@ public final class StoreRepositoryInventory implements RepositoryInventory {
      *  published coordinate version, each member folding that version's declared-license fingerprint. A single O(1)
      *  small-object read a whole-repository export's ETag derives from, so an {@code If-None-Match} revalidation of the
      *  SBOM / attribution {@code NOTICE} answers {@code 304} BEFORE the O(#versions) coordinate walk that assembles the
-     *  document (§4/§7). Built once, lazily, when no accumulator exists yet, then maintained incrementally by
+     *  document. Built once, lazily, when no accumulator exists yet, then maintained incrementally by
      *  publish / eviction / license-record and rebuilt authoritatively by {@link #reconcile}. */
     public String identity() throws IOException {
         Optional<byte[]> current = identity.current();
@@ -1018,9 +1015,9 @@ public final class StoreRepositoryInventory implements RepositoryInventory {
     /**
      * {@link #rebuildIdentity()} single-flighted per store: the first reader to find the rollup absent rebuilds it and
      * every reader that arrives while it does waits for that rebuild's accumulator instead of starting its own.
-     * Nothing did this before, and the identity-rebuild canary measured what that cost: fifty conditional reads
-     * arriving at once against an absent rollup each streamed the whole coordinate set, fifty rebuilds' worth of
-     * store operations for one answer. A rebuild that fails hands its failure to the readers that waited on it; a
+     * Without it, fifty conditional reads arriving at once against an absent rollup would each stream the whole
+     * coordinate set, fifty rebuilds' worth of store operations for one answer. A rebuild that fails hands its failure
+     * to the readers that waited on it; a
      * rebuild that outlives the stale horizon leaves a waiting reader to rebuild for itself.
      */
     private byte[] rebuildIdentityOnce() throws IOException {
@@ -1044,11 +1041,10 @@ public final class StoreRepositoryInventory implements RepositoryInventory {
      *  make: an attempt is lost when a fold exhausted its retries and dropped the stamped rollup under it, when a
      *  peer judged the stamp stale and took it over, or when a fold handed the walk a member while it ran.
      *
-     *  <p>It bounds the WALKS rather than the claims, which is the expensive thing: one walk is a read per member,
-     *  33,691 of them measured over the slowest emulator. Written first as two nested loops - rounds outside,
-     *  walks within a round - it bounded neither, and a rebuild meeting both kinds of loss could walk ten times
-     *  where the shape before the handoff counter walked four. One budget spent by whichever loss occurs keeps the
-     *  worst case where it was. */
+     *  <p>It bounds the WALKS rather than the claims, which is the expensive thing: one walk is a read per member.
+     *  Two nested loops - rounds outside, walks within a round - would bound neither, and a rebuild meeting both kinds
+     *  of loss could walk many times over. One budget spent by whichever loss occurs keeps the worst case at
+     *  {@value #REBUILD_ROUNDS} walks. */
     private static final int REBUILD_ROUNDS = 3;
 
     private static final System.Logger REBUILD_LOGGER = System.getLogger(StoreRepositoryInventory.class.getName());
@@ -1062,10 +1058,10 @@ public final class StoreRepositoryInventory implements RepositoryInventory {
      * <p>Publishes keep landing while the walk runs, and each member is folded exactly once: the rebuild
      * {@linkplain InventoryIdentity#begin stamps} the rollup with a boundary instant, the walk folds every member
      * published at or before it, a publish after it folds itself into the stamped object, and the
-     * {@linkplain InventoryIdentity#settle settle} combines the two under compare-and-set. Before this a rebuild in
-     * flight was a window in which every fold was a no-op - the rollup was absent - and the walk stored what it had
-     * seen, so a publish landing during the walk was folded by nobody until the next reconcile; the identity-drift
-     * canary's second leg drops the rollup in the middle of a storm and measured exactly that. A round the storm
+     * {@linkplain InventoryIdentity#settle settle} combines the two under compare-and-set. Without the stamp a rebuild
+     * in flight would be a window in which every fold is a no-op - the rollup is absent - and the walk stores what it
+     * has seen, so a publish landing during the walk would be folded by nobody until the next reconcile. A round the
+     * storm
      * defeats (an exhausted fold dropped the stamped object, a peer took it over) is claimed again, and the walk is
      * run again when a fold declines a member to it WHILE it is enumerating - the classification is on the member's
      * publish instant and the walk's coverage is on where the member's key sorts, so neither half can say afterwards
@@ -1134,9 +1130,8 @@ public final class StoreRepositoryInventory implements RepositoryInventory {
         // suspecting the fold.
         //
         // Counted rather than collected, and that distinction is the whole reason this exists. Collecting the
-        // declined digests - even as raw bytes, even formatted once at the end - suppressed the race it was
-        // measuring: the mismatch went from about one run in four to none in fifty, and came back when the probe
-        // was removed. Two int increments do not perturb the window; a list that grows inside it does.
+        // declined digests - even as raw bytes, even formatted once at the end - suppresses the race it is
+        // measuring. Two int increments do not perturb the window; a list that grows inside it does.
         int[] seen = {0, 0};
         enumeration.members(member -> {
             if (boundary != null && member.published().isAfter(boundary)) {
@@ -1203,13 +1198,10 @@ public final class StoreRepositoryInventory implements RepositoryInventory {
      *  {@code org:name:revision} and are both {@code Maven} to OSV. The union is exact rather than approximate
      *  because they map the same coordinate and the same version.
      *
-     *  <p>This javadoc used to say the opposite - that a composition with two such formats "refuses to start
-     *  ({@code RepositoryFormat.installed})" and that "at most one format can match" - and offered that as the
-     *  reason taking a single match was safe. There is no such check in {@code installed}, and there never was one
-     *  that this could have relied on; the method has returned a list for as long as it has had this name. The
-     *  rationale outlived the design it was defending, which is worth knowing because of what it was defending:
-     *  the paths returned here are what an eviction DELETES under, so a discovery-order winner would let two nodes
-     *  sweep one store differently. Unioning is what makes that impossible, not a start-up refusal. */
+     *  <p>No start-up check makes a single match safe: a composition with two such formats starts, and
+     *  {@code RepositoryFormat.installed} returns a list. The paths returned here are what an eviction DELETES under,
+     *  so a discovery-order winner would let two nodes sweep one store differently. Unioning is what makes that
+     *  impossible. */
     static List<ArtifactLayout> layoutsFor(String ecosystem) {
         List<ArtifactLayout> layouts = new ArrayList<>();
         for (RepositoryFormat format : formats()) {
@@ -1313,8 +1305,7 @@ public final class StoreRepositoryInventory implements RepositoryInventory {
      *  here drains and a filesystem cannot seek a directory: each page rescans the container, so a sweep of N names
      *  costs N/page scans of N. That is not theoretical at the sizes this sweep reaches - the level under
      *  {@code meta/<ecosystem>} holds one child per coordinate, so a repository with a million coordinates is a
-     *  million-entry directory, and the OCI tag canary measured the identical shape at 834 s a thousand names to a
-     *  page against 188 s at ten thousand. */
+     *  million-entry directory, where a thousand names to a page takes several times as long as ten thousand. */
     private static final PagedTreeWalk SIDECARS =
             PagedTreeWalk.bounded().steps(5_000_000).page(BoundedChildren.DRAIN_PAGE);
 

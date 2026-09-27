@@ -24,7 +24,7 @@ import build.jenesis.repository.store.ArtifactStore;
  * <li><b>Absence sentinel.</b> {@code false} means "this leg served nothing - let the local {@code 404} stand". It is
  *     the answer for an unproxyable path, an upstream miss and a refused body (clause 5); the adapter never invents a
  *     {@code 200}, and never leaves a partially written cache entry behind when it declines.
- *     <p><b>A transport failure is not among them on an enumeration document, and this clause used to say it was.</b>
+ *     <p><b>A transport failure is not among them on an enumeration document.</b>
  *     Reading the sentinel as "one answer for every way a fetch can end" is how the adapter's caller comes to render
  *     an unreachable upstream as a plain {@code 404}, and whether that is harmless depends on <em>what the request
  *     addressed</em>:
@@ -47,16 +47,15 @@ import build.jenesis.repository.store.ArtifactStore;
  *     The classification is the adapter's, because which of a format's paths is a version list is protocol knowledge
  *     only that format has; the rule above is not. It is what {@code versions()}-style local enumerations already do
  *     one layer down, where a scan that stopped at its bound refuses rather than serving a prefix of the versions
- *     (&sect;5, &sect;9) - a list incomplete because the store could not be walked and one empty because the upstream
- *     could not be reached are the same failure wearing different clothes. This is what it costs when they are not:
- *     a five-second connect timeout served {@code github.com/pkg/errors} as a module with no versions, and the
- *     {@code 404} was investigated for a day as an enumeration regression in this core's paged asset walk.</li>
- * <li><b>Streaming (&sect;1).</b> An artifact is copied from the network into the content-addressed store through
+ *     - a list incomplete because the store could not be walked and one empty because the upstream could not be
+ *     reached are the same failure wearing different clothes. Treated otherwise, a five-second connect timeout serves
+ *     a module as one with no versions, indistinguishable from an enumeration defect.</li>
+ * <li><b>Streaming.</b> An artifact is copied from the network into the content-addressed store through
  *     {@link Fetcher#download} without ever being materialised - the store is handed the still-unread upstream stream,
  *     never a buffer the adapter filled first - so a multi-gigabyte pull stays bounded in heap. Only a small mutable
  *     index or a manifest the adapter must parse or rewrite may use the buffered {@link Fetcher#fetch}, and a
  *     {@code HEAD} uses {@link Fetcher#head}, which opens no body at all.</li>
- * <li><b>Read purity (&sect;10).</b> A proxy fetch is the one sanctioned exception to the read path rendering only
+ * <li><b>Read purity.</b> A proxy fetch is the one sanctioned exception to the read path rendering only
  *     stored state, and it is entered solely on a local miss of a path this format claims. A local hit never touches
  *     the upstream.</li>
  * <li><b>Upstream integrity.</b> Where the ecosystem's own protocol advertises a digest for the bytes - a
@@ -71,16 +70,16 @@ import build.jenesis.repository.store.ArtifactStore;
  *     serving bytes it has not verified, a failure part-way through the undoing leaves them served for good, and
  *     there is no repair route on this leg at all, because the pointer it failed to remove is exactly what stops the
  *     next pull from being a miss (clause "Read purity": a local hit never touches the upstream). Every leg in this
- *     repository is in that order - OCI always was, Maven since it was reordered - and an adapter in another edition
- *     that still links first and undoes it is a defect against this clause rather than a variation of it.
- *     <p><b>"We could not read the digest" is not "the upstream publishes none", and this clause used to leave that
- *     open.</b> The unverified fall-back above is written for the upstream having <em>published nothing</em> - Maven
- *     serves jars whose {@code .sha1} sibling is missing, Packagist leaves {@code shasum} blank for a VCS-sourced dist
- *     - and every adapter whose digest comes out of a <em>second</em> document was applying it to a case this clause
- *     never covered. A packument fetch that timed out, a compact index behind a shared-egress {@code 429}, a
- *     registration leaf whose advertised URL an outbound screen refuses, a checksum sibling answered by a captive
- *     portal: each of those returned "this ecosystem declares no digest for this artifact", and the artifact was then
- *     cached with no point check at all. That is a silent fail-open, not a wrong answer - anyone able to drop one
+ *     repository is in that order, and an adapter in another edition that links first and undoes it is a defect
+ *     against this clause rather than a variation of it.
+ *     <p><b>"We could not read the digest" is not "the upstream publishes none".</b> The unverified fall-back above
+ *     is written for the upstream having <em>published nothing</em> - Maven serves jars whose {@code .sha1} sibling
+ *     is missing, Packagist leaves {@code shasum} blank for a VCS-sourced dist - and not for an adapter whose digest
+ *     comes out of a <em>second</em> document it could not read. A packument fetch that timed out, a compact index
+ *     behind a shared-egress {@code 429}, a registration leaf whose advertised URL an outbound screen refuses, a
+ *     checksum sibling answered by a captive portal: answering any of those as "this ecosystem declares no digest for
+ *     this artifact" would cache the artifact with no point check at all. That is a silent fail-open, not a wrong
+ *     answer - anyone able to drop one
  *     sidecar fetch turns this clause's "held to it and a mismatch is refused" off for that pull - and it is the
  *     integrity-surface twin of the split clause 2 makes on the discovery surface. So an adapter splits the same way,
  *     by <em>who said what</em>:
@@ -91,13 +90,13 @@ import build.jenesis.repository.store.ArtifactStore;
  *         any other non-{@code 200}, a body that is not the document, a bound the read ran past, or a target an
  *         outbound screen refuses - and the fill is <b>declined</b> exactly as a mismatch is: nothing linked, nothing
  *         served, the local {@code 404} left standing so a later pull re-hits the upstream, and the refusal logged.
- *         An unverifiable artifact is not served on the strength of not having been checked (&sect;5, &sect;9).</li>
+ *         An unverifiable artifact is not served on the strength of not having been checked.</li>
  *     </ul>
  *     As with clause 2, the rule is general and the classification is the adapter's, because which fetch declares a
  *     digest is protocol knowledge only that adapter has. An adapter whose digest rides on the artifact's own response,
  *     or whose declaring document is the same one that resolves the download URL, has nothing to split and says
  *     so.</li>
- * <li><b>Error visibility (&sect;9).</b> An upstream error status rides in the {@link Fetched} / {@link Download} /
+ * <li><b>Error visibility.</b> An upstream error status rides in the {@link Fetched} / {@link Download} /
  *     {@link Head} so the adapter acts on it (a {@code 401} challenge, a {@code 404} miss); only a transport failure is
  *     an empty {@link Optional}. A failure while filling the cache may never be swallowed into a served response.</li>
  * <li><b>Bounded work / cancellation.</b> {@link #enumerate} is lazy - an index page is read only as the stream
@@ -294,7 +293,7 @@ public interface ProxyFormat {
         /**
          * Fetch a small upstream document <em>whole</em> - an index, a metadata document, a manifest - so a proxy can
          * inspect or rewrite it. This is the buffered leg, and it is the only one: an artifact body never travels
-         * through it (&sect;1), and a transport caps what it will buffer here.
+         * through it, and a transport caps what it will buffer here.
          */
         Optional<Fetched> fetch(URI url, Map<String, String> requestHeaders) throws IOException;
 
@@ -449,14 +448,14 @@ public interface ProxyFormat {
      * what came back was the peer declining rather than a document: a {@code 5xx}, a {@code 429} under a shared
      * egress IP, an auth challenge. It is a fact about the peer's availability, never about the payload's shape.
      *
-     * <p><b>Clause 2 already draws this line for the proxy leg; this is the enumeration leg finally honouring it.</b>
+     * <p><b>Clause 2 draws this line for the proxy leg; this is the enumeration leg honouring it.</b>
      * There, "a question this repository could not put to its upstream" answers {@code 502} rather than being
      * rendered as an empty enumeration, because an empty enumeration is one a build records as a fact about the
-     * world. The walks reach the identical fork and used to flatten it: {@code No response from ...} and
-     * {@code Index fetch failed (503) ...} were thrown as a bare {@link IOException}, and so were {@code No flat
-     * container (PackageBaseAddress) advertised by ...} and {@code Not enumerable: neither a catalog nor a search
-     * service advertised by ...}. The first pair means the mirror is down. The second means the mirror is up and
-     * our walk is now wrong about its format.
+     * world. The walks reach the identical fork and must not flatten it: {@code No response from ...} and
+     * {@code Index fetch failed (503) ...} are not the same failure as {@code No flat container
+     * (PackageBaseAddress) advertised by ...} and {@code Not enumerable: neither a catalog nor a search service
+     * advertised by ...}. The first pair means the mirror is down. The second means the mirror is up and our walk is
+     * wrong about its format.
      *
      * <p>They call for opposite handling, which is why one type may not carry both. The first is transient - retry
      * it, back off, stand in for it, skip the cell that needed it. The second is permanent and has to be seen: it is

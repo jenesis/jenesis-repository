@@ -102,8 +102,7 @@ public class GlobalControllerAdvice {
 
     /** The strictly-opt-in anonymous-role grant ({@code jenreg.anonymous-rights}, env
      *  {@code JENREG_ANONYMOUS_RIGHTS}), so every view shows an explicit "Anonymous access" banner when it
-     *  is set - visible, never hidden. There was a second advice publishing this and every other attribute below,
-     *  in the shell package, and the two were kept in step by hand until the node that registered it went. Read
+     *  is set - visible, never hidden. This is the one advice publishing it and every other attribute below. Read
      *  straight off the environment,
      *  like {@link #readOnly()} - the console observes the posture, the {@code Authorization} choke point enforces it.
      *  Blank (the default) ⇒ no anonymous access and no banner. */
@@ -115,14 +114,13 @@ public class GlobalControllerAdvice {
     /** The header's security-posture badge - the advisory count a super-admin sees on every view,
      *  linking to the Security-posture screen; a clean deployment renders no badge. It is derived from the very same
      *  collected report {@code /posture} renders, for the same session-selected tenant, so the number the
-     *  badge names is by construction the number of rows its own destination lists. It used to collect a
-     *  second report over the <em>raw environment</em> while the screen read stored-settings-over-environment, so an
-     *  advisory raised by a stored dial was listed on the screen and counted as zero here; see {@link PostureBadge}
-     *  for why the tenant rows came with the fix rather than being kept out of it.
+     *  badge names is by construction the number of rows its own destination lists. A second report over the
+     *  <em>raw environment</em> would count as zero an advisory raised by a stored dial that the screen lists; see
+     *  {@link PostureBadge} for why the tenant rows are counted too.
      *
      *  <p>Collected only for a super-admin, because nobody else's view renders the badge - the model attribute is
      *  {@code null} for everyone else and the shell's condition already guards on it, so an ordinary user's page view
-     *  performs no settings read at all (&sect;7). The collection is memoised by {@link SettingsAdmin}, which is what
+     *  performs no settings read at all. The collection is memoised by {@link SettingsAdmin}, which is what
      *  keeps a per-view read off the store; a settings change made through this console drops that memo at once.
      *
      *  <p>A collection that fails is reported as {@link PostureBadge#unknown()} rather than as zero and rather than

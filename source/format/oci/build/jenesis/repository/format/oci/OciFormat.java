@@ -258,7 +258,7 @@ public final class OciFormat implements RepositoryFormat, ProxyFormat, Repositor
      *  a chunked docker push never accumulates the growing layer in memory. The session marker carries the running
      *  chunk count and received-byte total, advanced by one write here, so neither the next chunk index nor the
      *  received-bytes total needs a full re-list / re-sum of the staged chunks per {@code PATCH} - an N-chunk push
-     *  stays O(N), not O(N^2), store round-trips (the old per-PATCH re-sum cost ~N^2/2 {@code HEAD}s on an object
+     *  stays O(N), not O(N^2), store round-trips (a per-PATCH re-sum would cost ~N^2/2 {@code HEAD}s on an object
      *  store). Returns the running byte total for the {@code Range} header. */
     private long append(ArtifactStore store, String id, InputStream chunk) throws IOException {
         long[] session = session(store, id);
@@ -682,8 +682,8 @@ public final class OciFormat implements RepositoryFormat, ProxyFormat, Repositor
     /**
      * {@code GET /v2/<name>/tags/list} honouring the Distribution API's optional {@code n} (max results) and
      * {@code last} (resume-after) paging, cut from the image's stored tag list ({@link OciListings}) - the document a
-     * tag push maintains and a hold retracts from, so a tag whose manifest is held is never disclosed (AUDIT §5/§8,
-     * its existence included) and no read enumerates or screens the tag pointers.
+     * tag push maintains and a hold retracts from, so a tag whose manifest is held is never disclosed (its existence
+     * included) and no read enumerates or screens the tag pointers.
      */
     private void tags(String name, ArtifactStore store, FormatExchange exchange) throws IOException {
         if (!isImageName(name)) {
@@ -832,7 +832,7 @@ public final class OciFormat implements RepositoryFormat, ProxyFormat, Repositor
         String last = exchange.queryParameter("last");
         // The catalog is a stored listing every tag push maintains (an image is listed while it has a listed tag);
         // the client's n/last window is cut from it here, never walked out of the name tree.
-        // Streamed, and stopped at the window's edge - see tags/list for why reading it whole was the defect.
+        // Streamed, and stopped at the window's edge - see tags/list for why it is never read whole.
         Optional<StoredListing.Served> served = StoredListing.open(store, new OciListings(store).catalogSpec());
         if (exchange.queryParameter("n") == null) {
             stream(exchange, served, "repositories", null);
@@ -906,7 +906,7 @@ public final class OciFormat implements RepositoryFormat, ProxyFormat, Repositor
         }
         // Proxy-leg digest integrity for a blob, which is content-addressed by the reference itself. writeBlob streams
         // the download under a SHA-256 DigestInputStream and stores it at blobs/<its-own-hash> (never buffering the
-        // layer whole, §1); the fetched bytes are then held to the requested digest. On a sha256 reference (the OCI
+        // layer whole); the fetched bytes are then held to the requested digest. On a sha256 reference (the OCI
         // norm, and the only algorithm this content-addressed store keys on) a mismatch is REFUSED: the bytes land only
         // under their own true hash, so blobs/<requested> is never created - nothing is linked or served, the mismatched
         // object is left unreferenced for GC, and a re-pull re-hits upstream. A reference in another registered
@@ -985,7 +985,7 @@ public final class OciFormat implements RepositoryFormat, ProxyFormat, Repositor
         try {
             OciManifests.ingest(name, reference, body, fetched.get().header("Content-Type"), store);
         } catch (OciManifests.InvalidManifest invalid) {
-            // Serve-through-without-caching (F4): an oversized (> 4 MiB, reachable only on this proxy leg) or unparseable
+            // Serve-through-without-caching: an oversized (> 4 MiB, reachable only on this proxy leg) or unparseable
             // upstream manifest is never stored or laid out - nothing stored means nothing that can later need an
             // un-enumerable hold - but the client still receives the upstream body; only the local cache is skipped.
             String type = fetched.get().header("Content-Type");
@@ -1494,12 +1494,12 @@ public final class OciFormat implements RepositoryFormat, ProxyFormat, Repositor
      * Whether an image name may become the {@code oci/<name>/...} key it addresses: the store's own path rule
      * plus the one thing that rule deliberately allows and the Distribution grammar does not - an empty segment.
      *
-     * <p>The character half is {@link ArtifactStore#traversalFree}, not a local copy of it. It used to be a copy, and
-     * the copy was a segment behind: it refused {@code .}, {@code ..} and a backslash, and said nothing about a
-     * control character, so {@code /v2/kit/<NUL>lib/manifests/1.0} passed this screen, became a store key and threw
+     * <p>The character half is {@link ArtifactStore#traversalFree}, not a local copy of it. A copy that fell behind -
+     * refusing {@code .}, {@code ..} and a backslash but not a control character - would let
+     * {@code /v2/kit/<NUL>lib/manifests/1.0} pass this screen, become a store key and throw
      * {@code InvalidPathException} out of the filesystem backend - an unmapped {@code 500} at a request whose honest
      * answer is {@code 404}, and a different answer again on each object-store backend. Delegating is what keeps this
-     * screen and the store's write screen from ever disagreeing about which names are addressable (&sect;2, &sect;13).
+     * screen and the store's write screen from ever disagreeing about which names are addressable.
      *
      * <p>The empty-segment check stays local because it is genuinely this format's own: {@code traversalFree} permits
      * an empty segment on purpose - a trailing slash and a doubled separator are legitimate request shapes - while a

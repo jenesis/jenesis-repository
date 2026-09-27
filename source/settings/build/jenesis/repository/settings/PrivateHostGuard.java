@@ -14,9 +14,9 @@ import build.jenesis.repository.net.PrivateHosts;
  *
  * <p>{@link #refusalReason(URI, boolean)} is the whole outbound-target screen rather than only the host half: an
  * operator-supplied callback URL must be {@code https} <em>and</em> must not resolve internally. The two halves belong
- * together because they answer one question - "may this deployment send to this URL" - and splitting them is how the
- * webhook leg came to run the host half alone while its forwarding peer ran both (&sect;13: a guard one
- * feature applies to a shared concern is applied by every peer with that concern).
+ * together because they answer one question - "may this deployment send to this URL" - and split, one leg could run
+ * the host half alone while its peer ran both (a guard one feature applies to a shared concern is applied by every
+ * peer with that concern).
  *
  * <h2>Four shapes of the same screen, one statement of each rule</h2>
  * The legs that screen an outbound target do not all want the whole composed screen, so the pieces are named rather
@@ -32,7 +32,7 @@ import build.jenesis.repository.net.PrivateHosts;
  *   <li>{@link #cleartextRefusal(URI)} - the transport half alone. It performs <b>no I/O</b>, which is what lets a
  *       leg with a different host policy reuse the rule verbatim ({@link ImportHostGuard}, whose unresolvable host is
  *       admissible where this class's is not) and lets a <em>read</em> surface state a standing refusal without an
- *       external fetch on a GET (&sect;10).</li>
+ *       external fetch on a GET.</li>
  *   <li>{@link #unfetchableRefusal(URI)} - the capability floor <em>underneath</em> the screen, and the one piece the
  *       {@code allowInternal} dial does not lift.</li>
  * </ul>
@@ -56,7 +56,7 @@ public final class PrivateHostGuard {
      * that deployment's traffic on the wire in cleartext. It is the same posture
      * {@code S3ArtifactStoreProvider} takes over {@code JENREG_S3_ENDPOINT} (https unless
      * {@code JENREG_S3_ALLOW_INSECURE_ENDPOINT} says otherwise): a capability that cannot be honoured safely is
-     * refused visibly rather than degraded silently (&sect;9).
+     * refused visibly rather than degraded silently.
      *
      * <p>The scheme is checked <em>first</em>, so a refused plaintext URL never pays a DNS resolution; a caller
      * re-runs this immediately before it connects, which is what closes the DNS-rebinding window on the host half.
@@ -173,17 +173,15 @@ public final class PrivateHostGuard {
     /**
      * Whether an address is in a range a credentialed server-side request must not reach.
      *
-     * <p>The ranges themselves are {@link PrivateHosts}', not this class's. They used to be copied here, because
-     * {@code PrivateHosts} sat in the format SPI and this module neither requires that SPI nor should have to for
-     * a range table - so the two tables were maintained in parallel. That is the duplication whose previous
-     * instance was a real SSRF gap: the inline copy that predated {@code PrivateHosts} omitted carrier-grade NAT
-     * and multicast, and consolidating is what closed it. A second copy re-opens it the same way, because a range
-     * added to one table and not the other is invisible until something reaches the wrong half.
+     * <p>The ranges themselves are {@link PrivateHosts}', not this class's, and {@code PrivateHosts} lives in a module
+     * this one can require without the format SPI. A second copy of the table would be a real SSRF gap in waiting -
+     * a copy that omits carrier-grade NAT or multicast is one - because a range added to one table and not the other
+     * is invisible until something reaches the wrong half.
      *
      * <p><b>What is shared is the table; what is not is the policy.</b> This guard and the format legs disagree
      * about an unresolvable host and a hostless URI - they admit, this refuses - and that difference is deliberate
      * rather than drift. It stays here, in the callers above. Only "is this address in a range nobody should be
-     * steered into" moved, which is the half that must never disagree.
+     * steered into" is shared, which is the half that must never disagree.
      *
      * <p>Package-private rather than private so {@link ImportHostGuard}, whose host policy differs again but whose
      * blocked ranges must not, classifies through this one call.

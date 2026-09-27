@@ -74,11 +74,10 @@ final class ConfiguredSignerTrust implements SignerTrust {
             // Nothing configured at all: no material to verify against and nobody named. NONE says that honestly
             // rather than pretending to a trust store.
             //
-            // A pin on its own is NOT nothing, and reading it as nothing was a defect. The argument used to be that
-            // pins would be promises about keys we do not hold - true while this part was the only holder of any,
-            // and false since the trusted root can be FETCHED rather than pasted. A deployment that names a root URL
-            // and pins an identity holds material (in the fetched part) and names a signer (here), and every bundle
-            // it verified read UNTRUSTED because this part had collapsed to NONE. A pin can never admit something
+            // A pin on its own is NOT nothing: it is not a promise about keys we do not hold, because the trusted
+            // root can be FETCHED rather than pasted. A deployment that names a root URL and pins an identity holds
+            // material (in the fetched part) and names a signer (here), and collapsing this part to NONE would read
+            // every bundle it verified as UNTRUSTED. A pin can never admit something
             // unverifiable in any case: trusts() is asked only after a signature has verified against somebody's
             // material.
             return SignerTrust.NONE;

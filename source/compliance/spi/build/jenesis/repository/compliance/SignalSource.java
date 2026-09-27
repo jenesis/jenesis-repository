@@ -21,7 +21,7 @@ package build.jenesis.repository.compliance;
  *
  * <p>One further sub-interface is not a kind of signal at all but a statement about where a source keeps its data:
  * {@link RefreshableSource} says this source <em>mirrors</em> its vendor, so its query paths render and its fetch is
- * a separate write-role entry point (&sect;10). A provider does not declare it in
+ * a separate write-role entry point. A provider does not declare it in
  * {@link SignalSourceProvider#signals()} - nobody resolves <em>for</em> it - and it is detected by
  * {@code instanceof} on the created object, exactly as the five contracts above are.
  */
@@ -29,7 +29,7 @@ public interface SignalSource {
 
     /**
      * Whether this source currently answers from real data, and when that data was last fetched - the accessor that
-     * makes an outage, a stale snapshot and a genuinely clean answer three different values (&sect;9, &sect;10).
+     * makes an outage, a stale snapshot and a genuinely clean answer three different values.
      *
      * <p>It is abstract on purpose. A default would have to guess, and both guesses are wrong in the direction that
      * matters: a default of "authoritative" makes every source that forgot to answer claim its outage is a clean

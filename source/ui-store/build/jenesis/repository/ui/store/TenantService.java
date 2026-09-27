@@ -18,9 +18,9 @@ import build.jenesis.repository.scope.Scopes;
  * <p>Every method here - {@link #all}, {@link #exists}, {@link #create}, {@link #delete} - decides what is a tenant
  * through the one shared {@link Scopes} rule. The reserved store namespaces the root shares with the artifact store
  * ({@code auth/}, {@code config/}, {@code audit/}, {@code locks/}) are therefore invisible to this service in both
- * directions: they cannot be created, and they are not listed. They used to be excluded only on creation, so
- * {@link #all} - the console's {@code /instances} screen and the super-admin's accessible-tenants answer - offered
- * {@code audit} as a tenant to open and delete.
+ * directions: they cannot be created, and they are not listed. Excluded only on creation, {@link #all} - the
+ * console's {@code /instances} screen and the super-admin's accessible-tenants answer - would offer {@code audit} as
+ * a tenant to open and delete.
  */
 public class TenantService {
 
@@ -56,7 +56,7 @@ public class TenantService {
      * <p>The root listing is paged and its remainder is followed to exhaustion rather than reported: a tenant is
      * provisioned by an env super-admin, the set is not client-inflatable, and every caller of this method - the
      * tenants screen, the accessible-tenants answer, the membership walk - needs all of them or none. The bound
-     * that matters is the one below it: {@link #exists} no longer lists a scope's children to find out whether any
+     * that matters is the one below it: {@link #exists} does not list a scope's children to find out whether any
      * exist.
      */
     public List<String> all() {
@@ -84,7 +84,7 @@ public class TenantService {
         // A point read of the one scope, not a full listing of every tenant at the root then a linear scan: the
         // marker create() writes is a cheap version probe, and only a data-holding scope with no marker
         // (a scope that predates the console, or one holding only artifacts) falls back to a scoped listing. That
-        // fallback is now a single-name page rather than the scope's whole child set: the question is "does this hold
+        // fallback is a single-name page rather than the scope's whole child set: the question is "does this hold
         // anything at all", so one child answers it and every further one is work whose result is discarded. Mirrors
         // StoreTenants.exists and the SCIM tenant probe.
         Documents scope = rootStorage.scope(tenant);
@@ -108,7 +108,7 @@ public class TenantService {
         if (!rootStorage.scope(name).writeVersioned(TENANT_FILE, new Properties(), null)) {
             throw new IllegalArgumentException("Tenant already exists: " + tenant);
         }
-        // A tenant creation is a privileged super-admin mutation, so it writes an audit event (§6) - in the
+        // A tenant creation is a privileged super-admin mutation, so it writes an audit event - in the
         // new tenant's own scope (audit/<name>/), the scope every other per-tenant mutation records in, attributed to
         // the acting member. Its counterpart, TenantPurge's delete, must instead record in the operator scope because
         // the purge deletes the tenant's own audit space; a create has no such constraint, so it records where it

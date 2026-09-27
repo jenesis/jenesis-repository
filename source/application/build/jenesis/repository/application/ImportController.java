@@ -123,7 +123,7 @@ public class ImportController {
                     ? null : jobs.snapshot(store, request.resume()).orElse(null);
             // Resolve the SSRF-guard enable decision through the one resolver both import legs share: the stored
             // block-private-import-hosts setting layered over the deployment env-field, fail-closed (block) when
-            // neither is set - so a fixed-edition API import no longer defaults SSRF-open.
+            // neither is set - so a fixed-edition API import never defaults SSRF-open.
             Boolean storedGuard = ImportHostGuard.stored(settings.getOrDefault("block-private-import-hosts", null));
             ImportSource source = source(request, prior == null ? null : prior.cursor(),
                     properties.importHostsGuarded(storedGuard));

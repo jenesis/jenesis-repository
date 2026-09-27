@@ -77,7 +77,7 @@ public final class StoreHealthLedger implements HealthLedger {
 
     /**
      * When this ledger's records were last refreshed, and whether they may be acted on - the {@code health/scanned}
-     * stamp the health sweep marks, read straight off the store. It is the &sect;10 half of the ledger's job: a
+     * stamp the health sweep marks, read straight off the store. It is the staleness half of the ledger's job: a
      * console showing a coordinate with no score can say whether the deployment has ever been swept, so an empty
      * panel is never ambiguous between "clean" and "never scanned".
      *
@@ -110,11 +110,11 @@ public final class StoreHealthLedger implements HealthLedger {
      * rank-index rebuild and the console fold both need the whole ledger - so neither the entry cap nor the step
      * budget may end this scan; what it bounds is <b>heap</b>, one page of names at a time.
      *
-     * <p>That is the fix. This override answered a {@code LedgerVisitor} - the streaming leg the whole-collection
-     * ratchet points callers at, whose {@code InheritedBound}-ceilinged default is correct - by calling
-     * {@code store.list(prefix)} on the per-ecosystem coordinate subtree, materialising every scored coordinate of an
-     * ecosystem into one list before visiting any of them. The visitor never saw a bound and the caller never learnt
-     * it was one allocation, so the override dropped exactly the protection the default carries.
+     * <p>An override answering a {@code LedgerVisitor} - the streaming leg the whole-collection ratchet points callers
+     * at, whose {@code InheritedBound}-ceilinged default is correct - must not call {@code store.list(prefix)} on the
+     * per-ecosystem coordinate subtree, which would materialise every scored coordinate of an ecosystem into one list
+     * before visiting any of them. The visitor would never see a bound and the caller never learn it was one
+     * allocation, so the override would drop exactly the protection the default carries.
      */
     private static final BoundedChildren LEDGER =
             BoundedChildren.draining();
@@ -161,7 +161,7 @@ public final class StoreHealthLedger implements HealthLedger {
         // (which records or re-scores coordinates); the eviction epoch catches a coordinate reclaimed by its last-version
         // eviction, which does NOT move the scan stamp - so an evicted coordinate drops on this next pass rather than
         // lingering until the next scan. The scan stamp stays the composite's leading token, so a read still surfaces the
-        // ranking's honest as-of instant (Principle 10) and the epoch never leaks into it. Called after an explicit
+        // ranking's honest as-of instant and the epoch never leaks into it. Called after an explicit
         // rescan and on the maintenance cadence.
         String scanStamp = HealthLedger.scanned(store).read().map(Instant::toString).orElse("");
         String stamp = scanStamp + ' ' + HealthLedger.evictions(store).current();

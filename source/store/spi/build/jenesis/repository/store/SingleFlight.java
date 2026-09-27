@@ -4,14 +4,12 @@ import module java.base;
 
 /**
  * One piece of work per key at a time, in this process: the first caller for a key runs it and every caller that
- * arrives while it runs waits for that run instead of starting its own. A burst of first readers of an absent listing
- * used to generate it ten times over; fifty conditional reads against an absent identity rollup each walked the
- * coordinate set; a proxy miss for one path fetched it once per concurrent reader; a feed refresh for one key hit the
- * vendor once per caller. Each of those wrote this map of futures for itself - four copies - and two of them caught
- * {@code IOException | RuntimeException} around the leader's work and completed the future in the catch, so an
- * {@code Error} out of the leader left the future incomplete and every waiter parked on it for ever. The feed cache
- * had found that and completed an undone flight in its {@code finally}; the other three had not. One implementation,
- * one {@code finally}.
+ * arrives while it runs waits for that run instead of starting its own - so a burst of first readers of an absent
+ * listing does not generate it ten times over, fifty conditional reads against an absent identity rollup do not each
+ * walk the coordinate set, a proxy miss for one path is fetched once, and a feed refresh for one key hits the vendor
+ * once. The leader's future is completed in a {@code finally}, not in a catch of
+ * {@code IOException | RuntimeException}, so an {@code Error} out of the leader never leaves every waiter parked on
+ * an incomplete future for ever. One implementation, one {@code finally}.
  *
  * <p>The leader gets its work's value or its exception, exactly as if it had called the work itself. A waiter gets an
  * {@link Outcome}: {@link Followed} with the leader's value, {@link Failed} with what the leader threw, or

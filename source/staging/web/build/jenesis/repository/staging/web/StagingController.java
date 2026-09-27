@@ -126,9 +126,8 @@ public class StagingController {
             return null;
         }
         // A window, never the whole set: the first LIST_WINDOW stagings in the store's order with whether more exist,
-        // each row's item count capped so it never drains a staging's tree. The list used to take every id and walk
-        // every tree for its count, on the request thread - the staging-reap canary measured it at a million open
-        // stagings, and it did not answer.
+        // each row's item count capped so it never drains a staging's tree. Taking every id and walking every tree
+        // for its count, on the request thread, would not answer at a million open stagings.
         Staging.Window window = staging.get().ids(LIST_WINDOW);
         List<StagingEntry> entries = new ArrayList<>();
         for (String id : window.ids()) {

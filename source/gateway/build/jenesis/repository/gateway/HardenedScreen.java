@@ -24,13 +24,13 @@ import build.jenesis.repository.store.ArtifactStore;
  * materialised body, so no un-screened byte ever reaches the client (a materialise -> screen ->
  * decide -> serve lifecycle).
  *
- * <p><b>Bounded heap (§1).</b> The body streams into the {@link SpoolStore}'s bounded, owner-only temp file,
+ * <p><b>Bounded heap.</b> The body streams into the {@link SpoolStore}'s bounded, owner-only temp file,
  * digested as it lands; it is never pulled whole into a {@code byte[]}. Only the bounded inspection prefix is read into
  * heap for the inspectors, exactly the cap the publish and ordinary proxy screens already apply. Disk - governed by the
  * spool budget - is the resource spent; a spool that exhausts its budget raises {@link SpoolStore.BudgetExhausted},
  * which the router answers as a {@code 503}.
  *
- * <p><b>Structural refusal set (§9).</b> When the hardened leg cannot screen a body it does not fall back to
+ * <p><b>Structural refusal set.</b> When the hardened leg cannot screen a body it does not fall back to
  * serving it unscreened, nor swallow the failure into an anonymous error: the outcome is a typed, named {@link Refusal}
  * - the upstream fetch truncated ({@link Refusal#FETCH_INTERRUPTED}), the body grown past the per-artifact size
  * ceiling ({@link Refusal#OVERSIZE}), a stalled or over-long fetch ({@link Refusal#FETCH_TIMEOUT}), an inspector that
@@ -46,22 +46,22 @@ import build.jenesis.repository.store.ArtifactStore;
  * scanner streaming past the prefix window so a credential beyond 32 MiB is caught, a format inspector default-bridged
  * to the same front prefix it read before. Decompression/scan stays bounded by the shared
  * {@link QualityInspector#FULL_BODY_INSPECTION_LIMIT full-body tier} (and each inspector's own entry/finding/nesting
- * caps), so full-body is not unbounded (a decompression bomb cannot exhaust the node, §1). Every claiming
+ * caps), so full-body is not unbounded (a decompression bomb cannot exhaust the node). Every claiming
  * inspector <em>reports</em> whether its own read reached the end of the body or one of those bounds
  * ({@link QualityInspector.Inspection#complete()}), and the screen is complete only if all of them were: an artifact
  * this leg could not screen whole is decided, recorded and counted as such rather than passing as a clean whole-body
  * screen because some other inspector happened to produce a subject.
  *
- * <p><b>Digest-pinned verdict record + reuse-dedup (§5/§7).</b> When the leg screens a body it records a
+ * <p><b>Digest-pinned verdict record + reuse-dedup.</b> When the leg screens a body it records a
  * {@link VerdictSection#TAG verdict} section into the coordinate's consolidated metadata document, <em>pinned to the
  * artifact's content digest</em> (the SHA-256 the spool computed as the body streamed in), capturing the verdict, when
  * it was {@code screenedAt}, the screening {@code profile}, the {@code source} the bytes came from and the
  * {@code validators} that ran. On a subsequent fetch of the <em>same</em> digest the recorded {@code ALLOW} verdict is
- * reused - the spool is still paid, but the inspection/gate cost is not (§7 the reader pays for nothing a prior screen
+ * reused - the spool is still paid, but the inspection/gate cost is not (the reader pays for nothing a prior screen
  * already did). Reuse is digest-exact: a different-bytes artifact at the same coordinate never reuses a verdict reached
  * over changed content, it re-screens. A hardened artifact about to be served whose verdict is <em>absent</em> (never
  * recorded, or the document lost it) is never served unscreened: {@link #serveVerified} fails closed and, when the
- * bytes are local, re-screens them from the local store and re-records the verdict (idempotent self-healing, §5), then
+ * bytes are local, re-screens them from the local store and re-records the verdict (idempotent self-healing), then
  * serves per the fresh verdict; when the bytes are not local it is a MISS that falls to the normal fetch+screen path.
  *
  * <p><b>Transient full-enforcement screen ({@code harden nocache}).</b> A hardened leg constructed with
@@ -136,7 +136,7 @@ public final class HardenedScreen {
      *       budget: a body big enough to trip a higher ceiling exhausts the shared budget first and is answered 503,
      *       and the per-artifact refusal an operator configured can never fire. {@link #fromConfig} therefore reads the
      *       ceiling <em>against</em> the budget it will be spooled under and refuses the pair when it is unreachable
-     *       (§9) rather than letting a configured policy quietly do nothing - see
+     *       rather than letting a configured policy quietly do nothing - see
      *       {@link #reachableWithin(SpoolStore.Budget)}.</li>
      *   <li><b>Fetch duration ceiling</b> ({@link #fetchTimeout()}). An absolute wall-clock cap on the whole body
      *       transfer, a backstop against a fetch that is slow overall; exceeding it is a {@link Refusal#FETCH_TIMEOUT}.</li>
@@ -148,7 +148,7 @@ public final class HardenedScreen {
      *       momentary pause on a genuinely large artifact over a slow-but-real link and only bites a sustained stall.
      *       A non-positive floor disables the throughput guard (the duration ceiling still applies).</li>
      * </ul>
-     * The guard streams the body through, never buffering it (§1); a bound violation aborts the spool mid-stream and
+     * The guard streams the body through, never buffering it; a bound violation aborts the spool mid-stream and
      * the partial spool file is reclaimed exactly as any other refused fetch. Immutable; a non-positive size or
      * duration is refused at construction so a misconfiguration fails loud rather than disabling a ceiling silently.
      */
@@ -191,14 +191,14 @@ public final class HardenedScreen {
          * key - deploy-time resource dials a deployment sizes to its disk and links, exactly as the spool budget is.
          *
          * <p><b>The ceiling is read against the budget it will be spooled under, and the pair is validated.</b>
-         * The per-artifact ceiling and the shared {@code budget} are enforced by different code over the same bytes and
-         * used to validate only their own positivity, so a ceiling <em>above</em> the budget was accepted and then
-         * never reachable: every body large enough to trip it exhausted the shared budget first and was answered 503,
-         * and the configured per-artifact policy refusal could not fire once. The budget parameter is what makes that
+         * The per-artifact ceiling and the shared {@code budget} are enforced by different code over the same bytes, so
+         * each validating only its own positivity would accept a ceiling <em>above</em> the budget that is never
+         * reachable: every body large enough to trip it exhausts the shared budget first and is answered 503, and the
+         * configured per-artifact policy refusal cannot fire once. The budget parameter is what makes that
          * unrepresentable - there is no way to read the ceiling without naming the budget it lives under.
          * <ul>
          *   <li>An <b>explicitly configured</b> ceiling above the budget is an operator selection that cannot be
-         *       honoured, so it throws here, naming both keys and both values (&sect;9 fail fast: a config error names
+         *       honoured, so it throws here, naming both keys and both values (fail fast: a config error names
          *       what was selected and what is missing, and a configuration that cannot do what it says is never
          *       accepted silently).</li>
          *   <li>An <b>unset</b> ceiling above an explicitly lowered budget is not an operator selection - the budget
@@ -291,7 +291,7 @@ public final class HardenedScreen {
     /** The stream wrapper enforcing the untrusted-upstream {@link Bounds} as the body streams through the spool: it
      *  counts bytes (size ceiling) and watches elapsed wall-clock against the duration ceiling and the cumulative
      *  throughput floor, aborting with a typed {@link Oversize}/{@link SlowFetch} rather than letting an unbounded or
-     *  trickling body pin the spool. It never buffers the body (§1); it only counts and times it. */
+     *  trickling body pin the spool. It never buffers the body; it only counts and times it. */
     private static final class Guarded extends FilterInputStream {
 
         private final Bounds bounds;
@@ -362,7 +362,7 @@ public final class HardenedScreen {
     }
 
     /** Immutable-coordinate drift alarm events (each a refused re-fetch of an immutable coordinate whose bytes changed
-     *  under it) since the gateway started - the loud {@code jenreg.gateway.hardened.drift} counter (§9). Static so a
+     *  under it) since the gateway started - the loud {@code jenreg.gateway.hardened.drift} counter. Static so a
      *  per-request screen still contributes to the one gateway-wide alarm the {@link HardeningObservability} reports. */
     private static final AtomicLong DRIFT_EVENTS = new AtomicLong();
 
@@ -382,7 +382,7 @@ public final class HardenedScreen {
     /**
      * The coordinate a hardened-leg verdict is recorded under in the consolidated metadata document. It is derived
      * <em>from the request path alone</em> - deterministically, without inspecting the body - so the recorded verdict
-     * can be looked up for reuse before any inspection runs (the hot-path dedup, §7): the leading path segment is the
+     * can be looked up for reuse before any inspection runs (the hot-path dedup): the leading path segment is the
      * ecosystem, the whole request path the coordinate (URL-encoded into one segment by
      * {@link build.jenesis.repository.metadata.MetadataKey}), the filename the version. The identity that actually
      * binds the verdict to the bytes is the content digest carried <em>inside</em> the section, not this coordinate.
@@ -401,10 +401,9 @@ public final class HardenedScreen {
      * path split one artifact's acquisition history across two documents. One artifact, one origin document.
      *
      * <p>It lives here rather than being derived at each caller because there are three - the router that writes the
-     * row, the 409 message that reads it, and the console panel - and the last two used to <em>restate</em> the
-     * derivation with a javadoc saying it was "keyed exactly as the fallback-fetch path records it". A screen that
-     * describes itself as a copy of another is one that will fall behind it, and this one did the moment the writer
-     * moved.
+     * row, the 409 message that reads it, and the console panel - and a reader that <em>restated</em> the derivation
+     * with a javadoc saying it was "keyed exactly as the fallback-fetch path records it" would fall behind it the
+     * moment the writer moved.
      *
      * <p>{@link StoreRepositoryInventory#describe} is a pure path parse that opens no blob, so a caller on the serve
      * path pays only the format lookup it already does.
@@ -573,7 +572,7 @@ public final class HardenedScreen {
         String digest = key.substring(BLOB_PREFIX.length());
         Coordinate coordinate = coordinate(path);
         Optional<VerdictSection.Recorded> prior = priorVerdict(coordinate);
-        // Verdict-reuse dedup (§7): a prior screen of these EXACT bytes recorded an ALLOW verdict, so release the
+        // Verdict-reuse dedup: a prior screen of these EXACT bytes recorded an ALLOW verdict, so release the
         // verified spool without paying the inspection/gate cost again. Reuse is digest-exact - a changed-bytes
         // artifact at the same coordinate never reuses and re-screens (or drifts) below. Reuse is gated on
         // reuseVerdict: a transient `harden nocache` leg disables it so every fetch re-screens the full body
@@ -583,7 +582,7 @@ public final class HardenedScreen {
             return Optional.of(new ProxyFormat.Download(200, spool.open(key), response.headers()));
         }
         // Drift detection: an immutable coordinate whose previously-recorded verdict pins DIFFERENT bytes than
-        // this re-fetch is upstream tampering - a released version whose content changed under it. Refuse + ALARM (§9),
+        // this re-fetch is upstream tampering - a released version whose content changed under it. Refuse + ALARM,
         // never silently serve the changed bytes; the original digest stays the pinned baseline, so every re-fetch of
         // the swapped bytes keeps tripping the alarm until an operator intervenes.
         if (prior.isPresent() && immutableCoordinate(path) && !prior.get().pins(digest)) {
@@ -591,9 +590,9 @@ public final class HardenedScreen {
         }
         // Full-body screen: the whole body is on disk, so every claiming inspector screens the COMPLETE
         // artifact through a re-openable spool handle, and each REPORTS whether its own read ran to completion.
-        // The screen no longer derives that from the body's length: the length is the right test for a bridged
+        // The screen does not derive that from the body's length: the length is the right test for a bridged
         // inspector (it sees the front prefix and nothing else) but not for a full-body one, whose byte, entry, finding
-        // and nesting ceilings can stop it over a body of any size - and it was invisible altogether whenever some
+        // and nesting ceilings can stop it over a body of any size - and would be invisible altogether whenever some
         // other inspector produced a subject. Decompression/scan stays bomb-bounded by the shared full-body tier and
         // each inspector's own caps.
         return screenAndRecord(path, coordinate, digest, spooled(key), lastModified, source,
@@ -604,8 +603,8 @@ public final class HardenedScreen {
      * Serve a hardened artifact that is about to be released from the local store, fail-closed on an absent verdict.
      * When the bytes are not local this is a MISS (empty) - the caller falls to the normal fetch+screen path. When
      * they are local and a recorded {@code ALLOW} verdict pins these exact bytes, they are served without re-screening
-     * (reuse-dedup, §7). When no verdict is recorded (never was, or the document lost it) the artifact is <em>never</em>
-     * served unscreened: the local bytes are re-screened from scratch (self-healing repair, §5), the fresh verdict is
+     * (reuse-dedup). When no verdict is recorded (never was, or the document lost it) the artifact is <em>never</em>
+     * served unscreened: the local bytes are re-screened from scratch (self-healing repair), the fresh verdict is
      * recorded, and the artifact is served only if that fresh verdict is {@code ALLOW}.
      */
     public Optional<ProxyFormat.Download> serveVerified(String path, Optional<QualityInspector.Content> local)
@@ -641,7 +640,7 @@ public final class HardenedScreen {
             recordVerdict(coordinate, digest, Verdict.REJECT, Refusal.UNPARSEABLE, source, validators);
             return refuse(path, Refusal.UNPARSEABLE, unparseable);
         } catch (IOException inspectorError) {
-            // An inspector failed while screening - never swallowed into an anonymous 500 nor a silent serve (§9).
+            // An inspector failed while screening - never swallowed into an anonymous 500 nor a silent serve.
             recordVerdict(coordinate, digest, Verdict.REJECT, Refusal.INSPECTOR_ERROR, source, validators);
             return refuse(path, Refusal.INSPECTOR_ERROR, inspectorError);
         }
@@ -703,7 +702,7 @@ public final class HardenedScreen {
     }
 
     /** Refuse an immutable-coordinate re-fetch whose bytes drifted from the pinned baseline, and raise the loud drift
-     *  ALARM (§9): a {@code WARNING} log, the {@code jenreg.gateway.hardened.drift} counter, and a durable
+     *  ALARM: a {@code WARNING} log, the {@code jenreg.gateway.hardened.drift} counter, and a durable
      *  {@link build.jenesis.repository.gate.QuarantineLog} {@code REJECT} row - never silently serving the changed
      *  bytes. The baseline verdict is left untouched so the swapped bytes stay refused on every subsequent re-fetch. */
     private Optional<ProxyFormat.Download> driftRefuse(String path, String digest, VerdictSection.Recorded baseline)
@@ -718,7 +717,7 @@ public final class HardenedScreen {
 
     /** Record the digest-pinned verdict into the coordinate's metadata document through the section-scoped CAS
      *  mutate. Best-effort: the screen has already decided and the screened bytes are safe to serve, so a record
-     *  failure is logged (never silent, §9) rather than failing the serve - it only costs a re-screen next time. */
+     *  failure is logged (never silent) rather than failing the serve - it only costs a re-screen next time. */
     private void recordVerdict(Coordinate coordinate, String digest, Verdict verdict, Refusal refusal, String source,
                                List<VerdictSection.Validator> validators) {
         try {
@@ -767,7 +766,7 @@ public final class HardenedScreen {
 
     /** Record a structural, named refusal and withhold the body: a durable {@code QuarantineLog} REJECT row whose
      *  reason names the {@link Refusal}, a {@code WARNING} log, and an empty result so the wire stays a non-disclosive
-     *  {@code 404} - the refusal is captured server-side, never swallowed and never disclosed to the client (§9). */
+     *  {@code 404} - the refusal is captured server-side, never swallowed and never disclosed to the client. */
     private Optional<ProxyFormat.Download> refuse(String path, Refusal refusal, Exception cause) throws IOException {
         String reason = REFUSAL_REASON_PREFIX + refusal + "): " + refusal.detail()
                 + (cause == null || cause.getMessage() == null ? "" : " - " + cause.getMessage());

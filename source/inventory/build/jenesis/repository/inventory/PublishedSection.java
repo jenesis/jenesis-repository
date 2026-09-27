@@ -17,8 +17,7 @@ import build.jenesis.repository.metadata.State;
  *
  * <p>The {@code data} payload is {@code {"at":<instant>, "prerelease":<bool>, "pinned":<bool>}}. All methods are pure;
  * a mutation returns a fresh {@link Section} folded over the current one, preserving the fields it does not set (a pin
- * toggle keeps the publish instant; a re-publish keeps an existing pin) so no single writer clobbers another's fact
- * (§11).
+ * toggle keeps the publish instant; a re-publish keeps an existing pin) so no single writer clobbers another's fact.
  */
 public final class PublishedSection {
 

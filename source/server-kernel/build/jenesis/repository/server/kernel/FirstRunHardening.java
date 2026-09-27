@@ -4,7 +4,7 @@ import module java.base;
 import build.jenesis.repository.settings.Setting;
 
 /**
- * The first-run guided-hardening step (audit P4). A fresh deploy already boots with a non-empty secure
+ * The first-run guided-hardening step. A fresh deploy already boots with a non-empty secure
  * floor - per-credential authorization on, the CVSS gate at {@code CRITICAL}, a sane rate ceiling and a short
  * immaturity hold, with the advisory feeds off until an operator names them, since each is an outbound call - but the dials that need a <em>deployment-specific</em> answer stay at
  * their open default, because there is no universal secure value for them: which coordinates carry a version floor,
@@ -22,8 +22,8 @@ import build.jenesis.repository.settings.Setting;
  * when it is a per-tenant, free-form compliance rule that ships blank and no operator (nor an environment pin) has set
  * it - installed, but defining no rule, so it gates nothing until configured. Reading only, writing nothing: the
  * guidance renders the current posture and never mutates a setting on the operator's behalf (there is no safe universal
- * value to write), so it is idempotent and honours the reads-render/writes-refresh contract (§10) and the
- * prefer-immutability, no-hidden-mutation rule (§11).
+ * value to write), so it is idempotent and honours the reads-render/writes-refresh contract and the
+ * prefer-immutability, no-hidden-mutation rule.
  *
  * <p>The advice is surfaced both as a one-time boot log (the proactive nudge an operator sees on a fresh
  * {@code docker run}, mirroring the loud auth-disabled boot warning) and, recomputed live, on {@code /api/config} (so

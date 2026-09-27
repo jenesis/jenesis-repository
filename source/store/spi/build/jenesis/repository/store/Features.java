@@ -19,15 +19,15 @@ import module org.slf4j;
  *     implementation with {@code jenreg.<spi>=<feature>}; nothing set picks the most universally
  *     applicable default (the {@code filesystem} store) or, where the SPI is optional, the single enabled
  *     implementation. Resolution runs through the {@link Providers} primitives, so an explicitly selected
- *     implementation that is absent, switched off or unconfigured fails loudly (&sect;9) and two enabled
+ *     implementation that is absent, switched off or unconfigured fails loudly and two enabled
  *     implementations are ambiguous - discovery order never picks a winner.</li>
  * <li><em>One key, one meaning:</em> because both shapes live in the one {@code jenreg.*} namespace, an
  *     implementation's {@code name()} may never be the name of an <em>SPI</em>. The two readings of such a key
- *     collide silently in the benign direction and destructively in the other: the walk implementation was called
- *     {@code store}, so its documented off-switch {@code jenreg.store=false} was also the artifact
- *     store's selection key, and using it selected a storage backend named {@code false} and refused to boot -
- *     while every deployment's ordinary {@code jenreg.store=filesystem} was silently doubling as that
- *     walk's toggle. A build guard scans for the collision rather than trusting the convention.</li>
+ *     collide silently in the benign direction and destructively in the other: an implementation called
+ *     {@code store} would make its off-switch {@code jenreg.store=false} also the artifact store's selection key,
+ *     selecting a storage backend named {@code false} and refusing to boot - while every deployment's ordinary
+ *     {@code jenreg.store=filesystem} silently doubled as its toggle. A build guard scans for the collision rather
+ *     than trusting the convention.</li>
  * <li>An implementation's own settings live under {@code jenreg.<feature>.<property>=<value>} or its documented
  *     settings keys; they are never consulted here.</li>
  * <li><em>Required-config self-disable:</em> a provider declares the config keys it cannot run without (a
@@ -134,7 +134,7 @@ public final class Features {
     /** The implementation name a singleton SPI is configured to ({@code jenreg.<spi>=<feature>}), or
      *  empty when unset - the caller then applies its own most-universal default, or resolves the single enabled
      *  implementation through {@link Providers}. A <em>present</em> value is an explicit operator decision, so the
-     *  resolution primitives fail rather than degrade when nothing answers to it (&sect;9). */
+     *  resolution primitives fail rather than degrade when nothing answers to it. */
     public static Optional<String> selection(String spi) {
         return selection(settings(), spi);
     }
@@ -176,8 +176,8 @@ public final class Features {
      * <p><b>This is the one place {@code jenreg.} is spelled.</b> Every seam that takes a config lookup
      * in this product reads it with BARE names ({@code socket-token}, {@code scheduled-scan}, {@code read-only}) -
      * some hundred and thirty call sites do - while a deployment configures those under the shared namespace. The
-     * adapter between the two used to be a lambda written out at each entry point, thirty-five times, which is a
-     * spelling of the product's own namespace that a typo makes silently unfindable. It is written once here.
+     * adapter between the two, written out as a lambda at each entry point, would be a spelling of the product's own
+     * namespace that a typo makes silently unfindable. It is written once here.
      *
      */
     public static UnaryOperator<String> namespaced(UnaryOperator<String> properties) {

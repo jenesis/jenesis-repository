@@ -124,9 +124,8 @@ public final class DirtyIndexFeed {
      * Hand every pending entry to {@code pages}, {@code batch} at a time, paging the level with a cursor so the feed
      * is never listed whole and a page the consumer {@linkplain #clear clears} as it goes is never re-read. The
      * consumer decides when to clear: per page, where each page commits on its own (the dependents shards), or once
-     * after the pass has committed what every page fed into (the search snapshot). The search pass used to call
-     * {@code pending()} unbounded, which listed the level whole and held the burst in heap - the shape the dependents
-     * pass had already left for a paged drain after its canary measured it.
+     * after the pass has committed what every page fed into (the search snapshot). Never an unbounded
+     * {@code pending()}, which would list the level whole and hold the burst in heap.
      */
     public void drain(int batch, Pages pages) throws IOException {
         String after = "";

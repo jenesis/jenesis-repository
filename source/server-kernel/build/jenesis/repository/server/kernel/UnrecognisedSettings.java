@@ -7,8 +7,8 @@ import build.jenesis.repository.store.Features;
 /**
  * The boot check that tells an operator when a {@code jenreg.*} property they set is one nothing reads.
  *
- * <p>It exists because this product changes settings by clean cutover - {@code AGENTS.md} disallows compatibility
- * shims outright - while an unrecognised key is <em>silently ignored</em>. Those two together mean a rename or a
+ * <p>It exists because this product changes settings by clean cutover - compatibility shims are disallowed
+ * outright - while an unrecognised key is <em>silently ignored</em>. Those two together mean a rename or a
  * removal is invisible to whoever had the old key set: their value simply stops having effect, with nothing said at
  * boot, in the log or on any screen, and they discover it when the behaviour it governed does something else. The
  * cutover is right; the silence is what makes it indistinguishable from a setting that quietly stopped working.

@@ -45,31 +45,27 @@ import build.jenesis.repository.server.RepositoryRoutingProvider;
  * while the console binds it directly, in-process, rather than over the HTTP API.
  *
  * <p>The grantable-rights surfaces are contributed as beans too, so {@code CredentialService} still validates a
- * role against the discovered union and a new surface is one more bean - the console's replacement for the
- * component-scanned beans the layer used to carry.
+ * role against the discovered union and a new surface is one more bean, rather than a component-scanned bean in the
+ * layer.
  */
 @Configuration
 public class DomainConfig {
 
-    // The audit trail is NOT declared here. It used to be, as an @ConditionalOnMissingBean(AuditTrail.class)
-    // fallback returning AuditTrail.none() so a composition installing no audit implementation would still boot.
+    // The audit trail is NOT declared here, not even as an @ConditionalOnMissingBean(AuditTrail.class) fallback.
     // That condition cannot do what it says between two plain @Configuration classes: it is evaluated as the class
-    // is processed, and which of two user configurations is processed first is not defined. In the console's
-    // standalone node it lost the race, so both this class and RepositoryStoreConfig registered a bean called
-    // auditTrail and the context refused to start at all - the opposite of the boot the fallback existed to
-    // guarantee, and invisible to any lane that does not start a server.
+    // is processed, and which of two user configurations is processed first is not defined. Losing that race, both
+    // this class and RepositoryStoreConfig would register a bean called auditTrail and the context would refuse to
+    // start at all - invisible to any lane that does not start a server.
     //
     // There is no composition that needs it. The standalone node scans RepositoryStoreConfig, which declares the
     // trail unconditionally over the store it opens; a composed node excludes that class and takes the repository's
     // own, which is authoritative there. And a deployment carrying no audit implementation is already answered a
     // layer down, by AuditTrailProvider resolving to a trail that records nothing.
     //
-    // The tree was swept for the same shape afterwards: six bean names are declared by more than one user
-    // configuration with one of them conditional. Four never meet - they belonged to a console node nothing
-    // imported, and are deleted - and the cache node's two (`authorization`, `keyUsageTracker`) are ordered rather than
-    // raced, because a configuration class processes its @ComponentScan before its @Import, so the bundle's scan
-    // of the composition registers both competitors before CacheConfig is ever read. What has no order at all is
-    // two classes picked up by the SAME scan, which is what this one was.
+    // The same shape elsewhere is ordered rather than raced: the cache node's two (`authorization`,
+    // `keyUsageTracker`) are safe because a configuration class processes its @ComponentScan before its @Import, so
+    // the bundle's scan of the composition registers both competitors before CacheConfig is ever read. What has no
+    // order at all is two classes picked up by the SAME scan.
 
     @Bean
     public CacheService cacheService(@Qualifier("cacheTenantStorage") CacheStorage cacheTenantStorage,
@@ -189,7 +185,7 @@ public class DomainConfig {
         // The upstream-credential source reads its deploy-time bootstrap keys - notably secrets-key
         // (JENREG_SECRETS_KEY), the master key that envelope-encrypts a stored credential at rest - from the
         // console's own environment, exactly as the /api ConfigController path does, so a credential set through the
-        // console is encrypted under the same key (and refused the same way when none is configured, §9).
+        // console is encrypted under the same key (and refused the same way when none is configured).
         return new SettingsAdmin(repositoryStore, pins::pinned, tenantService::all, audit, currentTenant, actor,
                 Features.namespaced(environment::getProperty));
     }
@@ -277,9 +273,8 @@ public class DomainConfig {
      * This console's catalogue: the module graph decorated with each implementation's stored, effective state - is
      * its module installed, is its gate open, which key opens it, what settings it contributes.
      *
-     * <p>It is the same screen the base console serves, contributed rather than re-implemented. There were two
-     * pages: this one, and a thinner one over the module graph alone. They rendered the same enumeration with
-     * different markup, and only this one could say whether anything was switched on.
+     * <p>It is the same screen the base console serves, contributed rather than re-implemented, with the decoration
+     * that says whether anything is switched on.
      */
     @Bean
     public SpiCatalogSource spiCatalogSource(SettingsAdmin settings) {

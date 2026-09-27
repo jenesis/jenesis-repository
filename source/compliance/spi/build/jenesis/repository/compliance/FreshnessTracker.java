@@ -9,9 +9,9 @@ import module java.base;
  * {@link #failed(String) failed(key)} when one produced no answer at all, and hands {@link #freshness()} straight out
  * of its accessor.
  *
- * <p><strong>The reading is keyed, because the lookups are</strong>. It used to be a last-writer flag -
- * a failed lookup cleared it and the very next successful one, <em>of any other key</em>, set it again - so it
- * described whichever lookup happened to finish last rather than what the source can answer. The vendor having
+ * <p><strong>The reading is keyed, because the lookups are</strong>. A last-writer flag - cleared by a failed
+ * lookup and set again by the very next successful one, <em>of any other key</em> - would describe whichever lookup
+ * happened to finish last rather than what the source can answer. The vendor having
  * answered for B says nothing about the A it could not answer for, so a success on B does not clear A. Two rules, both
  * derived from the lookups themselves:
  * <ul>
@@ -32,7 +32,7 @@ import module java.base;
  *
  * <p><strong>Why a fail-closed feed records its failures too.</strong> A fail-closed feed's outage separation is the
  * raise its contract mandates ({@link AdvisorySource} clause 4), so no caller is left with a degraded value to be
- * misled by, and for it this reading is display-only. It is still recorded, for parity (&sect;13) and because a
+ * misled by, and for it this reading is display-only. It is still recorded, for parity and because a
  * console reading "authoritative, last fetched three days ago" beside a feed that has failed every lookup since is
  * exactly the ambiguity {@link Freshness} exists to remove. For a fail-<em>soft</em> feed the reading <em>is</em> the
  * separation: an unreachable model and a model with nothing to say produce the same empty answer, and only

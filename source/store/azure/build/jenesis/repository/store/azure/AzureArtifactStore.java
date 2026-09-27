@@ -439,8 +439,8 @@ public final class AzureArtifactStore implements ArtifactStore {
             return put(key, BinaryData.fromBytes(content.readAllBytes()), expected);
         }
         // Spooled to an owner-only file first, as write(..) is: a body from a plain stream is not replayable, and the
-        // client retries a refused upload by reading it again - the shape the S3 store measured as a publish
-        // answering 500 under two nodes' contention. A file-backed body replays.
+        // client retries a refused upload by reading it again - which answers a publish 500 under two nodes'
+        // contention. A file-backed body replays.
         Path temporary = spool();
         try {
             try (OutputStream out = Files.newOutputStream(temporary,

@@ -21,7 +21,7 @@ import com.azure.storage.blob.models.BlobStorageException;
  *
  * <p>The blob endpoint the connection string resolves to is required to be {@code https} unless
  * {@code jenreg.azure-blob.allow-insecure-endpoint=true} explicitly permits a plaintext one - the same
- * &sect;13 screen the {@code s3} and {@code gcs} siblings apply to their own endpoint keys, reached here through the
+ * screen the {@code s3} and {@code gcs} siblings apply to their own endpoint keys, reached here through the
  * connection string because that is where this SDK carries the scheme. Azure's account key rides inside the very value
  * that also selects the transport, so a {@code DefaultEndpointsProtocol=http} puts the shared-key signature and every
  * artifact byte on a plaintext wire that no error will ever surface - a plaintext exchange succeeds.
@@ -121,7 +121,7 @@ public final class AzureArtifactStoreProvider implements ArtifactStoreProvider {
      * <em>extracted</em> from one of them rather than read from it - so this method is where the two are bound to the
      * screen.
      *
-     * @throws IllegalStateException at resolution, before any client is built or any key is signed with (&sect;9).
+     * @throws IllegalStateException at resolution, before any client is built or any key is signed with.
      */
     public static URI secureEndpoint(String endpoint, String allowInsecure) {
         return Endpoints.secure(CONNECTION_STRING_KEY, endpoint, ALLOW_INSECURE_KEY, allowInsecure);

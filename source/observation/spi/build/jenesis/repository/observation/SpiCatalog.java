@@ -10,12 +10,11 @@ import module java.base;
  * what something believed was configured. Only this product's own contracts are listed, a service under the
  * {@code build.jenesis.} namespace, or the frameworks' own {@code ServiceLoader} plumbing would bury them.
  *
- * <p><b>The walk is here once, and what a deployment knows on top of it is a {@link Decoration}.</b> There were two
- * walks: a console one that could say only which providers existed, and a settings one that also knew each module's
- * installed and enabled state, its enablement key and the settings it contributes. They enumerated the same graph with
- * the same product-namespace filter and the same ordering, and produced two records the same screen was written
- * against twice. A deployment with no stored settings decorates with {@link #ALWAYS_ON} and gets the first; one that
- * reads settings supplies a decoration and gets the second. The screen does not know which it is looking at.
+ * <p><b>The walk is here once, and what a deployment knows on top of it is a {@link Decoration}.</b> A console can
+ * say only which providers exist; a deployment with settings also knows each module's installed and enabled state,
+ * its enablement key and the settings it contributes. Both enumerate the same graph with the same product-namespace
+ * filter and the same ordering, so one walk serves both: a deployment with no stored settings decorates with
+ * {@link #ALWAYS_ON}; one that reads settings supplies a decoration. The screen does not know which it is looking at.
  *
  * <p>It is a model rather than markup: a screen renders it through a template, so the escaping, the layout and the
  * accessibility of the result are the template engine's job.

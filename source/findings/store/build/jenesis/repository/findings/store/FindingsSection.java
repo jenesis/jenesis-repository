@@ -22,8 +22,8 @@ import build.jenesis.repository.metadata.Signal;
  * <p>The {@code data} payload is exactly what the ledger serialised as a standalone sidecar - {@code {"findings":[...]}}
  * - so the sidecar bytes and this section's {@code data} node are the same shape, and the migration folds one into the
  * other by re-union rather than a re-encode. The envelope's {@code signal} summarises the section for the gate and the
- * generic renderer (§6): the highest active vulnerability/malware severity, or neutral. All methods are pure; a
- * mutation returns a fresh {@link Section} and never touches its argument (§11).
+ * generic renderer: the highest active vulnerability/malware severity, or neutral. All methods are pure; a
+ * mutation returns a fresh {@link Section} and never touches its argument.
  */
 public final class FindingsSection {
 
@@ -102,7 +102,7 @@ public final class FindingsSection {
 
     /** The gate-and-GUI signal of a row set: the highest severity among active (not superseded) vulnerability and
      *  malware rows, or neutral when none contributes a band - the "adds to a score or is neutral" summary the gate
-     *  and the generic renderer read without parsing {@code data} (§6). */
+     *  and the generic renderer read without parsing {@code data}. */
     static Signal signal(List<Finding> rows) {
         Severity highest = null;
         for (Finding row : rows) {

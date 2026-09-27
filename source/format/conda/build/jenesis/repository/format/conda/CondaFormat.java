@@ -139,8 +139,9 @@ public final class CondaFormat implements RepositoryFormat, ArtifactLayout, Prox
         // subdirs and keeping the package pointers whose coordinate(file) matches - this collects EVERY build of the
         // version (the correct retroactive-hold scope). The BlobLayout.blobHashes default resolves the withhold set from
         // these pointers (bare-hex bodies), so a retroactive KEV/license hold marks them and serving (serve + repodata
-        // listing all gate on the withheld marker) retracts; an eviction deletes these exact keys. Before this the empty
-        // return made a hold a silent no-op (no marker, no review handle) and a KEV-listed package kept serving. The
+        // listing all gate on the withheld marker) retracts; an eviction deletes these exact keys. An empty return
+        // would make a hold a silent no-op (no marker, no review handle) and a KEV-listed package would keep serving.
+        // The
         // per-subdir pkgs listing is unbounded (attacker-publishable), so it is PAGED, never list()ed whole.
         List<Coordinate> kept = keptPackages(coordinate, version, store);
         List<String> keys = new ArrayList<>(kept.size());
@@ -414,11 +415,11 @@ public final class CondaFormat implements RepositoryFormat, ArtifactLayout, Prox
      * <ul>
      *   <li><b>The product has already answered it for the identical shape.</b> Debian's {@code dists/} autoindex
      *       screens the <em>suite</em>, and a suite is exactly as much an operator/platform container as
-     *       {@code linux-64} is. Two formats may not answer one question differently (&sect;13).</li>
+     *       {@code linux-64} is. Two formats may not answer one question differently.</li>
      *   <li><b>What {@code channeldata.json} is for is servability.</b> Its subdir list is a solver's answer to "which
      *       platforms can this channel resolve for". Announcing a platform whose every package is quarantined offers a
-     *       view that is not merely stale but known-unservable - the &sect;5 "never serve a silently-incomplete view
-     *       as if it were whole".</li>
+     *       view that is not merely stale but known-unservable, where a silently-incomplete view must never be
+     *       served as if it were whole.</li>
      *   <li><b>The rule's own criterion.</b> The disclosure that matters is servability, not whether the token looks
      *   like
      *       a coordinate; a subdir with nothing servable is a container with nothing servable.</li>

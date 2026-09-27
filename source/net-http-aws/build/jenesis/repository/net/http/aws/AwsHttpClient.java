@@ -12,7 +12,7 @@ import software.amazon.awssdk.http.SdkHttpRequest;
 import software.amazon.awssdk.http.SdkHttpResponse;
 
 /**
- * An AWS SDK client's HTTP over the product's own client, where the SDK's {@code UrlConnectionHttpClient} used to be:
+ * An AWS SDK client's HTTP over the product's own client, in place of the SDK's {@code UrlConnectionHttpClient}:
  * the S3 store's requests and the upstream credential exchange leave the way every other outbound call does, and
  * carry the product's {@code User-Agent} rather than the SDK's, which names the JVM, its version and the operating
  * system. Signature Version 4 does not sign the {@code User-Agent}, so replacing it leaves every signature as the SDK

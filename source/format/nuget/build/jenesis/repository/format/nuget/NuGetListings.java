@@ -184,9 +184,9 @@ final class NuGetListings {
             }
 
             /** The leaves one at a time through a streaming parser, page by page: the listing mechanism reads the
-             *  index through this on every publish of the package, and without it fell back to the whole document
-             *  in heap - the fallback the npm-packument canary showed failing a publish at fifty thousand versions
-             *  in a 512 MiB container, which this codec shared. The join still collects, for the reason below. */
+             *  index through this on every publish of the package, and without it falls back to the whole document
+             *  in heap - a fallback that fails a publish at fifty thousand versions in a 512 MiB container. The join
+             *  still collects, for the reason below. */
             @Override
             public Reader read(InputStream in, long ignored) throws IOException {
                 JsonParser parser = NuGetFormat.JSON.createParser(in);
@@ -350,9 +350,9 @@ final class NuGetListings {
     /**
      * Emit a search record per package, in the order the scan yields them.
      *
-     * <p>The search document names every package in the repository, so collecting the records into a map held the
-     * repository. The scan's order is the sink's order - the store's lexicographic child order, which is what the
-     * sorted map used to supply.
+     * <p>The search document names every package in the repository, so collecting the records into a map would hold
+     * the repository. The scan's order is the sink's order - the store's lexicographic child order, which is the order
+     * the document needs.
      */
     private void generateSearch(StoredListing.Generator.Sink sink) throws IOException {
         ENTRIES.scan(store, "nuget", id -> {

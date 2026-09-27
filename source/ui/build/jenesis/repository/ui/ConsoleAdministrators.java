@@ -10,11 +10,10 @@ import build.jenesis.repository.store.ArtifactStore;
  * Who administers this deployment - one reader, over grants rather than over a setting.
  *
  * <h2>One key, three readers, three meanings</h2>
- * {@code jenreg.ui.admins} was read in three places that had drifted: the console honoured its wildcard, the
- * downstream super-admin set refused it, and the security advisory asserted the first regardless. The parse was
- * unified first, which stopped them disagreeing about what was <em>written</em>; they still each decided for
- * themselves what it <em>granted</em>. This is the other half: there is one reader, and what it answers is a
- * grant - the same thing a minted key holds, in the same store, matched by the same code.
+ * {@code jenreg.ui.admins} read in three places - the console, the downstream super-admin set and the security
+ * advisory - could mean three things. A shared parse settles what was <em>written</em>; this settles what it
+ * <em>grants</em>: there is one reader, and what it answers is a grant - the same thing a minted key holds, in the
+ * same store, matched by the same code.
  *
  * <h2>The setting is a seed, not the source of truth</h2>
  * At construction - every boot, before the console serves anything - each named id is granted every right at the

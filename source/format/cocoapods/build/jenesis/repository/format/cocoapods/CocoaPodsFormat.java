@@ -662,8 +662,7 @@ public final class CocoaPodsFormat implements RepositoryFormat, ArtifactLayout, 
         if (!sub.startsWith(PODS) || !sub.endsWith(ZIP)) {
             // The publish path, <name>/<version>: what a pod is pushed at, and so the path the gate links a review
             // pointer at when it holds one. A release's cross-alias guard asks every review pointer's path to be
-            // placed, and this one was not - measured 2026-09-12 as the pointer that failed every release's guard
-            // closed for a quarter of an hour. The served path below carries the same coordinate.
+            // placed, or it fails every release's guard closed. The served path below carries the same coordinate.
             String[] pushed = sub.split("/", -1);
             if (pushed.length == 2 && !pushed[0].startsWith(ALL_PODS) && ArtifactLayout.addressable(pushed[0], pushed[1])) {
                 return Optional.of(new ArtifactDescriptor(ECOSYSTEM, pushed[0], pushed[1], path,

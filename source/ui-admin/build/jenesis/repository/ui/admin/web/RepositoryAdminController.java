@@ -82,9 +82,9 @@ public class RepositoryAdminController {
             definitions.putAll(settings.repositories(tenant.name()));
         }
         for (String name : repositories.repositories()) {
-            // The parsed shape drives the per-repository badges (item 2): writable vs read-only, and per-fallback
+            // The parsed shape drives the per-repository badges: writable vs read-only, and per-fallback
             // store/no-store + screen strength, from the one Definition the router routes on. Its valid-but-risky
-            // warnings (mixed strength, unscreened, plaintext) feed the non-blocking console banner (item 4).
+            // warnings (mixed strength, unscreened, plaintext) feed the non-blocking console banner.
             String definition = definitions.get(name);
             SettingsAdmin.RepositoryShape shape = settings.shape(name, definition);
             Optional<RepositoryDocument> document = repositories.document(name);
@@ -548,9 +548,9 @@ public class RepositoryAdminController {
     }
 
     /**
-     * The origin API (item 3): the {@code origin} acquisition rows of a published artifact path as JSON - the
+     * The origin API: the {@code origin} acquisition rows of a published artifact path as JSON - the
      * machine-readable twin of the artifact-detail origin panel, for an operator tool or audit export. Reads only the
-     * one small {@code origin} section ({@link RepositoryBrowse#origin}), never the artifact body (§1). A
+     * one small {@code origin} section ({@link RepositoryBrowse#origin}), never the artifact body. A
      * read-role GET gated exactly as the surrounding {@code /repositories/**} console reads are (any member of the
      * tenant, by SecurityConfig - operator/admin-appropriate for this neutral, gate-neutral display); a caller who
      * cannot read the repository never reaches it. Empty when the path carries no recorded origin.
@@ -736,7 +736,7 @@ public class RepositoryAdminController {
                                 boolean removing) {
     }
 
-    /** One valid-but-risky definition warning for the console banner (item 4): the repository it applies to and
+    /** One valid-but-risky definition warning for the console banner: the repository it applies to and
      *  the loud ⚑ the parse logged (mixed screening strength, an unscreened or plaintext upstream) - surfaced as a
      *  non-blocking notice on the repository admin view, distinct from a refused-and-not-stored parse error. */
     public record RepositoryWarning(String repository, String message) {

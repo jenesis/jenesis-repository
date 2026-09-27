@@ -16,8 +16,8 @@
  * identity, the parked flag and when it parked, and how to unpark) and promises to read nothing else.
  *
  * <p>The parked backlog's retention is the mechanism's own dial and is declared here, once, rather than once per
- * user: the webhook outbox used to declare it and the forwarding outbox pruned nothing at all, and the settings
- * surface was the last place the two could have re-split after becoming one class. That is why this module reads
+ * user, so the webhook and forwarding outboxes cannot re-split on it in the settings surface. That is why this
+ * module reads
  * the settings and maintenance contracts where its sibling {@code bounds} stays at {@code java.base} plus the store.
  *
  * @jenesis.release 25

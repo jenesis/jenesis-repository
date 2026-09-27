@@ -93,7 +93,7 @@ public final class SettingsRefresh {
         // the CONTAINED half of the resolve split: a provider that cannot build its task disables itself (reported
         // FAILED on the observability surface) while the other toggles in the same settings write still converge -
         // unlike boot, where the same failure fails the context. The catch below is the outer belt for the one thing
-        // containment deliberately lets through, a §9 selection failure: on a running deployment that keeps the last
+        // containment deliberately lets through, a selection failure: on a running deployment that keeps the last
         // resolved list whole and logged rather than taking a serving server down on a settings edit.
         try {
             maintenance.refresh();

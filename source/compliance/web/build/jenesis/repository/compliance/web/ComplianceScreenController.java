@@ -89,7 +89,7 @@ public class ComplianceScreenController {
     }
 
     /** The maintainer-health panel: the durable OpenSSF Scorecard-style health the sweep persisted for a repository's
-     *  coordinates, read from the store with no deps.dev probe on the render path (Principle 10). The staleness stamp is
+     *  coordinates, read from the store with no deps.dev probe on the render path. The staleness stamp is
      *  always shown; the rescan button is offered only to a caller who may take the write path (below). */
     @GetMapping("/ui/repositories/{repo}/health")
     public String health(@PathVariable("repo") String repo,
@@ -204,10 +204,9 @@ public class ComplianceScreenController {
         model.addAttribute("repo", repo);
         model.addAttribute("signer", page.signer());
         model.addAttribute("abbreviated", page.abbreviated());
-        // The three a keyless identity comes apart into, which the page was already being handed and was dropping
-        // on the floor: its template renders them behind an issuer != null test, so the screen showed the escaped
-        // wire token and nothing an operator could read - the issuer that certified the workflow, and the link to
-        // the workflow itself. Found 2026-09-15 by the first browser test to open the screen.
+        // The three a keyless identity comes apart into: the template renders them behind an issuer != null test,
+        // so without them the screen shows the escaped wire token and nothing an operator can read - the issuer that
+        // certified the workflow, and the link to the workflow itself.
         model.addAttribute("issuer", page.issuer());
         model.addAttribute("subject", page.subject());
         model.addAttribute("link", page.link());

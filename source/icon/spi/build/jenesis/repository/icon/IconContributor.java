@@ -42,18 +42,18 @@ import module java.base;
  *     {@code uses} clause, no {@code provides} clause and no resolution primitive of its own. An implementation is
  *     found through <em>its family's</em> clause and switched on and off by that family's
  *     {@code jenreg.<name>} key; a family whose implementation is switched off contributes no mark
- *     because it contributes nothing at all, which is the same degradation as an absent module (&sect;3).</li>
- * <li><b>Tenant scoping (&sect;6).</b> A mark carries no tenant data and no repository data - it is a deployment-static
+ *     because it contributes nothing at all, which is the same degradation as an absent module.</li>
+ * <li><b>Tenant scoping.</b> A mark carries no tenant data and no repository data - it is a deployment-static
  *     brand asset, fixed at build time in the contributing module - so it is the one console-facing document that may
  *     be served, cached and shared across tenants without scoping. An implementation must therefore never derive a
  *     mark from anything tenant-specific, because doing so would leak one tenant's state into a document every other
  *     tenant may be handed.</li>
- * <li><b>Error visibility (&sect;9).</b> Neither method may throw: both answer a constant, so there is nothing to
+ * <li><b>Error visibility.</b> Neither method may throw: both answer a constant, so there is nothing to
  *     fail. A throw is <em>not</em> contained by {@link Marks}, which is a pure function and deliberately not a
  *     second containment mechanism beside the one collected-report seam ({@code Contributions}) - it propagates to
  *     whichever surface asked, and is contained there or not at all. A console panel's own containment turns that
  *     into one failed card; an icon endpoint turns it into a failed request. Neither is a reason to hide it.</li>
- * <li><b>Read purity (&sect;10).</b> {@link #icon()} performs <b>no I/O of any kind</b>: no file or classpath resource
+ * <li><b>Read purity.</b> {@link #icon()} performs <b>no I/O of any kind</b>: no file or classpath resource
  *     read, no store access, no fetch, no lazy download and no write. It is called on a render path - once per
  *     rendered row, for as many rows as a page shows - so the document is a constant in the implementation's own
  *     source or a field initialised from one, not something resolved when first asked.</li>

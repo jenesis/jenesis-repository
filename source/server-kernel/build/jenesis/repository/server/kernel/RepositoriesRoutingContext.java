@@ -12,9 +12,9 @@ import build.jenesis.repository.store.ArtifactStore;
  * <p>It is a named type rather than an anonymous class in the application's configuration because it is not only
  * the application that needs it: every routing suite builds one too, and an adapter written twice is an adapter
  * whose two halves disagree about the case that matters. The case that matters here is the last method - a
- * repository this deployment holds no definition for is <em>hosted</em>, and therefore writable. Each of the three
- * routings used to open-code that null check, which is three places for it to be got wrong on the path that
- * decides whether a publish is accepted.
+ * repository this deployment holds no definition for is <em>hosted</em>, and therefore writable. Open-coded in each
+ * routing, that null check would be one place per routing for it to be got wrong on the path that decides whether a
+ * publish is accepted.
  */
 public final class RepositoriesRoutingContext implements RoutingContext {
 

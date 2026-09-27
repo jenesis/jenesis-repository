@@ -52,8 +52,7 @@ public final class Checksums {
      * {@code sha256:<hex>} reference, a pointer body naming a blob - and it is a refusal, not a parse: a value that is
      * not this shape (a tag typo, a {@code ..}-laced reference, a format's small non-hash marker under the same root)
      * must never be spliced into a store key, where it would resolve to a neighbouring key space rather than fail.
-     * Four modules used to carry the same eleven lines under two names, one of them citing another as "the rule";
-     * the rule lives here so that the citation is a call.
+     * The rule lives here, once, so that every module citing it makes a call rather than carrying a copy.
      */
     public static boolean isSha256Hex(String value) {
         if (value == null || value.length() != 64) {

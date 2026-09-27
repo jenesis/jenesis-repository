@@ -16,7 +16,7 @@ import build.jenesis.repository.store.ArtifactStore;
 import build.jenesis.repository.store.Publication;
 
 /**
- * The {@link PullThroughHooks} that closes the #79 cache-HIT bypass for a HARDEN serving posture: a locally
+ * The {@link PullThroughHooks} that closes the cache-HIT bypass for a HARDEN serving posture: a locally
  * cached hardened artifact is decided against the current gate <em>before</em> any hit byte is served,
  * the request-time fail-closed complement of the {@link MigrationRescreenTask} bulk amortizer. It is the hit-verify twin
  * of the miss-leg {@link HardenedScreen} - both funnel the identical screening mechanism, never a second one.
@@ -57,8 +57,8 @@ import build.jenesis.repository.store.Publication;
  *
  * <p><b>DEFAULT / non-hardened legs.</b> Constructed with {@code harden == false} (or simply not used), {@link #verifyHit}
  * is the {@link HitDecision#serveThrough()} default: a DEFAULT proxy keeps today's withheld-pointer retraction (the retro
- * KEV/license sweeps write the marker; a per-hit full gate re-assessment on every DEFAULT read would be a §7 regression
- * with no verdict record to dedup against), so no per-hit store read is added there.
+ * KEV/license sweeps write the marker; a per-hit full gate re-assessment on every DEFAULT read would make the reader
+ * pay with no verdict record to dedup against), so no per-hit store read is added there.
  *
  * <p><b>The flavour is the artifact's.</b> This leg is reached for every hit in a repository whose
  * {@link RepositoryDefinition#harden()} is set, and that includes the hybrid {@code writable} + hardened-fallback
@@ -116,7 +116,7 @@ public final class HardenedHitVerify implements PullThroughHooks {
             return HitDecision.serveThrough();
         }
         // Resolve the local cached pointer. The blob key IS the content digest (the store is content-addressed), so the
-        // digest is read from the tiny pointer, never by re-streaming the blob (§1). Nothing durably local -> serve
+        // digest is read from the tiny pointer, never by re-streaming the blob. Nothing durably local -> serve
         // through, so a genuine local miss flows on to the (screened) miss leg exactly as today.
         Optional<String> key = new Publication(store).located(path);
         if (key.isEmpty()) {
@@ -182,7 +182,7 @@ public final class HardenedHitVerify implements PullThroughHooks {
     }
 
     /** Stream a verified local {@link ProxyFormat.Download} to the exchange, with the Content-Length read from the
-     *  cached blob's size (never by buffering the body, §1). */
+     *  cached blob's size (never by buffering the body). */
     private static void writeThrough(ProxyFormat.Download download, ArtifactStore store, String blobKey,
                                      FormatExchange exchange) throws IOException {
         try (download) {
@@ -208,7 +208,7 @@ public final class HardenedHitVerify implements PullThroughHooks {
     }
 
     /** A re-openable {@link QualityInspector.Content} over a stored {@code blobs/<hash>} blob - streamable from byte
-     *  zero as many times as an inspector (or the digest re-hash) needs, never a heap {@code byte[]} (§1). Mirrors the
+     *  zero as many times as an inspector (or the digest re-hash) needs, never a heap {@code byte[]}. Mirrors the
      *  {@link MigrationRescreenTask} blob idiom. */
     private static QualityInspector.Content blob(ArtifactStore store, String key) {
         return new QualityInspector.Content() {

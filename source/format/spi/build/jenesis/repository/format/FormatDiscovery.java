@@ -10,12 +10,10 @@ import build.jenesis.repository.store.Providers;
  * duplicated name is a packaging error that throws here, once, rather than a discovery-order winner - and cached for
  * the process, so every consumer reaches the formats through this list rather than loading its own.
  *
- * <p><b>The reason is validation and consistency, not shared state.</b> This used to say that a format "keeps state
- * (a bounded digest set, a listing coalescer)", and neither example was ever a field of a format: the digest memory
- * is a local of one enumeration, and the coalescer is a static of the listing store. Measured across every format in
- * this build, the only mutable per-instance state that exists at all is the throttle pacing OCI's upload-session
- * reap. It could not be otherwise - see {@link RepositoryFormat}'s lifecycle clause - so a second load does not
- * corrupt anything. What it actually costs is the validation above, an installed set free to disagree with the one
+ * <p><b>The reason is validation and consistency, not shared state.</b> A format keeps almost no state of its own:
+ * the only mutable per-instance state across the formats is the throttle pacing OCI's upload-session reap. It could
+ * not be otherwise - see {@link RepositoryFormat}'s lifecycle clause - so a second load does not corrupt anything.
+ * What a second load costs is the validation above, an installed set free to disagree with the one
  * that serves, and a fresh allocation of every format on every call.
  *
  * <p>A holder rather than a field on the interface, so the load happens on first use of the list and not on the
@@ -37,15 +35,12 @@ final class FormatDiscovery {
      *
      * <h2>Why it is held at all</h2>
      *
-     * {@link #DECLARED} is discovered once; the ACTIVE subset was re-derived on every call, and it is asked on
-     * per-request and per-artifact paths - an inventory describing a path, the compliance screen deciding whose
-     * prefix a publish is under, a browse rendering a row. Each call walked every declared format and asked the
-     * configuration whether it was enabled and fully configured, which for a deployment carrying twenty-odd formats
-     * is twenty-odd property lookups and two list allocations, per artifact.
-     *
-     * <p>Measured 2026-09-15 by a flight recording of a five-minute soak: {@code RepositoryFormat.installed} was the
-     * hottest product frame in it, 262 of 20,707 execution samples - about 1.3% of sampled CPU in one method that
-     * answers the same thing every time.
+     * {@link #DECLARED} is discovered once; the ACTIVE subset is asked on per-request and per-artifact paths - an
+     * inventory describing a path, the compliance screen deciding whose prefix a publish is under, a browse rendering
+     * a row. Re-derived per call, each call would walk every declared format and ask the configuration whether it was
+     * enabled and fully configured, which for a deployment carrying twenty-odd formats is twenty-odd property lookups
+     * and two list allocations, per artifact - enough to make {@code RepositoryFormat.installed} the hottest product
+     * frame under load, in one method that answers the same thing every time.
      *
      * <h2>Why holding it is safe, and what would make it unsafe</h2>
      *
@@ -56,9 +51,8 @@ final class FormatDiscovery {
      *
      * <p>The one shape this would get wrong is a caller that changes a format's toggle <em>underneath</em> the
      * default lookup - setting the {@code jenreg.<name>} system property without calling {@link Features#configure}
-     * or {@link Features#reset} - since the default lookup reads those live. Nothing in either tree does that
-     * (measured: no test sets a format toggle as a property at all, while 108 test sites go through configure or
-     * reset), and a test that wants to is one {@code Features.reset()} away from being right.
+     * or {@link Features#reset} - since the default lookup reads those live. Nothing in either tree does that, and a
+     * test that wants to is one {@code Features.reset()} away from being right.
      */
     static List<RepositoryFormat> installed() {
         UnaryOperator<String> lookup = Features.lookup();

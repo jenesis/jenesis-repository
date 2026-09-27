@@ -9,10 +9,10 @@ import build.jenesis.repository.store.OwnerOnly;
 
 /**
  * The budgeted pre-verdict staging store for the hardening proxy: the scratch {@link ArtifactStore} an untrusted
- * upstream body is spooled into while it is fully screened, before any byte is released to a client. It is the
- * first-class promotion of the {@code nocache} pass-through's former in-line {@code PassThroughStore} - each blob is
+ * upstream body is spooled into while it is fully screened, before any byte is released to a client, and the store
+ * the {@code nocache} pass-through spools through - each blob is
  * spooled to a secure temp file, digested while it streams through and content-addressed like the real stores, never
- * pulled whole into a heap {@code byte[]} - now governed by an explicit resource {@link Budget} so an untrusted or
+ * pulled whole into a heap {@code byte[]} - governed by an explicit resource {@link Budget} so an untrusted or
  * hostile upstream can spend only bounded disk and only bounded concurrency, and pressure is <em>refused and
  * measured</em> rather than absorbed as unbounded growth.
  *
@@ -25,8 +25,8 @@ import build.jenesis.repository.store.OwnerOnly;
  *       disk), the concurrency budget when a spool first writes a blob.</li>
  *   <li><b>503 on exhaustion.</b> Crossing either budget aborts the spool with a {@link BudgetExhausted} - an
  *       {@link IOException} whose message names the exhausted budget - which the {@link RepositoryRouter} turns into a
- *       {@code 503} (Insufficient resources) to the client (§9 fail-fast, errors visible). No byte of the refused body
- *       is ever served, and the store never grows past its ceiling (§1 the spool is bounded, never a heap buffer nor
+ *       {@code 503} (Insufficient resources) to the client (fail fast, errors visible). No byte of the refused body
+ *       is ever served, and the store never grows past its ceiling (the spool is bounded, never a heap buffer nor
  *       unbounded disk).</li>
  *   <li><b>Cleanup.</b> Every temp file is created owner-only ({@code 0600} on a POSIX filesystem) and is
  *       <em>always</em> reclaimed - on success, on a budget refusal, and on a mid-stream error - so a crashed or
@@ -41,7 +41,7 @@ import build.jenesis.repository.store.OwnerOnly;
  *
  * <p><b>Threading and state.</b> The budget counters ({@link #bytesInFlight}, {@link #activeSpools},
  * {@link #exhaustionEvents}) are the deliberate shared mutable state - held as atomics and confined to this store - so
- * concurrent spools account against one budget correctly (§11: the {@link Budget} config and every field is
+ * concurrent spools account against one budget correctly (the {@link Budget} config and every field is
  * {@code final}, mutation is limited to the atomics). A single {@link Budget} instance is immutable; a spool acquired
  * from {@link #acquire()} draws on this store's one budget, and its per-request scratch state is discarded on
  * {@link SpoolLease#close() close}.
@@ -117,7 +117,7 @@ public final class SpoolStore implements ObservabilitySource {
 
     /** A spool store whose budget is read from {@code config} ({@code spool.max-bytes}, {@code spool.max-spools}),
      *  falling back to {@link Budget#standard()} for each unset or unparseable key - the runtime-tunable knobs a
-     *  deployment sizes to its disk (§3: a new tunable is a runtime setting, not a redeploy-only constant). */
+     *  deployment sizes to its disk (a new tunable is a runtime setting, not a redeploy-only constant). */
     public static SpoolStore fromConfig(UnaryOperator<String> config) {
         return new SpoolStore(Budget.fromConfig(config));
     }
@@ -256,7 +256,7 @@ public final class SpoolStore implements ObservabilitySource {
          * Copy {@code in} to a fresh secure temp file - digesting through {@code digest} when one is given - enforcing
          * the size budget a chunk at a time so an oversize body is refused mid-stream, and always cleaning the file up
          * on a refusal or error. The one place a blob's bytes touch storage, and they stream through, never buffered
-         * whole (§1). On success the reserved bytes stay counted (subtracted at {@link #close()} or when the file is
+         * whole. On success the reserved bytes stay counted (subtracted at {@link #close()} or when the file is
          * discarded); on any failure they are released and the partial file deleted.
          */
         private Spooled spool(InputStream in, MessageDigest digest) throws IOException {

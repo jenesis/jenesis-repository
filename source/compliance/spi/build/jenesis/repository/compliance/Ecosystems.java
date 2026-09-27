@@ -133,7 +133,7 @@ public final class Ecosystems {
      * A coordinate split into the segments its ecosystem writes it in: a Maven {@code group:artifact} into its group
      * and its artifact, a slashed name (an npm {@code @scope/name}, a Packagist {@code vendor/package}, a Go module
      * path) into its slash-separated parts, and a flat name into one segment. This is the same split a purl's
-     * namespace, a CPE's vendor field and a vendor's own dependency model each need, and each used to re-derive with
+     * namespace, a CPE's vendor field and a vendor's own dependency model each need, derived once so no caller carries
      * its own off-by-one; an empty list for an absent coordinate.
      */
     public static List<String> segments(String ecosystem, String coordinate) {

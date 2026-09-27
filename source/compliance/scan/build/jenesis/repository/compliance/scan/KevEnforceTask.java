@@ -83,7 +83,7 @@ public final class KevEnforceTask implements MaintenanceTask {
         // blobs-namespace format resolves no served path or content hash cannot be withheld, so serving is not
         // retracted. Throwing would let one broken format DoS the whole repository sweep, and an evicted-but-still-
         // enumerated version legitimately resolves to nothing; so this counts + WARNs rather than fails, alarming on a
-        // future blobs-namespace format that forgets to wire blobKeys/servedPaths (the F-1 regression this closes).
+        // future blobs-namespace format that forgets to wire blobKeys/servedPaths.
         long[] unenforceable = {0};
         // Every release every Nth pass; between, the releases published since the last full one - and a full pass
         // at once when the known-exploited catalogue changed, which the signal refresh asks for by name, since a

@@ -178,9 +178,10 @@ final class DebianListings {
     /**
      * Derive the {@code .gz} twin; its header, digested once here, is what the manifest line names.
      *
-     * <p>Through a temporary file, because a {@code Packages} index is every package in the suite and this used to
-     * hold <b>two</b> copies of it at once - the document, and the gzip of the document - on the write path of
-     * every publish. The bytes are compressed straight out of the source stream and digested as they are written,
+     * <p>Through a temporary file, because a {@code Packages} index is every package in the suite and holding it in
+     * heap would mean <b>two</b> copies of it at once - the document, and the gzip of the document - on the write
+     * path of every publish. The bytes are compressed straight out of the source stream and digested as they are
+     * written,
      * so the peak is a buffer and the twin's digests still come from one pass.
      */
     private StoredListing.Header deriveCompressed(String suite, String component, String architecture,

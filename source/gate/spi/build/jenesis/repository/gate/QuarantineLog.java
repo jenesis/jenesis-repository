@@ -31,10 +31,10 @@ import build.jenesis.repository.store.Retries;
  *
  * <p><b>The object name is the order.</b> Every event object is named
  * {@code <MAX_VALUE - epochMillis, zero-padded to 19>-<path digest>}, so the store's own lexicographic paging
- * enumerates the trail <em>newest first</em> and a bounded read is one forward page with no sort at all. It used to be
- * named by the raw epoch-millis, which meant the only way to serve the newest {@code limit} rows was to materialise
- * and sort the whole name list first - so the <em>paged</em> read cost exactly what the unpaged one does, a page that
- * was only a page in its return type. {@link #prune} pays the same way: it streams the same order rather than listing
+ * enumerates the trail <em>newest first</em> and a bounded read is one forward page with no sort at all. Named by the
+ * raw epoch-millis, the only way to serve the newest {@code limit} rows would be to materialise and sort the whole
+ * name list first - a page that is only a page in its return type. {@link #prune} pays the same way: it streams the
+ * same order rather than listing
  * the trail and the index root entire, twice.
  *
  * <p>The log does not grow without bound: {@link #prune} applies the age/count retention the scheduled cleanup pass
@@ -375,8 +375,8 @@ public final class QuarantineLog {
     private static final int ORDER_KEY_DIGITS = 19;
 
     /** The order key of an instant: {@code MAX_VALUE - millis}, zero-padded, so ascending lexicographic name order
-     *  <em>is</em> descending time order and {@link ArtifactStore#page} serves the newest rows from the first page
-     *. A future instant past {@link Long#MAX_VALUE} millis cannot be represented and does not arise: the
+     *  <em>is</em> descending time order and {@link ArtifactStore#page} serves the newest rows from the first page.
+     *  A future instant past {@link Long#MAX_VALUE} millis cannot be represented and does not arise: the
      *  argument comes from a clock. */
     private static String orderKey(long millis) {
         return String.format(Locale.ROOT, "%0" + ORDER_KEY_DIGITS + "d", Long.MAX_VALUE - millis);
@@ -409,15 +409,15 @@ public final class QuarantineLog {
      * {@link #INDEX_ROOT} - the same {@link #digest} the trail's own object names carry, so both of this class's
      * spaces name a path the one way.
      *
-     * <p><b>Why a digest and not the path.</b> This composer used to URL-encode the path into one segment,
-     * which triples every separator and walks straight past a filesystem store's 255-byte name limit: a real, deep
-     * pool path produced a key no filesystem backend could hold, so the space was structurally unwritable for exactly
-     * the artifacts most likely to be held. That failure landed on a best-effort write, so nothing broke - the path
-     * simply had no latest-verdict row, for ever. Truncating was never an option either (two paths would fuse into one
+     * <p><b>Why a digest and not the path.</b> URL-encoding the path into one segment triples every separator and
+     * walks straight past a filesystem store's 255-byte name limit: a real, deep pool path would produce a key no
+     * filesystem backend could hold, so the space would be structurally unwritable for exactly the artifacts most
+     * likely to be held - and since that failure lands on a best-effort write, nothing would break; the path would
+     * simply have no latest-verdict row, for ever. Truncating is no option either (two paths would fuse into one
      * row, which is worse than having none). A digest is fixed-width, so no path can overrun the segment, and the path
-     * itself rides the row's body - it always did, as the record's second field - so {@link #prune} and every reader
-     * still answer with the path rather than a hash. It is the fix
-     * {@link build.jenesis.repository.inventory.HeldSubjects} already applied to its own path face, for the same wall.
+     * itself rides the row's body, as the record's second field - so {@link #prune} and every reader answer with the
+     * path rather than a hash. {@link build.jenesis.repository.inventory.HeldSubjects} keys its own path face the same
+     * way, for the same wall.
      */
     private static String indexKey(String path) {
         return INDEX_ROOT + "/" + digest(path);

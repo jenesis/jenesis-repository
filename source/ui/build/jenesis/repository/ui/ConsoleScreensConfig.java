@@ -13,9 +13,8 @@ import org.springframework.context.annotation.Import;
  * routes as every other.
  *
  * <p>{@link DevConsoleSecurity} rides here for the same reason and is inert outside the {@code dev} profile. It is
- * the one development sign-in chain, and it is here rather than beside each console because the two that used to
- * exist had drifted: one pointed form login at a page carrying no credential form, so that console could not be
- * signed into at all.
+ * the one development sign-in chain, and it is here rather than beside each console because two copies drift: one
+ * pointing form login at a page carrying no credential form leaves that console impossible to sign into at all.
  *
  * <p>{@link DevSources} rides here on the same terms: inert outside the {@code dev} profile, and there it reads the
  * console's templates and static files from a source checkout, so the look can be worked on without a build.

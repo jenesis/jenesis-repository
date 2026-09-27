@@ -10,8 +10,7 @@ import build.jenesis.repository.store.ArtifactStore;
  * XOR of a per-version member digest over the published coordinate set, each member folding that version's
  * declared-license fingerprint - that the whole-repository SBOM / attribution {@code NOTICE} exports derive their ETag
  * from, so an {@code If-None-Match} revalidation answers {@code 304} with ONE O(1) small-object read instead of the
- * O(#versions) coordinate walk that assembles the document (§4/§7: an ETag / identity must not be an
- * O(#versions) walk).
+ * O(#versions) coordinate walk that assembles the document (an ETag / identity must not be an O(#versions) walk).
  *
  * <p>It is maintained incrementally at the mutation points that change the set - a publish folds a new member in
  * ({@link StoreRepositoryInventory#record}), an eviction folds it out ({@link StoreRepositoryInventory#evict}), a
@@ -23,13 +22,12 @@ import build.jenesis.repository.store.ArtifactStore;
  * <p><strong>Every fold is derived from a committed transition, and applied exactly once.</strong> A publish folds
  * its member in after the write that made the version a member has committed; a license record re-folds after the
  * document transition it made has committed, from the section it replaced to the one it wrote, so concurrent records
- * of one version telescope (old→a, a→b) instead of cancelling; an eviction folds out after the member is gone. The
- * folds used to be grouped into the publish's own batch as a single compare-and-set attempt whose outcome nobody
- * read, so under thirty-two concurrent publishers most of them lost the race and were dropped - "left to the
- * reconcile rebuild" - and every conditional read until that daily pass answered <em>not modified</em> after a
- * publish had landed. The identity-drift canary measured exactly that, and this class is where the fix lives: a fold
- * retries through {@link Retries#COMPARE_AND_SET} with backoff, and a fold that still loses drops the rollup rather
- * than leaving it stale, so the next read rebuilds from truth.
+ * of one version telescope (old→a, a→b) instead of cancelling; an eviction folds out after the member is gone. A
+ * fold grouped into the publish's own batch as a single compare-and-set attempt whose outcome nobody read would
+ * lose the race under concurrent publishers and be dropped, and every conditional read until the daily reconcile
+ * would answer <em>not modified</em> after a publish had landed. So a fold retries through
+ * {@link Retries#COMPARE_AND_SET} with backoff, and a fold that still loses drops the rollup rather than leaving it
+ * stale, so the next read rebuilds from truth.
  *
  * <h2>A rebuild under concurrent publishes</h2>
  *
@@ -52,16 +50,13 @@ import build.jenesis.repository.store.ArtifactStore;
  * seconds to write its member before the walk could reach it, so the fold may decline and leave it to the walk. The
  * grace bounds the gap between the boundary and the walk's START. It does not bound where in the enumeration the
  * walk has GOT to, and the enumeration is live and in key order - so a member whose row is written while the walk
- * runs, at a key the walk has already passed, was seen by neither half: its own fold declined it and the walk never
- * enumerated it, and the rollup was short by that member until something rebuilt from truth. Reached by the fleet's
- * PeerClock scenario about twice in sixty runs, losing a different member each time.
+ * runs, at a key the walk has already passed, is seen by neither half: its own fold declines it and the walk never
+ * enumerates it, and without the guard below the rollup would be short by that member until something rebuilt from
+ * truth. Two nodes with skewed clocks reach it as an ordinary race.
  *
- * <p>Reproduced 2026-09-16 by HOLDING the walk rather than by racing it, and the difference is the whole reason the
- * reproduction is trustworthy. Sizing a seed so the walk "takes real time" and then sleeping past the grace does not
- * work: a few hundred members enumerate well inside the grace-plus-a-second, so the publish lands after the settle
- * and is folded normally by its own publish. That arrangement was written and believed, and it went red for a
- * reason that is not this defect - the rebuild's RETURN value was one member short while the rollup it left behind
- * was exactly right. The test holds the store's read of the LAST seeded key instead, which is a point at which the
+ * <p>It is reproduced by HOLDING the walk rather than by racing it: a seed sized so the walk "takes real time"
+ * enumerates well inside the grace-plus-a-second, so the publish lands after the settle and is folded normally by
+ * its own publish. The test holds the store's read of the LAST seeded key instead, which is a point at which the
  * walk has provably passed every earlier one, lands the member at a version that sorts first, and carries a vacuity
  * guard that fails if the walk was not actually held.
  *
@@ -194,9 +189,10 @@ final class InventoryIdentity {
      *  it passed the member's key can at least know that a member was handed to it while it ran.
      *
      *  <p>A compare-and-set that keeps losing must NOT fail the publish or eviction it rides: the identity is a
-     *  derived, revalidatable cache. It used to leave the fold "to the reconcile rebuild" and return, and until that
-     *  pass ran the accumulator that tags the SBOM, the NOTICE and every conditional read was missing this member,
-     *  so a client was told "not modified" after a publish had landed. So the rollup is dropped instead: the next read
+     *  derived, revalidatable cache. Leaving the fold "to the reconcile rebuild" and returning would leave the
+     *  accumulator that tags the SBOM, the NOTICE and every conditional read missing this member until that pass ran,
+     *  so a client would be told "not modified" after a publish had landed. So the rollup is dropped instead: the next
+     *  read
      *  finds it absent and rebuilds it from truth, single-flighted, which costs that read one walk and costs nobody a
      *  stale answer. A genuine store {@link IOException} still propagates (the store is down; the primary write would
      *  have failed too). */
@@ -335,7 +331,7 @@ final class InventoryIdentity {
      * runs another round.
      */
     Optional<byte[]> settle(Rebuild rebuild, byte[] walked, int handed) throws IOException {
-        // Empty twice over: the object is no longer this rebuild's or was handed a member mid-walk (kept as it is),
+        // Empty twice over: the object is not this rebuild's any more or was handed a member mid-walk (kept as it is),
         // or every try lost.
         return Retries.tryDecide(store, KEY, current -> {
             if (current.isEmpty() || !mine(current.get().content(), rebuild)

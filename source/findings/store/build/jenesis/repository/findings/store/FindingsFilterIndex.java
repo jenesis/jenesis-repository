@@ -174,8 +174,8 @@ final class FindingsFilterIndex {
             // The window filled and one further match proved more remain - the ordinary end of a satisfied page.
         }
         // The page carries the index's own build-time ledger freshness, not the live scan stamp, so a selective query
-        // served from this eventually-consistent index is never shown fresher than the index it came from (Principle 10,
-        // the same builtScanStamp split the health/vulnerability rank indexes carry).
+        // served from this eventually-consistent index is never shown fresher than the index it came from (the same
+        // builtScanStamp split the health/vulnerability rank indexes carry).
         return new Findings.Page(window, more[0], builtScanStamp(marker.get().stamp()));
     }
 

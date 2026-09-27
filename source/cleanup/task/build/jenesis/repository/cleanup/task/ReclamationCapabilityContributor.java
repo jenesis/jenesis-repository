@@ -11,7 +11,7 @@ import build.jenesis.repository.walk.WalkProvider;
  * resolves - {@code false} means nothing is ever reclaimed, the GC SPI's no-op-by-absence default). Both are
  * exclusive discovered capabilities resolved against the live configuration - a selection or a required setting can
  * turn either off without a module change - so each is re-resolved per read from the effective config rather than
- * pinned. This is the reclamation module's own report; the neutral server no longer reaches into the {@code gc} and
+ * pinned. This is the reclamation module's own report; the neutral server does not reach into the {@code gc} and
  * {@code walk} SPIs to build these flags.
  */
 public final class ReclamationCapabilityContributor implements CapabilityContributor {

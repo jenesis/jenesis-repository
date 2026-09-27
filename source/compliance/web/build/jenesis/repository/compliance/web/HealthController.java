@@ -45,7 +45,7 @@ import org.springframework.web.bind.annotation.RestController;
  * {@code 503} with {@code "ranked":false}, {@code "entries":null} and the ledger's own {@code lastScanned}. It does not
  * derive a ranking here to fill the gap: a weakest-first list computed on the request thread out of whatever the ledger
  * buffers reads as authoritative while being a sample, and an operator reading "worst first" concludes nothing worse
- * exists (&sect;9's silent fallback). The point lookups the gate reads ({@link HealthLedger#health}) need no ranking and
+ * exists (a silent fallback). The point lookups the gate reads ({@link HealthLedger#health}) need no ranking and
  * are unaffected; only this ranked view waits.
  */
 @RestController
@@ -121,8 +121,8 @@ public class HealthController {
             // upsert what it scores, then re-stamp the freshness exactly as the scheduled sweep does. Idempotent, so a
             // re-fetch renews a coordinate's health rather than duplicating it. It is a walk of every coordinate with
             // a lookup each, so it runs as a stored report started by this request and read back by the next one,
-            // never on the request thread: the refresh-walk canary measured the inline shape as a request that
-            // never answered over a million coordinates. The answer below is the ledger as it stands, with a header
+            // never on the request thread: inline, it is a request that never answers over a million coordinates.
+            // The answer below is the ledger as it stands, with a header
             // saying the refresh was started - or was already under way.
             boolean started = StoredReport.compute(store, REFRESH_REPORT, () -> {
                 Instant now = Instant.now();
@@ -142,7 +142,7 @@ public class HealthController {
         return switch (ledger.worstFirst(cursor, pageLimit)) {
             // 503, and entries NULL rather than empty: a client that ignores `ranked` must not be able to render this
             // as "no project is unhealthy". The same answer /api/dependents gives for the same concern (an index whose
-            // sweep has not committed), with the ledger's own last sweep carried so Principle 10's staleness survives
+            // sweep has not committed), with the ledger's own last sweep carried so the staleness signal survives
             // the refusal - "swept at X but not yet ranked" is a different fact from "nothing has ever run here".
             case HealthLedger.Ranking.NotBuilt notBuilt -> {
                 response.setStatus(503);
@@ -172,19 +172,18 @@ public class HealthController {
      * Build the ranking on an explicit refresh - the answer to "a deployment with {@code scheduled-scan} off reads
      * <em>not yet ranked</em> permanently".
      *
-     * <p>This used to be left to the scheduled pass on purpose, and the reason still holds: the rank index mutates
-     * shared durable state and must stay on {@code HealthRankIndexTask}'s single-writer lease rather than racing a
-     * scheduled pass or a sibling rescan. What was missing was not the constraint but the way to honour it on a
-     * request. {@link MaintenanceScheduler#exclusively} takes exactly that lease by name, and because
+     * <p>The rank index mutates shared durable state and must stay on {@code HealthRankIndexTask}'s single-writer
+     * lease rather than racing a scheduled pass or a sibling rescan. {@link MaintenanceScheduler#exclusively} honours
+     * that on a request: it takes exactly that lease by name, and because
      * {@code exclusivePass} locks on the task's own name, running the reindex under {@code health-rank-index} is
      * serialised against the scheduled pass by construction - nothing here duplicates the scheduler's serialisation.
-     * The on-demand cleanup endpoint has run this way for as long as it has existed.
+     * The on-demand cleanup endpoint runs the same way.
      *
      * <p>A refused acquisition is <em>not</em> an error: another node, or the scheduled pass, is building the very
      * ranking this request asked for. The refresh has already persisted its scores either way, so the answer below is
      * simply whatever ranking currently stands - which is what the caller would have got anyway, one pass later.
      *
-     * <p>Best-effort by the same logic (&sect;4): a ranking that fails to build leaves the persisted scores intact and
+     * <p>Best-effort by the same logic: a ranking that fails to build leaves the persisted scores intact and
      * the next pass folds them, so it must not fail a refresh that already did its durable work.
      */
     private void rank(ArtifactStore store, HealthLedger ledger) {
@@ -249,7 +248,7 @@ public class HealthController {
      * client that reads statuses, the {@code null} for one that reaches straight for the list.
      *
      * <p>{@code lastScanned} is the instant this repository's health was last refreshed against the live source
-     * (Principle 10's staleness signal), {@code null} when it was never scanned - rendered as such, never as
+     * (the staleness signal), {@code null} when it was never scanned - rendered as such, never as
      * "healthy". On a ranked report it is the instant the <em>ranking</em> was built at, never a later sweep the
      * ranking has not folded in; on an unranked one it is the ledger's own last sweep, so an operator can tell
      * "swept but not yet ranked" from "nothing has ever run here".

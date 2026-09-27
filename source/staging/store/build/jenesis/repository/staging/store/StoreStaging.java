@@ -257,7 +257,7 @@ public final class StoreStaging implements Staging {
             // a later path, or a compliance-gate quarantine) rolls back every release this pass created, leaving NO
             // artifact released and every staged copy intact. Only once the whole set has released does the commit leg
             // unpublish the staged pointers and seal PROMOTED. A crash between a release and the commit re-converges on
-            // the next lease-guarded promote, since re-linking the same content-addressed blob is idempotent (§4/§5).
+            // the next lease-guarded promote, since re-linking the same content-addressed blob is idempotent.
             List<String> released = new ArrayList<>();
             List<String> withheld = new ArrayList<>();
             try {
@@ -428,10 +428,10 @@ public final class StoreStaging implements Staging {
      */
     public int reap(Instant now, Duration ttl) throws IOException {
         // The ids a page at a time, never the whole set: first every id with a state marker, then every staged
-        // pointer root that has none (a marker a partial purge lost, which the loop stamps). This used to list both levels
-        // whole into one set before judging the first id, so a farm that opens a staging per build and never
-        // closes them left a reap that could not run in the heap it was given - the staging-reap canary measured
-        // the pass failing at a million open stagings under 512 MiB. An id both levels hold is judged once, through
+        // pointer root that has none (a marker a partial purge lost, which the loop stamps). Listing both levels whole
+        // into one set before judging the first id would leave a farm that opens a staging per build and never closes
+        // them with a reap that cannot run in the heap it is given - at a million open stagings under 512 MiB. An id
+        // both levels hold is judged once, through
         // its marker; one the marker level reaped is gone from the pointer level by the time that level is paged.
         int reaped = 0;
         Names ids = reapable();
@@ -531,8 +531,8 @@ public final class StoreStaging implements Staging {
 
     /** The staging ids, paged: the state markers' level, then the staged roots that have no marker yet - what the
      *  reap visits and what the listing window takes its first entries from. One page of names is held at a time.
-     *  The whole set used to be listed into a {@code LinkedHashSet} for both, which the staging-reap canary measured
-     *  as an OutOfMemoryError at a million open stagings under 512 MiB. */
+     *  Listing the whole set into one collection would be an OutOfMemoryError at a million open stagings under
+     *  512 MiB. */
     private Names reapable() {
         return Names.concat(Names.over(store, ROOT),
                 Names.over(store, "publish/staging").select(name ->
@@ -575,7 +575,7 @@ public final class StoreStaging implements Staging {
      *  is formed into a store key: a bare {@code ..}, or a percent-encoded / double-encoded variant ({@code %2e%2e},
      *  {@code %2E%2E}, {@code ..%2f}, {@code %252e}) that a naive {@code contains("..")} misses. The HTTP boundary
      *  decodes and normalizes too, but a non-enforcing (anonymous) deployment never runs the security-layer path
-     *  normalizer, so the domain guards its own keys as well (defence in depth, §9). A staged coordinate is a plain
+     *  normalizer, so the domain guards its own keys as well (defence in depth). A staged coordinate is a plain
      *  artifact path that never legitimately carries a percent-escape, so any percent sign surviving one decode is
      *  refused outright - which also stops a double-encoding that would decode to {@code ..} a second time downstream.
      *

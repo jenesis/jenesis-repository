@@ -85,13 +85,12 @@ final class ContinuityTrust implements SignerTrust {
      * <p>The scheme is part of the key, and that is this part's whole answer to an artifact signed several ways at
      * once. A Maven release carries the detached OpenPGP signature its layout requires and may carry a Sigstore
      * bundle beside it, which establishes two continuities rather than one that flips; keyed by the coordinate
-     * alone the two signers overwrote each other on every publish, and the next assessment reported whichever lost
-     * as a change of signer. Measured 2026-09-15 by the end-to-end Sigstore leg, the only tier where both
-     * signatures of one artifact reach the gate in the order a client sends them.
+     * alone the two signers would overwrite each other on every publish, and the next assessment would report
+     * whichever lost as a change of signer.
      *
-     * <p>Records written before the scheme joined the key are unreachable, and continuity re-establishes itself
-     * from the next signed publish of the coordinate. That is the fail-open direction for a dimension whose finding
-     * is "this is not who signed last time", so nothing reads the old key and nothing migrates it.
+     * <p>A record under a key without the scheme is unreachable, and continuity re-establishes itself from the next
+     * signed publish of the coordinate. That is the fail-open direction for a dimension whose finding is "this is
+     * not who signed last time", so nothing reads such a key and nothing migrates it.
      */
     static String key(String ecosystem, String coordinate, String scheme) {
         return ROOT + "/" + coordinateId(ecosystem, coordinate) + "/" + scheme;

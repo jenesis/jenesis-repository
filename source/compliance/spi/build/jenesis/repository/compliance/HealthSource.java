@@ -31,7 +31,7 @@ import module java.base;
  *     tell an unranked deployment from an unrated coordinate by identity. Inside a {@link Health}, a component the
  *     source could not evaluate is {@link Health#NOT_EVALUATED} and never a zero: zero is a finding, {@code -1} is a
  *     silence, and rendering the two the same would report a well-run project as unreviewed.</li>
- * <li><b>The neutral element, and what it deliberately cannot say (&sect;9).</b> This is the clause a consumer must
+ * <li><b>The neutral element, and what it deliberately cannot say.</b> This is the clause a consumer must
  *     read before it gates on anything. Absence covers <em>four</em> different facts - the ecosystem is one the
  *     source does not cover, the coordinate has no resolvable source repository, the repository exists but was never
  *     scored, and the source could not be reached - and the {@link Optional} alone distinguishes none of them,
@@ -41,7 +41,7 @@ import module java.base;
  *     reject only what it has a score for, and a policy that treated absence as failing would fail every private
  *     coordinate and every vendor outage alike.
  *     <p>The fourth fact - the source could not be reached - is the one a gate must be able to see, and
- *     {@link SignalSource#freshness()} is where it now lives: with the source not
+ *     {@link SignalSource#freshness()} is where it lives: with the source not
  *     {@link Freshness#authoritative() authoritative}, <em>every</em> coordinate reads unrated, so a health floor
  *     that acted on absence would reject the whole world on one vendor outage. The rule is therefore the same one
  *     {@link ExploitProbabilitySource} states for an EPSS threshold - <b>a floor may only decide about a coordinate
@@ -49,22 +49,22 @@ import module java.base;
  *     dimension stands down for the pass and the other dimensions decide, exactly as when no health source is
  *     installed. The first three facts remain deliberately indistinguishable from each other, because all three mean
  *     "nobody scored this project" and a review treats them alike.</p></li>
- * <li><b>Bounded work / cancellation (&sect;12).</b> A network-backed source bounds every lookup: a per-request
+ * <li><b>Bounded work / cancellation.</b> A network-backed source bounds every lookup: a per-request
  *     timeout, a whole-lookup deadline and a response byte cap, plus the length of any resolution <em>chain</em> it
  *     walks (the deps.dev implementation resolves a coordinate's default version, that version's source repository
  *     and only then its Scorecard - three separate bounded queries, and a fourth would be a fourth metered call per
  *     ranked coordinate). Reaching a bound degrades to absent under clause 4 rather than answering with a
  *     partially-resolved score, because a score drawn from an incomplete resolution ranks a project on evidence
  *     nobody gathered.</li>
- * <li><b>Read purity (&sect;10).</b> The intent is that {@link #health} renders what a refresh already stored, so a
+ * <li><b>Read purity.</b> The intent is that {@link #health} renders what a refresh already stored, so a
  *     ranking stands while the source is down. <b>No implementation meets this today</b>: the one health source in
  *     the inventory fetches from inside the query and holds its answer in a process-local TTL cache, so a restarted
  *     deployment re-walks the resolution chain for every coordinate it ranks. Recorded here rather than left implicit,
- *     because an undocumented divergence on a shared concern is a defect (&sect;13); clause 4 is what keeps it
+ *     because an undocumented divergence on a shared concern is a defect; clause 4 is what keeps it
  *     harmless, since the worst outcome of the divergence is an unranked finding rather than a wrong verdict.</li>
  * <li><b>Staleness.</b> {@link SignalSource#freshness()} carries it, so a console showing a coordinate without a
  *     score can say when this source last answered at all - an empty health panel beside a fetch instant is "nothing
- *     scored as of then", and one beside {@link Freshness#NEVER} is "this source has never answered" (&sect;10). A
+ *     scored as of then", and one beside {@link Freshness#NEVER} is "this source has never answered". A
  *     maintainer-health score also ages differently from an advisory: a project's maintenance signals move over
  *     months, so the instant is what tells a reviewer whether an 8.4 still describes the project or describes it as
  *     it was.
@@ -84,7 +84,7 @@ import module java.base;
  *     inflate it. Freshness folds conservatively beside it ({@link Freshness#merged}): authoritative only when every
  *     source is, and as old as the oldest. Which sources a deployment installs changes what is reported; the order
  *     they were discovered in never does.</li>
- * <li><b>Tenant scoping (&sect;6).</b> None, deliberately: how well a project is maintained is the same fact for
+ * <li><b>Tenant scoping.</b> None, deliberately: how well a project is maintained is the same fact for
  *     every tenant. {@link SignalSourceProvider} carries no tenant and offers no way to supply one.</li>
  * </ol>
  */
@@ -212,7 +212,7 @@ public interface HealthSource extends SignalSource {
     /** The source names installed on this deployment, regardless of enablement.
      *
      *  <p>The console lists the maintainer-health page only where one is installed: the page renders the durable
-     *  ledger the sweep writes, which is what a read must render (&sect;10), and a ledger nothing fills would only
+     *  ledger the sweep writes, which is what a read must render, and a ledger nothing fills would only
      *  ever say that nothing had scored it. */
     static Set<String> installed() {
         return SignalSourceProvider.installed(HealthSource.class);

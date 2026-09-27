@@ -13,9 +13,8 @@ import module java.base;
  * from it is stable over a repository where nothing was ever evicted. A plain put rather than a compare-and-set, so a
  * lifecycle owner can mark the change whether or not the module that consumes it is installed.
  *
- * <p>This used to be written twice, as {@code markEvicted}/{@code evictionEpoch} on the findings ledger and again on
- * the health ledger, identical bar the key; a ledger now hands out its epoch through a factory naming the key
- * ({@code Findings.evictions(store)}). See {@link Stamp} for the instant-valued sibling.
+ * <p>One mechanism for every ledger, identical bar the key: a ledger hands out its epoch through a factory naming the
+ * key ({@code Findings.evictions(store)}). See {@link Stamp} for the instant-valued sibling.
  */
 public final class Epoch {
 

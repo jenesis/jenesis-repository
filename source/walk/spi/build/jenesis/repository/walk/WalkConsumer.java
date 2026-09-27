@@ -37,32 +37,32 @@ import build.jenesis.repository.store.Features;
  *     the uncommitted stride tail after a crash-resume, so the same artifact is legitimately delivered twice with the
  *     same arguments. A second full pass over unchanged stored state must leave the consumer's durable projection
  *     exactly as the first left it - same objects, same content - or the pass is a generator of garbage rather than a
- *     converge pass (&sect;4).</li>
+ *     converge pass.</li>
  * <li><b>Absence sentinel.</b> {@link #name()} returns a non-blank, stable, lower-case name - the settings namespace,
  *     the {@code jenreg.<name>=false} toggle key and the consumer's own key space. {@code null} is never
  *     a legal return, and the hooks return nothing: a consumer signals "I could not converge" through its own durable
  *     say-so surface (clause 8), never by returning quietly.</li>
- * <li><b>Streaming (&sect;1).</b> {@link #onRetained} is handed a descriptor and the walked store, never the artifact's
+ * <li><b>Streaming.</b> {@link #onRetained} is handed a descriptor and the walked store, never the artifact's
  *     bytes. A consumer that must look inside an artifact streams it from {@code blobs/<hash>} through the store it is
  *     handed and bounds what it reads; it never materialises an artifact to derive metadata from it.</li>
- * <li><b>Tenant scoping (&sect;6).</b> The {@link ArtifactStore} argument <em>is</em> the scope: it is the store the
+ * <li><b>Tenant scoping.</b> The {@link ArtifactStore} argument <em>is</em> the scope: it is the store the
  *     pass enumerated, already scoped by the caller. A consumer derives every key it writes from that argument and
  *     never captures a store from anywhere else, so one deployment's pass can never write into another tenant's
  *     namespace.</li>
- * <li><b>Error visibility (&sect;9).</b> An {@link IOException} (or a runtime failure) out of any hook fails
+ * <li><b>Error visibility.</b> An {@link IOException} (or a runtime failure) out of any hook fails
  *     <em>this consumer's generation</em>: the pass records it under {@code walks/rebuild/failed/<name>} with the
  *     generation and the key, hands this consumer nothing more until the next generation, and completes for the
  *     others; the task that drove the pass reports the consumer as failed, and the next generation - a full pass -
  *     redelivers everything to it ({@link RebuildPass#failed}). A consumer must therefore not catch its own store
- *     failures into a shrug: a swallowed write is exactly the silently-incomplete projection &sect;5 forbids, while a
+ *     failures into a shrug: a swallowed write is a silently-incomplete projection served as whole, while a
  *     thrown one is recorded, reported and redelivered. The pass hooks are not declared to throw, so a consumer that
  *     persists in them wraps a store failure in an {@link UncheckedIOException}, which is contained the same way.
  *     A failure of the walk itself - the store refusing the pass's own read or cursor commit - is nobody's and
  *     propagates, leaving the pass active and resumable.</li>
- * <li><b>Read purity (&sect;10).</b> A pass is a read of durable state plus a write of derived state. Neither hook may
+ * <li><b>Read purity.</b> A pass is a read of durable state plus a write of derived state. Neither hook may
  *     fetch from an upstream, call a scanner, or otherwise reach outside the store: the walk must produce the same
  *     projection when every external system is down.</li>
- * <li><b>Staleness (&sect;5, &sect;10).</b> A consumer that could not converge - the snapshot shape after a
+ * <li><b>Staleness.</b> A consumer that could not converge - the snapshot shape after a
  *     crash-resume - records that fact durably and surfaces it, rather than committing what it accumulated. It must
  *     never replace a whole projection with a partial one: serving a silently-incomplete view as if it were whole is
  *     the one outcome this SPI exists to prevent. The pass generation and {@link WalkPass#started()} are what a
@@ -106,8 +106,8 @@ import build.jenesis.repository.store.Features;
  *     member to every consumer that {@linkplain #families() listens} on that family: a pointer as a descriptor
  *     through {@link #onRetained} (or {@link #onWithheld}), any other member as a {@link Walked} key through
  *     {@link #onWalked}, whose body is read once for all of them. A family nobody listens on is not enumerated, so
- *     a consumer pays for exactly the streams it asked for; and every repair that used to walk the store on its
- *     own rides here instead, which is the reason the families exist.</li>
+ *     a consumer pays for exactly the streams it asked for; and every repair that walks the store rides here rather
+ *     than walking on its own, which is the reason the families exist.</li>
  * <li><b>Withheld pointers.</b> The pass decides once per pointer whether serving would 404 it - the quarantine
  *     subtree, the interceptor chain's hold, the {@code withheld/} marker - and delivers a withheld pointer through
  *     {@link #onWithheld} to a consumer that {@linkplain #seesWithheld() asked to see it} (a reconcile, a collector's
@@ -228,12 +228,9 @@ public interface WalkConsumer {
     /**
      * Whether this consumer reads {@link ArtifactDescriptor#size()} off the pointers it is handed.
      *
-     * <p>{@code true} by default. It used to be a cost dial: the size was a HEAD on the blob per pointer per pass,
-     * measured 2026-09-08 as 4.80 reads per blob held, paid only when a listener declared it would read the size.
-     * Since 2026-09-12 the length rides the pointer itself, so every consumer gets it for nothing and the walk stats
-     * a blob only for a pointer written before the length was recorded - once, writing the length back. The
-     * declaration stays for what it still says about the consumer, and so that a walk over a store the cutover
-     * has not reached yet is charged for the one stat by the consumer that wanted it.
+     * <p>{@code true} by default. The length rides the pointer itself, so every consumer gets it for nothing and the
+     * walk stats a blob only for a pointer that carries no length - once, writing the length back. The declaration
+     * says what the consumer reads, and charges that one stat to the consumer that wanted it.
      */
     default boolean needsBlobSize() {
         return true;
@@ -246,7 +243,7 @@ public interface WalkConsumer {
      * would 404 on a GET, so reinstating it into an index is the clause 14 breach {@link #seesWithheld} exists to
      * govern. Declaring {@code false} says the opposite - hand me every pointer through {@link #onRetained} and
      * do not work out which are held - and it lets the walk skip two reads per pointer per pass: the quarantine
-     * chain and the content-addressed withheld marker, measured 2026-09-08 as 1.60 reads per blob held each.
+     * chain and the content-addressed withheld marker.
      *
      * <p>The walk skips them only when NO consumer listening on {@link Family#POINTERS} distinguishes, so one
      * consumer that does keeps the status exact for everyone.
@@ -262,13 +259,12 @@ public interface WalkConsumer {
      *
      * <p>{@code true} by default: a consumer listening on {@link Family#POINTERS} normally wants them. Declaring
      * {@code false} says it rides the walk only to act when the walk completes, and the walk then does not read
-     * a pointer's body to build a delivery nobody takes - one read per pointer per pass, measured 2026-09-08 as
-     * 1.60 reads per blob held.
+     * a pointer's body to build a delivery nobody takes - one read per pointer per pass.
      *
-     * <p>It is narrower than declaring no {@link #families()}, and both are now available: a consumer that wants a
-     * family's membership but not its bodies keeps the family and declares this {@code false}, while one that wants
-     * nothing but the completion declares no family at all and the walk enumerates nothing for it. The refusal that
-     * used to conflate the second with a misconfigured deployment tells them apart.
+     * <p>It is narrower than declaring no {@link #families()}: a consumer that wants a family's membership but not
+     * its bodies keeps the family and declares this {@code false}, while one that wants nothing but the completion
+     * declares no family at all and the walk enumerates nothing for it - which the pass tells apart from a
+     * misconfigured deployment.
      *
      * @return whether pointer deliveries are of any use to this consumer.
      */
@@ -366,9 +362,9 @@ public interface WalkConsumer {
      *
      * <p>It exists for one relationship, and only completion is ordered by it. A consumer's completion work can
      * orphan content - a retention sweep unpublishes what it evicted - so anything that reclaims must see the store
-     * as the others left it, or it reclaims one pass late. That used to hold only because the consumers happened to
-     * be listed in one file in the right order, which stopped being true the moment one of them moved to a module
-     * of its own.
+     * as the others left it, or it reclaims one pass late - and that must not rest on the consumers happening to be
+     * listed in one file in the right order, which stops being true the moment one of them moves to a module of its
+     * own.
      */
     default int order() {
         return 0;

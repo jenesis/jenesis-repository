@@ -9,15 +9,14 @@ import build.jenesis.repository.store.OwnerOnly;
 /**
  * The {@code filesystem} provider: a store rooted at {@code jenreg.filesystem.root}, which is <em>required</em>.
  *
- * <p>It used to default the root to {@code /var/lib/jenesis-repository}, and that was the one default worth
- * removing. Storage is the setting a wrong guess LOSES data over rather than merely misconfigures: on a host that
- * path is presumptuous, and in a container it is the writable layer, so an operator who configured nothing got a
- * working repository that discarded itself on {@code docker rm}. Every other backend already refused - S3 names
- * its bucket in {@link #requiredConfig()} and fails loudly - and this one silently invented an answer.
+ * <p>There is no default root. Storage is the setting a wrong guess LOSES data over rather than merely
+ * misconfigures: on a host a default path is presumptuous, and in a container it is the writable layer, so an
+ * operator who configured nothing would get a working repository that discarded itself on {@code docker rm}. Every
+ * other backend refuses too - S3 names its bucket in {@link #requiredConfig()} and fails loudly.
  *
  * <p>Declaring the root required is all it takes, because {@code Providers.exclusiveWithDefault} validates the
  * CHOSEN provider whether it was selected or fell back. So {@code filesystem} stays the default <em>choice</em>
- * and can no longer be a silent one: an unconfigured deployment now fails naming the key to set.
+ * and cannot be a silent one: an unconfigured deployment fails naming the key to set.
  */
 public final class FilesystemArtifactStoreProvider implements ArtifactStoreProvider {
 

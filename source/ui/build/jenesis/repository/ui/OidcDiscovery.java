@@ -37,9 +37,8 @@ public final class OidcDiscovery {
 
     /**
      * Generous, and deliberately so. A discovery fetch is one incidental round trip on a path whose real work is
-     * elsewhere, and it has already been the cause of a suite blaming the product: an OIDC discovery against
-     * localhost lost a race with Spring's default read timeout under a full lane and was reported as an
-     * "infrastructure failure". A slow provider should make a login slow, not make it fail.
+     * elsewhere: under load, even a discovery against localhost can lose a race with Spring's default read timeout and
+     * read as an "infrastructure failure". A slow provider should make a login slow, not make it fail.
      */
     private static final Duration TIMEOUT = Duration.ofSeconds(30);
 

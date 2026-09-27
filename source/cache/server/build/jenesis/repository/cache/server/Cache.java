@@ -150,8 +150,8 @@ public class Cache {
     /**
      * How long a project's read policy - the size cap and sweep order its {@code cache.properties} sets - is trusted
      * before a request asks the store whether it changed; {@code null} or zero asks on every request. The check is
-     * one version probe of the policy document, a round trip per hit on an object store and the last store call a
-     * hit paid once recency moved into the touch window; so the node remembers when it last read or confirmed a
+     * one version probe of the policy document, a round trip per hit on an object store and otherwise the only store
+     * call a hit pays, recency being kept in the touch window; so the node remembers when it last read or confirmed a
      * project's policy and asks again only past the window. The window is the deployment's {@code jenreg.cache.ttl},
      * as it is for the credential the same request was authorised against: another node's edit of a project's cap
      * shows here within it, and an operator who wants every request to see an edit at once sets it to zero.
@@ -490,9 +490,10 @@ public class Cache {
     /**
      * Enforce one project's size cap, in bounded passes rather than one enumerate-and-sort.
      *
-     * <p>This used to hold the project's whole entry set in a list and sort it, which is an allocation proportional to
-     * whatever a build had cached - on a write-triggered path, so a client controlled both when it ran and how large
-     * it was. The total is now counted by streaming, and each round retains only the {@link #RECLAIM_BATCH} entries it
+     * <p>Holding the project's whole entry set in a list and sorting it would be an allocation proportional to
+     * whatever a build had cached - on a write-triggered path, so a client would control both when it ran and how
+     * large it was. The total is counted by streaming, and each round retains only the {@link #RECLAIM_BATCH} entries
+     * it
      * is about to delete, selected through the same bounded heap the free-space reclaim uses.
      */
     private void evict(CacheStorage store, Project project) {

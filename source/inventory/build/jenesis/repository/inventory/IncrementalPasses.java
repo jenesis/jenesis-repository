@@ -13,10 +13,10 @@ import build.jenesis.repository.store.StoredCounter;
 /**
  * The cadence every feed-driven pass keeps: every Nth scheduled pass visits every published version, and the passes
  * between visit only the versions published since the last full one - newest first out of the recent index, never a
- * walk of the publish facts. Measured 2026-09-06 for the advisory scan alone: a full pass reads one inventory document
- * per published version, which at two million versions and an hourly cadence was 48 million reads a day over an
- * object store; the shape was then copied into the other passes that read the feeds, each with its own counter and
- * its own idea of "since", and this is that shape once.
+ * walk of the publish facts. A full pass reads one inventory document per published version, which at two million
+ * versions and an hourly cadence is 48 million reads a day over an object store for one pass alone. Every pass that
+ * reads the feeds keeps this cadence through this one class, rather than with its own counter and its own idea of
+ * "since".
  *
  * <p>Three things make a pass full: nothing recorded as a last full pass (a first run, or a stamp that was never
  * advanced because a pass did not land clean); the counted passes since the last full one reaching the deployment's
@@ -32,12 +32,12 @@ import build.jenesis.repository.store.StoredCounter;
  *
  * <h2>The stamp's claim is stronger than the enumeration behind it</h2>
  *
- * <p><b>Open finding, demonstrated 2026-09-16.</b> "Everything published before this instant was visited" is a
- * claim about two different things at once, and only one of them is what a full pass measures. A full pass
- * enumerates the published key space LIVE and in KEY order; the stamp it writes is its own start instant. So a
- * version whose publish instant is before that start but whose ROW is written after the pass has passed the key it
- * sorts at was never visited, and the stamp says it was. The incremental legs then filter on the stamp, so it is
- * invisible to all of them until the next full pass.
+ * <p>"Everything published before this instant was visited" is a claim about two different things at once, and
+ * only one of them is what a full pass measures. A full pass enumerates the published key space LIVE and in KEY
+ * order; the stamp it writes is its own start instant. So a version whose publish instant is before that start but
+ * whose ROW is written after the pass has passed the key it sorts at is never visited, and the stamp says it was.
+ * The incremental legs filter on the stamp, so without a lookback it would be invisible to all of them until the
+ * next full pass.
  *
  * <p>Three different things again, as in {@code InventoryIdentity}, which carries the same gap in its rebuild and
  * closes it: the classification is on the PUBLISH INSTANT, the coverage is on WHEN THE ROW WAS WRITTEN and WHERE
@@ -45,14 +45,14 @@ import build.jenesis.repository.store.StoredCounter;
  * begins has an instant just before the start and a row just after it, and if its coordinate sorts early the pass
  * has already gone by.
  *
- * <p>Demonstrated directly rather than argued: record one version, run a full pass, stamp it, then record a
- * version dated thirty seconds BEFORE the stamp - a write that outlived the pass, or a publisher whose clock
- * lags - and ask for an incremental pass. It visits NOTHING, not merely "everything but the late one":
- * {@link #recent} returns at the first release below the floor, and the late release is the newest in the recent
- * index, so the floor is met on the first row and the leg returns having visited none of them.
+ * <p>With no lookback the effect is total rather than partial: record one version, run a full pass, stamp it, then
+ * record a version dated thirty seconds BEFORE the stamp - a write that outlived the pass, or a publisher whose
+ * clock lags - and an incremental pass visits NOTHING, not merely "everything but the late one": {@link #recent}
+ * returns at the first release below the floor, and the late release is the newest in the recent index, so the
+ * floor is met on the first row and the leg returns having visited none of them.
  *
  * <p>What it costs is bounded and self-healing, which is the difference from the identity's version of this gap:
- * the next FULL pass visits every published version whatever its instant, so the exposure was at most
+ * the next FULL pass visits every published version whatever its instant, so the exposure is at most
  * {@value #FULL_EVERY} passes - a day at the default dial and an hourly cadence. For the passes that ride this (the
  * advisory scan, KEV enforcement, reanalysis, the signature sweep, health and reachability) that is a published
  * artifact going unscanned for up to a day, not a wrong answer served to a client.
@@ -66,9 +66,9 @@ import build.jenesis.repository.store.StoredCounter;
  * <p><b>Where else this shape lives.</b> Two things have to meet for it: derived state whose coverage is claimed
  * by an INSTANT, and a walk that establishes that coverage by a LIVE, KEY-ORDERED enumeration. The probe that
  * finds them is a comparison between an item's publish instant and a coverage floor - {@code grep -rn
- * "published()\.isBefore\|published()\.isAfter"} over both source trees - and when the retrofit was run on
- * 2026-09-17 it returned exactly two, this one and {@code InventoryIdentity}'s rebuild boundary, both now closed.
- * Every other stamp in the build is either a freshness label a view renders, or a composite cache token compared
+ * "published()\.isBefore\|published()\.isAfter"} over both source trees - which finds this one and
+ * {@code InventoryIdentity}'s rebuild boundary, both closed. Every other stamp in the build is either a freshness label
+ * a view renders, or a composite cache token compared
  * for EQUALITY so that a mismatch rebuilds the whole generation rather than filtering by instant - which is the
  * shape that cannot have this defect, and the one to prefer when the choice is open.
  *
@@ -81,9 +81,9 @@ import build.jenesis.repository.store.StoredCounter;
  * pass as publish-rate times window in extra visits, and a visit here is a SCAN rather than a read. So the default
  * is sized at the write lag it has to cover - a publish in flight when a full pass began, which is seconds - and
  * not at a clock skew, which is what the full pass remains for. A deployment publishing fast enough for a minute's
- * worth of re-scans to matter turns it down; one with lagging publisher clocks turns it up. Zero restores the
- * behaviour this paragraph describes as the defect, which is why it is accepted rather than refused: an operator
- * who has measured the cost may choose it, and the full pass still heals.
+ * worth of re-scans to matter turns it down; one with lagging publisher clocks turns it up. Zero reopens the gap
+ * described above, which is why it is accepted rather than refused: an operator who has measured the cost may
+ * choose it, and the full pass still heals.
  */
 public final class IncrementalPasses {
 

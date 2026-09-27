@@ -67,10 +67,10 @@ public final class SignatureCompletionObserver implements PublicationObserver {
         // A detached sidecar's covers() strips its suffix and answers; it never asks whether the path is under its
         // own route. So a path ending .sig is answered by Swift's declaration wherever it sits - including an OCI
         // cosign signature tag, where the right answer is the manifest DIGEST and the suffix strip gives the tag
-        // with ".sig" removed. Taking the first match made which answer won a property of the module path's
+        // with ".sig" removed. Taking the first match would make which answer won a property of the module path's
         // ordering, and the losing case is silent: the wrong subject does not describe, the observer returns, and
         // an artifact's signature is simply never re-derived. That is the ecosystem fan-out rule this codebase
-        // already states for advisory lookups - ask all of them and union the answers - applied where it was not.
+        // states for advisory lookups - ask all of them and union the answers.
         Set<String> candidates = new LinkedHashSet<>();
         for (RepositoryFormat installed : RepositoryFormat.installed()) {
             if (installed instanceof ArtifactSignatures format) {
@@ -112,9 +112,9 @@ public final class SignatureCompletionObserver implements PublicationObserver {
 
         // The same effective lookup the screens use, not the boot environment: this observer runs on the publishing
         // thread, so the tenant is still bound and the keys an operator configured at runtime are the ones that
-        // apply. Reading the process configuration here instead was the defect that made a correctly configured
-        // deployment report every signature untrusted - and it hid behind the inline path, because a held artifact
-        // is recorded by THIS observer rather than by the screen. The composed trust with nothing installed is NONE,
+        // apply. Reading the process configuration here instead would make a correctly configured deployment report
+        // every signature untrusted - and it would hide behind the inline path, because a held artifact is recorded
+        // by THIS observer rather than by the screen. The composed trust with nothing installed is NONE,
         // so this needs no presence check of its own.
         SignerTrust trust = SignerTrustProvider.trust(ComplianceSettings.lookup(), store);
         QualityInspector inspector = ((TrustAware) new SignatureInspector()).withTrust(trust);

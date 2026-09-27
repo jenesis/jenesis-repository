@@ -23,15 +23,15 @@ import build.jenesis.repository.store.Providers;
  *     decline" with an empty {@link Optional}; {@code null} is never a legal return from it or from
  *     {@link #name()}. An <em>installed but switched-off</em> tracker is a different state from the sentinel - it
  *     still stands, so a health surface can tell "installed but off" from a dead worker.</li>
- * <li><b>Selection failure (&sect;9).</b> This SPI has <em>no</em> selection key - {@code track-downloads} is the
+ * <li><b>Selection failure.</b> This SPI has <em>no</em> selection key - {@code track-downloads} is the
  *     installed tracker's own on/off dial, not a provider name - so there is no explicitly-selected miss to fail
  *     on. The one resolution failure is ambiguity: two installed providers would make module-path order decide
  *     which tracker counts, so {@link #resolve} <em>throws</em> naming both rather than picking a discovery-order
  *     winner. Resolution runs through the shared {@link Providers#optionalUnique} primitive, never a hand-rolled
  *     loop.</li>
- * <li><b>Tenant scoping (&sect;6).</b> The tracker never resolves a tenant itself: every marker is written through
+ * <li><b>Tenant scoping.</b> The tracker never resolves a tenant itself: every marker is written through
  *     the {@link Inventories} lookup keyed by the caller's {@code (tenant, repository)} pair.</li>
- * <li><b>Error visibility (&sect;9).</b> Recording is best-effort and its blast radius is bounded to counting: a
+ * <li><b>Error visibility.</b> Recording is best-effort and its blast radius is bounded to counting: a
  *     lost increment may only under-count a download statistic, and it may never hide a served artifact, change a
  *     hold, or fail the download it observed.</li>
  * <li><b>Durability / delivery.</b> Counts are batched, so the commit point is the batch flush, not the download.

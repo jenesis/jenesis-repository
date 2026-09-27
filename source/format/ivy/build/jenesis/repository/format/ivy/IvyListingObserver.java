@@ -32,7 +32,7 @@ public final class IvyListingObserver implements ListingObserver {
     /**
      * A withheld revision leaves the listing, and it is <b>removed rather than re-derived</b>.
      *
-     * <p>That distinction was measured rather than chosen. A hold notifies its observers with the store the hold
+     * <p>That distinction is forced. A hold notifies its observers with the store the hold
      * was written through, which is not the serving store the interceptor chain wraps - so asking that store
      * whether the pointer still serves answers <em>yes</em> while the request path already answers 404. Re-deriving
      * here would therefore leave the revision listed and a resolver would go on selecting a version it cannot

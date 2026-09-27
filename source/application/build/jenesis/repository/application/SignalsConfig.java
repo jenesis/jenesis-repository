@@ -32,8 +32,7 @@ import org.springframework.core.env.Environment;
  * tenant-overlaid VEX view and the boot-time definition sweep).
  *
  * <p>What ARMS a publish screen with any of this is not here: a screen is installed by whichever module
- * provides one, and arms itself from these beans through its own configuration. Every bean is copied from the former
- * monolith; the split is behaviour-preserving.
+ * provides one, and arms itself from these beans through its own configuration.
  */
 @Configuration(proxyBeanMethods = false)
 public class SignalsConfig {

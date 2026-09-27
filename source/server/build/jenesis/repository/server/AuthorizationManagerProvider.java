@@ -14,13 +14,12 @@ import org.springframework.security.web.access.intercept.RequestAuthorizationCon
  * - so a richer policy (per-tenant scoping, an operator-tenant check, usage recording) is a drop-in module and the
  * security chain names no implementation. With none installed the server's own deny-by-default manager stands.
  *
- * <p><strong>Why this is a seam rather than a bean name.</strong> A deployment used to replace the manager by
- * declaring a bean called {@code repositoryAuthorizationManager}, which the server's own declaration backs off
- * from. That works, and it is undiscoverable: the coupling is a string matched in two modules, nothing fails when
- * it stops matching, and what fails instead is that every access decision is quietly taken by the weaker manager.
- * The alternative of contributing the bean from a discovered {@code ServerModuleProvider} configuration does not
- * work at all - such a configuration is a deferred import, evaluated after the server's own conditional has
- * already been decided - which is why the replacement had to be declared by whichever module happened to be the
+ * <p><strong>Why this is a seam rather than a bean name.</strong> Replacing the manager by declaring a bean the
+ * server's own declaration backs off from works, and it is undiscoverable: the coupling is a string matched in two
+ * modules, nothing fails when it stops matching, and what fails instead is that every access decision is quietly
+ * taken by the weaker manager. Contributing the bean from a discovered {@code ServerModuleProvider} configuration
+ * does not work at all - such a configuration is a deferred import, evaluated after the server's own conditional has
+ * already been decided - so the replacement would have to be declared by whichever module happened to be the
  * composition root. Resolving a provider <em>inside</em> the server's own declaration has neither problem: it
  * runs at the moment the manager is built, in every composition that carries the module.
  *
@@ -32,12 +31,12 @@ import org.springframework.security.web.access.intercept.RequestAuthorizationCon
  *   <li><b>Absence sentinel.</b> No provider installed is not an error: {@link #resolve} answers an empty
  *       {@link Optional} and the caller keeps its own manager. {@link #create} declines the same way;
  *       {@code null} is never a legal return from either, nor from {@link #name()}.</li>
- *   <li><b>Selection failure (&sect;9).</b> An explicit {@code jenreg.authorization-manager=<name>} that no
+ *   <li><b>Selection failure.</b> An explicit {@code jenreg.authorization-manager=<name>} that no
  *       installed provider answers to, or whose provider declines, throws at resolution naming the selection and
  *       the installed names. It does <em>not</em> fall back to the server's manager: a deployment that asked for
- *       a policy and silently got a weaker one is the §9 defect exactly, and here it is the defect that decides
+ *       a policy and silently got a weaker one is a silent fallback, and here it is the defect that decides
  *       who may read and write artifacts.</li>
- *   <li><b>Error visibility (&sect;9).</b> Two enabled providers with no selection to separate them throws,
+ *   <li><b>Error visibility.</b> Two enabled providers with no selection to separate them throws,
  *       naming both. Which manager decides a deployment's access is never a function of module-path order.</li>
  *   <li><b>Lifecycle / ownership.</b> The composition owns the resolved manager; the provider is created by
  *       {@link ServiceLoader}, consulted once and discarded.</li>

@@ -61,7 +61,7 @@ public final class HuggingFaceImporter implements RepositoryImporter {
         // so the served path is /huggingface/huggingface/<repo_id>/... and not a coordinate-breaking double slash.
         // RepositoryImporter clause 4: a source path is as client-supplied as a request path, so a
         // traversal-shaped one is refused by name rather than echoed into the descriptor the import edge
-        // screens and the trail records (the fix retrofitted here - §13).
+        // screens and the trail records, as every importer does.
         String relative = RepositoryImporter.importablePath(path, "huggingface");
         if (relative.indexOf(RESOLVE) < 0) {
             return Optional.empty();
@@ -76,7 +76,7 @@ public final class HuggingFaceImporter implements RepositoryImporter {
     public void importArtifact(String path, InputStream content, ArtifactStore store) throws IOException {
         // RepositoryImporter clause 4: a source path is as client-supplied as a request path, so a
         // traversal-shaped one is refused by name rather than echoed into the descriptor the import edge
-        // screens and the trail records (the fix retrofitted here - §13).
+        // screens and the trail records, as every importer does.
         String relative = RepositoryImporter.importablePath(path, "huggingface");
         int marker = relative.indexOf(RESOLVE);
         if (marker < 0) {

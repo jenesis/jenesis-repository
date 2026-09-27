@@ -256,10 +256,9 @@ public class ComplianceReview extends TenantScope {
      *
      * @return whether anything was actually held. The primitive is idempotent - a duplicate or stale discard
      *         strips no served version's history - but idempotent is not the same as indistinguishable, and the
-     *         answer has to reach the operator. This method used to drop it, so the console reported
-     *         "Discarded {@code <path>}" for a path nothing was holding: a reviewer who discarded the wrong row,
-     *         or raced another reviewer, was told the discard had happened. Returning it is what lets the surface
-     *         say which of the two occurred.
+     *         answer has to reach the operator. Dropped, the console would report "Discarded {@code <path>}" for a
+     *         path nothing was holding: a reviewer who discarded the wrong row, or raced another reviewer, would be
+     *         told the discard had happened. Returning it is what lets the surface say which of the two occurred.
      */
     public boolean discardQuarantined(String repository, String path) throws IOException {
         RepositoryRequests.rejectTraversal(path);
@@ -272,7 +271,7 @@ public class ComplianceReview extends TenantScope {
     /**
      * The refused-publish panel beside the {@link #quarantine hold queue}: the recent {@code REJECT} decisions this
      * repository recorded, newest first, read purely from the durable {@link QuarantineLog} (a bounded page of the
-     * recent ledger, no re-screen and no fetch - §10 reads render).
+     * recent ledger, no re-screen and no fetch - a read renders stored state).
      *
      * <p>A refusal is the one gate decision with nothing else to see it by: a quarantined artifact is stored
      * and linked, so it stands in the queue until a reviewer resolves it, while a refused one keeps no bytes and links
@@ -463,7 +462,7 @@ public class ComplianceReview extends TenantScope {
                     entries.add(HealthController.HealthEntryView.of(located));
                 }
                 // The eventually-consistent page carries the ranking's own build-time freshness, so it is never shown
-                // fresher than it is (Principle 10) - never a later scan the ranking has not folded in.
+                // fresher than it is - never a later scan the ranking has not folded in.
                 yield new MaintainerHealthReport(true, true, entries, ranked.nextCursor(), ranked.total(),
                         ranked.scannedAt().orElse(null), scanning(repository));
             }
@@ -503,10 +502,10 @@ public class ComplianceReview extends TenantScope {
      * One page of the scan, worst first - assembled by {@link VulnerabilityReports}, which the API's own endpoint
      * assembles through as well.
      *
-     * <p>This screen used to build its own report over the same ledger. The two drifted, and the drift reached a
-     * deployment: their feed-refresh loops ended up with opposite failure behaviour over one SPI, so a console
-     * reported a clean scan over a feed that never loaded. There is one assembly now, so the next difference
-     * between the surfaces cannot be a difference of opinion about what the repository holds.
+     * <p>A report this screen built for itself over the same ledger would drift from the API's - down to feed-refresh
+     * loops with opposite failure behaviour over one SPI, so a console reports a clean scan over a feed that never
+     * loaded. With one assembly, a difference between the surfaces cannot be a difference of opinion about what the
+     * repository holds.
      *
      * <p>What stays here is what is this console's: its tenant, its settings, and the stored report its own rescan
      * button runs under - a console button and an API {@code refresh=true} are separate write paths, so each says
@@ -629,7 +628,7 @@ public class ComplianceReview extends TenantScope {
     /** The findings screen as the console renders it: whether a persistence module is installed, the filtered
      *  rows (a bounded window of the {@code matched} total), the distinct kind/source/category facets recorded in
      *  the repository for the filter form, the instant the ledger was last refreshed against the advisory feeds
-     *  ({@code null} = never scanned - rendered as such, never as clean; Principle 10's staleness line), whether the
+     *  ({@code null} = never scanned - rendered as such, never as clean), whether the
      *  shown rows were {@code truncated} below the match count, and the full {@code matched} total so the view can say
      *  "showing N of M" and point at the paged {@code /api/findings} for the rest. */
     public record FindingsPanel(boolean available, List<FindingRow> rows, List<String> kinds, List<String> sources,

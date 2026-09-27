@@ -66,9 +66,9 @@ public class ManagementWebConfig {
     @Bean
     public CachesAdminController cachesAdminController(AuditTrail audit, Authorization authorization,
                                                       RepositoryProperties properties) {
-        // Written, documented, reachable from the CLI - and registered by nothing until 2026-09-09, so
-        // /api/admin/caches and its clear answered 404 in every composition while the console's own button worked.
-        // The controller-registration inspection rule exists because of this one and the walks one before it.
+        // Registered by hand, like every controller here: absent from this list, /api/admin/caches and its clear
+        // would answer 404 in every composition while the console's own button worked. The controller-registration
+        // inspection rule holds that.
         return new CachesAdminController(audit, authorization, properties);
     }
 
@@ -81,11 +81,10 @@ public class ManagementWebConfig {
     /**
      * The walks over the API.
      *
-     * <p>Registered as of 2026-09-08, having never been: the controller was written and documented as the API half
-     * of the walks capability, and this config registers its controllers by hand, so being absent from the list
-     * meant {@code GET /api/admin/walks} and {@code POST /api/admin/walks/run} answered 404 in every composition
-     * that carried the module. The CLI's {@code walks} and {@code walks run} call exactly those two paths, so two
-     * of that capability's three surfaces were dead while the third - the console screen - worked.
+     * <p>This config registers its controllers by hand, so absent from the list {@code GET /api/admin/walks} and
+     * {@code POST /api/admin/walks/run} would answer 404 in every composition that carried the module. The CLI's
+     * {@code walks} and {@code walks run} call exactly those two paths, so two of that capability's three surfaces
+     * would be dead while the third - the console screen - worked.
      */
     @Bean
     public WalksAdminController walksAdminController(ArtifactStore root, AuditTrail audit, Settings settings,

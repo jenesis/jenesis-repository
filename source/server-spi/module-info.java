@@ -6,12 +6,12 @@
  * {@code java.base} is the equally minimal {@code build.jenesis.repository.store} SPI (for {@code Features} and
  * {@code ArtifactStore}, which {@code Authorization} reads its grants through) - so it carries no Spring, Tomcat,
  * Micrometer or Jackson, exactly the "SPI contract modules stay java.base-light; the heavy deps ride the impl/bundle"
- * rule (&sect;2).
+ * rule.
  *
  * <p>It holds the credential model ({@code Authorization}) and the plugin seams the server
  * {@code uses} - the unique ones resolving through the shared {@code Providers} primitives, so an explicitly selected
  * implementation that no provider answers to fails at resolution rather than degrading to the seam's {@code NONE}
- * sentinel (&sect;9): the rate limiter ({@code RateLimiter} / {@code RateLimiterProvider}), the credential usage
+ * sentinel: the rate limiter ({@code RateLimiter} / {@code RateLimiterProvider}), the credential usage
  * tracker
  * ({@code KeyUsageTracker} / {@code KeyUsageTrackerProvider}), the workload-identity token exchange
  * ({@code TokenExchange} / {@code TokenExchangeProvider}), the {@code /api/capabilities} contributor

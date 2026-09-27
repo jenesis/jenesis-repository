@@ -15,7 +15,7 @@ import reactor.core.publisher.Mono;
 import reactor.core.scheduler.Schedulers;
 
 /**
- * The blob client's HTTP over the product's own client, where the SDK's Netty client used to be: the store's
+ * The blob client's HTTP over the product's own client, in place of the SDK's Netty client: the store's
  * requests leave the way every other outbound call does, and carry the product's {@code User-Agent} rather than the
  * SDK's, which names the Java version and the operating system. Shared-key signing covers neither the
  * {@code User-Agent} nor anything this changes, so every signature stands as the SDK computed it.

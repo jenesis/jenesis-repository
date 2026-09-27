@@ -54,7 +54,7 @@ public interface SignalContext {
     String signal();
 
     /** The effective configuration value for {@code key} (stored settings over the deployment configuration),
-     *  {@code null} when unset - the same lookup the provider used to be handed bare, now named. */
+     *  {@code null} when unset. */
     String setting(String key);
 
     /**
@@ -65,7 +65,7 @@ public interface SignalContext {
      *
      * @throws IllegalStateException when no deployment has {@link #deployment bound} its root store - a wiring error,
      *                               which fails loudly here rather than letting a mirror write nowhere and read as an
-     *                               empty catalogue (&sect;9). A provider that never persists never sees it.
+     *                               empty catalogue. A provider that never persists never sees it.
      */
     /**
      * Whether this source is switched on, read the one way the settings surface documents:

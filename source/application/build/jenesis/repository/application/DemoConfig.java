@@ -31,10 +31,9 @@ import org.springframework.core.env.PropertySource;
 /**
  * The first-run boot behaviours split out of {@link RepositoryConfig}: the background demo seeding (off by
  * default, only against a completely empty artifact space, screened by the same DEFAULT-strength proxy screen the
- * router uses) and the first-run guided-hardening advice logged once on a genuinely fresh deploy. Every bean is
- * copied verbatim from the former monolith; the split is behaviour-preserving. The demo seed depends on every
- * {@link PublishPathWiring} bean by parameter, so whatever arms the publish path is armed before it publishes. The
- * enabled-format list is shared with {@link ServingConfig#enabledFormats}.
+ * router uses) and the first-run guided-hardening advice logged once on a genuinely fresh deploy. The demo seed
+ * depends on every {@link PublishPathWiring} bean by parameter, so whatever arms the publish path is armed before
+ * it publishes. The enabled-format list is shared with {@link ServingConfig#enabledFormats}.
  */
 @Configuration(proxyBeanMethods = false)
 public class DemoConfig {
@@ -53,9 +52,9 @@ public class DemoConfig {
         // publish-path wiring keeps whatever screens a publish armed before the seed publishes through it. The list
         // is never read - asking for it is the whole point, because the container builds it first.
         ArtifactStore store = repositories.tenantScope(properties.getDefaultTenant());
-        // #79: the demo proxy leg is dispatcher-direct - it does NOT pass through the routed gateway's own
-        // screening() decoration - so once the embedded per-format publish screen was demoted it pulled through
-        // unscreened. Hand the free DemoSeeder a PullThroughHooks whose screenFetch is the SAME DEFAULT-strength
+        // The demo proxy leg is dispatcher-direct - it does NOT pass through the routed gateway's own
+        // screening() decoration - so without help it would pull through unscreened. Hand the free DemoSeeder a
+        // PullThroughHooks whose screenFetch is the SAME DEFAULT-strength
         // ProxyScreen the router's DEFAULT fallbacks use, over the serving tenant's live gate (resolved lazily, so the
         // demo gate config armed just before the seed is the one that screens) and the seed target store - so the demo
         // proxy leg is screened by the identical mechanism, with no screening code added to the free DemoSeeder and no
@@ -70,7 +69,7 @@ public class DemoConfig {
     }
 
     /**
-     * The first-run guided-hardening step (audit P4): on a genuinely fresh deploy (no runtime configuration persisted),
+     * The first-run guided-hardening step: on a genuinely fresh deploy (no runtime configuration persisted),
      * log once the deployment-specific dials still at their open default so an operator sees them on first boot -
      * mirroring the loud auth-disabled boot warning, but at INFO since the secure floor is already active and this is
      * advisory guidance, not an insecure posture. Reads the store-backed {@link Settings} the same way the demo seeder

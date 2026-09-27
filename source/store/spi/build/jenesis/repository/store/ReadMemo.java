@@ -25,8 +25,8 @@ import module java.base;
  * <p><b>Bounded.</b> A memo remembers at most {@value #CAPACITY} keys and passes every later read through
  * unremembered, so an operation that enumerates (a rebuild, a walk) cannot grow a request's memory with the store.
  * Installed by the hosted-publish edge ({@code ScreenedDispatch}) around one screened write, where the duplicate
- * reads were measured (2026-09-12, the per-key print of a Maven publish: the serving pointer three times, the
- * review pointer twice, the version's document twice), and deliberately not around a served read: a download has no
+ * reads are (a Maven publish reads the serving pointer three times, the review pointer twice, the version's
+ * document twice), and deliberately not around a served read: a download has no
  * repeated key, and the proxy's coalesced follower re-tries its local read after a leader filled the store through
  * another instance - the one shape a memo would turn from a hit into a second fetch.
  *

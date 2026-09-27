@@ -27,7 +27,7 @@ import io.micrometer.observation.ObservationRegistry;
  *
  * <p><strong>The hard guard: only a completely empty repository is seeded.</strong> {@link #seed} passes over a
  * non-empty one with a log line and fetches nothing into it, which makes re-seeding structurally impossible (a seeded
- * repository is no longer empty) and turns the flag on in a used deployment into a harmless no-op. Seeding is
+ * repository is not empty) and turns the flag on in a used deployment into a harmless no-op. Seeding is
  * best-effort over the public registries: a per-artifact fetch or gate failure is logged and tolerated so one
  * unavailable suggestion never stops the rest. A shell runs this on a background thread after boot (never blocking
  * it), only when the {@code demo} flag is on.

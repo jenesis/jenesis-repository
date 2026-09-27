@@ -19,11 +19,10 @@ public final class Listings {
      * Answer a request with a stored listing: its validator, a {@code 304} when the client already holds it, a
      * {@code HEAD} answered from the header alone, and otherwise the body streamed against its recorded length.
      *
-     * <p>This was the same twelve lines in sixteen formats, and writing it once matters beyond tidiness. When the
-     * listings stopped being materialised, two of those copies turned out to have no validator of their own: they
-     * had been relying on the dispatcher to derive one from the bytes it was handed, which works only while the
-     * answer is buffered. Streaming removed their revalidation silently, and a polling client would have
-     * re-fetched a whole index forever. A format that answers through this helper cannot be missing a piece of it.
+     * <p>Writing it once matters beyond tidiness. A format relying on the dispatcher to derive a validator from the
+     * bytes it was handed has one only while the answer is buffered; streaming removes its revalidation silently,
+     * and a polling client would re-fetch a whole index forever. A format that answers through this helper cannot be
+     * missing a piece of it.
      *
      * <p>Nothing here materialises the document. The validator is the sha256 the listing's header already records
      * and the length is the size it records, so a listing the size of the repository costs a header and a copy
@@ -49,8 +48,7 @@ public final class Listings {
      * <p>An OCI {@code tags/list} is the case: the stored document is the names, and the answer wraps them in a
      * document of its own, so there are no stored bytes to copy - but the validator is still the stored document's
      * sha256, because that is what changes exactly when the answer does. Going through here is what stops such a
-     * format from silently losing revalidation the moment it stops buffering, which is the defect recorded above
-     * and has now happened three times.
+     * format from silently losing revalidation the moment it stops buffering, as recorded above.
      *
      * @param length the response's length, or {@code -1} when it is only known once the body has been written.
      */

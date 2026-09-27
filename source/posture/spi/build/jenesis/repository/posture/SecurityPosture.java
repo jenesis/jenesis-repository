@@ -23,7 +23,7 @@ public final class SecurityPosture implements SafetyAdvisor {
         List<SecurityAdvisory> advisories = new ArrayList<>();
 
         // 1. Per-credential authorization disabled: the instance serves every request anonymously. This is the single
-        //    source of truth for the boot "running ANONYMOUS/OPEN" WARN the server used to log ad hoc.
+        //    source of truth for the boot "running ANONYMOUS/OPEN" warning, which is not logged ad hoc.
         if (!config.flag("jenreg.auth", true)) {
             advisories.add(SecurityAdvisory.deployment("jenreg.auth.open", Severity.CRITICAL,
                     "Authorization is disabled - the instance is fully open",
@@ -63,10 +63,9 @@ public final class SecurityPosture implements SafetyAdvisor {
                     "jenreg.rate-limit", "600", DOCS + "#jenreg.ratelimit.unset"));
         }
 
-        // 4. There was an advisory here about jenreg.ui.admins=*, warning that every signed-in user held admin.
-        //    It is gone because the state it describes is now unreachable: both consoles refuse that value at
-        //    startup, so a deployment carrying it does not run to be advised about. An advisory about an
-        //    impossible configuration is worse than none - it reads as a live risk somebody must weigh.
+        // 4. No advisory about jenreg.ui.admins=*: both consoles refuse that value at startup, so a deployment
+        //    carrying it does not run to be advised about. An advisory about an impossible configuration is worse
+        //    than none - it reads as a live risk somebody must weigh.
 
         // 5. The dev security profile active: DevSecurityConfig replaces the production chain with a permissive
         //    local-only one (form login, in-memory users). Never intended outside a developer laptop.

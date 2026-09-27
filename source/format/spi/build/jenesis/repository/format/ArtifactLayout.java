@@ -46,7 +46,7 @@ import build.jenesis.repository.store.ArtifactStore;
  *     carrying a {@code .} or {@code ..} segment. This matters because the paths returned here are handed to eviction,
  *     which unpublishes and deletes under them; a traversal-shaped coordinate must not be able to aim that delete at a
  *     neighbouring key space.</li>
- * <li><b>Read purity (&sect;10).</b> {@link #describe} and {@link #paths(String, String)} derive from the path or the
+ * <li><b>Read purity.</b> {@link #describe} and {@link #paths(String, String)} derive from the path or the
  *     coordinate <em>alone</em> - no store read, no blob opened - so a read path can call them freely. Only
  *     {@link #paths(String, String, ArtifactStore)} may consult the store, and only to find a mirror the format itself
  *     recorded; it is therefore never called from a serving read path.</li>
@@ -85,13 +85,13 @@ public interface ArtifactLayout extends EcosystemLayout {
      * {@code /} rule the store screens a <em>scope segment</em> on ({@link ArtifactStore#segment}), stated once here
      * for every layout rather than re-derived per format: a Maven artifactId, an OCI tag and a module name are all
      * single segments, and a Maven groupId is checked component by component because its dots become separators.
-     * Shared so a new layout inherits the guard instead of being the next one to forget it (&sect;13).
+     * Shared so a new layout inherits the guard instead of being the next one to forget it.
      *
-     * <p><b>It says "the same rule" and now asks for it</b>, rather than restating it. It used to spell out
-     * {@code .}, {@code ..} and {@code \} here, which is the same rule only for as long as nobody adds to the
-     * original - and something did: the store's screen grew the C0 control characters, and this copy did not,
-     * so a tab-bearing coordinate was addressable here and refused at the key screen. That gap is not merely
-     * cosmetic, because the keys {@link #paths} composes are handed to eviction, and a delete is not screened the way
+     * <p><b>It says "the same rule" and asks for it</b>, rather than restating it. Spelling out {@code .}, {@code ..}
+     * and {@code \} here would be the same rule only for as long as nobody adds to the original - and a copy that fell
+     * behind would let a tab-bearing coordinate be addressable here and refused at the key screen. That gap is not
+     * merely cosmetic, because the keys {@link #paths} composes are handed to eviction, and a delete is not screened
+     * the way
      * a write is: the composing seam is the one that has to refuse. A guard that describes itself as a copy of
      * another is a guard that will fall behind it.
      */

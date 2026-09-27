@@ -12,8 +12,8 @@ import build.jenesis.repository.store.ServableNames;
  * type decides nothing - driven by the shared bounded primitive {@link BoundedChildren}, so a screened listing is also
  * a bounded, resumable one without a second page loop existing anywhere.
  *
- * <p><strong>Why the screen has to live inside the enumeration.</strong> Every format used to hand-write the same two
- * steps: list the container, then filter each name through a withhold probe. The steps are separable, so they get
+ * <p><strong>Why the screen has to live inside the enumeration.</strong> Hand-written per format, it is two steps:
+ * list the container, then filter each name through a withhold probe. The steps are separable, so they get
  * separated - by a refactor, by a new surface copied from an older one, by a format author who only knows the first
  * step - and a listing that forgot the second one publishes the <em>existence</em> of a quarantined or retracted
  * artifact, which is the disclosure the hold was meant to prevent. Here the two are one call and cannot be pulled

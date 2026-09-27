@@ -12,7 +12,7 @@ import build.jenesis.repository.format.ArtifactLayout;
 import build.jenesis.repository.walk.ArtifactWalk;
 
 /**
- * The reconcile sweep extracted from {@link StoreRepositoryInventory}: the §4/§5 convergence backstop that rebuilds the
+ * The reconcile sweep beside {@link StoreRepositoryInventory}: the convergence backstop that rebuilds the
  * <em>publish facts</em> from the live {@code publish/} pointer tree in both directions and sweeps the derived
  * per-version key spaces of no-longer-published versions. The publish facts are the {@code published}
  * section of the consolidated metadata document (its presence is membership of the published set), so the forward leg
@@ -101,7 +101,7 @@ final class InventoryReconciler {
         String version;
         if (OverrideRecords.ROOT.equals(parts[0])) {
             // overrides/<kind>/<eco>/<coord>/<ver>, every segment encoded - parsed by the space's one owner
-            // rather than re-spelled here, which is exactly the drift that was closed there.
+            // rather than re-spelled here, so the two spellings cannot drift.
             Optional<OverrideRecords.Row> row = OverrideRecords.parse(key);
             if (row.isEmpty()) {
                 return false;
@@ -214,8 +214,8 @@ final class InventoryReconciler {
         if (artifact.coordinate() == null || artifact.version() == null) {
             return false;                                                // a checksum or generated file - no section
         }
-        // Only where the version's absence from the published set is an answer rather than an unread plane
-        //: re-recording a version whose facts stand in the plane this deployment does not read would
+        // Only where the version's absence from the published set is an answer rather than an unread plane:
+        // re-recording a version whose facts stand in the plane this deployment does not read would
         // re-stamp its publish instant at now on every pass, silently resetting the age retention evicts by.
         Known<PublishedSection.Facts> membership = inventory.membership(
                 artifact.ecosystem(), artifact.coordinate(), artifact.version());

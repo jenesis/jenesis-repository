@@ -63,12 +63,12 @@ public final class OciQualityInspector implements QualityInspector {
      * <p>It is a well-formed manifest, so this inspector reads it without complaint - and that is the danger. It
      * has no licence of its own, so a deployment that holds an unlicensed artifact quarantines every cosign
      * signature pushed to it, and a withheld sidecar is never handed to an inspector: signature verification for
-     * this layout switches itself off on exactly the deployments strict enough to care. Measured 2026-09-15 with
-     * {@code license-unknown} at QUARANTINE, where the signature artifact was held and the image it covered
-     * published unjudged. The shipped default is ALLOW, which is why nothing had noticed.
+     * this layout switches itself off on exactly the deployments strict enough to care: with
+     * {@code license-unknown} at QUARANTINE the signature artifact is held and the image it covers publishes
+     * unjudged. The shipped default is ALLOW, which is why the default deployment does not show it.
      *
      * <p>A signature is not an artifact, and an inspector that claims one is the thing that can hide it - the same
-     * rule the Helm layout learned the hard way on the same day.
+     * rule the Helm layout follows.
      */
     private static boolean isSignatureTag(String path) {
         int manifests = path.indexOf("/manifests/");

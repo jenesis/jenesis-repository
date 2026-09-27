@@ -48,17 +48,19 @@ public class SettingsAdmin {
     /** How long a computed orphaned-data snapshot is reused before the multi-tenant store walk is repeated. The
      *  diagnostic's walk scans every tenant's declared key-spaces for each not-installed module (potentially the
      *  whole store), so repeating it on every modules-screen render would make the reader pay a deployment-wide scan
-     *  (§7 read-first). The diagnostic tolerates a short staleness by its own contract - it only counts,
+     *  (read-first: the reader pays for nothing a sweep could pre-do). The diagnostic tolerates a short staleness by
+     *  its own contract - it only counts,
      *  never acts, and reclaiming is an explicit operator purge - so the snapshot is memoised for this window and the
      *  walk runs at most once per window however often the screen is rendered. */
     private static final Duration ORPHAN_TTL = Duration.ofSeconds(60);
 
     /**
      * How long a collected {@link CollectedPosture} is reused before the effective-settings read behind it is
-     * repeated. The header badge and the Security-posture screen now read <em>the same collected report</em>
+     * repeated. The header badge and the Security-posture screen read <em>the same collected report</em>
      * rather than two differently-derived numbers, which means the collection rides <em>every</em> console view -
      * and a per-view read of the deployment's and the tenant's settings documents is exactly the cost
-     * &sect;7 keeps off a reader. So it is collected at most once per tenant per window however often a page renders,
+     * that must be kept off a reader. So it is collected at most once per tenant per window however often a page
+     * renders,
      * and the window is short (versus {@link #ORPHAN_TTL}'s minute) because this one is not a store walk but a
      * handful of small documents, and because posture is what an operator watches while changing settings.
      *
@@ -89,7 +91,7 @@ public class SettingsAdmin {
     private Map<String, StorageNamespaces.Report> orphanSnapshot;
     private Instant orphanExpiry = Instant.MIN;
     /** When the current memoised snapshot was actually walked (not the cache's expiry), so the modules screen shows how
-     *  fresh its orphaned-data diagnostic is (Principle 10: staleness is visible). {@code null} until the first walk. */
+     *  fresh its orphaned-data diagnostic is (staleness is visible). {@code null} until the first walk. */
     private Instant orphanScannedAt;
 
     /** The memoised collected posture per tenant (the empty string being the tenant-less, deployment-wide view), so
@@ -138,7 +140,7 @@ public class SettingsAdmin {
      *  reads its deploy-time bootstrap keys from - notably {@code secrets-key} ({@code JENREG_SECRETS_KEY}),
      *  the master key that envelope-encrypts a stored credential at rest. The console reads
      *  it from its own environment exactly as the {@code /api} path does, so a credential set through the console is
-     *  encrypted under the same key and refused the same way when none is configured (§9). A fixture that passes no
+     *  encrypted under the same key and refused the same way when none is configured. A fixture that passes no
      *  config resolves an unconfigured cipher, so any credential write it makes is refused - as at rest it must be. */
     public SettingsAdmin(ArtifactStore repositoryStore, Function<String, Optional<Pin>> pins,
                          Supplier<List<String>> tenants, AuditTrail audit, CurrentTenant current, ConsoleActor actor,
@@ -315,12 +317,12 @@ public class SettingsAdmin {
      *  deployment where the session selects the one accessible tenant.
      *
      *  <p><b>One collection, two surfaces.</b> This is also what the console header's posture badge counts.
-     *  The badge used to collect its own report over the raw Spring environment while this screen read the stored
-     *  chain, so an advisory raised by a <em>stored</em> dial was listed here and counted as zero there - and 
-     *  widened the gap by giving the screen tenant rows the badge never had. Both now read the value this method
+     *  A badge collecting its own report over the raw Spring environment while this screen read the stored chain
+     *  would count as zero an advisory raised by a <em>stored</em> dial that is listed here, and would miss the
+     *  screen's tenant rows. Both read the value this method
      *  returns, for the same session-selected tenant, so they cannot disagree about the chain, about the tenant, or
      *  about an advisory: the badge counts exactly the rows the screen it links to renders. The result is memoised
-     *  for {@link #POSTURE_TTL} because the badge rides every view (&sect;7); the collection instant travels with it
+     *  for {@link #POSTURE_TTL} because the badge rides every view; the collection instant travels with it
      *  so the screen can say how fresh it is, and a settings write through this console drops the memo at once.
      *
      *  <p>{@code deployment} is the caller's own environment lookup and is <em>not</em> part of the memo key: every
@@ -408,7 +410,7 @@ public class SettingsAdmin {
         }
     }
 
-    /** The instant the orphaned-data diagnostic snapshot the modules screen renders was last walked - Principle 10's
+    /** The instant the orphaned-data diagnostic snapshot the modules screen renders was last walked - the
      *  staleness line for that deployment-wide derived view, so an operator knows a just-purged module may linger in
      *  the counts for up to the {@code ORPHAN_TTL} window rather than reading a stale count as current. {@code null}
      *  before the first walk. Reflects the memoised snapshot's actual walk time, not the cache expiry, and is refreshed
@@ -690,7 +692,7 @@ public class SettingsAdmin {
      * badges never drift from what actually serves. The caller has read the {@code specification} once - the listing
      * for every row, {@link #routing} for one - so this reads nothing. An unconfigured repository is the default shape
      * - writable, with no fallbacks - and a malformed specification degrades to that same neutral shape rather than
-     * throwing out of a render (§10 render-what-you-have). {@link RepositoryShape#warnings} carries the valid-but-risky
+     * throwing out of a render (render what you have). {@link RepositoryShape#warnings} carries the valid-but-risky
      * flags (mixed screening strength, an unscreened or plaintext upstream) the parse logs loudly - surfaced by the
      * console as a non-blocking notice, not a refusal.
      */
@@ -753,7 +755,7 @@ public class SettingsAdmin {
     }
 
     /** The per-fallback screen-strength badge label - the operator-facing name of the {@code Upstream} fallback's
-     *  screening policy (item 2). */
+     *  screening policy. */
     private static String screeningLabel(RepositoryDefinition.Screening screening) {
         return switch (screening) {
             case DEFAULT -> "default";
@@ -762,7 +764,7 @@ public class SettingsAdmin {
         };
     }
 
-    /** A repository's parsed shape for the console (item 2): whether the definition is configured at runtime at
+    /** A repository's parsed shape for the console: whether the definition is configured at runtime at
      *  all ({@code configured}; an unconfigured or malformed one is the neutral default), whether it accepts uploads
      *  ({@code writable}), its ordered per-fallback badges, and any valid-but-risky {@code warnings} the console
      *  surfaces as a non-blocking notice. A {@code writable} repository with fallbacks is the host+proxy hybrid. */
@@ -785,7 +787,7 @@ public class SettingsAdmin {
         }
     }
 
-    /** One fallback's console badge (item 2): an {@code upstream} carries its URL {@code source}, its
+    /** One fallback's console badge: an {@code upstream} carries its URL {@code source}, its
      *  {@code store} (cached vs pass-through) and its {@code screening} strength ({@code default}/{@code harden}/
      *  {@code unscreened}); a repository-name fallback ({@code upstream=false}) carries its inner {@code repository}
      *  reference and no store/screen policy (the inner repository owns its own). */
@@ -828,7 +830,7 @@ public class SettingsAdmin {
         if (!NAME.matcher(name).matches()) {
             throw new IllegalArgumentException("Invalid repository name '" + name + "'.");
         }
-        // Write-time validation (§9): run the SAME parser the boot sweep uses BEFORE the
+        // Write-time validation: run the SAME parser the boot sweep uses BEFORE the
         // definition is stored, so a broken definition never reaches the store. A parse failure is refused LOUD and
         // NAMED - the repository name, what is wrong, and the fix - mirroring LiveConfig.sweepDefinitions so the
         // console write-surface refuses exactly what the boot sweep would. A valid-but-risky definition (unscreened,
@@ -1031,8 +1033,8 @@ public class SettingsAdmin {
      * One collected security-posture view and the instant it was collected - what both the Security-posture screen
      * renders and the header badge counts, handed out as one value so the two can never be reading different
      * collections. {@code collectedAt} is the report's own as-of: the collection is memoised for
-     * {@link #POSTURE_TTL} so the badge does not make every console view pay a settings read, and &sect;10
-     * asks that a derived view state its freshness rather than pass a memoised number off as a live one.
+     * {@link #POSTURE_TTL} so the badge does not make every console view pay a settings read, and a derived view
+     * states its freshness rather than pass a memoised number off as a live one.
      */
     public record CollectedPosture(ScopedPosture posture, Instant collectedAt) {
 

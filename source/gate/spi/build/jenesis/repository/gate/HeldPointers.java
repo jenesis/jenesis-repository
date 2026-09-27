@@ -11,16 +11,16 @@ import build.jenesis.repository.walk.Traversal;
 /**
  * The one descent over the live {@code publish/quarantine} review-pointer subtree, shared by the review queue
  * ({@code QuarantineLog.heldPaths}) and the cross-alias withhold guard ({@code HoldLifecycle.withheldByAnotherAlias}).
- * Both previously carried their own self-recursive descent that listed each level whole with
- * {@link ArtifactStore#list} - the unbounded-work class the bounded traversal primitives exist to remove - and both had to answer the same
- * awkward question about this particular tree, so the answer is written once here rather than twice.
+ * Neither carries a self-recursive descent that lists each level whole with {@link ArtifactStore#list} - the
+ * unbounded-work class the bounded traversal primitives exist to remove - and both have to answer the same awkward
+ * question about this particular tree, so the answer is written once here rather than twice.
  *
  * <p><strong>Why this is not simply {@link PagedTreeWalk} applied to the root.</strong> The shared bounded tree walk
  * defines a <em>leaf</em> as a key {@link ArtifactStore#exists} answers for, and it does not descend into one. A hold
  * pointer is a blob at {@code publish/quarantine<path>}, and on a flat/object store a held path can be a proper prefix
  * of another held path - both are independent keys - so a node here can be a pointer <em>and</em> a container at once.
  * Handing the root straight to the tree walk would deliver such a node and then silently drop every deeper hold
- * beneath it, which is the mirror image of the "leaf only" defect the review queue was fixed for. This class therefore
+ * beneath it, the mirror image of delivering only leaves. This class therefore
  * drives the shared primitives rather than replacing them: the tree walk enumerates each subtree, and the rare node
  * that is both a pointer and a container is re-queued as a fresh subtree root, so <em>every</em> stored pointer is
  * delivered exactly once and no level is ever listed whole.

@@ -6,7 +6,7 @@ import module java.base;
  * An upstream credential as an operator asks for one, the same on every surface that sets one: a {@code basic}
  * username and password, a {@code bearer} token, an arbitrary {@code header} and value for an API-key upstream, or
  * {@code aws} - a token the deployment's own AWS identity is issued for the host, renewed as it expires. The API,
- * the console and the CLI each used to translate a scheme into a header themselves.
+ * the console and the CLI all translate a scheme into a header through this, not each for themselves.
  */
 public sealed interface UpstreamCredential {
 

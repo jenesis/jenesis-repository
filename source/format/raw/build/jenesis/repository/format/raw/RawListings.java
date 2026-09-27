@@ -54,11 +54,11 @@ final class RawListings {
     /**
      * Emit a link per served child, in the order the scan yields them.
      *
-     * <p>The scan was already paged - a thousand names at a time, by cursor - so the names were never all in hand;
-     * what was, until this emitted instead of collecting, is the <em>page</em>: an entry per child of the folder,
-     * held in a map until the last one arrived. A raw folder has no bound on its children, and this generator runs
-     * on the first read of a folder page that does not exist yet, so that map was the whole folder on a request
-     * path. Emitting hands each link to the codec, which writes it and lets it go.
+     * <p>The scan is paged - a thousand names at a time, by cursor - so the names are never all in hand, and this
+     * emits rather than collecting the <em>page</em>: an entry per child of the folder held in a map until the last
+     * one arrived would be the whole folder on a request path, since a raw folder has no bound on its children and
+     * this generator runs on the first read of a folder page that does not exist yet. Emitting hands each link to the
+     * codec, which writes it and lets it go.
      *
      * <p>The scan's order is the sink's order, which is what the contract requires: the cursor it pages by is only
      * meaningful over one, so ascending is what it already yields.

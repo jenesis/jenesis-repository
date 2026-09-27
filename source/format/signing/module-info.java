@@ -1,10 +1,9 @@
 /**
  * The repository's OpenPGP signing key, shared by every format that signs one of its own documents.
  *
- * <p>It exists because there were two copies of it and a third was about to be written. {@code ReleaseSigner} in the
- * Debian format and {@code RpmMetadataSigner} in the RPM one were separate classes in separate modules, and 130 of
- * the RPM one's 151 lines were byte-identical to the Debian one; a Terraform provider registry signs its
- * {@code SHA256SUMS} the same way again. What differs between them is which document is signed and what the
+ * <p>Debian's {@code Release}, RPM's {@code repomd.xml} and a Terraform provider registry's {@code SHA256SUMS} are
+ * all signed the same way, so the signing is one module rather than a near-identical copy per format. What differs
+ * between them is which document is signed and what the
  * signature file is called, which is a statement about a protocol and stays with the format that speaks it.
  *
  * <p>It also carries the consumer half, {@code OpenPgpVerification}: reading what a third party's detached signature

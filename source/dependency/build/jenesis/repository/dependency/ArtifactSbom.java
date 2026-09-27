@@ -13,7 +13,7 @@ import build.jenesis.repository.store.ArchiveInflation;
  * Both SBOM standards are ingested at parity: an embedded SPDX document ({@code META-INF/sbom/*.spdx.json} or the
  * tag-value {@code *.spdx}/{@code *.spdx.txt}, or a {@code Sbom-Location} pointing at one) is recognised the same
  * way, and the extracted bytes are sniffed - an SPDX {@code spdxVersion} marker routes to {@link SpdxParser},
- * everything else to {@link CycloneDxParser} - so a jar shipping SPDX no longer contributes no edges at all.
+ * everything else to {@link CycloneDxParser} - so a jar shipping SPDX contributes its edges like any other.
  *
  * <p>Only the manifest and the one small SBOM entry are materialised: the jar is streamed through a
  * {@link JarInputStream} and the reader stops at the SBOM entry (which a jar places among its leading
@@ -23,12 +23,12 @@ import build.jenesis.repository.store.ArchiveInflation;
  * {@link Optional#empty()} - a genuine, permanent negative for a content-addressed blob, reached only by reading the
  * archive to its end. A read that fails part way instead - a truncated or interrupted stream, a socket reset mid-jar -
  * throws the {@link IOException} rather than returning empty, so the caller can tell an incomplete read from an
- * authoritative "no SBOM" and skip/retry it rather than recording a transient failure as a permanent fact
- * (§5). Either way one bad artifact never derails the sweep that scans every blob.
+ * authoritative "no SBOM" and skip/retry it rather than recording a transient failure as a permanent fact.
+ * Either way one bad artifact never derails the sweep that scans every blob.
  *
  * <p>Reaching that SBOM entry means inflating every entry the jar places before it, so the hunt is bounded at
  * {@link #MAX_SCAN} inflated bytes: a max-ratio deflated ("deflate bomb") or arbitrarily large entry standing before
- * (or in place of) the SBOM can no longer pin the reading thread inflating gigabytes - a jar that does not surface its
+ * (or in place of) the SBOM cannot pin the reading thread inflating gigabytes - a jar that does not surface its
  * SBOM within the budget is read as carrying none (a deterministic, permanent negative for that blob). This is what
  * lets {@code /api/sbom} decompress an untrusted hosted jar on a request thread safely; it is the same concern the
  * shared {@code ArchiveWalk} bound answers for the publish-path archive walks, kept separate here because this budget
@@ -65,7 +65,7 @@ public final class ArtifactSbom {
      * a content-addressed blob. A read that fails part way - a truncated or interrupted stream, a socket reset mid-jar
      * - is <em>not</em> a negative: it throws the {@link IOException} rather than swallowing it into an empty result,
      * so the caller can tell an incomplete read from an authoritative "no SBOM" and skip/retry it rather than caching
-     * a transient failure as a permanent fact (§5). The caller owns {@code artifact} and closes it; this
+     * a transient failure as a permanent fact. The caller owns {@code artifact} and closes it; this
      * method consumes only as far as the SBOM entry.
      */
     public static Optional<DependencyGraph> graph(InputStream artifact) throws IOException {

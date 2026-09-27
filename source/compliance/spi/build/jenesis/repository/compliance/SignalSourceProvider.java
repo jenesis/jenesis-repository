@@ -31,19 +31,19 @@ import build.jenesis.repository.store.Providers;
  * <li><b>Idempotency / replay.</b> {@link #create} builds a client, never a fetch: resolving twice must not refresh
  *     a feed, spend a rate-limit token or move a staleness stamp - and it must not read, write or probe the
  *     {@link SignalContext#snapshots() snapshot space} either. Refreshing is an explicit, idempotent write-role
- *     action (&sect;10).</li>
+ *     action.</li>
  * <li><b>Absence sentinel.</b> {@link #create} declares "I am not configured" with an empty {@link Optional}, and
  *     each contract's own {@code resolve} folds an empty candidate set into its identity-comparable neutral element
  *     - never {@code null}, and never a value that reads as "clean". {@code null} is never a legal return from
  *     {@link #name()}, {@link #signals()} or {@link #requiredConfig()} either.</li>
- * <li><b>Selection failure (&sect;9).</b> This is an additive SPI: every enabled provider contributes and there is
+ * <li><b>Selection failure.</b> This is an additive SPI: every enabled provider contributes and there is
  *     no selection to miss. The uniform gate is enablement, not selection - {@code jenreg.<name>=false}
  *     switches one off and an unset {@link #requiredConfig()} key self-disables one with a single log line, so a
  *     licensed feed turns on by supplying its credential. What is <em>not</em> tolerated is a packaging error: two
  *     providers answering to one name, or one provider registered twice, throw rather than letting discovery order
  *     silently drop a feed's signals - a vulnerability nobody reported is indistinguishable from a clean
  *     artifact.</li>
- * <li><b>Tenant scoping (&sect;6).</b> There is none, deliberately: a signal source is a <em>deployment</em>
+ * <li><b>Tenant scoping.</b> There is none, deliberately: a signal source is a <em>deployment</em>
  *     singleton. The CISA catalogue, the EPSS model and the OSV database are the same public data for every tenant
  *     and are refreshed once, so {@link SignalContext} carries no tenant and offers no way to supply one - compare
  *     {@link VexProvider#over VexProvider.over(tenant, store, config)}, whose first parameter <em>is</em> the tenant
@@ -55,10 +55,10 @@ import build.jenesis.repository.store.Providers;
  *     {@link #name()} - so one signal can reach neither a tenant's data nor another signal's snapshots. The
  *     {@code config} lookup behind {@link SignalContext#setting} is likewise the deployment-wide effective view; a
  *     provider must read every dial through it rather than an environment variable of its own.</li>
- * <li><b>Error visibility (&sect;9).</b> {@link #signals()} must match what {@link #create} returns; resolution
+ * <li><b>Error visibility.</b> {@link #signals()} must match what {@link #create} returns; resolution
  *     still filters the created object by {@code instanceof}, so a drifting declaration can only under- or
  *     over-advertise, never mis-route a signal into another contract's merge.</li>
- * <li><b>Read purity (&sect;10).</b> A query against a created source renders its persisted snapshot; the fetch is
+ * <li><b>Read purity.</b> A query against a created source renders its persisted snapshot; the fetch is
  *     the refresh path's business, so a gate decision stands when the vendor is down.</li>
  * <li><b>Staleness.</b> A created source surfaces when it last refreshed <em>and</em> whether it is answering from a
  *     real fetch at all, through the one {@link SignalSource#freshness()} accessor every contract in the family
@@ -80,7 +80,7 @@ import build.jenesis.repository.store.Providers;
  * <li><b>Ordering / determinism.</b> Discovery order never shows through: providers are name-sorted before anything
  *     is created, so {@link #installed} and {@link #named} answer the same set and the same attributed order on
  *     every module path, and every contract's merge is order-insensitive by construction.</li>
- * <li><b>Durability / delivery (&sect;13).</b> Creating a source commits nothing. What a source persists it persists
+ * <li><b>Durability / delivery.</b> Creating a source commits nothing. What a source persists it persists
  *     into {@link SignalContext#snapshots()} only - never a file, never a second store, never the artifact publish
  *     path (a mirrored catalogue is derived external data, not a served artifact, so no publication interceptor or
  *     observer fires for it). The durable source of truth is that space's own compare-and-set pointer: the commit
@@ -131,15 +131,13 @@ import build.jenesis.repository.store.Providers;
  * <p><b>The switch is read one way, and the default is stated rather than implied.</b> A source asks
  * {@link SignalContext#enabled} and passes its own default.
  *
- * <p>Both halves of that used to be divergent. Six sources read the switch through {@code Features} and six through
- * {@code Boolean.parseBoolean}, which disagree on every value that is neither "true" nor "false" -
- * {@code jenreg.snyk=yes} enabled Snyk while {@code jenreg.osv=yes} disabled OSV, though the settings surface
- * documents {@code jenreg.<name>=false} as the one thing that switches a source off. That was an accident of which
- * idiom a provider copied, and asking the context is what removes it. It could not simply be fixed in place: half
- * the source modules do not require the store SPI, which is why they had reimplemented the read rather than calling
- * {@code Features} - so the shared answer has to live on the context they already hold.
+ * <p>{@code Features} and {@code Boolean.parseBoolean} disagree on every value that is neither "true" nor "false" -
+ * one reads {@code jenreg.snyk=yes} as enabled where the other reads {@code jenreg.osv=yes} as disabled - though the
+ * settings surface documents {@code jenreg.<name>=false} as the one thing that switches a source off. Asking the
+ * context gives every source the one reading. It lives on the context because half the source modules do not
+ * require the store SPI, so the shared answer has to live on something they already hold.
  *
- * <p>The <em>defaults</em> differ on purpose, and are now written at the call site rather than implied by the
+ * <p>The <em>defaults</em> differ on purpose, and are written at the call site rather than implied by the
  * idiom. A public no-credential feed defaults OFF, because an unconfigured deployment must consult no advisory API
  * - a contract with a test of its own - and the shipped boot module raises those five as part of its secure floor.
  * A licensed feed defaults on and disables itself when its credential is absent, reaching the same place by a

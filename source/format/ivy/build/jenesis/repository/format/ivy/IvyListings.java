@@ -19,7 +19,7 @@ import build.jenesis.repository.store.StoredListing;
  *
  * <p>So the listing is a stored document maintained on the write path, not a rendering: a publish adds the one
  * revision, and a read streams the document as it is. The on-read generation survives as the document's
- * <em>generator</em> - the first materialisation for a repository published to before this existed, and the
+ * <em>generator</em> - the first materialisation for a repository that holds revisions but no document yet, and the
  * repair path afterwards - never as the read path.
  *
  * <h2>What a withheld revision must do to it</h2>

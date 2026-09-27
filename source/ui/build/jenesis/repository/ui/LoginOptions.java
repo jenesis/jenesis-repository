@@ -10,10 +10,10 @@ import build.jenesis.repository.icon.IconResource;
  * login page flattens all of them, and with none it shows the "no sign-in module" notice.
  *
  * <p>It is the reading half of the login seam, beside {@link LoginContributor}, which is the installing half - and it
- * lives here for the same reason that one does. The console used to build its own list by reaching into Spring
- * Security's {@code ClientRegistrationRepository} directly, which meant it could only ever show OAuth2 and OIDC: a
- * mechanism that is not an OAuth2 client - SAML, a certificate, anything a module might add - contributed a button to
- * one console and nothing at all to the other, on a page whose entire job is to list what a user may sign in with.
+ * lives here for the same reason that one does. A console building its own list by reaching into Spring Security's
+ * {@code ClientRegistrationRepository} directly could only ever show OAuth2 and OIDC: a mechanism that is not an
+ * OAuth2 client - SAML, a certificate, anything a module might add - would contribute a button to one console and
+ * nothing at all to the other, on a page whose entire job is to list what a user may sign in with.
  */
 public interface LoginOptions {
 

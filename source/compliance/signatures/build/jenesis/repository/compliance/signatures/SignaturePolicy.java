@@ -70,8 +70,8 @@ final class SignaturePolicy implements GatePolicy {
      * among them, because "carries no signature" at screening time is usually a statement about the ordering of two
      * requests - a deploy sends the {@code .asc} after the artifact it signs - rather than about the artifact.
      *
-     * <p>Written once because the licence twin of this dimension was not: its unknown-verdict default lived in three
-     * places, a change moved two of them, and the product reported a floor it was not applying.
+     * <p>Written once: a default that lives in several places lets a change move some of them, and the product then
+     * reports a floor it is not applying.
      */
     static final String INVALID_DEFAULT = "REJECT";
     static final String UNTRUSTED_DEFAULT = "QUARANTINE";

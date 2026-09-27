@@ -5,12 +5,11 @@ import module java.base;
 /**
  * The shared {@link GatePolicyProvider} plumbing, held as one immutable value for the length of a single
  * {@link GatePolicyProvider#create create} call. Around its own policy object every dimension - the licence policy,
- * the version floor, the known-exploited catalogue - used to hand-roll the same three things: read its dials out of
+ * the version floor, the known-exploited catalogue - needs the same three things: read its dials out of
  * the {@code config} lookup, yield {@linkplain Optional#empty() nothing} when the deployment has not configured the
- * dimension, and throw when it configured it wrongly. The eight dimensions carried seven copies of the
- * verdict-with-a-default parse, five copies of the comma-separated-list parse and a null-or-blank guard on every
- * single read; those are stated once here, so a ninth dimension arrives at parity with its peers (&sect;13) instead of
- * re-deriving them.
+ * dimension, and throw when it configured it wrongly. The verdict-with-a-default parse, the comma-separated-list
+ * parse and the null-or-blank guard on every read are stated once here, so a new dimension arrives at parity with
+ * its peers instead of re-deriving them.
  *
  * <p>This is composition, not a base class: a provider still implements {@link GatePolicyProvider} directly and
  * still owns every decision that is genuinely its own - which keys it reads, what "nothing to gate on" means for
@@ -24,7 +23,7 @@ import module java.base;
  * a bare {@code Verdict.valueOf} that says only <em>"No enum constant Verdict.MAYBE"</em>, that failure told an
  * operator nothing about <em>which</em> of the deployment's dials to fix - and on the boot / scheduled-re-read path
  * there is no settings-write context to add it back. Every read here therefore fails with the offending key in the
- * message (&sect;9). Reaching for a default instead is never an option: silently gating on
+ * message. Reaching for a default instead is never an option: silently gating on
  * {@code QUARANTINE} when the operator asked for {@code REJECT} loosens the gate without saying so.
  *
  * <h2>Nothing configured is an absent dimension, never an inert one</h2>
@@ -133,7 +132,7 @@ public final class GateDimension {
     }
 
     /** The stripped value of {@code key}, or empty when it is unset or blank - the null-or-blank guard every read
-     *  used to write out, so "unset" and "set to spaces" cannot diverge between two dimensions. */
+     *  needs, so "unset" and "set to spaces" cannot diverge between two dimensions. */
     public Optional<String> text(String key) {
         String value = config.apply(key);
         return value == null || value.isBlank() ? Optional.empty() : Optional.of(value.strip());

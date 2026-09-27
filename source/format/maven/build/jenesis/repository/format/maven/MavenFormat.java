@@ -22,7 +22,7 @@ import build.jenesis.repository.format.PublishedExport;
  * The Maven layout ({@code /maven/...}): a {@code PUT} stores the blob content-addressed through the shared
  * {@link Publication} store - including a {@code maven-metadata.xml} and its checksum siblings, stored verbatim like
  * any artifact - and a {@code GET} serves the stored bytes byte-for-byte, an absent one a 404. Deriving
- * {@code maven-metadata.xml} on read is no longer the default: it is the opt-in {@link MavenMetadata#COMPUTE_SETTING}
+ * {@code maven-metadata.xml} on read is not the default: it is the opt-in {@link MavenMetadata#COMPUTE_SETTING}
  * computation, read off the exchange, which reconciles a stored document's version list (or derives one for a
  * coordinate no client uploaded). When the uploaded artifact is a
  * modular jar, it is cross-published into the Jenesis module layout: this format reads the module name and hands it to
@@ -81,7 +81,7 @@ public final class MavenFormat implements RepositoryFormat, ProxyFormat, Artifac
      * upstream this layout mirrors has demanded one on every release since the early 2010s. And a Sigstore bundle at
      * {@code <artifact>.sigstore.json}, the file the sigstore-maven-plugin writes for each file it publishes and
      * Central has copied and validated beside the {@code .asc} since 2025, <em>optional</em> because Central does not
-     * require it: measured 2026-09-14, 2 of the 373 artifacts this product's own build pins carry one. The bundle is
+     * require it and few artifacts carry one. The bundle is
      * keyless - it names a certificate identity under an OIDC issuer rather than a key - so a bundle that verifies is
      * VALID only where an operator's pin names that identity, and otherwise UNTRUSTED under the same dial a
      * signature by an unknown key falls under; holding the Sigstore root vouches for nobody.
@@ -174,15 +174,15 @@ public final class MavenFormat implements RepositoryFormat, ProxyFormat, Artifac
         //
         // The pointer is resolved through blob(), NOT located(): this method answers "which request paths does this
         // version OCCUPY", which is a fact about stored state, and located() answers "which of them would a GET
-        // serve", which is a fact about the current hold. Asking the serving question here made the mirror vanish
-        // from every caller the moment the jar was held - and the callers are the retroactive holds' own converge
-        // pass, eviction, reconciliation and the release path's cross-alias exclusion set. Driven consequences
-        //: a hold that crashed between the coordinate pointer and the mirror pointer could never converge,
-        // because the re-run no longer saw the path it had not yet held; an eviction of a held version left the
-        // mirror pointing at a blob it had just reclaimed; and a release of the coordinate could not lift the
-        // content-addressed marker, because the version's OWN mirror - missing from the exclusion set - read as a
-        // foreign alias still holding those bytes. The blob stat keeps the old "no jar, no mirror" degrade for a
-        // torn pointer, since a module name cannot be read out of content the store does not hold.
+        // serve", which is a fact about the current hold. Asking the serving question here would make the mirror
+        // vanish from every caller the moment the jar was held - and the callers are the retroactive holds' own
+        // converge pass, eviction, reconciliation and the release path's cross-alias exclusion set: a hold that
+        // crashed between the coordinate pointer and the mirror pointer could never converge, because the re-run
+        // would not see the path it had not yet held; an eviction of a held version would leave the mirror pointing
+        // at a blob it had just reclaimed; and a release of the coordinate could not lift the content-addressed
+        // marker, because the version's OWN mirror - missing from the exclusion set - would read as a foreign alias
+        // still holding those bytes. The blob stat keeps the "no jar, no mirror" degrade for a torn pointer, since a
+        // module name cannot be read out of content the store does not hold.
         try {
             Publication publication = new Publication(store);
             Optional<String> hash = publication.blob(mavenDir + "/" + artifact + "-" + version + ".jar");
@@ -245,8 +245,8 @@ public final class MavenFormat implements RepositoryFormat, ProxyFormat, Artifac
         if (exchange.method().equals("PUT")) {
             // (1): a maven-metadata.xml (and its checksum siblings) is stored verbatim like any artifact rather
             // than dropped, so a publisher-authored document round-trips even when the server does not derive one.
-            // Screening rides the ingress edge now: this branch only lays the body out and responds 201 -
-            // the body reaching here has already been screened to ACCEPT, so verdicts are no longer the format's call.
+            // Screening rides the ingress edge: this branch only lays the body out and responds 201 -
+            // the body reaching here has already been screened to ACCEPT, so verdicts are not the format's call.
             layout(store, path, exchange.requestStream());
             if (metadataCompute(exchange)) {
                 // The computed maven-metadata.xml is a stored listing the upload maintains, not a read-time
@@ -317,10 +317,10 @@ public final class MavenFormat implements RepositoryFormat, ProxyFormat, Artifac
 
     /** Lay an already-screened body out into the Maven namespace: store it content-addressed ({@link
      *  Publication#storeBlob}, streamed straight to storage, never buffered whole) and then run the layout sequence
-     *  below over the stored blob. Screening no longer happens here: the ingress edge screens the body to
+     *  below over the stored blob. Screening does not happen here: the ingress edge screens the body to
      *  ACCEPT and restreams the stored blob into this layout, so a body reaching {@code layout} is already accepted and
-     *  there is no verdict to map - the redundant format-embedded screen pass is dropped, the essential link (what
-     *  {@link Publication#located} serves over) is kept. The restreamed body dedupes to the same {@code blobs/<hash>}, so reading
+     *  there is no verdict to map - only the essential link (what {@link Publication#located} serves over) is made. The
+     *  restreamed body dedupes to the same {@code blobs/<hash>}, so reading
      *  the module name back is identical to before. Returns the content-addressed blob hash. */
     public static String layout(ArtifactStore store, String path, InputStream body) throws IOException {
         Publication.Blob blob = new Publication(store).stored(body);
@@ -415,9 +415,10 @@ public final class MavenFormat implements RepositoryFormat, ProxyFormat, Artifac
      * non-modular - the single read the layout cross-link and its rebuild share, so both act on the same module.
      *
      * <p>Read from {@link #MODULE_INDEX} when it has been recorded, else out of the jar and then recorded, an empty
-     * body standing for a non-modular jar so it is not opened again either. The rebuild pass used to open every
-     * Maven jar in the repository on every pass for this one string - a full GET of the artifact bytes per jar per
-     * day. A store that refuses the record (read-only) still answers the name; it just pays the jar again next time.
+     * body standing for a non-modular jar so it is not opened again either. Without the record the rebuild pass would
+     * open every Maven jar in the repository on every pass for this one string - a full GET of the artifact bytes per
+     * jar per day. A store that refuses the record (read-only) still answers the name; it just pays the jar again next
+     * time.
      */
     static String moduleName(ArtifactStore store, String hash) throws IOException {
         Optional<ArtifactStore.Versioned> recorded = store.readVersioned(MODULE_INDEX + "/" + hash);
@@ -540,7 +541,7 @@ public final class MavenFormat implements RepositoryFormat, ProxyFormat, Artifac
                 // blob is inert until a pointer references it, so a fill that fails verification links nothing and
                 // needs no retraction - the same order the OCI leg holds a mismatched digest to (a layer lands only
                 // under its own true hash, so the requested key is never created). Storing first is what lets the
-                // digest be computed while the body streams, without buffering it (§1); the unreferenced blob a
+                // digest be computed while the body streams, without buffering it; the unreferenced blob a
                 // refused fill leaves behind is exactly the object garbage collection exists to reclaim.
                 MessageDigest sha1 = sha1();
                 Publication.Blob stored = new Publication(store).stored(new DigestInputStream(download.body(), sha1));
@@ -628,7 +629,7 @@ public final class MavenFormat implements RepositoryFormat, ProxyFormat, Artifac
      * Gradle acts on it - it falls back to the POM, picks a variant by the old rules and reports
      * {@code BUILD SUCCESSFUL}. So spelling a refusal as a 404 does not withhold the descriptor, it substitutes a
      * different resolution for it, silently, and the operator sees a green build over a repository that detected a
-     * problem and said nothing (&sect;9).
+     * problem and said nothing.
      *
      * <p>This is the same split the {@code maven-metadata.xml} leg above makes for the same reason, and it is
      * deliberately narrow: {@code .sha1}/{@code .md5} siblings keep the plain decline, because a checksum answers

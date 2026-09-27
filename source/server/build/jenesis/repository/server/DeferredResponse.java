@@ -10,14 +10,13 @@ import build.jenesis.repository.store.ArtifactDescriptor;
  *
  * <p>The response to an accepted write is written by the format inside the edge's layout callback, and the servlet
  * exchange commits it the moment the format closes its stream - before {@code Publication.commit} has fired the
- * after-commit observers. The client was therefore acknowledged while the publish's consequences were still running,
- * and its next request raced them. Measured 2026-09-12 by the soak, with {@code signature-missing} at QUARANTINE so
- * that a Maven {@code .asc} releases the artifact it completes: the release ran behind the sidecar's {@code 201}, a
- * jar completed a moment earlier answered {@code 404} to a reader for the length of its own release (twenty-five
- * times in a quarter of an hour), and one jar publish answered {@code 500} because its hold record was written into a
- * directory that the POM's release - still running behind the POM signature's {@code 201} - had just pruned
- * ({@code NoSuchFileException} under {@code holds/signature/}). Everything an accepted publish causes now happens
- * before the client hears that it was accepted.
+ * after-commit observers. Unheld, the client would be acknowledged while the publish's consequences were still
+ * running, and its next request would race them: with {@code signature-missing} at QUARANTINE, so that a Maven
+ * {@code .asc} releases the artifact it completes, the release would run behind the sidecar's {@code 201}, a jar
+ * completed a moment earlier would answer {@code 404} to a reader for the length of its own release, and a jar
+ * publish could answer {@code 500} because its hold record was written into a directory that the POM's release -
+ * still running behind the POM signature's {@code 201} - had just pruned. Everything an accepted publish causes
+ * happens before the client hears that it was accepted.
  *
  * <p>Only the response side is held; the request side is the wrapped exchange's. A write's response is a status,
  * a few headers and at most a small document, so keeping it costs nothing measurable, and a streamed read never

@@ -8,7 +8,7 @@ import module java.base;
  *
  * <p><b>Why the key carries the order.</b> A roll-up index keyed by the entry's own id - a content hash, a scan id -
  * is in no useful order at all, so a screen wanting "the newest first" has to read every row and sort. That is the
- * shape &sect;10 forbids on a request path, and it is not fixable by paging the id-keyed namespace, because a page of
+ * shape a request path must not take, and it is not fixable by paging the id-keyed namespace, because a page of
  * an arbitrary order is an arbitrary subset rather than the newest. Putting the order <em>in the key</em> is what
  * makes the two compatible: the store's own ordering is the answer, so one bounded page is both correct and cheap.
  *

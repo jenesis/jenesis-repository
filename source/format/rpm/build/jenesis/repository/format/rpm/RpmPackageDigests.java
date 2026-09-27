@@ -103,8 +103,8 @@ final class RpmPackageDigests {
      * <p>{@linkplain ProxyRelay.Declared#unreadable Unreadable} - the fill is declined - when the declaring index could
      * not be read at all: a {@code repomd.xml} the transport never reached or that answered a {@code 429}/{@code 5xx}/
      * challenge, a malformed {@code repomd.xml} or {@code primary}, a primary index that does not answer, one past the
-     * decompression bound, and one whose URL the outbound screen refuses. Before this, the first two of those returned
-     * the same "declares no checksum" as a plain file mirror and the package was cached with no point check at all.
+     * decompression bound, and one whose URL the outbound screen refuses. None of those may answer the same "declares
+     * no checksum" as a plain file mirror, or the package would be cached with no point check at all.
      *
      * @throws IOException when the <em>store</em> fails while the index map is read or rebuilt - a real failure of this
      *                     repository, not a statement about the upstream, so it is not folded into a verdict
@@ -254,14 +254,14 @@ final class RpmPackageDigests {
         // as-is - so an index href pointing at a loopback, metadata or plaintext host would be fetched server-side from
         // here. Screened by the one shared outbound call every peer leg makes: the http(s)/host
         // capability floor no dial lifts, then the upstream's own ORIGIN admitted, then the full transport-and-host
-        // screen on anything cross-origin under the one ProxyLeg.ALLOW_INTERNAL dial. Two things moved: this leg used
-        // to admit an index href naming NO host at all (resolvesToPrivate(null) answers false), which the importer's
-        // HttpRequest.newBuilder then threw on, and its same-origin test lived here as a private copy.
+        // screen on anything cross-origin under the one ProxyLeg.ALLOW_INTERNAL dial. An index href naming NO host at
+        // all is refused - resolvesToPrivate(null) answers false, so a host screen alone would admit it and the
+        // importer's HttpRequest.newBuilder would throw on it - and the same-origin test is the shared one.
         String refusal = OutboundTargets.advertisedRefusal(index, repository, allowInternal);
         if (refusal != null) {
             // A distinct exception rather than a null Digest, because a null here means "the repodata declares no
             // checksum" and downgrades the fill to UNVERIFIED caching - the one outcome a refused index must never
-            // produce (§9). RpmFormat.cache turns it into the clause-2 decline: nothing cached,
+            // produce. RpmFormat.cache turns it into the clause-2 decline: nothing cached,
             // nothing served, the local 404 stands, and a WARN naming the dial.
             throw new RefusedTarget("Refusing the primary index at " + index + ": " + refusal
                     + " (set proxy-allow-internal to permit an internal or http target)");

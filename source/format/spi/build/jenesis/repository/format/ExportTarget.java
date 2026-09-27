@@ -19,10 +19,10 @@ import module java.base;
  * <li><b>Thread-safety.</b> One export job drives one target from one thread; an implementation need not be
  *     thread-safe.</li>
  * <li><b>Absence sentinel.</b> {@link #credential()} is empty for an anonymous target, never {@code null}.</li>
- * <li><b>Streaming (&sect;1).</b> A request body is opened when it is sent and streamed; an implementation never
+ * <li><b>Streaming.</b> A request body is opened when it is sent and streamed; an implementation never
  *     buffers it whole. A response body is read up to a small cap - enough for the message a registry answers a
  *     refusal with, never an artifact - and {@link #sha256} hashes what it reads without holding it.</li>
- * <li><b>Error visibility (&sect;9).</b> {@link #send} throws for a request that could not be made (no route, a
+ * <li><b>Error visibility.</b> {@link #send} throws for a request that could not be made (no route, a
  *     refused address, a timeout); a request the target answered - whatever its status - is a {@link Response}, and
  *     judging it is the exporter's.</li>
  * <li><b>Traversal refusal.</b> A path that would leave the configured URL - a {@code ..} segment, an absolute URL, a

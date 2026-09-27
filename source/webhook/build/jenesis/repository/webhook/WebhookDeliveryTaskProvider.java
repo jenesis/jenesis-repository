@@ -16,14 +16,12 @@ import build.jenesis.repository.maintenance.MaintenanceTaskProvider;
  * <p>The cadence is held as an {@link IntervalSetting} constant and rendered into {@link WebhookSettingsContributor}
  * from it, so the catalogue default cannot drift from the code.
  *
- * <p><b>"Off unless enabled" was the sentence above and not what shipped.</b> The catalogue declared the key
- * {@code true} and this gate read the two-argument {@link Features#enabled(UnaryOperator, String)}, which answers
- * on for a key nobody has stored - so every deployment ran the drain, and one that had configured no endpoint had
- * each publish write an outbox note that the next minute's drain deleted. It surfaced as a cost measurement: the
- * walk's per-object figure moved on whichever backing's window that minute elapsed in, and was recorded for three
- * days as a difference between object stores. The enablement now says {@code false} in both places, and the
- * three-argument form is the one to read for any key the catalogue defaults off - which is precisely the drift
- * that form exists to prevent.
+ * <p><b>"Off unless enabled" is what the gate reads, not only what the sentence says.</b> The two-argument
+ * {@link Features#enabled(UnaryOperator, String)} answers on for a key nobody has stored, so reading it would run the
+ * drain on every deployment, and one that had configured no endpoint would have each publish write an outbox note
+ * that the next minute's drain deleted - a cost that shows up only as a moving per-object figure in the walk. The
+ * enablement says {@code false} in both places, and the three-argument form is the one to read for any key the
+ * catalogue defaults off - which is precisely the drift that form exists to prevent.
  */
 public final class WebhookDeliveryTaskProvider implements MaintenanceTaskProvider {
 

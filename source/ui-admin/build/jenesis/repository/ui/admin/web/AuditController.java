@@ -29,7 +29,7 @@ public class AuditController {
                         @RequestParam(name = "after", defaultValue = "") String after,
                         @RequestParam(name = "limit", defaultValue = "200") int limit, Model model) throws IOException {
         int size = Math.clamp(limit, 1, 500);
-        // A bounded slice per render, resumed by cursor, never the whole (unrotated) trail (§7); the CSV export still
+        // A bounded slice per render, resumed by cursor, never the whole (unrotated) trail; the CSV export still
         // streams it all.
         AuditTrail.Page page = audit.query(tenant(), null, null, action, after, size);
         model.addAttribute("events", page.events());

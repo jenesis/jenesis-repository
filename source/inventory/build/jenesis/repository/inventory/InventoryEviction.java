@@ -101,8 +101,8 @@ final class InventoryEviction {
     }
 
     void evict(Release release) throws IOException {
-        // Nothing is destroyed unless the pointers can be found. Before this the layout-driven unpublish legs
-        // below simply no-opped for an absent format while every delete under them ran unconditionally.
+        // Nothing is destroyed unless the pointers can be found: the layout-driven unpublish legs below no-op for an
+        // absent format, and every delete under them would still run unconditionally.
         if (!pointersEnumerable(release.ecosystem(), release.coordinate(), release.version())) {
             throw refusal("eviction", release.ecosystem(), release.coordinate(), release.version());
         }
@@ -192,9 +192,8 @@ final class InventoryEviction {
         // Every kind's hold-override marker goes with the version (overrides/kev, overrides/license,
         // overrides/reachability, any future kind): an override records a human's clearance of a hold for THIS stored
         // version, so if the version is ever re-published it is re-screened and re-reviewed, the conservative
-        // direction. Composed through OverrideRecords, the one owner of that key space - this reaper used to spell the
-        // key its own way (raw ecosystem and version, encoded coordinate) while the reachability kind wrote a
-        // fully-encoded one, so evicting a version silently STRANDED that kind's marker, which would then suppress the
+        // direction. Composed through OverrideRecords, the one owner of that key space - a reaper spelling the key
+        // its own way would silently STRAND a marker written in another spelling, which would then suppress the
         // re-screen of a later re-publish. The kind index is enumerated rather than hard-coded so an
         // uninstalled kind's markers are reaped too: absence must not strand a row any more than it may delete one.
         for (String kind : OverrideRecords.kinds(store)) {
@@ -225,7 +224,7 @@ final class InventoryEviction {
      * Reclaim a <em>re-heatable cached fallback</em> blob under quota/disk pressure:
      * discard the bytes (unpublish every pointer the version occupies so the now-unreferenced blob is garbage-collected)
      * but <b>retain the {@code origin} and {@code verdict} sections</b> of the meta document - the "durable records
-     * beside transient bytes" spine, so audit survives the eviction and a pull-through can re-heat the entry (§5). The
+     * beside transient bytes" spine, so audit survives the eviction and a pull-through can re-heat the entry. The
      * decision is made off the durable {@code origin} record: a version carrying a {@code local-upload} row is
      * system-of-record and is <b>never</b> cache-evicted (returns {@code false}, nothing touched); a version whose only
      * origin is one or more {@code fallback} rows is re-heatable and is reclaimed (returns {@code true}). A version with
