@@ -163,36 +163,30 @@ public final class RiskClient extends ClientCalls {
         return response.body();
     }
 
-    /** Record a human verdict on one finding. */
-    public void reviewFinding(String repo, String coordinate, String id, String verdict, String note)
-            throws IOException, InterruptedException {
-        Map<String, String> fields = new LinkedHashMap<>();
-        fields.put("coordinate", coordinate);
-        fields.put("id", id);
-        fields.put("verdict", verdict);
-        if (note != null) {
-            fields.put("note", note);
-        }
-        HttpResponse<String> response = send("POST", "/api/findings/review?repo=" + enc(repo),
-                body(fields), "application/json");
-        require(response, 200, "review finding " + id);
+    /**
+     * One finding, named the way the ledger keys it: the version it was found in, the scanner that reported it and
+     * its id within that scanner. The findings listing prints the first three on each version's heading and the last
+     * two on each row, so what a person reads is what they type back.
+     */
+    public record FindingKey(String ecosystem, String coordinate, String version, String source, String id) {
     }
 
-    /** Waive a finding, with a reason and an optional expiry. */
-    public void waiveFinding(String repo, String coordinate, String id, String reason, String until)
+    /** Record a person's decision on an AI-produced finding: {@code confirmed} or {@code dismissed}, with an
+     *  optional note. The endpoint binds every field from the query, and reads no body. */
+    public void reviewFinding(String repo, FindingKey finding, String decision, String note)
             throws IOException, InterruptedException {
-        Map<String, String> fields = new LinkedHashMap<>();
-        fields.put("coordinate", coordinate);
-        fields.put("id", id);
-        if (reason != null) {
-            fields.put("reason", reason);
-        }
-        if (until != null) {
-            fields.put("until", until);
-        }
-        HttpResponse<String> response = send("POST", "/api/findings/waiver?repo=" + enc(repo),
-                body(fields), "application/json");
-        require(response, 200, "waive finding " + id);
+        String query = identify(repo, finding) + "&decision=" + enc(decision)
+                + (note == null ? "" : "&note=" + enc(note));
+        require(send("POST", "/api/findings/review?" + query, null, null), 200, "review finding " + finding.id());
+    }
+
+    /** Accept the risk of an advisory-derived finding until {@code expires}, an ISO-8601 instant in the future,
+     *  with an optional note justifying it. The endpoint binds every field from the query, and reads no body. */
+    public void waiveFinding(String repo, FindingKey finding, String expires, String note)
+            throws IOException, InterruptedException {
+        String query = identify(repo, finding) + "&expires=" + enc(expires)
+                + (note == null ? "" : "&note=" + enc(note));
+        require(send("POST", "/api/findings/waiver?" + query, null, null), 200, "waive finding " + finding.id());
     }
 
     /** Post a scanner's report about one stored version, the request document read from {@code file} as it is.
@@ -211,11 +205,17 @@ public final class RiskClient extends ClientCalls {
     public record ReportAnswer(int recorded, String verdict, boolean held, List<String> reasons) {
     }
 
-    /** Revoke a finding's waiver. */
-    public void revokeWaiver(String repo, String coordinate, String id) throws IOException, InterruptedException {
-        HttpResponse<String> response = send("POST", "/api/findings/waiver/revoke?repo=" + enc(repo),
-                body(Map.of("coordinate", coordinate, "id", id)), "application/json");
-        require(response, 200, "revoke the waiver on finding " + id);
+    /** Withdraw a finding's waiver; the endpoint binds the finding from the query, and reads no body. */
+    public void revokeWaiver(String repo, FindingKey finding) throws IOException, InterruptedException {
+        require(send("POST", "/api/findings/waiver/revoke?" + identify(repo, finding), null, null), 200,
+                "revoke the waiver on finding " + finding.id());
+    }
+
+    /** The query that names one finding in one repository. */
+    private static String identify(String repo, FindingKey finding) {
+        return "repo=" + enc(repo) + "&ecosystem=" + enc(finding.ecosystem())
+                + "&coordinate=" + enc(finding.coordinate()) + "&version=" + enc(finding.version())
+                + "&source=" + enc(finding.source()) + "&id=" + enc(finding.id());
     }
 
     /** {@code signals} lists the report columns the server's installed signal modules contribute; {@code null} when

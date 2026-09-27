@@ -174,10 +174,10 @@ public final class LifecycleClient extends ClientCalls {
         return response.body();
     }
 
-    /** Redeliver one failed webhook. */
+    /** Redeliver one failed webhook; the endpoint reads the delivery's id from the body. */
     public void retryWebhook(String repo, String id) throws IOException, InterruptedException {
-        HttpResponse<String> response = send("POST",
-                "/api/webhook/retry?repo=" + enc(repo) + "&id=" + enc(id), HttpRequest.BodyPublishers.noBody(), null);
+        HttpResponse<String> response = send("POST", "/api/webhook/retry?repo=" + enc(repo),
+                body(Map.of("id", id)), "application/json");
         require(response, 200, "retry webhook " + id);
     }
 

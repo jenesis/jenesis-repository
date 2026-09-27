@@ -187,10 +187,10 @@ public final class ProvenanceClient extends ClientCalls {
         return response.body();
     }
 
-    /** The recorded VEX statements, deployment-wide or for one repository. */
-    public String vexStatements(String repo) throws IOException, InterruptedException {
-        HttpResponse<String> response = send("GET",
-                "/api/vex" + (repo == null ? "" : "?repo=" + enc(repo)), null, null);
+    /** The tenant's recorded VEX documents: a statement is about a product, not a repository, so there is no
+     *  repository to narrow them to. */
+    public String vexStatements() throws IOException, InterruptedException {
+        HttpResponse<String> response = send("GET", "/api/vex", null, null);
         require(response, 200, "read the VEX statements");
         return response.body();
     }

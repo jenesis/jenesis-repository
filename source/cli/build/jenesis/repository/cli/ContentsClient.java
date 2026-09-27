@@ -205,7 +205,9 @@ public final class ContentsClient extends ClientCalls {
         return JSON.readValue(response.body(), AssetPage.class);
     }
 
-    /** The immediate child folders under a path - the paged folder probe, not a listing of every entry. */
+    /** The immediate child folders under a path - the paged folder probe, not a listing of every entry. No API route
+     *  serves {@code /api/browse/children}: the probe is the console's own screen, so the server answers this with a
+     *  404 until the API grows the route. */
     public String browseChildren(String repo, String prefix) throws IOException, InterruptedException {
         HttpResponse<String> response = send("GET",
                 "/api/browse/children?repo=" + enc(repo) + "&prefix=" + enc(prefix), null, null);

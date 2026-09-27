@@ -240,7 +240,8 @@ public class CliDispatcherTest {
         String out = capture(() -> assertThat(Cli.run(new String[] {"findings", "releases",
                 "--kind", "vulnerability", "--source", "osv", "--category", "advisory",
                 "--severity", "CRITICAL", "--coordinate", "org.acme:lib"})).isZero());
-        assertThat(out).contains("org.acme:lib:1.0")
+        assertThat(out).as("the heading names the version as a review or waiver takes it back")
+                .contains("Maven org.acme:lib 1.0")
                 .contains("[vulnerability] GHSA-x (CRITICAL, osv, advisory)")
                 .contains("[superseded by GHSA-better]")
                 .contains("remote code execution").contains("(fixed in 2.0)")

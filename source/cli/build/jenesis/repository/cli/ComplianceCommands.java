@@ -15,11 +15,13 @@ final class ComplianceCommands {
     }
 
     static int health(String[] args, Path home) throws Exception {
-        if (args.length < 2) {
-            throw new IllegalArgumentException("Usage: health <repo> [--refresh]");
+        // A re-score is an action rather than a flag: --refresh belongs to the whole command line, which watches
+        // work that outlives a request, and takes it off the line before any handler reads it.
+        boolean refresh = args.length > 1 && args[1].equals("refresh");
+        if (args.length != (refresh ? 3 : 2)) {
+            throw new IllegalArgumentException("Usage: health <repo> | health refresh <repo>");
         }
-        boolean refresh = Arrays.asList(args).subList(2, args.length).contains("--refresh");
-        RiskClient.HealthReport report = CliSupport.client(home).risk().health(args[1], refresh);
+        RiskClient.HealthReport report = CliSupport.client(home).risk().health(args[refresh ? 2 : 1], refresh);
         if (!report.available()) {
             System.out.println("No health source is configured on this deployment.");
             return 0;
@@ -162,7 +164,9 @@ final class ComplianceCommands {
         }
         String at = null;
         for (RiskClient.FindingRow row : report.findings()) {
-            String key = row.coordinate() + ":" + row.version();
+            // The heading names the version as the review and waiver actions take it back: ecosystem, coordinate
+            // and version, then each row its source and id.
+            String key = row.ecosystem() + " " + row.coordinate() + " " + row.version();
             if (!key.equals(at)) {
                 System.out.println(key);
                 at = key;
@@ -431,13 +435,6 @@ final class ComplianceCommands {
         return 0;
     }
 
-    /**
-     * The two ways a human answers a finding: a recorded verdict, and a waiver that suppresses it.
-     *
-     * <p>Both name the coordinate as well as the finding id, because an id is only unique within a coordinate -
-     * the same advisory is a separate finding against every version it touches, and a review that named the id
-     * alone would be ambiguous about which of them it settled.
-     */
     /** Post a scanner's report - the file is the API's own request document, sent as it is, so the CLI adds
      *  nothing a CI job could get out of step with - and say what it did. */
     private static int report(String[] args, Path home) throws Exception {
@@ -457,47 +454,59 @@ final class ComplianceCommands {
         return 0;
     }
 
+    /**
+     * The two ways a person answers a finding: a decision on an AI-produced one, and a waiver that accepts an
+     * advisory's risk until a date - and the waiver's withdrawal.
+     *
+     * <p>Each names the finding the way the ledger keys it - ecosystem, coordinate, version, source and id - because
+     * an id is unique only within one scanner's report on one version: the same advisory is a separate finding against
+     * every version it touches, and a decision that named less would be ambiguous about which of them it settled.
+     */
     private static int verdict(String[] args, Path home) throws Exception {
         if (args[1].equals("review")) {
-            if (args.length < 6) {
-                throw new IllegalArgumentException(
-                        "Usage: findings review <repo> <coordinate> <id> <verdict> [--note <note>]");
+            if (args.length < 9) {
+                throw new IllegalArgumentException("Usage: findings review <repo> <ecosystem> <coordinate> <version>"
+                        + " <source> <id> <confirmed|dismissed> [--note N]");
             }
-            String note = null;
-            for (int i = 6; i < args.length; i++) {
-                if (args[i].equals("--note")) {
-                    note = CliSupport.flag(args, ++i);
-                } else {
-                    throw new IllegalArgumentException("Unknown review flag '" + args[i] + "'");
-                }
-            }
-            CliSupport.client(home).risk().reviewFinding(args[2], args[3], args[4], args[5], note);
-            System.out.println("Recorded '" + args[5] + "' on " + args[4] + " for " + args[3] + ".");
+            String note = note(args, 9);
+            CliSupport.client(home).risk().reviewFinding(args[2], finding(args, 3), args[8], note);
+            System.out.println("Recorded '" + args[8] + "' on " + args[7] + " for " + args[4] + " " + args[5] + ".");
             return 0;
         }
         if (args.length > 2 && args[2].equals("revoke")) {
-            if (args.length < 6) {
-                throw new IllegalArgumentException("Usage: findings waiver revoke <repo> <coordinate> <id>");
+            if (args.length != 9) {
+                throw new IllegalArgumentException("Usage: findings waiver revoke <repo> <ecosystem> <coordinate>"
+                        + " <version> <source> <id>");
             }
-            CliSupport.client(home).risk().revokeWaiver(args[3], args[4], args[5]);
-            System.out.println("Revoked the waiver on " + args[5] + " for " + args[4] + ".");
+            CliSupport.client(home).risk().revokeWaiver(args[3], finding(args, 4));
+            System.out.println("Revoked the waiver on " + args[8] + " for " + args[5] + " " + args[6] + ".");
             return 0;
         }
-        if (args.length < 5) {
-            throw new IllegalArgumentException(
-                    "Usage: findings waiver <repo> <coordinate> <id> [--reason R] [--until I]");
+        if (args.length < 9) {
+            throw new IllegalArgumentException("Usage: findings waiver <repo> <ecosystem> <coordinate> <version>"
+                    + " <source> <id> <until> [--note N]");
         }
-        String reason = null;
-        String until = null;
-        for (int i = 5; i < args.length; i++) {
-            switch (args[i]) {
-                case "--reason" -> reason = CliSupport.flag(args, ++i);
-                case "--until" -> until = CliSupport.flag(args, ++i);
-                default -> throw new IllegalArgumentException("Unknown waiver flag '" + args[i] + "'");
+        String note = note(args, 9);
+        CliSupport.client(home).risk().waiveFinding(args[2], finding(args, 3), args[8], note);
+        System.out.println("Waived " + args[7] + " for " + args[4] + " " + args[5] + " until " + args[8] + ".");
+        return 0;
+    }
+
+    /** The finding named by the five arguments from {@code from}: ecosystem, coordinate, version, source, id. */
+    private static RiskClient.FindingKey finding(String[] args, int from) {
+        return new RiskClient.FindingKey(args[from], args[from + 1], args[from + 2], args[from + 3], args[from + 4]);
+    }
+
+    /** The {@code --note} among the arguments from {@code from}, the only flag a decision takes. */
+    private static String note(String[] args, int from) {
+        String note = null;
+        for (int i = from; i < args.length; i++) {
+            if (args[i].equals("--note")) {
+                note = CliSupport.flag(args, ++i);
+            } else {
+                throw new IllegalArgumentException("Unknown flag '" + args[i] + "'");
             }
         }
-        CliSupport.client(home).risk().waiveFinding(args[2], args[3], args[4], reason, until);
-        System.out.println("Waived " + args[4] + " for " + args[3] + ".");
-        return 0;
+        return note;
     }
 }

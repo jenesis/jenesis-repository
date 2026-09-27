@@ -97,10 +97,10 @@ public final class BuildCacheClient extends ClientCalls {
         return response.body();
     }
 
-    /** The ingested third-party scan runs. */
-    public String scans(String repo) throws IOException, InterruptedException {
-        HttpResponse<String> response = send("GET",
-                "/api/scans" + (repo == null ? "" : "?repo=" + enc(repo)), null, null);
+    /** The tenant's ingested build scans: a build reports to the tenant, not to a repository, so there is no
+     *  repository to narrow them to. */
+    public String scans() throws IOException, InterruptedException {
+        HttpResponse<String> response = send("GET", "/api/scans", null, null);
         require(response, 200, "read the scan runs");
         return response.body();
     }
@@ -120,13 +120,8 @@ public final class BuildCacheClient extends ClientCalls {
     }
 
     /** Ingest a build scan - the per-run record of what a build ran and what the cache saved it. */
-    public String ingestScan(String document, String repo)
-            throws IOException, InterruptedException {
-        StringBuilder path = new StringBuilder("/api/scans");
-        if (repo != null) {
-            path.append("?repo=").append(enc(repo));
-        }
-        HttpResponse<String> response = send("POST", path.toString(),
+    public String ingestScan(String document) throws IOException, InterruptedException {
+        HttpResponse<String> response = send("POST", "/api/scans",
                 HttpRequest.BodyPublishers.ofString(document), "application/json");
         require(response, 201, "ingest the build scan");
         return response.body();
@@ -143,10 +138,9 @@ public final class BuildCacheClient extends ClientCalls {
         return response.body();
     }
 
-    /** Ingest a test run. */
-    public String ingestTestRun(String document, String repo) throws IOException, InterruptedException {
-        HttpResponse<String> response = send("POST",
-                "/api/tests" + (repo == null ? "" : "?repo=" + enc(repo)),
+    /** Ingest a test run into the tenant's history. */
+    public String ingestTestRun(String document) throws IOException, InterruptedException {
+        HttpResponse<String> response = send("POST", "/api/tests",
                 HttpRequest.BodyPublishers.ofString(document), "application/json");
         require(response, 201, "ingest the test run");
         return response.body();
@@ -159,26 +153,18 @@ public final class BuildCacheClient extends ClientCalls {
         return response.body();
     }
 
-    /** The tests seen to flake. */
-    public String flakyTests(String repo) throws IOException, InterruptedException {
-        HttpResponse<String> response = send("GET",
-                "/api/tests/flaky" + (repo == null ? "" : "?repo=" + enc(repo)), null, null);
+    /** The tests seen to flake across the tenant's history. */
+    public String flakyTests() throws IOException, InterruptedException {
+        HttpResponse<String> response = send("GET", "/api/tests/flaky", null, null);
         require(response, 200, "read the flaky tests");
         return response.body();
     }
 
-    /** The tests worth running for a change. */
-    public String selectTests(String repo, String changed) throws IOException, InterruptedException {
-        StringBuilder path = new StringBuilder("/api/tests/select");
-        String separator = "?";
-        if (repo != null) {
-            path.append(separator).append("repo=").append(enc(repo));
-            separator = "&";
-        }
-        if (changed != null) {
-            path.append(separator).append("changed=").append(enc(changed));
-        }
-        HttpResponse<String> response = send("GET", path.toString(), null, null);
+    /** The tests worth running for a change touching {@code changed} (comma-separated paths), or the ones failing
+     *  on the tip when it is {@code null}. */
+    public String selectTests(String changed) throws IOException, InterruptedException {
+        HttpResponse<String> response = send("GET",
+                "/api/tests/select" + (changed == null ? "" : "?changed=" + enc(changed)), null, null);
         require(response, 200, "select the tests for the change");
         return response.body();
     }

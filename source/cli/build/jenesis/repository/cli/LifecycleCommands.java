@@ -94,13 +94,16 @@ final class LifecycleCommands {
     }
 
     static int cleanup(String[] args, Path home) throws Exception {
-        if (args.length < 2) {
-            throw new IllegalArgumentException("Usage: cleanup <repo> [plan]");
+        // The action comes before the repository, as on every other noun: 'cleanup plan <repo>' is the dry run, and
+        // a line that does not have exactly that shape is refused rather than read as a sweep of some repository.
+        boolean plan = args.length > 1 && args[1].equals("plan");
+        if (args.length != (plan ? 3 : 2)) {
+            throw new IllegalArgumentException("Usage: cleanup <repo> | cleanup plan <repo>");
         }
-        boolean plan = args.length > 2 && args[2].equals("plan");
+        String repo = args[plan ? 2 : 1];
         RepositoryClient client = CliSupport.client(home);
         LifecycleClient.CleanupReport report = plan
-                ? client.lifecycle().cleanupPlan(args[1]) : client.lifecycle().cleanup(args[1]);
+                ? client.lifecycle().cleanupPlan(repo) : client.lifecycle().cleanup(repo);
         if (report == null) {
             System.out.println("Retention is not installed on this deployment.");
             return 0;

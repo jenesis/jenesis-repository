@@ -113,18 +113,22 @@ public final class Commands {
                     noun("findings", "the persisted findings ledger", null, ComplianceCommands::findings,
                             act("findings <repo> [--coordinate C] [--kind K] [--source S] [--category C]"
                                     + " [--severity S]", "the durable, attributed findings"),
-                            act("findings review <repo> <coordinate> <id> <verdict> [--note N]",
-                                    "record a human verdict on one finding"),
-                            act("findings waiver <repo> <coordinate> <id> [--reason R] [--until I]",
-                                    "waive a finding, with a reason and an optional expiry"),
-                            act("findings waiver revoke <repo> <coordinate> <id>", "revoke a waiver"),
+                            act("findings review <repo> <ecosystem> <coordinate> <version> <source> <id>"
+                                    + " <confirmed|dismissed> [--note N]",
+                                    "confirm or dismiss an AI-produced finding, as the listing names it"),
+                            act("findings waiver <repo> <ecosystem> <coordinate> <version> <source> <id> <until>"
+                                    + " [--note N]", "accept an advisory's risk until an ISO-8601 instant, with a "
+                                    + "justification"),
+                            act("findings waiver revoke <repo> <ecosystem> <coordinate> <version> <source> <id>",
+                                    "withdraw a waiver"),
                             act("findings report <repo> <file>", "hand a scanner's findings about a stored version to "
                                     + "the gate: recorded under the scanner's name, and withheld for review if the "
                                     + "gate would not admit them")),
                     noun("health", "the maintainer health of what a repository holds",
                             "build.jenesis.repository.compliance.web", ComplianceCommands::health,
-                            act("health <repo> [--refresh]", "the stored scores, lowest first where ranked; "
-                                    + "--refresh re-scores every coordinate in the background")),
+                            act("health <repo>", "the stored scores, lowest first where ranked"),
+                            act("health refresh <repo>", "re-score every coordinate in the background, and answer "
+                                    + "the scores as they stand")),
                     noun("enforcement-preview", "what enabling licence enforcement would newly hold",
                             "build.jenesis.repository.license", ComplianceCommands::enforcementPreview,
                             act("enforcement-preview <repo> [--unknown]", "a dry run over what is already published")),
@@ -167,7 +171,7 @@ public final class Commands {
                                     "the assembled third-party attribution document")),
                     noun("vex", "VEX statements: what an advisory means for this product",
                             "build.jenesis.repository.compliance.vex.web", ScanCommands::vex,
-                            act("vex [--repo R]", "the recorded statements"),
+                            act("vex", "the tenant's recorded statements"),
                             act("vex show <id>", "one statement"),
                             act("vex add <file>", "record a statement from an OpenVEX / CSAF document"),
                             act("vex remove <id>", "withdraw a statement"),
@@ -230,18 +234,18 @@ public final class Commands {
                                     + "in the background, after typing 'delete <project>' - or --yes, for a script")),
                     noun("scans", "build scans: what a build ran, and what the cache saved it",
                             "build.jenesis.repository.scans", ScanCommands::scans,
-                            act("scans [--repo R]", "the ingested build scans"),
+                            act("scans", "the tenant's ingested build scans"),
                             act("scans show <id>", "one build scan"),
                             act("scans report <id>", "one build scan, rendered"),
-                            act("scans ingest <file> [--repo R]", "ingest a build scan document"),
+                            act("scans ingest <file>", "ingest a build scan document"),
                             act("scans analytics", "the cache-savings view across build scans"),
                             act("scans analytics report", "the analytics as a downloadable report")),
                     noun("tests", "the test-selection and flakiness service",
                             "build.jenesis.repository.testselection", ScanCommands::tests,
-                            act("tests ingest <file> [--repo R]", "ingest a test run"),
+                            act("tests ingest <file>", "ingest a test run"),
                             act("tests show <id>", "one ingested run"),
-                            act("tests flaky [--repo R]", "the tests seen to flake"),
-                            act("tests select [--repo R] [--changed F]",
+                            act("tests flaky", "the tests seen to flake"),
+                            act("tests select [--changed F]",
                                     "the tests worth running for a change")))),
 
             new Section("Access", List.of(

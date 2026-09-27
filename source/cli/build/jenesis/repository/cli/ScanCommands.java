@@ -7,7 +7,8 @@ import module java.base;
  * actually means for this product, and the test runs the selection service learns from.
  *
  * <p>All three ingest a document produced by another tool, so each takes a file path rather than asking a caller to
- * inline a payload - which is also what lets a CI job or an agent use them without assembling JSON.
+ * inline a payload - which is also what lets a CI job or an agent use them without assembling JSON. None takes a
+ * repository: a build, a test history and a VEX statement belong to the tenant, and the API scopes them to it.
  */
 final class ScanCommands {
 
@@ -53,17 +54,8 @@ final class ScanCommands {
                     System.out.println("Wrote " + output + ".");
                 }
             }
-            default -> {
-                String repo = null;
-                for (int i = 1; i < args.length; i++) {
-                    if (args[i].equals("--repo")) {
-                        repo = CliSupport.flag(args, ++i);
-                    } else {
-                        throw new IllegalArgumentException("Unknown vex action or flag '" + args[i] + "'");
-                    }
-                }
-                System.out.println(CliSupport.client(home).provenance().vexStatements(repo));
-            }
+            case "" -> System.out.println(CliSupport.client(home).provenance().vexStatements());
+            default -> throw new IllegalArgumentException("Unknown vex action '" + action + "'");
         }
         return 0;
     }
@@ -89,30 +81,13 @@ final class ScanCommands {
             }
             case "ingest" -> {
                 if (args.length < 3) {
-                    throw new IllegalArgumentException("Usage: scans ingest <file> [--repo R]");
-                }
-                String repo = null;
-                for (int i = 3; i < args.length; i++) {
-                    if (args[i].equals("--repo")) {
-                        repo = CliSupport.flag(args, ++i);
-                    } else {
-                        throw new IllegalArgumentException("Unknown ingest flag '" + args[i] + "'");
-                    }
+                    throw new IllegalArgumentException("Usage: scans ingest <file>");
                 }
                 System.out.println(CliSupport.client(home)
-                        .buildCache().ingestScan(Files.readString(Path.of(args[2])), repo));
+                        .buildCache().ingestScan(Files.readString(Path.of(args[2]))));
             }
-            default -> {
-                String repo = null;
-                for (int i = 1; i < args.length; i++) {
-                    if (args[i].equals("--repo")) {
-                        repo = CliSupport.flag(args, ++i);
-                    } else {
-                        throw new IllegalArgumentException("Unknown scans action or flag '" + args[i] + "'");
-                    }
-                }
-                System.out.println(CliSupport.client(home).buildCache().scans(repo));
-            }
+            case "" -> System.out.println(CliSupport.client(home).buildCache().scans());
+            default -> throw new IllegalArgumentException("Unknown scans action '" + action + "'");
         }
         return 0;
     }
@@ -122,18 +97,10 @@ final class ScanCommands {
         switch (action) {
             case "ingest" -> {
                 if (args.length < 3) {
-                    throw new IllegalArgumentException("Usage: tests ingest <file> [--repo R]");
-                }
-                String repo = null;
-                for (int i = 3; i < args.length; i++) {
-                    if (args[i].equals("--repo")) {
-                        repo = CliSupport.flag(args, ++i);
-                    } else {
-                        throw new IllegalArgumentException("Unknown ingest flag '" + args[i] + "'");
-                    }
+                    throw new IllegalArgumentException("Usage: tests ingest <file>");
                 }
                 System.out.println(CliSupport.client(home)
-                        .buildCache().ingestTestRun(Files.readString(Path.of(args[2])), repo));
+                        .buildCache().ingestTestRun(Files.readString(Path.of(args[2]))));
             }
             case "show" -> {
                 if (args.length < 3) {
@@ -142,27 +109,21 @@ final class ScanCommands {
                 System.out.println(CliSupport.client(home).buildCache().testRun(args[2]));
             }
             case "flaky" -> {
-                String repo = null;
-                for (int i = 2; i < args.length; i++) {
-                    if (args[i].equals("--repo")) {
-                        repo = CliSupport.flag(args, ++i);
-                    } else {
-                        throw new IllegalArgumentException("Unknown flaky flag '" + args[i] + "'");
-                    }
+                if (args.length > 2) {
+                    throw new IllegalArgumentException("Usage: tests flaky");
                 }
-                System.out.println(CliSupport.client(home).buildCache().flakyTests(repo));
+                System.out.println(CliSupport.client(home).buildCache().flakyTests());
             }
             case "select" -> {
-                String repo = null;
                 String changed = null;
                 for (int i = 2; i < args.length; i++) {
-                    switch (args[i]) {
-                        case "--repo" -> repo = CliSupport.flag(args, ++i);
-                        case "--changed" -> changed = CliSupport.flag(args, ++i);
-                        default -> throw new IllegalArgumentException("Unknown select flag '" + args[i] + "'");
+                    if (args[i].equals("--changed")) {
+                        changed = CliSupport.flag(args, ++i);
+                    } else {
+                        throw new IllegalArgumentException("Unknown select flag '" + args[i] + "'");
                     }
                 }
-                System.out.println(CliSupport.client(home).buildCache().selectTests(repo, changed));
+                System.out.println(CliSupport.client(home).buildCache().selectTests(changed));
             }
             default -> throw new IllegalArgumentException(
                     "Usage: tests ingest <file> | tests show <id> | tests flaky | tests select");
