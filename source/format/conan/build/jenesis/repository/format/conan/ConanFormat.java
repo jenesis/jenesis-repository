@@ -21,6 +21,7 @@ import build.jenesis.repository.store.ArtifactDescriptor;
 import build.jenesis.repository.store.ArtifactStore;
 import build.jenesis.repository.store.Retries;
 import build.jenesis.repository.store.StoredListing;
+import build.jenesis.repository.store.Publication;
 import build.jenesis.repository.walk.BoundedChildren;
 import build.jenesis.repository.walk.TraversalException;
 
@@ -509,7 +510,15 @@ public final class ConanFormat implements RepositoryFormat, ArtifactLayout, Prox
         Blobs blobs = new Blobs(store);
         switch (exchange.method()) {
             case "PUT" -> {
-                blobs.write(fileKey, exchange.requestStream());
+                // A revision is named for its content, so a file of it never changes under that name: a second
+                // upload with other bytes is refused rather than rewriting a revision a lock file pins.
+                String hash = blobs.store(exchange.requestStream());
+                try {
+                    blobs.linkRelease(fileKey, hash, -1L);
+                } catch (Publication.RepublishConflict taken) {
+                    exchange.respond(409, Blobs.alreadyPublished(revBase + "/" + filename));
+                    return;
+                }
                 stampTime(store, revBase + "/time");
                 indexed(revBase, filename, blobs);
                 // Stamp the per-registry hosted-publish marker, so a later latest/revisions/files read serves the

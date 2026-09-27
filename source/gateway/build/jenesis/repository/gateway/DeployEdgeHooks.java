@@ -82,6 +82,12 @@ public final class DeployEdgeHooks implements EdgeHooks {
         return immutability.guards(format, PublishTenant.current(), path);
     }
 
+    /** The publishing tenant's {@code allow-redeploy}, which a format linking a released file honours. */
+    @Override
+    public boolean redeploys(RepositoryFormat format, ArtifactStore store) {
+        return immutability.redeployAllowed(PublishTenant.current());
+    }
+
     /**
      * The gate held this upload before the format laid it out, so the stored blob is the raw publish envelope (an npm
      * packument, a NuGet/PyPI multipart), never the served artifact. Record the dispatch context beside the hold - the

@@ -77,6 +77,13 @@ final class ApkFormatFixture implements EcosystemFormatFixture {
         return Optional.of(new Packaged(artifact, download("1.0.0-r0"), Packages.sha256(artifact)));
     }
 
+    /** The release {@link #publishPackage} made, published again with other bytes - the census's second upload. */
+    @Override
+    public Optional<Packaged> republishPackage(ArtifactStore store) throws IOException {
+        byte[] artifact = push(store, "1.0.0-r0", " rebuilt");
+        return Optional.of(new Packaged(artifact, download("1.0.0-r0"), Packages.sha256(artifact)));
+    }
+
     @Override
     public Seeded seed(ArtifactStore store) throws IOException {
         push(store, "1.0.0-r0");
@@ -192,7 +199,11 @@ final class ApkFormatFixture implements EcosystemFormatFixture {
     }
 
     private byte[] push(ArtifactStore store, String version) throws IOException {
-        byte[] artifact = Packages.apk(PACKAGE, version, ARCHITECTURE);
+        return push(store, version, "");
+    }
+
+    private byte[] push(ArtifactStore store, String version, String variant) throws IOException {
+        byte[] artifact = Packages.apk(PACKAGE, version, ARCHITECTURE, variant);
         seed(store, ContractExchange.of("PUT", download(version), artifact), 201);
         return artifact;
     }

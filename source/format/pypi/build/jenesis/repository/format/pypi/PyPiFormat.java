@@ -700,7 +700,7 @@ public final class PyPiFormat implements RepositoryFormat, ProxyLeg, BlobLayout,
                         return Publication.Visibility
                                 // The serving pointer, in this format's own namespace rather than publish/ - so it is
                                 // declared through a Serving step, not named with at().
-                                .through((hash, size, _) -> blobs.linkOnce(fileKey(project, filename), hash, size))
+                                .through((hash, size, _) -> blobs.linkRelease(fileKey(project, filename), hash, size))
                                 // The attestations the upload carried, kept beside the file before the Simple page
                                 // links them, so no client reads a link whose provenance is still to come.
                                 .andThrough((_, _, _) -> storeAttestations(blobs, project, filename, form.attestations))
@@ -770,7 +770,7 @@ public final class PyPiFormat implements RepositoryFormat, ProxyLeg, BlobLayout,
         blobs.refuseReplacement(fileKey(project, filename), hash);
         Withheld.mark(store, hash, new PyPiFormat().describe("/pypi/simple/" + project + "/" + filename)
                 .orElse(ArtifactDescriptor.at("PyPI", "/pypi/simple/" + project + "/" + filename)));
-        blobs.linkOnce(fileKey(project, filename), hash, -1L);
+        blobs.linkRelease(fileKey(project, filename), hash, -1L);
         storeAttestations(blobs, project, filename, form.attestations);
         markHosted(store, hostedKey(project));
         reverseIndex(blobs, project, filename);

@@ -25,6 +25,7 @@ import build.jenesis.repository.store.ArchiveWalk;
 import build.jenesis.repository.store.ArtifactDescriptor;
 import build.jenesis.repository.store.ArtifactStore;
 import build.jenesis.repository.store.StoredListing;
+import build.jenesis.repository.store.Publication;
 
 /**
  * The classic Helm chart repository - {@code index.yaml} and {@code .tgz} charts - so {@code helm repo add},
@@ -265,7 +266,12 @@ public final class HelmFormat implements RepositoryFormat, ArtifactLayout, BlobL
             exchange.respond(400);
             return;
         }
-        blobs.link(blobKey(repo, name, version), hash);
+        try {
+            blobs.linkRelease(blobKey(repo, name, version), hash, -1L);
+        } catch (Publication.RepublishConflict taken) {
+            exchange.respond(409, Blobs.alreadyPublished(name + " " + version));
+            return;
+        }
         blobs.write(entryKey(repo, name, version), stanza(chart, name, version, hash, expected));
         new HelmListings(blobs).refresh(repo, name);
         exchange.respond(201);

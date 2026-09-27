@@ -166,6 +166,13 @@ interface EcosystemFormatFixture extends FormatFixture {
         return Optional.empty();
     }
 
+    /** The release {@link #publishPackage} made - the same version, the same request path - published again with
+     *  other bytes, for the census that asks whether a released file keeps its bytes. Empty (the default) where
+     *  {@link #publishPackage} is. */
+    default Optional<Packaged> republishPackage(ArtifactStore store) throws IOException {
+        return Optional.empty();
+    }
+
     /** A published package: the exact bytes the client uploaded, the request path that serves them back, and the
      *  content address of the {@code blobs/} object holding them (the key the {@code HEAD} leg seals). */
     record Packaged(byte[] artifact, String servedPath, String contentHash) {

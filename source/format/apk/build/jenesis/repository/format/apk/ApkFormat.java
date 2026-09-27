@@ -22,6 +22,7 @@ import build.jenesis.repository.format.RepositoryImporter;
 import build.jenesis.repository.store.ArtifactDescriptor;
 import build.jenesis.repository.store.ArtifactStore;
 import build.jenesis.repository.store.StoredListing;
+import build.jenesis.repository.store.Publication;
 import build.jenesis.repository.format.Listings;
 
 /**
@@ -210,7 +211,12 @@ public final class ApkFormat implements RepositoryFormat, ArtifactLayout, BlobLa
             exchange.respond(400);
             return;
         }
-        blobs.link(ApkListings.packageKey(repo, architecture, file), hash);
+        try {
+            blobs.linkRelease(ApkListings.packageKey(repo, architecture, file), hash, -1L);
+        } catch (Publication.RepublishConflict taken) {
+            exchange.respond(409, Blobs.alreadyPublished(architecture + "/" + file));
+            return;
+        }
         new ApkListings(blobs).published(repo, architecture, file, block);
         exchange.respond(201);
     }

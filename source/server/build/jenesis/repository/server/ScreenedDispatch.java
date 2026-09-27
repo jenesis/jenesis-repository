@@ -115,16 +115,20 @@ public final class ScreenedDispatch {
                     // response, so it links its own serving pointer inside this callback rather than declaring it.
                     // The ingress census asserts the pointer-last ordering behaviourally for this shape.
                     DeferredResponse held = new DeferredResponse(new RestreamExchange(exchange, accepted));
-                    if (hooks.guardsLayout(format, store, exchange.path())) {
-                        // Held to the pointer it replaces: a concurrent first publish that landed after the check
-                        // above raises RepublishConflict at this layout's own write, answered 409.
-                        Publication.guarded(exchange.path(), () -> {
+                    boolean guards = hooks.guardsLayout(format, store, exchange.path());
+                    Publication.redeploying(hooks.redeploys(format, store), () -> {
+                        if (guards) {
+                            // Held to the pointer it replaces: a concurrent first publish that landed after the
+                            // check above raises RepublishConflict at this layout's own write, answered 409.
+                            Publication.guarded(exchange.path(), () -> {
+                                format.handle(held, store);
+                                return null;
+                            });
+                        } else {
                             format.handle(held, store);
-                            return null;
-                        });
-                    } else {
-                        format.handle(held, store);
-                    }
+                        }
+                        return null;
+                    });
                     answer[0] = held;
                     if (held.refused()) {
                         // The format refused the write - a version already published, a body it cannot read - so

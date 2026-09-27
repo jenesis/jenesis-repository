@@ -28,6 +28,7 @@ import build.jenesis.repository.store.PublishInterceptor;
 import build.jenesis.repository.store.StoreCache;
 import build.jenesis.repository.store.StoredListing;
 import build.jenesis.repository.store.ServableNames;
+import build.jenesis.repository.store.Publication;
 import build.jenesis.repository.walk.BoundedChildren;
 import build.jenesis.repository.walk.PagedTreeWalk;
 import build.jenesis.repository.format.lifecycle.Lifecycle;
@@ -667,7 +668,12 @@ public final class DebianFormat implements RepositoryFormat, ProxyLeg, BlobLayou
         String[] md5sha1 = digests(blobs, hash);
         // Point the pool path at the stored blob through Blobs.link, which clears any gc/condemned marker on a blob a
         // collector already judged unreferenced (re-pushing byte-identical content dedupes to that same blob).
-        blobs.link("debian/" + rest, hash);
+        try {
+            blobs.linkRelease("debian/" + rest, hash, -1L);
+        } catch (Publication.RepublishConflict taken) {
+            exchange.respond(409, Blobs.alreadyPublished(rest));
+            return;
+        }
         String stanza = control.stripTrailing() + "\n"
                 + "Filename: " + rest + "\n"
                 + "Size: " + size + "\n"

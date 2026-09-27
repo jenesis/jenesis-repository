@@ -210,16 +210,32 @@ public final class Blobs {
         long length = size < 0 ? store.size("blobs/" + hash) : size;
         byte[] body = ServableNames.Pointer.render(hash, length);
         Retries.decide(store, key, current -> {
-            if (current.isEmpty()) {
-                return Retries.Verdict.write(body, null);
-            }
-            String standing = ServableNames.parse(current.get().content()).hash();
-            if (!standing.equals(hash)) {
-                throw new Publication.RepublishConflict(key, standing, hash);
-            }
-            return Arrays.equals(current.get().content(), body) ? Retries.Verdict.keep(null)
+            Publication.refuseReplacing(key, current, hash);
+            return current.isPresent() && Arrays.equals(current.get().content(), body) ? Retries.Verdict.keep(null)
                     : Retries.Verdict.write(body, null);
         });
+    }
+
+    /**
+     * Link a released file: {@link #linkOnce} unless the publish may replace releases
+     * ({@link Publication#redeployAllowed()}, the {@code allow-redeploy} opt-out the ingress edge resolved for its
+     * tenant), when it is {@link #link(String, String, long)}. The call every format makes for a file its registry
+     * never lets change under a version - a wheel, a {@code .nupkg}, a gem, a crate, a Go module zip, a conda package,
+     * a Terraform archive, an npm tarball - so the refusal and its opt-out have one statement.
+     */
+    public void linkRelease(String key, String hash, long size) throws IOException {
+        if (Publication.redeployAllowed()) {
+            link(key, hash, size);
+        } else {
+            linkOnce(key, hash, size);
+        }
+    }
+
+    /** The body a format answers a refused second upload of a released file with, when its registry prescribes none
+     *  of its own: which file, and that a published version does not change. */
+    public static byte[] alreadyPublished(String what) {
+        return (what + " is already published with other content, and a published version cannot change")
+                .getBytes(StandardCharsets.UTF_8);
     }
 
     /**
@@ -229,6 +245,9 @@ public final class Blobs {
      * upload a marker it would leave behind.
      */
     public void refuseReplacement(String key, String hash) throws IOException {
+        if (Publication.redeployAllowed()) {
+            return;   // the publish may replace a release, as linkRelease will
+        }
         Optional<String> standing = hash(key);
         if (standing.isPresent() && !standing.get().equals(hash)) {
             throw new Publication.RepublishConflict(key, standing.get(), hash);

@@ -26,6 +26,7 @@ import build.jenesis.repository.store.ArtifactDescriptor;
 import build.jenesis.repository.store.ArtifactStore;
 import build.jenesis.repository.store.StoredListing;
 import build.jenesis.repository.store.ServableNames;
+import build.jenesis.repository.store.Publication;
 import build.jenesis.repository.walk.PagedTreeWalk;
 import build.jenesis.repository.format.lifecycle.Lifecycle;
 import build.jenesis.repository.walk.ScreenedNames;
@@ -402,7 +403,12 @@ public final class RpmFormat implements RepositoryFormat, ArtifactLayout, ProxyL
         // condemned one un-condemns it before the sweep deletes it - otherwise a 201 publish is GC-deleted to a
         // permanent 404. The repo/location segments are validated above, so the key is safe.
         Blobs blobs = new Blobs(store);
-        blobs.link("rpm/" + rest, hash, size);
+        try {
+            blobs.linkRelease("rpm/" + rest, hash, size);
+        } catch (Publication.RepublishConflict taken) {
+            exchange.respond(409, Blobs.alreadyPublished(rest));
+            return;
+        }
         byte[] stanza = primaryPackage(pkg, hash, size, location).getBytes(StandardCharsets.UTF_8);
         blobs.write(indexKey(repo, location), stanza);
         if (nevra != null) {

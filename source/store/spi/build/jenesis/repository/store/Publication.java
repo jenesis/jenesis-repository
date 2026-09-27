@@ -352,6 +352,42 @@ public final class Publication {
      *  names the bytes being linked - see {@link #guarded}. */
     private static final ScopedValue<String> GUARD = ScopedValue.newInstance();
 
+    /** Whether the publish a layout in progress belongs to may replace a released file - see {@link #redeploying}. */
+    private static final ScopedValue<Boolean> REDEPLOY = ScopedValue.newInstance();
+
+    /**
+     * Run {@code layout} knowing whether its publish may replace a released file: the {@code allow-redeploy} opt-out,
+     * as the ingress edge resolved it for the publishing tenant. A format links a released file through
+     * {@code Blobs.linkRelease}, which asks {@link #redeployAllowed()} - so the dial is read once, at the edge, and a
+     * format neither reads a setting nor needs the tenant to honour it.
+     */
+    public static <T> T redeploying(boolean allowed, ScopedValue.CallableOp<T, IOException> layout)
+            throws IOException {
+        return ScopedValue.where(REDEPLOY, allowed).call(layout);
+    }
+
+    /** Whether the publish in progress may replace a released file. {@code false} outside {@link #redeploying} - an
+     *  import, a replay, a caller that is no edge - since a release is immutable unless an operator opted out. */
+    public static boolean redeployAllowed() {
+        return REDEPLOY.isBound() && REDEPLOY.get();
+    }
+
+    /**
+     * The one decision a released file's pointer is written under, taken over the pointer the write would replace: a
+     * pointer naming other bytes raises {@link RepublishConflict}, and one standing empty or already naming these
+     * bytes may be written. Both ways a release is linked ask it - a {@link #guarded} request path here, and a
+     * format's own pointer through {@code Blobs.linkOnce} - so the rule has one statement.
+     */
+    public static void refuseReplacing(String key, Optional<ArtifactStore.Versioned> current, String hash)
+            throws RepublishConflict {
+        if (current.isPresent()) {
+            String standing = ServableNames.parse(current.get().content()).hash();
+            if (!standing.equals(hash)) {
+                throw new RepublishConflict(key, standing, hash);
+            }
+        }
+    }
+
     /**
      * Run {@code layout} with {@code requestPath}'s serving pointer guarded: a {@link #link} of that path which finds
      * the pointer naming other bytes raises {@link RepublishConflict} instead of replacing it, and the decision is
@@ -428,13 +464,10 @@ public final class Publication {
         Condemned.spare(store, hash, requestPath);
         boolean guarded = !quarantine && GUARD.isBound() && GUARD.get().equals(requestPath);
         Optional<ArtifactStore.Versioned> prior = Retries.decide(store, key, current -> {
-            if (guarded && current.isPresent()) {
+            if (guarded) {
                 // Decided inside the compare-and-set, over the pointer this write would replace, so a rival that
                 // landed after the edge's check is met here rather than overwritten.
-                String standing = ServableNames.parse(current.get().content()).hash();
-                if (!standing.equals(hash)) {
-                    throw new RepublishConflict(key, standing, hash);
-                }
+                refuseReplacing(key, current, hash);
             }
             boolean held = !quarantine && (current.isPresent()
                     ? ServableNames.parse(current.get().content()).held()
@@ -896,10 +929,14 @@ public final class Publication {
      * {@code commit} fires once the accepted artifact is visible.
      */
     public Published screen(ArtifactDescriptor artifact, InputStream content) throws IOException {
-        return route(artifact, content);
+        return route(artifact, content, null);
     }
 
-    private Published route(ArtifactDescriptor artifact, InputStream content) throws IOException {
+    /** Screen and store {@code content}, and hold it when the chain says so - asking {@code republish}, where there is
+     *  one, before the hold is written: a held upload that could never be released, since a released version stands
+     *  at other bytes, is refused rather than left on the review queue. */
+    private Published route(ArtifactDescriptor artifact, InputStream content, Republish republish)
+            throws IOException {
         // The length is counted as the bytes stream into the store, so the descriptor never stats the blob it just
         // wrote - one read per publish that answered a question the write itself had answered.
         Counting counted = new Counting(content);
@@ -937,7 +974,12 @@ public final class Publication {
             case ACCEPT -> {
             }
             // QUARANTINE still diverts to the quarantine view (stored but not served) for review.
-            case QUARANTINE -> link("/quarantine" + artifact.path(), hash);
+            case QUARANTINE -> {
+                if (republish != null) {
+                    admit(republish, artifact, hash);
+                }
+                link("/quarantine" + artifact.path(), hash);
+            }
             // REJECT links nothing; the orphaned blob is left for garbage collection.
             case REJECT -> {
             }
@@ -1278,7 +1320,7 @@ public final class Publication {
             throws IOException {
         Objects.requireNonNull(republish, "republish");
         Objects.requireNonNull(layout, "layout");
-        Published screened = screen(artifact, body);
+        Published screened = route(artifact, body, republish);
         String hash = screened.hash();
         // The length was counted as the bytes streamed in; the blob is not stat-ed for a number the write knew.
         ArtifactDescriptor stored = artifact.withBlob(hash, screened.size());

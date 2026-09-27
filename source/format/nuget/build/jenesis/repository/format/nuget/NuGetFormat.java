@@ -405,7 +405,7 @@ public final class NuGetFormat implements RepositoryFormat, ProxyLeg, BlobLayout
                             // The serving pointer, in this format's own namespace rather than publish/ - so it is
                             // declared through a Serving step, not named with at(). It is where a version already
                             // pushed refuses this one, so nothing keyed by the version is written before it.
-                            .through((hash, size, _) -> blobs.linkOnce(key, hash, size))
+                            .through((hash, size, _) -> blobs.linkRelease(key, hash, size))
                             .andThrough((_, _, _) -> parsed.write(blobs))
                             // Stamp the hosted-publish marker, so a later flat-container version-index read serves the
                             // local versions. A pull-through proxy repository (whose .nupkg is cached by proxy(), never
@@ -531,7 +531,7 @@ public final class NuGetFormat implements RepositoryFormat, ProxyLeg, BlobLayout
         }
         Withheld.mark(store, hash, new ArtifactDescriptor("NuGet", id, version, flatContainerPath(id, version),
                 "application/octet-stream", version.contains("-"), null, -1L));
-        blobs.linkOnce(nupkgKey(id, version), hash, -1L);
+        blobs.linkRelease(nupkgKey(id, version), hash, -1L);
         parsed.write(blobs);
         markHosted(store, HOSTED_KEY);
         new NuGetListings(blobs).refresh(id, version);   // held: the stored documents keep it out

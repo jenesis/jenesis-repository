@@ -88,6 +88,13 @@ final class CocoaPodsFormatFixture implements EcosystemFormatFixture {
         return Optional.of(new Packaged(artifact, download("1.0.0"), Packages.sha256(artifact)));
     }
 
+    /** The release {@link #publishPackage} made, published again with other bytes - the census's second upload. */
+    @Override
+    public Optional<Packaged> republishPackage(ArtifactStore store) throws IOException {
+        byte[] artifact = push(store, "1.0.0", " rebuilt");
+        return Optional.of(new Packaged(artifact, download("1.0.0"), Packages.sha256(artifact)));
+    }
+
     @Override
     public Seeded seed(ArtifactStore store) throws IOException {
         push(store, "1.0.0");
@@ -225,7 +232,11 @@ final class CocoaPodsFormatFixture implements EcosystemFormatFixture {
     }
 
     private byte[] push(ArtifactStore store, String version) throws IOException {
-        byte[] artifact = Packages.podspec(POD, version);
+        return push(store, version, "");
+    }
+
+    private byte[] push(ArtifactStore store, String version, String variant) throws IOException {
+        byte[] artifact = Packages.podspec(POD, version, variant);
         seed(store, ContractExchange.of("PUT", "/cocoapods/" + REGISTRY + "/" + POD + "/" + version, artifact), 201);
         return artifact;
     }

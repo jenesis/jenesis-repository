@@ -21,7 +21,6 @@ import build.jenesis.repository.format.lifecycle.Lifecycle;
 import build.jenesis.repository.store.ArtifactDescriptor;
 import build.jenesis.repository.store.ArtifactStore;
 import build.jenesis.repository.store.StoredListing;
-import build.jenesis.repository.store.Features;
 import build.jenesis.repository.store.Publication;
 import build.jenesis.repository.store.PublishInterceptor;
 import build.jenesis.repository.store.Withheld;
@@ -254,8 +253,8 @@ public final class NpmFormat implements RepositoryFormat, ProxyLeg, BlobLayout, 
      * <p>This used to be {@link Publication.Republish#overwrite()} unconditionally, which quietly exempted npm from
      * that guarantee: {@code ReleaseImmutability} keys on the request path, and an npm publish PUTs the packument
      * root, which carries no version for it to protect. The versioned writes happen inside this format, so this is
-     * where the dial has to be read - through {@link Features}, the seam a format already has, rather than by
-     * reaching for the server module and inverting the layering.
+     * where the dial is honoured - as the edge resolved it for the publishing tenant
+     * ({@link Publication#redeployAllowed()}), rather than read here deployment-wide.
      *
      * <p>The probe is the format's <em>own</em> serving pointer, not the publication's request path: an npm publish
      * addresses the packument, which legitimately changes on every publish as a version joins it. The key that must
@@ -267,7 +266,7 @@ public final class NpmFormat implements RepositoryFormat, ProxyLeg, BlobLayout, 
      * away. What is refused is different bytes at a version already published, which is the hole.
      */
     private static Publication.Republish republish(String pointer) {
-        return "true".equalsIgnoreCase(Features.lookup().apply("jenreg.allow-redeploy"))
+        return Publication.redeployAllowed()
                 ? Publication.Republish.overwrite()
                 : Publication.Republish.idempotent(pointer);
     }
@@ -318,6 +317,12 @@ public final class NpmFormat implements RepositoryFormat, ProxyLeg, BlobLayout, 
             envelope = parse(name, exchange, blobs, store);
         } catch (TooLarge refused) {
             exchange.respond(413);   // an envelope field past its bound - nothing was indexed
+            return;
+        } catch (Publication.RepublishConflict taken) {
+            // A version's tarball never changes once published, and npm's registry answers a second publish of it
+            // this way - which is what `npm publish` reports - rather than with a bare conflict.
+            exchange.respond(403, "You cannot publish over the previously published versions."
+                    .getBytes(StandardCharsets.UTF_8));
             return;
         }
         if (envelope == null) {
@@ -937,8 +942,11 @@ public final class NpmFormat implements RepositoryFormat, ProxyLeg, BlobLayout, 
                 // The body reached EOF, so the decoder has closed its sink and is done; join it before declaring so a
                 // broken decode links nothing.
                 join(decoder);
+                // The version's bytes are linked once, decided inside the pointer's compare-and-set: the probe above
+                // reads before the layout, so two first publishes of one version with different bytes both pass it,
+                // and only the link can tell them apart.
                 return failure.get() == null
-                        ? Publication.Visibility.through((hash, _, _) -> blobs.link(key, hash))
+                        ? Publication.Visibility.through((hash, size, _) -> blobs.linkRelease(key, hash, size))
                         : Publication.Visibility.declined();
             });
         } finally {
@@ -966,8 +974,10 @@ public final class NpmFormat implements RepositoryFormat, ProxyLeg, BlobLayout, 
         // servable, which is the regression this closes; without the marker-first order the layout is the disclosure.
         switch (commit.disposition()) {
             case QUARANTINE -> {
+                // A hold never replaces a released tarball: refused before the mark, so nothing is left held.
+                blobs.refuseReplacement(key, commit.hash());
                 Withheld.mark(blobs.store(), commit.hash(), descriptor);
-                blobs.link(key, commit.hash());
+                blobs.linkRelease(key, commit.hash(), -1L);
             }
             default -> {
             }

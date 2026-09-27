@@ -453,7 +453,8 @@ public final class RubyGemsFormat implements RepositoryFormat, ProxyLeg, BlobLay
                             // are declared through Serving steps, not named with at(). The .gem pointer comes first:
                             // it is where a version already pushed refuses this one, so nothing keyed by the version
                             // - the quick spec, the attestations - is written before it and replaced by a refused push.
-                            .through((hash, size, _) -> blobs.linkOnce(gemKey(spec.name(), spec.version()), hash, size))
+                            .through((hash, size, _) ->
+                                    blobs.linkRelease(gemKey(spec.name(), spec.version()), hash, size))
                             // The legacy quick spec gem install fetches, precomputed as the compact-index line is so
                             // serving it is a plain streamed read; the Marshal encoding lives in QuickSpec.
                             .andThrough((_, _, _) -> blobs.write("rubygemfiles/" + spec.name() + "-" + spec.version()

@@ -18,6 +18,7 @@ import build.jenesis.repository.format.lifecycle.Lifecycle;
 import build.jenesis.repository.store.ArtifactDescriptor;
 import build.jenesis.repository.store.ArtifactStore;
 import build.jenesis.repository.store.StoredListing;
+import build.jenesis.repository.store.Publication;
 
 /**
  * The Windows Package Manager REST source protocol, so {@code winget search} and {@code winget install} resolve
@@ -257,7 +258,12 @@ public final class WingetFormat implements RepositoryFormat, ArtifactLayout, Blo
         // Through Blobs.link rather than a bare write: besides the compare-and-set retry, link clears any
         // gc/condemned/<hash> marker a collector set, so re-publishing bytes identical to a condemned blob
         // un-condemns them before the sweep runs.
-        blobs.link(installerKey(repo, identifier, version, file), hash);
+        try {
+            blobs.linkRelease(installerKey(repo, identifier, version, file), hash, -1L);
+        } catch (Publication.RepublishConflict taken) {
+            exchange.respond(409, Blobs.alreadyPublished(identifier + " " + version + " " + file));
+            return;
+        }
         exchange.respond(201);
     }
 

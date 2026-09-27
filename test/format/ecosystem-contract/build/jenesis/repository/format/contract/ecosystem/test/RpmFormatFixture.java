@@ -75,6 +75,13 @@ final class RpmFormatFixture implements EcosystemFormatFixture {
         return Optional.of(new Packaged(artifact, pool("1.0.0"), Packages.sha256(artifact)));
     }
 
+    /** The release {@link #publishPackage} made, published again with other bytes - the census's second upload. */
+    @Override
+    public Optional<Packaged> republishPackage(ArtifactStore store) throws IOException {
+        byte[] artifact = push(store, "1.0.0", " rebuilt");
+        return Optional.of(new Packaged(artifact, pool("1.0.0"), Packages.sha256(artifact)));
+    }
+
     @Override
     public Seeded seed(ArtifactStore store) throws IOException {
         push(store, "1.0.0");
@@ -241,7 +248,11 @@ final class RpmFormatFixture implements EcosystemFormatFixture {
     }
 
     private byte[] push(ArtifactStore store, String upstream) throws IOException {
-        byte[] artifact = Packages.rpm(PACKAGE, upstream, RELEASE, ARCHITECTURE);
+        return push(store, upstream, "");
+    }
+
+    private byte[] push(ArtifactStore store, String upstream, String variant) throws IOException {
+        byte[] artifact = Packages.rpm(PACKAGE, upstream, RELEASE, ARCHITECTURE, variant);
         seed(store, ContractExchange.of("PUT", pool(upstream), artifact), 201);
         return artifact;
     }

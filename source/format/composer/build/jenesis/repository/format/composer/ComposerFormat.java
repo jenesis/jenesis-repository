@@ -24,6 +24,7 @@ import build.jenesis.repository.store.ArtifactDescriptor;
 import build.jenesis.repository.store.ArtifactStore;
 import build.jenesis.repository.store.StoredListing;
 import build.jenesis.repository.store.ServableNames;
+import build.jenesis.repository.store.Publication;
 import build.jenesis.repository.walk.ScreenedNames;
 
 /**
@@ -298,7 +299,12 @@ public final class ComposerFormat implements RepositoryFormat, ArtifactLayout, P
         // condemned archive un-condemns it before the sweep deletes it - otherwise a 201 publish is GC-deleted to a
         // permanent 404. The pointer stores exactly that blob hash, so the marker key matches.
         Blobs blobs = new Blobs(store);
-        blobs.link(distKey(repo, vendor, pkg, version), hash);
+        try {
+            blobs.linkRelease(distKey(repo, vendor, pkg, version), hash, -1L);
+        } catch (Publication.RepublishConflict taken) {
+            exchange.respond(409, Blobs.alreadyPublished(vendor + "/" + pkg + " " + version));
+            return;
+        }
         byte[] indexed = MAPPER.writeValueAsBytes(stanza);
         blobs.write(indexKey(repo, vendor, pkg, version), indexed);
         // The served p2 file and the package list are written here, on the publish, rather than generated on read.

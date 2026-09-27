@@ -18,6 +18,7 @@ import build.jenesis.repository.format.RepositoryFormat;
 import build.jenesis.repository.format.RepositoryImporter;
 import build.jenesis.repository.store.ArtifactDescriptor;
 import build.jenesis.repository.store.ArtifactStore;
+import build.jenesis.repository.store.Publication;
 import build.jenesis.repository.store.StoredListing;
 import build.jenesis.repository.walk.BoundedChildren;
 import build.jenesis.repository.format.Semver;
@@ -274,7 +275,21 @@ public final class GoFormat implements RepositoryFormat, ProxyLeg, BlobLayout, R
             return;
         }
         if (exchange.method().equals("PUT")) {
-            blobs.write("go/" + modulePath + "/@v/" + file, exchange.requestStream());
+            String key = "go/" + modulePath + "/@v/" + file;
+            String hash = blobs.store(exchange.requestStream());
+            if (file.endsWith(".zip") || file.endsWith(".mod")) {
+                // A version's module zip and go.mod are what go.sum pins: replacing either under a published version
+                // fails every build that verified it, so the version's first bytes stay, decided at the pointer's
+                // compare-and-set. The .info is the version's timestamp, which a re-publish may state afresh.
+                try {
+                    blobs.linkRelease(key, hash, -1L);
+                } catch (Publication.RepublishConflict taken) {
+                    exchange.respond(409, Blobs.alreadyPublished(modulePath + "@" + file));
+                    return;
+                }
+            } else {
+                blobs.link(key, hash);
+            }
             // Stamp the per-module hosted-publish marker, so a later @v/list or @latest read serves the local
             // versions. A pull-through proxy repository (whose .info/.mod/.zip are cached by proxy(), never PUT) never
             // writes it, so its version discovery misses locally and the pull-through streams the authoritative

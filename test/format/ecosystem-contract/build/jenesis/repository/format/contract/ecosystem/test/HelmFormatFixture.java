@@ -80,6 +80,14 @@ final class HelmFormatFixture implements EcosystemFormatFixture {
         return Optional.of(new Packaged(chart, download(VERSION), Packages.sha256(chart)));
     }
 
+    /** The release {@link #publishPackage} made, published again with other bytes - the census's second upload. */
+    @Override
+    public Optional<Packaged> republishPackage(ArtifactStore store) throws IOException {
+        byte[] chart = Packages.helmChart(CHART, VERSION, "rebuilt");
+        put(store, download(VERSION), chart);
+        return Optional.of(new Packaged(chart, download(VERSION), Packages.sha256(chart)));
+    }
+
     @Override
     public Seeded seed(ArtifactStore store) throws IOException {
         put(store, download(VERSION), Packages.helmChart(CHART, VERSION));

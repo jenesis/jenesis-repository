@@ -16,6 +16,7 @@ import build.jenesis.repository.format.FormatExchange;
 import build.jenesis.repository.format.RepositoryFormat;
 import build.jenesis.repository.store.ArtifactDescriptor;
 import build.jenesis.repository.store.ArtifactStore;
+import build.jenesis.repository.store.Publication;
 
 /**
  * Homebrew bottles: a bottle domain a {@code brew install} pours from.
@@ -198,7 +199,12 @@ public final class HomebrewFormat implements RepositoryFormat, ArtifactLayout, B
      */
     private void push(FormatExchange exchange, Blobs blobs, String repo, String file) throws IOException {
         String hash = blobs.store(exchange.requestStream());
-        blobs.link(key(repo, file), hash);
+        try {
+            blobs.linkRelease(key(repo, file), hash, -1L);
+        } catch (Publication.RepublishConflict taken) {
+            exchange.respond(409, Blobs.alreadyPublished(file));
+            return;
+        }
         exchange.respond(201);
     }
 

@@ -64,6 +64,16 @@ public interface EdgeHooks {
         return false;
     }
 
+    /**
+     * Whether this publish may replace a released file - the {@code allow-redeploy} opt-out for the publishing tenant.
+     * The edge binds the answer around the layout ({@link build.jenesis.repository.store.Publication#redeploying}),
+     * and a format linking a released file honours it there. {@code false} by default: a release is immutable unless
+     * an operator opted out.
+     */
+    default boolean redeploys(RepositoryFormat format, ArtifactStore store) throws IOException {
+        return false;
+    }
+
     /** Called on the {@code QUARANTINE} branch (the body is stored for review, not laid out), around the edge's
      *  {@code 202}, so an edition can record the held body's replay context - {@code path} is the request path and
      *  {@code hash} the stored blob. No-op by default. */

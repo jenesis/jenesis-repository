@@ -82,6 +82,14 @@ final class SwiftFormatFixture implements EcosystemFormatFixture {
         return Optional.of(new Packaged(archive, download("1.0.0"), Packages.sha256(archive)));
     }
 
+    /** The release {@link #publishPackage} made, published again with other bytes - the census's second upload. */
+    @Override
+    public Optional<Packaged> republishPackage(ArtifactStore store) throws IOException {
+        byte[] archive = archive("1.0.0", " rebuilt");
+        release(store, "1.0.0", archive);
+        return Optional.of(new Packaged(archive, download("1.0.0"), Packages.sha256(archive)));
+    }
+
     @Override
     public Seeded seed(ArtifactStore store) throws IOException {
         release(store, "1.0.0", archive("1.0.0"));
@@ -201,9 +209,13 @@ final class SwiftFormatFixture implements EcosystemFormatFixture {
     }
 
     private static byte[] archive(String version) throws IOException {
+        return archive(version, "");
+    }
+
+    private static byte[] archive(String version, String variant) throws IOException {
         SequencedMap<String, byte[]> entries = new LinkedHashMap<>();
         entries.put(NAME + "/Package.swift",
-                ("// swift-tools-version:5.9\n// " + version + "\n").getBytes(StandardCharsets.UTF_8));
+                ("// swift-tools-version:5.9\n// " + version + variant + "\n").getBytes(StandardCharsets.UTF_8));
         return Packages.zip(entries);
     }
 }

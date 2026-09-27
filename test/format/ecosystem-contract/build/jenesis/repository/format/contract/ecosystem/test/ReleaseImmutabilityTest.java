@@ -6,17 +6,20 @@ import module org.junit.jupiter.params;
 import build.jenesis.repository.format.testkit.ContractExchange;
 import build.jenesis.repository.store.ArtifactStore;
 import build.jenesis.repository.store.ArtifactStoreProvider;
+import build.jenesis.repository.store.StoredListing;
+import build.jenesis.repository.store.Publication;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
 /**
- * A released version of a PyPI, NuGet, RubyGems or Cargo package keeps its bytes: every public registry of the four
- * refuses a second upload of a version, and a consumer pinning hashes ({@code pip --require-hashes},
- * {@code Cargo.lock}, NuGet's lock file) breaks the day the bytes under a version change. Each of these formats knows
- * the version an upload collides on only inside its layout, once the envelope or the package has been read, so the
- * refusal is taken at the version's pointer, inside its compare-and-set - and answered as the format's own registry
- * answers it, which is what its client recognises ({@code twine upload --skip-existing} reads PyPI's {@code 400} and
- * its words, {@code dotnet nuget push --skip-duplicate} NuGet's {@code 409}).
+ * A released version keeps its bytes - a PyPI, NuGet, RubyGems, Cargo, npm or conda package, a Go module version, a
+ * Terraform module or provider archive: every public registry of them refuses a second upload of a version, and a
+ * consumer pinning hashes ({@code pip --require-hashes}, {@code Cargo.lock}, NuGet's lock file) breaks the day the
+ * bytes under a version change. Each of these formats knows the version an upload collides on only inside its layout,
+ * once the envelope or the package has been read, so the refusal is taken at the version's pointer, inside its
+ * compare-and-set - and answered as the format's own registry answers it, which is what its client recognises ({@code
+ * twine upload --skip-existing} reads PyPI's {@code 400} and its words, {@code dotnet nuget push --skip-duplicate}
+ * NuGet's {@code 409}).
  *
  * <p>The refusal leaves the release as it was, and that is checked over the whole store rather than over the one
  * pointer: every key the release had keeps its content, since a sidecar keyed by the version - NuGet's dependency
@@ -28,8 +31,15 @@ class ReleaseImmutabilityTest {
     @TempDir
     Path root;
 
+    /** Finish any derivation a publish queued - a conda repodata's compressed twin, a Debian index's signed release -
+     *  before the {@code @TempDir} under it is deleted. */
+    @AfterEach
+    void settle() {
+        StoredListing.settle();
+    }
+
     /** One format's release, uploaded through its own write path with bytes {@code variant} makes distinct. */
-    private record Format(String name, EcosystemFormatFixture fixture, int accepted, int refusal, String words,
+    record Format(String name, EcosystemFormatFixture fixture, int accepted, int refusal, String words,
                           String served, Uploader uploader) {
 
         @Override
@@ -51,13 +61,16 @@ class ReleaseImmutabilityTest {
         }
     }
 
-    private record Upload(ContractExchange exchange, byte[] artifact) {
+    record Upload(ContractExchange exchange, byte[] artifact) {
     }
 
     @FunctionalInterface
-    private interface Uploader {
+    interface Uploader {
         Upload upload(String variant) throws IOException;
     }
+
+    private static final String TERRAFORM_PROVIDER =
+            "/terraform/release/providers/acme/widget/1.0.0/terraform-provider-widget_1.0.0_linux_amd64.zip";
 
     static List<Format> formats() {
         String boundary = "release-boundary";
@@ -84,12 +97,36 @@ class ReleaseImmutabilityTest {
                             byte[] crate = ("a crate " + variant).getBytes(StandardCharsets.UTF_8);
                             return new Upload(ContractExchange.of("PUT", "/cargo/release/api/v1/crates/new",
                                     Packages.cargoFrame("release-lib", "1.0.0", crate)), crate);
+                        }),
+                new Format("npm", new NpmFormatFixture(), 201, 403, "cannot publish over",
+                        "/npm/release-lib/-/release-lib-1.0.0.tgz", variant -> {
+                            byte[] tarball = ("a tarball " + variant).getBytes(StandardCharsets.UTF_8);
+                            return new Upload(ContractExchange.of("PUT", "/npm/release-lib",
+                                    Packages.npmEnvelope("release-lib", "1.0.0", tarball)), tarball);
+                        }),
+                new Format("go", new GoFormatFixture(), 201, 409, "already published",
+                        "/go/example.com/release/@v/v1.0.0.zip", variant -> {
+                            byte[] zip = ("a module zip " + variant).getBytes(StandardCharsets.UTF_8);
+                            return new Upload(ContractExchange.of("PUT", "/go/example.com/release/@v/v1.0.0.zip", zip),
+                                    zip);
+                        }),
+                new Format("conda", new CondaFormatFixture(), 201, 409, "already exists",
+                        "/conda/release/linux-64/release-lib-1.0.0-0.conda", variant -> {
+                            byte[] conda = Packages.conda("release-lib", "1.0.0", "0", variant);
+                            return new Upload(ContractExchange.of("PUT",
+                                    "/conda/release/linux-64/release-lib-1.0.0-0.conda", conda), conda);
+                        }),
+                new Format("terraform", new TerraformFormatFixture(), 201, 409, "already published",
+                        TERRAFORM_PROVIDER, variant -> {
+                            byte[] zip = ("a provider binary " + variant).getBytes(StandardCharsets.UTF_8);
+                            return new Upload(ContractExchange.of("PUT", TERRAFORM_PROVIDER, zip), zip);
                         }));
     }
 
-    /** The three formats whose own publish runs the screen, so a held upload is laid out by the format itself. */
+    /** The formats whose own publish runs the screen, so a held upload is laid out by the format itself. */
     static List<Format> screening() {
-        return formats().stream().filter(format -> !format.name().equals("gems")).toList();
+        Set<String> screening = Set.of("pypi", "nuget", "cargo", "npm");
+        return formats().stream().filter(format -> screening.contains(format.name())).toList();
     }
 
     @ParameterizedTest
@@ -109,6 +146,20 @@ class ReleaseImmutabilityTest {
         assertThat(format.serve(store)).as("%s still serves the first bytes", format).isEqualTo(first.artifact());
         assertThat(changed(released, contents(format.name())))
                 .as("no key the release had is rewritten by a refused upload of %s", format).isEmpty();
+    }
+
+    /** The operator's opt-out, as the edge resolves it for the publishing tenant, lets a release be replaced - the one
+     *  dial every release link honours rather than each format reading it. */
+    @ParameterizedTest
+    @MethodSource("formats")
+    void with_redeploy_allowed_a_second_upload_replaces_the_release(Format format) throws IOException {
+        ArtifactStore store = store(format.name());
+        format.upload(store, "");
+
+        Upload second = Publication.redeploying(true, () -> format.upload(store, "rebuilt"));
+
+        assertThat(second.exchange().status()).as("%s accepts the replacement", format).isEqualTo(format.accepted());
+        assertThat(format.serve(store)).as("%s serves the replacement", format).isEqualTo(second.artifact());
     }
 
     @ParameterizedTest

@@ -250,7 +250,7 @@ public final class CargoFormat implements RepositoryFormat, ArtifactLayout, Prox
                                 // bare writeVersioned): besides the compare-and-set retry, link clears any
                                 // gc/condemned/<hash> marker a collector set, so republishing a crate byte-identical to
                                 // a condemned one un-condemns it before the sweep deletes it.
-                                .through((hash, size, _) -> blobs.linkOnce(crateKey(repo, canonical, version), hash,
+                                .through((hash, size, _) -> blobs.linkRelease(crateKey(repo, canonical, version), hash,
                                         size))
                                 // The index line that advertises it, after it - never before, so a crash never leaves a
                                 // sparse index naming a crate no download can serve.
@@ -316,7 +316,7 @@ public final class CargoFormat implements RepositoryFormat, ArtifactLayout, Prox
         blobs.refuseReplacement(crateKey(repo, canonical, version), hash);
         Withheld.mark(store, hash, new ArtifactDescriptor(ECOSYSTEM, canonical, version,
                 downloadPath(repo, canonical, version), null, false, null, -1L));
-        blobs.linkOnce(crateKey(repo, canonical, version), hash, -1L);
+        blobs.linkRelease(crateKey(repo, canonical, version), hash, -1L);
         blobs.link(indexKey(repo, canonical, version), line);
         new CargoListings(blobs).refresh(repo, canonical, version);   // held: the stored index keeps it out
     }

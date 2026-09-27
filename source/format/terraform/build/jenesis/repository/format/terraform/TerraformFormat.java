@@ -20,6 +20,7 @@ import build.jenesis.repository.format.RepositoryImporter;
 import build.jenesis.repository.format.signing.OpenPgpSigner;
 import build.jenesis.repository.store.ArtifactDescriptor;
 import build.jenesis.repository.store.ArtifactStore;
+import build.jenesis.repository.store.Publication;
 import build.jenesis.repository.store.StoredListing;
 import org.apache.commons.compress.archivers.tar.TarArchiveEntry;
 import org.apache.commons.compress.archivers.tar.TarArchiveInputStream;
@@ -289,7 +290,10 @@ public final class TerraformFormat implements RepositoryFormat, ArtifactLayout, 
                 return;
             }
             String hash = blobs.store(exchange.requestStream());
-            blobs.link(TerraformCoordinates.moduleArchive(repo, path[1], path[2], path[3], version), hash);
+            if (!linked(exchange, blobs, TerraformCoordinates.moduleArchive(repo, path[1], path[2], path[3], version),
+                    hash, path[1] + "/" + path[2] + "/" + path[3] + " " + version)) {
+                return;
+            }
             listings(blobs).moduleRefresh(repo, path[1], path[2], path[3], version);
             exchange.respond(201);
         } else if (path.length == 5 && path[0].equals("providers") && path[4].endsWith(PROVIDER_ARCHIVE)) {
@@ -301,11 +305,27 @@ public final class TerraformFormat implements RepositoryFormat, ArtifactLayout, 
                 return;
             }
             String hash = blobs.store(exchange.requestStream());
-            blobs.link(TerraformCoordinates.providerArchive(repo, path[1], path[2], path[3], path[4]), hash);
+            if (!linked(exchange, blobs, TerraformCoordinates.providerArchive(repo, path[1], path[2], path[3], path[4]),
+                    hash, path[1] + "/" + path[2] + " " + path[3] + " " + path[4])) {
+                return;
+            }
             listings(blobs).providerRefresh(repo, path[1], path[2], path[3], path[4]);
             exchange.respond(201);
         } else {
             exchange.respond(400);
+        }
+    }
+
+    /** Link a published archive, whose bytes the lock file and {@code SHA256SUMS} pin, so its first bytes stay; a
+     *  second publish with other bytes is answered {@code 409} and nothing is refreshed. Whether it was linked. */
+    private static boolean linked(FormatExchange exchange, Blobs blobs, String key, String hash, String what)
+            throws IOException {
+        try {
+            blobs.linkRelease(key, hash, -1L);
+            return true;
+        } catch (Publication.RepublishConflict taken) {
+            exchange.respond(409, Blobs.alreadyPublished(what));
+            return false;
         }
     }
 

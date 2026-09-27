@@ -25,6 +25,7 @@ import build.jenesis.repository.store.ArchiveWalk;
 import build.jenesis.repository.store.ArtifactDescriptor;
 import build.jenesis.repository.store.ArtifactStore;
 import build.jenesis.repository.store.StoredListing;
+import build.jenesis.repository.store.Publication;
 
 /**
  * The CocoaPods registry format (the CocoaPods CDN protocol), so {@code pod install} and {@code pod update} resolve
@@ -278,7 +279,12 @@ public final class CocoaPodsFormat implements RepositoryFormat, ArtifactLayout, 
         // condemned one un-condemns it before the sweep deletes it - otherwise a 201 publish is GC-deleted to a
         // permanent 404. The pointer stores exactly that blob hash, so the marker key matches.
         Blobs blobs = new Blobs(store);
-        blobs.link(blobKey(repo, name, version), hash);
+        try {
+            blobs.linkRelease(blobKey(repo, name, version), hash, -1L);
+        } catch (Publication.RepublishConflict taken) {
+            exchange.respond(409, Blobs.alreadyPublished(name + " " + version));
+            return;
+        }
         blobs.write(specKey(repo, shard, name, version), MAPPER.writeValueAsBytes(stanza));
         // The served shard listing is written here, on the publish: the version joins the pod's stored list, which
         // re-derives the pod's line in its shard rather than scanning the shard on every read.

@@ -90,6 +90,11 @@ public final class ReleaseImmutability {
         return !live.allowRedeploy(tenant) && immutableReleaseArtifact(plugin, path);
     }
 
+    /** Whether {@code tenant} has opted out of release immutability ({@code allow-redeploy}). */
+    public boolean redeployAllowed(String tenant) {
+        return live.allowRedeploy(tenant);
+    }
+
     /** Record and log the loud, named refusal (§9), returning the client-facing message. Called by the deploy path
      *  once it has decided to answer {@code 409}. The {@code store} is read for the incumbent's ORIGIN:
      *  the incumbent pointer's hash keys the {@link OriginSection origin} record, so the message can name whether the

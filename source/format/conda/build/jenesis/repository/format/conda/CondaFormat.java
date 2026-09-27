@@ -23,6 +23,7 @@ import build.jenesis.repository.store.ArchiveInflation;
 import build.jenesis.repository.store.ArchiveWalk;
 import build.jenesis.repository.store.ArtifactDescriptor;
 import build.jenesis.repository.store.ArtifactStore;
+import build.jenesis.repository.store.Publication;
 import build.jenesis.repository.store.StoredListing;
 import build.jenesis.repository.store.ServableNames;
 import build.jenesis.repository.walk.BoundedChildren;
@@ -314,7 +315,16 @@ public final class CondaFormat implements RepositoryFormat, ArtifactLayout, Prox
         // condemned blob un-condemns it before the sweep deletes it - otherwise a 200/201 publish is GC-deleted to a
         // permanent 404. The blob hash is exactly what the pointer stores, so the marker key matches.
         Blobs blobs = new Blobs(store);
-        blobs.link(packageKey(repo, subdir, file), hash);
+        try {
+            // A package file never changes under its name once uploaded - a conda lock file pins its sha256 - so the
+            // first bytes stay, decided at the pointer's compare-and-set, and a second upload is answered as
+            // anaconda.org answers it.
+            blobs.linkRelease(packageKey(repo, subdir, file), hash, -1L);
+        } catch (Publication.RepublishConflict taken) {
+            exchange.respond(409, ("Conflict: the file " + subdir + "/" + file + " already exists")
+                    .getBytes(StandardCharsets.UTF_8));
+            return;
+        }
         byte[] indexed = MAPPER.writeValueAsBytes(record);
         blobs.write(indexKey(repo, subdir, file), indexed);
         if (pathCoordinate != null) {
