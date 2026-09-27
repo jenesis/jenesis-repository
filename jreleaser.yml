@@ -27,22 +27,39 @@ release:
     skipTag: false
     tagName: 'v{{projectVersion}}'
 
-# The command-line client: its launcher jar as a download of its own, and the SDKMAN archive that wraps it with the
-# jenesis-repo command. Both are assembled by release.yml after staging; SDKMAN itself is published from release.yml
-# against state.sdkman.io, since JReleaser speaks only SDKMAN's retired vendor API.
+# The command-line client: its launcher jar as a download of its own, and the archive that wraps it with the jenreg
+# command, published to Homebrew and Scoop here and to mise from release.yml. Both are assembled by release.yml after
+# staging. The packager templates live under distribution/, since this project has no src/ tree for JReleaser's
+# default location, so each packager names its templateDirectory.
 distributions:
-  jenesis-repo:
+  jenreg:
     type: JAVA_BINARY
     executable:
-      name: jenesis-repo
+      name: jenreg
     java:
       mainClass: build.jenesis.repository.cli.Cli
     artifacts:
-      - path: 'sdk/jenesis-repo-{{projectVersion}}.zip'
+      - path: 'sdk/jenreg-{{projectVersion}}.zip'
+    brew:
+      active: ALWAYS
+      templateDirectory: distribution/jenreg/brew
+      formulaName: jenreg
+      repository:
+        owner: jenesis
+        name: homebrew-tap
+    scoop:
+      active: ALWAYS
+      templateDirectory: distribution/jenreg/scoop
+      packageName: jenreg
+      repository:
+        owner: jenesis
+        name: scoop-bucket
+    # SDKMAN is published from release.yml against state.sdkman.io once the candidate exists, since JReleaser speaks
+    # only SDKMAN's retired vendor API; the step there is commented out until then.
 
 files:
   artifacts:
-    - path: 'sdk/jenesis-repo-{{projectVersion}}.jar'
+    - path: 'sdk/jenreg-{{projectVersion}}.jar'
 
 deploy:
   maven:

@@ -80,8 +80,9 @@ jobs:
                -Djenesis.dependency.pin=strict \
                build/jenesis/Make.java stage
 
-      # The command-line client ships as its launcher jar and as the SDKMAN archive around it: bin/ from sdk/, the jar
-      # the launcher packaging wrote, and the licence. The archive is unpacked and run before anything is released.
+      # The command-line client ships as its launcher jar and as the archive around it that Homebrew, Scoop and mise
+      # install: bin/ from sdk/, the jar the launcher packaging wrote, and the licence. The archive is unpacked and run
+      # before anything is released.
       - name: Package the command-line client
         env:
           VERSION: ${{ steps.version.outputs.version }}
@@ -92,10 +93,10 @@ jobs:
             exit 1
           fi
           git clean -fdX sdk/
-          BASE="jenesis-repo-${VERSION}"
+          BASE="jenreg-${VERSION}"
           mkdir -p "sdk/${BASE}/lib"
           cp -r sdk/bin "sdk/${BASE}/bin"
-          cp "${LAUNCHER}" "sdk/${BASE}/lib/jenesis-repo.jar"
+          cp "${LAUNCHER}" "sdk/${BASE}/lib/jenreg.jar"
           cp LICENSE NOTICE "sdk/${BASE}/"
           cp "${LAUNCHER}" "sdk/${BASE}.jar"
           (cd sdk && zip -r "${BASE}.zip" "${BASE}")
@@ -119,38 +120,51 @@ jobs:
           JRELEASER_GPG_PASSPHRASE: ${{ secrets.GPG_PASSPHRASE }}
           JRELEASER_GPG_PUBLIC_KEY: ${{ secrets.GPG_PUBLIC_KEY }}
           JRELEASER_GPG_SECRET_KEY: ${{ secrets.GPG_SECRET_KEY }}
+          JRELEASER_HOMEBREW_GITHUB_TOKEN: ${{ secrets.HOMEBREW_GITHUB_TOKEN }}
+          JRELEASER_SCOOP_GITHUB_TOKEN: ${{ secrets.SCOOP_GITHUB_TOKEN }}
 
-      - name: Publish the SDKMAN candidate
-        env:
-          VERSION: ${{ steps.version.outputs.version }}
-          EMAIL: ${{ secrets.SDKMAN_EMAIL }}
-          PASSWORD: ${{ secrets.SDKMAN_PASSWORD }}
-        run: |
-          if [ -z "${EMAIL}" ] || [ -z "${PASSWORD}" ]; then
-            echo "No SDKMAN credentials: set the SDKMAN_EMAIL and SDKMAN_PASSWORD secrets." >&2
-            exit 1
-          fi
-          TOKEN="$(curl -sS --fail-with-body https://state.sdkman.io/login \
-            -H 'Content-Type: application/json' \
-            -d "$(jq -n --arg email "${EMAIL}" --arg password "${PASSWORD}" \
-                    '{email: $email, password: $password}')" | jq -r '.token // empty')"
-          if [ -z "${TOKEN}" ]; then
-            echo "SDKMAN returned no token for ${EMAIL}." >&2
-            exit 1
-          fi
-          echo "::add-mask::${TOKEN}"
-          DOWNLOAD="https://github.com/jenesis/jenesis-repository/releases/download/v${VERSION}/jenesis-repo-${VERSION}.zip"
-          curl -fsIL -o /dev/null "${DOWNLOAD}"
-          curl -sS --fail-with-body -X POST https://state.sdkman.io/versions \
-            -H "Authorization: Bearer ${TOKEN}" \
-            -H 'Content-Type: application/json' \
-            -d "$(jq -n \
-                    --arg candidate jenesis-repo \
-                    --arg version "${VERSION}" \
-                    --arg url "${DOWNLOAD}" \
-                    --arg sha256sum "$(sha256sum "sdk/jenesis-repo-${VERSION}.zip" | cut -d' ' -f1)" \
-                    '{candidate: $candidate, version: $version, platform: "UNIVERSAL", visible: true,
-                      url: $url, sha256sum: $sha256sum, tags: ["latest"]}')"
+      # SDKMAN waits until the jenreg candidate exists there: then uncomment this step and set the SDKMAN_EMAIL and
+      # SDKMAN_PASSWORD secrets.
+      # - name: Publish the SDKMAN candidate
+      #   env:
+      #     VERSION: ${{ steps.version.outputs.version }}
+      #     EMAIL: ${{ secrets.SDKMAN_EMAIL }}
+      #     PASSWORD: ${{ secrets.SDKMAN_PASSWORD }}
+      #   run: |
+      #     if [ -z "${EMAIL}" ] || [ -z "${PASSWORD}" ]; then
+      #       echo "No SDKMAN credentials: set the SDKMAN_EMAIL and SDKMAN_PASSWORD secrets." >&2
+      #       exit 1
+      #     fi
+      #     TOKEN="$(curl -sS --fail-with-body https://state.sdkman.io/login \
+      #       -H 'Content-Type: application/json' \
+      #       -d "$(jq -n --arg email "${EMAIL}" --arg password "${PASSWORD}" \
+      #               '{email: $email, password: $password}')" | jq -r '.token // empty')"
+      #     if [ -z "${TOKEN}" ]; then
+      #       echo "SDKMAN returned no token for ${EMAIL}." >&2
+      #       exit 1
+      #     fi
+      #     echo "::add-mask::${TOKEN}"
+      #     DOWNLOAD="https://github.com/jenesis/jenesis-repository/releases/download/v${VERSION}/jenreg-${VERSION}.zip"
+      #     curl -fsIL -o /dev/null "${DOWNLOAD}"
+      #     curl -sS --fail-with-body -X POST https://state.sdkman.io/versions \
+      #       -H "Authorization: Bearer ${TOKEN}" \
+      #       -H 'Content-Type: application/json' \
+      #       -d "$(jq -n \
+      #               --arg candidate jenreg \
+      #               --arg version "${VERSION}" \
+      #               --arg url "${DOWNLOAD}" \
+      #               --arg sha256sum "$(sha256sum "sdk/jenreg-${VERSION}.zip" | cut -d' ' -f1)" \
+      #               '{candidate: $candidate, version: $version, platform: "UNIVERSAL", visible: true,
+      #                 url: $url, sha256sum: $sha256sum, tags: ["latest"]}')"
+
+      - name: Publish the jenreg packslip for mise
+        uses: jdx/packslip@74c75db7d611b36dd5a157999ec16cf823ccf80c # v1.2.0
+        with:
+          project: github.com/jenesis/jenesis-repository/jenreg
+          tag: v${{ steps.version.outputs.version }}
+          artifacts: sdk/jenreg-${{ steps.version.outputs.version }}.zip
+          bin: jenreg
+          require: bin:java@25
 
       - name: Upload JReleaser logs
         if: always()
