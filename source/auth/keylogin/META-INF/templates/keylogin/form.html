@@ -19,7 +19,7 @@
         <label for="key">Login key</label>
         <input type="password" id="key" name="key" autocomplete="off" autofocus required
                placeholder="Paste your login key"/>
-        <button type="submit">Sign in</button>
+        <button th:replace="~{base :: primaryButton('Sign in')}">Sign in</button>
     </form>
     <p class="app-signin__foot">Key-based sign-in is for <strong>demos and simple deployments</strong> without
         single sign-on. For production, prefer OIDC or LDAP, and switch this off once real credentials exist.</p>

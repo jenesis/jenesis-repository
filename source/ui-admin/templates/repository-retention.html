@@ -21,7 +21,7 @@
             <label>not-downloaded-for
                 <input name="notDownloadedFor" th:value="${retention.notDownloadedFor}" placeholder="P30D"></label>
         </div>
-        <button type="submit">Save retention</button>
+        <button th:replace="~{base :: primaryButton('Save retention')}">Save retention</button>
     </form>
 
     <article id="cleanup">
@@ -60,15 +60,16 @@
         </th:block>
         <p th:unless="${capabilities.gc()}"><small>Garbage collection is off - no collector module is installed
             or selected, so a cleanup evicts versions but reclaims no storage.</small></p>
-        <!--/* The preview is the everyday action and leads; the run evicts, so it is the danger control and its
-             confirmation says what the last finished preview found - or that there is none to go by. */-->
-        <div th:if="${isEditor}" style="display:flex; gap:0.5em">
+        <!--/* The preview changes nothing and leads; the run brings forward what the policy's scheduled pass evicts,
+             so it is the caution, and its confirmation says what the last finished preview found - or that there is
+             none to go by. */-->
+        <div th:if="${isEditor}" class="app-actions">
             <form method="post" th:action="@{'/ui/repositories/' + ${repo} + '/cleanup/preview'}">
-                <button type="submit">Preview cleanup</button>
+                <button th:replace="~{base :: secondaryButton('Preview cleanup')}">Preview cleanup</button>
             </form>
             <form method="post" th:action="@{'/ui/repositories/' + ${repo} + '/cleanup'}"
                   th:with="previewed=${plan != null and !plan.running() and plan.failure() == null}">
-                <button th:replace="~{base :: dangerButton('Run cleanup now', ${previewed}
+                <button th:replace="~{base :: cautionButton('Run cleanup now', ${previewed}
                         ? |Evict now? The last preview, as of ${plan.finishedAt()}, found ${plan.count()} version(s) to evict.|
                         : 'Evict now? No finished preview says what this cleanup would evict.')}">Run cleanup now</button>
             </form>

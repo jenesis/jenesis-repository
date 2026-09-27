@@ -26,11 +26,13 @@
             <tr th:each="e : ${upstreams}">
                 <td><code th:text="${e.key}">format</code></td>
                 <td><code th:text="${e.value}">url</code></td>
-                <td>
-                    <form method="post" th:action="@{/ui/settings/upstreams/remove}" style="margin:0">
-                        <input type="hidden" name="format" th:value="${e.key}">
-                        <button th:replace="~{base :: deleteButton('Remove', ${e.key}, 'The proxy upstream is removed; misses stop being pulled through until it is set again.')}">Remove</button>
-                    </form>
+                <td class="app-list__actions">
+                    <div class="app-actions">
+                        <form method="post" th:action="@{/ui/settings/upstreams/remove}">
+                            <input type="hidden" name="format" th:value="${e.key}">
+                            <button th:replace="~{base :: deleteButton('Remove', ${e.key}, 'The proxy upstream is removed; misses stop being pulled through until it is set again.')}">Remove</button>
+                        </form>
+                    </div>
                 </td>
             </tr>
             </tbody>
@@ -51,13 +53,15 @@
             <tr th:each="e : ${suggestedUpstreams}">
                 <td><code th:text="${e.key}">format</code></td>
                 <td><code th:text="${e.value}">url</code></td>
-                <td>
-                    <form method="post" th:action="@{/ui/settings/upstreams}" style="margin:0">
-                        <input type="hidden" name="format" th:value="${e.key}">
-                        <input type="hidden" name="url" th:value="${e.value}">
-                        <button type="submit" class="secondary"
-                                th:attr="aria-label='Use ' + ${e.value} + ' for ' + ${e.key}">Use</button>
-                    </form>
+                <td class="app-list__actions">
+                    <div class="app-actions">
+                        <form method="post" th:action="@{/ui/settings/upstreams}">
+                            <input type="hidden" name="format" th:value="${e.key}">
+                            <input type="hidden" name="url" th:value="${e.value}">
+                            <button type="submit" class="secondary outline app-secondary"
+                                    th:attr="aria-label='Use ' + ${e.value} + ' for ' + ${e.key}">Use</button>
+                        </form>
+                    </div>
                 </td>
             </tr>
             </tbody>
@@ -66,7 +70,7 @@
         <form method="post" th:action="@{/ui/settings/upstreams}" class="grid">
             <input name="format" placeholder="format name" required pattern="[A-Za-z0-9_-]+">
             <input name="url" placeholder="upstream URL" required>
-            <button type="submit">Save</button>
+            <button th:replace="~{base :: primaryButton('Save')}">Save</button>
         </form>
     </article>
 
@@ -86,11 +90,13 @@
             <tbody>
             <tr th:each="h : ${upstreamAuthHosts}">
                 <td><code th:text="${h}">registry.internal</code></td>
-                <td>
-                    <form method="post" th:action="@{/ui/settings/upstream-auth/remove}" style="margin:0">
-                        <input type="hidden" name="host" th:value="${h}">
-                        <button th:replace="~{base :: deleteButton('Remove', ${h}, 'The stored credential for this host is removed; the secret is not recoverable and must be entered again.')}">Remove</button>
-                    </form>
+                <td class="app-list__actions">
+                    <div class="app-actions">
+                        <form method="post" th:action="@{/ui/settings/upstream-auth/remove}">
+                            <input type="hidden" name="host" th:value="${h}">
+                            <button th:replace="~{base :: deleteButton('Remove', ${h}, 'The stored credential for this host is removed; the secret is not recoverable and must be entered again.')}">Remove</button>
+                        </form>
+                    </div>
                 </td>
             </tr>
             </tbody>
@@ -114,7 +120,7 @@
                 <input name="header" placeholder="header name (header)">
                 <input name="token" type="password" placeholder="token (bearer) or header value" autocomplete="off">
             </div>
-            <button type="submit">Save credential</button>
+            <button th:replace="~{base :: primaryButton('Save credential')}">Save credential</button>
         </form>
     </article>
 
@@ -138,11 +144,13 @@
             <tr th:each="e : ${repositories}">
                 <td><code th:text="${e.key}">name</code></td>
                 <td><code th:text="${e.value}">spec</code></td>
-                <td>
-                    <form method="post" th:action="@{/ui/settings/repositories/remove}" style="margin:0">
-                        <input type="hidden" name="name" th:value="${e.key}">
-                        <button th:replace="~{base :: deleteButton('Remove', ${e.key}, 'The definition is removed; requests routed through it stop resolving until it is defined again.')}">Remove</button>
-                    </form>
+                <td class="app-list__actions">
+                    <div class="app-actions">
+                        <form method="post" th:action="@{/ui/settings/repositories/remove}">
+                            <input type="hidden" name="name" th:value="${e.key}">
+                            <button th:replace="~{base :: deleteButton('Remove', ${e.key}, 'The definition is removed; requests routed through it stop resolving until it is defined again.')}">Remove</button>
+                        </form>
+                    </div>
                 </td>
             </tr>
             </tbody>
@@ -151,7 +159,7 @@
         <form method="post" th:action="@{/ui/settings/repositories}" class="grid">
             <input name="name" placeholder="name" required pattern="[A-Za-z0-9_-]+">
             <input name="definition" placeholder="writable | fallback <url> | fallback a fallback b" required>
-            <button type="submit">Save</button>
+            <button th:replace="~{base :: primaryButton('Save')}">Save</button>
         </form>
     </article>
 
@@ -173,12 +181,14 @@
                         <tr th:each="e : ${tenantUpstreams}">
                             <td><code th:text="${e.key}">format</code></td>
                             <td><code th:text="${e.value}">url</code></td>
-                            <td>
-                                <form method="post" th:action="@{/ui/settings/upstreams/remove}" style="margin:0">
-                                    <input type="hidden" name="format" th:value="${e.key}">
-                                    <input type="hidden" name="forTenant" value="true">
-                                    <button th:replace="~{base :: deleteButton('Remove', ${e.key}, 'The tenant pulls this format through the deployment upstream again.')}">Remove</button>
-                                </form>
+                            <td class="app-list__actions">
+                                <div class="app-actions">
+                                    <form method="post" th:action="@{/ui/settings/upstreams/remove}">
+                                        <input type="hidden" name="format" th:value="${e.key}">
+                                        <input type="hidden" name="forTenant" value="true">
+                                        <button th:replace="~{base :: deleteButton('Remove', ${e.key}, 'The tenant pulls this format through the deployment upstream again.')}">Remove</button>
+                                    </form>
+                                </div>
                             </td>
                         </tr>
                         </tbody>
@@ -190,7 +200,7 @@
                     <input type="hidden" name="forTenant" value="true">
                     <label>Format <input name="format" required pattern="[A-Za-z0-9_-]+" placeholder="maven"></label>
                     <label>Upstream URL <input name="url" required placeholder="https://mirror.example/maven2/"></label>
-                    <button type="submit">Save for this tenant</button>
+                    <button th:replace="~{base :: primaryButton('Save for this tenant')}">Save for this tenant</button>
                 </form>
             </article>
             <article>

@@ -23,15 +23,17 @@
                 <td th:text="${s.id}">id</td>
                 <td th:text="${s.state}">OPEN</td>
                 <td class="app-list__num" th:text="${s.items >= stagedCountCap} ? ${stagedCountCap} + '+' : ${s.items}">0</td>
-                <td th:if="${isEditor}">
-                    <form method="post" style="display:inline; margin:0"
-                          th:action="@{'/ui/repositories/' + ${repo} + '/staging/' + ${s.id} + '/promote'}">
-                        <button th:replace="~{base :: dangerButton('Promote', |Publish everything staged under ${s.id} into the release layout?|)}">Promote</button>
-                    </form>
-                    <form method="post" style="display:inline; margin:0" class="app-actions__danger"
-                          th:action="@{'/ui/repositories/' + ${repo} + '/staging/' + ${s.id} + '/drop'}">
-                        <button th:replace="~{base :: deleteButton('Drop', ${s.id}, 'Everything staged under this id is discarded and can no longer be promoted.')}">Drop</button>
-                    </form>
+                <td th:if="${isEditor}" class="app-list__actions">
+                    <div class="app-actions">
+                        <form method="post"
+                              th:action="@{'/ui/repositories/' + ${repo} + '/staging/' + ${s.id} + '/promote'}">
+                            <button th:replace="~{base :: cautionButton('Promote', |Publish everything staged under ${s.id} into the release layout?|)}">Promote</button>
+                        </form>
+                        <form method="post" class="app-actions__danger"
+                              th:action="@{'/ui/repositories/' + ${repo} + '/staging/' + ${s.id} + '/drop'}">
+                            <button th:replace="~{base :: deleteButton('Drop', ${s.id}, 'Everything staged under this id is discarded and can no longer be promoted.')}">Drop</button>
+                        </form>
+                    </div>
                 </td>
             </tr>
             </tbody>

@@ -18,7 +18,7 @@
         <form class="setting-edit" method="post" th:action="@{'/ui/repositories/' + ${repo} + '/describe'}">
             <input name="description" maxlength="280" th:value="${description}" aria-label="Description"
                    placeholder="What this repository is for">
-            <button type="submit">Save</button>
+            <button th:replace="~{base :: primaryButton('Save')}">Save</button>
         </form>
     </details>
     <th:block th:if="${unplaceable != null and !unplaceable.isEmpty()}">
@@ -68,7 +68,7 @@
                     <input name="definition" required placeholder="fallback https://repo1.maven.org/maven2/"
                            th:value="${routing.layer().name() == 'TENANT'} ? ${routing.specification()} : ''">
                 </label>
-                <button type="submit">Save for this tenant</button>
+                <button th:replace="~{base :: primaryButton('Save for this tenant')}">Save for this tenant</button>
             </form>
         </details>
         <form th:if="${isSuperadmin and routing.layer().name() == 'TENANT'}" method="post"
@@ -148,7 +148,7 @@
                        th:text="${retirements.get(eco).sample().isEmpty()} ? 'Retired.' : ${retirements.get(eco).sample()[0]}">
                     retired</small>
                 <form th:if="${isEditor and (retirements == null or !retirements.containsKey(eco) or !retirements.get(eco).running())}"
-                      method="post" style="display:inline; margin:0" class="app-actions__danger"
+                      method="post" class="app-actions__danger"
                       th:action="@{'/ui/repositories/' + ${repo} + '/forget-ecosystem'}">
                     <input type="hidden" name="ecosystem" th:value="${eco}">
                     <button th:replace="~{base :: deleteButton('Forget ecosystem', ${eco}, 'Every record of this ecosystem in this repository is retired, and the collector reclaims its content.')}">Forget ecosystem</button>

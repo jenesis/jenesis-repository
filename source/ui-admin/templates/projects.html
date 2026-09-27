@@ -49,7 +49,7 @@
             <label>Name
                 <input name="name" required pattern="[A-Za-z0-9_]+" placeholder="my_project">
             </label>
-            <button type="submit">Create project</button>
+            <button th:replace="~{base :: primaryButton('Create project')}">Create project</button>
         </form>
     </article>
     </div>
@@ -75,7 +75,7 @@
                     <input name="minFreePercent" inputmode="numeric">
                 </label>
             </div>
-            <button th:replace="~{base :: dangerButton('Reclaim now', 'Evict the least recently used cache entries across every tenant until the target is met?')}">Reclaim now</button>
+            <button th:replace="~{base :: cautionButton('Reclaim now', 'Evict the least recently used cache entries across every tenant until the target is met?')}">Reclaim now</button>
         </form>
     </section>
 </main>

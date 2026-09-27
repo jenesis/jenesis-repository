@@ -13,7 +13,7 @@
             construction - every secret-kind setting is excluded, so a stored secret never travels in the backup. An
             import is validated first and refused whole if any value would not resolve, then it replaces the current
             stored settings.</small></p>
-        <a class="secondary" role="button" th:href="@{/ui/settings/export}" download="jenesis-settings.json">Download
+        <a class="secondary outline app-secondary" role="button" th:href="@{/ui/settings/export}" download="jenesis-settings.json">Download
             settings bundle</a>
         <!--/* The CSRF token rides in the action URL, not only in the body: this is the one multipart form in the
              console, and with Spring's multipart resolver deliberately off everywhere (it would drain an artifact

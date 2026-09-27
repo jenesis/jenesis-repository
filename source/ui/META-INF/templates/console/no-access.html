@@ -26,7 +26,7 @@
     <p><code th:text="${qualifiedId}">oidc/00000000-0000-0000-0000-000000000000</code></p>
     <p><small>Once you have been granted access, reload this page.</small></p>
     <form th:action="@{/ui/logout}" method="post">
-        <button type="submit" class="secondary">Sign out</button>
+        <button th:replace="~{base :: secondaryButton('Sign out')}">Sign out</button>
     </form>
 </main>
 </body>

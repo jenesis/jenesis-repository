@@ -33,7 +33,7 @@
         </th:block>
         <form th:if="${isAdmin and !report.scanning()}" method="post"
               th:action="@{'/ui/repositories/' + ${repo} + '/health/rescan'}">
-            <button type="submit" class="secondary">Rescan maintainer-health</button>
+            <button th:replace="~{base :: secondaryButton('Rescan maintainer-health')}">Rescan maintainer-health</button>
         </form>
         <!--/* The ranking is a built artefact, so "not built yet" is a state of its own and never an empty table. An
              empty weakest-first list would tell a reviewer that no project here is worse than the ones shown, which is

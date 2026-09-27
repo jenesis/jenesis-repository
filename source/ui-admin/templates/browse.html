@@ -49,7 +49,7 @@
         <div class="grid">
             <input name="q" type="search" th:value="${query}"
                    placeholder="search coordinates" aria-label="Search coordinates">
-            <button type="submit">Search</button>
+            <button th:replace="~{base :: secondaryButton('Search')}">Search</button>
         </div>
     </form>
 

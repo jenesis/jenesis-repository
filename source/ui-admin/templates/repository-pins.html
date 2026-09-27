@@ -8,17 +8,15 @@
     <th:block th:replace="~{base :: repositoryHeader('Pins', null, null)}"></th:block>
     <p><small>A pinned version is never evicted, whatever the retention policy says.</small></p>
     <ul th:unless="${pins.isEmpty()}">
-        <li th:each="pin : ${pins}">
+        <li th:each="pin : ${pins}"><div class="app-actions">
             <code th:text="${pin.ecosystem()} + ':' + ${pin.coordinate()} + ':' + ${pin.version()}">ecosystem:coordinate:version</code>
-            <form th:if="${isEditor}" method="post" style="display:inline; margin:0"
-                  th:action="@{'/ui/repositories/' + ${repo} + '/pins/remove'}"
-                  data-confirm="Lift this pin? The version becomes eligible for retention eviction.">
+            <form th:if="${isEditor}" method="post" th:action="@{'/ui/repositories/' + ${repo} + '/pins/remove'}">
                 <input type="hidden" name="ecosystem" th:value="${pin.ecosystem()}">
                 <input type="hidden" name="coordinate" th:value="${pin.coordinate()}">
                 <input type="hidden" name="version" th:value="${pin.version()}">
-                <button class="secondary outline" type="submit">Unpin</button>
+                <button th:replace="~{base :: cautionButton('Unpin', 'Lift this pin? The version becomes eligible for retention eviction.')}">Unpin</button>
             </form>
-        </li>
+        </div></li>
     </ul>
     <th:block th:if="${pins.isEmpty()}">
         <div th:replace="~{base :: empty('No pins. A pinned version is never evicted by retention.')}"></div>
@@ -37,7 +35,7 @@
             <label>Coordinate <input name="coordinate" placeholder="org.acme:lib" required></label>
             <label>Version <input name="version" placeholder="1.4.0" required></label>
         </div>
-        <button type="submit">Pin a version</button>
+        <button th:replace="~{base :: primaryButton('Pin a version')}">Pin a version</button>
     </form>
 </main>
 </body>

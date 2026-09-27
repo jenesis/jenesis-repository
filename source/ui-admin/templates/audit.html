@@ -14,7 +14,7 @@
                 <input name="action" th:value="${action}" placeholder="credential.mint">
             </label>
         </div>
-        <button type="submit">Filter</button>
+        <button th:replace="~{base :: secondaryButton('Filter')}">Filter</button>
     </form>
     <figure th:unless="${events.isEmpty()}">
         <table class="app-list">

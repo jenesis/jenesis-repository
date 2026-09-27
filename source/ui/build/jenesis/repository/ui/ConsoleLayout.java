@@ -41,7 +41,17 @@ public final class ConsoleLayout {
     /** The shared list of what every page loads - a console adding its own {@code <head>} extras includes this. */
     public static final String HEAD_CONTENTS = "headContents";
 
-    /** A destructive submit: the danger treatment and its confirmation together, so neither can be forgotten. */
+    /** The main action of a page or of a section standing on its own, taking the label: the one filled button. */
+    public static final String PRIMARY_BUTTON = "primaryButton";
+
+    /** A neutral action - a filter, a refresh, a row's everyday act - taking the label. */
+    public static final String SECONDARY_BUTTON = "secondaryButton";
+
+    /** A consequential submit that can be undone - a release, a promotion, a pass run now: the caution treatment and
+     *  its confirmation together, taking the label and the question. */
+    public static final String CAUTION_BUTTON = "cautionButton";
+
+    /** An irreversible submit: the danger treatment and its confirmation together, so neither can be forgotten. */
     public static final String DANGER_BUTTON = "dangerButton";
 
     /** A deletion: the danger treatment, guarded by a dialog in which the reader types {@code delete <name>}, taking the
@@ -93,9 +103,10 @@ public final class ConsoleLayout {
 
     /** Every fragment an extending console may build on. */
     public static final Set<String> FRAGMENTS = Set.of(
-            PAGE_HEADER, PAGE_HEADER_CRUMBS, EMPTY, ALERT, HEAD_CONTENTS, DANGER_BUTTON, DELETE_BUTTON, SHELL, SIGN_IN_SHELL,
-            MESSAGES, SUBSECTION_ERROR, BROWSE_ROWS, BROWSE_UP, RUNNING, REPOSITORY_HEADER, REPOSITORY_OVERVIEW_HEADER,
-            REPOSITORY_IDENTITY, MODULE_VIEWS);
+            PAGE_HEADER, PAGE_HEADER_CRUMBS, EMPTY, ALERT, HEAD_CONTENTS, PRIMARY_BUTTON, SECONDARY_BUTTON,
+            CAUTION_BUTTON, DANGER_BUTTON, DELETE_BUTTON, SHELL, SIGN_IN_SHELL, MESSAGES, SUBSECTION_ERROR,
+            BROWSE_ROWS, BROWSE_UP, RUNNING, REPOSITORY_HEADER, REPOSITORY_OVERVIEW_HEADER, REPOSITORY_IDENTITY,
+            MODULE_VIEWS);
 
     private ConsoleLayout() {
         throw new UnsupportedOperationException();

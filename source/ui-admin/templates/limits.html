@@ -23,7 +23,7 @@
             <form th:if="${isAdmin}" method="post" th:action="@{/ui/limits/quota}">
                 <label>Maximum bytes (0 = unlimited)
                     <input type="number" name="maxBytes" min="0" th:value="${quota.maxBytes}"></label>
-                <button type="submit">Save quota</button>
+                <button th:replace="~{base :: primaryButton('Save quota')}">Save quota</button>
             </form>
         </article>
         <article th:if="${capabilities.rateLimit()}">
@@ -39,7 +39,7 @@
             <form th:if="${isAdmin}" method="post" th:action="@{/ui/limits/rate-limit}">
                 <label>Permits per minute (0 = the deployment's)
                     <input type="number" name="permitsPerMinute" min="0" th:value="${rateLimit}"></label>
-                <button type="submit">Save rate limit</button>
+                <button th:replace="~{base :: primaryButton('Save rate limit')}">Save rate limit</button>
             </form>
         </article>
     </div>

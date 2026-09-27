@@ -77,7 +77,7 @@
                                 <select name="format" required th:attr="aria-label=|Format for ${r.name}|">
                                     <option th:each="f : ${formats}" th:value="${f}" th:text="${f}">maven</option>
                                 </select>
-                                <button type="submit">Give format</button>
+                                <button th:replace="~{base :: secondaryButton('Give format')}">Give format</button>
                             </form>
                         </th:block>
                     </td>
@@ -102,7 +102,7 @@
                 </select></label>
             <label>Description <small>(optional)</small>
                 <input name="description" maxlength="280" placeholder="What this repository is for"></label>
-            <button type="submit">Create repository</button>
+            <button th:replace="~{base :: primaryButton('Create repository')}">Create repository</button>
         </form>
     </article>
     </div>

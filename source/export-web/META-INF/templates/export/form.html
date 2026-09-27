@@ -82,7 +82,7 @@
             </div>
             <small>The credential is used for this job only and never stored; resuming a job asks for it again.</small>
 
-            <button type="submit" th:text="${resume.isBlank()} ? 'Start export' : 'Resume export'">Start export</button>
+            <button th:replace="~{base :: primaryButton(${resume.isBlank()} ? 'Start export' : 'Resume export')}">Start export</button>
         </form>
     </article>
 

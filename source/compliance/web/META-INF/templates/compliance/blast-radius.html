@@ -41,7 +41,7 @@
                found: when it finished, how many releases it would hold, and the first rows of them. */-->
         <form th:if="${isEditor}" method="post" th:action="@{'/ui/repositories/' + ${repo} + '/blast-radius'}">
             <input type="hidden" name="unknown" th:value="${unknown}">
-            <button type="submit" th:disabled="${blast.running()}">Recompute</button>
+            <button type="submit" class="secondary outline app-secondary" th:disabled="${blast.running()}">Recompute</button>
         </form>
         <article th:unless="${blast.computed()}">
             <div th:replace="~{base :: empty('No preview has been computed yet for this mode.')}"></div>

@@ -22,7 +22,7 @@
         <span th:text="${project.stats.lastAction()}">count</span>: <span th:text="${project.stats.lastOutcome()}">outcome</span>.</small></p>
     <form th:if="${isEditor and !project.stats.counting()}" method="post"
           th:action="@{'/ui/projects/' + ${project.name} + '/recount'}">
-        <button type="submit" class="secondary">Count entries now</button>
+        <button th:replace="~{base :: secondaryButton('Count entries now')}">Count entries now</button>
     </form>
 
     <article>
@@ -47,7 +47,7 @@
             <label>TTL <small>(ISO-8601 duration, e.g. P30D or PT12H; blank = none)</small>
                 <input name="ttl" th:value="${project.ttl}" placeholder="P30D">
             </label>
-            <button type="submit">Save settings</button>
+            <button th:replace="~{base :: primaryButton('Save settings')}">Save settings</button>
         </form>
     </article>
 
@@ -66,10 +66,10 @@
             entries left are shown above when it lands.</small></p>
         <div class="app-actions">
             <form method="post" th:action="@{'/ui/projects/' + ${project.name} + '/evict/size'}">
-                <button th:replace="~{base :: dangerButton('Enforce size cap now', 'Evict entries until the project is within its size cap?')}">Enforce size cap now</button>
+                <button th:replace="~{base :: cautionButton('Enforce size cap now', 'Evict entries until the project is within its size cap?')}">Enforce size cap now</button>
             </form>
             <form method="post" th:action="@{'/ui/projects/' + ${project.name} + '/evict/ttl'}">
-                <button th:replace="~{base :: dangerButton('Expire stale entries now', 'Delete every entry older than the project ttl?')}">Expire stale entries now</button>
+                <button th:replace="~{base :: cautionButton('Expire stale entries now', 'Delete every entry older than the project ttl?')}">Expire stale entries now</button>
             </form>
             <form method="post" class="app-actions__danger" th:action="@{'/ui/projects/' + ${project.name} + '/evict/clear'}">
                 <button th:replace="~{base :: deleteButton('Clear all entries', ${project.name}, 'Every cached entry of this project is deleted; the next builds run without them.')}">Clear all entries</button>

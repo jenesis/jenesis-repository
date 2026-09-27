@@ -47,7 +47,7 @@
                                 th:text="${entry}" th:selected="${entry == applicability}">applies</option>
                     </select>
                 </label>
-                <label>&nbsp;<button type="submit">Filter</button></label>
+                <label>&nbsp;<button th:replace="~{base :: secondaryButton('Filter')}">Filter</button></label>
             </div>
         </form>
         <!--/* Principle 10: the render above serves the durable ledger only, so its staleness is always shown - a
@@ -63,7 +63,7 @@
         </th:block>
         <form th:if="${isAdmin and !report.scanning()}" method="post"
               th:action="@{'/ui/repositories/' + ${repo} + '/vulnerabilities/rescan'}">
-            <button type="submit" class="secondary">Rescan against the advisory feeds</button>
+            <button th:replace="~{base :: secondaryButton('Rescan against the advisory feeds')}">Rescan against the advisory feeds</button>
         </form>
         <p th:if="${report.partial()}"><small>The ranking has not been built yet, so this page ranks the first
             findings it read rather than the whole repository; the scheduled index pass completes it.</small></p>

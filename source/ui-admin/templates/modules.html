@@ -48,8 +48,7 @@
                           th:if="${m.installed and m.gated and m.toggleable}">
                         <input type="hidden" name="key" th:value="${m.enableKey}">
                         <input type="hidden" name="value" th:value="${m.toggleValue()}">
-                        <button type="submit" th:text="${m.enabled} ? 'Disable' : 'Enable'"
-                                th:classappend="${m.enabled} ? 'secondary outline' : ''">Toggle</button>
+                        <button th:replace="~{base :: secondaryButton(${m.enabled} ? 'Disable' : 'Enable')}">Toggle</button>
                     </form>
                 </div>
             </div>
@@ -88,11 +87,13 @@
                     <td><code th:text="${m.module}">module</code></td>
                     <td th:text="${m.orphanObjects}">0</td>
                     <td th:text="${m.orphanBytes}">0</td>
-                    <td>
-                        <form method="post" th:action="@{/ui/settings/modules/purge}" style="margin:0">
-                            <input type="hidden" name="module" th:value="${m.module}">
-                            <button th:replace="~{base :: deleteButton('Purge', ${m.module}, 'Everything this module left behind is deleted, in every tenant.')}">Purge</button>
-                        </form>
+                    <td class="app-list__actions">
+                        <div class="app-actions">
+                            <form method="post" th:action="@{/ui/settings/modules/purge}">
+                                <input type="hidden" name="module" th:value="${m.module}">
+                                <button th:replace="~{base :: deleteButton('Purge', ${m.module}, 'Everything this module left behind is deleted, in every tenant.')}">Purge</button>
+                            </form>
+                        </div>
                     </td>
                 </tr>
                 </tbody>

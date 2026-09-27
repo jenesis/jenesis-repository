@@ -60,7 +60,7 @@
                                 th:text="${entry}" th:selected="${entry == severity}">CRITICAL</option>
                     </select>
                 </label>
-                <label>&nbsp;<button type="submit">Filter</button></label>
+                <label>&nbsp;<button th:replace="~{base :: secondaryButton('Filter')}">Filter</button></label>
             </div>
         </form>
 
@@ -132,7 +132,9 @@
                             <span th:if="${row.review() == 'dismissed'}"
                                   class="app-badge app-badge--muted">dismissed</span>
                             <span th:if="${row.review() == ''}" class="app-badge app-badge--warn">pending</span>
-                            <form method="post" style="display:inline"
+                            <!--/* A review is a label on a row that stays, and the other button flips it back, so
+                                 both decisions are neutral. */-->
+                            <form method="post" class="app-actions"
                                   th:action="@{'/ui/repositories/' + ${repo} + '/findings/review'}">
                                 <input type="hidden" name="ecosystem" th:value="${row.ecosystem()}">
                                 <input type="hidden" name="coordinate" th:value="${row.bareCoordinate()}">
@@ -141,8 +143,10 @@
                                 <input type="hidden" name="id" th:value="${row.id()}">
                                 <input th:if="${reviewQueue}" type="hidden" name="queue" value="ai-review">
                                 <button type="submit" name="decision" value="confirmed"
+                                        class="secondary outline app-secondary"
                                         th:if="${row.review() != 'confirmed'}">Confirm</button>
-                                <button type="submit" name="decision" value="dismissed" class="secondary"
+                                <button type="submit" name="decision" value="dismissed"
+                                        class="secondary outline app-secondary"
                                         th:if="${row.review() != 'dismissed'}">Dismiss</button>
                             </form>
                         </th:block>

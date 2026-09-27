@@ -29,7 +29,7 @@
         <div th:replace="~{base :: empty('No read cache is open on this node yet.')}"></div>
     </th:block>
     <form method="post" th:action="@{/ui/caches/clear}">
-        <button th:replace="~{base :: dangerButton('Clear caches on this node', 'Drop every cached entry on this node, and the cached grants on every node?')}">Clear caches on this node</button>
+        <button th:replace="~{base :: cautionButton('Clear caches on this node', 'Drop every cached entry on this node, and the cached grants on every node?')}">Clear caches on this node</button>
     </form>
 </main>
 </body>

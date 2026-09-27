@@ -20,7 +20,7 @@
         <input type="text" id="username" name="username" autocomplete="username" autofocus required/>
         <label for="password">Password</label>
         <input type="password" id="password" name="password" autocomplete="current-password" required/>
-        <button type="submit">Sign in</button>
+        <button th:replace="~{base :: primaryButton('Sign in')}">Sign in</button>
     </form>
     <p class="app-signin__foot"><a th:href="@{/ui/login}">&larr; Back to sign-in options</a></p>
 </main>

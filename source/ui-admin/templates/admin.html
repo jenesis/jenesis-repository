@@ -27,11 +27,13 @@
                     <td th:text="${u.id}">0</td>
                     <td th:text="${#strings.isEmpty(u.login)} ? '-' : ${u.login}">-</td>
                     <td th:text="${u.role.label()}">viewer</td>
-                    <td th:if="${isAdmin}">
-                        <form method="post" th:action="@{/ui/admin/users/remove}" style="margin:0">
-                            <input type="hidden" name="id" th:value="${u.id}">
-                            <button th:replace="~{base :: deleteButton('Remove', ${u.id}, 'The user loses their membership of this tenant and everything it granted.')}">Remove</button>
-                        </form>
+                    <td th:if="${isAdmin}" class="app-list__actions">
+                        <div class="app-actions">
+                            <form method="post" th:action="@{/ui/admin/users/remove}">
+                                <input type="hidden" name="id" th:value="${u.id}">
+                                <button th:replace="~{base :: deleteButton('Remove', ${u.id}, 'The user loses their membership of this tenant and everything it granted.')}">Remove</button>
+                            </form>
+                        </div>
                     </td>
                 </tr>
                 </tbody>
@@ -65,7 +67,7 @@
                     </select>
                 </label>
             </div>
-            <button type="submit">Add / update user</button>
+            <button th:replace="~{base :: primaryButton('Add / update user')}">Add / update user</button>
         </form>
     </article>
 
@@ -85,7 +87,7 @@
                     <th scope="col">Group</th>
                     <th scope="col">Grants</th>
                     <th scope="col">Members</th>
-                    <th th:if="${isAdmin}" scope="col">Actions</th>
+                    <th th:if="${isAdmin}" scope="col"><span class="app-sr-only">Actions</span></th>
                 </tr>
                 </thead>
                 <tbody>
@@ -93,15 +95,14 @@
                     <td><code th:text="${g.name()}">developers</code></td>
                     <td>
                         <span th:if="${g.grants().isEmpty()}"><small>grants nothing</small></span>
-                        <span th:each="grant : ${g.grants()}">
+                        <div th:each="grant : ${g.grants()}" class="app-actions">
                             <code th:text="${grant.key} + ' → ' + ${grant.value}">* → repository:read</code>
-                            <form th:if="${isAdmin}" method="post" th:action="@{/ui/admin/groups/revoke-grant}"
-                                  style="display:inline">
+                            <form th:if="${isAdmin}" method="post" th:action="@{/ui/admin/groups/revoke-grant}">
                                 <input type="hidden" name="name" th:value="${g.name()}">
                                 <input type="hidden" name="scope" th:value="${grant.key}">
                                 <button th:replace="~{base :: deleteButton('Revoke', ${grant.key}, 'The group loses this grant, and so does every member who held it through the group.')}">Revoke</button>
                             </form>
-                        </span>
+                        </div>
                         <!--/* A grant is added on the group it is for, never by typing the group's name again. */-->
                         <details th:if="${isAdmin}">
                             <summary>Add grant</summary>
@@ -111,21 +112,20 @@
                                     <input name="scope" required placeholder="*" value="*"></label>
                                 <label>Rights <small>(comma-separated)</small>
                                     <input name="tokens" required placeholder="repository:read"></label>
-                                <button type="submit">Grant</button>
+                                <button th:replace="~{base :: secondaryButton('Grant')}">Grant</button>
                             </form>
                         </details>
                     </td>
                     <td>
                         <span th:if="${g.members().isEmpty()}"><small>nobody yet</small></span>
-                        <span th:each="member : ${g.members()}">
+                        <div th:each="member : ${g.members()}" class="app-actions">
                             <code th:text="${member}">oidc/ada</code>
-                            <form th:if="${isAdmin}" method="post" th:action="@{/ui/admin/groups/members/remove}"
-                                  style="display:inline">
+                            <form th:if="${isAdmin}" method="post" th:action="@{/ui/admin/groups/members/remove}">
                                 <input type="hidden" name="name" th:value="${g.name()}">
                                 <input type="hidden" name="id" th:value="${member}">
                                 <button th:replace="~{base :: deleteButton('Remove', ${member}, 'The member leaves the group and loses what the group grants.')}">Remove</button>
                             </form>
-                        </span>
+                        </div>
                         <!--/* The preview is capped so this screen costs the same on a group of eight and one of
                              eight hundred; the rest are reachable through the API. */-->
                         <small th:if="${g.more()}">and more</small>
@@ -137,15 +137,17 @@
                                     <input name="id" required placeholder="oidc/8f3c1a" list="known-principals"
                                            autocomplete="off">
                                 </label>
-                                <button type="submit">Add</button>
+                                <button th:replace="~{base :: secondaryButton('Add')}">Add</button>
                             </form>
                         </details>
                     </td>
-                    <td th:if="${isAdmin}">
-                        <form method="post" th:action="@{/ui/admin/groups/remove}">
-                            <input type="hidden" name="name" th:value="${g.name()}">
-                            <button th:replace="~{base :: deleteButton('Delete group', ${g.name()}, 'The group is deleted with its grants; its members lose what it granted.')}">Delete group</button>
-                        </form>
+                    <td th:if="${isAdmin}" class="app-list__actions">
+                        <div class="app-actions">
+                            <form method="post" th:action="@{/ui/admin/groups/remove}">
+                                <input type="hidden" name="name" th:value="${g.name()}">
+                                <button th:replace="~{base :: deleteButton('Delete group', ${g.name()}, 'The group is deleted with its grants; its members lose what it granted.')}">Delete group</button>
+                            </form>
+                        </div>
                     </td>
                 </tr>
                 </tbody>
@@ -165,7 +167,7 @@
                 <label>Rights <small>(comma-separated)</small>
                     <input name="tokens" required placeholder="repository:read"></label>
             </div>
-            <button type="submit">Create group</button>
+            <button th:replace="~{base :: primaryButton('Create group')}">Create group</button>
         </form>
     </article>
 
@@ -176,12 +178,16 @@
             the Bearer secret on the IdP's SCIM connector. The token is scoped to this tenant and shown once; only its
             hash is stored. Status:
             <strong th:text="${scimConfigured} ? 'configured' : 'not configured'">not configured</strong>.</small></p>
-        <div class="grid">
+        <!--/* A token is minted by the product and shown once, so neither act loses anything a new token does not
+             give back: regenerating and clearing are both the caution, and ask first, because either stops the token
+             the identity provider holds. */-->
+        <div class="app-actions">
             <form method="post" th:action="@{/ui/admin/scim-token}">
-                <button type="submit" th:text="${scimConfigured} ? 'Regenerate token' : 'Generate token'">Generate token</button>
+                <th:block th:unless="${scimConfigured}"><button th:replace="~{base :: primaryButton('Generate token')}">Generate token</button></th:block>
+                <th:block th:if="${scimConfigured}"><button th:replace="~{base :: cautionButton('Regenerate token', 'Mint a new SCIM token? The token the identity provider holds stops working until it is given the new one.')}">Regenerate token</button></th:block>
             </form>
             <form th:if="${scimConfigured}" method="post" th:action="@{/ui/admin/scim-token/clear}">
-                <button th:replace="~{base :: dangerButton('Clear token', 'Disable SCIM for this tenant? The identity provider can no longer provision its members.')}">Clear token</button>
+                <button th:replace="~{base :: cautionButton('Clear token', 'Disable SCIM for this tenant? The identity provider can no longer provision its members.')}">Clear token</button>
             </form>
         </div>
     </article>

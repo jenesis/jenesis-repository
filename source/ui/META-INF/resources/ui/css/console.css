@@ -652,9 +652,15 @@ figure {
 .app-list__date {
     white-space: nowrap;
 }
-.app-list__action {
-    text-align: right;
+/* A row's actions: one cell at the row's end, holding one `.app-actions` group, right-aligned on every table. */
+.app-list__actions > .app-actions {
+    justify-content: flex-end;
+    gap: var(--app-space-2);
     white-space: nowrap;
+}
+/* An action that opens a form of its own inside the cell - a resume asking for credentials - wraps its text. */
+.app-list__actions details {
+    white-space: normal;
 }
 .app-list__num {
     text-align: right;
@@ -877,8 +883,27 @@ figure {
     color: var(--app-status-warn-fg);
 }
 
-/* ---- Destructive actions ---------------------------------------------------------------------------------- */
-/* A control that destroys looks like it, and keeps its distance from the safe one beside it. */
+/* ---- Actions ---------------------------------------------------------------------------------------------- */
+/* Four weights, so a button's colour says what it does before its label is read (base.html renders each):
+   `app-primary` is Pico's filled button and the only filled one on a page; `app-secondary` is Pico's neutral outline;
+   `app-caution` - consequential but recoverable - takes the status palette's warn tint, and `app-danger` -
+   irreversible - its danger tint. Both tints are the status pairs, so they clear AA in either theme wherever a status
+   badge does. Colour is never the only signal: the label says what the action does, and caution and danger ask
+   before they act. */
+.app-caution,
+button.app-caution,
+[type="submit"].app-caution {
+    background: transparent;
+    border-color: var(--app-status-warn-fg);
+    color: var(--app-status-warn-fg);
+}
+.app-caution:hover,
+button.app-caution:hover,
+[type="submit"].app-caution:hover {
+    background: var(--app-status-warn-bg);
+    border-color: var(--app-status-warn-fg);
+    color: var(--app-status-warn-fg);
+}
 .app-danger,
 button.app-danger,
 [type="submit"].app-danger {
@@ -893,15 +918,25 @@ button.app-danger:hover,
     border-color: var(--app-status-danger-fg);
     color: var(--app-status-danger-fg);
 }
+/* A group of actions on one line: a row's actions in its actions cell, or the passes a section runs. The forms in it
+   sit inline with nothing between them but the gap, so no form carries a style of its own. The caution or primary
+   action comes first and a danger action last, set apart by `app-actions__danger`. */
 .app-actions {
     display: flex;
     flex-wrap: wrap;
     align-items: center;
     gap: var(--app-space-4);
 }
+.app-actions > form {
+    display: flex;
+    align-items: center;
+    gap: var(--app-space-2);
+    margin: 0;
+}
 /* A form laid out as one row of controls, inside a table cell say: the controls keep their own width. */
 form.app-actions > select,
-form.app-actions > button {
+form.app-actions > button,
+.app-actions > form > button {
     width: auto;
     margin-bottom: 0;
 }

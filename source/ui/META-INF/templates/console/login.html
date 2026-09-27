@@ -27,7 +27,7 @@
         <!--/* The mark is inline SVG built from module constants and geometry - never from a name - which is why it
              is the one value here rendered unescaped. A mechanism that ships its own drawing renders that instead;
              the resolution is made in the controller, as it is on every other console surface. */-->
-        <a th:each="option : ${loginOptions}" role="button" th:href="@{${option.href()}}">
+        <a th:each="option : ${loginOptions}" role="button" class="app-primary" th:href="@{${option.href()}}">
             <span class="app-mark" th:classappend="${option.markTint()}"
                   th:title="${option.markTitle()}" role="img" th:aria-label="${option.markTitle()}"
                   th:utext="${option.markSvg()}"></span>

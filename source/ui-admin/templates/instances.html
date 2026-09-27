@@ -16,8 +16,7 @@
                 <thead>
                 <tr>
                     <th scope="col">Tenant</th>
-                    <th scope="col"><span class="app-sr-only">Open</span></th>
-                    <th scope="col" th:if="${superadmin}"><span class="app-sr-only">Delete</span></th>
+                    <th scope="col"><span class="app-sr-only">Actions</span></th>
                 </tr>
                 </thead>
                 <tbody>
@@ -26,19 +25,20 @@
                         <code th:text="${t}">acme</code>
                         <small th:if="${t == selected}">- selected</small>
                     </td>
-                    <td>
-                        <form method="post" th:action="@{/ui/instances/select}" style="margin:0">
-                            <input type="hidden" name="tenant" th:value="${t}">
-                            <button type="submit">Open</button>
-                        </form>
-                    </td>
-                    <!--/* Everywhere else an object is deleted on its own page; a tenant has no page of its own, so
-                         its deletion stays on its row. */-->
-                    <td th:if="${superadmin}">
-                        <form method="post" th:action="@{/ui/instances/delete}" style="margin:0">
-                            <input type="hidden" name="name" th:value="${t}">
-                            <button th:replace="~{base :: deleteButton('Delete', ${t}, 'The tenant is deleted with everything in it: every repository and artifact, every build-cache project, every credential and member, and its audit trail.')}">Delete</button>
-                        </form>
+                    <td class="app-list__actions">
+                        <div class="app-actions">
+                            <form method="post" th:action="@{/ui/instances/select}">
+                                <input type="hidden" name="tenant" th:value="${t}">
+                                <button th:replace="~{base :: secondaryButton('Open')}">Open</button>
+                            </form>
+                            <!--/* Everywhere else an object is deleted on its own page; a tenant has no page of its
+                                 own, so its deletion stays on its row. */-->
+                            <form th:if="${superadmin}" method="post" th:action="@{/ui/instances/delete}"
+                                  class="app-actions__danger">
+                                <input type="hidden" name="name" th:value="${t}">
+                                <button th:replace="~{base :: deleteButton('Delete', ${t}, 'The tenant is deleted with everything in it: every repository and artifact, every build-cache project, every credential and member, and its audit trail.')}">Delete</button>
+                            </form>
+                        </div>
                     </td>
                 </tr>
                 </tbody>
@@ -54,7 +54,7 @@
             <label>Name
                 <input name="name" required pattern="[A-Za-z0-9_]+" placeholder="acme">
             </label>
-            <button type="submit">Create tenant</button>
+            <button th:replace="~{base :: primaryButton('Create tenant')}">Create tenant</button>
         </form>
     </article>
     </div>

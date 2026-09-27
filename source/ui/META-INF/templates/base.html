@@ -19,7 +19,10 @@
     empty(message)                  - the one empty-state treatment.
     field(label, name, value, help) - a labelled text input with inline help text.
     alert(message, kind)            - a flash/outcome banner; kind in {pass,warn,danger} or null for info.
-    dangerButton(label, confirm)    - a destructive submit: the danger treatment plus its confirmation, together.
+    primaryButton(label)            - the main action of a page or of a section: filled, and the only filled button.
+    secondaryButton(label)          - a neutral action: a filter, a refresh, a row's everyday act.
+    cautionButton(label, confirm)   - a consequential, recoverable submit: the warn tint plus its confirmation.
+    dangerButton(label, confirm)    - an irreversible submit: the danger treatment plus its confirmation, together.
     deleteButton(label, name, warning) - a deletion: the danger treatment, guarded by typing `delete <name>`.
 -->
 <html lang="en" xmlns:th="http://www.thymeleaf.org">
@@ -283,6 +286,36 @@
 <p th:fragment="alert(message, kind)" class="app-alert"
    th:classappend="${kind} != null ? 'app-alert--' + ${kind} : ''"
    th:attr="role=${kind == 'danger'} ? 'alert' : 'status'" th:text="${message}">message</p>
+
+<!--/* The weight of an action: four, so a reader tells from a button's colour what it does before reading it, and which
+     button on a screen loses data.
+
+       primary   - the main action of a page, or of a section standing on its own: the submit of the form it exists
+                   for (create, save, publish, start). The one filled weight, and never in a row.
+       secondary - neutral: a filter, a refresh, a row's everyday act (open, pin, use, add). Outlined.
+       caution   - consequential but recoverable: a release, a promotion, a rotation, an unpin, a pass run now. The warn
+                   tint, and it asks before it acts.
+       danger    - irreversible: a discard, a deletion, a restore over the current state. The danger tint, guarded by
+                   a question (dangerButton) or, for a deletion, by typing the name (deleteButton).
+
+     Among a row's or a section's actions the caution or primary one comes first and the danger one last, set apart
+     (console.css: app-actions, app-actions__danger).
+
+     Caution and danger are only ever rendered through their fragment, because the guard is half of what they are.
+     Primary and secondary carry no guard, so a button that needs an attribute no parameter here expresses - a
+     name/value pair choosing between two submits, an accessible name wider than its label, a disabled state, or a
+     link styled as a button - writes the weight's classes itself: `app-primary`, or `secondary outline
+     app-secondary`. */-->
+<button th:fragment="primaryButton(label)" type="submit" class="app-primary" th:text="${label}">Save</button>
+
+<button th:fragment="secondaryButton(label)" type="submit" class="secondary outline app-secondary"
+        th:text="${label}">Open</button>
+
+<!--/* A consequential, recoverable submit: the caution treatment and the question in one place, for the same
+     reason as the danger button below. `confirm` names what changes - "Serve this artifact despite its verdict?" -
+     rather than asking whether the reader is sure. */-->
+<button th:fragment="cautionButton(label, confirm)" type="submit" class="secondary outline app-caution"
+        th:attr="data-confirm=${confirm}" th:text="${label}">release</button>
 
 <!--/* Destructive submit button: the danger treatment and the confirmation in one place.
 

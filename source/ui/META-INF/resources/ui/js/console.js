@@ -112,7 +112,7 @@
         input.setAttribute('autocapitalize', 'off');
         label.appendChild(input);
         var footer = element('footer');
-        var cancel = element('button', 'secondary outline', 'Cancel');
+        var cancel = element('button', 'secondary outline app-secondary', 'Cancel');
         cancel.type = 'button';
         var confirm = element('button', 'app-danger', (submitter && submitter.textContent.trim()) || 'Delete');
         confirm.type = 'button';

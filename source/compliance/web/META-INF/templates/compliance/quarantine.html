@@ -52,20 +52,22 @@
                             arrival</small>
                     </td>
                     <td><small th:text="${#strings.listJoin(q.reasons, '; ')}">reason</small></td>
-                    <td th:if="${isEditor}">
-                        <!--/* Release admits what the gate held, so it asks, naming the verdict and the reasons it
-                             overrides; discard drops the bytes, so it asks for the name. */-->
-                        <form method="post" style="display:inline; margin:0"
-                              th:action="@{'/ui/repositories/' + ${repo} + '/quarantine/release'}"
-                              th:with="reasons=${#strings.listJoin(q.reasons, '; ')}">
-                            <input type="hidden" name="path" th:value="${q.path}">
-                            <button th:replace="~{base :: dangerButton('Release', |Serve ${q.coordinate} despite its ${q.verdict} verdict? ${reasons}|)}">Release</button>
-                        </form>
-                        <form method="post" style="display:inline; margin:0" class="app-actions__danger"
-                              th:action="@{'/ui/repositories/' + ${repo} + '/quarantine/discard'}">
-                            <input type="hidden" name="path" th:value="${q.path}">
-                            <button th:replace="~{base :: deleteButton('Discard', ${q.coordinate}, 'The bytes of the held artifact are dropped, and it can no longer be released.')}">Discard</button>
-                        </form>
+                    <td th:if="${isEditor}" class="app-list__actions">
+                        <!--/* Release admits what the gate held and loses nothing, so it is the caution and asks,
+                             naming the verdict and the reasons it overrides; discard drops the bytes for good, so it
+                             is the danger, last, and asks for the name. */-->
+                        <div class="app-actions">
+                            <form method="post" th:action="@{'/ui/repositories/' + ${repo} + '/quarantine/release'}"
+                                  th:with="reasons=${#strings.listJoin(q.reasons, '; ')}">
+                                <input type="hidden" name="path" th:value="${q.path}">
+                                <button th:replace="~{base :: cautionButton('Release', |Serve ${q.coordinate} despite its ${q.verdict} verdict? ${reasons}|)}">Release</button>
+                            </form>
+                            <form method="post" class="app-actions__danger"
+                                  th:action="@{'/ui/repositories/' + ${repo} + '/quarantine/discard'}">
+                                <input type="hidden" name="path" th:value="${q.path}">
+                                <button th:replace="~{base :: deleteButton('Discard', ${q.coordinate}, 'The bytes of the held artifact are dropped, and it can no longer be released.')}">Discard</button>
+                            </form>
+                        </div>
                     </td>
                 </tr>
                 </tbody>

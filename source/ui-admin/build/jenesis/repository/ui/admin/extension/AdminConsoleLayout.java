@@ -29,10 +29,12 @@ public final class AdminConsoleLayout implements ConsoleLayout.Extension {
         // the shared shell, so this console asks for the shell and gets them. The alert is: the repository overview warns inline when garbage collection refuses the repository.
         return Set.of(ConsoleLayout.HEAD_CONTENTS, ConsoleLayout.SHELL, ConsoleLayout.PAGE_HEADER,
                 ConsoleLayout.MESSAGES, ConsoleLayout.SUBSECTION_ERROR, ConsoleLayout.ALERT,
-                ConsoleLayout.EMPTY, ConsoleLayout.DELETE_BUTTON,
-                // A consequential act that is not a deletion - a restore, a reclaim, a cache clear, a cleanup run -
-                // asks through this rather than through a hand-written confirm.
-                ConsoleLayout.DANGER_BUTTON,
+                ConsoleLayout.EMPTY,
+                // Every action carries its weight: the main one, a neutral one, a recoverable consequence that asks
+                // first (a release, a reclaim, a cache clear, a cleanup run), and an irreversible one - a restore
+                // that asks, or a deletion guarded by typing its name.
+                ConsoleLayout.PRIMARY_BUTTON, ConsoleLayout.SECONDARY_BUTTON, ConsoleLayout.CAUTION_BUTTON,
+                ConsoleLayout.DANGER_BUTTON, ConsoleLayout.DELETE_BUTTON,
                 ConsoleLayout.BROWSE_ROWS, ConsoleLayout.BROWSE_UP,
                 // Every screen that starts work off the request path renders this instead of telling the reader to
                 // reload: the rescans, the blast radius, the project count, both cleanup notices and the migration.

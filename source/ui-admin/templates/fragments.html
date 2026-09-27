@@ -110,13 +110,16 @@
                   th:text="|🔒 pinned by ${s.pinnedBy}|">🔒 pinned</span>
             <span class="app-badge app-badge--danger" th:if="${s.highImpact}"
                   title="A change here can start rejecting or admitting packages.">high-impact</span>
+            <!--/* A row's save and revert are its everyday acts, so they are neutral; on a high-impact setting they
+                 can start rejecting or admitting packages, so they are the caution and ask first. */-->
             <form method="post" th:action="@{${action}}" class="setting-revert"
-                  th:if="${s.overridden and !s.pinned}"
-                  th:attr="data-confirm=${s.highImpact} ? |Revert this high-impact policy knob to ${revertTo}?| : null">
+                  th:if="${s.overridden and !s.pinned}">
                 <input type="hidden" name="key" th:value="${s.key}">
                 <input type="hidden" name="return" th:value="${back}" th:if="${back != null}">
                 <input type="hidden" name="value" value="">
-                <button class="secondary outline" type="submit">Revert</button>
+                <th:block th:if="${s.highImpact}"><button th:replace="~{base :: cautionButton('Revert',
+                        |Revert this high-impact policy knob to ${revertTo}?|)}">Revert</button></th:block>
+                <th:block th:unless="${s.highImpact}"><button th:replace="~{base :: secondaryButton('Revert')}">Revert</button></th:block>
             </form>
         </div>
     </div>
@@ -130,8 +133,7 @@
         <div th:replace="~{fragments :: settingSwitch(${s}, ${action}, ${back},
                 |Apply this high-impact policy change${scope}?|)}"></div>
     </th:block>
-    <form method="post" th:action="@{${action}}" class="setting-edit" th:unless="${s.pinned or s.toggle()}"
-          th:attr="data-confirm=${s.highImpact} ? |Apply this high-impact policy change${scope}?| : null">
+    <form method="post" th:action="@{${action}}" class="setting-edit" th:unless="${s.pinned or s.toggle()}">
         <input type="hidden" name="key" th:value="${s.key}">
         <input type="hidden" name="return" th:value="${back}" th:if="${back != null}">
         <select name="value" th:if="${s.dropdown()}" th:attr="aria-label=${s.label}">
@@ -141,7 +143,9 @@
         <input th:unless="${s.dropdown()}" name="value" th:type="${s.inputType()}"
                th:value="${s.editValue()}" th:attr="aria-label=${s.label}"
                th:placeholder="${s.editPlaceholder()}">
-        <button type="submit">Save</button>
+        <th:block th:if="${s.highImpact}"><button th:replace="~{base :: cautionButton('Save',
+                |Apply this high-impact policy change${scope}?|)}">Save</button></th:block>
+        <th:block th:unless="${s.highImpact}"><button th:replace="~{base :: secondaryButton('Save')}">Save</button></th:block>
     </form>
     <div class="setting-edit setting-pinned" th:if="${s.pinned and !s.toggle()}">
         <select th:if="${s.dropdown()}" disabled th:attr="aria-label=${s.label}">

@@ -12,7 +12,7 @@
         Nothing on this screen has to be answered now - skip it and it stays reachable as Setup, under Settings.</small></p>
 
     <form method="post" th:action="@{/ui/setup/skip}" class="setup-skip">
-        <button class="secondary outline" type="submit">Skip for now</button>
+        <button th:replace="~{base :: secondaryButton('Skip for now')}">Skip for now</button>
     </form>
 
     <article th:each="step : ${steps}" class="setting-group setup-step" th:id="|setup-${step.id}|">
