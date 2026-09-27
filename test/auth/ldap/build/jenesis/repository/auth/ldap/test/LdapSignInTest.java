@@ -85,7 +85,8 @@ class LdapSignInTest {
         assertThat(signed.getName()).as("one person whatever case they type").isEqualTo("ldap/alice");
         assertThat(signed.getAuthorities()).extracting(GrantedAuthority::getAuthority).containsExactly("ROLE_USER");
         for (String tenant : List.of("acme", "globex")) {
-            assertThat(authorization.members(tenant, "developers", null, 10).ids()).containsExactly("ldap/alice");
+            assertThat(authorization.groups().members(tenant, "developers", null, 10).ids())
+                    .containsExactly("ldap/alice");
         }
         assertThat(audited).containsExactly("login ldap/alice");
     }

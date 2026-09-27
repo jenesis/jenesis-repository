@@ -125,7 +125,7 @@ public final class SecurityPosture implements SafetyAdvisor {
 
     /** Whether an {@code anonymous-rights} value would let a keyless caller write or administer - it grants the
      *  all-privileges {@code *}, any {@code <surface>:write} (or a {@code <surface>:*} wildcard covering write), or any
-     *  {@code manage:<verb>} admin right. Mirrors {@code Authorization.grantsWriteOrAdmin} (the posture SPI cannot
+     *  {@code manage:<verb>} admin right. Mirrors {@code AnonymousRights.grantsWriteOrAdmin} (the posture SPI cannot
      *  depend on the server module), so anonymous read is a WARN and anonymous write/admin a CRITICAL. */
     private static boolean grantsWriteOrAdmin(String rights) {
         if (rights == null || rights.isBlank()) {

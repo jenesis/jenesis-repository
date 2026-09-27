@@ -27,7 +27,7 @@ public class TenantLimits extends TenantScope {
 
     /** The signed-in tenant's storage quota: the byte ceiling ({@code 0} when unlimited) and the bytes stored. */
     public QuotaView quota() throws IOException {
-        return new QuotaView(authorization.quota(tenant()),
+        return new QuotaView(authorization.quotas().of(tenant()),
                 new QuotaArtifactStore(root.scope(tenant()), 0).used());
     }
 
@@ -43,14 +43,14 @@ public class TenantLimits extends TenantScope {
         // Matches ManagementController's quota.set event and its byte-count target.
         audit(AuditActions.QUOTA_SET, Long.toString(maxBytes));
         observe("set-quota", "*", _ -> {
-            authorization.setQuota(tenant(), maxBytes);
+            authorization.quotas().set(tenant(), maxBytes);
             return null;
         });
     }
 
     /** The signed-in tenant's request rate ceiling in permits per minute, or {@code 0} for the deployment default. */
     public long rateLimit() throws IOException {
-        return authorization.rateLimit(tenant());
+        return authorization.rateLimits().of(tenant());
     }
 
     /** Set ({@code > 0}) or clear ({@code 0}) the tenant's request rate ceiling in permits per minute. */
@@ -58,7 +58,7 @@ public class TenantLimits extends TenantScope {
         // Matches ManagementController's rate-limit.set event and its permits-per-minute target.
         audit("rate-limit.set", Long.toString(permitsPerMinute));
         observe("set-rate-limit", "*", _ -> {
-            authorization.setRateLimit(tenant(), permitsPerMinute);
+            authorization.rateLimits().set(tenant(), permitsPerMinute);
             return null;
         });
     }

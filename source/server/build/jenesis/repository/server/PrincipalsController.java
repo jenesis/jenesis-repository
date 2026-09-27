@@ -3,6 +3,7 @@ package build.jenesis.repository.server;
 import module java.base;
 
 import build.jenesis.repository.server.spi.Authorization;
+import build.jenesis.repository.server.spi.CredentialLifetimes;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import org.springframework.web.bind.annotation.DeleteMapping;
@@ -73,7 +74,7 @@ public final class PrincipalsController {
         String key = PresentedKey.from(http);
         authorization.setGrant(context.tenant(key), Authorization.Subject.principal(request.id()),
                 request.scope(), String.join(",", request.tokens()),
-                Authorization.expiry(request.expires()));
+                CredentialLifetimes.expiry(request.expires()));
         context.audit(key, "principal.grant.set", request.id() + " " + request.scope());
         response.setStatus(200);
     }

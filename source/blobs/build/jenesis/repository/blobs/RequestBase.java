@@ -3,7 +3,7 @@ package build.jenesis.repository.blobs;
 import module java.base;
 
 import build.jenesis.repository.format.FormatExchange;
-import build.jenesis.repository.server.spi.Authorization;
+import build.jenesis.repository.server.spi.ClientAddresses;
 
 /**
  * The absolute base a generated index builds its download URLs on.
@@ -52,7 +52,7 @@ public final class RequestBase {
         }
         String scheme = exchange.scheme();
         String host = exchange.requestHeader("Host");
-        if (Authorization.trustedProxy(exchange.remoteAddress(), trustedProxies(exchange))) {
+        if (ClientAddresses.trustedProxy(exchange.remoteAddress(), trustedProxies(exchange))) {
             String forwardedProto = first(exchange.requestHeader("X-Forwarded-Proto"));
             String forwardedHost = first(exchange.requestHeader("X-Forwarded-Host"));
             scheme = forwardedProto == null ? scheme : forwardedProto;

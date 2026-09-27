@@ -7,6 +7,7 @@ import build.jenesis.repository.server.spi.TokenExchange;
 import build.jenesis.repository.server.spi.TokenExchangeProvider;
 import build.jenesis.repository.server.spi.KeyUsageTracker;
 import build.jenesis.repository.server.spi.KeyUsageTrackerProvider;
+import build.jenesis.repository.server.spi.AnonymousRights;
 import build.jenesis.repository.server.spi.Authorization;
 import build.jenesis.repository.server.spi.RateLimiter;
 import build.jenesis.repository.server.spi.RateLimiterProvider;
@@ -138,7 +139,7 @@ public class RepositoryAutoConfiguration {
         // jenreg.anonymous.* security-posture advisories carry the governance escalation onto the console and
         // GET /api/posture. Default (empty) => no anonymous access and no warning, byte-for-byte today's behaviour.
         if (!anonymousRights.isEmpty()) {
-            if (Authorization.grantsWriteOrAdmin(anonymousRights)) {
+            if (AnonymousRights.grantsWriteOrAdmin(anonymousRights)) {
                 LOGGER.warn("SECURITY: anonymous access ENABLED with WRITE/ADMIN rights: {}. A keyless caller may "
                         + "mutate or administer artifacts with NO credential (a public drop-box / open admin) - the "
                         + "loudest anonymous combination. This is an explicit opt-in; unset "
@@ -157,7 +158,7 @@ public class RepositoryAutoConfiguration {
         // The other boot obligation an enforcing deployment's authorization carries, beside the bootstrap key:
         // repair what an interrupted group derivation left behind. Every composition honours it here, in the same
         // place and for the same reason - a process that died mid-derivation is a process that is starting now.
-        authorization.repairDerivedGrants();
+        authorization.groups().repairDerivedGrants();
         return authorization;
     }
 

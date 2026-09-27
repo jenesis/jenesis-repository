@@ -3,6 +3,7 @@ package build.jenesis.repository.server;
 import module java.base;
 
 import build.jenesis.repository.server.spi.Authorization;
+import build.jenesis.repository.server.spi.CredentialLifetimes;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import org.springframework.web.bind.annotation.DeleteMapping;
@@ -73,7 +74,7 @@ public final class GroupsController {
                                 HttpServletRequest http, HttpServletResponse response) {
         String key = PresentedKey.from(http);
         String after = http.getParameter("after");
-        Authorization.SubjectPage page = authorization.members(context.tenant(key), group(name),
+        Authorization.SubjectPage page = authorization.groups().members(context.tenant(key), group(name),
                 after == null || after.isBlank() ? null : after, pageSize(http.getParameter("limit")));
         if (page.next() != null) {
             response.setHeader("Jenesis-Next-Cursor", page.next());
@@ -91,7 +92,7 @@ public final class GroupsController {
         String key = PresentedKey.from(http);
         authorization.setGrant(context.tenant(key), Authorization.Subject.group(group(name)),
                 request.scope(), String.join(",", request.tokens()),
-                Authorization.expiry(request.expires()));
+                CredentialLifetimes.expiry(request.expires()));
         context.audit(key, "group.grant.set", name + " " + request.scope());
         response.setStatus(200);
     }
@@ -113,7 +114,7 @@ public final class GroupsController {
                           @RequestBody MemberRequest request,
                           HttpServletResponse response) throws IOException {
         String key = PresentedKey.from(http);
-        authorization.addMember(context.tenant(key), group(name), request.id());
+        authorization.groups().addMember(context.tenant(key), group(name), request.id());
         context.audit(key, "group.member.add", name + " " + request.id());
         response.setStatus(200);
     }
@@ -128,7 +129,7 @@ public final class GroupsController {
         if (id == null || id.isBlank()) {
             throw new IllegalArgumentException("A member is removed by id: pass ?id=<provider-qualified id>");
         }
-        authorization.removeMember(context.tenant(key), group(name), id);
+        authorization.groups().removeMember(context.tenant(key), group(name), id);
         context.audit(key, "group.member.remove", name + " " + id);
         response.setStatus(200);
     }

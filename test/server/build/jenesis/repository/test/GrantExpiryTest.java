@@ -74,7 +74,7 @@ class GrantExpiryTest {
         // The reason expiry belongs on the grant rather than on the holder: one date ends it for the whole team.
         authorization.setGrant("acme", Authorization.Subject.group("contractors"), "*",
                 Authorization.REPOSITORY_WRITE, Instant.now().plus(Duration.ofHours(1)));
-        authorization.addMember("acme", "contractors", "oidc/ada");
+        authorization.groups().addMember("acme", "contractors", "oidc/ada");
         assertThat(allowed(Authorization.Subject.principal("oidc/ada"), Authorization.REPOSITORY_WRITE)).isTrue();
 
         authorization.setGrant("acme", Authorization.Subject.group("contractors"), "*",

@@ -20,7 +20,7 @@ import static org.assertj.core.api.Assertions.assertThat;
  * in the steady state, where an uncached check pays three per request, a third of the read path's round trips.
  *
  * <p><b>Three reads rather than two, and the third is the deployment's auth epoch</b> - one small document a node
- * re-reads at most once per {@code Authorization.EPOCH_TTL} (seconds), clearing its credential cache when another
+ * re-reads at most once per {@code CredentialSpace.EPOCH_TTL} (seconds), clearing its credential cache when another
  * node has changed a credential. It is what lets the credential ttl be fifteen minutes without a revocation taking
  * fifteen minutes to reach the fleet, and {@code POST /api/admin/caches/clear} only ever clearing one node. The
  * claim this suite exists for is untouched and is the second assertion, not the first: **a hundred further requests

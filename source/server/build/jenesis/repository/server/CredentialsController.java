@@ -3,6 +3,7 @@ package build.jenesis.repository.server;
 import module java.base;
 
 import build.jenesis.repository.server.spi.Authorization;
+import build.jenesis.repository.server.spi.CredentialLifetimes;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import org.springframework.web.bind.annotation.DeleteMapping;
@@ -99,8 +100,8 @@ public final class CredentialsController {
         String tenant = context.tenant(key);
         String minted = Authorization.mint(tenant);
         String hash = Authorization.hash(minted);
-        Instant expires = authorization.mintExpiry(tenant,
-                request == null ? null : Authorization.expiry(request.expires()),
+        Instant expires = authorization.lifetimes().mintExpiry(tenant,
+                request == null ? null : CredentialLifetimes.expiry(request.expires()),
                 request != null && Boolean.TRUE.equals(request.nonExpiring()));
         authorization.provision(tenant, hash, request == null ? null : request.label(), expires);
         context.audit(key, "credential.mint", hash);
@@ -118,7 +119,7 @@ public final class CredentialsController {
         // Through the subject form so the expiry is honoured: the record carries one for every holder, and a field
         // a surface accepts and drops is worse than one it never offered.
         authorization.setGrant(context.tenant(key), Authorization.Subject.credential(hashId(id)),
-                request.scope(), String.join(",", request.tokens()), Authorization.expiry(request.expires()));
+                request.scope(), String.join(",", request.tokens()), CredentialLifetimes.expiry(request.expires()));
         context.audit(key, "grant.set", id + " " + request.scope());
         response.setStatus(200);
     }
@@ -140,7 +141,7 @@ public final class CredentialsController {
                           HttpServletResponse response) throws IOException {
         String key = PresentedKey.from(http);
         authorization.setExpiry(context.tenant(key), hashId(id),
-                request == null ? null : Authorization.expiry(request.expires()));
+                request == null ? null : CredentialLifetimes.expiry(request.expires()));
         context.audit(key, "credential.expiry", id);
         response.setStatus(200);
     }
@@ -167,7 +168,7 @@ public final class CredentialsController {
                          HttpServletResponse response) throws IOException {
         String key = PresentedKey.from(http);
         Authorization.Rotated rotated = authorization.rotate(context.tenant(key), hashId(id),
-                request == null ? null : Authorization.lifetime(request.overlap()));
+                request == null ? null : CredentialLifetimes.lifetime(request.overlap()));
         context.audit(key, "credential.rotate", id + " -> " + Authorization.hash(rotated.key()));
         response.setStatus(201);
         return new Minted(Authorization.hash(rotated.key()), rotated.key(),

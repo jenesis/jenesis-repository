@@ -2,6 +2,7 @@ package build.jenesis.repository.server;
 
 import module java.base;
 import build.jenesis.repository.server.spi.Authorization;
+import build.jenesis.repository.server.spi.ClientAddresses;
 import build.jenesis.repository.server.spi.KeyUsageTracker;
 import jakarta.servlet.http.HttpServletRequest;
 import org.springframework.security.authorization.AuthorizationDecision;
@@ -105,7 +106,7 @@ public class RepositoryAuthorizationManager implements AuthorizationManager<Requ
                 ? (read ? Authorization.MANAGE_READ : Authorization.MANAGE_WRITE)
                 : (read ? Authorization.REPOSITORY_READ : Authorization.REPOSITORY_WRITE);
         String key = PresentedKey.from(request);
-        String client = Authorization.clientAddress(
+        String client = ClientAddresses.resolve(
                 request.getRemoteAddr(), request.getHeader("X-Forwarded-For"), trustedProxies);
         Authorization.Decision decision;
         try {

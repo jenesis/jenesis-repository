@@ -3,6 +3,7 @@ package build.jenesis.repository.oidc;
 import module java.base;
 
 import build.jenesis.repository.server.spi.Authorization;
+import build.jenesis.repository.server.spi.OidcTrusts;
 import build.jenesis.repository.server.spi.TokenExchange;
 import org.springframework.security.oauth2.jwt.Jwt;
 import org.springframework.security.oauth2.jwt.JwtDecoder;
@@ -53,7 +54,7 @@ public final class OidcExchange implements TokenExchange {
         if (token == null || token.isBlank()) {
             return null;
         }
-        for (Authorization.Trust trust : authorization.trusts(tenant)) {
+        for (OidcTrusts.Trust trust : authorization.trusts().of(tenant)) {
             Jwt jwt;
             try {
                 jwt = decoders.computeIfAbsent(trust.issuer(), OidcExchange::decoder).decode(token);
@@ -88,7 +89,7 @@ public final class OidcExchange implements TokenExchange {
     }
 
     private static boolean audienceMatches(List<String> audiences, String required) {
-        // The trust's audience is guaranteed non-blank (enforced at Authorization.Trust construction), so there is no
+        // The trust's audience is guaranteed non-blank (enforced at OidcTrusts.Trust construction), so there is no
         // "blank matches any audience" branch to fall through - a trust is always pinned to one explicit audience. A
         // signed token may still legitimately omit aud (getAudience() is then null); an audience-pinned trust must not
         // match it, but the null must not NPE either - this check runs outside the decode try/catch, so a throw here

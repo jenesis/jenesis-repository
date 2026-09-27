@@ -8,6 +8,8 @@ import build.jenesis.repository.audit.AuditActions;
 import build.jenesis.repository.audit.AuditTrail;
 import build.jenesis.repository.cache.storage.Names;
 import build.jenesis.repository.server.spi.Authorization;
+import build.jenesis.repository.server.spi.CredentialLifetimes;
+import build.jenesis.repository.server.spi.OidcTrusts;
 
 /**
  * Manages access credentials within the current tenant through the shared {@link Authorization}: a credential
@@ -17,7 +19,7 @@ import build.jenesis.repository.server.spi.Authorization;
  * The grantable tokens are discovered from the {@link GrantableRights} beans on the context rather than hard-coded,
  * so a new surface needs no change here. The minted key carries its tenant in its {@code jenk_<tenant>.<secret><checksum>}
  * form, so the cache server resolves the tenant from the key alone; only the key's hash is stored, so the plaintext key
- * is shown once at creation and never again. A credential expires by default (see {@link Authorization#mintExpiry});
+ * is shown once at creation and never again. A credential expires by default (see {@link CredentialLifetimes#mintExpiry});
  * the cache and the artifact repository authorize against this same store, so a credential granted here is honoured by
  * every surface.
  */
@@ -79,7 +81,7 @@ public class CredentialService {
         String tenant = tenant();
         // The tenant's named roles are the same for every credential in the list, so read them once here rather than
         // re-reading the roles document from the store on each per-credential load (an N+1 store read on the page).
-        Map<String, String> roles = authorization.roles(tenant);
+        Map<String, String> roles = authorization.roles().of(tenant);
         List<Credential> credentials = new ArrayList<>();
         Authorization.CredentialPage page = authorization.credentials(tenant, after, Math.clamp(limit, 1, PAGE));
         for (String id : page.hashes()) {
@@ -93,7 +95,7 @@ public class CredentialService {
 
     public Credential get(String id) throws IOException {
         String tenant = tenant();
-        return load(tenant, requireId(id), authorization.roles(tenant));
+        return load(tenant, requireId(id), authorization.roles().of(tenant));
     }
 
     private Credential load(String tenant, String id, Map<String, String> roles) throws IOException {
@@ -123,7 +125,7 @@ public class CredentialService {
         String tenant = tenant();
         String key = Authorization.mint(tenant);
         String id = Authorization.hash(key);
-        Instant expiry = authorization.mintExpiry(tenant, expires, nonExpiring);
+        Instant expiry = authorization.lifetimes().mintExpiry(tenant, expires, nonExpiring);
         authorization.provision(tenant, id, label, expiry);
         audit("credential.mint", id);
         return new Created(id, key, expiry);
@@ -147,7 +149,7 @@ public class CredentialService {
         if (role == null || role.isBlank()) {
             throw new IllegalArgumentException("A role is required.");
         }
-        String tokens = authorization.roles(tenant()).get(role.trim());
+        String tokens = authorization.roles().of(tenant()).get(role.trim());
         if (tokens == null) {
             throw new IllegalArgumentException("Unknown role '" + role + "'.");
         }
@@ -199,41 +201,41 @@ public class CredentialService {
     }
 
     /** The current tenant's OIDC trusts: each exchanges a matching id-token for a short-lived credential. */
-    public List<Authorization.Trust> trusts() throws IOException {
-        return authorization.trusts(tenant());
+    public List<OidcTrusts.Trust> trusts() throws IOException {
+        return authorization.trusts().of(tenant());
     }
 
     /** Add or replace an OIDC trust on the current tenant. */
     public void setTrust(String name, String issuer, String audience, String subject, String scope, String rights,
                          Duration ttl) throws IOException {
-        authorization.setTrust(tenant(),
-                new Authorization.Trust(name, issuer, audience, subject, scope, rights, ttl));
+        authorization.trusts().set(tenant(),
+                new OidcTrusts.Trust(name, issuer, audience, subject, scope, rights, ttl));
         audit(TrustsController.SET, name);
     }
 
     public void removeTrust(String name) throws IOException {
-        authorization.removeTrust(tenant(), name);
+        authorization.trusts().remove(tenant(), name);
         audit(TrustsController.REMOVE, name);
     }
 
     /** The current tenant's role names, for a console role picker. */
     public List<String> roleNames() throws IOException {
-        return new ArrayList<>(authorization.roles(tenant()).keySet());
+        return new ArrayList<>(authorization.roles().of(tenant()).keySet());
     }
 
     /** The current tenant's named roles (name to comma-separated tokens), built-in defaults plus custom ones. */
     public Map<String, String> roles() throws IOException {
-        return authorization.roles(tenant());
+        return authorization.roles().of(tenant());
     }
 
     /** Add or replace a custom role from comma-separated tokens, validated against the known rights. */
     public void setRole(String name, String tokens) throws IOException {
-        authorization.setRole(tenant(), name, validRole(tokens));
+        authorization.roles().set(tenant(), name, validRole(tokens));
         audit(AuditActions.ROLE_SET, name);
     }
 
     public void removeRole(String name) throws IOException {
-        authorization.removeRole(tenant(), name);
+        authorization.roles().remove(tenant(), name);
         audit(AuditActions.ROLE_REMOVE, name);
     }
 
@@ -258,13 +260,13 @@ public class CredentialService {
 
     /** The current tenant's effective credential-lifetime policy: the default stamped on a blank-expiry mint and the
      *  optional ceiling beyond which no key may live. */
-    public Authorization.Policy policy() throws IOException {
-        return authorization.policy(tenant());
+    public CredentialLifetimes.Policy policy() throws IOException {
+        return authorization.lifetimes().policy(tenant());
     }
 
     /** Set or clear ({@code null}) the current tenant's default and maximum credential lifetimes. */
     public void setPolicy(Duration defaultLifetime, Duration maxLifetime) throws IOException {
-        authorization.setPolicy(tenant(), defaultLifetime, maxLifetime);
+        authorization.lifetimes().setPolicy(tenant(), defaultLifetime, maxLifetime);
         audit(AuditActions.POLICY_SET, "lifetime");
     }
 

@@ -69,7 +69,7 @@ public final class LdapSignIn implements AuthenticationProvider {
         Set<String> groups = account.get().groups();
         try {
             for (String each : properties.tenantList()) {
-                authorization.reconcileMembership(each, id, groups, SOURCE);
+                authorization.groups().reconcile(each, id, groups, SOURCE);
             }
         } catch (IOException e) {
             throw new AuthenticationServiceException("Could not record the directory groups of " + id, e);

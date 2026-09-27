@@ -110,7 +110,8 @@ public class AdminController {
     private List<GroupRow> groups() throws IOException {
         List<GroupRow> rows = new ArrayList<>();
         for (String name : authorization.subjects(current.name(), Authorization.Kind.GROUP, null, GROUPS_PAGE).ids()) {
-            Authorization.SubjectPage members = authorization.members(current.name(), name, null, MEMBER_PREVIEW);
+            Authorization.SubjectPage members =
+                    authorization.groups().members(current.name(), name, null, MEMBER_PREVIEW);
             rows.add(new GroupRow(name,
                     authorization.grants(current.name(), Authorization.Subject.group(name)),
                     members.ids(), members.next() != null));
@@ -153,7 +154,7 @@ public class AdminController {
     public String addGroupMember(@RequestParam("name") String name,
                                  @RequestParam("id") String id,
                                  RedirectAttributes redirect) throws IOException {
-        authorization.addMember(current.name(), name, id.trim());
+        authorization.groups().addMember(current.name(), name, id.trim());
         audit("group.member.add", name + " " + id.trim());
         redirect.addFlashAttribute("message", "Added " + id.trim() + " to " + name + ".");
         return "redirect:/ui/admin";
@@ -163,7 +164,7 @@ public class AdminController {
     public String removeGroupMember(@RequestParam("name") String name,
                                     @RequestParam("id") String id,
                                     RedirectAttributes redirect) throws IOException {
-        authorization.removeMember(current.name(), name, id);
+        authorization.groups().removeMember(current.name(), name, id);
         audit("group.member.remove", name + " " + id);
         redirect.addFlashAttribute("message", "Removed " + id + " from " + name + ".");
         return "redirect:/ui/admin";

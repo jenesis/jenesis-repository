@@ -4,6 +4,7 @@ import module org.junit.jupiter.api;
 import module java.base;
 
 import build.jenesis.repository.server.spi.Authorization;
+import build.jenesis.repository.server.spi.OidcTrusts;
 import build.jenesis.repository.oidc.OidcExchange;
 import build.jenesis.repository.server.spi.TokenExchange;
 import build.jenesis.repository.store.ArtifactStore;
@@ -83,7 +84,7 @@ class OidcExchangeTest {
                                 + unsigned(publicKey.getModulus()) + "\",\"e\":\""
                                 + unsigned(publicKey.getPublicExponent()) + "\"}]}")));
 
-        authorization.setTrust("acme", new Authorization.Trust("github", issuer, "jenesis",
+        authorization.trusts().set("acme", new OidcTrusts.Trust("github", issuer, "jenesis",
                 "repo:acme/app:*", "releases", "repository:read,repository:write", Duration.ofMinutes(15)));
         warmTheDecoder();
     }
@@ -176,7 +177,7 @@ class OidcExchangeTest {
         // first (here by audience) must fall through to a later one that does. Provision a decoy trust ordered before
         // "github" (trusts iterate by name) whose audience the token does not carry; the token's audience matches only
         // "github", so it must be exchanged against "github" - carrying github's grant, not the decoy's.
-        authorization.setTrust("acme", new Authorization.Trust("aaa-decoy", issuer, "other-audience",
+        authorization.trusts().set("acme", new OidcTrusts.Trust("aaa-decoy", issuer, "other-audience",
                 "repo:acme/app:*", "wrong-scope", "repository:read", Duration.ofMinutes(15)));
 
         TokenExchange.Exchanged exchanged = exchange.exchange("acme",
@@ -320,13 +321,13 @@ class OidcExchangeTest {
     void a_trust_created_with_a_blank_or_null_audience_is_rejected_at_creation_with_a_clear_message() {
         // Fail-fast at the single creation/parse chokepoint (the Trust canonical constructor): a trust must not exist
         // with a blank audience, because a blank audience would silently accept a token minted for any relying party.
-        assertThatThrownBy(() -> new Authorization.Trust("github", issuer, "  ",
+        assertThatThrownBy(() -> new OidcTrusts.Trust("github", issuer, "  ",
                 "repo:acme/app:*", "releases", "repository:read", Duration.ofMinutes(15)))
                 .isInstanceOf(IllegalArgumentException.class)
                 .as("a blank audience names the offending trust and states the remedy")
                 .hasMessageContaining("github")
                 .hasMessageContaining("requires an explicit audience");
-        assertThatThrownBy(() -> new Authorization.Trust("github", issuer, null,
+        assertThatThrownBy(() -> new OidcTrusts.Trust("github", issuer, null,
                 "repo:acme/app:*", "releases", "repository:read", Duration.ofMinutes(15)))
                 .isInstanceOf(IllegalArgumentException.class)
                 .as("a null audience is rejected the same way")
@@ -335,7 +336,7 @@ class OidcExchangeTest {
 
     @Test
     void a_trust_created_with_an_explicit_audience_is_accepted() {
-        Authorization.Trust trust = new Authorization.Trust("github", issuer, "jenesis",
+        OidcTrusts.Trust trust = new OidcTrusts.Trust("github", issuer, "jenesis",
                 "repo:acme/app:*", "releases", "repository:read", Duration.ofMinutes(15));
         assertThat(trust.audience()).isEqualTo("jenesis");
     }

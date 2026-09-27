@@ -5,6 +5,7 @@ import build.jenesis.repository.audit.AuditActions;
 import build.jenesis.repository.audit.AuditTrail;
 import build.jenesis.repository.server.kernel.Repositories;
 import build.jenesis.repository.server.spi.Authorization;
+import build.jenesis.repository.server.spi.CredentialLifetimes;
 import build.jenesis.repository.server.spi.RateLimiter;
 import build.jenesis.repository.server.spi.RateLimiterProvider;
 import jakarta.servlet.http.HttpServletResponse;
@@ -62,7 +63,7 @@ public class ManagementController {
     @GetMapping("/api/policy")
     @ResponseBody
     public PolicyView policy(@RequestHeader(value = Repositories.KEY, required = false) String key) throws IOException {
-        Authorization.Policy policy = authorization.policy(repositories.tenant(key));
+        CredentialLifetimes.Policy policy = authorization.lifetimes().policy(repositories.tenant(key));
         return new PolicyView(policy.defaultLifetime().toString(),
                 policy.maxLifetime() == null ? null : policy.maxLifetime().toString());
     }
@@ -72,9 +73,9 @@ public class ManagementController {
     public void setPolicy(@RequestHeader(value = Repositories.KEY, required = false) String key,
                           @RequestBody(required = false) PolicyRequest request,
                           HttpServletResponse response) throws IOException {
-        authorization.setPolicy(repositories.tenant(key),
-                request == null ? null : Authorization.lifetime(request.defaultLifetime()),
-                request == null ? null : Authorization.lifetime(request.maxLifetime()));
+        authorization.lifetimes().setPolicy(repositories.tenant(key),
+                request == null ? null : CredentialLifetimes.lifetime(request.defaultLifetime()),
+                request == null ? null : CredentialLifetimes.lifetime(request.maxLifetime()));
         audit(key, AuditActions.POLICY_SET, "lifetime");
         response.setStatus(200);
     }
@@ -94,7 +95,7 @@ public class ManagementController {
                          @RequestBody QuotaRequest request,
                          HttpServletResponse response) throws IOException {
         String tenant = repositories.tenant(key);
-        authorization.setQuota(tenant, request == null ? 0L : request.maxBytes());
+        authorization.quotas().set(tenant, request == null ? 0L : request.maxBytes());
         // The usage total is NOT recomputed here: that walks every blob of every repository the tenant owns while
         // the caller waits - so the cost of setting a limit would grow with the tenant, which is the one thing a
         // request must not do. The cleanup pass already recomputes it for any tenant that has
@@ -114,7 +115,7 @@ public class ManagementController {
             respondRateLimitNotInstalled(response);
             return null;
         }
-        return new RateLimitView(authorization.rateLimit(repositories.tenant(key)));
+        return new RateLimitView(authorization.rateLimits().of(repositories.tenant(key)));
     }
 
     /** Set ({@code > 0}) or clear ({@code 0}) the tenant's request rate ceiling in permits per minute. */
@@ -126,7 +127,7 @@ public class ManagementController {
             return;
         }
         long permitsPerMinute = request == null ? 0L : request.permitsPerMinute();
-        authorization.setRateLimit(repositories.tenant(key), permitsPerMinute);
+        authorization.rateLimits().set(repositories.tenant(key), permitsPerMinute);
         audit(key, "rate-limit.set", Long.toString(permitsPerMinute));
         response.setStatus(200);
     }
@@ -135,7 +136,7 @@ public class ManagementController {
     @GetMapping("/api/roles")
     @ResponseBody
     public Map<String, String> roles(@RequestHeader(value = Repositories.KEY, required = false) String key) throws IOException {
-        return authorization.roles(repositories.tenant(key));
+        return authorization.roles().of(repositories.tenant(key));
     }
 
     /** Add or replace a custom role by name from comma-separated tokens. */
@@ -144,7 +145,7 @@ public class ManagementController {
                         @RequestHeader(value = Repositories.KEY, required = false) String key,
                         @RequestBody RoleRequest request,
                         HttpServletResponse response) throws IOException {
-        authorization.setRole(repositories.tenant(key), name, request.tokens());
+        authorization.roles().set(repositories.tenant(key), name, request.tokens());
         audit(key, AuditActions.ROLE_SET, name);
         response.setStatus(200);
     }
@@ -153,7 +154,7 @@ public class ManagementController {
     public void removeRole(@PathVariable("name") String name,
                            @RequestHeader(value = Repositories.KEY, required = false) String key,
                            HttpServletResponse response) throws IOException {
-        authorization.removeRole(repositories.tenant(key), name);
+        authorization.roles().remove(repositories.tenant(key), name);
         audit(key, AuditActions.ROLE_REMOVE, name);
         response.setStatus(200);
     }

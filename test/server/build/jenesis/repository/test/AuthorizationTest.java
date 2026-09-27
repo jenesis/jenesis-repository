@@ -5,7 +5,10 @@ import module java.base;
 
 import build.jenesis.repository.scope.Scopes;
 import build.jenesis.repository.store.Retries;
+import build.jenesis.repository.server.spi.AnonymousRights;
 import build.jenesis.repository.server.spi.Authorization;
+import build.jenesis.repository.server.spi.ClientAddresses;
+import build.jenesis.repository.server.spi.CredentialLifetimes;
 import build.jenesis.repository.store.ArtifactStore;
 import build.jenesis.repository.store.ArtifactStoreProvider;
 import static org.assertj.core.api.Assertions.assertThat;
@@ -155,32 +158,32 @@ class AuthorizationTest {
 
     @Test
     void a_mint_expires_by_default_and_only_skips_expiry_on_an_explicit_opt_out() throws IOException {
-        Instant byDefault = authorization.mintExpiry("acme", null, false);
+        Instant byDefault = authorization.lifetimes().mintExpiry("acme", null, false);
         assertThat(byDefault).as("a credential expires by default")
                 .isAfter(Instant.now().plus(Duration.ofDays(89)));
         Instant requested = Instant.now().plus(Duration.ofDays(7));
-        assertThat(authorization.mintExpiry("acme", requested, false))
+        assertThat(authorization.lifetimes().mintExpiry("acme", requested, false))
                 .as("an explicit expiry is honoured as given").isEqualTo(requested);
-        assertThat(authorization.mintExpiry("acme", null, true))
+        assertThat(authorization.lifetimes().mintExpiry("acme", null, true))
                 .as("non-expiring is only ever an explicit opt-out").isNull();
 
-        assertThat(authorization.withDefaultLifetime(Duration.ofDays(30)).mintExpiry("acme", null, false))
+        assertThat(authorization.withDefaultLifetime(Duration.ofDays(30)).lifetimes().mintExpiry("acme", null, false))
                 .as("the default lifetime is overridable").isBefore(Instant.now().plus(Duration.ofDays(31)));
     }
 
     @Test
     void a_tenant_policy_caps_the_lifetime_and_overrides_a_non_expiring_request() throws IOException {
-        authorization.setPolicy("acme", Duration.ofDays(7), Duration.ofDays(30));
-        Authorization.Policy policy = authorization.policy("acme");
+        authorization.lifetimes().setPolicy("acme", Duration.ofDays(7), Duration.ofDays(30));
+        CredentialLifetimes.Policy policy = authorization.lifetimes().policy("acme");
         assertThat(policy.defaultLifetime()).isEqualTo(Duration.ofDays(7));
         assertThat(policy.maxLifetime()).isEqualTo(Duration.ofDays(30));
 
-        assertThat(authorization.mintExpiry("acme", null, false))
+        assertThat(authorization.lifetimes().mintExpiry("acme", null, false))
                 .as("a blank expiry uses the tenant default").isBefore(Instant.now().plus(Duration.ofDays(8)));
-        assertThat(authorization.mintExpiry("acme", Instant.now().plus(Duration.ofDays(365)), false))
+        assertThat(authorization.lifetimes().mintExpiry("acme", Instant.now().plus(Duration.ofDays(365)), false))
                 .as("a too-distant expiry is pulled back to the ceiling")
                 .isBefore(Instant.now().plus(Duration.ofDays(31)));
-        assertThat(authorization.mintExpiry("acme", null, true))
+        assertThat(authorization.lifetimes().mintExpiry("acme", null, true))
                 .as("a non-expiring request is capped, not honoured, under a policy")
                 .isAfter(Instant.now()).isBefore(Instant.now().plus(Duration.ofDays(31)));
 
@@ -196,13 +199,13 @@ class AuthorizationTest {
     @Test
     void a_deployment_ceiling_bounds_every_tenant_and_a_tenant_can_only_narrow_it() throws IOException {
         Authorization capped = authorization.withMaxLifetime(Duration.ofDays(60));
-        assertThat(capped.policy("acme").maxLifetime())
+        assertThat(capped.lifetimes().policy("acme").maxLifetime())
                 .as("the deployment ceiling applies with no tenant policy").isEqualTo(Duration.ofDays(60));
-        capped.setPolicy("acme", null, Duration.ofDays(365));
-        assertThat(capped.policy("acme").maxLifetime())
+        capped.lifetimes().setPolicy("acme", null, Duration.ofDays(365));
+        assertThat(capped.lifetimes().policy("acme").maxLifetime())
                 .as("a tenant cannot raise its ceiling past the deployment ceiling").isEqualTo(Duration.ofDays(60));
-        capped.setPolicy("acme", null, Duration.ofDays(10));
-        assertThat(capped.policy("acme").maxLifetime())
+        capped.lifetimes().setPolicy("acme", null, Duration.ofDays(10));
+        assertThat(capped.lifetimes().policy("acme").maxLifetime())
                 .as("a tenant can narrow its ceiling further").isEqualTo(Duration.ofDays(10));
     }
 
@@ -228,26 +231,26 @@ class AuthorizationTest {
     @Test
     void the_client_address_ignores_a_forwarded_header_from_an_untrusted_peer() {
         List<String> trusted = List.of("10.0.0.0/8");
-        assertThat(Authorization.clientAddress("10.0.0.1", "203.0.113.9, 10.0.0.1", trusted))
+        assertThat(ClientAddresses.resolve("10.0.0.1", "203.0.113.9, 10.0.0.1", trusted))
                 .as("a trusted proxy's forwarded client is taken").isEqualTo("203.0.113.9");
-        assertThat(Authorization.clientAddress("10.0.0.2", "198.51.100.7, 10.0.0.9, 10.0.0.2", trusted))
+        assertThat(ClientAddresses.resolve("10.0.0.2", "198.51.100.7, 10.0.0.9, 10.0.0.2", trusted))
                 .as("the walk skips trusted hops to the real client").isEqualTo("198.51.100.7");
-        assertThat(Authorization.clientAddress("203.0.113.50", "10.0.0.5", trusted))
+        assertThat(ClientAddresses.resolve("203.0.113.50", "10.0.0.5", trusted))
                 .as("an untrusted peer's forwarded header is ignored (anti-spoofing)").isEqualTo("203.0.113.50");
-        assertThat(Authorization.clientAddress("203.0.113.50", "1.2.3.4", List.of()))
+        assertThat(ClientAddresses.resolve("203.0.113.50", "1.2.3.4", List.of()))
                 .as("with no trusted proxies the peer is always the client").isEqualTo("203.0.113.50");
-        assertThat(Authorization.clientAddress("10.0.0.1", null, trusted))
+        assertThat(ClientAddresses.resolve("10.0.0.1", null, trusted))
                 .as("a trusted peer with no forwarded header is the client").isEqualTo("10.0.0.1");
     }
 
     @Test
     void a_peer_is_a_trusted_proxy_only_within_the_configured_ranges() {
         List<String> trusted = List.of("10.0.0.0/8", "192.168.1.5");
-        assertThat(Authorization.trustedProxy("10.3.2.1", trusted)).isTrue();
-        assertThat(Authorization.trustedProxy("192.168.1.5", trusted)).isTrue();
-        assertThat(Authorization.trustedProxy("203.0.113.50", trusted)).isFalse();
-        assertThat(Authorization.trustedProxy("10.3.2.1", List.of())).as("nobody is trusted by default").isFalse();
-        assertThat(Authorization.trustedProxy(null, trusted)).as("no peer, no trust").isFalse();
+        assertThat(ClientAddresses.trustedProxy("10.3.2.1", trusted)).isTrue();
+        assertThat(ClientAddresses.trustedProxy("192.168.1.5", trusted)).isTrue();
+        assertThat(ClientAddresses.trustedProxy("203.0.113.50", trusted)).isFalse();
+        assertThat(ClientAddresses.trustedProxy("10.3.2.1", List.of())).as("nobody is trusted by default").isFalse();
+        assertThat(ClientAddresses.trustedProxy(null, trusted)).as("no peer, no trust").isFalse();
     }
 
     @Test
@@ -290,16 +293,16 @@ class AuthorizationTest {
 
     @Test
     void named_roles_default_to_a_hierarchy_and_accept_custom_additions() throws IOException {
-        java.util.Map<String, String> roles = authorization.roles("acme");
+        java.util.Map<String, String> roles = authorization.roles().of("acme");
         assertThat(roles).containsKeys("read-only", "deploy", "admin");
         assertThat(roles.get("read-only")).contains("repository:read").doesNotContain("repository:write");
         assertThat(roles.get("deploy")).contains("repository:write");
         assertThat(roles.get("admin")).isEqualTo("*");
 
-        authorization.setRole("acme", "publisher", "repository:read,repository:write");
-        assertThat(authorization.roles("acme")).containsEntry("publisher", "repository:read,repository:write");
-        authorization.removeRole("acme", "publisher");
-        assertThat(authorization.roles("acme")).doesNotContainKey("publisher");
+        authorization.roles().set("acme", "publisher", "repository:read,repository:write");
+        assertThat(authorization.roles().of("acme")).containsEntry("publisher", "repository:read,repository:write");
+        authorization.roles().remove("acme", "publisher");
+        assertThat(authorization.roles().of("acme")).doesNotContainKey("publisher");
     }
 
     @Test
@@ -381,13 +384,13 @@ class AuthorizationTest {
 
     @Test
     void the_write_or_admin_escalation_predicate_classifies_the_grant() {
-        assertThat(Authorization.grantsWriteOrAdmin("")).isFalse();
-        assertThat(Authorization.grantsWriteOrAdmin("repository:read")).isFalse();
-        assertThat(Authorization.grantsWriteOrAdmin("releases=repository:read")).isFalse();
-        assertThat(Authorization.grantsWriteOrAdmin("repository:read,repository:write")).isTrue();
-        assertThat(Authorization.grantsWriteOrAdmin("manage:read")).as("any manage right is admin").isTrue();
-        assertThat(Authorization.grantsWriteOrAdmin("repository:*")).as("a surface wildcard covers write").isTrue();
-        assertThat(Authorization.grantsWriteOrAdmin("*")).as("all-privileges is write and admin").isTrue();
+        assertThat(AnonymousRights.grantsWriteOrAdmin("")).isFalse();
+        assertThat(AnonymousRights.grantsWriteOrAdmin("repository:read")).isFalse();
+        assertThat(AnonymousRights.grantsWriteOrAdmin("releases=repository:read")).isFalse();
+        assertThat(AnonymousRights.grantsWriteOrAdmin("repository:read,repository:write")).isTrue();
+        assertThat(AnonymousRights.grantsWriteOrAdmin("manage:read")).as("any manage right is admin").isTrue();
+        assertThat(AnonymousRights.grantsWriteOrAdmin("repository:*")).as("a surface wildcard covers write").isTrue();
+        assertThat(AnonymousRights.grantsWriteOrAdmin("*")).as("all-privileges is write and admin").isTrue();
     }
 
     @Test
@@ -431,24 +434,24 @@ class AuthorizationTest {
 
     @Test
     void a_tenant_storage_quota_is_stored_set_and_cleared() throws IOException {
-        assertThat(authorization.quota("acme")).as("none set is unlimited").isZero();
+        assertThat(authorization.quotas().of("acme")).as("none set is unlimited").isZero();
 
-        authorization.setQuota("acme", 1_099_511_627_776L);
-        assertThat(authorization.quota("acme")).isEqualTo(1_099_511_627_776L);
+        authorization.quotas().set("acme", 1_099_511_627_776L);
+        assertThat(authorization.quotas().of("acme")).isEqualTo(1_099_511_627_776L);
 
-        authorization.setQuota("acme", 0);
-        assertThat(authorization.quota("acme")).as("zero clears it").isZero();
+        authorization.quotas().set("acme", 0);
+        assertThat(authorization.quotas().of("acme")).as("zero clears it").isZero();
     }
 
     @Test
     void a_tenant_rate_limit_is_stored_set_and_cleared() throws IOException {
-        assertThat(authorization.rateLimit("acme")).as("none set is the deployment default").isZero();
+        assertThat(authorization.rateLimits().of("acme")).as("none set is the deployment default").isZero();
 
-        authorization.setRateLimit("acme", 600);
-        assertThat(authorization.rateLimit("acme")).isEqualTo(600);
+        authorization.rateLimits().set("acme", 600);
+        assertThat(authorization.rateLimits().of("acme")).isEqualTo(600);
 
-        authorization.setRateLimit("acme", 0);
-        assertThat(authorization.rateLimit("acme")).as("zero clears it").isZero();
+        authorization.rateLimits().set("acme", 0);
+        assertThat(authorization.rateLimits().of("acme")).as("zero clears it").isZero();
     }
 
     @Test
@@ -714,19 +717,19 @@ class AuthorizationTest {
     @Test
     void the_deployment_lifetime_dials_are_reachable_from_their_configuration_values() {
         Authorization configured = authorization.withLifetimes("P30D", "P60D");
-        assertThat(configured.defaultLifetime()).isEqualTo(Duration.ofDays(30));
-        assertThat(configured.maxLifetime()).isEqualTo(Duration.ofDays(60));
+        assertThat(configured.lifetimes().defaultLifetime()).isEqualTo(Duration.ofDays(30));
+        assertThat(configured.lifetimes().maxLifetime()).isEqualTo(Duration.ofDays(60));
     }
 
     /** A blank dial leaves the shipped posture exactly as it was: 90 days, uncapped. A ceiling appearing on upgrade
      *  would shorten every tenant's credentials with nothing in the configuration to explain it. */
     @Test
     void a_blank_lifetime_dial_changes_nothing() {
-        assertThat(authorization.withLifetimes("", "  ").defaultLifetime())
-                .isEqualTo(authorization.defaultLifetime());
-        assertThat(authorization.withLifetimes(null, null).maxLifetime())
+        assertThat(authorization.withLifetimes("", "  ").lifetimes().defaultLifetime())
+                .isEqualTo(authorization.lifetimes().defaultLifetime());
+        assertThat(authorization.withLifetimes(null, null).lifetimes().maxLifetime())
                 .as("and an unset ceiling stays unset rather than becoming a default one")
-                .isEqualTo(authorization.maxLifetime());
+                .isEqualTo(authorization.lifetimes().maxLifetime());
     }
 
     /** A malformed duration refuses, naming the key and a well-formed value. Falling back to 90 days instead is only

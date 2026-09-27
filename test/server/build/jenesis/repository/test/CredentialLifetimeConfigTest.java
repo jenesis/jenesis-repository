@@ -47,18 +47,18 @@ class CredentialLifetimeConfigTest {
     void the_configured_lifetimes_reach_the_authorization_the_deployment_runs_on() {
         Authorization configured = authorization("P30D", "P60D");
 
-        assertThat(configured.defaultLifetime()).isEqualTo(Duration.ofDays(30));
-        assertThat(configured.maxLifetime()).isEqualTo(Duration.ofDays(60));
+        assertThat(configured.lifetimes().defaultLifetime()).isEqualTo(Duration.ofDays(30));
+        assertThat(configured.lifetimes().maxLifetime()).isEqualTo(Duration.ofDays(60));
     }
 
     @Test
     void an_unconfigured_deployment_keeps_the_ninety_day_default_and_no_ceiling() {
         Authorization shipped = authorization("", "");
 
-        assertThat(shipped.defaultLifetime())
+        assertThat(shipped.lifetimes().defaultLifetime())
                 .as("the shipped posture is unchanged for a deployment that sets neither")
                 .isEqualTo(Duration.ofDays(90));
-        assertThat(shipped.maxLifetime())
+        assertThat(shipped.lifetimes().maxLifetime())
                 .as("and no ceiling appears on upgrade, which would shorten every tenant's credentials at once")
                 .isNull();
     }

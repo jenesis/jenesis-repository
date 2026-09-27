@@ -45,7 +45,7 @@ class GroupGrantTest {
     void a_member_holds_what_the_group_holds() throws IOException {
         authorization.setGrant("acme", Authorization.Subject.group("developers"), "*",
                 Authorization.REPOSITORY_READ);
-        authorization.addMember("acme", "developers", "oidc/ada");
+        authorization.groups().addMember("acme", "developers", "oidc/ada");
 
         assertThat(allowed("oidc/ada", Authorization.REPOSITORY_READ))
                 .as("through the group, having been granted nothing of their own").isTrue();
@@ -55,7 +55,7 @@ class GroupGrantTest {
         // about the membership test rather than about her never having been derived. Without the second group it
         // passes over a derivation that ignores membership entirely and hands every group's rights to everyone,
         // which is exactly what a planted mutation showed.
-        authorization.addMember("acme", "auditors", "oidc/grace");
+        authorization.groups().addMember("acme", "auditors", "oidc/grace");
         assertThat(allowed("oidc/grace", Authorization.REPOSITORY_READ))
                 .as("someone who is not a member of THAT group holds nothing of it").isFalse();
     }
@@ -65,7 +65,7 @@ class GroupGrantTest {
         // The order an operator actually works in: put people in the group, then decide what it may do. If this
         // needed a repair to take effect the grant would be real in the store and absent from every decision,
         // which is the failure this whole model exists to remove.
-        authorization.addMember("acme", "developers", "oidc/ada");
+        authorization.groups().addMember("acme", "developers", "oidc/ada");
         assertThat(allowed("oidc/ada", Authorization.REPOSITORY_READ)).isFalse();
 
         authorization.setGrant("acme", Authorization.Subject.group("developers"), "*",
@@ -79,10 +79,10 @@ class GroupGrantTest {
     void leaving_the_group_takes_its_rights_away() throws IOException {
         authorization.setGrant("acme", Authorization.Subject.group("developers"), "*",
                 Authorization.REPOSITORY_READ);
-        authorization.addMember("acme", "developers", "oidc/ada");
+        authorization.groups().addMember("acme", "developers", "oidc/ada");
         assertThat(allowed("oidc/ada", Authorization.REPOSITORY_READ)).isTrue();
 
-        authorization.removeMember("acme", "developers", "oidc/ada");
+        authorization.groups().removeMember("acme", "developers", "oidc/ada");
 
         assertThat(allowed("oidc/ada", Authorization.REPOSITORY_READ))
                 .as("the offboarding half - a membership that could not be taken back is not a membership")
@@ -93,7 +93,7 @@ class GroupGrantTest {
     void deleting_the_group_takes_its_rights_off_everyone_who_held_them_through_it() throws IOException {
         authorization.setGrant("acme", Authorization.Subject.group("contractors"), "*",
                 Authorization.REPOSITORY_WRITE);
-        authorization.addMember("acme", "contractors", "oidc/ada");
+        authorization.groups().addMember("acme", "contractors", "oidc/ada");
         assertThat(allowed("oidc/ada", Authorization.REPOSITORY_WRITE)).isTrue();
 
         authorization.removeSubject("acme", Authorization.Subject.group("contractors"));
@@ -101,7 +101,7 @@ class GroupGrantTest {
         assertThat(allowed("oidc/ada", Authorization.REPOSITORY_WRITE))
                 .as("a group that no longer exists confers nothing - and the member rows went with it")
                 .isFalse();
-        assertThat(authorization.members("acme", "contractors", null, 10).ids()).isEmpty();
+        assertThat(authorization.groups().members("acme", "contractors", null, 10).ids()).isEmpty();
     }
 
     @Test
@@ -112,8 +112,8 @@ class GroupGrantTest {
                 Authorization.REPOSITORY_READ);
         authorization.setGrant("acme", Authorization.Subject.group("publishers"), "*",
                 Authorization.REPOSITORY_WRITE);
-        authorization.addMember("acme", "readers", "oidc/ada");
-        authorization.addMember("acme", "publishers", "oidc/ada");
+        authorization.groups().addMember("acme", "readers", "oidc/ada");
+        authorization.groups().addMember("acme", "publishers", "oidc/ada");
 
         assertThat(allowed("oidc/ada", Authorization.REPOSITORY_READ)).isTrue();
         assertThat(allowed("oidc/ada", Authorization.REPOSITORY_WRITE)).isTrue();
@@ -128,13 +128,13 @@ class GroupGrantTest {
         authorization.setGrant("acme", ada, "*", Authorization.MANAGE_WRITE);
         authorization.setGrant("acme", Authorization.Subject.group("developers"), "*",
                 Authorization.REPOSITORY_READ);
-        authorization.addMember("acme", "developers", "oidc/ada");
+        authorization.groups().addMember("acme", "developers", "oidc/ada");
 
         authorization.removeSubject("acme", ada);
 
         assertThat(allowed("oidc/ada", Authorization.MANAGE_WRITE))
                 .as("what they held personally is gone").isFalse();
-        authorization.rederive("acme", "oidc/ada");
+        authorization.groups().rederive("acme", "oidc/ada");
         assertThat(allowed("oidc/ada", Authorization.REPOSITORY_READ))
                 .as("what they hold as a member is still theirs").isTrue();
     }
@@ -147,7 +147,7 @@ class GroupGrantTest {
         // cadence rather than checked, and this is that cadence doing its job.
         authorization.setGrant("acme", Authorization.Subject.group("developers"), "*",
                 Authorization.MANAGE_WRITE);
-        authorization.addMember("acme", "developers", "oidc/ada");
+        authorization.groups().addMember("acme", "developers", "oidc/ada");
         assertThat(allowed("oidc/ada", Authorization.MANAGE_WRITE)).isTrue();
 
         // What a node dying mid-derivation leaves: the group's grants are current and one member's derived
@@ -164,7 +164,7 @@ class GroupGrantTest {
         assertThat(allowed("oidc/ada", Authorization.MANAGE_WRITE))
                 .as("and not holding what it grants now").isFalse();
 
-        authorization.rederive("acme");
+        authorization.groups().rederive("acme");
 
         assertThat(allowed("oidc/ada", Authorization.REPOSITORY_READ))
                 .as("the repair took away what the group stopped granting").isFalse();
@@ -181,14 +181,14 @@ class GroupGrantTest {
         for (String tenant : List.of("acme", "globex")) {
             authorization.setGrant(tenant, Authorization.Subject.group("developers"), "*",
                     Authorization.MANAGE_WRITE);
-            authorization.addMember(tenant, "developers", "oidc/ada");
+            authorization.groups().addMember(tenant, "developers", "oidc/ada");
             store.write(".system/auth/" + tenant + "/principal/oidc%2Fada/derived",
                     new ByteArrayInputStream(("*=" + Authorization.REPOSITORY_READ + "\n")
                             .getBytes(StandardCharsets.UTF_8)));
         }
         authorization.forget();
 
-        authorization.repairDerivedGrants();
+        authorization.groups().repairDerivedGrants();
 
         for (String tenant : List.of("acme", "globex")) {
             assertThat(authorization.authorize(tenant, Authorization.Subject.principal("oidc/ada"), null,
@@ -205,10 +205,10 @@ class GroupGrantTest {
         // an exception nobody can act on while a process is coming up.
         authorization.setGrant("acme", Authorization.Subject.group("developers"), "*",
                 Authorization.REPOSITORY_READ);
-        authorization.addMember("acme", "developers", "oidc/ada");
+        authorization.groups().addMember("acme", "developers", "oidc/ada");
 
         Authorization readOnly = Authorization.enforcing(new ReadOnlyArtifactStore(store));
-        assertThatCode(readOnly::repairDerivedGrants).doesNotThrowAnyException();
+        assertThatCode(readOnly.groups()::repairDerivedGrants).doesNotThrowAnyException();
     }
 
     @Test
@@ -218,8 +218,8 @@ class GroupGrantTest {
         // reconciles - it removes the memberships it no longer sees. Without a source on the row the first one to
         // reconcile deletes what the others made, and an operator's manual grant is silently undone by the next
         // sign-in. That is the failure that makes a directory integration untrustworthy rather than merely wrong.
-        authorization.addMember("acme", "hand-picked", "oidc/ada");                 // an operator, by hand
-        authorization.reconcileMembership("acme", "oidc/ada", Set.of("developers"), "oidc");
+        authorization.groups().addMember("acme", "hand-picked", "oidc/ada");                 // an operator, by hand
+        authorization.groups().reconcile("acme", "oidc/ada", Set.of("developers"), "oidc");
 
         assertThat(members("hand-picked")).as("the operator's own row survives a directory reconciliation")
                 .contains("oidc/ada");
@@ -227,7 +227,7 @@ class GroupGrantTest {
 
         // The directory now says they are in `auditors` instead. Its own previous row goes; the hand-picked one
         // does not.
-        authorization.reconcileMembership("acme", "oidc/ada", Set.of("auditors"), "oidc");
+        authorization.groups().reconcile("acme", "oidc/ada", Set.of("auditors"), "oidc");
 
         assertThat(members("auditors")).as("what the source now says").contains("oidc/ada");
         assertThat(members("developers")).as("what the source no longer says").isEmpty();
@@ -238,8 +238,8 @@ class GroupGrantTest {
     void two_directories_do_not_reconcile_each_other_away() throws IOException {
         // The same claim between two mechanisms rather than between a mechanism and a person - the shape an estate
         // running SCIM push and an LDAP pull at once really has.
-        authorization.reconcileMembership("acme", "oidc/ada", Set.of("from-scim"), "scim");
-        authorization.reconcileMembership("acme", "oidc/ada", Set.of("from-ldap"), "ldap");
+        authorization.groups().reconcile("acme", "oidc/ada", Set.of("from-scim"), "scim");
+        authorization.groups().reconcile("acme", "oidc/ada", Set.of("from-ldap"), "ldap");
 
         assertThat(members("from-scim")).as("the first source's view is not the second's to remove")
                 .contains("oidc/ada");
@@ -251,13 +251,13 @@ class GroupGrantTest {
         // A membership from a directory is a membership: it is not a second, weaker kind of belonging.
         authorization.setGrant("acme", Authorization.Subject.group("developers"), "*",
                 Authorization.REPOSITORY_READ);
-        authorization.reconcileMembership("acme", "oidc/ada", Set.of("developers"), "oidc");
+        authorization.groups().reconcile("acme", "oidc/ada", Set.of("developers"), "oidc");
 
         assertThat(allowed("oidc/ada", Authorization.REPOSITORY_READ)).isTrue();
     }
 
     private List<String> members(String group) {
-        return authorization.members("acme", group, null, 50).ids();
+        return authorization.groups().members("acme", group, null, 50).ids();
     }
 
     @Test
@@ -274,7 +274,7 @@ class GroupGrantTest {
     void a_member_is_not_a_group_and_cannot_be_named_with_a_traversal() throws IOException {
         assertThatIllegalArgumentException()
                 .as("a member id is a subject id, screened before it can reach a key")
-                .isThrownBy(() -> authorization.addMember("acme", "developers", "../../elsewhere"));
+                .isThrownBy(() -> authorization.groups().addMember("acme", "developers", "../../elsewhere"));
     }
 
     private boolean allowed(String principal, String right) throws IOException {

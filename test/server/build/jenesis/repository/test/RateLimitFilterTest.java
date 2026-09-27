@@ -82,7 +82,7 @@ public class RateLimitFilterTest {
         authorization = Authorization.enforcing(store);
         // The forged tenant carries a high per-tenant override. It is honoured while the tenant holds its own bucket
         // and must be ignored once the tenant overflows to the shared anonymous bucket.
-        authorization.setRateLimit("evil-corp", TENANT_OVERRIDE);
+        authorization.rateLimits().set("evil-corp", TENANT_OVERRIDE);
     }
 
     @Test

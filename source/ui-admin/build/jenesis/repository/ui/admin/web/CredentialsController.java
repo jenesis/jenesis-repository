@@ -1,7 +1,7 @@
 package build.jenesis.repository.ui.admin.web;
 
 import module java.base;
-import build.jenesis.repository.server.spi.Authorization;
+import build.jenesis.repository.server.spi.CredentialLifetimes;
 import build.jenesis.repository.ui.store.CredentialService;
 import org.springframework.stereotype.Controller;
 import org.springframework.ui.Model;
@@ -69,7 +69,7 @@ public class CredentialsController {
                            @RequestParam("rights") String rights,
                            @RequestParam(name = "ttl", required = false) String ttl,
                            RedirectAttributes redirect) throws IOException {
-        credentials.setTrust(name, issuer, audience, subject, scope, rights, Authorization.lifetime(ttl));
+        credentials.setTrust(name, issuer, audience, subject, scope, rights, CredentialLifetimes.lifetime(ttl));
         redirect.addFlashAttribute("message", "Saved OIDC trust '" + name + "'.");
         return "redirect:/ui/credentials";
     }
@@ -85,7 +85,7 @@ public class CredentialsController {
     public String setPolicy(@RequestParam(name = "default", required = false) String defaultLifetime,
                             @RequestParam(name = "max", required = false) String max,
                             RedirectAttributes redirect) throws IOException {
-        credentials.setPolicy(Authorization.lifetime(defaultLifetime), Authorization.lifetime(max));
+        credentials.setPolicy(CredentialLifetimes.lifetime(defaultLifetime), CredentialLifetimes.lifetime(max));
         redirect.addFlashAttribute("message", "Updated the credential-lifetime policy.");
         return "redirect:/ui/credentials";
     }
@@ -95,7 +95,7 @@ public class CredentialsController {
                          @RequestParam(name = "expires", required = false) String expires,
                          @RequestParam(name = "never", required = false, defaultValue = "false") boolean never,
                          RedirectAttributes redirect) throws IOException {
-        CredentialService.Created created = credentials.create(label, Authorization.expiry(expires), never);
+        CredentialService.Created created = credentials.create(label, CredentialLifetimes.expiry(expires), never);
         String lifetime = created.expires() == null
                 ? " This key never expires; prefer a finite lifetime and rotate it regularly."
                 : " It expires on " + created.expires() + ".";
@@ -136,7 +136,7 @@ public class CredentialsController {
     public String setExpiry(@PathVariable("id") String id,
                             @RequestParam(name = "expires", required = false) String expires,
                             RedirectAttributes redirect) throws IOException {
-        Instant expiry = Authorization.expiry(expires);
+        Instant expiry = CredentialLifetimes.expiry(expires);
         credentials.setExpiry(id, expiry);
         redirect.addFlashAttribute("message", expiry == null ? "Cleared expiry." : "Expires " + expiry + ".");
         return "redirect:/ui/credentials/" + id;
@@ -146,7 +146,7 @@ public class CredentialsController {
     public String rotate(@PathVariable("id") String id,
                          @RequestParam(name = "overlap", required = false) String overlap,
                          RedirectAttributes redirect) throws IOException {
-        CredentialService.Created created = credentials.rotate(id, Authorization.lifetime(overlap));
+        CredentialService.Created created = credentials.rotate(id, CredentialLifetimes.lifetime(overlap));
         redirect.addFlashAttribute("message",
                 "Rotated. Copy the new key now - it is shown only once: " + created.key()
                         + " The previous key keeps working until the overlap elapses.");

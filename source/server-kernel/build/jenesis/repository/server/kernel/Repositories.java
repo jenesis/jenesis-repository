@@ -156,7 +156,7 @@ public final class Repositories {
 
     /** The tenant's configured storage quota in bytes, or {@code 0} when unlimited. */
     public long quotaLimit(String tenant) throws IOException {
-        return authorization.quota(tenant);
+        return authorization.quotas().of(tenant);
     }
 
     /** The tenant's currently counted stored-content bytes (across its repositories). */
@@ -195,7 +195,7 @@ public final class Repositories {
      *  tenant gets the plain scoped store, so only quota'd tenants pay for the metering. The counter lives on the
      *  tenant scope, so every repository's blobs count against one tenant-wide limit. */
     public ArtifactStore writable(String tenant, String repository) throws IOException {
-        long limit = authorization.quota(tenant);
+        long limit = authorization.quotas().of(tenant);
         return limit > 0
                 ? new QuotaArtifactStore(root.scope(tenant), limit).scope(repository)
                 : store(tenant, repository);

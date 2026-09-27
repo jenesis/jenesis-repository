@@ -12,7 +12,7 @@ import org.springframework.web.filter.OncePerRequestFilter;
 
 /**
  * Sheds excess load before the request reaches the repository: each request is metered against its tenant's rate
- * ceiling (the per-tenant {@link Authorization#rateLimit} when set, otherwise the deployment default), and one that
+ * ceiling (the per-tenant {@link Authorization#rateLimits()} when set, otherwise the deployment default), and one that
  * exhausts the tenant's {@link RateLimiter} bucket is answered {@code 429 Too Many Requests} with a {@code
  * Retry-After}. The tenant is read from the presented key ({@link PresentedKey}) when it is
  * {@link Authorization#wellFormed well-formed}, but that check is only a CRC32 typo guard, not a signature: this
@@ -125,7 +125,7 @@ public class RateLimitFilter extends OncePerRequestFilter {
         long ceiling = defaultPermitsPerMinute.getAsLong();
         if (tenant != null) {
             try {
-                long override = authorization.rateLimit(tenant);
+                long override = authorization.rateLimits().of(tenant);
                 if (override > 0) {
                     ceiling = override;
                 }
