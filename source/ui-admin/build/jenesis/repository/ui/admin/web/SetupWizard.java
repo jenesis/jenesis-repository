@@ -2,7 +2,8 @@ package build.jenesis.repository.ui.admin.web;
 
 import module java.base;
 
-import build.jenesis.repository.settings.FirstRunSteps;
+import build.jenesis.repository.settings.Setting;
+import build.jenesis.repository.settings.Wizard;
 import build.jenesis.repository.ui.identity.StarterCredential;
 import build.jenesis.repository.ui.store.SettingsAdmin;
 import jakarta.servlet.http.HttpSession;
@@ -10,7 +11,7 @@ import org.springframework.security.core.Authentication;
 import org.springframework.stereotype.Component;
 
 /**
- * The first-run setup guide's decisions: whether a session is sent to it, and what it renders.
+ * The first boot's wizard: whether a session is sent to it, and what it asks.
  *
  * <p><b>The redirect keys on the starter credential, not on the store.</b> A super-admin whose session is on the
  * starter credential ({@link StarterCredential}) lands on {@code /setup} instead of the tenants screen - once per
@@ -28,10 +29,11 @@ import org.springframework.stereotype.Component;
  * There is no {@code jenreg.x=${JENREG_X:default}} line for it anywhere: relaxed binding maps the variable onto
  * the key whether or not a file mentions it, and the default lives here.
  *
- * <p><b>It renders the catalogue and never restates it.</b> Each step ({@link FirstRunSteps}) shows its settings
- * as the settings screen shows them - the setting's own description, its declared default, its effective value,
- * whether it applies live - through the same {@link SettingsAdmin} rows, and every save posts to the settings
- * screen's own save route. A key the catalogue does not carry is left out of the step rather than invented.
+ * <p><b>It is the first boot's wizard, derived from the catalogue and never restating it.</b> Its steps are the
+ * starter credential's, which is about no setting, then one per group of the deployment's and a tenant's essential
+ * settings ({@link Wizard#SETUP}), each row the setting's own description, default and value, then the review; on
+ * completion every value changed from what the deployment held is saved in one batch ({@link SettingsAdmin#saveAll}),
+ * and nothing is written before that.
  */
 @Component
 public class SetupWizard {
@@ -79,29 +81,95 @@ public class SetupWizard {
         session.setAttribute(SKIPPED, Boolean.TRUE);
     }
 
-    /** The guide's steps with their settings rendered from the catalogue and the store - the rows the settings
-     *  screen shows, for the keys each step names and the catalogue carries. A step none of whose settings this
-     *  deployment carries is left out: it asks about a capability the image does not have, and a decision nobody
-     *  can make is not a step. The starter-credential step names no setting and is always kept. */
-    public List<Step> steps() throws IOException {
-        List<Step> steps = new ArrayList<>();
-        for (FirstRunSteps.Step step : FirstRunSteps.ALL) {
-            List<SettingsAdmin.SettingView> views = settings.views(step.keys());
-            // A step about settings this image does not carry is left out; a step about no setting stays.
-            if (views.isEmpty() && !step.keys().isEmpty()) {
-                continue;
+    /** What the console knows of the starter credential: whether this session is on it, and whether the console's
+     *  admin key and the API's bootstrap key are set - read from the deployment's environment, since they are
+     *  secrets it is provisioned with rather than values in the store. */
+    public record Starter(boolean session, boolean adminKeySet, boolean bootstrapKeySet) {
+    }
+
+    /** The wizard's route: its page, and where each step posts. */
+    public static final String ROUTE = "/ui/setup";
+
+    /** The wizard: the starter credential's step, the settings steps, the review, and the checks of its values. */
+    public WizardFlow.Definition definition(Starter starter) throws IOException {
+        List<WizardFlow.Step> steps = new ArrayList<>();
+        for (Wizard.Information information : Wizard.SETUP.information()) {
+            List<String> paragraphs = new ArrayList<>(List.of(information.text()));
+            if (information.equals(Wizard.STARTER_CREDENTIAL)) {
+                paragraphs.add(starter.session() ? "This session is signed in with the starter key: anything it does "
+                        + "is recorded against the key, not a person." : "This session is a real identity, not the "
+                        + "starter key.");
+                paragraphs.add(starter.adminKeySet() ? "The console's admin key (jenreg.ui.admin-key) is set: it grants "
+                        + "super-admin over every tenant and is re-provisioned on every boot until the variable is "
+                        + "unset." : "The console's admin key (jenreg.ui.admin-key) is not set.");
+                paragraphs.add(starter.bootstrapKeySet() ? "The API's bootstrap key (jenreg.bootstrap-key) is set: a "
+                        + "non-expiring credential holding every right, re-provisioned on every boot until the variable "
+                        + "is unset." : "The API's bootstrap key (jenreg.bootstrap-key) is not set.");
             }
-            steps.add(new Step(step.id(), step.title(), step.why(), views));
+            steps.add(WizardFlow.Step.information(information.title(), paragraphs,
+                    List.of(new WizardFlow.Link("Grant a real administrator", "/ui/admin"),
+                            new WizardFlow.Link("Issue a real credential", "/ui/credentials"))));
         }
-        return steps;
+        steps.addAll(WizardFlow.settingsSteps(Wizard.SETUP, views()));
+        List<String> review = new ArrayList<>(List.of("Nothing has been saved yet. Applying saves every value changed "
+                + "here in one step; a value left at its default is the deployment's until it is set - here again, or "
+                + "on the settings screen, whenever it is wanted."));
+        if (!on()) {
+            review.add("The first-run redirect is switched off for this deployment; this wizard was opened from the "
+                    + "menu, and stays there as First-run setup, under Settings.");
+        }
+        return new WizardFlow.Definition("First-run setup", ROUTE,
+                new WizardFlow.Exit("Skip for now", ROUTE + "/skip", true), "Apply setup", "Apply now", steps, review,
+                new WizardFlow.Checks() {
+                    @Override
+                    public Map<String, String> identity(Map<String, String> identity) {
+                        return Map.of();
+                    }
+
+                    @Override
+                    public Map<String, String> settings(Map<String, String> values) throws IOException {
+                        return SetupWizard.this.settings.refusals(Setting.Scope.GLOBAL, values, true);
+                    }
+                });
     }
 
-    /** One rendered step: the definition's id, title and reason, and the settings rows the deployment carries. */
-    public record Step(String id, String title, String why, List<SettingsAdmin.SettingView> settings) {
+    /** What the deployment holds already of what the wizard asks - its stored values, which a run starts from. */
+    public Map<String, String> held() throws IOException {
+        Map<String, String> held = new LinkedHashMap<>();
+        views().forEach((key, view) -> {
+            if (view.overridden() && !view.pinned() && !view.secret()) {
+                held.put(key, view.value());
+            }
+        });
+        return held;
     }
 
-    private static boolean superadmin(Authentication authentication) {
-        return authentication.getAuthorities().stream()
+    /**
+     * Save what a completed run changed from what the deployment held, in one batch - validated whole, so one refused
+     * value saves none. Returns how many values changed.
+     */
+    public int complete(WizardFlow flow) throws IOException {
+        Map<String, String> held = held();
+        Map<String, String> changed = new LinkedHashMap<>();
+        flow.settings().forEach((key, value) -> {
+            if (!value.equals(held.getOrDefault(key, ""))) {
+                changed.put(key, value);
+            }
+        });
+        if (!changed.isEmpty()) {
+            settings.saveAll(changed);
+        }
+        return changed.size();
+    }
+
+    private Map<String, SettingsAdmin.SettingView> views() throws IOException {
+        return settings.wizardViews(Wizard.SETUP, null, true);
+    }
+
+    /** Whether the session is a super-admin's - who alone sets the deployment's settings and, among a repository's,
+     *  the operator-only ones. */
+    static boolean superadmin(Authentication authentication) {
+        return authentication != null && authentication.getAuthorities().stream()
                 .anyMatch(authority -> authority.getAuthority().equals("ROLE_SUPERADMIN"));
     }
 }

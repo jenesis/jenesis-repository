@@ -39,7 +39,8 @@ class WizardFlowTest {
     };
 
     private final WizardFlow.Definition definition = new WizardFlow.Definition("New repository",
-            "/ui/new/repository", "/ui/repositories", "Create repository", "Create now",
+            "/ui/new/repository", new WizardFlow.Exit("Cancel", "/ui/repositories", false), "Create repository",
+            "Create now",
             List.of(WizardFlow.Step.identity("Repository", List.of("What it is called."),
                             List.of(new WizardFlow.Field("name", "Name", "Letters and digits.", List.of(), true))),
                     WizardFlow.Step.settings("Retention", List.of(view("keep-last", "LONG", "0", false),

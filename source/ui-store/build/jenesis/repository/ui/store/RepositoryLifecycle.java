@@ -19,6 +19,7 @@ import build.jenesis.repository.inventory.StoreRepositoryInventory;
 import build.jenesis.repository.staging.Staging;
 import build.jenesis.repository.staging.StagingProvider;
 import build.jenesis.repository.format.RepositoryType;
+import build.jenesis.repository.scope.Scopes;
 import build.jenesis.repository.settings.Setting;
 import build.jenesis.repository.store.ArtifactStore;
 import build.jenesis.repository.store.RepositoryDocument;
@@ -66,15 +67,16 @@ public class RepositoryLifecycle extends TenantScope {
      * @throws IllegalArgumentException when the name, the type or the description is refused.
      */
     public RepositoryType.Creation create(String repository, String format, String description) throws IOException {
-        return create(repository, format, description, Map.of(), false);
+        return create(repository, format, description, null, false);
     }
 
     /**
-     * {@link #create(String, String, String)}, the repository created with {@code values} as its own settings - the
-     * one creation the repository wizard completes with. Every value is validated through the catalogue first and a
-     * refusal writes nothing; the settings are then stored before the document that makes the repository exist
+     * Create a new repository with {@code values} as its own settings - the one creation the repository wizard
+     * completes with, and only ever a creation. Every value is validated through the catalogue first and a refusal
+     * writes nothing; the settings are then stored before the document that makes the repository exist
      * ({@link RepositoryType#create(ArtifactStore, String, String, RepositoryType.Configuration)}), and a repository
-     * that exists already is answered {@link RepositoryType.Creation#EXISTS}, unchanged.
+     * that exists already - one {@link #create(String, String, String)} would retype - is answered
+     * {@link RepositoryType.Creation#EXISTS}, unchanged.
      *
      * @param operator whether the session is the deployment operator's, who alone sets an operator-only setting.
      * @throws IllegalArgumentException when the name, the type, the description or any value is refused - naming
@@ -90,15 +92,19 @@ public class RepositoryLifecycle extends TenantScope {
             throw new IllegalArgumentException("Repository '" + repository + "' is still being deleted; create it "
                     + "again once it is gone.");
         }
-        if (!values.isEmpty()) {
+        if (values != null) {
             SortedMap<String, String> refused = settings.refusals(Setting.Scope.REPOSITORY, values, operator);
             if (!refused.isEmpty()) {
                 throw new IllegalArgumentException(String.join(" ", refused.values()));
             }
         }
         String tenant = tenant();
-        RepositoryType.Creation creation = RepositoryType.create(scope(repository), format, line, values.isEmpty()
-                ? null : () -> settings.saveRepository(tenant, repository, values, operator));
+        RepositoryType.Creation creation = RepositoryType.create(scope(repository), format, line, values == null
+                ? null : () -> {
+                    if (!values.isEmpty()) {
+                        settings.saveRepository(tenant, repository, values, operator);
+                    }
+                });
         if ((creation == RepositoryType.Creation.UNCHANGED || creation == RepositoryType.Creation.RETYPED)
                 && !line.isEmpty()) {
             describe(repository, line);
@@ -110,6 +116,36 @@ public class RepositoryLifecycle extends TenantScope {
             }
         }
         return creation;
+    }
+
+    /**
+     * What refuses a new repository's name, format or description, by field ({@code name}, {@code format},
+     * {@code description}) - empty when a creation would be accepted: a name that is no repository name, is taken, or
+     * is still being deleted; a type no repository can hold here; a description longer than a repository takes. The
+     * repository wizard asks this when its first step is left; the creation itself decides again.
+     */
+    public Map<String, String> identityRefusals(String repository, String format, String description)
+            throws IOException {
+        Map<String, String> refused = new LinkedHashMap<>();
+        String name = repository == null ? "" : repository.trim();
+        if (name.isEmpty()) {
+            refused.put("name", "A repository needs a name.");
+        } else if (!Scopes.valid(name)) {
+            refused.put("name", "A repository name is letters, digits, hyphens and underscores.");
+        } else if (RepositoryDocument.exists(scope(name))) {
+            refused.put("name", "Repository '" + name + "' exists already.");
+        } else if (RepositoryRemoval.removing(scope(name))) {
+            refused.put("name", "Repository '" + name + "' is still being deleted; create it again once it is gone.");
+        }
+        if (!RepositoryType.offerable().contains(format)) {
+            refused.put("format", "'" + format + "' is not a format this deployment serves.");
+        }
+        try {
+            RepositoryDocument.description(description);
+        } catch (IllegalArgumentException tooLong) {
+            refused.put("description", tooLong.getMessage());
+        }
+        return refused;
     }
 
     /**

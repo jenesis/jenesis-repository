@@ -17,7 +17,7 @@ name - publish a modular jar once and both ecosystems resolve it. It is also a s
 registry over the same store, so `docker push` works against it too.
 
 A publish can be screened against OSV, the GitHub Advisory Database and the OpenSSF malicious-packages records -
-each switched on in the first-run guide, since none reaches out unasked: a package at or above the configured
+each switched on in the first boot's wizard, since none reaches out unasked: a package at or above the configured
 severity, or one a malicious-package record names, is refused or withheld for review, the console's review queue
 says why and releases it, and a configured endpoint hears of it as a signed webhook. What a
 coordinate cannot show - the packages in an image's base layer - a scanner run in CI reports through

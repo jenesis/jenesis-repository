@@ -78,10 +78,6 @@ final class ConsoleAuthorization {
                 .requestMatchers("/ui/repositories/*/deploy").access(tenants.require(UserDirectory.Role.ADMIN))
                 .requestMatchers(HttpMethod.POST, "/ui/limits/**")
                         .access(tenants.require(UserDirectory.Role.ADMIN))
-                // A repository's routing names the upstreams it fetches from, which is the operator's decision on every
-                // surface - the API takes an operator key for it - so a tenant's own definition is a super-admin's.
-                .requestMatchers(HttpMethod.POST, "/ui/repositories/*/routing", "/ui/repositories/*/routing/remove")
-                        .hasRole("SUPERADMIN")
                 // Deleting a repository removes everything it holds, for everyone - admin-grade, like the limits.
                 .requestMatchers(HttpMethod.POST, "/ui/repositories/*/delete")
                         .access(tenants.require(UserDirectory.Role.ADMIN))
@@ -92,6 +88,10 @@ final class ConsoleAuthorization {
                 // Deleting a project removes its entries and its settings, which is eviction and more.
                 .requestMatchers(HttpMethod.POST, "/ui/projects/*/delete")
                         .access(tenants.require(UserDirectory.Role.ADMIN))
+                // A wizard creates in the selected tenant, so even its first page is an editor's: a viewer is not
+                // walked through steps whose completion would be refused.
+                .requestMatchers("/ui/new/repository", "/ui/new/project")
+                        .access(tenants.require(UserDirectory.Role.EDITOR))
                 .requestMatchers(HttpMethod.POST, "/**").access(tenants.require(UserDirectory.Role.EDITOR))
                 .requestMatchers(HttpMethod.PUT, "/**").access(tenants.require(UserDirectory.Role.EDITOR))
                 .requestMatchers(HttpMethod.DELETE, "/**").access(tenants.require(UserDirectory.Role.EDITOR))

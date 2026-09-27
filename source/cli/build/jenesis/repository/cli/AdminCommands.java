@@ -28,7 +28,9 @@ final class AdminCommands {
         }
         for (SettingsClient.SetupStep step : client.settings().setup().steps()) {
             System.out.println(step.title());
-            System.out.println("  " + step.why());
+            if (step.why() != null && !step.why().isBlank()) {
+                System.out.println("  " + step.why());
+            }
             for (SettingsClient.Setting setting : step.settings()) {
                 String state = setting.pinned() ? "pinned by " + setting.pinnedBy()
                         : setting.overridden() ? "override" : "default";

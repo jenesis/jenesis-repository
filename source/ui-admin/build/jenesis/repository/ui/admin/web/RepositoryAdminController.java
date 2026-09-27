@@ -168,10 +168,11 @@ public class RepositoryAdminController {
         return marks.forEcosystem(ecosystem).orElseGet(() -> Marks.orphaned(ecosystem));
     }
 
-    /** Create a repository to hold one type - the only way a repository comes into being - give one that holds content
-     *  but no format the type it holds, or move one to a type that holds everything its old one did. The creation
-     *  reads the settings documents a creation's settings are validated by, one object per module under a constant
-     *  prefix, narrow by construction. */
+    /** Give a repository that holds content but no format the type it holds - the list's Give format form - through
+     *  the one creation every surface makes, which also moves one to a type that holds everything its old one did. A
+     *  new repository is created by its wizard ({@link RepositoryWizardController}). The creation reads the settings
+     *  documents a creation's settings are validated by, one object per module under a constant prefix, narrow by
+     *  construction. */
     @PostMapping("/ui/repositories/create")
     public String create(@RequestParam("name") String name, @RequestParam("format") String format,
                          @RequestParam(name = "description", defaultValue = "") String description,

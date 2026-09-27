@@ -17,6 +17,7 @@ import build.jenesis.repository.store.RepositoryRemoval;
 import build.jenesis.repository.format.RepositoryType;
 import build.jenesis.repository.settings.Setting;
 import build.jenesis.repository.settings.StoredSettings;
+import build.jenesis.repository.settings.Wizard;
 import build.jenesis.repository.upstream.UpstreamCredentialSource;
 import build.jenesis.repository.upstream.store.StoreUpstreamCredentials;
 import build.jenesis.repository.servlet.testkit.Servlets;
@@ -171,13 +172,18 @@ class ConfigControllerTest {
     }
 
     @Test
-    void the_setup_guide_carries_only_rows_the_catalogue_has() {
+    void the_setup_view_is_the_first_boot_wizard_the_console_runs() {
         ConfigController.SetupView setup = controller.setup(null);
 
-        assertThat(setup.steps()).isNotEmpty();
-        Set<String> catalogued = new HashSet<>();
-        controller.settings(null, null).forEach(row -> catalogued.add(row.key()));
-        setup.steps().forEach(step -> step.settings().forEach(row -> assertThat(catalogued).contains(row.key())));
+        assertThat(setup.steps().getFirst().id()).as("the starter credential first, asking no setting")
+                .isEqualTo(Wizard.STARTER_CREDENTIAL.id());
+        assertThat(setup.steps().getFirst().settings()).isEmpty();
+        List<String> asked = setup.steps().stream().flatMap(step -> step.settings().stream())
+                .map(ConfigController.SettingView::key).toList();
+        assertThat(asked).as("every essential deployment and tenant setting, and nothing else")
+                .containsExactlyElementsOf(Wizard.SETUP.steps().stream()
+                        .flatMap(step -> step.settings().stream()).map(Setting::key).toList());
+        assertThat(asked).contains("vulnerability-threshold").doesNotContain("keep-last");
     }
 
     @Test

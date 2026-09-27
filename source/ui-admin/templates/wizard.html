@@ -99,7 +99,10 @@
                     th:if="${wizard.index() > 0}">Back</button>
             <button type="submit" name="action" value="now" class="secondary outline app-secondary"
                     th:if="${wizard.completesEarly()}" th:text="${wizard.nowLabel()}">Create now</button>
-            <a th:href="@{${wizard.cancel()}}">Cancel</a>
+            <a th:unless="${wizard.exit().posts()}" th:href="@{${wizard.exit().href()}}"
+               th:text="${wizard.exit().label()}">Cancel</a>
+            <button th:if="${wizard.exit().posts()}" type="submit" class="secondary outline app-secondary"
+                    th:formaction="@{${wizard.exit().href()}}" th:text="${wizard.exit().label()}">Skip for now</button>
         </div>
     </form>
 </main>

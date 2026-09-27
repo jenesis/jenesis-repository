@@ -100,12 +100,17 @@ public final class WizardFlow {
         Map<String, String> settings(Map<String, String> settings) throws IOException;
     }
 
+    /** How a run is left without completing: a link away, or - for a wizard whose leaving is remembered, as the
+     *  first boot's skip is - a post of the run's own form to a route of its own. Either way nothing is written. */
+    public record Exit(String label, String href, boolean posts) {
+    }
+
     /**
-     * A wizard, as its owner describes it: its title, the route its form posts to, where Cancel goes, what its
+     * A wizard, as its owner describes it: its title, the route its form posts to, how it is left, what its
      * completion is called - and the quicker one, offered from every step after the identity one - its steps before
      * the review, what the review says, and what checks its values.
      */
-    public record Definition(String title, String action, String cancel, String completeLabel, String nowLabel,
+    public record Definition(String title, String action, Exit exit, String completeLabel, String nowLabel,
                              List<Step> steps, List<String> review, Checks checks) {
 
         public Definition {
@@ -136,6 +141,21 @@ public final class WizardFlow {
         this.steps = List.copyOf(all);
         this.values = values;
         this.index = Math.clamp(index, 0, steps.size() - 1);
+    }
+
+    /** The settings steps of a catalogue {@link build.jenesis.repository.settings.Wizard wizard}, each asked setting as
+     *  {@code views} - its level's rows - shows it; a setting with no row, or a group left with none, is not asked. */
+    public static List<Step> settingsSteps(build.jenesis.repository.settings.Wizard wizard,
+                                           Map<String, SettingsAdmin.SettingView> views) {
+        List<Step> steps = new ArrayList<>();
+        for (build.jenesis.repository.settings.Wizard.Step step : wizard.steps()) {
+            List<SettingsAdmin.SettingView> rows = step.settings().stream().map(setting -> views.get(setting.key()))
+                    .filter(Objects::nonNull).toList();
+            if (!rows.isEmpty()) {
+                steps.add(Step.settings(step.group(), rows));
+            }
+        }
+        return steps;
     }
 
     /** A run on its first step, its settings starting from {@code initial} - what the deployment holds already, for
@@ -249,8 +269,8 @@ public final class WizardFlow {
         return definition.action();
     }
 
-    public String cancel() {
-        return definition.cancel();
+    public Exit exit() {
+        return definition.exit();
     }
 
     public String completeLabel() {

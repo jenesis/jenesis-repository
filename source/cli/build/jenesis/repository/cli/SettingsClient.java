@@ -34,7 +34,7 @@ public final class SettingsClient extends ClientCalls {
         require(send("DELETE", "/api/settings/" + name, null, null), 200, "clear " + name);
     }
 
-    /** The first-run setup guide: its steps, each with the settings rows it is about, as the console renders it. */
+    /** The first boot's wizard: its steps, each with the settings rows it asks, as the console runs it. */
     public Setup setup() throws IOException, InterruptedException {
         HttpResponse<String> response = send("GET", "/api/setup", null, null);
         require(response, 200, "read the setup guide");
@@ -374,11 +374,11 @@ public final class SettingsClient extends ClientCalls {
                           String group, String label, String description, boolean advanced) {
     }
 
-    /** The first-run setup guide the server serves at {@code /api/setup}. */
+    /** The first boot's wizard the server serves at {@code /api/setup}. */
     public record Setup(List<SetupStep> steps) {
     }
 
-    /** One step of it: its id, title, the sentence on why it is asked, and the settings it is about. */
+    /** One step of it: its id, title, what it says - empty for a settings group's - and the settings it asks. */
     public record SetupStep(String id, String title, String why, List<Setting> settings) {
     }
 

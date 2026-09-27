@@ -109,10 +109,9 @@ public class SettingsController {
     }
 
 
-    /** The console screens a save may come back to: this screen, and the first-run setup guide, which posts its
-     *  saves here so that a value applied from the guide is applied by exactly the path this screen applies it. Any
-     *  other {@code return} lands here - a redirect target is never taken from the request unvetted. */
-    private static final Set<String> RETURNS = Set.of("/ui/settings", "/ui/setup");
+    /** The console screens a save may come back to: this one. Any other {@code return} lands here too - a redirect
+     *  target is never taken from the request unvetted. */
+    private static final Set<String> RETURNS = Set.of("/ui/settings");
 
     /**
      * It reads the tenant's and the deployment's settings documents, which the values it resolves inherit from: one

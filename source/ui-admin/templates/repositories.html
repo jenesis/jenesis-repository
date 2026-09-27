@@ -92,18 +92,10 @@
     </article>
     <article th:if="${isEditor}">
         <h2>New repository</h2>
-        <form method="post" th:action="@{/ui/repositories/create}">
-            <label>Name
-                <input name="name" required pattern="[A-Za-z0-9_\-]+" placeholder="libraries"
-                       title="Letters, digits, hyphens and underscores"></label>
-            <label>Format
-                <select name="format" required>
-                    <option th:each="f : ${formats}" th:value="${f}" th:text="${f}">maven</option>
-                </select></label>
-            <label>Description <small>(optional)</small>
-                <input name="description" maxlength="280" placeholder="What this repository is for"></label>
-            <button th:replace="~{base :: primaryButton('Create repository')}">Create repository</button>
-        </form>
+        <p><small>A repository is created with its name, its format and the settings it needs from the start - its
+            retention, and where it fetches from - asked a step at a time, and nothing is written until the
+            last.</small></p>
+        <a th:href="@{/ui/new/repository}" role="button" class="app-primary">New repository</a>
     </article>
     </div>
 </main>

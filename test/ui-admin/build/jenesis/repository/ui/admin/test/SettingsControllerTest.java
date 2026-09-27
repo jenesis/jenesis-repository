@@ -70,8 +70,8 @@ class SettingsControllerTest {
         RedirectAttributesModelMap saved = new RedirectAttributesModelMap();
         RedirectAttributesModelMap cleared = new RedirectAttributesModelMap();
 
-        assertThat(controller.save("vulnerability-threshold", "HIGH", "/ui/setup", saved))
-                .as("the setup guide saves through here and is returned to").isEqualTo("redirect:/ui/setup");
+        assertThat(controller.save("vulnerability-threshold", "HIGH", "/ui/settings", saved))
+                .isEqualTo("redirect:/ui/settings");
         assertThat(effective(settings.groups(), "vulnerability-threshold")).isEqualTo("HIGH");
         assertThat(controller.save("vulnerability-threshold", " ", "https://elsewhere.example/", cleared))
                 .as("a return address no screen names is not followed").isEqualTo("redirect:/ui/settings");

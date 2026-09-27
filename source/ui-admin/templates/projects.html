@@ -45,12 +45,9 @@
     </article>
     <article th:if="${isEditor}">
         <h2>New project</h2>
-        <form method="post" th:action="@{/ui/projects}">
-            <label>Name
-                <input name="name" required pattern="[A-Za-z0-9_]+" placeholder="my_project">
-            </label>
-            <button th:replace="~{base :: primaryButton('Create project')}">Create project</button>
-        </form>
+        <p><small>A project is created with its name and the settings it needs from the start - its size cap and
+            how long an unused entry is kept - asked a step at a time, and nothing is written until the last.</small></p>
+        <a th:href="@{/ui/new/project}" role="button" class="app-primary">New project</a>
     </article>
     </div>
 

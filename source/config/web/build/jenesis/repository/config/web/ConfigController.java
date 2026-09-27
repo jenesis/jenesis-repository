@@ -13,11 +13,11 @@ import build.jenesis.repository.server.kernel.PinnedSettings;
 import build.jenesis.repository.server.kernel.Repositories;
 import build.jenesis.repository.server.kernel.Settings;
 import build.jenesis.repository.server.spi.Authorization;
-import build.jenesis.repository.settings.FirstRunSteps;
 import build.jenesis.repository.settings.Setting;
 import build.jenesis.repository.settings.SettingsContributor;
 import build.jenesis.repository.settings.SettingsDocuments;
 import build.jenesis.repository.settings.SettingsScopes;
+import build.jenesis.repository.settings.Wizard;
 import build.jenesis.repository.upstream.UpstreamCredential;
 import build.jenesis.repository.upstream.UpstreamCredentialSource;
 import jakarta.servlet.http.HttpServletRequest;
@@ -120,13 +120,12 @@ public class ConfigController {
     }
 
     /**
-     * The first-run setup guide - the decisions a new deployment should make, in order, each with the settings
-     * rows it is about: the one list the console's {@code /setup} screen and the CLI's {@code setup} verb render
-     * ({@link FirstRunSteps}), so a step is a capability on all three surfaces and not a screen. A key the catalogue
-     * does not carry is left out of its step, and a step left with none is left out of the guide, as on the
-     * console's Setup screen. Writes go through {@code PUT /api/settings/<key>} like any other.
-     * Its one store read is the settings document {@code GET /api/settings} reads - one object per module under a
-     * constant prefix, narrow by construction.
+     * The first boot's wizard - the one the console runs at {@code /ui/setup} and the CLI's {@code setup} verb prints:
+     * the starter credential's step, then one step per group of the deployment's and a tenant's essential settings
+     * ({@link Wizard#SETUP}), each with the settings rows it asks, so what the wizard asks is a capability on all three
+     * surfaces and not a screen. Writes go through {@code PUT /api/settings/<key>} like any other. Its one store read
+     * is the settings document {@code GET /api/settings} reads - one object per module under a constant prefix,
+     * narrow by construction.
      */
     @GetMapping("/api/setup")
     @ResponseBody
@@ -136,19 +135,16 @@ public class ConfigController {
             rows.put(row.key(), row);
         }
         List<StepView> steps = new ArrayList<>();
-        for (FirstRunSteps.Step step : FirstRunSteps.ALL) {
-            List<SettingView> carried = new ArrayList<>();
-            for (String named : step.keys()) {
-                SettingView row = rows.get(named);
-                if (row != null) {
-                    carried.add(row);
-                }
+        for (Wizard.Information information : Wizard.SETUP.information()) {
+            steps.add(new StepView(information.id(), information.title(), information.text(), List.of()));
+        }
+        for (Wizard.Step step : Wizard.SETUP.steps()) {
+            List<SettingView> asked = step.settings().stream().map(setting -> rows.get(setting.key()))
+                    .filter(Objects::nonNull).toList();
+            if (!asked.isEmpty()) {
+                steps.add(new StepView(step.group().toLowerCase(Locale.ROOT).replaceAll("[^a-z0-9]+", "-"),
+                        step.group(), "", asked));
             }
-            // A step about settings this image does not carry is left out; a step about no setting stays.
-            if (carried.isEmpty() && !step.keys().isEmpty()) {
-                continue;
-            }
-            steps.add(new StepView(step.id(), step.title(), step.why(), carried));
         }
         return new SetupView(steps);
     }
@@ -972,8 +968,9 @@ public class ConfigController {
     public record SetupView(List<StepView> steps) {
     }
 
-    /** One step of the guide: its id, title and the sentence on why it is asked, and the settings rows this
-     *  deployment carries for it - the same rows {@code GET /api/settings} lists, documentation included. */
+    /** One step of the wizard: its id and title, what it says - the starter credential's step, which asks no
+     *  setting - and the settings rows it asks, a settings group's, the same rows {@code GET /api/settings} lists,
+     *  documentation included. */
     public record StepView(String id, String title, String why, List<SettingView> settings) {
     }
 

@@ -304,6 +304,21 @@ public class CacheService {
         storage.createProject(validated);
     }
 
+    /** What refuses a new project's name - empty when a creation would be accepted: a name that is no project name,
+     *  or one taken already. The project wizard asks this when its first step is left; the creation decides again. */
+    public Optional<String> nameRefusal(String name) {
+        if (name == null || name.isBlank()) {
+            return Optional.of("A project needs a name.");
+        }
+        try {
+            String validated = validateName(name);
+            return storage.projectExists(validated) ? Optional.of("Project '" + validated + "' exists already.")
+                    : Optional.empty();
+        } catch (IllegalArgumentException refused) {
+            return Optional.of(refused.getMessage());
+        }
+    }
+
     /** A project's settings, grouped for its screen - see {@link SettingsAdmin#projectGroups}. */
     public List<SettingsAdmin.Group> settings(String name) throws IOException {
         requireProject(name);

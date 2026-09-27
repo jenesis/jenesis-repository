@@ -344,9 +344,9 @@ public final class Commands {
                                     "revert a setting to what it inherits"),
                             act("settings export [file] [--tenant N]", "dump the settings as a JSON bundle"),
                             act("settings import <file> [--tenant N]", "restore a bundle, validated first")),
-                    noun("setup", "the first-run setup guide", null, AdminCommands::setup,
-                            act("setup", "the decisions a new deployment should make, each dial with its "
-                                    + "documentation and current value"),
+                    noun("setup", "the first boot's wizard", null, AdminCommands::setup,
+                            act("setup", "what a new deployment should decide: the starter credential, then each "
+                                    + "essential setting with its documentation and current value"),
                             act("setup set <key> <value>", "decide one of them")),
                     noun("tenants", "the deployment's tenants (an operator key's)", "build.jenesis.repository.ui.admin",
                             AdminCommands::tenants,

@@ -83,16 +83,6 @@ public class ProjectsController {
         return "redirect:/ui/projects";
     }
 
-    /** Create a project from the list's form. The creation reads the settings documents a creation's settings are
-     *  validated by, one object per module under a constant prefix, narrow by construction. */
-    @PostMapping("/ui/projects")
-    public String create(@RequestParam("name") String name, RedirectAttributes redirect) throws IOException {
-        service.createProject(name);
-        redirect.addFlashAttribute("message",
-                "Created project '" + name + "'. Grant access by adding it to a credential.");
-        return "redirect:/ui/projects/" + name;
-    }
-
     /**
      * It reads the tenant's and the deployment's settings documents, which the values it resolves inherit from: one
      * object per module under a constant prefix, narrow by construction.
