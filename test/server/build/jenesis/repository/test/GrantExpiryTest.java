@@ -102,6 +102,71 @@ class GrantExpiryTest {
                 .isEqualTo(Authorization.Decision.FORBIDDEN);
     }
 
+    @Test
+    void a_time_boxed_grant_on_a_key_authorizes_the_presented_key_only_until_it_lapses() throws IOException {
+        // A key's grants are matched as every holder's are: the expiry the grant carries ends it for the key too,
+        // not only for a person asked about by subject.
+        String key = Authorization.mint("acme");
+        String hash = Authorization.hash(key);
+        authorization.provision("acme", hash, "ci", null);
+        authorization.setGrant("acme", Authorization.Subject.credential(hash), "*", Authorization.REPOSITORY_READ,
+                Instant.now().plus(Duration.ofHours(1)));
+        assertThat(authorization.authorize(key, "main", Authorization.REPOSITORY_READ))
+                .as("still in its window").isEqualTo(Authorization.Decision.ALLOWED);
+
+        authorization.setGrant("acme", Authorization.Subject.credential(hash), "*", Authorization.REPOSITORY_READ,
+                Instant.now().minus(Duration.ofSeconds(1)));
+        assertThat(authorization.authorize(key, "main", Authorization.REPOSITORY_READ))
+                .as("past it, the presented key is refused").isEqualTo(Authorization.Decision.FORBIDDEN);
+    }
+
+    @Test
+    void a_credential_lists_its_scopes_and_not_the_expiry_kept_beside_one() throws IOException {
+        // The management surface shows these as the key's scopes; an expiry entry listed there would read as a
+        // scope named after the bookkeeping, and an operator could "revoke" it.
+        String hash = Authorization.hash(Authorization.mint("acme"));
+        authorization.provision("acme", hash, "ci", null);
+        authorization.setGrant("acme", Authorization.Subject.credential(hash), "main",
+                Authorization.REPOSITORY_WRITE, Instant.now().plus(Duration.ofHours(1)));
+
+        assertThat(authorization.credential("acme", hash).orElseThrow().grants())
+                .containsExactly(Map.entry("main", Authorization.REPOSITORY_WRITE));
+    }
+
+    @Test
+    void a_rotated_key_inherits_a_time_boxed_grant_as_the_same_time_boxed_grant() throws IOException {
+        // A rotation swaps the secret and nothing else: a grant that was ending must not become permanent on the
+        // successor, and one still running must keep running.
+        String key = Authorization.mint("acme");
+        String hash = Authorization.hash(key);
+        authorization.provision("acme", hash, "ci", null);
+        authorization.setGrant("acme", Authorization.Subject.credential(hash), "lapsed",
+                Authorization.REPOSITORY_READ, Instant.now().minus(Duration.ofSeconds(1)));
+        authorization.setGrant("acme", Authorization.Subject.credential(hash), "running",
+                Authorization.REPOSITORY_READ, Instant.now().plus(Duration.ofHours(1)));
+
+        String successor = authorization.rotate("acme", hash, null).key();
+
+        assertThat(authorization.authorize(successor, "lapsed", Authorization.REPOSITORY_READ))
+                .as("the lapsed grant stays lapsed").isEqualTo(Authorization.Decision.FORBIDDEN);
+        assertThat(authorization.authorize(successor, "running", Authorization.REPOSITORY_READ))
+                .as("the running grant still runs").isEqualTo(Authorization.Decision.ALLOWED);
+        assertThat(grants(Authorization.hash(successor)).getProperty(".expires.running"))
+                .as("and ends when the original's would have")
+                .isEqualTo(grants(hash).getProperty(".expires.running"));
+    }
+
+    /** A credential's grants document as it is stored, read past the authorization. */
+    private Properties grants(String hash) throws IOException {
+        ArtifactStore store = ArtifactStoreProvider.resolve(
+                "filesystem", key -> "jenreg.filesystem.root".equals(key) ? root.toString() : null);
+        ByteArrayOutputStream bytes = new ByteArrayOutputStream();
+        store.read(".system/auth/acme/credential/" + hash + "/grants", bytes);
+        Properties grants = new Properties();
+        grants.load(new ByteArrayInputStream(bytes.toByteArray()));
+        return grants;
+    }
+
     private boolean allowed(Authorization.Subject subject, String right) throws IOException {
         return authorization.authorize("acme", subject, null, right) == Authorization.Decision.ALLOWED;
     }

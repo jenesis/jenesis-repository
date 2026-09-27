@@ -352,14 +352,10 @@ public final class Authorization {
         if (grants == null) {
             return Decision.FORBIDDEN;
         }
-        String repository = GrantMatching.repository(scope);
-        for (String grantScope : grants.stringPropertyNames()) {
-            if (GrantMatching.covers(grantScope, repository, path)
-                    && GrantMatching.confers(grants.getProperty(grantScope), required)) {
-                return Decision.ALLOWED;
-            }
-        }
-        return Decision.FORBIDDEN;
+        // The same matching a subject's grants take, so a scope's expiry ends what it granted whoever holds it.
+        return GrantMatching.holds(grants, GrantMatching.repository(scope), path, required)
+                ? Decision.ALLOWED
+                : Decision.FORBIDDEN;
     }
 
     /**
@@ -552,7 +548,8 @@ public final class Authorization {
     public record CredentialPage(List<String> hashes, String next) {
     }
 
-    /** A credential's metadata and grants, or empty if neither is present. */
+    /** A credential's metadata and grants, or empty if neither is present. The grants are its scopes and their
+     *  rights; a scope's expiry is bookkeeping beside the grant, not a scope, and is not listed as one. */
     public Optional<Credential> credential(String tenant, String hash) throws IOException {
         Properties grants = space.read(CredentialSpace.grantsPath(tenant, hash));
         Properties metadata = space.read(CredentialSpace.metadataPath(tenant, hash));
@@ -562,7 +559,9 @@ public final class Authorization {
         Map<String, String> scopes = new TreeMap<>();
         if (grants != null) {
             for (String scope : grants.stringPropertyNames()) {
-                scopes.put(scope, grants.getProperty(scope));
+                if (!scope.startsWith(GrantMatching.EXPIRES)) {
+                    scopes.put(scope, grants.getProperty(scope));
+                }
             }
         }
         String label = metadata == null ? null : metadata.getProperty("label");
@@ -891,7 +890,8 @@ public final class Authorization {
     /** Rotate a credential: mint a successor that inherits the same label, grants and source-IP allowlist with a fresh
      *  default lifetime, and set the old credential to expire after {@code overlap} (7 days when null) so callers can
      *  swap over with no downtime. Returns the successor's raw key (shown once); the old hash keeps working until the
-     *  overlap elapses, then expires on its own. */
+     *  overlap elapses, then expires on its own. The grants document is copied whole, so a time-boxed grant stays
+     *  time-boxed on the successor and ends when it would have ended on the original. */
     public Rotated rotate(String tenant, String hash, Duration overlap) throws IOException {
         space.require();
         Credential previous = credential(tenant, hash).orElseThrow(
@@ -900,8 +900,9 @@ public final class Authorization {
         String successor = hash(key);
         Instant expires = lifetimes.mintExpiry(tenant, null, false);
         provision(tenant, successor, previous.label(), expires);
-        for (Map.Entry<String, String> grant : previous.grants().entrySet()) {
-            setGrant(tenant, successor, grant.getKey(), grant.getValue());
+        Properties grants = space.read(CredentialSpace.grantsPath(tenant, hash));
+        if (grants != null && !grants.isEmpty()) {
+            space.mutate(CredentialSpace.grantsPath(tenant, successor), copy -> copy.putAll(grants));
         }
         if (previous.allowedAddresses() != null) {
             setAllowedAddresses(tenant, successor, previous.allowedAddresses());
