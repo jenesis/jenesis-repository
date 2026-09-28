@@ -132,16 +132,11 @@ final class Packages {
                 + "<dependency id=\"contract.dep." + version + variant + "\" version=\"1.0.0\"/>"
                 + "</group></dependencies>"
                 + "</metadata></package>";
-        ByteArrayOutputStream bytes = new ByteArrayOutputStream();
-        try (ZipOutputStream zip = new ZipOutputStream(bytes)) {
-            zip.putNextEntry(new ZipEntry(id + ".nuspec"));
-            zip.write(nuspec.getBytes(StandardCharsets.UTF_8));
-            zip.closeEntry();
-            zip.putNextEntry(new ZipEntry("lib/net8.0/" + id + ".dll"));
-            zip.write(("payload of " + id + " " + version + variant).getBytes(StandardCharsets.UTF_8));
-            zip.closeEntry();
-        }
-        return bytes.toByteArray();
+        Map<String, byte[]> members = new LinkedHashMap<>();
+        members.put(id + ".nuspec", nuspec.getBytes(StandardCharsets.UTF_8));
+        members.put("lib/net8.0/" + id + ".dll", ("payload of " + id + " " + version + variant)
+                .getBytes(StandardCharsets.UTF_8));
+        return zip(members);
     }
 
     // --- RubyGems ----------------------------------------------------------------------------------------------

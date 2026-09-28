@@ -382,8 +382,11 @@ class ReleaseImmutabilityTest {
         return store;
     }
 
-    /** Every file under a store's root, by its path relative to the root. */
+    /** Every file under a store's root, by its path relative to the root, once every derivation a publish queued has
+     *  landed: a Debian index's signed release is written behind the publish, and a snapshot taken while it is being
+     *  written meets its temporary file or reports the rewrite as the refused upload's. */
     private Map<String, byte[]> contents(String name) throws IOException {
+        StoredListing.settle();
         Path directory = root.resolve(name);
         Map<String, byte[]> contents = new TreeMap<>();
         try (Stream<Path> files = Files.walk(directory)) {
