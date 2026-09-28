@@ -8,7 +8,9 @@ import jakarta.servlet.http.HttpSession;
 import org.springframework.security.authentication.AnonymousAuthenticationToken;
 import org.springframework.security.core.Authentication;
 import org.springframework.stereotype.Controller;
+import org.springframework.ui.Model;
 import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.servlet.mvc.support.RedirectAttributes;
 import build.jenesis.repository.ui.ConsoleScreen;
 
 /**
@@ -42,8 +44,20 @@ public class HomeController {
         return "redirect:/ui/";
     }
 
+    /**
+     * The landing, which only ever redirects. A screen that finishes by landing where the console would - the setup
+     * guide applied or skipped - says what it did in a flash message, and a flash message lives for the one request
+     * after the redirect that set it: this one. So what arrived is handed on to the screen this sends the reader to,
+     * or the reader would land on a page that says nothing about what they had just done.
+     */
     @GetMapping({"/ui", "/ui/"})
-    public String home(Authentication authentication, HttpSession session) throws IOException {
+    public String home(Authentication authentication, HttpSession session, Model model,
+                       RedirectAttributes redirect) throws IOException {
+        for (String said : List.of("message", "error")) {
+            if (model.containsAttribute(said)) {
+                redirect.addFlashAttribute(said, model.getAttribute(said));
+            }
+        }
         if (!authenticated(authentication)) {
             return "redirect:/ui/login";
         }
