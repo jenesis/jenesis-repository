@@ -24,10 +24,10 @@ import build.jenesis.repository.server.spi.KeyUsageTracker;
  * is public so it can be driven synchronously, without the thread. A {@link #record} is a no-op when tracking is off.
  *
  * <p>An enabled tracker is its own {@link ObservabilitySource}: it reports its bounded queue depth ({@code
- * jenreg.usage.queue}, used vs the fixed capacity - the saturation that turns into drops), the per-credential
- * accumulators it holds ({@code jenreg.usage.tracked}), the hits it has dropped under back-pressure ({@code
- * jenreg.usage.dropped}), a {@code jenreg.usage.worker} health check (DOWN when the worker died with tracking on)
- * and a {@code jenreg.usage.flush} task status stamped with the last drain. A <em>disabled</em> tracker (tracking
+ * jenrepo.usage.queue}, used vs the fixed capacity - the saturation that turns into drops), the per-credential
+ * accumulators it holds ({@code jenrepo.usage.tracked}), the hits it has dropped under back-pressure ({@code
+ * jenrepo.usage.dropped}), a {@code jenrepo.usage.worker} health check (DOWN when the worker died with tracking on)
+ * and a {@code jenrepo.usage.flush} task status stamped with the last drain. A <em>disabled</em> tracker (tracking
  * switched off) reports nothing at all, consistent with the "a disabled plugin is not listed" rule; the same
  * distinction the health surface already draws between "installed but off" and a dead worker.
  */
@@ -138,15 +138,15 @@ public final class BatchingKeyUsageTracker extends BatchingWorker<BatchingKeyUsa
             return List.of();
         }
         return List.of(
-                Metric.bounded("jenreg.usage.queue",
+                Metric.bounded("jenrepo.usage.queue",
                         "Credential-use hits buffered off the request path waiting for the worker to drain them, "
                                 + "against the fixed queue bound past which a hit is dropped rather than blocking a request.",
                         queueDepth(), capacity(), "hits"),
-                Metric.gauge("jenreg.usage.tracked",
+                Metric.gauge("jenrepo.usage.tracked",
                         "Per-credential accumulators currently held - bounded by the credentials seen in the current "
                                 + "UTC day (plus any carrying an unflushed delta), not every credential ever seen.",
                         tracked(), ""),
-                Metric.counter("jenreg.usage.dropped",
+                Metric.counter("jenrepo.usage.dropped",
                         "Credential-use hits dropped because the in-memory queue was saturated - back-pressure, not "
                                 + "an outage; usage is an informational signal, never an audit log.",
                         dropped(), "hits"));
@@ -159,8 +159,8 @@ public final class BatchingKeyUsageTracker extends BatchingWorker<BatchingKeyUsa
         }
         String description = "Credential-usage worker thread is started and draining hits off the request path.";
         return List.of(alive()
-                ? HealthCheck.up("jenreg.usage.worker", description)
-                : HealthCheck.of("jenreg.usage.worker", description, Health.DOWN,
+                ? HealthCheck.up("jenrepo.usage.worker", description)
+                : HealthCheck.of("jenrepo.usage.worker", description, Health.DOWN,
                         "usage tracking is switched on but its worker thread is not running"));
     }
 
@@ -170,7 +170,7 @@ public final class BatchingKeyUsageTracker extends BatchingWorker<BatchingKeyUsa
             return List.of();
         }
         boolean alive = alive();
-        return List.of(TaskStatus.ran("jenreg.usage.flush",
+        return List.of(TaskStatus.ran("jenrepo.usage.flush",
                 "Background worker draining buffered credential-use hits and flushing each credential's running "
                         + "count and last address through the authorization store at most once per UTC day.",
                 alive ? TaskStatus.State.RUNNING : TaskStatus.State.FAILED, lastDrain, null,

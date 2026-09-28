@@ -9,7 +9,7 @@ import build.jenesis.repository.observation.TaskStatus;
 
 /**
  * An {@link ArtifactStore} decorator that refuses every write, so a deployment configured read-only
- * ({@code jenreg.read-only=true}) serves reads normally while every mutation - a hosted publish, a
+ * ({@code jenrepo.read-only=true}) serves reads normally while every mutation - a hosted publish, a
  * {@code maven-metadata.xml} compare-and-set, a delete, a content-addressed blob write - is rejected at this single
  * low-level choke point, whether it originates at an HTTP write endpoint or an internal path (a write-through proxy
  * cache, an import replay, a background sweep). Because every serving, routing, tenant and console bean resolves

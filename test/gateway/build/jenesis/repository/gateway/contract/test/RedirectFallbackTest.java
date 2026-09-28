@@ -307,7 +307,7 @@ public class RedirectFallbackTest {
 
         private Fixture(Map<String, RepositoryDefinition> definitions, UnaryOperator<RepositoryRouter> customize) throws IOException {
             this.store = ArtifactStoreProvider.resolve("filesystem",
-                    key -> "jenreg.filesystem.root".equals(key) ? root.toString() : null);
+                    key -> "jenrepo.filesystem.root".equals(key) ? root.toString() : null);
             ProxyFormat.Fetcher.Buffered fetcher = (url, _) -> {
                 fetched.add(url.toString());
                 // both upstreams serve every /t/ coordinate, so the routed leg is proven by WHICH upstream was asked

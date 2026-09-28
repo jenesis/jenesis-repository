@@ -47,26 +47,26 @@ carries every layout, backend, importer and the console; `source/server` on its 
 them and has nothing to serve:
 
 ```bash
-JENREG_AUTH=false JENREG_FILESYSTEM_ROOT=/var/lib/jenesis-repository \
+JENREPO_AUTH=false JENREPO_FILESYSTEM_ROOT=/var/lib/jenesis-repository \
   java -Djenesis.execute.module=source+bundle build/jenesis/Execute.java
 ```
 
 The server discovers whatever is on its module path at startup, so a narrower deployment is a launcher
 whose `requires` name only the modules it should speak. Authentication is enforced by default; a real
-deployment starts from `JENREG_BOOTSTRAP_KEY` (a well-formed `jenk_<tenant>.<secret><checksum>` key that
-`java -Djenesis.execute.module=source+server-spi build/jenesis/Execute.java` mints and the server provisions at boot) and issues its keys through `/api/credentials`, while `JENREG_AUTH=false` is the
+deployment starts from `JENREPO_BOOTSTRAP_KEY` (a well-formed `jenk_<tenant>.<secret><checksum>` key that
+`java -Djenesis.execute.module=source+server-spi build/jenesis/Execute.java` mints and the server provisions at boot) and issues its keys through `/api/credentials`, while `JENREPO_AUTH=false` is the
 shortcut for local work. **The web console runs in that same process**, on the same port: the launcher
 above scans it in, so it answers under `/ui/` beside the repository's own routes, and `/` redirects there. It used to be a
 second entry point on port 8081, which is why an older reading of this file describes one. The `dev`
 profile swaps its OAuth sign-in for a built-in `admin`/`admin` form login:
 
 ```bash
-SPRING_PROFILES_ACTIVE=dev JENREG_FILESYSTEM_ROOT=/var/lib/jenesis-repository \
+SPRING_PROFILES_ACTIVE=dev JENREPO_FILESYSTEM_ROOT=/var/lib/jenesis-repository \
   java -Djenesis.execute.module=source+bundle build/jenesis/Execute.java
 ```
 
 The profile also lets the session cookie travel over plain http, which it must to survive a sign-in without
-TLS. That used to be a variable an operator set (`JENREG_UI_SECURE_COOKIE=false`); a switch that turns session
+TLS. That used to be a variable an operator set (`JENREPO_UI_SECURE_COOKIE=false`); a switch that turns session
 hardening off in a deployment is not one worth having, so it belongs to the profile that already means "this
 is not a deployment".
 
@@ -80,11 +80,11 @@ as an exporter of the whole project and configured in `jenesis.plugins.arguments
 extending the Jenesis build with a module of one's own, and the same module any build of this product publishes its
 images with.
 There was a `Dockerfile` here that re-ran the whole build inside Docker - a second mechanism for a job the
-shared one does - and the deployment settings it carried (`JENREG_FILESYSTEM_ROOT=/data`, a `VOLUME`) belong
+shared one does - and the deployment settings it carried (`JENREPO_FILESYSTEM_ROOT=/data`, a `VOLUME`) belong
 to a deployment's own descriptor, which can make them conditional on the storage backend where an image cannot:
 a baked-in `VOLUME` cannot be un-declared by a consumer, so an object-store deployment would create an anonymous
 volume on every run that it never writes to. So the image declares no store root: name one with
-`JENREG_FILESYSTEM_ROOT` and mount a volume there, or select an object store.
+`JENREPO_FILESYSTEM_ROOT` and mount a volume there, or select an object store.
 
 `deploy/` carries the rest of what a deployment needs besides the image: the Helm chart, and a template for each of
 Google Cloud, AWS, Azure and Scaleway that provisions that cloud's object store and runs the published image over

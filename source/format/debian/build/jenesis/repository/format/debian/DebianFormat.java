@@ -1117,11 +1117,11 @@ public final class DebianFormat implements RepositoryFormat, ProxyLeg, BlobLayou
     }
 
     // The decompressed control.tar is attacker-supplied, so its ./control member is read under the product's one
-    // archive-inflation ceiling, ArchiveInflation.largestEntry(), settable at jenreg.archive.largest-entry - not
+    // archive-inflation ceiling, ArchiveInflation.largestEntry(), settable at jenrepo.archive.largest-entry - not
     // under a private constant of this format's (RepositoryFormat contract clause 15).
 
     // How far the decompressed control.tar is walked to reach ./control is the product's one archive-walk bound,
-    // ArchiveWalk.largestWalk(), settable at jenreg.archive.largest-walk. It is a different bound from the inflation
+    // ArchiveWalk.largestWalk(), settable at jenrepo.archive.largest-walk. It is a different bound from the inflation
     // ceiling above and both are needed: capping only the stanza read does not bound the walk PAST a preceding entry,
     // so a control.tar.gz whose first member is a giant run would inflate unbounded while getNextEntry() skips it.
     // A bomb before ./control leaves it unfound - an unparsable control, a rejected publish.

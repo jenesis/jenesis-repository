@@ -55,7 +55,7 @@ class RepositoryAdminControllerTest {
     @BeforeEach
     void wire() throws IOException {
         store = ArtifactStoreProvider.resolve("filesystem",
-                key -> "jenreg.filesystem.root".equals(key) ? root.toString() : null);
+                key -> "jenrepo.filesystem.root".equals(key) ? root.toString() : null);
         settings = new SettingsAdmin(store);
         limits = new TenantLimits(store, settings, () -> TENANT, ObservationRegistry.NOOP, AuditTrail.none(),
                 () -> "operator");

@@ -178,7 +178,7 @@ public enum Mutant {
         private Mutated(SignalFixture delegate, Mutant mutant) {
             this.delegate = delegate;
             this.mutant = mutant;
-            this.canary = "already-reached." + delegate.signal() + ".jenreg.test";
+            this.canary = "already-reached." + delegate.signal() + ".jenrepo.test";
             if (mutant == A_QUERY_THAT_REACHES_A_HOST_ALREADY_REACHED) {
                 resolve(canary);                     // the first lookup, so the one inside the check is a REPEAT
             }

@@ -30,14 +30,14 @@ import com.google.auth.oauth2.GoogleCredentials;
 
 /**
  * The {@code gcs} artifact-store backend over a Google Cloud Storage bucket, through GCS's JSON API on Google's
- * API client. Selected with {@code jenreg.store=gcs}; configured by {@code jenreg.gcs.bucket} (required), an
- * optional {@code jenreg.gcs.credentials} (a service-account key file; absent, the Application Default Credentials
+ * API client. Selected with {@code jenrepo.store=gcs}; configured by {@code jenrepo.gcs.bucket} (required), an
+ * optional {@code jenrepo.gcs.credentials} (a service-account key file; absent, the Application Default Credentials
  * are used - {@code GOOGLE_APPLICATION_CREDENTIALS}, a {@code gcloud} login, or the metadata server that makes a
  * deployment on GCE, GKE or Cloud Run keyless under Workload Identity; the literal {@value #ANONYMOUS} sends no
- * credential at all, which only an emulator accepts), an optional {@code jenreg.gcs.endpoint} (default
+ * credential at all, which only an emulator accepts), an optional {@code jenrepo.gcs.endpoint} (default
  * {@code https://storage.googleapis.com}; point it at an emulator, but it must be {@code https} unless
- * {@code jenreg.gcs.allow-insecure-endpoint=true} explicitly permits a plaintext one), and an optional
- * {@code jenreg.gcs.project}, which is what creating the bucket on first use needs - a deployment provisions its
+ * {@code jenrepo.gcs.allow-insecure-endpoint=true} explicitly permits a plaintext one), and an optional
+ * {@code jenrepo.gcs.project}, which is what creating the bucket on first use needs - a deployment provisions its
  * bucket out of band, an emulator does not. Every request rides the JDK's own HTTP transport with a fresh
  * exponential backoff on the responses Google documents as retryable.
  */
@@ -139,7 +139,7 @@ public final class GcsArtifactStoreProvider implements ArtifactStoreProvider {
      * The endpoint (the {@code storage.googleapis.com} default, or an emulator override), required to be {@code https}
      * by default so the bearer token and artifact bytes are not sent over a plaintext transport a MITM can read or
      * tamper with. A plaintext {@code http} emulator endpoint is an explicit opt-out: set
-     * {@code jenreg.gcs.allow-insecure-endpoint=true}.
+     * {@code jenrepo.gcs.allow-insecure-endpoint=true}.
      *
      * <p>The rule itself is {@link Endpoints#secure}, shared with the {@code s3} and {@code azure-blob} backends;
      * what is this backend's own is the pair of config keys it names, and this method is where they are bound to

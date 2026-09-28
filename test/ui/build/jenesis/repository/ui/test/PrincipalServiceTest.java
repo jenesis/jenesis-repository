@@ -108,7 +108,7 @@ class PrincipalServiceTest {
         UiProperties properties = new UiProperties();
         properties.setAdmins(admins);
         Authorization authorization = Authorization.enforcing(ArtifactStoreProvider.resolve(
-                "filesystem", key -> "jenreg.filesystem.root".equals(key) ? root.toString() : null));
+                "filesystem", key -> "jenrepo.filesystem.root".equals(key) ? root.toString() : null));
         return new AdminListAuthorities(new ConsoleAdministrators(authorization, properties.getAdmins()),
                 new KnownPrincipals(authorization));
     }

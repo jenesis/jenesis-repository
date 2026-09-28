@@ -27,7 +27,7 @@
  *
  * <p><b>A miss pulls through an upstream registry</b>, found the way a client finds one: a provider zip is held to
  * the digest its package document declares, and a module's archive is cached as fetched. Most public modules name a
- * git repository rather than an archive; one on a host the operator lists ({@code jenreg.terraform.git-hosts}) is
+ * git repository rather than an archive; one on a host the operator lists ({@code jenrepo.terraform.git-hosts}) is
  * fetched as that ref's archive and held to the digest of its first fetch, so a moved tag is refused - see
  * {@code TerraformGitSource}. An importer moves modules and providers off another registry. Discovery is separate -
  * {@code terraform init} finds a registry by fetching {@code /.well-known/terraform.json} from the host root, which

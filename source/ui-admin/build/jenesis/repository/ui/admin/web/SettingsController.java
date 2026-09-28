@@ -94,7 +94,7 @@ public class SettingsController {
     }
 
     /** Purge one absent module's orphaned data - the button beside the modules screen's orphaned-data badge, driving
-     *  the same manifest primitive as {@code jenreg purge} / {@code POST /api/admin/purge} and audited the same way.
+     *  the same manifest primitive as {@code jenrepo purge} / {@code POST /api/admin/purge} and audited the same way.
      *  The screen already shows the dry-run counts, so this is the confirmed second step; a module no manifest entry
      *  names answers with a flash message rather than a error page. Super-admin, under {@code /settings/**}. */
     @PostMapping("/ui/settings/modules/purge")

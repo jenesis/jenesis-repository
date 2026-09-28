@@ -50,13 +50,13 @@ import build.jenesis.repository.store.Providers;
  * sentinel. A provider whose {@link #requiredConfig()} keys are unset self-disables with one log line rather than
  * throwing, because that is unconfigured, not misconfigured. The duty is on the dimension the operator is actually
  * running: {@link #resolve} filters on enablement <em>before</em> it asks anyone to create anything, so an unparseable
- * dial belonging to a dimension switched off with {@code jenreg.<name>=false} does not fail the rebuild -
+ * dial belonging to a dimension switched off with {@code jenrepo.<name>=false} does not fail the rebuild -
  * the toggle is the operator's way out of a dimension they cannot presently configure correctly, and refusing to boot
  * over a dial nothing reads would make the off switch unusable. The verdict a dial <em>does</em> name never decides
  * presence either (see {@link GateDimension}): an {@code <dim>-action} of {@link Verdict#ALLOW} evaluates and permits.
  * What <em>is</em> a resolution failure here is a
  * packaging one: two providers answering to the same {@link #name()}, or one provider registered twice, throw out of
- * {@link #resolve} naming what collided. A shared name is a shared {@code jenreg.<name>} toggle, so the
+ * {@link #resolve} naming what collided. A shared name is a shared {@code jenrepo.<name>} toggle, so the
  * operator's off switch would silently reach a dimension they never meant to disable.</li>
  *
  * <li><b>What a permit reports.</b> A dimension carrying an {@code <dim>-action} dial evaluates its subject
@@ -192,7 +192,7 @@ public interface GatePolicyProvider {
      * <p>The iterate-filter-create loop itself is the shared {@link Providers#all ALL-policy primitive}, not a copy of
      * it: dimensions are additive, so there is no selection to miss here, but a <em>duplicate</em> provider name is
      * still a packaging error this family had been the last to tolerate. Two providers answering to one name share one
-     * {@code jenreg.<name>} toggle - switching one off switches both off, and the operator has no key that
+     * {@code jenrepo.<name>} toggle - switching one off switches both off, and the operator has no key that
      * names either - so the primitive throws, naming both classes and the name that collided, exactly as it does for
      * the unique and exclusive families. The same holds for one provider registered twice.
      */

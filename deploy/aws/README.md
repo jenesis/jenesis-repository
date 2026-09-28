@@ -2,7 +2,7 @@ AWS
 ===
 
 Deploys Jenesis Repository on **ECS Fargate** behind an Application Load Balancer, over an **S3** bucket the stack
-provisions (or one it is given): `JENREG_STORE=s3`. The store credential is the task role, found through the
+provisions (or one it is given): `JENREPO_STORE=s3`. The store credential is the task role, found through the
 standard AWS credential chain, so no key is set anywhere.
 
     aws cloudformation deploy --stack-name jenesis-repository \
@@ -16,7 +16,7 @@ standard AWS credential chain, so no key is set anywhere.
 |---|---|---|
 | `Image` | `docker.io/jenesisbuild/jenesis-repository:latest` | Fargate pulls from Docker Hub directly |
 | `BootstrapKey`, `AdminKey` | empty | the two starter credentials, each kept in Secrets Manager |
-| `EnvironmentFile` | empty | S3 object ARN of a file of further `JENREG_*=value` lines |
+| `EnvironmentFile` | empty | S3 object ARN of a file of further `JENREPO_*=value` lines |
 | `BucketName` | empty | an existing bucket; empty creates one |
 | `VpcId`, `SubnetIds` | | two or more public subnets, for the ALB and the tasks |
 | `DesiredCount`, `Cpu`, `Memory` | `1`, `512`, `2048` | the image sets no `-Xmx`, so about a quarter of the memory becomes heap |

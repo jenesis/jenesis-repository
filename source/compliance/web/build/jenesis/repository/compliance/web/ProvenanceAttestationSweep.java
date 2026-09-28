@@ -86,10 +86,10 @@ public final class ProvenanceAttestationSweep implements MaintenanceTask {
             LOGGER.warn("The provenance-attestation container did not enumerate to its end; the rest was not examined "
                     + "this pass.", unreadable);
         }
-        context.gauge("jenreg.provenance.attestations.reclaimed",
+        context.gauge("jenrepo.provenance.attestations.reclaimed",
                 "Provenance attestations removed because their content is gone",
                 Map.of("repository", context.repository()), reclaimed);
-        context.gauge("jenreg.provenance.attestations.unreadable",
+        context.gauge("jenrepo.provenance.attestations.unreadable",
                 "Attestation hashes this pass could not judge, and therefore kept",
                 Map.of("repository", context.repository()), skipped);
     }

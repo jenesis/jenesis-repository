@@ -16,7 +16,7 @@ module build.jenesis.repository.format.go {
     requires build.jenesis.repository.blobs;
     requires org.slf4j;
     // The ecosystem suite reads GoDirhash and the escaping directly; the cross-format census additionally reads
-    // GoChecksumDatabase, because jenreg.go.sumdb is one of the edition's two operator-configured outbound roots and
+    // GoChecksumDatabase, because jenrepo.go.sumdb is one of the edition's two operator-configured outbound roots and
     // the census that names them is the one that has to prove this leg reaches their shared screen.
     exports build.jenesis.repository.format.go to build.jenesis.repository.gateway.go.test,
             build.jenesis.repository.gateway.census.test;

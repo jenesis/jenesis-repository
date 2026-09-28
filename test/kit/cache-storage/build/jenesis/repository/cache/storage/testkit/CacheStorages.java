@@ -35,7 +35,7 @@ public final class CacheStorages {
      */
     public static Documents documents(Path root) {
         return Documents.over(ArtifactStoreProvider.resolve("filesystem",
-                key -> "jenreg.filesystem.root".equals(key) ? root.toString() : null));
+                key -> "jenrepo.filesystem.root".equals(key) ? root.toString() : null));
     }
 
     /**
@@ -48,8 +48,8 @@ public final class CacheStorages {
     public static CacheStorage filesystem(Path root) {
         String configured = root.toString();
         return CacheStorageProvider.resolve(key -> switch (key) {
-            case "jenreg.store" -> "filesystem";
-            case "jenreg.filesystem.root" -> configured;
+            case "jenrepo.store" -> "filesystem";
+            case "jenrepo.filesystem.root" -> configured;
             default -> null;
         });
     }

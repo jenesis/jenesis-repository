@@ -70,7 +70,7 @@ class ContendedWriteTest {
     @Test
     void a_write_that_loses_every_compare_and_set_is_answered_503_with_a_retry_after() throws Exception {
         ArtifactStore store = ArtifactStoreProvider.resolve(
-                "filesystem", key -> "jenreg.filesystem.root".equals(key) ? root.toString() : null)
+                "filesystem", key -> "jenrepo.filesystem.root".equals(key) ? root.toString() : null)
                 .scope("default").scope("default");
         new RepositoryDocument("contended", Instant.now()).create(store);
         RepositoryController controller = new RepositoryController(

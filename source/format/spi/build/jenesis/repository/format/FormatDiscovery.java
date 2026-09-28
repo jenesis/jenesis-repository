@@ -50,7 +50,7 @@ final class FormatDiscovery {
      * answer is then fixed for the process; a test that reconfigures gets a fresh answer because it reconfigured.
      *
      * <p>The one shape this would get wrong is a caller that changes a format's toggle <em>underneath</em> the
-     * default lookup - setting the {@code jenreg.<name>} system property without calling {@link Features#configure}
+     * default lookup - setting the {@code jenrepo.<name>} system property without calling {@link Features#configure}
      * or {@link Features#reset} - since the default lookup reads those live. Nothing in either tree does that, and a
      * test that wants to is one {@code Features.reset()} away from being right.
      */

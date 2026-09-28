@@ -28,7 +28,7 @@ import build.jenesis.repository.compliance.Verdict;
  * saying what failed, so a permitted artifact's assessment tells an incident review that the attestation was checked
  * and found wanting rather than reading exactly like one whose provenance verified. It is the shape the
  * known-exploited, private-name, version-floor, embedded-secret and maintainer-health dimensions take under their own
- * ALLOW. Stopping the check is the {@code jenreg.provenance-admission} toggle or an unset trust anchor,
+ * ALLOW. Stopping the check is the {@code jenrepo.provenance-admission} toggle or an unset trust anchor,
  * and those leave the dimension genuinely absent from the gate rather than present-and-permitting, which is the
  * distinction an operator needs the two spellings to keep.
  */

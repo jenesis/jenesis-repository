@@ -68,13 +68,13 @@ public final class ArchiveWalk {
     public static final long LARGEST_WALK = 64L * 1024 * 1024;
 
     /**
-     * The key an operator raises or lowers {@link #largestWalk()} with, in the shared {@code jenreg.} namespace and
-     * so also settable as {@code JENREG_ARCHIVE_LARGEST_WALK} in a plain {@code docker run -e}. Deploy-time
+     * The key an operator raises or lowers {@link #largestWalk()} with, in the shared {@code jenrepo.} namespace and
+     * so also settable as {@code JENREPO_ARCHIVE_LARGEST_WALK} in a plain {@code docker run -e}. Deploy-time
      * configuration for the same reasons its sibling {@link ArchiveInflation#LARGEST_ENTRY_KEY} is: it is a per-process
      * budget on work done on the publish thread, read where a store round-trip per archive would be absurd, and
      * deployment-global where a stored setting would be per tenant.
      */
-    public static final String LARGEST_WALK_KEY = "jenreg.archive.largest-walk";
+    public static final String LARGEST_WALK_KEY = "jenrepo.archive.largest-walk";
 
     private ArchiveWalk() {
         throw new UnsupportedOperationException("ArchiveWalk is a static utility");

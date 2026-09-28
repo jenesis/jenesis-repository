@@ -175,7 +175,7 @@ final class ApkListings {
         try {
             byte[] signature = member(ApkSigner.ENTRY,
                     ApkSigner.of(blobs).sign(() -> new BufferedInputStream(Files.newInputStream(document))), false);
-            Path archive = OwnerOnly.createTempFile("jenreg-apkindex", ".tar.gz");
+            Path archive = OwnerOnly.createTempFile("jenrepo-apkindex", ".tar.gz");
             try (OutputStream out = new BufferedOutputStream(Files.newOutputStream(archive));
                  InputStream body = new BufferedInputStream(Files.newInputStream(document))) {
                 out.write(signature);
@@ -198,7 +198,7 @@ final class ApkListings {
      * entry's modification time is pinned so two archives derived from one unchanged document are byte-identical.
      */
     private static Path member(String name, StoredListing.Body content, long size, boolean end) throws IOException {
-        Path blocks = OwnerOnly.createTempFile("jenreg-apkindex", ".tar");
+        Path blocks = OwnerOnly.createTempFile("jenrepo-apkindex", ".tar");
         try {
             try (OutputStream raw = new BufferedOutputStream(Files.newOutputStream(blocks));
                  TarArchiveOutputStream tar = new TarArchiveOutputStream(raw, "UTF-8")) {
@@ -214,7 +214,7 @@ final class ApkListings {
             try (FileChannel channel = FileChannel.open(blocks, StandardOpenOption.WRITE)) {
                 channel.truncate(BLOCK + (size + BLOCK - 1) / BLOCK * BLOCK + (end ? 2L * BLOCK : 0));
             }
-            Path compressed = OwnerOnly.createTempFile("jenreg-apkindex", ".gz");
+            Path compressed = OwnerOnly.createTempFile("jenrepo-apkindex", ".gz");
             try (InputStream in = new BufferedInputStream(Files.newInputStream(blocks));
                  OutputStream out = new BufferedOutputStream(Files.newOutputStream(compressed));
                  GzipCompressorOutputStream gzip = new GzipCompressorOutputStream(out)) {

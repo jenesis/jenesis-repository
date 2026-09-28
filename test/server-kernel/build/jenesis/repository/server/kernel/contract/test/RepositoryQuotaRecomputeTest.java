@@ -34,7 +34,7 @@ class RepositoryQuotaRecomputeTest {
     @Test
     void the_recount_pages_each_repositorys_blob_namespace_and_never_lists_it() throws IOException {
         ArtifactStore filesystem = ArtifactStoreProvider.resolve("filesystem",
-                key -> "jenreg.filesystem.root".equals(key) ? root.toString() : null);
+                key -> "jenrepo.filesystem.root".equals(key) ? root.toString() : null);
         ArtifactStore tenant = filesystem.scope("acme");
         ArtifactStore alpha = tenant.scope("alpha");
         for (int blob = 0; blob < 2001; blob++) {

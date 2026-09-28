@@ -33,7 +33,7 @@ import module java.base;
 public final class SecretCipher {
 
     /** The environment variable carrying the master key(s): comma-separated {@code <key-id>:<base64(32-byte key)>}. */
-    public static final String ENV = "JENREG_SECRETS_KEY";
+    public static final String ENV = "JENREPO_SECRETS_KEY";
 
     /** The versioned envelope prefix a stored ciphertext carries: {@code enc:v1:<key-id>:<base64(iv||ct||tag)>}. */
     private static final String PREFIX = "enc:v1:";

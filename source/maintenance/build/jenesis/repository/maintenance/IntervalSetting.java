@@ -32,7 +32,7 @@ import build.jenesis.repository.store.Durations;
  *
  * <p><strong>Zero does not disable a pass.</strong> A non-positive cadence ({@code PT0S}, {@code -PT1H}, {@code 0})
  * falls back exactly like a malformed one. Disabling a maintenance pass has two routes and gains no third here: the
- * neutral {@code jenreg.<task>=false} toggle (plus the required-config self-disable) that
+ * neutral {@code jenrepo.<task>=false} toggle (plus the required-config self-disable) that
  * {@link MaintenanceTaskProvider#resolve} applies before a provider is even asked, and the provider's own enablement
  * setting, which returns an empty {@code create}. Letting a cadence of zero mean "off" would give one dial two
  * meanings and turn a typo into a pass that is installed, listed and never runs - a silently-incomplete state
@@ -245,7 +245,7 @@ public final class IntervalSetting {
             LOGGER.log(System.Logger.Level.WARNING, Features.key(key) + "=" + value + " " + why
                     + "; the pass runs every " + fallback + ". Accepted: an ISO-8601 duration (PT1H, P1D) or a "
                     + "suffixed one (500ms, 90s, 5m, 6h, 2d)" + (bareIsMillis ? " or a plain number of milliseconds" : "")
-                    + ". A cadence of zero does not disable a pass - use jenreg.<task>=false or the "
+                    + ". A cadence of zero does not disable a pass - use jenrepo.<task>=false or the "
                     + "task's own enablement setting.");
         }
         return fallback;

@@ -1,9 +1,9 @@
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: {{ include "jenreg.fullname" . }}
+  name: {{ include "jenrepo.fullname" . }}
   labels:
-    {{- include "jenreg.labels" . | nindent 4 }}
+    {{- include "jenrepo.labels" . | nindent 4 }}
 spec:
   replicas: {{ .Values.replicaCount }}
   {{- if eq .Values.store.backend "filesystem" }}
@@ -12,11 +12,11 @@ spec:
   {{- end }}
   selector:
     matchLabels:
-      {{- include "jenreg.selectorLabels" . | nindent 6 }}
+      {{- include "jenrepo.selectorLabels" . | nindent 6 }}
   template:
     metadata:
       labels:
-        {{- include "jenreg.selectorLabels" . | nindent 8 }}
+        {{- include "jenrepo.selectorLabels" . | nindent 8 }}
       annotations:
         {{- if not .Values.secrets.existingSecret }}
         checksum/secret: {{ include (print $.Template.BasePath "/secret.yaml") . | sha256sum }}
@@ -29,7 +29,7 @@ spec:
       imagePullSecrets:
         {{- toYaml . | nindent 8 }}
       {{- end }}
-      serviceAccountName: {{ include "jenreg.serviceAccountName" . }}
+      serviceAccountName: {{ include "jenrepo.serviceAccountName" . }}
       securityContext:
         {{- toYaml .Values.podSecurityContext | nindent 8 }}
       containers:
@@ -42,18 +42,18 @@ spec:
             - name: http
               containerPort: 8080
           env:
-            {{- include "jenreg.storeEnv" . | nindent 12 }}
+            {{- include "jenrepo.storeEnv" . | nindent 12 }}
             {{- range $key, $value := .Values.repository }}
-            - name: {{ include "jenreg.repositoryEnvName" $key }}
+            - name: {{ include "jenrepo.repositoryEnvName" $key }}
               value: {{ $value | quote }}
             {{- end }}
-            {{- include "jenreg.uiEnv" . | nindent 12 }}
+            {{- include "jenrepo.uiEnv" . | nindent 12 }}
             {{- with .Values.extraEnv }}
             {{- toYaml . | nindent 12 }}
             {{- end }}
           envFrom:
             - secretRef:
-                name: {{ include "jenreg.secretName" . }}
+                name: {{ include "jenrepo.secretName" . }}
                 optional: true
           # Writable mounts under the read-only root filesystem: /tmp always (upload spool /
           # java.io.tmpdir / embedded server work dir), plus the /data store volume for the
@@ -67,7 +67,7 @@ spec:
             {{- end }}
             {{- if and (eq .Values.store.backend "gcs") .Values.secrets.gcsServiceAccountKey }}
             - name: gcs-credentials
-              mountPath: {{ include "jenreg.gcsCredentialsPath" . | dir }}
+              mountPath: {{ include "jenrepo.gcsCredentialsPath" . | dir }}
               readOnly: true
             {{- end }}
           startupProbe:
@@ -96,12 +96,12 @@ spec:
         {{- if eq .Values.store.backend "filesystem" }}
         - name: data
           persistentVolumeClaim:
-            claimName: {{ .Values.store.filesystem.persistence.existingClaim | default (printf "%s-data" (include "jenreg.fullname" .)) }}
+            claimName: {{ .Values.store.filesystem.persistence.existingClaim | default (printf "%s-data" (include "jenrepo.fullname" .)) }}
         {{- end }}
         {{- if and (eq .Values.store.backend "gcs") .Values.secrets.gcsServiceAccountKey }}
         - name: gcs-credentials
           secret:
-            secretName: {{ include "jenreg.fullname" . }}-gcs
+            secretName: {{ include "jenrepo.fullname" . }}-gcs
         {{- end }}
       {{- with .Values.nodeSelector }}
       nodeSelector:

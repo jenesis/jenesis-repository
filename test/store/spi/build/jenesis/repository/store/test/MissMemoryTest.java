@@ -60,7 +60,7 @@ class MissMemoryTest {
     @BeforeEach
     void setUp() {
         ArtifactStore filesystem = ArtifactStoreProvider.resolve("filesystem",
-                key -> "jenreg.filesystem.root".equals(key) ? root.toString() : null);
+                key -> "jenrepo.filesystem.root".equals(key) ? root.toString() : null);
         counting = FaultInjectingStore.wrap(filesystem);
         clock = new Moving();
         memory = new MissMemory(Duration.ofSeconds(10), clock);

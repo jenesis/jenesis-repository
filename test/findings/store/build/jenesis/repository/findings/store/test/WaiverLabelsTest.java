@@ -43,7 +43,7 @@ class WaiverLabelsTest {
     @BeforeEach
     void setUp() {
         ArtifactStore store = ArtifactStoreProvider.resolve(
-                "filesystem", key -> "jenreg.filesystem.root".equals(key) ? root.toString() : null);
+                "filesystem", key -> "jenrepo.filesystem.root".equals(key) ? root.toString() : null);
         ledger = new StoreFindings(store);
     }
 
@@ -168,7 +168,7 @@ class WaiverLabelsTest {
         // The architectural point: the coordinate-scoped overlay is point lookups only (no listing walk of the ledger),
         // while the whole-ledger overlay lists the tree - an O(ledger) cost on every publish.
         CountingStore counting = new CountingStore(ArtifactStoreProvider.resolve(
-                "filesystem", key -> "jenreg.filesystem.root".equals(key) ? root.toString() : null));
+                "filesystem", key -> "jenrepo.filesystem.root".equals(key) ? root.toString() : null));
         Findings counted = new StoreFindings(counting);
         WaiverLabels.overlayFor(counted, List.of(assessed), GRANTED);
         assertThat(counting.lists()).as("the coordinate-scoped overlay makes no listing walk").isZero();

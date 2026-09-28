@@ -23,7 +23,7 @@ import build.jenesis.repository.walk.WalkPass;
  */
 public final class IndexRebaseConsumer implements WalkConsumer {
 
-    /** The consumer's name: its toggle ({@code jenreg.index-rebase}) and how a walk entry names it. */
+    /** The consumer's name: its toggle ({@code jenrepo.index-rebase}) and how a walk entry names it. */
     public static final String NAME = "index-rebase";
 
     private final Set<Object> riding = ConcurrentHashMap.newKeySet();

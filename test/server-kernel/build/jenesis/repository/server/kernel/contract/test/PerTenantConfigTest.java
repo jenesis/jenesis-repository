@@ -29,7 +29,7 @@ class PerTenantConfigTest {
 
     private Settings settings() throws IOException {
         ArtifactStore store = ArtifactStoreProvider.resolve("filesystem",
-                key -> "jenreg.filesystem.root".equals(key) ? root.toString() : null);
+                key -> "jenrepo.filesystem.root".equals(key) ? root.toString() : null);
         return new Settings(store);
     }
 

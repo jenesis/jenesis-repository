@@ -115,7 +115,7 @@ public class DomainConfig {
     /**
      * A fixed deployment's one tenant, created at boot when the store does not hold it yet.
      *
-     * <p>A fixed deployment serves exactly one tenant, named by {@code jenreg.default-tenant}, and the console lists
+     * <p>A fixed deployment serves exactly one tenant, named by {@code jenrepo.default-tenant}, and the console lists
      * tenants from the store - where a tenant appears only once something is written under it. On a fresh store the
      * console therefore listed none, and an operator signing in for the first time was sent to the tenants screen
      * to create the one tenant the deployment already serves, before any other screen would open. Creating it here
@@ -126,10 +126,10 @@ public class DomainConfig {
     @Bean
     public FixedTenant fixedTenant(TenantService tenants, Tenancy tenancy,
                                    ConfigurableEnvironment environment) {
-        if (!tenancy.fixed() || environment.getProperty("jenreg.read-only", Boolean.class, false)) {
+        if (!tenancy.fixed() || environment.getProperty("jenrepo.read-only", Boolean.class, false)) {
             return new FixedTenant(null);
         }
-        String tenant = environment.getProperty("jenreg.default-tenant", Scopes.DEFAULT_TENANT);
+        String tenant = environment.getProperty("jenrepo.default-tenant", Scopes.DEFAULT_TENANT);
         try {
             if (!tenants.exists(tenant)) {
                 tenants.create(tenant);
@@ -151,11 +151,11 @@ public class DomainConfig {
      *  that decides whether a tenant is chosen for the reader, and the header that shows which one is. */
     @Bean
     public Tenancy tenancy(ConfigurableEnvironment environment) {
-        return new Tenancy(environment.getProperty("jenreg." + RepositoryRoutingProvider.SETTING,
+        return new Tenancy(environment.getProperty("jenrepo." + RepositoryRoutingProvider.SETTING,
                 RepositoryRoutingProvider.FIXED).equals(RepositoryRoutingProvider.FIXED));
     }
 
-    /** Whether the deployment serves one tenant ({@code jenreg.tenancy=fixed}) or several. */
+    /** Whether the deployment serves one tenant ({@code jenrepo.tenancy=fixed}) or several. */
     public record Tenancy(boolean fixed) {
 
         public boolean multi() {
@@ -168,9 +168,9 @@ public class DomainConfig {
      *  tenant are audited. Shared by the tenant purge, the volume reclaim and the cache clear so they apply one
      *  rule. */
     private static String operatorTenant(ConfigurableEnvironment environment) {
-        String operatorTenant = environment.getProperty("jenreg.operator-tenant", "");
+        String operatorTenant = environment.getProperty("jenrepo.operator-tenant", "");
         return operatorTenant.isBlank()
-                ? environment.getProperty("jenreg.default-tenant", Scopes.DEFAULT_TENANT)
+                ? environment.getProperty("jenrepo.default-tenant", Scopes.DEFAULT_TENANT)
                 : operatorTenant;
     }
 
@@ -182,7 +182,7 @@ public class DomainConfig {
         // repository's own where the console is composed into it, the console's own store wiring's otherwise. The
         // tenant directory feeds the modules screen's orphaned-data diagnostic (a per-tenant scan, read-only).
         // The upstream-credential source reads its deploy-time bootstrap keys - notably secrets-key
-        // (JENREG_SECRETS_KEY), the master key that envelope-encrypts a stored credential at rest - from the
+        // (JENREPO_SECRETS_KEY), the master key that envelope-encrypts a stored credential at rest - from the
         // console's own environment, exactly as the /api ConfigController path does, so a credential set through the
         // console is encrypted under the same key (and refused the same way when none is configured).
         return new SettingsAdmin(repositoryStore, settingsEditor, tenantService::all, audit, currentTenant, actor,

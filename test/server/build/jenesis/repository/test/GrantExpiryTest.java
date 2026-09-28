@@ -26,7 +26,7 @@ class GrantExpiryTest {
     @BeforeEach
     void setUp() {
         ArtifactStore store = ArtifactStoreProvider.resolve(
-                "filesystem", key -> "jenreg.filesystem.root".equals(key) ? root.toString() : null);
+                "filesystem", key -> "jenrepo.filesystem.root".equals(key) ? root.toString() : null);
         authorization = Authorization.enforcing(store);
     }
 
@@ -92,7 +92,7 @@ class GrantExpiryTest {
                 Instant.now().plus(Duration.ofHours(1)));
 
         ArtifactStore store = ArtifactStoreProvider.resolve(
-                "filesystem", key -> "jenreg.filesystem.root".equals(key) ? root.toString() : null);
+                "filesystem", key -> "jenrepo.filesystem.root".equals(key) ? root.toString() : null);
         store.write(".system/auth/acme/principal/oidc%2Fada/grants",
                 new ByteArrayInputStream(("*=" + Authorization.REPOSITORY_READ + "\n.expires.*=not-an-instant\n")
                         .getBytes(StandardCharsets.UTF_8)));
@@ -159,7 +159,7 @@ class GrantExpiryTest {
     /** A credential's grants document as it is stored, read past the authorization. */
     private Properties grants(String hash) throws IOException {
         ArtifactStore store = ArtifactStoreProvider.resolve(
-                "filesystem", key -> "jenreg.filesystem.root".equals(key) ? root.toString() : null);
+                "filesystem", key -> "jenrepo.filesystem.root".equals(key) ? root.toString() : null);
         ByteArrayOutputStream bytes = new ByteArrayOutputStream();
         store.read(".system/auth/acme/credential/" + hash + "/grants", bytes);
         Properties grants = new Properties();

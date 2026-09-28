@@ -82,7 +82,7 @@ class NpmImportCoordinateAgreementTest {
 
     private ArtifactStore store() {
         return ArtifactStoreProvider.resolve("filesystem",
-                key -> "jenreg.filesystem.root".equals(key) ? root.toString() : null);
+                key -> "jenrepo.filesystem.root".equals(key) ? root.toString() : null);
     }
 
     /** A gzipped tar with one regular-file entry whose path fits the 100-byte name field (no ustar prefix split). */

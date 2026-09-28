@@ -3,7 +3,7 @@
  * {@link build.jenesis.repository.ui.ConsoleModuleProvider}, so the console imports its configuration through
  * {@code ServiceLoader} discovery and names no mechanism. With this module absent the console starts with sign-in
  * disabled (the login page says so); installed but unconfigured behaves the same until a provider is configured
- * ({@code JENREG_UI_GITHUB_CLIENT_ID} / {@code JENREG_UI_OIDC_ISSUER_URI} and their credentials - the same keys
+ * ({@code JENREPO_UI_GITHUB_CLIENT_ID} / {@code JENREPO_UI_OIDC_ISSUER_URI} and their credentials - the same keys
  * as before the split). Another mechanism is added the same way - as its own module.
  *
  * <p><b>LDAP bind exists beside these two, and what it costs is real.</b> An LDAP <em>bind</em> - the

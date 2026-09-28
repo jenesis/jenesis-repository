@@ -104,7 +104,7 @@ public class Cache {
     private final Duration reaper;
     /** How many entries' recency this node remembers; past it a hot entry's stamp is merely re-read once. */
     private static final int TOUCH_MEMORY = 200_000;
-    /** The shipped {@code jenreg.cache.touch-interval}; {@link #touchInterval(Duration)} is what binds it. */
+    /** The shipped {@code jenrepo.cache.touch-interval}; {@link #touchInterval(Duration)} is what binds it. */
     static final Duration DEFAULT_TOUCH_INTERVAL = Duration.ofHours(6);
     private volatile Duration touchInterval;
     private volatile Map<String, Known> touched;
@@ -135,7 +135,7 @@ public class Cache {
     }
 
     /**
-     * How long a recency stamp stands before a hit renews it ({@code jenreg.cache.touch-interval}); {@code null} or
+     * How long a recency stamp stands before a hit renews it ({@code jenrepo.cache.touch-interval}); {@code null} or
      * zero stamps every hit. Within the window a hit costs the store nothing for recency: this node remembers, per
      * entry, the stamp it last wrote or read - or the store it made itself, whose recency is the entry's own time
      * until a stamp exists - and only an entry it does not remember is asked for its recency - its stamps, then the
@@ -166,7 +166,7 @@ public class Cache {
      * it again; {@code null} or zero reads it on every request. Reading it is the settings documents of the project, its
      * tenant and the deployment - otherwise the only store calls a hit pays, recency being kept in the touch window -
      * so the node remembers when it last read a project's policy and reads it again only past the window. The window
-     * is the deployment's {@code jenreg.cache.ttl}, as it is for the credential the same request was authorised
+     * is the deployment's {@code jenrepo.cache.ttl}, as it is for the credential the same request was authorised
      * against: another node's edit of a project's cap shows here within it, and an operator who wants every request
      * to see an edit at once sets it to zero.
      */
@@ -392,7 +392,7 @@ public class Cache {
         String tenantTag = tenant;
         String projectTag = project;
         counters.computeIfAbsent(tenant + '\0' + project + '\0' + outcome.label(), _ ->
-                        Counter.builder("jenreg.cache.requests")
+                        Counter.builder("jenrepo.cache.requests")
                                 .description("Cache requests by tenant, project and outcome")
                                 .tag("tenant", tenantTag)
                                 .tag("project", projectTag)

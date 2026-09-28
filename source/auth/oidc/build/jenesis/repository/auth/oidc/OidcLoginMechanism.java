@@ -10,7 +10,7 @@ import build.jenesis.repository.ui.OAuth2ClientConfig;
  *
  * <p>The configuration it names lives in the console module, and this module is only the statement that a console
  * wants the mechanism <em>optional</em>. It carries no copy of the condition, the contributor, the registration
- * builder or the {@code jenreg.ui.github.*} and {@code jenreg.ui.oidc.*} binding.
+ * builder or the {@code jenrepo.ui.github.*} and {@code jenrepo.ui.oidc.*} binding.
  */
 public final class OidcLoginMechanism implements ConsoleModuleProvider {
 

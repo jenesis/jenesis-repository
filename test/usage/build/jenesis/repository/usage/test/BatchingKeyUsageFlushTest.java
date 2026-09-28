@@ -28,7 +28,7 @@ class BatchingKeyUsageFlushTest {
     @BeforeEach
     void setUp() throws IOException {
         ArtifactStore backend = ArtifactStoreProvider.resolve(
-                "filesystem", key -> "jenreg.filesystem.root".equals(key) ? root.toString() : null);
+                "filesystem", key -> "jenrepo.filesystem.root".equals(key) ? root.toString() : null);
         store = new ConflictingWrites(backend);
         authorization = Authorization.enforcing(store);
         hash = Authorization.hash(Authorization.mint("acme"));

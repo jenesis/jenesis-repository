@@ -6,7 +6,7 @@ import build.jenesis.repository.icon.IconContributor;
 /**
  * A named factory for an {@link ArtifactStore} backend, discovered at runtime with {@link ServiceLoader}.
  * The store is an <em>exclusive</em> SPI in the {@link Features} convention: the server selects one by name
- * (the {@code jenreg.store} setting, default {@code filesystem} - the most universally applicable
+ * (the {@code jenrepo.store} setting, default {@code filesystem} - the most universally applicable
  * backend); each provider reads its own configuration through the {@code config} lookup, staying free of any
  * framework dependency. <strong>Every</strong> backend - the bundled filesystem one no less than S3 / GCS / Azure
  * Blob - is added to the module graph by the distribution and bound here through {@code provides}: no consumer, the
@@ -33,7 +33,7 @@ import build.jenesis.repository.icon.IconContributor;
  *     selection, the {@code filesystem} default it refuses to fall back to, and the installed provider names. A
  *     selected backend whose {@link #requiredConfig()} is unset likewise throws, naming <em>every</em> missing key at
  *     once, and is never constructed. This SPI deliberately does not self-disable the way an optional capability may:
- *     {@code jenreg.store=s3} with the s3 module absent must not boot against the local disk, publishing
+ *     {@code jenrepo.store=s3} with the s3 module absent must not boot against the local disk, publishing
  *     into ephemeral storage while every artifact in the intended bucket 404s. Only an <em>unselected</em> deployment
  *     gets the {@code filesystem} default, and its required configuration is checked just the same.</li>
  * <li><b>Error visibility.</b> Nothing is swallowed. Two providers answering to one name, or one provider
@@ -52,7 +52,7 @@ import build.jenesis.repository.icon.IconContributor;
  *     whose message <b>names the opt-out key</b> - because credentials and every artifact byte would otherwise travel
  *     in clear with no operator signal, and the operator running a local emulator needs to be told what to set. It is
  *     an opt-out, not a ban: the very same configuration resolves once an explicit
- *     {@code JENREG_<BACKEND>_ALLOW_INSECURE_ENDPOINT=true} is set, which is how the containerised emulators are
+ *     {@code JENREPO_<BACKEND>_ALLOW_INSECURE_ENDPOINT=true} is set, which is how the containerised emulators are
  *     reached. The rule binds however the endpoint reaches the provider - as its own setting for {@code s3} and
  *     {@code gcs}, or buried inside a connection string that also carries the account key for {@code azure-blob},
  *     where the scheme is easiest to mistype and most costly to get wrong. A backend with no endpoint at all (the
@@ -151,7 +151,7 @@ public interface ArtifactStoreProvider extends IconContributor {
                     + " backend is fully configured as well: " + String.join("; ", rivals) + ". A deployment has"
                     + " exactly one store, so this is a misconfiguration rather than a preference - and one that"
                     + " loses data quietly, by writing where nobody is looking. Select the backend you mean with"
-                    + " jenreg.store and remove the other's configuration.");
+                    + " jenrepo.store and remove the other's configuration.");
         }
     }
 

@@ -14,8 +14,8 @@ import org.springframework.core.type.AnnotationMetadata;
  * configuration class is imported as a deferred configuration - the same treatment Boot gives its auto-configurations
  * - so a feature module's {@code @Bean} methods, controllers, conditions and properties work exactly as if the class
  * were part of the server, while the server names no module. A module configured off by its provider name
- * ({@code jenreg.<name>=false}, the {@link Features} convention - settable as
- * {@code JENREG_<NAME>=false} through relaxed binding) is not imported, so its endpoints degrade exactly
+ * ({@code jenrepo.<name>=false}, the {@link Features} convention - settable as
+ * {@code JENREPO_<NAME>=false} through relaxed binding) is not imported, so its endpoints degrade exactly
  * as if the module were absent from the image. Mirrors {@code ConsoleModuleImports} on the console side.
  */
 public class ServerModuleImports implements DeferredImportSelector, EnvironmentAware {

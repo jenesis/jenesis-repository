@@ -3,7 +3,7 @@ package build.jenesis.repository.ui;
 import org.springframework.boot.context.properties.ConfigurationProperties;
 
 /**
- * Configuration for the console, bound from {@code jenreg.ui.*}. The artifact store is selected the same way the
+ * Configuration for the console, bound from {@code jenrepo.ui.*}. The artifact store is selected the same way the
  * repository server selects it - a backend name resolved through {@code ArtifactStoreProvider}, reading its own
  * configuration (root / bucket / connection string) from the environment - so the console reads the very store the
  * server writes.
@@ -18,16 +18,16 @@ import org.springframework.boot.context.properties.ConfigurationProperties;
  * wildcard names no holder.
  *
  * <p>Sign-in is not configured here. The OAuth2 and OpenID Connect clients bind their own
- * {@link GithubProperties} and {@link OidcProperties}, under {@code jenreg.ui.github.*} and
- * {@code jenreg.ui.oidc.*} - which is what they always did on the admin console's side, while this class bound the
+ * {@link GithubProperties} and {@link OidcProperties}, under {@code jenrepo.ui.github.*} and
+ * {@code jenrepo.ui.oidc.*} - which is what they always did on the admin console's side, while this class bound the
  * same keys a second time with identical fields and identical defaults. A mechanism owns its own configuration; a
  * console's properties are what the console itself reads.
  *
- *   jenreg.ui.admins            comma-separated provider-qualified ids SEEDED as deployment administrators on
- *                               every boot (JENREG_UI_ADMINS); not a mirror - removing one does not revoke it,
+ *   jenrepo.ui.admins            comma-separated provider-qualified ids SEEDED as deployment administrators on
+ *                               every boot (JENREPO_UI_ADMINS); not a mirror - removing one does not revoke it,
  *                               and a '*' entry is refused at startup, an admin being a holder and it naming none
  */
-@ConfigurationProperties(prefix = "jenreg.ui")
+@ConfigurationProperties(prefix = "jenrepo.ui")
 public class UiProperties {
 
     private String admins = "";

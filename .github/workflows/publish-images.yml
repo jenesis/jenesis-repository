@@ -26,9 +26,9 @@
 #  AFTER THE IMAGE IS PUSHED:  standing up a server
 # ─────────────────────────────────────────────────────────────────────────────
 #  The image is the all-in-one server. Deploy it with the chart (deploy/helm/jenesis) pointing the image at a
-#  URI this workflow pushed. The server reads JENREG_* environment variables: JENREG_STORE selects the backend
-#  (filesystem needs JENREG_FILESYSTEM_ROOT; s3, gcs and azure-blob their bucket or container and a
-#  credential), and JENREG_UI_GITHUB_* or JENREG_UI_OIDC_* configure the console's sign-in.
+#  URI this workflow pushed. The server reads JENREPO_* environment variables: JENREPO_STORE selects the backend
+#  (filesystem needs JENREPO_FILESYSTEM_ROOT; s3, gcs and azure-blob their bucket or container and a
+#  credential), and JENREPO_UI_GITHUB_* or JENREPO_UI_OIDC_* configure the console's sign-in.
 
 name: Publish the image and chart
 

@@ -8,12 +8,12 @@ import build.jenesis.repository.store.Retries;
 
 /**
  * The store operations this node has issued, on the observability report: one counter per operation name under
- * {@code jenreg.store.ops.<op>} and the two class totals {@code jenreg.store.ops.reads} and {@code .writes}. What
+ * {@code jenrepo.store.ops.<op>} and the two class totals {@code jenrepo.store.ops.reads} and {@code .writes}. What
  * the operation-count suites read - a download, a publish and a walked object each held to a standard of reads and
  * writes - and what the soak prints per interval, so a store that fills up shows constant operations per request.
  *
  * <p>Beside them, what the compare-and-set loops made of the writes the store refused, under
- * {@code jenreg.store.cas.*}: how many conditional writes were tried, how many refusals turned out to have landed
+ * {@code jenrepo.store.cas.*}: how many conditional writes were tried, how many refusals turned out to have landed
  * ({@code replayed}), how many found a peer's bytes on the key ({@code lost.peer}) and how many found this node's
  * bytes but work still outstanding ({@code lost.unsettled}). Read and write totals alone cannot tell a lost write
  * from a deferred counter flush; with these verdicts reported, "the store refused a write it had accepted" is a
@@ -27,7 +27,7 @@ public final class StoreOperationsObservability implements ObservabilitySource {
         long reads = 0;
         long writes = 0;
         for (Map.Entry<String, Long> entry : MeteringArtifactStore.operations().entrySet()) {
-            metrics.add(Metric.counter("jenreg.store.ops." + signal(entry.getKey()),
+            metrics.add(Metric.counter("jenrepo.store.ops." + signal(entry.getKey()),
                     "Store operations named " + entry.getKey() + " this node has issued since it started.",
                     entry.getValue(), "operations"));
             if (MeteringArtifactStore.writes(entry.getKey())) {
@@ -36,30 +36,30 @@ public final class StoreOperationsObservability implements ObservabilitySource {
                 reads += entry.getValue();
             }
         }
-        metrics.add(Metric.counter("jenreg.store.ops.reads", "Read-class store operations (GET, HEAD, listing) this node "
+        metrics.add(Metric.counter("jenrepo.store.ops.reads", "Read-class store operations (GET, HEAD, listing) this node "
                 + "has issued since it started.", reads, "operations"));
-        metrics.add(Metric.counter("jenreg.store.ops.writes", "Write-class store operations (PUT, DELETE) this node has "
+        metrics.add(Metric.counter("jenrepo.store.ops.writes", "Write-class store operations (PUT, DELETE) this node has "
                 + "issued since it started - twelve reads' worth each on every object store.", writes, "operations"));
-        metrics.add(Metric.counter("jenreg.store.cas.tried", "Conditional writes the compare-and-set loops have asked "
+        metrics.add(Metric.counter("jenrepo.store.cas.tried", "Conditional writes the compare-and-set loops have asked "
                 + "the store for since this node started, landed or refused - the denominator of the three verdicts.",
                 Retries.tried(), "writes"));
-        metrics.add(Metric.counter("jenreg.store.cas.replayed", "Refused conditional writes that had in fact landed - "
+        metrics.add(Metric.counter("jenrepo.store.cas.replayed", "Refused conditional writes that had in fact landed - "
                 + "the key held what the try wrote and the mutation had nothing left to do. Climbs on an object store "
                 + "whose SDK retried a write the service had accepted; zero on a filesystem.",
                 Retries.replayed(), "writes"));
-        metrics.add(Metric.counter("jenreg.store.cas.lost.peer", "Refused conditional writes whose key turned out to "
+        metrics.add(Metric.counter("jenrepo.store.cas.lost.peer", "Refused conditional writes whose key turned out to "
                 + "hold another writer's bytes, or nothing - an honest loss to a peer, retried against a fresh read. "
                 + "Zero on a serial publish; anything else there is the store refusing a write it did not refuse for "
                 + "a reason the loop can see.", Retries.lostToPeer(), "writes"));
-        metrics.add(Metric.counter("jenreg.store.cas.lost.unsettled", "Refused conditional writes whose key held this "
+        metrics.add(Metric.counter("jenrepo.store.cas.lost.unsettled", "Refused conditional writes whose key held this "
                 + "node's bytes while the mutation still had work to do - an accumulation, a claim, a delete - and was "
                 + "retried rather than believed landed.", Retries.lostUnsettled(), "writes"));
-        // Deliberately a different prefix, not more jenreg.store.ops.* names: the two totals above are summed by
+        // Deliberately a different prefix, not more jenrepo.store.ops.* names: the two totals above are summed by
         // partitioning that namespace on the operation name, so a family-suffixed name in it would be read as an
         // operation nobody recognises and counted into the reads.
         MeteringArtifactStore.byFamily().forEach((name, count) -> {
             String[] split = name.split(" ", 2);
-            metrics.add(Metric.counter("jenreg.store.family." + signal(split[0]) + "." + segment(split[1]),
+            metrics.add(Metric.counter("jenrepo.store.family." + signal(split[0]) + "." + segment(split[1]),
                     "Store operations named " + split[0] + " this node has issued against keys under "
                             + split[1] + ".", count, "operations"));
         });
@@ -76,7 +76,7 @@ public final class StoreOperationsObservability implements ObservabilitySource {
      * by date does: {@code .system/audit/2026-09-09} folds to {@code .system/audit/<n>-09-09} and cleaned to
      * {@code system.audit.n.09.09}, whose {@code 09} the grammar refuses - and a refused {@link Metric} name is not
      * one missing metric, it throws, and the report drops this whole source as unavailable: switching
-     * {@code jenreg.store-families} on would make a node report NO {@code jenreg.store.ops.*} counters at all.
+     * {@code jenrepo.store-families} on would make a node report NO {@code jenrepo.store.ops.*} counters at all.
      *
      * <p>So every part is made to begin with a letter, and the cleaning is ASCII-only - {@code Character.isLetterOrDigit}
      * is Unicode-aware and would pass an accented letter straight into a name the grammar also refuses.

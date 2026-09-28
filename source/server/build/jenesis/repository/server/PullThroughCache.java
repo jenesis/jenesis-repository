@@ -36,7 +36,7 @@ import io.micrometer.observation.Observation;
  * the leader failed, timed out, or the artifact is genuinely absent upstream - fetches for itself, so this is an
  * optimisation that never changes an outcome.
  *
- * <p>Each proxy-eligible read is wrapped in a {@code jenreg.proxy.fetch} {@link Observations observation} tagged
+ * <p>Each proxy-eligible read is wrapped in a {@code jenrepo.proxy.fetch} {@link Observations observation} tagged
  * with the {@code format} and the {@code outcome} - {@code hit} (served locally, no upstream call), {@code miss}
  * (fetched from upstream) or {@code negative} (upstream also missed) - so the upstream leg is visible in metrics,
  * logs and traces from one instrumentation point. A leg that asked the upstream also carries what the upstream
@@ -103,7 +103,7 @@ public final class PullThroughCache {
             format.handle(exchange, store);
             return;
         }
-        Observations.observe(observations, "jenreg.proxy.fetch", null, null, observation -> {
+        Observations.observe(observations, "jenrepo.proxy.fetch", null, null, observation -> {
             observation.lowCardinalityKeyValue("format", format.name());
             // Present on every outcome, because a meter's tag keys must not vary with its value: a hit never asks
             // the upstream, and says so, rather than carrying one key fewer than a miss.

@@ -480,7 +480,7 @@ public record RepositoryDefinition(boolean writable, List<Fallback> fallbacks) {
      * advertised downloads too, so two dials could only ever disagree with each other.
      *
      * <p>The rule itself lives in {@link OutboundTargets#configuredRefusal}, because this is not the only
-     * operator-configured outbound root - {@code jenreg.go.sumdb} is the other, and the two would otherwise be two
+     * operator-configured outbound root - {@code jenrepo.go.sumdb} is the other, and the two would otherwise be two
      * spellings of one decision. This method is where the decision is <em>applied</em> to a
      * repository definition; the decision itself is stated once.
      */

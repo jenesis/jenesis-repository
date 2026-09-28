@@ -35,7 +35,7 @@ public class RepositoryLicenseInventoryTest {
     @BeforeEach
     void setUp() throws IOException {
         store = ArtifactStoreProvider.resolve("filesystem",
-                key -> "jenreg.filesystem.root".equals(key) ? root.toString() : null);
+                key -> "jenrepo.filesystem.root".equals(key) ? root.toString() : null);
         ArtifactStore repo = store.scope("acme").scope("releases");
         Publication publication = new Publication(repo);
         publication.link("/maven/org/acme/lib/1.0/lib-1.0.jar",

@@ -84,7 +84,7 @@ public class ServingConfig {
                 : new AuthFetcher(resolved, upstreamCredentials);
     }
 
-    /** The pre-verdict spool store, sized from {@code jenreg.spool.*} ({@code max-bytes}, {@code max-spools}): the
+    /** The pre-verdict spool store, sized from {@code jenrepo.spool.*} ({@code max-bytes}, {@code max-spools}): the
      *  nocache pass-through leg spools each untrusted upstream body through it and refuses with {@code 503} when a
      *  budget is exhausted, rather than growing unbounded. A bean so its budget gauges are reported from this context. */
     @Bean
@@ -101,7 +101,7 @@ public class ServingConfig {
         // liveConfig::proxyGate binds the tenant-aware proxyGate(String) overload, so a routed proxy fetch is screened
         // by the serving tenant's own gate; liveConfig::holdDays stays the deployment-wide immaturity window.
         UnaryOperator<String> config = Features.namespaced(environment::getProperty);
-        // The hardened leg's untrusted-upstream fetch bounds are sized from jenreg.spool.*
+        // The hardened leg's untrusted-upstream fetch bounds are sized from jenrepo.spool.*
         // (max-artifact-bytes, fetch-timeout-millis, fetch-min-throughput-bytes) - deploy-time resource dials sized to
         // the node's disk and links, like the spool budget - so an oversize or slow-loris upstream is refused rather
         // than exhausting the spool or pinning a connection. They are read against THIS spool's budget: the
@@ -225,7 +225,7 @@ public class ServingConfig {
     /**
      * The routing this deployment runs on, discovered rather than chosen here.
      *
-     * <p>Not an {@code if}-chain over {@code jenreg.tenancy} naming the routings by constructor, which would make
+     * <p>Not an {@code if}-chain over {@code jenrepo.tenancy} naming the routings by constructor, which would make
      * tenancy a composition choice: the setting would be real, the seam would not, and a further routing could
      * only arrive by editing the method that names the others. It resolves through
      * {@link RepositoryRoutingProvider} - the same {@code EXCLUSIVE_WITH_DEFAULT} discovery the artifact store
@@ -246,7 +246,7 @@ public class ServingConfig {
     }
 
     /** Every discovered format that the {@link Features} convention leaves enabled - one image carries every
-     *  format module and {@code jenreg.<format>=false} trims it at boot, degrading exactly like an
+     *  format module and {@code jenrepo.<format>=false} trims it at boot, degrading exactly like an
      *  absent module. (The core applies the same gate inside its own auto-configuration; this shell builds its
      *  format list itself, so it applies the convention at its own discovery sites.) */
     static List<RepositoryFormat> enabledFormats(Environment environment) {
@@ -259,10 +259,10 @@ public class ServingConfig {
         // The upstream table is a live view over the runtime settings (format-upstream.<format> or the format's
         // own declared default, nothing when the proxy switch is off), so a settings change applies on the next
         // fetch where the core's boot-time map could not. The observation registry rides in so a proxied miss
-        // is timed and traced as jenreg.proxy.fetch (format, outcome) through the free PullThroughCache.
+        // is timed and traced as jenrepo.proxy.fetch (format, outcome) through the free PullThroughCache.
         List<RepositoryFormat> formats = enabledFormats(environment);
         // ... and screened. This is the leg every repository WITHOUT a router definition uses, the deployment-wide
-        // jenreg.proxy.<format> upstream map among them, and it delegated with PullThroughHooks.NONE - so no quality
+        // jenrepo.proxy.<format> upstream map among them, and it delegated with PullThroughHooks.NONE - so no quality
         // inspector, no licence or advisory dimension, no operator deny-list and no quarantine ran on it. A format's
         // proxy() caches the fetched body through Publication.storeBlob + link, and neither runs the
         // PublishInterceptor chain (only Publication.commit does), so there was no gate anywhere on this path
@@ -304,7 +304,7 @@ public class ServingConfig {
         // Publication with the discovered compliance gate riding the interceptor chain and the EdgeHooks bean
         // (deployEdgeHooks) plugged in for the immutability 409 / quarantine record / deploy observation; a batch
         // explode header is walked here too. A format reads a runtime toggle (the Maven metadata computation opt-in) off
-        // the exchange, resolved against the jenreg.* environment into which a stored setting is layered at
+        // the exchange, resolved against the jenrepo.* environment into which a stored setting is layered at
         // boot, so the format needs no settings dependency.
         List<ImportSourceProvider> importSources =
                 ImportSourceProvider.installed(Features.namespaced(environment::getProperty));
@@ -323,7 +323,7 @@ public class ServingConfig {
     public DeployEdgeHooks deployEdgeHooks(LiveConfig liveConfig, ObservationRegistry observations) {
         // The deploy edge's ingress concerns, plugged into the free ScreenedDispatch through the EdgeHooks
         // seam rather than forked into a second controller: the release-immutability 409 (post-hash, pre-layout), the
-        // quarantine-dispatch replay record around the 202, and the jenreg.deploy observation. The tenant
+        // quarantine-dispatch replay record around the 202, and the jenrepo.deploy observation. The tenant
         // each concern needs is read from PublishTenant (bound by publishTenantFilter).
         return new DeployEdgeHooks(liveConfig, observations);
     }

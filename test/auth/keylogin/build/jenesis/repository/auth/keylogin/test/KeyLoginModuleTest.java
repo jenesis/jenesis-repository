@@ -27,7 +27,7 @@ public class KeyLoginModuleTest {
 
     @Test
     void isDiscoveredAsAConsoleModuleNamedKeyLogin() {
-        // The provider name is the module's jenreg.<name> toggle, so it is the same spelling as the
+        // The provider name is the module's jenrepo.<name> toggle, so it is the same spelling as the
         // enablement gate this module catalogues and its own condition reads: one key, not two.
         ConsoleModuleProvider keyLogin = ConsoleModuleProvider.installed().stream()
                 .filter(provider -> provider.name().equals("key-login"))

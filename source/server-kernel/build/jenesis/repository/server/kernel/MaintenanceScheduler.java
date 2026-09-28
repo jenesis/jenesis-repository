@@ -26,7 +26,7 @@ import io.micrometer.core.instrument.MeterRegistry;
  * and the deployment simply has no background maintenance. {@link #runNow} is public so a pass can be driven
  * synchronously - by a test, or by an admin - without the thread; an exclusive pass still takes (and promptly releases)
  * its single-writer lease, so an on-demand run never sweeps concurrently with the scheduled pass on another node. A
- * failing pass or unit is logged and counted ({@code jenreg.maintenance.failures}) rather than swallowed,
+ * failing pass or unit is logged and counted ({@code jenrepo.maintenance.failures}) rather than swallowed,
  * and the worker stays alive across it.
  *
  * <p>The scheduler is split <strong>in place</strong> into three collaborators inside this module, rather than
@@ -62,7 +62,7 @@ import io.micrometer.core.instrument.MeterRegistry;
  *   <li><b>One task's failure never stops another's.</b> Containment is per task, per tenant and per fanned-out unit,
  *       and the remaining tasks of the same iteration still run.</li>
  *   <li><b>Nothing is swallowed.</b> Every contained failure is named at {@code WARNING} (an {@link Error} at
- *       {@code ERROR}) and counted on {@code jenreg.maintenance.failures}, and the task reports
+ *       {@code ERROR}) and counted on {@code jenrepo.maintenance.failures}, and the task reports
  *       {@code FAILED} through the observability seam. See {@link Escalation} for where an {@code Error} goes and why
  *       the answer differs between the worker loop and {@link #runNow(Instant)}.</li>
  *   <li><b>A handler never re-enters the task it is reporting.</b> Names come from {@link ScheduledTask}, captured at
@@ -548,7 +548,7 @@ public final class MaintenanceScheduler implements AutoCloseable {
          *
          * <p>So the loop survives, and the escalation is the one an operator can actually see: an ERROR naming the
          * task and saying the runtime gave way, a counted failure on
-         * {@code jenreg.maintenance.failures{task=...}}, and the task reported {@code FAILED} through
+         * {@code jenrepo.maintenance.failures{task=...}}, and the task reported {@code FAILED} through
          * the observability seam. Nothing is swallowed - what changes is who the report goes to. The pass keeps its
          * schedule rather than being withdrawn, deliberately: a {@code StackOverflowError} on one pathological tree
          * or an {@code OutOfMemoryError} under load is often transient, and permanently withdrawing (say) the garbage

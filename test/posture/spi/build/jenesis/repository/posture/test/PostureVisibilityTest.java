@@ -42,9 +42,9 @@ class PostureVisibilityTest {
 
     private static PostureReport report() {
         return PostureReport.from(List.of(advisor(
-                deployment("jenreg.auth.open"),
-                tenant("jenreg.tls.acme", "acme"),
-                tenant("jenreg.tls.globex", "globex"))), EMPTY);
+                deployment("jenrepo.auth.open"),
+                tenant("jenrepo.tls.acme", "acme"),
+                tenant("jenrepo.tls.globex", "globex"))), EMPTY);
     }
 
     private static List<String> ids(List<SecurityAdvisory> advisories) {
@@ -55,17 +55,17 @@ class PostureVisibilityTest {
     void a_tenants_caller_sees_the_deployment_rows_and_only_its_own() {
         assertThat(ids(report().visibleTo("acme")))
                 .as("its own tenant row and every deployment-wide one")
-                .containsExactlyInAnyOrder("jenreg.auth.open", "jenreg.tls.acme");
+                .containsExactlyInAnyOrder("jenrepo.auth.open", "jenrepo.tls.acme");
     }
 
     @Test
     void a_tenants_caller_never_sees_another_tenants_row() {
         assertThat(ids(report().visibleTo("acme")))
                 .as("the leak: another tenant's unsafe settings, on a surface that names the setting and its value")
-                .doesNotContain("jenreg.tls.globex");
+                .doesNotContain("jenrepo.tls.globex");
         assertThat(ids(report().visibleTo("globex")))
                 .as("and symmetrically, so this is not passing by an accident of ordering")
-                .containsExactlyInAnyOrder("jenreg.auth.open", "jenreg.tls.globex");
+                .containsExactlyInAnyOrder("jenrepo.auth.open", "jenrepo.tls.globex");
     }
 
     @Test
@@ -76,7 +76,7 @@ class PostureVisibilityTest {
             assertThat(ids(report().visibleTo(none)))
                     .as("a caller with no tenant (%s) gets the deployment rows and nothing tenant-scoped",
                             none == null ? "null" : "'" + none + "'")
-                    .containsExactly("jenreg.auth.open");
+                    .containsExactly("jenrepo.auth.open");
         }
     }
 
@@ -84,14 +84,14 @@ class PostureVisibilityTest {
     void an_unknown_tenant_sees_the_deployment_rows_alone_rather_than_everything() {
         assertThat(ids(report().visibleTo("nobody")))
                 .as("a tenant with no rows of its own must not fall through to the whole report")
-                .containsExactly("jenreg.auth.open");
+                .containsExactly("jenrepo.auth.open");
     }
 
     @Test
     void the_report_still_carries_every_row_so_the_legs_above_are_not_vacuous() {
         // If the report held only deployment rows, every assertion above would pass for the wrong reason.
         assertThat(ids(report().advisories()))
-                .contains("jenreg.auth.open", "jenreg.tls.acme", "jenreg.tls.globex");
+                .contains("jenrepo.auth.open", "jenrepo.tls.acme", "jenrepo.tls.globex");
         assertThat(report().scoped(Scope.TENANT)).as("and two of them really are tenant-scoped").hasSize(2);
     }
 

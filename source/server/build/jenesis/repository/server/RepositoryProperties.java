@@ -8,14 +8,14 @@ import org.springframework.boot.context.properties.ConfigurationProperties;
 import build.jenesis.repository.scope.Scopes;
 
 /**
- * The repository server's configuration, bound from {@code jenreg.*} - every dial the server itself binds, in one
+ * The repository server's configuration, bound from {@code jenrepo.*} - every dial the server itself binds, in one
  * class because there is one prefix and one deployment reading it. The storage backend reads its own root / bucket /
  * connection string from the same environment through {@code ArtifactStoreProvider}, so every composition shares one
  * config surface: the backend name ({@code filesystem} by default), the artifact space a request resolves to,
  * whether the wire is gated by the {@link Authorization} credential model (enforced by default; anonymous is an
  * explicit opt-out), the request routing and its per-repository definitions, an optional storage
  * {@link #getQuota() quota} and rate ceiling, the pull-through {@link #getProxy() proxy} upstreams keyed by format
- * name ({@code jenreg.proxy.<format>}), the compliance verdicts {@code LiveConfig} reads as the running gate's
+ * name ({@code jenrepo.proxy.<format>}), the compliance verdicts {@code LiveConfig} reads as the running gate's
  * fallback, and the cleanup dials.
  *
  * <p><b>It was two classes binding the same prefix</b>, one here and one in the server kernel layered above it,
@@ -31,14 +31,14 @@ import build.jenesis.repository.scope.Scopes;
  * routing, the browse and the maintenance surfaces resolve against, and which two nodes over one store must agree
  * on. A repository is always named by the request.
  */
-@ConfigurationProperties(prefix = "jenreg")
+@ConfigurationProperties(prefix = "jenrepo")
 public class RepositoryProperties {
 
     private String store = "filesystem";
 
     /** Enforce per-credential authorization. On by default - the secure default: a fresh deployment authorizes every
      *  request against a per-credential key. Anonymous/open mode is an <em>explicit opt-out</em>: an operator sets
-     *  {@code jenreg.auth=false} (env {@code JENREG_AUTH=false}), and the server logs a loud
+     *  {@code jenrepo.auth=false} (env {@code JENREPO_AUTH=false}), and the server logs a loud
      *  boot warning that it is running open so the choice is never silent. */
     private boolean auth = true;
 
@@ -51,7 +51,7 @@ public class RepositoryProperties {
      * authentication off, which is not a bootstrap, it is a different deployment.
      *
      * <p>Empty by default, so nothing changes for a deployment that already has keys. Set it once
-     * ({@code JENREG_BOOTSTRAP_KEY}), use it to issue the credentials you actually want, then unset it: it grants
+     * ({@code JENREPO_BOOTSTRAP_KEY}), use it to issue the credentials you actually want, then unset it: it grants
      * every right on every repository of its tenant, and it is a deploy-time secret rather than a stored one, so
      * it is re-provisioned on every boot for as long as it is set. The server logs a loud SECURITY line while it
      * is in effect, for the same reason {@code anonymous-rights} does.
@@ -70,8 +70,8 @@ public class RepositoryProperties {
      *  repository, and a {@code <repository>=<token>} entry scopes a token to one named repository - the same
      *  {@code <scope>/<surface>:<verb>} vocabulary a minted credential carries, so there is no new right vocabulary.
      *  Only meaningful under {@code auth=true}; a non-empty value under {@code auth=false} is redundant (already fully
-     *  open) and warns. The env spelling is {@code JENREG_ANONYMOUS_RIGHTS}. Paired with
-     *  {@code jenreg.read-only=true} and {@code anonymous-rights=repository:read} this is the public-mirror
+     *  open) and warns. The env spelling is {@code JENREPO_ANONYMOUS_RIGHTS}. Paired with
+     *  {@code jenrepo.read-only=true} and {@code anonymous-rights=repository:read} this is the public-mirror
      *  pattern: reads served anonymously while writes/admin stay key-gated and the store write-gate refuses
      *  internal writes. */
     private String anonymousRights = "";
@@ -124,7 +124,7 @@ public class RepositoryProperties {
     private boolean readOnly = false;
 
     /** Whether pull-through proxy reads that miss locally are fetched from the upstreams, caching and bridging them.
-     *  Named {@code proxy-enabled} to sit alongside the {@code jenreg.proxy.<format>} map,
+     *  Named {@code proxy-enabled} to sit alongside the {@code jenrepo.proxy.<format>} map,
      *  which owns the per-format upstream URLs (this distribution extends the schema rather than redefining its
      *  {@code proxy} key). */
     private boolean proxyEnabled = Boolean.parseBoolean(CoreDefaults.PROXY_ENABLED);
@@ -162,7 +162,7 @@ public class RepositoryProperties {
      *  so an unlisted CDN edge or a direct-to-origin request still serves the default tenant rather than being refused;
      *  the mapped tenant is validated as a traversal-free name before it scopes the store. A single plain {@code String}
      *  (not a {@code Map}) so a hostname's dots never become nested binding keys; the env spelling is
-     *  {@code JENREG_TENANT_HOSTS}. Only consulted under {@code tenancy=host}; ignored otherwise. */
+     *  {@code JENREPO_TENANT_HOSTS}. Only consulted under {@code tenancy=host}; ignored otherwise. */
     private String tenantHosts = "";
 
     /** Tenant whose credentials may drive the deployment-global API routes ({@code /api/settings}, {@code
@@ -184,7 +184,7 @@ public class RepositoryProperties {
 
     // The three licence dials (license-allowed, license-denied, license-unknown) are not fields here. Licence is a
     // discovered plugin dimension: its dials reach the gate through the settings lookup layered over the Spring
-    // environment, so a jenreg.license-* set in a properties file or as an environment variable works without this
+    // environment, so a jenrepo.license-* set in a properties file or as an environment variable works without this
     // bean, and binding it here would only create a second value that had to equal the first - and would drift from
     // it, with the deployment-info surface reporting the copy. A dial the server itself binds (malware-action,
     // vulnerability-threshold,
@@ -425,7 +425,7 @@ public class RepositoryProperties {
      *  every mutating admin action, plus internal writes (write-through proxy caching, import replay, a background
      *  sweep) - is refused at the {@link build.jenesis.repository.store.ReadOnlyArtifactStore} store choke point, while
      *  browse, download, search and all read APIs work normally. Off by default; a demo or a public read-only mirror
-     *  turns it on. The env spelling is {@code JENREG_READ_ONLY}. */
+     *  turns it on. The env spelling is {@code JENREPO_READ_ONLY}. */
     public boolean isReadOnly() {
         return readOnly;
     }
@@ -507,7 +507,7 @@ public class RepositoryProperties {
             String host = equals < 0 ? "" : pair.substring(0, equals).trim();
             String tenant = equals < 0 ? "" : pair.substring(equals + 1).trim();
             if (host.isEmpty() || tenant.isEmpty()) {
-                throw new IllegalArgumentException("Malformed jenreg.tenant-hosts entry '" + pair
+                throw new IllegalArgumentException("Malformed jenrepo.tenant-hosts entry '" + pair
                         + "': expected <host>=<tenant> such as acme.cdn.example.com=acme");
             }
             mapping.put(host.toLowerCase(Locale.ROOT), tenant);

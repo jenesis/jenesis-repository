@@ -40,7 +40,7 @@ class StoredListingSpoolPermissionsTest {
         Assumptions.assumeTrue(FileSystems.getDefault().supportedFileAttributeViews().contains("posix"),
                 "owner-only modes are only observable on a POSIX filesystem");
         ArtifactStore store = ArtifactStoreProvider.resolve("filesystem",
-                key -> "jenreg.filesystem.root".equals(key) ? root.toString() : null).scope("acme");
+                key -> "jenrepo.filesystem.root".equals(key) ? root.toString() : null).scope("acme");
         Path tmp = Path.of(System.getProperty("java.io.tmpdir"));
         Set<Path> before = spools(tmp);
 
@@ -119,7 +119,7 @@ class StoredListingSpoolPermissionsTest {
 
     private static Set<Path> spools(Path tmp) throws IOException {
         try (Stream<Path> files = Files.list(tmp)) {
-            return files.filter(p -> p.getFileName().toString().startsWith("jenreg-listing"))
+            return files.filter(p -> p.getFileName().toString().startsWith("jenrepo-listing"))
                     .collect(Collectors.toSet());
         }
     }

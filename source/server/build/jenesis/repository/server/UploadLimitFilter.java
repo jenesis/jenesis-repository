@@ -43,7 +43,7 @@ public class UploadLimitFilter extends OncePerRequestFilter {
      *  parse, or is negative, is the default rather than no bound. */
     public static LongSupplier live(UnaryOperator<String> lookup) {
         return () -> {
-            String configured = lookup.apply("jenreg." + KEY);
+            String configured = lookup.apply("jenrepo." + KEY);
             if (configured == null || configured.isBlank()) {
                 return DEFAULT;
             }

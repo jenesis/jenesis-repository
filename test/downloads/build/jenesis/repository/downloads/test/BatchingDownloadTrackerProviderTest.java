@@ -29,7 +29,7 @@ class BatchingDownloadTrackerProviderTest {
     @BeforeEach
     void setUp() {
         ArtifactStore backend = ArtifactStoreProvider.resolve("filesystem",
-                        key -> "jenreg.filesystem.root".equals(key) ? root.toString() : null)
+                        key -> "jenrepo.filesystem.root".equals(key) ? root.toString() : null)
                 .scope("default").scope("releases");
         inventories = (tenant, repository) -> new StoreRepositoryInventory(backend);
     }

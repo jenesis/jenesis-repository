@@ -59,25 +59,25 @@ public class GateWiringConfig {
     @Bean(destroyMethod = "close")
     public AutoCloseable complianceScreenFeedMissesWiring(MeterRegistry meterRegistry) {
         // Count a commit-time feed re-query the warm cache could not answer (a feed failing closed with
-        // nothing cached) as jenreg.gate.advisory.persist.miss tagged by feed - the gate module hands the count
+        // nothing cached) as jenrepo.gate.advisory.persist.miss tagged by feed - the gate module hands the count
         // through a plain callback and stays registry-free, the Micrometer counter is created here in the distribution.
         return ComplianceScreen.advisoryFeedMisses(feed ->
-                meterRegistry.counter("jenreg.gate.advisory.persist.miss", "feed", feed).increment());
+                meterRegistry.counter("jenrepo.gate.advisory.persist.miss", "feed", feed).increment());
     }
 
     @Bean(destroyMethod = "close")
     public AutoCloseable gateVerdictsWiring(MeterRegistry meterRegistry) {
-        // Count every committed gate verdict, on EVERY publish path (deploy, staging, batch), as jenreg.gate.verdicts
+        // Count every committed gate verdict, on EVERY publish path (deploy, staging, batch), as jenrepo.gate.verdicts
         // tagged by format and verdict - the gate module stays registry-free by handing the count through a plain
         // callback, and the Micrometer counter is created here in the distribution.
         return ComplianceScreen.verdicts((format, verdict) ->
-                meterRegistry.counter("jenreg.gate.verdicts", "format", format, "verdict", verdict).increment());
+                meterRegistry.counter("jenrepo.gate.verdicts", "format", format, "verdict", verdict).increment());
     }
 
     @Bean(destroyMethod = "close")
     public AutoCloseable complianceScreenStrictHoldMappingWiring(LiveConfig liveConfig) {
         // Whether the publish-time hold-mapping round-trip check throws (failing the publish) or only
-        // alarms is jenreg.strict-hold-mapping, read through the same live effective config the gate dials
+        // alarms is jenrepo.strict-hold-mapping, read through the same live effective config the gate dials
         // are, so it applies on the next settings re-read like every other dial. Off by default (production stays
         // alarm-not-abort - a broken blobs-namespace format must not DoS publishes); the test config flips it on.
         return ComplianceScreen.strictHoldMapping(liveConfig::strictHoldMapping);
@@ -86,20 +86,20 @@ public class GateWiringConfig {
     @Bean(destroyMethod = "close")
     public AutoCloseable complianceScreenHoldMappingBrokenWiring(MeterRegistry meterRegistry) {
         // Count a publish whose blobs-namespace format resolves no served path or content hash for the artifact it just
-        // laid out as jenreg.publish.holdmapping.broken tagged by ecosystem - the publish-time sibling of the sweep's
-        // jenreg.vulnerabilities.hold.unenforceable gauge, the production backstop even when strict mode is off.
+        // laid out as jenrepo.publish.holdmapping.broken tagged by ecosystem - the publish-time sibling of the sweep's
+        // jenrepo.vulnerabilities.hold.unenforceable gauge, the production backstop even when strict mode is off.
         // Registry-free like the verdicts meter: the gate module hands the count through a plain callback, the
         // Micrometer counter is created here in the distribution.
         return ComplianceScreen.holdMappingBroken(eco ->
-                meterRegistry.counter("jenreg.publish.holdmapping.broken", "eco", eco).increment());
+                meterRegistry.counter("jenrepo.publish.holdmapping.broken", "eco", eco).increment());
     }
 
     @Bean(destroyMethod = "close")
     public AutoCloseable complianceScreenUnparseableWiring(MeterRegistry meterRegistry) {
-        // Count every artifact an inspector could not parse as jenreg.gate.unparseable tagged by format - the
+        // Count every artifact an inspector could not parse as jenrepo.gate.unparseable tagged by format - the
         // make-errors-visible diagnostic beside the WARNING the screen logs. Registry-free like the verdicts meter:
         // the gate module hands the count through a plain callback, the Micrometer counter is created here.
         return ComplianceScreen.unparseableArtifacts(format ->
-                meterRegistry.counter("jenreg.gate.unparseable", "format", format).increment());
+                meterRegistry.counter("jenrepo.gate.unparseable", "format", format).increment());
     }
 }

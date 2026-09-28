@@ -28,7 +28,7 @@ public class RepositoryShapeBadgeTest {
     @BeforeEach
     void setUp() {
         ArtifactStore store = ArtifactStoreProvider.resolve("filesystem",
-                key -> "jenreg.filesystem.root".equals(key) ? root.toString() : null);
+                key -> "jenrepo.filesystem.root".equals(key) ? root.toString() : null);
         settings = new SettingsAdmin(store);
     }
 

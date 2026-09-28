@@ -100,7 +100,7 @@ public abstract class TenantScope {
      *  logging and tracing together. The tenant is read null-tolerantly (the wrapper records {@code none} when no
      *  tenant is selected) rather than through the throwing {@link #tenant()} accessor the store scoping uses. */
     final <T> T observe(String action, String repository, AdminCall<T> call) throws IOException {
-        return Observations.observe(observations, "jenreg.ui.admin", repository, current.name(), observation -> {
+        return Observations.observe(observations, "jenrepo.ui.admin", repository, current.name(), observation -> {
             observation.lowCardinalityKeyValue("action", action);
             return call.call(observation);
         });

@@ -37,7 +37,7 @@ class ProductSpaceTenantEnumerationTest {
 
     private ArtifactStore store() {
         return ArtifactStoreProvider.resolve("filesystem",
-                key -> "jenreg.filesystem.root".equals(key) ? root.toString() : null);
+                key -> "jenrepo.filesystem.root".equals(key) ? root.toString() : null);
     }
 
     /** Put a real object in each of the product's spaces, the way the product's own writes do. */

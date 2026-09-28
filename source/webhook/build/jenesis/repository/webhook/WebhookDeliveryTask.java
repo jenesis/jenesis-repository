@@ -29,7 +29,7 @@ import build.jenesis.repository.store.ArtifactStore;
  *       and reaches an operator on {@code GET /api/webhook}; the {@code webhook-allow-internal} opt-out - deployment-
  *       global, so no tenant admin can take it alone - permits it for a trusted internal receiver.</li>
  *   <li><b>An unsigned endpoint is reported, not refused.</b> Whether a secretless {@code https} URL is safe depends
- *       on the receiver, which this side cannot see, so the pass publishes {@code jenreg.webhook.unsigned} instead of
+ *       on the receiver, which this side cannot see, so the pass publishes {@code jenrepo.webhook.unsigned} instead of
  *       guessing (see {@link WebhookEndpoint#signed()}).</li>
  * </ol>
  *
@@ -113,10 +113,10 @@ public final class WebhookDeliveryTask implements MaintenanceTask {
         int reclaimed = outbox.prunePark(context.now(),
                 OutboxSettings.PARKED_RETENTION.resolve(context.config()).orElse(null),
                 OutboxSettings.parkedCap(context.config()));
-        context.gauge("jenreg.webhook.parked.reclaimed",
+        context.gauge("jenrepo.webhook.parked.reclaimed",
                 "Parked webhook deliveries removed by the backlog's retention this pass",
                 Map.of("repository", context.repository()), reclaimed);
-        context.gauge("jenreg.webhook.unsigned", "Configured webhook endpoints delivered without a signature",
+        context.gauge("jenrepo.webhook.unsigned", "Configured webhook endpoints delivered without a signature",
                 Map.of("repository", context.repository()),
                 configured.stream().filter(endpoint -> !endpoint.signed()).count());
         if (spec == null || spec.isBlank()) {
@@ -236,23 +236,23 @@ public final class WebhookDeliveryTask implements MaintenanceTask {
      * <p>The peer of {@code ForwardingTask.depths}, and one mechanism with it: like concerns are treated alike.
      * Written only where the pass found work, each early return would leave the previous pass's numbers standing and
      * a drained queue would be indistinguishable from a module that had stopped running - the same reason
-     * {@code jenreg.webhook.unsigned} sits above these very returns.
+     * {@code jenrepo.webhook.unsigned} sits above these very returns.
      *
      * <p>What is true at each exit differs: the no-endpoint exit has just emptied the queue and reports nothing,
      * while the two retain-on-misconfiguration exits keep theirs and report its real depth. Reporting zero there
      * would trade a stale gauge for a lying one.
      */
     private static void depths(RepositoryContext context, long pending, long parked) {
-        context.gauge("jenreg.webhook.pending", "Events queued for webhook delivery",
+        context.gauge("jenrepo.webhook.pending", "Events queued for webhook delivery",
                 Map.of("repository", context.repository()), pending);
-        context.gauge("jenreg.webhook.parked", "Webhook entries parked after a terminal failure",
+        context.gauge("jenrepo.webhook.parked", "Webhook entries parked after a terminal failure",
                 Map.of("repository", context.repository()), parked);
     }
 
-    /** Count one webhook delivery transition ({@code jenreg.webhook.deliveries}), tagged by endpoint and outcome
+    /** Count one webhook delivery transition ({@code jenrepo.webhook.deliveries}), tagged by endpoint and outcome
      *  ({@code delivered}/{@code failed}/{@code parked}) - a monotonic counter beside the pending/parked gauges. */
     private static void deliveries(RepositoryContext context, String endpoint, String outcome) {
-        context.counter("jenreg.webhook.deliveries", "Webhook delivery transitions",
+        context.counter("jenrepo.webhook.deliveries", "Webhook delivery transitions",
                 Map.of("endpoint", endpoint, "outcome", outcome), 1);
     }
 

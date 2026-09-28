@@ -177,7 +177,7 @@ public class GcsConditionalWriteTest {
         assertThatThrownBy(() -> GcsArtifactStoreProvider.secureEndpoint("http://localhost:9000", null))
                 .isInstanceOf(IllegalStateException.class)
                 .hasMessageContaining("https")
-                .hasMessageContaining("jenreg.gcs.allow-insecure-endpoint");
+                .hasMessageContaining("jenrepo.gcs.allow-insecure-endpoint");
         assertThat(GcsArtifactStoreProvider.secureEndpoint("http://localhost:9000", "true"))
                 .as("the opt-out permits a plaintext emulator endpoint")
                 .isEqualTo(URI.create("http://localhost:9000"));
@@ -188,7 +188,7 @@ public class GcsConditionalWriteTest {
 
     @Test
     public void a_missing_bucket_setting_is_a_clear_configuration_error() {
-        assertThatThrownBy(() -> ArtifactStoreProvider.resolve("gcs", Map.of("jenreg.gcs.credentials", GcsArtifactStoreProvider.ANONYMOUS)::get))
-                .hasMessageContaining("jenreg.gcs.bucket");
+        assertThatThrownBy(() -> ArtifactStoreProvider.resolve("gcs", Map.of("jenrepo.gcs.credentials", GcsArtifactStoreProvider.ANONYMOUS)::get))
+                .hasMessageContaining("jenrepo.gcs.bucket");
     }
 }

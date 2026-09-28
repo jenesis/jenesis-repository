@@ -29,7 +29,7 @@ import build.jenesis.repository.maintenance.RepositoryContext;
  * <p><strong>A failed draw fails the pass.</strong> {@code MaintenanceTask} clause 4 is explicit that a unit which
  * could not do its work must throw rather than return quietly, or an index unrebuilt for a week is indistinguishable
  * from a healthy one. So a source whose refresh did not land is named in an {@link IOException} the scheduler logs and
- * counts on {@code jenreg.maintenance.failures}. The refresh itself stays fail-soft where it must be: the
+ * counts on {@code jenrepo.maintenance.failures}. The refresh itself stays fail-soft where it must be: the
  * prior-good catalogue keeps serving and the gate keeps deciding - but an outage is <em>counted</em> instead of being
  * a silent lazy-load nobody watches.
  */

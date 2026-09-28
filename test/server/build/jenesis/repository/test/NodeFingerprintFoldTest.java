@@ -31,18 +31,18 @@ class NodeFingerprintFoldTest {
     /** Every must-match setting at an agreed value, so a caller changes exactly the one it is asking about. */
     private static Map<String, String> agreed(String node) {
         Map<String, String> config = new TreeMap<>();
-        config.put("jenreg.consistency.node-id", node);
-        config.put("jenreg.store", "filesystem");
-        config.put("jenreg.operator-tenant", "operator");
-        config.put("jenreg.default-tenant", "acme");
-        config.put("jenreg.auth", "false");
-        config.put("jenreg.read-only", "false");
+        config.put("jenrepo.consistency.node-id", node);
+        config.put("jenrepo.store", "filesystem");
+        config.put("jenrepo.operator-tenant", "operator");
+        config.put("jenrepo.default-tenant", "acme");
+        config.put("jenrepo.auth", "false");
+        config.put("jenrepo.read-only", "false");
         return config;
     }
 
     private static boolean divergesOn(Path root, String setting, String other) throws IOException {
         ArtifactStore store = ArtifactStoreProvider.resolve("filesystem",
-                key -> "jenreg.filesystem.root".equals(key) ? root.toString() : null);
+                key -> "jenrepo.filesystem.root".equals(key) ? root.toString() : null);
         Map<String, String> a = agreed("node-a");
         Map<String, String> b = agreed("node-b");
         b.put(setting, other);
@@ -58,7 +58,7 @@ class NodeFingerprintFoldTest {
     @Test
     void two_nodes_agreeing_on_every_folded_setting_converge(@TempDir Path root) throws IOException {
         // The vacuity guard: if this said "diverged", every row below would pass for the wrong reason.
-        assertThat(divergesOn(root, "jenreg.consistency.node-id", "node-b"))
+        assertThat(divergesOn(root, "jenrepo.consistency.node-id", "node-b"))
                 .as("nodes that agree on every must-match setting converge; only the node id differs")
                 .isFalse();
     }
@@ -66,11 +66,11 @@ class NodeFingerprintFoldTest {
     @TestFactory
     Stream<DynamicTest> every_must_match_setting_makes_two_nodes_diverge(@TempDir Path root) {
         Map<String, String> differing = new LinkedHashMap<>();
-        differing.put("jenreg.store", "s3");
-        differing.put("jenreg.operator-tenant", "other-operator");
-        differing.put("jenreg.default-tenant", "globex");
-        differing.put("jenreg.auth", "true");
-        differing.put("jenreg.read-only", "true");
+        differing.put("jenrepo.store", "s3");
+        differing.put("jenrepo.operator-tenant", "other-operator");
+        differing.put("jenrepo.default-tenant", "globex");
+        differing.put("jenrepo.auth", "true");
+        differing.put("jenrepo.read-only", "true");
         AtomicInteger cell = new AtomicInteger();
         return differing.entrySet().stream().map(entry -> DynamicTest.dynamicTest(entry.getKey(), () ->
                 assertThat(divergesOn(root.resolve("cell-" + cell.incrementAndGet()), entry.getKey(),

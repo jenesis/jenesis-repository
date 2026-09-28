@@ -1,10 +1,10 @@
 # Jenesis Repository on Cloud Run, backed by Google Cloud Storage (the cloud's native object store).
-# Provisions a GCS bucket and a Cloud Run service running the image with JENREG_STORE=gcs pointed at
+# Provisions a GCS bucket and a Cloud Run service running the image with JENREPO_STORE=gcs pointed at
 # the bucket. The service runs as a service account that holds objectAdmin on the bucket, and that is
 # the whole store credential: the gcs backend speaks the JSON API through Application Default
 # Credentials, so on Cloud Run the metadata server hands it a token and no key is minted, stored or
 # rotated. Every further setting is an entry of `environment` (plain) or `secrets` (Secret Manager),
-# under the setting's JENREG_* name.
+# under the setting's JENREPO_* name.
 #
 # NOTE: authored from the documented resource shapes and checked with `terraform validate`; NOT
 # deploy-validated (no GCP project was at hand). Review before relying on it.
@@ -81,8 +81,8 @@ resource "google_secret_manager_secret_iam_member" "setting" {
 # this template provisions is the one the service must use.
 locals {
   plain_env = merge(var.environment, {
-    JENREG_STORE      = "gcs"
-    JENREG_GCS_BUCKET = google_storage_bucket.repository.name
+    JENREPO_STORE      = "gcs"
+    JENREPO_GCS_BUCKET = google_storage_bucket.repository.name
   })
 }
 

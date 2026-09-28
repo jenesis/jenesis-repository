@@ -22,7 +22,7 @@ class PageTest {
 
     private ArtifactStore store() {
         return ArtifactStoreProvider.resolve(
-                "filesystem", key -> "jenreg.filesystem.root".equals(key) ? root.toString() : null);
+                "filesystem", key -> "jenrepo.filesystem.root".equals(key) ? root.toString() : null);
     }
 
     /** The filesystem store behind the interface's default {@code page}, so the fallback is what runs. */

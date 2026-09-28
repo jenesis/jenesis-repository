@@ -38,7 +38,7 @@
                      th:attr="data-search=${check.name() + ' ' + check.description() + ' ' + check.status().name()}">
                 <div class="module-head">
                     <div>
-                        <strong th:text="${check.name()}">jenreg.feature.check</strong>
+                        <strong th:text="${check.name()}">jenrepo.feature.check</strong>
                         <br><small class="setting-doc" th:text="${check.description()}">What this check means.</small>
                         <br><small th:if="${!check.detail().isEmpty()}"><code th:text="${check.detail()}">detail</code></small>
                     </div>
@@ -56,7 +56,7 @@
                      th:attr="data-search=${metric.name() + ' ' + metric.description() + ' ' + metric.unit()}">
                 <div class="module-head">
                     <div>
-                        <strong th:text="${metric.name()}">jenreg.feature.signal</strong>
+                        <strong th:text="${metric.name()}">jenrepo.feature.signal</strong>
                         <br><small class="setting-doc" th:text="${metric.description()}">What this metric means.</small>
                     </div>
                     <div class="module-badges">
@@ -85,7 +85,7 @@
                      th:attr="data-search=${task.name() + ' ' + task.description() + ' ' + task.state().name()}">
                 <div class="module-head">
                     <div>
-                        <strong th:text="${task.name()}">jenreg.feature.task</strong>
+                        <strong th:text="${task.name()}">jenrepo.feature.task</strong>
                         <br><small class="setting-doc" th:text="${task.description()}">What this task does.</small>
                         <br><small th:if="${task.everRan()}">last run
                             <span th:text="${instants.display(task.lastRun())}">time</span>

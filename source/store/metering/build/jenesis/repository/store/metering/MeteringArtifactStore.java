@@ -6,7 +6,7 @@ import io.micrometer.core.instrument.MeterRegistry;
 import io.micrometer.core.instrument.Timer;
 
 /**
- * An {@link ArtifactStore} decorator that times each store operation as {@code jenreg.store.operations}, tagged by
+ * An {@link ArtifactStore} decorator that times each store operation as {@code jenrepo.store.operations}, tagged by
  * the operation ({@code op}), the configured backend ({@code backend}: filesystem, s3, azure, ...) and the
  * {@code outcome} ({@code ok}/{@code error}) - so a deployment sees per-backend store latency the same way the
  * quota decorator meters bytes. It is wired only in the distribution, and only when a {@link MeterRegistry} is
@@ -224,7 +224,7 @@ public final class MeteringArtifactStore implements ArtifactStore {
     private void record(String op, String key, String outcome, long startNanos) {
         if (registry != null) {   // the timers need a registry; the counts below are the node's own and never do
             timers.computeIfAbsent(op + '\0' + outcome, _ ->
-                            registry.timer("jenreg.store.operations", "op", op, "backend", backend, "outcome", outcome))
+                            registry.timer("jenrepo.store.operations", "op", op, "backend", backend, "outcome", outcome))
                     .record(System.nanoTime() - startNanos, TimeUnit.NANOSECONDS);
         }
         COUNTS.computeIfAbsent(op, _ -> new LongAdder()).increment();
@@ -261,7 +261,7 @@ public final class MeteringArtifactStore implements ArtifactStore {
     }
 
     /** Every operation this node has issued to its store, by name, since it started - the count the observability
-     *  report carries as {@code jenreg.store.ops.<op>}, so a suite that drives the product as booted can hold a
+     *  report carries as {@code jenrepo.store.ops.<op>}, so a suite that drives the product as booted can hold a
      *  download, a publish or a walked object to a standard of reads and writes, and a soak can show the operations
      *  per request staying flat as the store fills. The Micrometer timer above is per backend and outcome for a
      *  dashboard; this is the plain count a harness reads over HTTP. */

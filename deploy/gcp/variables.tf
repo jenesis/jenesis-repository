@@ -52,7 +52,7 @@ variable "allow_unauthenticated" {
     Whether to grant run.invoker to allUsers, making the Cloud Run service reachable by anonymous
     callers at the network layer. Secure default is false: a stock apply keeps the service PRIVATE
     (only IAM-authorized principals can invoke it), matching the server's auth-on default
-    (jenreg.auth is enforced unless explicitly set to false). To expose the service on the
+    (jenrepo.auth is enforced unless explicitly set to false). To expose the service on the
     public internet - relying on the repository's own per-credential key auth for access control - set
     allow_unauthenticated = true.
   EOT
@@ -62,8 +62,8 @@ variable "environment" {
   type        = map(string)
   default     = {}
   description = <<-EOT
-    Further settings, as plain environment variables: any jenreg.* key under its JENREG_* name (Spring's relaxed
-    binding), e.g. { JENREG_MAVEN = "false" } to drop a format. The store selection is the template's and wins
+    Further settings, as plain environment variables: any jenrepo.* key under its JENREPO_* name (Spring's relaxed
+    binding), e.g. { JENREPO_MAVEN = "false" } to drop a format. The store selection is the template's and wins
     over an entry here.
   EOT
 }
@@ -75,7 +75,7 @@ variable "secrets" {
   description = <<-EOT
     Settings that are credentials, each stored in Secret Manager and handed to the container as the environment
     variable it is keyed by. The first two a deployment wants, since authentication is on by default:
-    JENREG_BOOTSTRAP_KEY, the API key the server provisions at boot, and JENREG_UI_ADMIN_KEY, the key that signs
+    JENREPO_BOOTSTRAP_KEY, the API key the server provisions at boot, and JENREPO_UI_ADMIN_KEY, the key that signs
     into the console's first-run setup. A vendor feed's token goes here too; supplying it is what switches the
     feed on.
   EOT

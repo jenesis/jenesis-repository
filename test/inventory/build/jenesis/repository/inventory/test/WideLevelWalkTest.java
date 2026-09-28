@@ -36,7 +36,7 @@ class WideLevelWalkTest {
     @BeforeEach
     void setUp() throws IOException {
         ArtifactStore backend = ArtifactStoreProvider.resolve("filesystem",
-                        key -> "jenreg.filesystem.root".equals(key) ? root.toString() : null)
+                        key -> "jenrepo.filesystem.root".equals(key) ? root.toString() : null)
                 .scope("default").scope("releases");
         Publication publication = new Publication(backend);
         StoreRepositoryInventory recording = new StoreRepositoryInventory(backend);

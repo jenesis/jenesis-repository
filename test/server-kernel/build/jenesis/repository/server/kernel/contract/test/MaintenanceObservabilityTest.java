@@ -26,11 +26,11 @@ import static org.assertj.core.api.Assertions.assertThat;
 /**
  * {@link MaintenanceObservability}, the scheduler's own face, surfaces each enabled maintenance task's last-run / status
  * through the observation seam: one {@link TaskStatus} per enabled task of the
- * {@link MaintenanceScheduler}, named per the {@code jenreg.maintenance.<task>} grammar. A task that ran cleanly
+ * {@link MaintenanceScheduler}, named per the {@code jenrepo.maintenance.<task>} grammar. A task that ran cleanly
  * reports an {@code IDLE} status stamped with its last-run instant, a task whose pass failed reports {@code FAILED}, a
  * never-run enabled task reports pending ({@code UNKNOWN}), and a scheduler with no enabled task contributes no task
  * signal. Beside them sits one row for the worker <em>loop</em>
- * ({@code jenreg.maintenance.worker}), which is what separates "no pass is enabled" and "the worker stopped
+ * ({@code jenrepo.maintenance.worker}), which is what separates "no pass is enabled" and "the worker stopped
  * and every pass with it" - two conditions the per-task rows read identically. It is reported from the context that
  * built the scheduler, so two contexts in one JVM each report their own.
  */
@@ -47,7 +47,7 @@ class MaintenanceObservabilityTest {
     @BeforeEach
     void setUp() throws IOException {
         store = ArtifactStoreProvider.resolve("filesystem",
-                key -> "jenreg.filesystem.root".equals(key) ? root.toString() : null);
+                key -> "jenrepo.filesystem.root".equals(key) ? root.toString() : null);
         RepositoryProperties properties = new RepositoryProperties();
         properties.setProxyEnabled(false);
         LiveConfig live = new LiveConfig(new Settings(store), properties, AdvisorySource.none(), _ -> null);
@@ -61,7 +61,7 @@ class MaintenanceObservabilityTest {
         MaintenanceScheduler scheduler = schedulerWith(task("cleanup-observed", false));
         scheduler.runNow(NOW);
 
-        TaskStatus status = find(new MaintenanceObservability(scheduler).taskStatuses(), "jenreg.maintenance.cleanup.observed");
+        TaskStatus status = find(new MaintenanceObservability(scheduler).taskStatuses(), "jenrepo.maintenance.cleanup.observed");
         assertThat(status.state()).as("a clean run is IDLE between passes, not FAILED").isEqualTo(TaskStatus.State.IDLE);
         assertThat(status.everRan()).as("a completed pass records a last-run instant").isTrue();
         assertThat(status.lastRun()).isNotNull();
@@ -76,7 +76,7 @@ class MaintenanceObservabilityTest {
         MaintenanceScheduler scheduler = schedulerWith(task("scan", true));
         scheduler.runNow(NOW);
 
-        TaskStatus status = find(new MaintenanceObservability(scheduler).taskStatuses(), "jenreg.maintenance.scan");
+        TaskStatus status = find(new MaintenanceObservability(scheduler).taskStatuses(), "jenrepo.maintenance.scan");
         assertThat(status.state()).isEqualTo(TaskStatus.State.FAILED);
         assertThat(status.everRan()).as("the failed attempt is still stamped with a last-run instant").isTrue();
     }
@@ -86,7 +86,7 @@ class MaintenanceObservabilityTest {
         MaintenanceScheduler scheduler = schedulerWith(task("reanalyze", false));
         // No runNow: the task is enabled but has not run yet.
 
-        TaskStatus status = find(new MaintenanceObservability(scheduler).taskStatuses(), "jenreg.maintenance.reanalyze");
+        TaskStatus status = find(new MaintenanceObservability(scheduler).taskStatuses(), "jenrepo.maintenance.reanalyze");
         assertThat(status.state()).as("a never-run enabled task is pending, not IDLE or FAILED")
                 .isEqualTo(TaskStatus.State.UNKNOWN);
         assertThat(status.everRan()).isFalse();
@@ -108,8 +108,8 @@ class MaintenanceObservabilityTest {
         List<TaskStatus> statuses = new MaintenanceObservability(schedulerWith()).taskStatuses();
         assertThat(statuses).extracting(TaskStatus::name)
                 .as("the worker row, and nothing else - no pass is enabled to report")
-                .containsExactly("jenreg.maintenance.worker");
-        assertThat(find(statuses, "jenreg.maintenance.worker").state())
+                .containsExactly("jenrepo.maintenance.worker");
+        assertThat(find(statuses, "jenrepo.maintenance.worker").state())
                 .as("no pass enabled is DISABLED, not FAILED - the worker has nothing to schedule")
                 .isEqualTo(TaskStatus.State.DISABLED);
     }
@@ -121,7 +121,7 @@ class MaintenanceObservabilityTest {
         // own liveness has to be a row of its own.
         MaintenanceScheduler scheduler = schedulerWith(task("reanalyze", false));
 
-        TaskStatus stopped = find(new MaintenanceObservability(scheduler).taskStatuses(), "jenreg.maintenance.worker");
+        TaskStatus stopped = find(new MaintenanceObservability(scheduler).taskStatuses(), "jenrepo.maintenance.worker");
         assertThat(stopped.state())
                 .as("an enabled scheduler whose worker is not running is FAILED, however quiet the task rows are")
                 .isEqualTo(TaskStatus.State.FAILED);
@@ -135,7 +135,7 @@ class MaintenanceObservabilityTest {
             for (int attempt = 0; attempt < 2_000 && scheduler.worker().lastIteration() == null; attempt++) {
                 Thread.sleep(10L);
             }
-            TaskStatus running = find(new MaintenanceObservability(scheduler).taskStatuses(), "jenreg.maintenance.worker");
+            TaskStatus running = find(new MaintenanceObservability(scheduler).taskStatuses(), "jenrepo.maintenance.worker");
             assertThat(running.state())
                     .as("a started worker with nothing due is IDLE - it found nothing to do, which is not the same "
                             + "thing as not running")
@@ -143,7 +143,7 @@ class MaintenanceObservabilityTest {
             assertThat(running.lastRun())
                     .as("stamped with the loop's own iteration, so the reading is liveness rather than work")
                     .isNotNull();
-            assertThat(find(new MaintenanceObservability(scheduler).taskStatuses(), "jenreg.maintenance.reanalyze").state())
+            assertThat(find(new MaintenanceObservability(scheduler).taskStatuses(), "jenrepo.maintenance.reanalyze").state())
                     .as("while the pass itself is still pending, exactly as before")
                     .isEqualTo(TaskStatus.State.UNKNOWN);
         } finally {
@@ -161,13 +161,13 @@ class MaintenanceObservabilityTest {
         ObservabilityReport report = ObservabilityReport.of(List.of(new MaintenanceObservability(scheduler)));
         assertThat(report.tasks().stream().map(TaskStatus::name))
                 .as("a context reports the scheduler it built")
-                .contains("jenreg.maintenance.forwarding")
-                .doesNotContain("jenreg.maintenance.elsewhere");
+                .contains("jenrepo.maintenance.forwarding")
+                .doesNotContain("jenrepo.maintenance.elsewhere");
         assertThat(ObservabilityReport.of(List.of(new MaintenanceObservability(another))).tasks().stream()
                 .map(TaskStatus::name))
                 .as("and a second context in the same JVM reports its own")
-                .contains("jenreg.maintenance.elsewhere")
-                .doesNotContain("jenreg.maintenance.forwarding");
+                .contains("jenrepo.maintenance.elsewhere")
+                .doesNotContain("jenrepo.maintenance.forwarding");
     }
 
     private MaintenanceScheduler schedulerWith(MaintenanceTask... tasks) {

@@ -18,11 +18,11 @@ import org.springframework.context.annotation.FilterType;
  * order-1 chain, and registering that chain for a cache nobody serves would leave a permitted path space in front
  * of a controller that is not there.
  *
- * <p>Default on: an application carrying the cache module meant to serve it. {@code jenreg.build-cache=false}
+ * <p>Default on: an application carrying the cache module meant to serve it. {@code jenrepo.build-cache=false}
  * takes it out.
  */
 @Configuration(proxyBeanMethods = false)
-@ConditionalOnProperty(name = "jenreg." + CacheNode.GATE, havingValue = "true", matchIfMissing = true)
+@ConditionalOnProperty(name = "jenrepo." + CacheNode.GATE, havingValue = "true", matchIfMissing = true)
 @ComponentScan(basePackages = "build.jenesis.repository.cache.server",
         // The cache's own entry point, which a composing launcher replaces - and the cache node's own report
         // endpoint, since a composing launcher answers the same path for the whole process over the same store.

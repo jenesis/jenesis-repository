@@ -9,9 +9,9 @@
  * decided, and the web console ({@code ui}) - so the packaging {@code bundle} step emits a {@code bundle.zip}
  * carrying the complete free product, and the {@code Dockerfile} turns that one zip into the image.
  * Nothing here names a plugin: the server keeps discovering everything through {@code ServiceLoader}, and the image
- * is trimmed by configuration instead of rebuilt - {@code jenreg.<feature>=false} (settable as
- * {@code JENREG_<FEATURE>=false} through relaxed binding) disables an implementation exactly as if its
- * module were absent, and {@code jenreg.<spi>=<feature>} selects among exclusive implementations
+ * is trimmed by configuration instead of rebuilt - {@code jenrepo.<feature>=false} (settable as
+ * {@code JENREPO_<FEATURE>=false} through relaxed binding) disables an implementation exactly as if its
+ * module were absent, and {@code jenrepo.<spi>=<feature>} selects among exclusive implementations
  * (the store defaults to {@code filesystem}), per the {@code build.jenesis.repository.store.Features} convention.
  *
  * <p>{@link build.jenesis.repository.bundle.Server} boots the repository server under the config name
@@ -50,7 +50,7 @@ open module build.jenesis.repository.bundle {
     // Console sign-in through GitHub or any OpenID Connect issuer, off until a provider is configured.
     requires build.jenesis.repository.auth.keylogin;
     requires build.jenesis.repository.auth.oidc;
-    // Console sign-in against an LDAP or Active Directory server, off until jenreg.ui.ldap.url names one.
+    // Console sign-in against an LDAP or Active Directory server, off until jenrepo.ui.ldap.url names one.
     requires build.jenesis.repository.auth.ldap;
     requires build.jenesis.repository.proxy;
     requires build.jenesis.repository.ratelimit;

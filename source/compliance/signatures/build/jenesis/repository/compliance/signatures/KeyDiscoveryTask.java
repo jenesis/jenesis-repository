@@ -331,11 +331,11 @@ public final class KeyDiscoveryTask implements MaintenanceTask {
             }
         }
         Map<String, String> tags = Map.of("tenant", context.tenant(), "repository", context.repository());
-        context.counter("jenreg.signature.keys.discovered", "Signing keys fetched from a discovery source", tags,
+        context.counter("jenrepo.signature.keys.discovered", "Signing keys fetched from a discovery source", tags,
                 discovered);
-        context.counter("jenreg.signature.keys.missed", "Wanted signing keys no discovery source had", tags,
+        context.counter("jenrepo.signature.keys.missed", "Wanted signing keys no discovery source had", tags,
                 missed);
-        context.counter("jenreg.signature.keys.unavailable", "Wanted signing keys a discovery source could not be "
+        context.counter("jenrepo.signature.keys.unavailable", "Wanted signing keys a discovery source could not be "
                 + "asked for", tags, failed);
         if (discovered + missed + failed + settled > 0) {
             LOGGER.log(System.Logger.Level.INFO, "Key discovery for " + context.tenant() + "/" + context.repository()

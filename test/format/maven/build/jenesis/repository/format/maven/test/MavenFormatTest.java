@@ -30,7 +30,7 @@ class MavenFormatTest {
     @BeforeEach
     void setUp() {
         store = ArtifactStoreProvider.resolve(
-                "filesystem", key -> "jenreg.filesystem.root".equals(key) ? root.toString() : null);
+                "filesystem", key -> "jenrepo.filesystem.root".equals(key) ? root.toString() : null);
         publication = new Publication(store);
     }
 

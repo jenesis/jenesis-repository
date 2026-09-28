@@ -33,7 +33,7 @@ public class MavenRouterTest {
     @BeforeAll
     public void setUp() throws IOException {
         ArtifactStore store = ArtifactStoreProvider.resolve("filesystem",
-                key -> "jenreg.filesystem.root".equals(key) ? root.toString() : null);
+                key -> "jenrepo.filesystem.root".equals(key) ? root.toString() : null);
         Map<String, byte[]> upstream = Map.of("http://central/org/lib/dep/2.0/dep-2.0.jar",
                 "the dependency jar".getBytes(StandardCharsets.UTF_8));
         fetches = new AtomicInteger();

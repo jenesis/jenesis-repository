@@ -3,7 +3,7 @@ package build.jenesis.repository.posture;
 import module java.base;
 
 /**
- * How {@code jenreg.ui.admins} is read: one rule, for everything that reads it.
+ * How {@code jenrepo.ui.admins} is read: one rule, for everything that reads it.
  *
  * <p>It is a comma-separated list of provider-qualified ids, trimmed, with empty entries dropped, and
  * {@link #EVERYONE} is meaningful within it - {@code alice,*} carries the wildcard exactly as a bare {@code *} does,
@@ -57,7 +57,7 @@ public final class ConsoleAdmins {
 
     /** The refusal every reader gives, worded once. */
     public static String refusal() {
-        return "jenreg.ui.admins=" + EVERYONE + " is refused: an administrator is a holder of rights, and the "
+        return "jenrepo.ui.admins=" + EVERYONE + " is refused: an administrator is a holder of rights, and the "
                 + "wildcard names no holder - nothing is granted that an operator could read back, revoke or see "
                 + "in a list. Name the operators who should hold admin, as provider-qualified ids (github/<id>, "
                 + "oidc/<sub>).";

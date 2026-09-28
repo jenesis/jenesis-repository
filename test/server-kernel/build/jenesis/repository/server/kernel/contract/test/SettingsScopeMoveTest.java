@@ -31,7 +31,7 @@ class SettingsScopeMoveTest {
     @BeforeEach
     void seed() throws IOException {
         store = ArtifactStoreProvider.resolve("filesystem",
-                key -> "jenreg.filesystem.root".equals(key) ? root.toString() : null);
+                key -> "jenrepo.filesystem.root".equals(key) ? root.toString() : null);
         // A tenant's ceilings as the credential space kept them.
         write(".system/auth/acme/quota", "max-bytes=4096\n");
         write(".system/auth/acme/ratelimit", "permits-per-minute=120\n");

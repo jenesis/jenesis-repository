@@ -8,7 +8,7 @@ import org.springframework.web.bind.annotation.GetMapping;
 
 /**
  * The security-posture screen: every potentially-unsafe configuration this deployment reports about itself, each
- * with why it is unsafe, a safer alternative and the exact {@code jenreg.*} setting that fixes it.
+ * with why it is unsafe, a safer alternative and the exact {@code jenrepo.*} setting that fixes it.
  *
  * <p>Read-only - observing posture never changes it - and no advisory prints a secret value. Where the effective
  * configuration comes from is the {@link PostureSource} seam's business, and which tenant is being asked about is

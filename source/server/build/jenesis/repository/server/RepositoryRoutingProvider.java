@@ -8,7 +8,7 @@ import build.jenesis.repository.store.Providers;
  * Discovers the {@link RepositoryRouting} a deployment runs on, so tenancy is an extension point rather than a
  * composition choice.
  *
- * <p>An {@code if}-chain over {@code jenreg.tenancy} inside a Spring configuration would make the <em>setting</em>
+ * <p>An {@code if}-chain over {@code jenrepo.tenancy} inside a Spring configuration would make the <em>setting</em>
  * real and the <em>seam</em> not: a deployment could pick one of the routings it names, and another could only be
  * added by editing the chain. Everything else in this product that has several implementations and one selection is
  * discovered; this is that shape.
@@ -16,7 +16,7 @@ import build.jenesis.repository.store.Providers;
  * <h2>Contract</h2>
  *
  * <ol>
- *   <li><b>Selection is {@code EXCLUSIVE_WITH_DEFAULT}.</b> One routing serves a deployment. {@code jenreg.tenancy}
+ *   <li><b>Selection is {@code EXCLUSIVE_WITH_DEFAULT}.</b> One routing serves a deployment. {@code jenrepo.tenancy}
  *       names it; unset, the {@link #FIXED single-tenant} routing binds. A name no installed provider answers to
  *       fails at boot naming what is installed - never a silent fall back to the default, because routing to the
  *       wrong tenant is not a degraded service, it is the wrong data.</li>
@@ -32,11 +32,11 @@ import build.jenesis.repository.store.Providers;
  */
 public interface RepositoryRoutingProvider {
 
-    /** The routing every deployment gets when {@code jenreg.tenancy} names none: one tenant, one repository. */
+    /** The routing every deployment gets when {@code jenrepo.tenancy} names none: one tenant, one repository. */
     String FIXED = "fixed";
 
     /**
-     * The setting that names the routing, unprefixed - a deployment writes {@code jenreg.tenancy}.
+     * The setting that names the routing, unprefixed - a deployment writes {@code jenrepo.tenancy}.
      *
      * <p>It is deliberately <strong>not</strong> in the settings catalogue, which is the surface
      * {@code PUT /api/settings/{key}} writes: a routing decides which tenant's data a request addresses, and it is
@@ -45,7 +45,7 @@ public interface RepositoryRoutingProvider {
      */
     String SETTING = "tenancy";
 
-    /** The name {@code jenreg.tenancy} selects this routing by; stable, lower case. */
+    /** The name {@code jenrepo.tenancy} selects this routing by; stable, lower case. */
     String name();
 
     /** Build the routing. Called once, at boot. */

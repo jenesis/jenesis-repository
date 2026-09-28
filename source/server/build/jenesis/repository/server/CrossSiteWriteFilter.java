@@ -48,7 +48,7 @@ public class CrossSiteWriteFilter extends OncePerRequestFilter {
      *  ({@code https://console.example.com}), each compared as the scheme, host and port a browser sends in
      *  {@code Origin}; unset trusts none. */
     public static Supplier<Set<String>> live(UnaryOperator<String> lookup) {
-        return () -> origins(lookup.apply("jenreg." + KEY));
+        return () -> origins(lookup.apply("jenrepo." + KEY));
     }
 
     /** {@code value} as the set of origins it lists, each in the form {@link #origin} compares. */

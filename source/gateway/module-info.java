@@ -32,7 +32,7 @@ module build.jenesis.repository.gateway {
     // operator-configured upstream under that same key, so it reads the constant rather than respelling it.
     requires build.jenesis.repository.blobs;
     requires java.net.http;
-    // The deploy edge's hooks raise the jenreg.deploy observation.
+    // The deploy edge's hooks raise the jenrepo.deploy observation.
     requires micrometer.observation;
     requires org.slf4j;
     exports build.jenesis.repository.gateway;

@@ -5,7 +5,7 @@ import org.springframework.boot.context.properties.ConfigurationProperties;
 import build.jenesis.repository.scope.Scopes;
 
 /**
- * The directory, read at boot from {@code jenreg.ui.ldap.*}.
+ * The directory, read at boot from {@code jenrepo.ui.ldap.*}.
  *
  * <p>A person is found either by a DN pattern ({@code user-dn-pattern}, {@code {0}} standing for the name they typed)
  * or by a search ({@code user-search-base} and {@code user-search-filter}), which Active Directory needs and which
@@ -13,7 +13,7 @@ import build.jenesis.repository.scope.Scopes;
  * {@code group-name-attribute} on the entries {@code group-search-filter} finds under {@code group-search-base},
  * {@code {0}} standing for their DN and {@code {1}} for the name they typed.
  */
-@ConfigurationProperties("jenreg.ui.ldap")
+@ConfigurationProperties("jenrepo.ui.ldap")
 public class LdapProperties {
 
     private String url = "";
@@ -35,21 +35,21 @@ public class LdapProperties {
     /** Refuse a directory configuration that could not work or would expose a password, naming the setting. */
     public void validate() {
         if (url.isBlank()) {
-            throw new IllegalStateException("jenreg.ui.ldap.url is not set");
+            throw new IllegalStateException("jenrepo.ui.ldap.url is not set");
         }
         if (userDnPattern.isBlank() && userSearchBase.isBlank()) {
-            throw new IllegalStateException("Set jenreg.ui.ldap.user-dn-pattern or jenreg.ui.ldap.user-search-base, "
+            throw new IllegalStateException("Set jenrepo.ui.ldap.user-dn-pattern or jenrepo.ui.ldap.user-search-base, "
                     + "so a name typed at sign-in can be found in the directory");
         }
         for (String each : url.trim().split("\\s+")) {
             String scheme = URI.create(each).getScheme();
             if ("ldap".equalsIgnoreCase(scheme) && !startTls && !allowPlaintext) {
-                throw new IllegalStateException("jenreg.ui.ldap.url is plaintext ldap:// - a sign-in would send the "
-                        + "password in the clear. Use ldaps://, set jenreg.ui.ldap.start-tls=true, or set "
-                        + "jenreg.ui.ldap.allow-plaintext=true if the connection is private");
+                throw new IllegalStateException("jenrepo.ui.ldap.url is plaintext ldap:// - a sign-in would send the "
+                        + "password in the clear. Use ldaps://, set jenrepo.ui.ldap.start-tls=true, or set "
+                        + "jenrepo.ui.ldap.allow-plaintext=true if the connection is private");
             }
             if (!"ldap".equalsIgnoreCase(scheme) && !"ldaps".equalsIgnoreCase(scheme)) {
-                throw new IllegalStateException("jenreg.ui.ldap.url must be ldap:// or ldaps://, not " + each);
+                throw new IllegalStateException("jenrepo.ui.ldap.url must be ldap:// or ldaps://, not " + each);
             }
         }
     }

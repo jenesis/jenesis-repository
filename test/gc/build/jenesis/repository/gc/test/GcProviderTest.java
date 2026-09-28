@@ -32,9 +32,9 @@ class GcProviderTest {
 
     @Test
     void an_explicitly_selected_collector_no_provider_answers_to_fails_loudly() {
-        // Resolving to the no-op default would make `jenreg.gc=other` look like a deployment with garbage
+        // Resolving to the no-op default would make `jenrepo.gc=other` look like a deployment with garbage
         // collection configured while nothing was ever reclaimed.
-        Features.configure(key -> "jenreg.gc".equals(key) ? "other" : null);
+        Features.configure(key -> "jenrepo.gc".equals(key) ? "other" : null);
         assertThatThrownBy(() -> GarbageCollectorProvider.resolve(key -> null))
                 .isInstanceOf(IllegalStateException.class)
                 .hasMessageContaining("'other'")
@@ -46,8 +46,8 @@ class GcProviderTest {
     @Test
     void an_explicit_selection_of_the_installed_collector_outranks_its_toggle() {
         Features.configure(key -> switch (key) {
-            case "jenreg.gc" -> "mark-sweep";
-            case "jenreg.mark-sweep" -> "false";
+            case "jenrepo.gc" -> "mark-sweep";
+            case "jenrepo.mark-sweep" -> "false";
             case null, default -> null;
         });
         assertThat(GarbageCollectorProvider.resolve(key -> null))
@@ -57,7 +57,7 @@ class GcProviderTest {
 
     @Test
     void a_disabled_feature_resolves_to_the_no_op_default() {
-        Features.configure(key -> "jenreg.mark-sweep".equals(key) ? "false" : null);
+        Features.configure(key -> "jenrepo.mark-sweep".equals(key) ? "false" : null);
         assertThat(GarbageCollectorProvider.resolve(key -> null)).isEmpty();
     }
 
@@ -67,7 +67,7 @@ class GcProviderTest {
         // ride, and the deployment degrades to no garbage collection rather than a hand-rolled listing loop. The
         // reference walk's feature name is `paged-descent` (StoreWalkProvider), so that is the toggle that removes
         // it - not `store`, which is the artifact store's own selection key.
-        Features.configure(key -> "jenreg.paged-descent".equals(key) ? "false" : null);
+        Features.configure(key -> "jenrepo.paged-descent".equals(key) ? "false" : null);
         assertThat(GarbageCollectorProvider.resolve(key -> null)).isEmpty();
     }
 
@@ -75,7 +75,7 @@ class GcProviderTest {
     void an_explicitly_selected_walk_the_collector_cannot_ride_fails_loudly() {
         // The collector's own resolution is fine; the walk underneath it is the unsatisfiable selection, and the failure propagates
         // rather than being folded into "no collector installed".
-        Features.configure(key -> "jenreg.walk".equals(key) ? "absent" : null);
+        Features.configure(key -> "jenrepo.walk".equals(key) ? "absent" : null);
         assertThatThrownBy(() -> GarbageCollectorProvider.resolve(key -> null))
                 .isInstanceOf(IllegalStateException.class)
                 .hasMessageContaining("'absent'")

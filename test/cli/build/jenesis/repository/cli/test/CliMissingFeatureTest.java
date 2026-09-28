@@ -52,13 +52,13 @@ public class CliMissingFeatureTest {
         server = new WireMockServer(WireMockConfiguration.options().bindAddress("127.0.0.1").dynamicPort());
         server.start();
         server.stubFor(get(urlPathEqualTo("/api/scans")).willReturn(aResponse().withStatus(404)));
-        System.setProperty("JENREG_CLI_HOME", home.toString());
+        System.setProperty("JENREPO_CLI_HOME", home.toString());
         Cli.run(new String[] {"login", "http://127.0.0.1:" + server.port() + "/", "--key", "k"});
     }
 
     @AfterAll
     public void tearDown() {
-        System.clearProperty("JENREG_CLI_HOME");
+        System.clearProperty("JENREPO_CLI_HOME");
         if (server != null) {
             server.stop();
         }

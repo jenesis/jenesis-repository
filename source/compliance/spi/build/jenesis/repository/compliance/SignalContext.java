@@ -69,14 +69,14 @@ public interface SignalContext {
      */
     /**
      * Whether this source is switched on, read the one way the settings surface documents:
-     * {@code jenreg.<name>=false} switches a source off and nothing else does, an unset value takes
+     * {@code jenrepo.<name>=false} switches a source off and nothing else does, an unset value takes
      * {@code byDefault}, and the default a source passes is the one its own settings row declares.
      *
      * <p>It lives here because a source cannot reach {@code Features} for itself: half of them do not require the
      * store SPI at all, which is exactly why half of them had reimplemented the switch as
      * {@code Boolean.parseBoolean(setting(name))}. That disagrees with {@code Features} on an unset value - off
-     * rather than on - and on every value that is neither "true" nor "false", so {@code jenreg.snyk=yes} enabled
-     * Snyk while {@code jenreg.osv=yes} disabled OSV. Asking the context removes the choice.
+     * rather than on - and on every value that is neither "true" nor "false", so {@code jenrepo.snyk=yes} enabled
+     * Snyk while {@code jenrepo.osv=yes} disabled OSV. Asking the context removes the choice.
      */
     default boolean enabled(String name, boolean byDefault) {
         return Features.enabled(this::setting, name, byDefault);

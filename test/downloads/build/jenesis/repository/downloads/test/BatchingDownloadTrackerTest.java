@@ -44,7 +44,7 @@ class BatchingDownloadTrackerTest {
     @BeforeEach
     void setUp() {
         ArtifactStore backend = ArtifactStoreProvider.resolve("filesystem",
-                        key -> "jenreg.filesystem.root".equals(key) ? root.toString() : null)
+                        key -> "jenrepo.filesystem.root".equals(key) ? root.toString() : null)
                 .scope("default").scope("releases");
         store = FaultInjectingStore.wrap(backend);
         // The tracker writes every hit into the same store, so one FaultInjectingStore counts every flush.

@@ -64,7 +64,7 @@ public interface GatePolicyFixture extends AutoCloseable {
          * The dimension is carried whenever it is switched on, because what it gates on arrives with the artifact
          * rather than from configuration: an artifact declaring no identifiable licence <em>is</em> the licence
          * dimension's case, and a detection stamped on the subject is the secret dimension's. Such a dimension has no
-         * unconfigured shape, so its only off switches are the {@code jenreg.<name>} toggle and its own
+         * unconfigured shape, so its only off switches are the {@code jenrepo.<name>} toggle and its own
          * {@link GatePolicyProvider#requiredConfig()} - which is what makes the kit assert presence here rather than
          * absence.
          */
@@ -205,7 +205,7 @@ public interface GatePolicyFixture extends AutoCloseable {
 
     /**
      * The settings that give this dimension something to gate on - the deployment an operator configured. Read through
-     * the same {@code jenreg.*}-prefixed lookup the server hands a provider, so a key here is spelled
+     * the same {@code jenrepo.*}-prefixed lookup the server hands a provider, so a key here is spelled
      * exactly as the settings catalogue spells it.
      */
     Map<String, String> configured();

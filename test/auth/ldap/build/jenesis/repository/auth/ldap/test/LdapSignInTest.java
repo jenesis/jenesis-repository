@@ -43,7 +43,7 @@ class LdapSignInTest {
     @BeforeEach
     void store() {
         ArtifactStore store = ArtifactStoreProvider.resolve("filesystem",
-                key -> "jenreg.filesystem.root".equals(key) ? root.toString() : null);
+                key -> "jenrepo.filesystem.root".equals(key) ? root.toString() : null);
         authorization = Authorization.enforcing(store);
     }
 

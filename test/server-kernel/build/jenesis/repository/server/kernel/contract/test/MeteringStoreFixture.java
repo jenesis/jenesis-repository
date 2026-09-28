@@ -42,7 +42,7 @@ final class MeteringStoreFixture implements StoreFixture {
     public void start() throws IOException {
         root = Files.createTempDirectory("store-contract-metering-");
         ArtifactStore filesystem = ArtifactStoreProvider.resolve("filesystem",
-                key -> "jenreg.filesystem.root".equals(key) ? root.toString() : null);
+                key -> "jenrepo.filesystem.root".equals(key) ? root.toString() : null);
         store = new MeteringArtifactStore(filesystem, new SimpleMeterRegistry(), "filesystem")
                 .scope("kit" + Long.toHexString(ThreadLocalRandom.current().nextLong() >>> 1));
     }

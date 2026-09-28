@@ -38,6 +38,6 @@ abstract class FormatContractSuite {
     private ArtifactStore store(String name) throws IOException {
         Path directory = Files.createDirectories(root.resolve(name.replaceAll("[^A-Za-z0-9]", "_")));
         return ArtifactStoreProvider.resolve("filesystem",
-                key -> "jenreg.filesystem.root".equals(key) ? directory.toString() : null);
+                key -> "jenrepo.filesystem.root".equals(key) ? directory.toString() : null);
     }
 }

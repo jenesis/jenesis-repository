@@ -26,7 +26,7 @@ class ListedRepositoriesTest {
     @Test
     void the_sidebar_names_the_repositories_the_tenant_holds() throws IOException {
         ArtifactStore store = ArtifactStoreProvider.resolve("filesystem",
-                key -> "jenreg.filesystem.root".equals(key) ? root.toString() : null);
+                key -> "jenrepo.filesystem.root".equals(key) ? root.toString() : null);
         for (String repository : List.of("releases", "snapshots")) {
             Publication publication = new Publication(store.scope("acme").scope(repository));
             publication.link("/raw/notes.txt", publication.storeBlob(new ByteArrayInputStream("notes".getBytes(UTF_8))));

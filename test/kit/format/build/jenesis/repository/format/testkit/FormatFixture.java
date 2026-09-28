@@ -34,7 +34,7 @@ import build.jenesis.repository.store.ArtifactStore;
 public interface FormatFixture {
 
     /** The {@link RepositoryFormat#name() format name} this fixture drives ({@code maven}, {@code oci}, ...) - the
-     *  same string an operator writes as {@code jenreg.<name>}. */
+     *  same string an operator writes as {@code jenrepo.<name>}. */
     String format();
 
     /** The fully qualified {@code RepositoryFormat} implementation class this fixture covers, as the census parses it

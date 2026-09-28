@@ -48,12 +48,12 @@ public final class NuGetFormat implements RepositoryFormat, ProxyLeg, BlobLayout
     static final JsonMapper JSON = JsonMapper.builder().build();
 
     // A hostile .nupkg cannot force a large allocation: a .nuspec is small metadata XML, read under the product's one
-    // archive-inflation ceiling, ArchiveInflation.largestEntry(), settable at jenreg.archive.largest-entry - the same
+    // archive-inflation ceiling, ArchiveInflation.largestEntry(), settable at jenrepo.archive.largest-entry - the same
     // bound the NuGetQualityInspector applies, because it is one bound rather than two constants that agree by
     // convention (RepositoryFormat contract clause 15, cross-format parity).
 
     // How far the walk for the .nuspec may run is the product's one archive-walk bound, ArchiveWalk.largestWalk(),
-    // settable at jenreg.archive.largest-walk - not a private constant of this format's, and not a number the
+    // settable at jenrepo.archive.largest-walk - not a private constant of this format's, and not a number the
     // compliance inspector mirrors by hand either (RepositoryFormat contract clause 15).
 
     @Override

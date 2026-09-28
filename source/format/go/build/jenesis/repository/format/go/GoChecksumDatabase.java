@@ -35,8 +35,8 @@ import build.jenesis.repository.store.Features;
  * can run the full check itself, against the same database, through this repository.
  *
  * <h2>Configuration, and the screen on it</h2>
- * {@code jenreg.go.sumdb} is the database's base URL, {@code https://sum.golang.org/} by default and {@code off} to
- * disable. It is deploy-time configuration in the {@code jenreg.<feature>.<property>} convention: which hosts a
+ * {@code jenrepo.go.sumdb} is the database's base URL, {@code https://sum.golang.org/} by default and {@code off} to
+ * disable. It is deploy-time configuration in the {@code jenrepo.<feature>.<property>} convention: which hosts a
  * deployment may reach is an egress decision made where the process is started, not a runtime dial, and an air-gapped
  * deployment sets it {@code off} so no fill waits on a name that cannot resolve.
  *
@@ -60,7 +60,7 @@ import build.jenesis.repository.store.Features;
 public final class GoChecksumDatabase {
 
     /** The key an operator points at their own checksum database, or sets to {@code off}. */
-    public static final String DATABASE_KEY = "jenreg.go.sumdb";
+    public static final String DATABASE_KEY = "jenrepo.go.sumdb";
 
     /** The ecosystem's own default, and the value {@code GOSUMDB} carries when nothing sets it. */
     private static final String DEFAULT_DATABASE = "https://sum.golang.org/";

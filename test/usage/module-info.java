@@ -1,10 +1,10 @@
 /**
  * Focused unit tests for the batching key-usage tracker's observability adoption - that an <em>enabled</em> tracker
  * is an {@link build.jenesis.repository.observation.ObservabilitySource} reporting its bounded queue depth ({@code
- * jenreg.usage.queue}, used vs the fixed capacity), the per-credential accumulators it holds ({@code
- * jenreg.usage.tracked}), the hits it has dropped under back-pressure ({@code jenreg.usage.dropped}), a {@code
- * jenreg.usage.worker} health check that is DOWN when the worker died with tracking on, and a {@code
- * jenreg.usage.flush} task status stamped with the last drain - while a <em>disabled</em> tracker reports nothing at
+ * jenrepo.usage.queue}, used vs the fixed capacity), the per-credential accumulators it holds ({@code
+ * jenrepo.usage.tracked}), the hits it has dropped under back-pressure ({@code jenrepo.usage.dropped}), a {@code
+ * jenrepo.usage.worker} health check that is DOWN when the worker died with tracking on, and a {@code
+ * jenrepo.usage.flush} task status stamped with the last drain - while a <em>disabled</em> tracker reports nothing at
  * all, all collected into the single {@link build.jenesis.repository.observation.ObservabilityReport} view without the
  * server, Micrometer or a network - and that the tracker's one setting reaches the catalogue through its discovered
  * contributor. The tracker's flush/accumulation behaviour itself is covered by the server test

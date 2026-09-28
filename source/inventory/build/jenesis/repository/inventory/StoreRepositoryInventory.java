@@ -57,7 +57,7 @@ public final class StoreRepositoryInventory implements RepositoryInventory {
 
     /**
      * The formats this deployment currently installs: the module graph filtered by the deployment's feature toggles
-     * at every consultation, so {@code jenreg.<format>=false} means absent here exactly as it does at the serving
+     * at every consultation, so {@code jenrepo.<format>=false} means absent here exactly as it does at the serving
      * edge and in the collector's reference lenders - the documented "as if it were not installed". The filter runs
      * per call rather than at class load, so a toggle applied by a settings refresh is honoured live.
      *

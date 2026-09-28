@@ -20,7 +20,7 @@ public final class ReconcileSettingsContributor implements SettingsContributor {
                                 + "whenever a walk of the store runs: a crash that skipped a sidecar write converges "
                                 + "instead of leaving a served artifact invisible to retention and the search and "
                                 + "license index, and a crashed eviction's orphan facts and derived rows go. A listener "
-                                + "of the one walk (jenreg.walks) rather than a sweep of its own; on by default, and "
+                                + "of the one walk (jenrepo.walks) rather than a sweep of its own; on by default, and "
                                 + "nothing until a walk runs.",
                         Setting.Kind.BOOLEAN, "true", true).advanced());
     }

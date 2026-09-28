@@ -9,7 +9,7 @@ import org.springframework.web.bind.annotation.RestController;
 /**
  * The metrics-overview admin read: {@code GET /api/admin/observability} returns the whole collected {@link
  * ObservabilityReport} this deployment carries - the overall verdict, then the self-describing health checks, metrics
- * and background-task statuses, each with its stable {@code jenreg.<feature>.<signal>} name and the human-readable
+ * and background-task statuses, each with its stable {@code jenrepo.<feature>.<signal>} name and the human-readable
  * description from its registration - so an operator (or a headless agent) reads every metric, health state and task
  * status in one document rather than scraping {@code /actuator/health}, {@code /actuator/metrics} and the task
  * surfaces. It is the JSON the console's metrics-overview page renders as a plain, no-graphs overview; a metric that

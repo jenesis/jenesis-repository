@@ -16,7 +16,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 /**
  * The bootstrap key: how an operator gets their FIRST credential on an enforcing deployment.
  *
- * <p>Before it, a fresh install was unusable as configured. {@code jenreg.auth} is on by default, a keyless caller
+ * <p>Before it, a fresh install was unusable as configured. {@code jenrepo.auth} is on by default, a keyless caller
  * is rejected, and every route that could mint a key requires one already - so the only advice a new deployment
  * could be given was to switch authentication off, which is not a bootstrap but a different deployment.
  */
@@ -27,7 +27,7 @@ class BootstrapKeyTest {
 
     private ArtifactStore store() {
         return ArtifactStoreProvider.resolve("filesystem",
-                key -> "jenreg.filesystem.root".equals(key) ? root.toString() : null);
+                key -> "jenrepo.filesystem.root".equals(key) ? root.toString() : null);
     }
 
     private Authorization authorization(String bootstrapKey) {

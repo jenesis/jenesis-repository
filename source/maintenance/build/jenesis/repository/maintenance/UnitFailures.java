@@ -8,7 +8,7 @@ import module java.base;
  *
  * <p><b>Why containment and a throw rather than one or the other.</b> {@code MaintenanceTask} contract clause 4 says a
  * unit that could not do its work must throw - a swallowed failure reaches neither
- * {@code jenreg.maintenance.failures} nor the task's reported status, so a store that refused every write
+ * {@code jenrepo.maintenance.failures} nor the task's reported status, so a store that refused every write
  * reads exactly like a clean pass. But a unit that aborts on its <em>first</em> refused subject leaves the other
  * million coordinates unswept for one poisoned jar, which is the bounded-work half of clause 6. Both are satisfied by
  * containing each subject, naming what failed, and raising once at the end: every subject that could be swept was

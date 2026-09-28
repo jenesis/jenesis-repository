@@ -35,7 +35,7 @@ public final class BatchUploadSettingsContributor implements SettingsContributor
                         Integer.toString(RepositoryProperties.BATCH_UPLOAD_MAX_RATIO), true).advanced(),
                 new Setting("store-families", "Operations", "Count store operations by key family",
                         "Count every store operation by the key family it touched as well as by its name, reported "
-                                + "as jenreg.store.family.<operation>.<family> beside jenreg.store.ops.<operation>. "
+                                + "as jenrepo.store.family.<operation>.<family> beside jenrepo.store.ops.<operation>. "
                                 + "Off by default, and worth switching on only while measuring: it costs a map "
                                 + "lookup and a string concatenation on the store's hottest path. A count by "
                                 + "operation alone cannot say which keys a pass is reading - whether a walk's "

@@ -16,12 +16,12 @@ own object store from the first start, and there is no database to provision bes
 the one store is the product's multi-node shape; the templates start one.
 
 **Authentication is on by default**, so a deployment needs a credential to begin with. Each template takes two as
-secrets: `JENREG_BOOTSTRAP_KEY`, the API key the server provisions at boot (a `jenk_<tenant>.<secret><checksum>`
+secrets: `JENREPO_BOOTSTRAP_KEY`, the API key the server provisions at boot (a `jenk_<tenant>.<secret><checksum>`
 key; `java -Djenesis.execute.module=source+server-spi build/jenesis/Execute.java` mints one), and
-`JENREG_UI_ADMIN_KEY`, which signs into the console's first-run setup at the server's address. Issue real credentials from there
+`JENREPO_UI_ADMIN_KEY`, which signs into the console's first-run setup at the server's address. Issue real credentials from there
 and unset both - they are re-provisioned on every boot for as long as they are set.
 
-**Any other setting is an environment variable**: a `jenreg.*` key under its `JENREG_*` name, by Spring's relaxed
+**Any other setting is an environment variable**: a `jenrepo.*` key under its `JENREPO_*` name, by Spring's relaxed
 binding. The Terraform and Bicep templates take a map of plain settings and a map of secret ones; the
 CloudFormation template, which cannot iterate, takes an environment file in S3. The generated settings reference
 on the documentation site lists every key.

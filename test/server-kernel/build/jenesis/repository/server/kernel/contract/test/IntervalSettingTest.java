@@ -44,7 +44,7 @@ class IntervalSettingTest {
 
     @Test
     void the_suffixed_style_an_environment_variable_carries_is_honoured() {
-        // JENREG_CLEANUP_INTERVAL=6h is what an operator writes; today every maintenance dial rejects it
+        // JENREPO_CLEANUP_INTERVAL=6h is what an operator writes; today every maintenance dial rejects it
         // (silently falling back in the guarded providers, aborting the resolve in the unguarded ones) while the free
         // core's proxy negative-cache window already accepts exactly this style - the parity gap this closes.
         assertThat(CADENCE.resolve(config("500ms"))).isEqualTo(Duration.ofMillis(500));
@@ -76,7 +76,7 @@ class IntervalSettingTest {
 
     @Test
     void a_non_positive_cadence_falls_back_and_never_disables_the_pass() {
-        // Disabling a pass has exactly two routes - jenreg.<task>=false and the provider's own enablement
+        // Disabling a pass has exactly two routes - jenrepo.<task>=false and the provider's own enablement
         // setting - and a cadence dial does not become a third. A pass that is listed must actually run.
         for (String value : List.of("PT0S", "P0D", "0s", "-PT1H", "-5m")) {
             assertThat(CADENCE.resolve(config(value))).as("cadence %s", value).isEqualTo(HOUR);

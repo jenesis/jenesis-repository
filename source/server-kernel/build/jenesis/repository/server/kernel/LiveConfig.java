@@ -299,7 +299,7 @@ public final class LiveConfig implements SettingsEditor.Resolution {
     }
 
     /** Whether the publish-time hold-mapping round-trip check ({@code ComplianceScreen.onPublished}) throws on a break
-     *  rather than only alarming - {@code jenreg.strict-hold-mapping}, off by default so a broken
+     *  rather than only alarming - {@code jenrepo.strict-hold-mapping}, off by default so a broken
      *  blobs-namespace format alarms without DoS-ing publishes, on in the test config so it fails the first publish. */
     public boolean strictHoldMapping() {
         return strictHoldMapping;
@@ -382,7 +382,7 @@ public final class LiveConfig implements SettingsEditor.Resolution {
     }
 
     /** A proxy upstream override for a format: the runtime-stored one ({@code format-upstream.<format>}, the live
-     *  override) over the boot-time default from the per-format map ({@code jenreg.proxy.<format>},
+     *  override) over the boot-time default from the per-format map ({@code jenrepo.proxy.<format>},
      *  read here through the file/env lookup), or {@code null} when neither is set - the caller then falls back to the
      *  format's own {@code ProxyFormat.defaultUpstream()}, so no table of format names to default upstream URLs lives
      *  here. One concept, two sources: the property is the boot default, the setting is the live override. */

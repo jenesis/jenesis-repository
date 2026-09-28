@@ -68,7 +68,7 @@ class SpiCatalogTest {
         // The seam that replaced the second walk. A deployment answers per module, and what it answers reaches the
         // row unchanged - which is what lets one screen render both an undecorated console and a settings-reading
         // one without knowing which it is looking at.
-        SpiCatalog.Setting setting = new SpiCatalog.Setting("jenreg.example", "Example");
+        SpiCatalog.Setting setting = new SpiCatalog.Setting("jenrepo.example", "Example");
         List<SpiCatalog> catalog = SpiCatalog.of(ModuleLayer.boot(), _ ->
                 new SpiCatalog.Capability(true, false, "example", List.of(setting)));
 

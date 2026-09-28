@@ -28,7 +28,7 @@ public class CredentialServiceTest {
     @BeforeEach
     public void setUp() {
         ArtifactStore store = ArtifactStoreProvider.resolve("filesystem",
-                key -> "jenreg.filesystem.root".equals(key) ? root.toString() : null);
+                key -> "jenrepo.filesystem.root".equals(key) ? root.toString() : null);
         credentials = new CredentialService(Authorization.anonymous(), AuditTrail.none(),
                 new CurrentTenant() {
                     @Override

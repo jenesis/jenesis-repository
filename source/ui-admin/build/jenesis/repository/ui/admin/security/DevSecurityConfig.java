@@ -63,12 +63,12 @@ public class DevSecurityConfig {
                 User.withUsername("viewer").password("{noop}viewer").roles("USER").build());
     }
 
-    /** Seed the tenant this deployment serves - {@code jenreg.default-tenant}, else {@link Scopes#DEFAULT_TENANT} -
+    /** Seed the tenant this deployment serves - {@code jenrepo.default-tenant}, else {@link Scopes#DEFAULT_TENANT} -
      *  with the dev admin/editor/viewer accounts as its members (keyed by username). The configured one rather than
      *  the constant, because the console signs these accounts in to the tenant it serves. */
     @Bean
     public ApplicationRunner devTenantSeed(Authorization authorization, TenantService tenants,
-            @Value("${jenreg.default-tenant:" + Scopes.DEFAULT_TENANT + "}") String tenant) {
+            @Value("${jenrepo.default-tenant:" + Scopes.DEFAULT_TENANT + "}") String tenant) {
         return _ -> {
             if (!tenants.exists(tenant)) {
                 tenants.create(tenant);

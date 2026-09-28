@@ -37,7 +37,7 @@ class GcMarkRoundTripsTest {
     @Test
     void a_mark_pass_reads_each_pointer_once_and_probes_none_of_them() throws IOException {
         ArtifactStore backing = ArtifactStoreProvider.resolve(
-                "filesystem", key -> "jenreg.filesystem.root".equals(key) ? root.toString() : null);
+                "filesystem", key -> "jenrepo.filesystem.root".equals(key) ? root.toString() : null);
         Publication publication = new Publication(backing);
         for (int index = 0; index < 12; index++) {
             publication.link("/maven/g/a/" + index + "/a-" + index + ".jar",

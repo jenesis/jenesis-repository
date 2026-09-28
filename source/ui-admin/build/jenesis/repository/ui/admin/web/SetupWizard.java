@@ -26,7 +26,7 @@ import org.springframework.stereotype.Component;
  * screen rendering an empty shell. On by default ({@link #onByDefault()}, one definition), because the argument
  * for the guide is precisely the operator who does not know to look for it; a deployment provisioned from
  * configuration, rebuilt by CI or started for the hundredth time is the party that can afford to say so, once.
- * There is no {@code jenreg.x=${JENREG_X:default}} line for it anywhere: relaxed binding maps the variable onto
+ * There is no {@code jenrepo.x=${JENREPO_X:default}} line for it anywhere: relaxed binding maps the variable onto
  * the key whether or not a file mentions it, and the default lives here.
  *
  * <p><b>It is the first boot's wizard, derived from the catalogue and never restating it.</b> Its steps are the
@@ -99,12 +99,12 @@ public class SetupWizard {
                 paragraphs.add(starter.session() ? "This session is signed in with the starter key: anything it does "
                         + "is recorded against the key, not a person." : "This session is a real identity, not the "
                         + "starter key.");
-                paragraphs.add(starter.adminKeySet() ? "The console's admin key (jenreg.ui.admin-key) is set: it grants "
+                paragraphs.add(starter.adminKeySet() ? "The console's admin key (jenrepo.ui.admin-key) is set: it grants "
                         + "super-admin over every tenant and is re-provisioned on every boot until the variable is "
-                        + "unset." : "The console's admin key (jenreg.ui.admin-key) is not set.");
-                paragraphs.add(starter.bootstrapKeySet() ? "The API's bootstrap key (jenreg.bootstrap-key) is set: a "
+                        + "unset." : "The console's admin key (jenrepo.ui.admin-key) is not set.");
+                paragraphs.add(starter.bootstrapKeySet() ? "The API's bootstrap key (jenrepo.bootstrap-key) is set: a "
                         + "non-expiring credential holding every right, re-provisioned on every boot until the variable "
-                        + "is unset." : "The API's bootstrap key (jenreg.bootstrap-key) is not set.");
+                        + "is unset." : "The API's bootstrap key (jenrepo.bootstrap-key) is not set.");
             }
             steps.add(WizardFlow.Step.information(information.title(), paragraphs,
                     List.of(new WizardFlow.Link("Grant a real administrator", "/ui/admin"),

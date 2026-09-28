@@ -40,7 +40,7 @@ class BrowseChildrenControllerTest {
     @BeforeEach
     void wire() throws IOException {
         store = ArtifactStoreProvider.resolve("filesystem",
-                key -> "jenreg.filesystem.root".equals(key) ? root.toString() : null);
+                key -> "jenrepo.filesystem.root".equals(key) ? root.toString() : null);
         RepositoryProperties properties = new RepositoryProperties();
         properties.setProxyEnabled(false);
         LiveConfig live = new LiveConfig(new Settings(store), properties, AdvisorySource.none(), _ -> null);

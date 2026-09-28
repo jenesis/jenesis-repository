@@ -52,7 +52,7 @@ public class ImportEdgeController {
     private final UnaryOperator<String> settings;
 
     /** As {@link RepositoryController}, this reads its deployment toggles (read-only, the import SSRF screen) off the
-     *  shared {@code jenreg.*} settings through {@code settings}, so the import edge needs no extra
+     *  shared {@code jenrepo.*} settings through {@code settings}, so the import edge needs no extra
      *  dependency; {@code key -> null} keeps every toggle on its shipped default. */
     public ImportEdgeController(RepositoryRouting routing,
                                 List<ImportSourceProvider> importSources,
@@ -109,12 +109,12 @@ public class ImportEdgeController {
         // endpoint into a proxy for the deployment's own network (169.254.169.254, a loopback control plane, an
         // internal host). The reason is carried through rather than flattened, so an operator whose source is
         // plaintext on a perfectly public host is not told to go and look at its host. On by default; an
-        // internal or plaintext on-prem migration opts out with jenreg.block-private-import-hosts=false.
+        // internal or plaintext on-prem migration opts out with jenrepo.block-private-import-hosts=false.
         String refusal = ImportScreen.refusalReason(url, blockPrivateImportHosts());
         if (refusal != null) {
             respond(response, 400, "import url is refused: " + refusal + "; a migration is walked server-side with "
                     + "the upstream credentials attached, so it must be an https URL to a public host (set "
-                    + "jenreg.block-private-import-hosts=false to migrate from an internal or plaintext "
+                    + "jenrepo.block-private-import-hosts=false to migrate from an internal or plaintext "
                     + "mirror)");
             return;
         }
@@ -190,7 +190,7 @@ public class ImportEdgeController {
         }
     }
 
-    /** The deployment-wide read-only flag, read off the same {@code jenreg.*} settings the formats read a
+    /** The deployment-wide read-only flag, read off the same {@code jenrepo.*} settings the formats read a
      *  toggle from, so no extra dependency is threaded in; unset means read-write. */
     private boolean readOnly() {
         return Boolean.parseBoolean(settings.apply("read-only"));
@@ -198,7 +198,7 @@ public class ImportEdgeController {
 
     /** The import screen is on by default (the secure default) and this one dial governs <em>both</em> its halves -
      *  the transport and the host - so an internal <em>or</em> plaintext on-premises migration opts out with
-     *  {@code jenreg.block-private-import-hosts=false} and nothing can be opted out of alone. Read off the
+     *  {@code jenrepo.block-private-import-hosts=false} and nothing can be opted out of alone. Read off the
      *  same settings the read-only flag reads, so no extra dependency is threaded in - unset or blank blocks, and so
      *  does an explicit {@code true}. */
     private boolean blockPrivateImportHosts() {

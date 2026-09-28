@@ -15,7 +15,7 @@ import org.springframework.web.util.UriUtils;
 
 /**
  * Authorizes a request against the {@link Authorization} credential model. An anonymous deployment (the
- * {@code jenreg.auth=false} opt-out) allows everything; an enforcing one reads the presented key
+ * {@code jenrepo.auth=false} opt-out) allows everything; an enforcing one reads the presented key
  * ({@link PresentedKey}) and requires a right chosen by what the request addresses and its method:
  *
  * <ul>
@@ -35,7 +35,7 @@ import org.springframework.web.util.UriUtils;
  *       CI key - may not thereby change a setting, issue a key, grant a group, purge a module's data or run a walk.
  *       The routes that read or write the deployment rather than a tenant - its settings, repository definitions,
  *       upstreams, the {@code /api/admin/} verbs, the logs, the fleet's consistency and the actuator - further
- *       require a key of the operator tenant ({@code jenreg.operator-tenant}, else {@code default-tenant}): a
+ *       require a key of the operator tenant ({@code jenrepo.operator-tenant}, else {@code default-tenant}): a
  *       tenant administering its own keys cannot repoint an upstream, relax the policy or read every tenant's logs.</li>
  * </ul>
  *
@@ -47,7 +47,7 @@ import org.springframework.web.util.UriUtils;
  * {@link RepositoryAuthorizationEntryPoint} can answer {@code 401} for an unauthorized request (no key, a malformed
  * or expired key) and {@code 403} for a forbidden one (a key that lacks the right, or whose source address lies
  * outside the credential's allowlist). The source address is the connection peer unless that peer is a configured
- * {@code jenreg.trusted-proxies} hop, in which case it is taken from {@code X-Forwarded-For}, so a client cannot
+ * {@code jenrepo.trusted-proxies} hop, in which case it is taken from {@code X-Forwarded-For}, so a client cannot
  * spoof the allowlist by setting the header itself. It is contributed as a bean by
  * {@link RepositorySecurityAutoConfiguration}.
  */
@@ -96,7 +96,7 @@ public class RepositoryAuthorizationManager implements AuthorizationManager<Requ
         // while a prefix check misreads it. Such a URI is never a legitimate artifact, /api or /actuator route.
         String path = UriUtils.decode(request.getRequestURI(), StandardCharsets.UTF_8);
         if (!normalized(path)) {
-            request.setAttribute("jenreg.decision", Authorization.Decision.FORBIDDEN);
+            request.setAttribute("jenrepo.decision", Authorization.Decision.FORBIDDEN);
             return new AuthorizationDecision(false);
         }
         Target target = classify(path, request.getQueryString());
@@ -126,7 +126,7 @@ public class RepositoryAuthorizationManager implements AuthorizationManager<Requ
                 && !operatorTenant.equals(Authorization.tenantOf(key))) {
             decision = Authorization.Decision.FORBIDDEN;
         }
-        request.setAttribute("jenreg.decision", decision);
+        request.setAttribute("jenrepo.decision", decision);
         String tenant = Authorization.tenantOf(key);
         if (decision == Authorization.Decision.ALLOWED && usage.enabled() && tenant != null) {
             usage.record(tenant, Authorization.hash(key), client);
@@ -218,7 +218,7 @@ public class RepositoryAuthorizationManager implements AuthorizationManager<Requ
         return found == null || found.isBlank() ? Optional.empty() : Optional.of(found);
     }
 
-    /** Parse the comma-separated {@code jenreg.trusted-proxies} value into the reverse-proxy CIDRs a forwarded header
+    /** Parse the comma-separated {@code jenrepo.trusted-proxies} value into the reverse-proxy CIDRs a forwarded header
      *  is believed from. A malformed entry fails the start naming it rather than being dropped: a swallowed CIDR would
      *  leave the real proxy untrusted and every request appearing to come from it, silently disabling the source-IP
      *  allowlist. Empty is the secure default - no forwarded header is believed. */
@@ -232,7 +232,7 @@ public class RepositoryAuthorizationManager implements AuthorizationManager<Requ
             try {
                 new IpAddressMatcher(cidr);
             } catch (IllegalArgumentException e) {
-                throw new IllegalArgumentException("Malformed jenreg.trusted-proxies entry '" + cidr
+                throw new IllegalArgumentException("Malformed jenrepo.trusted-proxies entry '" + cidr
                         + "': expected an IP address or CIDR such as 10.0.0.0/8 or 2001:db8::/32", e);
             }
             parsed.add(cidr);

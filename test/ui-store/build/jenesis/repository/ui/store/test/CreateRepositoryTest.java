@@ -138,7 +138,7 @@ class CreateRepositoryTest {
 
     private ArtifactStore store() {
         return ArtifactStoreProvider.resolve("filesystem",
-                key -> "jenreg.filesystem.root".equals(key) ? root.toString() : null);
+                key -> "jenrepo.filesystem.root".equals(key) ? root.toString() : null);
     }
 
     private static CurrentTenant tenant() {

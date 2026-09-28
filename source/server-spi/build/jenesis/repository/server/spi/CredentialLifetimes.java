@@ -69,7 +69,7 @@ public final class CredentialLifetimes {
         try {
             return Durations.parse(value);
         } catch (IllegalArgumentException malformed) {
-            throw new IllegalArgumentException("jenreg." + key + " is not a duration: '" + value
+            throw new IllegalArgumentException("jenrepo." + key + " is not a duration: '" + value
                     + "'. Write it as P30D or 30d (thirty days), PT12H or 12h (twelve hours) or P1DT6H.", malformed);
         }
     }

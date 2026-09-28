@@ -41,7 +41,7 @@ public class HuggingFaceResolveRevisionProbeTest {
 
     @BeforeAll
     public void seed() throws IOException {
-        System.setProperty("jenreg.filesystem.root", root.toString());
+        System.setProperty("jenrepo.filesystem.root", root.toString());
         ArtifactStore filesystem = ArtifactStoreProvider.resolve("filesystem", System::getProperty)
                 .scope("default").scope("myrepo");
         store = new ProbeStore(filesystem);
@@ -59,7 +59,7 @@ public class HuggingFaceResolveRevisionProbeTest {
 
     @AfterAll
     public void teardown() {
-        System.clearProperty("jenreg.filesystem.root");
+        System.clearProperty("jenrepo.filesystem.root");
     }
 
     @Test

@@ -36,7 +36,7 @@ class SettingsControllerTest {
     @BeforeEach
     void wire() {
         ArtifactStore store = ArtifactStoreProvider.resolve("filesystem",
-                key -> "jenreg.filesystem.root".equals(key) ? root.toString() : null);
+                key -> "jenrepo.filesystem.root".equals(key) ? root.toString() : null);
         settings = new SettingsAdmin(store);
         selected = TENANT;
         controller = new SettingsController(settings, () -> selected, new StandardEnvironment());

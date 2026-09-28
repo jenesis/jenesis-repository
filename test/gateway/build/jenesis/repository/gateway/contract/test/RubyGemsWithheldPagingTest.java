@@ -51,7 +51,7 @@ public class RubyGemsWithheldPagingTest {
 
     @BeforeAll
     public void seed() throws IOException {
-        System.setProperty("jenreg.filesystem.root", root.toString());
+        System.setProperty("jenrepo.filesystem.root", root.toString());
         ArtifactStore filesystem = ArtifactStoreProvider.resolve("filesystem", System::getProperty)
                 .scope("default").scope("myrepo");
         store = new ForbidWithheldListStore(filesystem);
@@ -63,7 +63,7 @@ public class RubyGemsWithheldPagingTest {
 
     @AfterAll
     public void teardown() {
-        System.clearProperty("jenreg.filesystem.root");
+        System.clearProperty("jenrepo.filesystem.root");
     }
 
     @Test

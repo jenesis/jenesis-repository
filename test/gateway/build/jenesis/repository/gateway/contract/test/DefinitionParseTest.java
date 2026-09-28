@@ -215,7 +215,7 @@ public class DefinitionParseTest {
     @Test
     public void a_fallback_definition_routes_through_the_walk() throws Exception {
         ArtifactStore store = ArtifactStoreProvider.resolve("filesystem",
-                key -> "jenreg.filesystem.root".equals(key) ? root.toString() : null);
+                key -> "jenrepo.filesystem.root".equals(key) ? root.toString() : null);
         Map<String, byte[]> upstream = Map.of("http://up/remote.txt", "from upstream".getBytes(StandardCharsets.UTF_8));
         AtomicInteger fetches = new AtomicInteger();
         ProxyFormat.Fetcher.Buffered fetcher = (url, _) -> {

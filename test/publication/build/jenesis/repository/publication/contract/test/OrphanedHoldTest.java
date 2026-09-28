@@ -53,7 +53,7 @@ class OrphanedHoldTest {
     @BeforeEach
     void setUp() throws IOException {
         store = ArtifactStoreProvider.resolve("filesystem",
-                key -> "jenreg.filesystem.root".equals(key) ? root.toString() : null);
+                key -> "jenrepo.filesystem.root".equals(key) ? root.toString() : null);
         // The retroactive shape the hold-release fixtures hold with: the version is already serving, and a sweep has laid its
         // review pointer over it and written its own record.
         Publication publication = new Publication(store, List.of(), List.of());

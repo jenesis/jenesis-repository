@@ -30,7 +30,7 @@ import module java.base;
  *       reads only what decides <em>whether and how often</em> the pass exists (its enablement and cadence); everything
  *       a unit's work depends on comes from the context.</li>
  *   <li><b>Error visibility.</b> A thrown failure is logged and counted on
- *       {@code jenreg.maintenance.failures}, and the pass continues with the next unit - so a failure is
+ *       {@code jenrepo.maintenance.failures}, and the pass continues with the next unit - so a failure is
  *       contained to its unit, never silent. Swallowing a failure inside a unit hides it from that counter and from
  *       the task's reported status; throw instead. A read path that degrades gracefully is <em>not</em> an exemption:
  *       a derived view whose previous generation keeps serving because the rebuild never reached its marker flip is

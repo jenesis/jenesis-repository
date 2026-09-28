@@ -58,8 +58,8 @@ class ProvidersTest {
         assertThatThrownBy(() -> Providers.optionalUnique(SPI, two, NAME, Optional.empty(), ENABLED, CREATE))
                 .as("an SPI that reads a selection may advise using it")
                 .isInstanceOf(IllegalStateException.class)
-                .hasMessageContaining("jenreg." + SPI + "=<name>")
-                .hasMessageContaining("jenreg.<name>=false");
+                .hasMessageContaining("jenrepo." + SPI + "=<name>")
+                .hasMessageContaining("jenrepo.<name>=false");
 
         // The no-selection form. Eleven call sites hard-wired Optional.empty(), so that key was never read for any
         // of them - and for `search` and `staging` the key the message named is the server module's own off-switch,
@@ -67,16 +67,16 @@ class ProvidersTest {
         assertThatThrownBy(() -> Providers.optionalUnique(SPI, two, NAME, ENABLED, CREATE))
                 .as("an SPI that reads no selection must not advise setting a key nothing consults")
                 .isInstanceOf(IllegalStateException.class)
-                .hasMessageNotContaining("jenreg." + SPI + "=<name>")
+                .hasMessageNotContaining("jenrepo." + SPI + "=<name>")
                 .hasMessageContaining("reads no selection key")
-                .hasMessageContaining("jenreg.<name>=false");
+                .hasMessageContaining("jenrepo.<name>=false");
     }
 
     // --- packaging errors, rejected by every primitive -------------------------------------------------------
 
     @Test
     void two_providers_answering_to_one_name_are_a_packaging_error() {
-        // Case-insensitively equal: one jenreg.<name>=false switch would toggle both.
+        // Case-insensitively equal: one jenrepo.<name>=false switch would toggle both.
         List<Fake> clashing = List.of(alfa("dup", "a"), beta("DUP", "b"));
         for (Runnable primitive : everyPrimitive(clashing)) {
             assertThatThrownBy(primitive::run)
@@ -212,7 +212,7 @@ class ProvidersTest {
                 .hasMessageContaining("More than one widget implementation is enabled")
                 .hasMessageContaining("alfa")
                 .hasMessageContaining("bravo")
-                .hasMessageContaining("jenreg.widget=<name>");
+                .hasMessageContaining("jenrepo.widget=<name>");
     }
 
     @Test
@@ -247,7 +247,7 @@ class ProvidersTest {
                 Providers.optionalUnique(SPI, discovered, NAME, Optional.of("bravo"), ENABLED, CREATE))
                 .isInstanceOf(IllegalStateException.class)
                 .hasMessageContaining("'bravo'")
-                .hasMessageContaining("jenreg.bravo=false")
+                .hasMessageContaining("jenrepo.bravo=false")
                 .hasMessageContaining("required configuration is unset")
                 .hasMessageContaining("refusing to degrade silently");
     }

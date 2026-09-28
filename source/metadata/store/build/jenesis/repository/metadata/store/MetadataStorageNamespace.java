@@ -14,8 +14,8 @@ import build.jenesis.repository.maintenance.StorageNamespace;
  * {@code MetadataKey.version(..)} with the artifact it describes, and the {@code @coordinate} document when the last
  * version of a coordinate goes.
  *
- * <p>So {@code meta} growing under churn means no eviction ran - a suite arming {@code jenreg.gc} without
- * {@code jenreg.walks}, say, where retention and collection ride the walk and so never run. A reclamation figure
+ * <p>So {@code meta} growing under churn means no eviction ran - a suite arming {@code jenrepo.gc} without
+ * {@code jenrepo.walks}, say, where retention and collection ride the walk and so never run. A reclamation figure
  * taken from a deployment where the reaper never ran measures the reaper's absence.
  */
 public final class MetadataStorageNamespace implements StorageNamespace {

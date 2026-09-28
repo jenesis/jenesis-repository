@@ -33,7 +33,7 @@ public class RepositoryAdmin extends TenantScope {
 
     /**
      * The named repositories in the current tenant as the console's navigation lists them: from a node-local cache
-     * kept for {@code jenreg.cache.ttl}, five minutes by default, rather than from a store listing per page view.
+     * kept for {@code jenrepo.cache.ttl}, five minutes by default, rather than from a store listing per page view.
      *
      * <p>The sidebar asks on every page of the Repositories group, and the set changes only when an operator
      * defines a repository or a first publish creates one - so a new repository appears here within the ttl, and the

@@ -10,10 +10,10 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 /**
  * The {@code azure-blob} blob endpoint must be {@code https} by default, exactly as the {@code s3} and {@code gcs}
  * endpoint overrides must be - the one difference being where the scheme lives. Azure carries it <em>inside</em>
- * {@code jenreg.azure-blob.connection-string}, beside the account key, so the rule its siblings apply to an
+ * {@code jenrepo.azure-blob.connection-string}, beside the account key, so the rule its siblings apply to an
  * endpoint key of their own never reached this backend and a {@code DefaultEndpointsProtocol=http} put the shared-key
  * signature and every artifact byte on a plaintext wire with no operator signal at all. A plaintext endpoint - a local
- * Azurite container - is an explicit opt-out: {@code jenreg.azure-blob.allow-insecure-endpoint=true}.
+ * Azurite container - is an explicit opt-out: {@code jenrepo.azure-blob.allow-insecure-endpoint=true}.
  *
  * <p>The extraction is pinned as directly as the screen, because getting it wrong disarms the screen silently: a
  * connection string whose endpoint this reads as {@code null} is one the screen waves through. Needs no Docker, so it
@@ -30,7 +30,7 @@ class AzureEndpointSchemeTest {
         assertThatThrownBy(() -> AzureArtifactStoreProvider.secureEndpoint("http://127.0.0.1:10000/acme", null))
                 .isInstanceOf(IllegalStateException.class)
                 .hasMessageContaining("https")
-                .hasMessageContaining("jenreg.azure-blob.allow-insecure-endpoint");
+                .hasMessageContaining("jenrepo.azure-blob.allow-insecure-endpoint");
     }
 
     @Test

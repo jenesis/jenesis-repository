@@ -16,7 +16,7 @@ import org.thymeleaf.templatemode.TemplateMode;
 
 /**
  * The console read from a source checkout, for working on its look: with the {@code dev} profile active and
- * {@code jenreg.ui.sources} naming the root of a checkout, every template and every stylesheet, script, font and image
+ * {@code jenrepo.ui.sources} naming the root of a checkout, every template and every stylesheet, script, font and image
  * is read from the source tree on each request instead of from the module jars, so an edit shows on the next reload
  * of the page with no build, no restart and no test run. A change to Java still needs the modules rebuilt.
  *
@@ -30,7 +30,7 @@ import org.thymeleaf.templatemode.TemplateMode;
  */
 @Configuration(proxyBeanMethods = false)
 @Profile("dev")
-@ConditionalOnProperty("jenreg.ui.sources")
+@ConditionalOnProperty("jenrepo.ui.sources")
 public class DevSources implements WebMvcConfigurer {
 
     /** Where the shell's static files live below a checkout's root. */
@@ -38,10 +38,10 @@ public class DevSources implements WebMvcConfigurer {
 
     private final Path root;
 
-    public DevSources(@Value("${jenreg.ui.sources}") String root) {
+    public DevSources(@Value("${jenrepo.ui.sources}") String root) {
         this.root = Path.of(root).toAbsolutePath().normalize();
         if (!Files.isDirectory(this.root.resolve(STATIC))) {
-            throw new IllegalStateException("jenreg.ui.sources names " + this.root + ", which is not a checkout of"
+            throw new IllegalStateException("jenrepo.ui.sources names " + this.root + ", which is not a checkout of"
                     + " this repository: it has no " + STATIC);
         }
     }

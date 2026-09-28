@@ -10,7 +10,7 @@
     <nav th:replace="~{base :: moduleViews('contract')}"></nav>
     <p><small>The same modules as the by-module view, grouped by the <strong>SPI</strong> (a plug-in contract) each
         implements. Each implementation shows the <strong>module</strong> it comes from, whether it is
-        <strong>enabled</strong>, the <code>jenreg.*</code> key that toggles it, and the settings its module reads. It
+        <strong>enabled</strong>, the <code>jenrepo.*</code> key that toggles it, and the settings its module reads. It
         is read-only: switching a module and purging what a removed one left behind are on the by-module
         view.</small></p>
 
@@ -41,7 +41,7 @@
                     <th:block th:if="${impl.installed and impl.gated()}">
                         <span class="app-badge app-badge--pass" th:if="${impl.enabled}">enabled</span>
                         <span class="app-badge" th:unless="${impl.enabled}">&#9675; disabled</span>
-                        <code class="setting-doc" th:text="'jenreg.' + ${impl.enableKey}">key</code>
+                        <code class="setting-doc" th:text="'jenrepo.' + ${impl.enableKey}">key</code>
                     </th:block>
                     <span class="app-badge" th:if="${impl.installed and !impl.gated()}"
                           title="This implementation has no enable flag; it is active whenever it is installed.">always on</span>

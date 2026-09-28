@@ -17,7 +17,7 @@ import build.jenesis.repository.store.Providers;
  * {@link SignalContext} - its configuration lookup, the deployment-global space its snapshots live in and the clock
  * its staleness stamps come from - staying free of any framework dependency, and yields empty when its signal is not
  * enabled; discovery applies the uniform
- * {@link Features#active} gate (enabled unless {@code jenreg.<name>=false}, self-disabled when
+ * {@link Features#active} gate (enabled unless {@code jenrepo.<name>=false}, self-disabled when
  * {@link #requiredConfig()} is unset). Consumers resolve per contract through the contract's own statics
  * ({@link AdvisorySource#resolve}, {@link KnownExploitedSource#resolve}, {@link ExploitProbabilitySource#resolve},
  * {@link HealthSource#resolve}, {@link AdvisorySignal#resolve}), each keeping its own conservative merge and its
@@ -37,7 +37,7 @@ import build.jenesis.repository.store.Providers;
  *     - never {@code null}, and never a value that reads as "clean". {@code null} is never a legal return from
  *     {@link #name()}, {@link #signals()} or {@link #requiredConfig()} either.</li>
  * <li><b>Selection failure.</b> This is an additive SPI: every enabled provider contributes and there is
- *     no selection to miss. The uniform gate is enablement, not selection - {@code jenreg.<name>=false}
+ *     no selection to miss. The uniform gate is enablement, not selection - {@code jenrepo.<name>=false}
  *     switches one off and an unset {@link #requiredConfig()} key self-disables one with a single log line, so a
  *     licensed feed turns on by supplying its credential. What is <em>not</em> tolerated is a packaging error: two
  *     providers answering to one name, or one provider registered twice, throw rather than letting discovery order
@@ -132,8 +132,8 @@ import build.jenesis.repository.store.Providers;
  * {@link SignalContext#enabled} and passes its own default.
  *
  * <p>{@code Features} and {@code Boolean.parseBoolean} disagree on every value that is neither "true" nor "false" -
- * one reads {@code jenreg.snyk=yes} as enabled where the other reads {@code jenreg.osv=yes} as disabled - though the
- * settings surface documents {@code jenreg.<name>=false} as the one thing that switches a source off. Asking the
+ * one reads {@code jenrepo.snyk=yes} as enabled where the other reads {@code jenrepo.osv=yes} as disabled - though the
+ * settings surface documents {@code jenrepo.<name>=false} as the one thing that switches a source off. Asking the
  * context gives every source the one reading. It lives on the context because half the source modules do not
  * require the store SPI, so the shared answer has to live on something they already hold.
  *
@@ -147,7 +147,7 @@ import build.jenesis.repository.store.Providers;
 public interface SignalSourceProvider extends IconContributor {
 
     /** The signal name this provider answers to, e.g. {@code osv}, {@code kev}, {@code epss} - the
-     *  {@code jenreg.<name>} toggle, the attribution key of everything it creates, and the string a
+     *  {@code jenrepo.<name>} toggle, the attribution key of everything it creates, and the string a
      *  finding it produced carries as its {@code source} for as long as that finding is stored. */
     @Override
     String name();
@@ -213,7 +213,7 @@ public interface SignalSourceProvider extends IconContributor {
         List<Map.Entry<String, T>> attributed = Providers.all("signal-source",
                 ServiceLoader.load(SignalSourceProvider.class),
                 SignalSourceProvider::name,
-                // The uniform convention gate: declares the contract, enabled unless jenreg.<name>=false,
+                // The uniform convention gate: declares the contract, enabled unless jenrepo.<name>=false,
                 // and a source missing its required config (a licensed credential) self-disables with one log line.
                 provider -> provider.signals().stream().anyMatch(contract::isAssignableFrom)
                         && Features.active(config, provider.name(), provider.requiredConfig()),

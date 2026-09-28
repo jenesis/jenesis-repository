@@ -29,17 +29,17 @@ import static org.assertj.core.api.Assertions.assertThat;
  */
 class ScopedPostureTest {
 
-    private static final SecurityAdvisory ACME = SecurityAdvisory.tenant("jenreg.gate.malware", Severity.CRITICAL,
+    private static final SecurityAdvisory ACME = SecurityAdvisory.tenant("jenrepo.gate.malware", Severity.CRITICAL,
             "acme", "acme admits malicious packages", "acme why", "acme fix",
-            "jenreg.malware-action", "QUARANTINE", "");
+            "jenrepo.malware-action", "QUARANTINE", "");
 
-    private static final SecurityAdvisory GLOBEX = SecurityAdvisory.tenant("jenreg.gate.vulnerability", Severity.WARN,
+    private static final SecurityAdvisory GLOBEX = SecurityAdvisory.tenant("jenrepo.gate.vulnerability", Severity.WARN,
             "globex", "globex has its vulnerability check disabled", "globex why", "globex fix",
-            "jenreg.vulnerability-threshold", "CRITICAL", "");
+            "jenrepo.vulnerability-threshold", "CRITICAL", "");
 
-    private static final SecurityAdvisory DEPLOYMENT = SecurityAdvisory.deployment("jenreg.auth.open",
+    private static final SecurityAdvisory DEPLOYMENT = SecurityAdvisory.deployment("jenrepo.auth.open",
             Severity.CRITICAL, "Authorization is disabled", "deployment why", "deployment fix",
-            "jenreg.auth", "true", "");
+            "jenrepo.auth", "true", "");
 
     /** A report carrying both tenants' rows and a deployment-wide one - the shape a fan-out over several advisors
      *  produces, and the only shape in which dropped scoping is observable. */
@@ -53,12 +53,12 @@ class ScopedPostureTest {
     void a_tenants_view_shows_its_own_advisories_and_not_another_tenants() {
         ScopedPosture view = ScopedPosture.of(twoTenants(), "acme");
         assertThat(view.own()).extracting(SecurityAdvisory::id)
-                .as("this tenant's own row is shown").containsExactly("jenreg.gate.malware");
+                .as("this tenant's own row is shown").containsExactly("jenrepo.gate.malware");
         assertThat(view.own()).extracting(SecurityAdvisory::tenant)
                 .as("and every row in the tenant half belongs to the tenant being viewed").containsOnly("acme");
         assertThat(view.rendered()).extracting(SecurityAdvisory::id)
                 .as("another tenant's advisory is in neither half of what is rendered")
-                .doesNotContain("jenreg.gate.vulnerability");
+                .doesNotContain("jenrepo.gate.vulnerability");
         assertThat(view.rendered()).extracting(SecurityAdvisory::tenant)
                 .as("and no rendered row names a tenant other than this one").doesNotContain("globex");
     }
@@ -68,8 +68,8 @@ class ScopedPostureTest {
         // The mirror image, so the assertion above cannot be satisfied by rendering nothing at all: the row exists,
         // it is real, and it appears - in the one view it belongs to.
         ScopedPosture view = ScopedPosture.of(twoTenants(), "globex");
-        assertThat(view.own()).extracting(SecurityAdvisory::id).containsExactly("jenreg.gate.vulnerability");
-        assertThat(view.rendered()).extracting(SecurityAdvisory::id).doesNotContain("jenreg.gate.malware");
+        assertThat(view.own()).extracting(SecurityAdvisory::id).containsExactly("jenrepo.gate.vulnerability");
+        assertThat(view.rendered()).extracting(SecurityAdvisory::id).doesNotContain("jenrepo.gate.malware");
     }
 
     @Test
@@ -78,7 +78,7 @@ class ScopedPostureTest {
             ScopedPosture view = ScopedPosture.of(twoTenants(), tenant);
             assertThat(view.deployment()).extracting(SecurityAdvisory::id)
                     .as("a deployment-wide row applies to every tenant and is shown in each view")
-                    .containsExactly("jenreg.auth.open");
+                    .containsExactly("jenrepo.auth.open");
             assertThat(view.own()).extracting(SecurityAdvisory::scope)
                     .as("the two halves are kept apart so an operator can tell whose each row is")
                     .containsOnly(build.jenesis.repository.posture.Scope.TENANT);
@@ -104,7 +104,7 @@ class ScopedPostureTest {
             assertThat(view.own()).as("and guesses no tenant's rows").isEmpty();
             assertThat(view.rendered()).extracting(SecurityAdvisory::id)
                     .as("the deployment-wide view it was before still renders")
-                    .containsExactly("jenreg.auth.open");
+                    .containsExactly("jenrepo.auth.open");
         }
     }
 
@@ -116,8 +116,8 @@ class ScopedPostureTest {
                 Configuration.ofMap(Map.of()));
         ScopedPosture view = ScopedPosture.of(report, "acme");
         assertThat(view.scoped()).isTrue();
-        assertThat(view.own()).extracting(SecurityAdvisory::id).containsExactly("jenreg.gate.malware");
-        assertThat(view.deployment()).extracting(SecurityAdvisory::id).containsExactly("jenreg.auth.open");
+        assertThat(view.own()).extracting(SecurityAdvisory::id).containsExactly("jenrepo.gate.malware");
+        assertThat(view.deployment()).extracting(SecurityAdvisory::id).containsExactly("jenrepo.auth.open");
         assertThat(view.count()).isEqualTo(2);
     }
 

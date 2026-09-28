@@ -29,7 +29,7 @@ import build.jenesis.repository.gate.HeldElsewhere;
  */
 public final class WithheldReconcileConsumer implements WalkConsumer {
 
-    /** The consumer's name: its toggle ({@code jenreg.withheld-reconcile}), its scenario, its settings row. */
+    /** The consumer's name: its toggle ({@code jenrepo.withheld-reconcile}), its scenario, its settings row. */
     public static final String NAME = "withheld-reconcile";
 
     private static final Logger LOGGER = LoggerFactory.getLogger(WithheldReconcileConsumer.class);
@@ -230,9 +230,9 @@ public final class WithheldReconcileConsumer implements WalkConsumer {
                 remarked += result.remarked();
             }
             return List.of(
-                    Metric.gauge("jenreg.withheld.markers.lifted", "Holderless withheld/<hash> markers lifted by the "
+                    Metric.gauge("jenrepo.withheld.markers.lifted", "Holderless withheld/<hash> markers lifted by the "
                             + "last walk of each repository.", lifted, "markers"),
-                    Metric.gauge("jenreg.withheld.markers.remarked", "Re-asserted withheld markers whose hold went "
+                    Metric.gauge("jenrepo.withheld.markers.remarked", "Re-asserted withheld markers whose hold went "
                             + "live mid-pass (the reconcile-versus-enforce race) in the last walk of each repository.",
                             remarked, "markers"));
         }

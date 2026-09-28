@@ -3,7 +3,7 @@ package build.jenesis.repository.cli;
 import module java.base;
 
 /**
- * The {@code jenreg} command-line entry point.
+ * The {@code jenrepo} command-line entry point.
  *
  * <p>It is a thin dispatcher over {@link Session} (the stored login) and {@link RepositoryClient} (the HTTP API),
  * and that thinness is the design: the CLI holds no state and makes no decision the API does not, so what it offers
@@ -102,7 +102,7 @@ public final class Cli {
         if (noun == null) {
             System.err.println("error: unknown command '" + first + "'");
             suggest(first).ifPresent(near -> System.err.println("did you mean '" + near + "'?"));
-            System.err.println("run 'jenreg help' for the commands, or 'jenreg skill' for a briefing.");
+            System.err.println("run 'jenrepo help' for the commands, or 'jenrepo skill' for a briefing.");
             return 2;
         }
         for (String arg : args) {
@@ -245,11 +245,11 @@ public final class Cli {
 
     /** The map of the product: every noun under its heading, with one line each. */
     private static void overview(PrintStream out) {
-        out.println("jenreg - operate a Jenesis repository from the command line");
+        out.println("jenrepo - operate a Jenesis repository from the command line");
         out.println();
-        out.println("Usage: jenreg <command> [action] [arguments]");
-        out.println("       jenreg help <command>   every action on one command");
-        out.println("       jenreg skill            a briefing for a program driving this tool");
+        out.println("Usage: jenrepo <command> [action] [arguments]");
+        out.println("       jenrepo help <command>   every action on one command");
+        out.println("       jenrepo skill            a briefing for a program driving this tool");
         out.println();
         out.println("Global: --json               answer with the API's own JSON instead of the human rendering");
         out.println("        --refresh[=30s|5m]  where a command starts work that outlives it, reprint the state");
@@ -277,7 +277,7 @@ public final class Cli {
      */
     private static void skill() {
         System.out.println("""
-                jenreg - a Jenesis artifact repository, driven from the command line.
+                jenrepo - a Jenesis artifact repository, driven from the command line.
 
                 WHAT IT IS
                   Every command is one HTTP call to the repository's API - the same API the admin console and any
@@ -286,8 +286,8 @@ public final class Cli {
                   body: arguments and flags carry everything.
 
                 GETTING A SESSION
-                  jenreg login <url> --key <key>
-                  The URL and key are stored under ~/.jenesis (override with JENREG_CLI_HOME) and every later
+                  jenrepo login <url> --key <key>
+                  The URL and key are stored under ~/.jenesis (override with JENREPO_CLI_HOME) and every later
                   command uses them. 'whoami' shows what is stored. Without a session every command that needs one
                   fails immediately and says so.
 
@@ -300,7 +300,7 @@ public final class Cli {
                   a given server, and knowing that up front is cheaper than discovering it from an error.
 
                 SHAPE OF A COMMAND
-                  jenreg <noun> [action] [arguments] [--flags]
+                  jenrepo <noun> [action] [arguments] [--flags]
                   The noun is the subject (a repository, the credentials, the findings). With no action a noun
                   reads: 'pins <repo>' lists the pins, 'pins pin <repo> ...' adds one. Reads never change anything.
 

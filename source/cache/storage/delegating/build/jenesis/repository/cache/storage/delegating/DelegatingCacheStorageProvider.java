@@ -13,7 +13,7 @@ import build.jenesis.repository.store.ArtifactStoreProvider;
  *
  * <p>There is one provider, naming no backend, rather than one per backend selected by a cache-storage key of the
  * cache's own. A second selection costs ambiguity of the kind that loses data: both roles would read the same
- * {@code jenreg.s3.*} keys, so a deployment with the repository on disk and the cache in a bucket would configure
+ * {@code jenrepo.s3.*} keys, so a deployment with the repository on disk and the cache in a bucket would configure
  * two backends at once - and nothing could tell that apart from a misconfiguration. With one selection there is one
  * store, and "nothing configured" and "more than one configured" are answerable questions rather than
  * indistinguishable ones.
@@ -41,7 +41,7 @@ public final class DelegatingCacheStorageProvider implements CacheStorageProvide
 
 
     /** The repository's backend selection. The cache has none of its own - that is the point. */
-    private static final String STORE_SELECTION = "jenreg.store";
+    private static final String STORE_SELECTION = "jenrepo.store";
 
     @Override
     public String name() {

@@ -32,7 +32,7 @@ class ImporterCapabilityTest {
     @BeforeEach
     void setUp() {
         store = ArtifactStoreProvider.resolve(
-                "filesystem", key -> "jenreg.filesystem.root".equals(key) ? root.toString() : null);
+                "filesystem", key -> "jenrepo.filesystem.root".equals(key) ? root.toString() : null);
     }
 
     /** A hosted-only format with no import capability - a base RepositoryFormat, never an importer. */

@@ -31,7 +31,7 @@ public final class IndexSettingsContributor implements SettingsContributor {
                         Setting.Kind.LONG, "8388608", false).advanced(),
                 new Setting(IndexRebaseConsumer.NAME, "Index", "Index rebase on the walk",
                         "Rebase the published index onto a fresh chunk chain from every served pointer at the end "
-                                + "of a walk of the store that carries this consumer (jenreg.walks). Published chunks "
+                                + "of a walk of the store that carries this consumer (jenrepo.walks). Published chunks "
                                 + "are immutable and cached by consumers, so the rebase is what removes a "
                                 + "retroactively withheld path from the index once the live retraction signal was "
                                 + "missed; carry it on a scheduled walk.",

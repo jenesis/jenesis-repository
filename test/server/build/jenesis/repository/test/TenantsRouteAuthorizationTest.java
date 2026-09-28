@@ -32,7 +32,7 @@ class TenantsRouteAuthorizationTest {
     @Test
     void a_wildcard_publish_right_does_not_administer_tenants_and_the_manage_right_does() throws IOException {
         ArtifactStore store = ArtifactStoreProvider.resolve(
-                "filesystem", key -> "jenreg.filesystem.root".equals(key) ? root.toString() : null);
+                "filesystem", key -> "jenrepo.filesystem.root".equals(key) ? root.toString() : null);
         Authorization authorization = Authorization.enforcing(store);
         RepositoryProperties properties = new RepositoryProperties();
         properties.setOperatorTenant("operator");

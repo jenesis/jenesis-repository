@@ -122,13 +122,13 @@ class SpoolStoreTest {
         SpoolStore spool = new SpoolStore(new SpoolStore.Budget(64, 2));
 
         Map<String, Metric> before = byName(spool.metrics());
-        assertThat(before).containsKeys("jenreg.gateway.spool.bytes", "jenreg.gateway.spool.count",
-                "jenreg.gateway.spool.exhausted");
-        assertThat(before.get("jenreg.gateway.spool.bytes").limit()).hasValue(64d);
-        assertThat(before.get("jenreg.gateway.spool.bytes").kind()).isEqualTo(Metric.Kind.GAUGE);
-        assertThat(before.get("jenreg.gateway.spool.count").limit()).hasValue(2d);
-        assertThat(before.get("jenreg.gateway.spool.exhausted").kind()).isEqualTo(Metric.Kind.COUNTER);
-        assertThat(before.get("jenreg.gateway.spool.exhausted").value()).isZero();
+        assertThat(before).containsKeys("jenrepo.gateway.spool.bytes", "jenrepo.gateway.spool.count",
+                "jenrepo.gateway.spool.exhausted");
+        assertThat(before.get("jenrepo.gateway.spool.bytes").limit()).hasValue(64d);
+        assertThat(before.get("jenrepo.gateway.spool.bytes").kind()).isEqualTo(Metric.Kind.GAUGE);
+        assertThat(before.get("jenrepo.gateway.spool.count").limit()).hasValue(2d);
+        assertThat(before.get("jenrepo.gateway.spool.exhausted").kind()).isEqualTo(Metric.Kind.COUNTER);
+        assertThat(before.get("jenrepo.gateway.spool.exhausted").value()).isZero();
 
         ArtifactStore scratch = spool.acquire();
         try {
@@ -136,14 +136,14 @@ class SpoolStoreTest {
         } finally {
             ((AutoCloseable) scratch).close();
         }
-        assertThat(byName(spool.metrics()).get("jenreg.gateway.spool.exhausted").value())
+        assertThat(byName(spool.metrics()).get("jenrepo.gateway.spool.exhausted").value())
                 .as("the exhaustion counter moved").isEqualTo(1d);
 
         // The store is its own source: a context that built it reports its signals.
         ObservabilityReport report = ObservabilityReport.of(List.of(spool));
-        assertThat(report.metrics()).extracting(Metric::name).contains("jenreg.gateway.spool.bytes",
-                "jenreg.gateway.spool.count", "jenreg.gateway.spool.exhausted");
-        assertThat(report.healthChecks()).extracting("name").contains("jenreg.gateway.spool");
+        assertThat(report.metrics()).extracting(Metric::name).contains("jenrepo.gateway.spool.bytes",
+                "jenrepo.gateway.spool.count", "jenrepo.gateway.spool.exhausted");
+        assertThat(report.healthChecks()).extracting("name").contains("jenrepo.gateway.spool");
     }
 
     private static RepositoryRouter passThroughRouter(SpoolStore spool, String body) {

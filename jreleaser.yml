@@ -27,30 +27,30 @@ release:
     skipTag: false
     tagName: 'v{{projectVersion}}'
 
-# The command-line client: its launcher jar as a download of its own, and the archive that wraps it with the jenreg
+# The command-line client: its launcher jar as a download of its own, and the archive that wraps it with the jenrepo
 # command, published to Homebrew and Scoop here and to mise from release.yml. Both are assembled by release.yml after
 # staging. The packager templates live under distribution/, since this project has no src/ tree for JReleaser's
 # default location, so each packager names its templateDirectory.
 distributions:
-  jenreg:
+  jenrepo:
     type: JAVA_BINARY
     executable:
-      name: jenreg
+      name: jenrepo
     java:
       mainClass: build.jenesis.repository.cli.Cli
     artifacts:
-      - path: 'sdk/jenreg-{{projectVersion}}.zip'
+      - path: 'sdk/jenrepo-{{projectVersion}}.zip'
     brew:
       active: ALWAYS
-      templateDirectory: distribution/jenreg/brew
-      formulaName: jenreg
+      templateDirectory: distribution/jenrepo/brew
+      formulaName: jenrepo
       repository:
         owner: jenesis
         name: homebrew-tap
     scoop:
       active: ALWAYS
-      templateDirectory: distribution/jenreg/scoop
-      packageName: jenreg
+      templateDirectory: distribution/jenrepo/scoop
+      packageName: jenrepo
       repository:
         owner: jenesis
         name: scoop-bucket
@@ -59,7 +59,7 @@ distributions:
 
 files:
   artifacts:
-    - path: 'sdk/jenreg-{{projectVersion}}.jar'
+    - path: 'sdk/jenrepo-{{projectVersion}}.jar'
 
 deploy:
   maven:

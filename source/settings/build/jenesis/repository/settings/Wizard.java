@@ -36,10 +36,10 @@ public enum Wizard {
     public static final Information STARTER_CREDENTIAL = new Information("starter-credential",
             "Stop using the starter credential",
             "A new deployment is first signed in to with the one-time key its start printed, which stops working after "
-                    + "an hour or as soon as an administrator exists. The console's starter key (jenreg.ui.admin-key) "
-                    + "and the API's bootstrap key (jenreg.bootstrap-key) are secrets a deployment is provisioned with, "
+                    + "an hour or as soon as an administrator exists. The console's starter key (jenrepo.ui.admin-key) "
+                    + "and the API's bootstrap key (jenrepo.bootstrap-key) are secrets a deployment is provisioned with, "
                     + "re-provisioned on every boot for as long as they are set. Grant a real administrator and issue a "
-                    + "real credential, then unset both; removing an id from jenreg.ui.admins does not revoke the grant "
+                    + "real credential, then unset both; removing an id from jenrepo.ui.admins does not revoke the grant "
                     + "it seeded.");
 
     /** A step that informs rather than asks: a stable id, a title and what it says. */

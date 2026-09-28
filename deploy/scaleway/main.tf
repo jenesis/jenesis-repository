@@ -1,10 +1,10 @@
 # Jenesis Repository on Scaleway, backed by Scaleway Object Storage through the
 # s3 backend. Provisions a bucket, an IAM application whose API key is the bucket's only credential, and a
-# Serverless Container running the image with JENREG_STORE=s3 pointed at the bucket. Scaleway
+# Serverless Container running the image with JENREPO_STORE=s3 pointed at the bucket. Scaleway
 # documents both write preconditions the s3 backend's compare-and-set rests on (If-None-Match on a create,
 # If-Match on a replace), and the backend confirms them at every boot with a four-write probe before it
 # serves - a store that ignored either would refuse to start rather than lose writes silently. Every further
-# setting is an entry of `environment` (plain) or `secrets` (secret environment), under its JENREG_* name.
+# setting is an entry of `environment` (plain) or `secrets` (secret environment), under its JENREPO_* name.
 #
 # NOTE: authored from the provider's documented resource shapes and checked with `terraform validate`; NOT
 # deploy-validated (no Scaleway project was at hand). Review before relying on it.
@@ -53,19 +53,19 @@ resource "scaleway_iam_api_key" "repository" {
 }
 
 # The store selection and its settings: the s3 backend against the regional endpoint and the bucket, with the
-# credential as secret environment. The key names are the jenreg.* settings under Spring's relaxed binding
-# (jenreg.s3.access-key-id is JENREG_S3_ACCESSKEYID). Both are the template's, so they are applied over whatever
+# credential as secret environment. The key names are the jenrepo.* settings under Spring's relaxed binding
+# (jenrepo.s3.access-key-id is JENREPO_S3_ACCESSKEYID). Both are the template's, so they are applied over whatever
 # `environment` and `secrets` say: the bucket this template provisions is the one the container must use.
 locals {
   plain_env = merge(var.environment, {
-    JENREG_STORE       = "s3"
-    JENREG_S3_BUCKET   = scaleway_object_bucket.repository.name
-    JENREG_S3_ENDPOINT = "https://s3.${var.region}.scw.cloud"
-    JENREG_S3_REGION   = var.region
+    JENREPO_STORE       = "s3"
+    JENREPO_S3_BUCKET   = scaleway_object_bucket.repository.name
+    JENREPO_S3_ENDPOINT = "https://s3.${var.region}.scw.cloud"
+    JENREPO_S3_REGION   = var.region
   })
   secret_env = merge(var.secrets, {
-    JENREG_S3_ACCESSKEYID     = scaleway_iam_api_key.repository.access_key
-    JENREG_S3_SECRETACCESSKEY = scaleway_iam_api_key.repository.secret_key
+    JENREPO_S3_ACCESSKEYID     = scaleway_iam_api_key.repository.access_key
+    JENREPO_S3_SECRETACCESSKEY = scaleway_iam_api_key.repository.secret_key
   })
 }
 

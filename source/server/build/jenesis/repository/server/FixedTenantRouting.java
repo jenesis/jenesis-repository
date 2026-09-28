@@ -9,7 +9,7 @@ import org.springframework.http.HttpStatus;
 import org.springframework.web.server.ResponseStatusException;
 
 /**
- * The fixed-tenant {@link RepositoryRouting}: the deployment answers one tenant, {@code jenreg.default-tenant}, and a
+ * The fixed-tenant {@link RepositoryRouting}: the deployment answers one tenant, {@code jenrepo.default-tenant}, and a
  * URL naming any other is a {@code 404}. The URL names the tenant all the same ({@link RepositoryRouting#target}),
  * exactly as under a multi-tenant routing, so switching a deployment to one is a configuration change that moves no
  * URL a client has, over a layout where the data is found where it was left.

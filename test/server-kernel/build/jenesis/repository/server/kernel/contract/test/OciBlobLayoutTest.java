@@ -116,7 +116,7 @@ class OciBlobLayoutTest {
 
     private ArtifactStore store() {
         return ArtifactStoreProvider.resolve("filesystem",
-                key -> "jenreg.filesystem.root".equals(key) ? root.toString() : null);
+                key -> "jenrepo.filesystem.root".equals(key) ? root.toString() : null);
     }
 
     /** Attach a logback list appender to the layout's logger so a test can assert (or assert the absence of) its WARN. */

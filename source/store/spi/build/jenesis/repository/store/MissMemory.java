@@ -6,7 +6,7 @@ import com.github.benmanes.caffeine.cache.Caffeine;
 
 /**
  * A node's memory of what it looked for and did not find: a bounded, expiring set of store keys a serve probed and
- * found absent, so the same probe is answered from memory rather than from the store for {@code jenreg.cache.miss-ttl}.
+ * found absent, so the same probe is answered from memory rather than from the store for {@code jenrepo.cache.miss-ttl}.
  * The read it spares is the pointer read at the head of every download - a build tool probing a version range, a
  * missing snapshot or an optional classifier across a group's members asks the same question of the same
  * repositories many times in a row, and each would otherwise ask the store.
@@ -33,7 +33,7 @@ import com.github.benmanes.caffeine.cache.Caffeine;
  */
 public final class MissMemory {
 
-    /** The setting the ttl is read from ({@code jenreg.cache.miss-ttl}). */
+    /** The setting the ttl is read from ({@code jenrepo.cache.miss-ttl}). */
     public static final String TTL_SETTING = "cache.miss-ttl";
 
     /** The default as an operator writes it; {@link #DEFAULT_TTL} parses this. Ten seconds: long enough to absorb

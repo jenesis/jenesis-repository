@@ -20,7 +20,7 @@ public class RepositoryAuthorizationNormalizationTest {
     @Test
     public void an_empty_or_dot_segment_is_not_normalized() {
         assertThat(RepositoryAuthorizationManager.normalized("/api//settings")).isFalse();
-        assertThat(RepositoryAuthorizationManager.normalized("/api//settings/jenreg.gate.enabled")).isFalse();
+        assertThat(RepositoryAuthorizationManager.normalized("/api//settings/jenrepo.gate.enabled")).isFalse();
         assertThat(RepositoryAuthorizationManager.normalized("//api/settings")).isFalse();
         assertThat(RepositoryAuthorizationManager.normalized("/api/./settings")).isFalse();
         assertThat(RepositoryAuthorizationManager.normalized("/api/../settings")).isFalse();
@@ -32,7 +32,7 @@ public class RepositoryAuthorizationNormalizationTest {
     @Test
     public void a_clean_path_is_normalized() {
         assertThat(RepositoryAuthorizationManager.normalized("/api/settings")).isTrue();
-        assertThat(RepositoryAuthorizationManager.normalized("/api/settings/jenreg.gate.enabled")).isTrue();
+        assertThat(RepositoryAuthorizationManager.normalized("/api/settings/jenrepo.gate.enabled")).isTrue();
         assertThat(RepositoryAuthorizationManager.normalized("/api/repositories")).isTrue();
         assertThat(RepositoryAuthorizationManager.normalized("/actuator/prometheus")).isTrue();
         assertThat(RepositoryAuthorizationManager.normalized("/repository/releases/org/example/a/1/a-1.jar")).isTrue();

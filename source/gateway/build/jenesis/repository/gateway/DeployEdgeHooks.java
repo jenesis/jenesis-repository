@@ -31,7 +31,7 @@ import io.micrometer.observation.ObservationRegistry;
  *       so a later review release can replay {@code plugin.handle} from the stored publish envelope and actually
  *       materialise the version rather than link a raw envelope blob. Without it a hold could not be released, and
  *       it is recorded here so every tenancy mode's write path records it alike.</li>
- *   <li>{@link #verdict} raises the {@code jenreg.deploy} observation once per screened write with the
+ *   <li>{@link #verdict} raises the {@code jenrepo.deploy} observation once per screened write with the
  *       chain's disposition, so every accepted, quarantined and rejected deploy is observed.</li>
  * </ul>
  *
@@ -98,14 +98,14 @@ public final class DeployEdgeHooks implements EdgeHooks {
                 QuarantineDispatch.capture(exchange::requestHeader));
     }
 
-    /** One verdict per screened write, raised as the {@code jenreg.deploy} observation tagged with the
+    /** One verdict per screened write, raised as the {@code jenrepo.deploy} observation tagged with the
      *  publishing tenant ({@link PublishTenant#current()}), the repository the request addressed and the chain's
      *  disposition. */
     @Override
     public void verdict(PublishInterceptor.Disposition disposition, ArtifactDescriptor descriptor,
                         FormatExchange exchange) throws IOException {
         String repository = repositoryOf(exchange.requestUri());
-        Observations.observe(observations, "jenreg.deploy", repository, PublishTenant.current(),
+        Observations.observe(observations, "jenrepo.deploy", repository, PublishTenant.current(),
                 observation -> {
                     observation.lowCardinalityKeyValue("verdict", disposition.name());
                     return null;

@@ -7,7 +7,7 @@ import build.jenesis.repository.store.ArtifactStoreProvider;
 import build.jenesis.repository.store.OwnerOnly;
 
 /**
- * The {@code filesystem} provider: a store rooted at {@code jenreg.filesystem.root}, which is <em>required</em>.
+ * The {@code filesystem} provider: a store rooted at {@code jenrepo.filesystem.root}, which is <em>required</em>.
  *
  * <p>There is no default root. Storage is the setting a wrong guess LOSES data over rather than merely
  * misconfigures: on a host a default path is presumptuous, and in a container it is the writable layer, so an
@@ -28,13 +28,13 @@ public final class FilesystemArtifactStoreProvider implements ArtifactStoreProvi
     /** The store root. Required: a store that guesses where to put bytes is a store that loses them. */
     @Override
     public Set<String> requiredConfig() {
-        return Set.of("jenreg.filesystem.root");
+        return Set.of("jenrepo.filesystem.root");
     }
 
     @Override
     public ArtifactStore create(UnaryOperator<String> config) {
         // Never null or blank: requiredConfig() above is validated before this is called.
-        Path path = Path.of(config.apply("jenreg.filesystem.root"));
+        Path path = Path.of(config.apply("jenrepo.filesystem.root"));
         try {
             // Create the store root owner-only (rwx------) up front, so the top-level container is never left
             // world-readable at the process umask; a root that cannot be created is a fail-fast, not a store

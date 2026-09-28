@@ -99,7 +99,7 @@ public final class RepositoryImport {
             }
 
             private void walk(String format, String path, ImportSource.Content content) throws IOException {
-                // A format configured off (jenreg.<format>=false) imports nothing either - its assets
+                // A format configured off (jenrepo.<format>=false) imports nothing either - its assets
                 // count as skipped, exactly as if its importer module were absent.
                 if (Features.enabled(format)) {
                     for (RepositoryImporter importer : importers) {

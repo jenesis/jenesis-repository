@@ -31,18 +31,18 @@ import org.springframework.context.annotation.Import;
  * answer them with a redirect to a sign-in page nothing serves.
  */
 @Configuration(proxyBeanMethods = false)
-// "jenreg." + GATE, not GATE: the constant is the SETTINGS key (unprefixed, as the catalogue
+// "jenrepo." + GATE, not GATE: the constant is the SETTINGS key (unprefixed, as the catalogue
 // carries it) and Spring wants the property name. They were one string until the settings
 // reference needed a literal it could read, and a compile-time constant is inlined - so this
 // call site went on compiling while asking for a property called "console" that nothing sets.
-@ConditionalOnProperty(name = "jenreg." + AdminConsoleNode.GATE, havingValue = "true", matchIfMissing = true)
+@ConditionalOnProperty(name = "jenrepo." + AdminConsoleNode.GATE, havingValue = "true", matchIfMissing = true)
 @ConfigurationPropertiesScan(basePackages = "build.jenesis.repository.ui.admin.config")
 @ComponentScan(basePackages = "build.jenesis.repository.ui.admin",
         excludeFilters = @ComponentScan.Filter(type = FilterType.REGEX,
                 // The console's own store wiring, which exists so it can run as its own node. In a composed
                 // application the repository's StoreConfig is authoritative: both declare an `authorization` and an
-                // `auditTrail` bean, and more to the point the console's opens the store named by jenreg.ui.* while
-                // the repository opens jenreg.store - one node must read one store, and it is the one the
+                // `auditTrail` bean, and more to the point the console's opens the store named by jenrepo.ui.* while
+                // the repository opens jenrepo.store - one node must read one store, and it is the one the
                 // repository writes.
                 pattern = {"build\\.jenesis\\.repository\\.ui\\.admin\\.config\\.RepositoryStoreConfig",
                         "build\\.jenesis\\.repository\\.ui\\.admin\\.Application"}))
@@ -52,7 +52,7 @@ public class AdminConsoleNode {
     /**
      * Whether this deployment serves the console at all. Read before the context starts, so it applies on the next
      * restart rather than live; the settings catalogue carries it unprefixed, which is why the call sites above
-     * compose {@code "jenreg." + GATE} rather than holding one string for both jobs.
+     * compose {@code "jenrepo." + GATE} rather than holding one string for both jobs.
      *
      * <p>It lived on the shell's own node until that node went. Nothing imported that node, so the gate it carried
      * was the gate of a console nobody booted, while the console that ships read the same constant across a module
@@ -61,12 +61,12 @@ public class AdminConsoleNode {
     public static final String GATE = "console";
 
     /**
-     * Who administers this deployment, seeded from this console's own {@code jenreg.ui.admins}.
+     * Who administers this deployment, seeded from this console's own {@code jenrepo.ui.admins}.
      *
      * <p>Declared on the node rather than in {@code RepositoryStoreConfig}, which is the console's <em>standalone</em>
      * store wiring and is excluded from the scan wherever the console is composed with the repository - so a bean
      * declared there exists in one of the two compositions this console ships in. It is declared here rather than
-     * inherited from the base console's default because the two bind {@code jenreg.ui.*} with different
+     * inherited from the base console's default because the two bind {@code jenrepo.ui.*} with different
      * configuration types - disjoint keys, deliberately not merged - so each supplies the value from its own; the
      * reader, the seeding and the grants they produce are shared.
      *

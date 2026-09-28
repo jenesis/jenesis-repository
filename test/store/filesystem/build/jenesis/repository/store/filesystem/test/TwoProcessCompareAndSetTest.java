@@ -22,7 +22,7 @@ class TwoProcessCompareAndSetTest {
     @Test
     void two_processes_incrementing_one_key_lose_no_increment(@TempDir Path root) throws Exception {
         ArtifactStore store = ArtifactStoreProvider.resolve("filesystem",
-                key -> "jenreg.filesystem.root".equals(key) ? root.toString() : null);
+                key -> "jenrepo.filesystem.root".equals(key) ? root.toString() : null);
         assertThat(store.writeVersioned("m/counter", "0".getBytes(StandardCharsets.UTF_8), null)).isTrue();
 
         Process first = incrementer(root);
@@ -46,7 +46,7 @@ class TwoProcessCompareAndSetTest {
         Path root = Files.createDirectories(scratch.resolve("shared"));
         Path alias = Files.createSymbolicLink(scratch.resolve("alias"), root);
         ArtifactStore store = ArtifactStoreProvider.resolve("filesystem",
-                key -> "jenreg.filesystem.root".equals(key) ? root.toString() : null);
+                key -> "jenrepo.filesystem.root".equals(key) ? root.toString() : null);
         assertThat(store.writeVersioned("m/counter", "0".getBytes(StandardCharsets.UTF_8), null)).isTrue();
 
         Process first = incrementer(root);

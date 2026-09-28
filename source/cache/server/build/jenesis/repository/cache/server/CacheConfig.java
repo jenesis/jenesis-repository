@@ -20,8 +20,8 @@ import org.springframework.context.annotation.Configuration;
 import org.springframework.core.env.Environment;
 
 /**
- * Builds the {@link Cache} from {@link CacheProperties} (bound from {@code jenreg.cache.*} / the
- * matching {@code JENREG_CACHE_*} environment variables) and starting the reaper. A configured trial
+ * Builds the {@link Cache} from {@link CacheProperties} (bound from {@code jenrepo.cache.*} / the
+ * matching {@code JENREPO_CACHE_*} environment variables) and starting the reaper. A configured trial
  * bootstrap key is logged with a strong warning. There is no storage backend to select here: the cache
  * delegates into the repository's store, which reads its own configuration (root / bucket / connection
  * string) from the same {@link Environment}, so every app shares one config surface.
@@ -40,14 +40,14 @@ public class CacheConfig {
 
     private static final Logger LOGGER = LoggerFactory.getLogger(CacheConfig.class);
 
-    /** The repository's store, selected by {@code jenreg.store}. There is one store per deployment and the cache
+    /** The repository's store, selected by {@code jenrepo.store}. There is one store per deployment and the cache
      *  delegates into a segment of it, so there is no second backend selection to disagree with this one. */
     @Bean
     @ConditionalOnMissingBean
     public ArtifactStore artifactStore(Environment environment, MeterRegistry registry) {
         // Metered exactly as the repository node meters its store: the cache delegates into a segment of the same
         // store, and the operation counts are what its soak and the walks screen read.
-        String backend = environment.getProperty("jenreg.store");
+        String backend = environment.getProperty("jenrepo.store");
         return new MeteringArtifactStore(ArtifactStoreProvider.resolve(backend, environment::getProperty),
                 registry, backend);
     }
@@ -63,7 +63,7 @@ public class CacheConfig {
     public KeyUsageTracker keyUsageTracker(Authorization authorization, Environment environment) {
         // Usage tracking is a discovered plugin (the usage module); NONE when absent.
         return KeyUsageTrackerProvider.resolve(authorization,
-                key -> environment.getProperty("jenreg.cache." + key));
+                key -> environment.getProperty("jenrepo.cache." + key));
     }
 
     @Bean(destroyMethod = "stop")
@@ -74,7 +74,7 @@ public class CacheConfig {
         String bootstrapKey = properties.getKey();
         String defaultTenant = properties.getDefaultTenant();
         if (bootstrapKey != null && !bootstrapKey.isBlank()) {
-            LOGGER.warn("SECURITY: jenreg.cache.key is set - a single static key is accepted for tenant '{}' with "
+            LOGGER.warn("SECURITY: jenrepo.cache.key is set - a single static key is accepted for tenant '{}' with "
                     + "full read+write. This is intended for trials only; for any real deployment unset it and issue "
                     + "per-credential keys through an admin console instead.", defaultTenant);
         }
@@ -96,7 +96,7 @@ public class CacheConfig {
         LOGGER.info("jenesis-cache ready (storage {}, project cache {}, reaper {}, touch window {}, policy window {}, "
                         + "min free {}B/{}%, project {}, keys {})",
                 // The cache has no backend of its own: it reports the repository store it delegates to.
-                environment.getProperty("jenreg.store", "filesystem"), properties.getProjects(),
+                environment.getProperty("jenrepo.store", "filesystem"), properties.getProjects(),
                 reaper == null ? "off" : reaper, touchInterval == null ? "every hit" : touchInterval,
                 policyInterval.isZero() ? "every request" : policyInterval,
                 properties.getMinFree(), minFreePercent,

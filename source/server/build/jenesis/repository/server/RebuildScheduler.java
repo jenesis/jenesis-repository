@@ -23,7 +23,7 @@ import build.jenesis.repository.store.Durations;
  * consumer's view (a format's module index, a back-fill) converges on its own without an embedder driving it and
  * without waiting for the artifact to be republished. It runs on its own single daemon scheduler because it is a bean
  * that owns its start/close lifecycle, so it keeps a private timer rather than the composition root's scheduler. The
- * cadence is {@code jenreg.rebuild.interval} (a week by
+ * cadence is {@code jenrepo.rebuild.interval} (a week by
  * default, matching {@link #DEFAULT_INTERVAL}; {@code off} or {@code 0} switches the driver off), the first pass runs a minute after boot. The driver is
  * inert - it logs one line and schedules nothing - when there is no walk with a consumer and no listing to repair, so
  * a deployment without either is byte-for-byte unchanged. One pass at a time: a cadence tick that finds the previous
@@ -36,7 +36,7 @@ public final class RebuildScheduler implements AutoCloseable, ObservabilitySourc
 
     /** The cadence setting: an ISO-8601 duration ({@code PT6H}), a simple one ({@code 6h}, {@code 30m}), or
      *  {@code off}/{@code 0}. */
-    public static final String INTERVAL = "jenreg.rebuild.interval";
+    public static final String INTERVAL = "jenrepo.rebuild.interval";
 
     /** The first pass runs this long after boot, so a restart does not walk the store before it serves. */
     static final Duration INITIAL_DELAY = Duration.ofMinutes(1);
@@ -48,7 +48,7 @@ public final class RebuildScheduler implements AutoCloseable, ObservabilitySourc
     /** How often the driver looks for a standing request, whether or not a cadence is configured. */
     static final Duration REQUEST_POLL = Duration.ofSeconds(30);
 
-    private static final String TASK = "jenreg.rebuild.pass";
+    private static final String TASK = "jenrepo.rebuild.pass";
 
     /** Whether {@link #start} has run, so a driver that was built and never started reports nothing. */
     private volatile boolean started;

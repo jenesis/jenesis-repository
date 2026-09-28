@@ -27,7 +27,7 @@ public class TerraformDiscoveryConfig {
      */
     @Bean
     public TerraformDiscoveryController terraformDiscoveryController(
-            @Value("${jenreg.terraform.prefix:" + DEFAULT_PREFIX + "}") String prefix) {
+            @Value("${jenrepo.terraform.prefix:" + DEFAULT_PREFIX + "}") String prefix) {
         return new TerraformDiscoveryController(prefix);
     }
 }

@@ -12,7 +12,7 @@ import build.jenesis.repository.settings.SettingsContributor;
  * <p>It is {@link Setting#localOnly() local} - a tenant or deployment default would route every repository, of every
  * format, through one upstream - and {@link Setting#operatorOnly() the operator's}: it names the upstreams a
  * repository fetches from, with the deployment's per-host credential attached. A repository that sets none routes as
- * the deployment's by-name definition ({@code repositories.<name>}, over {@code jenreg.repositories.<name>}) says,
+ * the deployment's by-name definition ({@code repositories.<name>}, over {@code jenrepo.repositories.<name>}) says,
  * and with neither it is hosted.
  */
 public final class RoutingSettingsContributor implements SettingsContributor {

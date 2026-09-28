@@ -4,14 +4,14 @@ import org.springframework.boot.context.properties.ConfigurationProperties;
 import build.jenesis.repository.scope.Scopes;
 
 /**
- * The cache server's configuration, bound from {@code jenreg.cache.*}; each property also accepts its
- * relaxed-binding {@code JENREG_CACHE_*} environment variable (declared with defaults in
+ * The cache server's configuration, bound from {@code jenrepo.cache.*}; each property also accepts its
+ * relaxed-binding {@code JENREPO_CACHE_*} environment variable (declared with defaults in
  * {@code application.properties}). This replaces the previous scattered {@code System.getenv} reads, so
  * every setting is explicit and bound through Spring Boot. Where the bytes go is not among them: the
- * cache delegates into the repository's store, which reads {@code jenreg.store} and that backend's own
+ * cache delegates into the repository's store, which reads {@code jenrepo.store} and that backend's own
  * keys from the same {@code Environment}, keeping one config surface for every app.
  */
-@ConfigurationProperties(prefix = "jenreg.cache")
+@ConfigurationProperties(prefix = "jenrepo.cache")
 public class CacheProperties {
 
     /** Byte cap on a single uploaded entry; a larger PUT is refused. */

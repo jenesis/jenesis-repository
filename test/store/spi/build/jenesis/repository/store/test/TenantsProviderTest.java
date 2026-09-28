@@ -21,7 +21,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
  * empty by design.
  *
  * <p>The seam resolves through the shared {@code Providers.optionalUnique} primitive: an <em>explicitly
- * selected</em> {@code jenreg.tenants=<name>} that no provider answers to throws, exactly as the store backend does.
+ * selected</em> {@code jenrepo.tenants=<name>} that no provider answers to throws, exactly as the store backend does.
  * Degrading to the fixed single tenant would collapse a multi-tenant deployment onto one tenant and hide every other
  * tenant's artifacts behind a 404 that looks like an empty repository. Only <em>unselected</em> absence degrades.
  */
@@ -37,7 +37,7 @@ class TenantsProviderTest {
 
     private ArtifactStore store() {
         return ArtifactStoreProvider.resolve(
-                "filesystem", key -> "jenreg.filesystem.root".equals(key) ? root.toString() : null);
+                "filesystem", key -> "jenrepo.filesystem.root".equals(key) ? root.toString() : null);
     }
 
     @Test
@@ -58,12 +58,12 @@ class TenantsProviderTest {
         // Answering the fixed single-tenant directory would bring a deployment that configured a tenants module it
         // had not installed - or misspelled its name - up looking like a healthy single-tenant server while every
         // other tenant's artifacts 404'd.
-        Features.configure(key -> "jenreg.tenants".equals(key) ? "store-tenants" : null);
+        Features.configure(key -> "jenrepo.tenants".equals(key) ? "store-tenants" : null);
         ArtifactStore store = store();
         assertThatThrownBy(() -> TenantsProvider.resolve(store, key -> null, "acme"))
                 .isInstanceOf(IllegalStateException.class)
                 .hasMessageContaining("'store-tenants'")
-                .hasMessageContaining("jenreg.tenants=store-tenants")
+                .hasMessageContaining("jenrepo.tenants=store-tenants")
                 .hasMessageContaining("no installed provider answers to it")
                 .hasMessageContaining("refusing to degrade silently");
     }

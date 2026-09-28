@@ -28,7 +28,7 @@ class KeyShapeCapTest {
 
     private ArtifactStore store() {
         return ArtifactStoreProvider.resolve(
-                "filesystem", key -> "jenreg.filesystem.root".equals(key) ? root.toString() : null);
+                "filesystem", key -> "jenrepo.filesystem.root".equals(key) ? root.toString() : null);
     }
 
     /** A key of exactly {@code segments} single-character {@code '/'}-separated segments ({@code a/a/.../a}). */

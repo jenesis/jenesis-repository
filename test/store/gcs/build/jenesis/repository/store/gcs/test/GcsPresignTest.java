@@ -70,7 +70,7 @@ class GcsPresignTest {
 
     private Map<String, String> settings(String credentials) {
         Map<String, String> settings = new LinkedHashMap<>(JsonGcs.settings(server.port(), "repo"));
-        settings.put("jenreg.gcs.credentials", credentials);
+        settings.put("jenrepo.gcs.credentials", credentials);
         return settings;
     }
 

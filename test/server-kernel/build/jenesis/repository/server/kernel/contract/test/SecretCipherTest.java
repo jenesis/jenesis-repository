@@ -81,15 +81,15 @@ class SecretCipherTest {
     void a_malformed_master_key_environment_value_fails_fast_naming_the_variable() {
         assertThatThrownBy(() -> SecretCipher.of("k1:not-valid-base64!!!"))
                 .isInstanceOf(IllegalStateException.class)
-                .hasMessageContaining("JENREG_SECRETS_KEY");
+                .hasMessageContaining("JENREPO_SECRETS_KEY");
         // A base64 value that is not 32 bytes (here 16) is refused.
         assertThatThrownBy(() -> SecretCipher.of("k1:" + Base64.getEncoder().encodeToString(new byte[16])))
                 .isInstanceOf(IllegalStateException.class)
-                .hasMessageContaining("JENREG_SECRETS_KEY");
+                .hasMessageContaining("JENREPO_SECRETS_KEY");
         // An entry with no <key-id>:<key> shape is refused.
         assertThatThrownBy(() -> SecretCipher.of("no-colon-entry"))
                 .isInstanceOf(IllegalStateException.class)
-                .hasMessageContaining("JENREG_SECRETS_KEY");
+                .hasMessageContaining("JENREPO_SECRETS_KEY");
     }
 
     @Test

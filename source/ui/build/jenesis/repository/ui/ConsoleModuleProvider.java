@@ -31,7 +31,7 @@ import build.jenesis.repository.icon.IconContributor;
  *     nothing to select. A <em>collision</em> is still a packaging error: two providers answering to one
  *     {@link #name()}, or one provider class registered twice, make {@link #installed()} and {@link #enabled} throw
  *     naming the colliding classes rather than letting module-path order pick a winner - two modules on one name
- *     share the single {@code jenreg.<name>} toggle, so switching one off switches both off. Two
+ *     share the single {@code jenrepo.<name>} toggle, so switching one off switches both off. Two
  *     providers naming one {@link #configuration()} class is equally a packaging error, refused by the contract suite
  *     because the configuration class is this SPI's own concept rather than the shared discovery primitive's.</li>
  * <li><b>Tenant scoping.</b> A provider carries no tenant and is resolved once per JVM: it declares a
@@ -72,7 +72,7 @@ public interface ConsoleModuleProvider extends IconContributor {
     String SPI = "console-module";
 
     /** The module name this provider answers to, e.g. {@code oidc}, {@code scim}. It is also the module's
-     *  {@code jenreg.<name>} toggle key (the {@link Features} convention), so it is lowercase and
+     *  {@code jenrepo.<name>} toggle key (the {@link Features} convention), so it is lowercase and
      *  dotted/hyphenated like any other settings key - and where the module catalogues its own enablement gate
      *  through a {@code SettingsContributor}, that gate's key is this same spelling. */
     String name();
@@ -115,7 +115,7 @@ public interface ConsoleModuleProvider extends IconContributor {
     /**
      * The installed modules {@code config} leaves switched on, name-sorted - what {@link ConsoleModuleImports} turns
      * into a configuration-class list. A module configured off by its provider name
-     * ({@code jenreg.<name>=false}, the {@link Features} convention) is not imported, so its screens
+     * ({@code jenrepo.<name>=false}, the {@link Features} convention) is not imported, so its screens
      * degrade exactly as if the module were absent from the image; unset means enabled.
      */
     static List<ConsoleModuleProvider> enabled(UnaryOperator<String> config) {

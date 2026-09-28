@@ -35,7 +35,7 @@ class QuarantineRetentionTaskTest {
     @BeforeEach
     void setUp() throws IOException {
         store = ArtifactStoreProvider.resolve("filesystem",
-                key -> "jenreg.filesystem.root".equals(key) ? root.toString() : null);
+                key -> "jenrepo.filesystem.root".equals(key) ? root.toString() : null);
         QuarantineLog log = new QuarantineLog(store);
         log.record(OLD, OLD_PATH, "org.old:lib:1.0", Verdict.REJECT, List.of("old"));
         log.record(NEW, NEW_PATH, "org.new:lib:1.0", Verdict.REJECT, List.of("recent"));

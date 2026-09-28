@@ -7,7 +7,7 @@ import module java.base;
  * shape a minted credential's grants object has, and matched by the same {@link GrantMatching}.
  *
  * <p>Empty (the default) means no anonymous access: a keyless request is rejected exactly as an enforcing deployment
- * rejects one with no role configured. Immutable, parsed once from {@code jenreg.anonymous-rights} when the
+ * rejects one with no role configured. Immutable, parsed once from {@code jenrepo.anonymous-rights} when the
  * authorization is built.
  */
 public final class AnonymousRights {

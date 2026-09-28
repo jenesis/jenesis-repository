@@ -20,7 +20,7 @@ import static org.assertj.core.api.Assertions.assertThatCode;
  * The scheduled convergence pass ({@link SettingsRefresh}) completes the interval re-read: it re-reads the stored
  * settings and, when they changed on another node, re-seeds both runtime surfaces a write elsewhere would otherwise
  * leave stale here - the live {@link LiveConfig} snapshot (for live keys) and the mutable environment's
- * stored-settings source (for keys read through a {@code jenreg.*} lookup). A malformed stored value is
+ * stored-settings source (for keys read through a {@code jenrepo.*} lookup). A malformed stored value is
  * rolled back to the last good live configuration and the pass never throws out of the scheduler.
  */
 class SettingsRefreshTest {
@@ -37,7 +37,7 @@ class SettingsRefreshTest {
     @BeforeEach
     void setUp() throws IOException {
         store = ArtifactStoreProvider.resolve("filesystem",
-                key -> "jenreg.filesystem.root".equals(key) ? root.toString() : null);
+                key -> "jenrepo.filesystem.root".equals(key) ? root.toString() : null);
         environment = new StandardEnvironment();
         // A deployment with nothing set: the test JVM is started with the suites' tenant named as a system property,
         // which would stand in for the file default this test watches being shadowed and restored.
@@ -77,16 +77,16 @@ class SettingsRefreshTest {
 
     @Test
     void the_interval_refresh_converges_a_lookup_consumed_key_into_the_environment() throws IOException {
-        assertThat(environment.getProperty("jenreg.default-tenant")).isNull();
+        assertThat(environment.getProperty("jenrepo.default-tenant")).isNull();
 
         new Settings(store).set("default-tenant", "acme");   // another node writes
         refresh.refresh();
-        assertThat(environment.getProperty("jenreg.default-tenant"))
+        assertThat(environment.getProperty("jenrepo.default-tenant"))
                 .as("the environment's stored-settings source converged for a lookup-consumed key").isEqualTo("acme");
 
         new Settings(store).set("default-tenant", null);     // another node clears it
         refresh.refresh();
-        assertThat(environment.getProperty("jenreg.default-tenant"))
+        assertThat(environment.getProperty("jenrepo.default-tenant"))
                 .as("a cleared key stops shadowing the file default rather than leaving a stale value").isNull();
     }
 

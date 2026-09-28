@@ -6,8 +6,8 @@
  * namespace is never materialised as one list and a resume deep inside it is a seek on a backend that pages natively.
  * All pass state lives in the walked store ({@code walks/<consumer>/...}, compare-and-set objects only) - persist
  * only through the store, so a pass survives process death on any node sharing it. Settings:
- * {@code jenreg.walk.checkpoint} (cursor-commit stride, default 1000), {@code jenreg.walk.segments} (target
- * segment count per pass, default 32), {@code jenreg.walk.ttl} (claim lease seconds, default 900).
+ * {@code jenrepo.walk.checkpoint} (cursor-commit stride, default 1000), {@code jenrepo.walk.segments} (target
+ * segment count per pass, default 32), {@code jenrepo.walk.ttl} (claim lease seconds, default 900).
  *
  * @jenesis.release 25
  * @jenesis.bom pin-repository.properties

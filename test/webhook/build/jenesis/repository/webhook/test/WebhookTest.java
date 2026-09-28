@@ -54,7 +54,7 @@ public class WebhookTest {
     @BeforeEach
     void setUp() {
         store = ArtifactStoreProvider.resolve("filesystem",
-                        key -> "jenreg.filesystem.root".equals(key) ? root.toString() : null)
+                        key -> "jenrepo.filesystem.root".equals(key) ? root.toString() : null)
                 .scope("acme").scope("releases");
         gauges.clear();
         Webhooks.configure(false);
@@ -659,7 +659,7 @@ public class WebhookTest {
                         the pass publishes the reading the refusal deliberately does not raise: how many of this \
                         tenant's configured endpoints have no webhook-secrets entry and therefore leave their \
                         receiver unable to tell a genuine event from a forged POST""")
-                .containsEntry("jenreg.webhook.unsigned", 1.0d);
+                .containsEntry("jenrepo.webhook.unsigned", 1.0d);
         assertThat(signatures).as("and both endpoints were delivered to - the unsigned one is not refused")
                 .hasSize(2);
         assertThat(signatures.get(0)).as("the endpoint keyed in webhook-secrets is signed").startsWith("sha256=");
@@ -672,7 +672,7 @@ public class WebhookTest {
         task.repository(context(spec, oneSecret + "\nhttps://93.184.216.35/two=other",
                 Instant.parse("2026-07-08T00:00:00Z"), false));
         assertThat(gauges).as("with every endpoint keyed in webhook-secrets the reading falls to zero")
-                .containsEntry("jenreg.webhook.unsigned", 0.0d);
+                .containsEntry("jenrepo.webhook.unsigned", 0.0d);
     }
 
     @Test

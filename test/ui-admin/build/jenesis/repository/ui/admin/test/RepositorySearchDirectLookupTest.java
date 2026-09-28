@@ -35,7 +35,7 @@ public class RepositorySearchDirectLookupTest {
     @BeforeEach
     void setUp() throws IOException {
         backing = ArtifactStoreProvider.resolve("filesystem",
-                key -> "jenreg.filesystem.root".equals(key) ? root.toString() : null);
+                key -> "jenrepo.filesystem.root".equals(key) ? root.toString() : null);
         StoreRepositoryInventory inventory = new StoreRepositoryInventory(backing.scope("acme").scope("releases"));
         // One hit coordinate the fake index returns, plus another coordinate a full walk would enumerate. Both sit
         // under meta/maven/ - the ecosystem folder the refusing store guards.

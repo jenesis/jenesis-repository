@@ -22,7 +22,7 @@ class CoordinateFolderTest {
     @Test
     void the_folder_that_holds_the_version_is_the_one_linked() throws IOException {
         ArtifactStore store = ArtifactStoreProvider.resolve("filesystem",
-                key -> "jenreg.filesystem.root".equals(key) ? root.toString() : null).scope("acme").scope("releases");
+                key -> "jenrepo.filesystem.root".equals(key) ? root.toString() : null).scope("acme").scope("releases");
         Publication publication = new Publication(store);
         publication.link("/maven/org/acme/app/1.0/app-1.0.pom",
                 publication.storeBlob(new ByteArrayInputStream("<project/>".getBytes(StandardCharsets.UTF_8))));
@@ -35,7 +35,7 @@ class CoordinateFolderTest {
     @Test
     void a_version_no_folder_holds_links_where_a_layout_would_place_it() {
         StoreRepositoryInventory inventory = new StoreRepositoryInventory(ArtifactStoreProvider.resolve("filesystem",
-                key -> "jenreg.filesystem.root".equals(key) ? root.toString() : null).scope("acme").scope("empty"));
+                key -> "jenrepo.filesystem.root".equals(key) ? root.toString() : null).scope("acme").scope("empty"));
 
         assertThat(inventory.locateHeld("Maven", "org.acme:app", "1.0"))
                 .isEqualTo(inventory.locate("Maven", "org.acme:app", "1.0"));

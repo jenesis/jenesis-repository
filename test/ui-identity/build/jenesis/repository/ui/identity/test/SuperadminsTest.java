@@ -14,7 +14,7 @@ import static org.assertj.core.api.Assertions.assertThatIllegalStateException;
 /**
  * The deployment's super-admins, and the one value this console refuses to read.
  *
- * <p>{@code jenreg.ui.admins} is shared with the single-tenant console, where {@code *} is a documented opt-out
+ * <p>{@code jenrepo.ui.admins} is shared with the single-tenant console, where {@code *} is a documented opt-out
  * granting admin to every authenticated user. A super-admin here is not that: it administers <em>every</em> tenant
  * and the deployment itself, so the same wildcard would be a far larger grant, and not one anybody sets on purpose.
  *
@@ -41,7 +41,7 @@ class SuperadminsTest {
         UiProperties properties = new UiProperties();
         properties.setAdmins(configured);
         return new Superadmins(new ConsoleAdministrators(ArtifactStoreProvider.resolve("filesystem",
-                key -> "jenreg.filesystem.root".equals(key) ? root.resolve(tenancy).toString() : null), properties.getAdmins()));
+                key -> "jenrepo.filesystem.root".equals(key) ? root.resolve(tenancy).toString() : null), properties.getAdmins()));
     }
 
     @Test

@@ -30,7 +30,7 @@ public class ProxyUpstreamAuthTest {
     @BeforeEach
     void setUp() {
         store = ArtifactStoreProvider.resolve("filesystem",
-                key -> "jenreg.filesystem.root".equals(key) ? root.toString() : null);
+                key -> "jenrepo.filesystem.root".equals(key) ? root.toString() : null);
         byte[] material = new byte[32];
         Arrays.fill(material, (byte) 7);
         keyed = SecretCipher.of("k1:" + Base64.getEncoder().encodeToString(material));

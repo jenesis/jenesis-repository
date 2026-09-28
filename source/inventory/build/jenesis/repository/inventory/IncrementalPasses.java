@@ -88,12 +88,12 @@ import build.jenesis.repository.store.StoredCounter;
 public final class IncrementalPasses {
 
     /** The cadence dial, shared by every pass that reads the feeds: bare key, as every dial's,
-     *  {@code jenreg.scan-full-every}. */
+     *  {@code jenrepo.scan-full-every}. */
     public static final String FULL_EVERY = "scan-full-every";
 
     public static final int DEFAULT_FULL_EVERY = 24;
 
-    /** The lookback dial, shared the same way: {@code jenreg.scan-lookback}. How far BEFORE the last full pass's
+    /** The lookback dial, shared the same way: {@code jenrepo.scan-lookback}. How far BEFORE the last full pass's
      *  stamp an incremental pass still looks - see the finding above, which it closes. */
     public static final String LOOKBACK = "scan-lookback";
 

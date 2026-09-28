@@ -14,13 +14,13 @@ import com.azure.storage.blob.models.BlobStorageException;
 
 /**
  * The {@code azure-blob} artifact-store backend over an Azure Blob Storage container. Selected with
- * {@code jenreg.store=azure-blob}; configured by {@code jenreg.azure-blob.connection-string}
+ * {@code jenrepo.store=azure-blob}; configured by {@code jenrepo.azure-blob.connection-string}
  * (a storage-account connection string, or the Azurite development string) and an optional
- * {@code jenreg.azure-blob.container} (default {@code jenesis-repository}). The blob I/O and the
+ * {@code jenrepo.azure-blob.container} (default {@code jenesis-repository}). The blob I/O and the
  * conditional compare-and-set semantics live in {@link AzureArtifactStore}.
  *
  * <p>The blob endpoint the connection string resolves to is required to be {@code https} unless
- * {@code jenreg.azure-blob.allow-insecure-endpoint=true} explicitly permits a plaintext one - the same
+ * {@code jenrepo.azure-blob.allow-insecure-endpoint=true} explicitly permits a plaintext one - the same
  * screen the {@code s3} and {@code gcs} siblings apply to their own endpoint keys, reached here through the
  * connection string because that is where this SDK carries the scheme. Azure's account key rides inside the very value
  * that also selects the transport, so a {@code DefaultEndpointsProtocol=http} puts the shared-key signature and every
@@ -107,7 +107,7 @@ public final class AzureArtifactStoreProvider implements ArtifactStoreProvider {
      * The blob endpoint the connection string resolves to, required to be {@code https} by default so the account key
      * and artifact bytes are not sent over a plaintext transport a MITM can read or tamper with. A plaintext
      * {@code http} endpoint - a local Azurite container, say - is an explicit opt-out: set
-     * {@code jenreg.azure-blob.allow-insecure-endpoint=true}. This is the {@code s3}/{@code gcs} rule,
+     * {@code jenrepo.azure-blob.allow-insecure-endpoint=true}. This is the {@code s3}/{@code gcs} rule,
      * spelled the same way, for the one backend whose transport is not a config key of its own.
      *
      * <p>A {@code null} endpoint - a connection string declaring neither a {@code BlobEndpoint} nor a

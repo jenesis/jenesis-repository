@@ -37,7 +37,7 @@ class AuthorizationCacheTest {
     @BeforeEach
     void setUp() {
         ArtifactStore filesystem = ArtifactStoreProvider.resolve("filesystem",
-                key -> "jenreg.filesystem.root".equals(key) ? root.toString() : null);
+                key -> "jenrepo.filesystem.root".equals(key) ? root.toString() : null);
         store = FaultInjectingStore.wrap(filesystem);
         authorization = Authorization.enforcing(store);
     }
@@ -101,7 +101,7 @@ class AuthorizationCacheTest {
 
     @Test
     void an_open_deployment_says_it_invalidated_nothing_rather_than_claiming_a_clear() throws IOException {
-        // jenreg.auth=false holds no grants and keeps no epoch, so there is nothing to invalidate. Saying so is the
+        // jenrepo.auth=false holds no grants and keeps no epoch, so there is nothing to invalidate. Saying so is the
         // point: the operator surfaces render this answer, and a bare "cleared" over a fleet is read as more than
         // it is. A clear that quietly did nothing while reporting success is the shape to avoid on this surface.
         assertThat(Authorization.anonymous().invalidateAcrossNodes()).isFalse();

@@ -7,7 +7,7 @@ import build.jenesis.repository.inventory.DownloadTrackerProvider;
 import build.jenesis.repository.server.spi.BatchingWorker;
 
 /**
- * Opt-in download tracking ({@code jenreg.track-downloads}), off the request path on its own worker thread -
+ * Opt-in download tracking ({@code jenrepo.track-downloads}), off the request path on its own worker thread -
  * started and stopped through Spring's bean lifecycle (not a daemon), so {@link #close} interrupts and joins it for a
  * clean shutdown, and {@link #alive}/{@link #dropped} let a health indicator watch it. A successful read offers a
  * {@link DownloadTracker.Hit} to a bounded in-memory queue (non-blocking, counted as dropped if saturated - a

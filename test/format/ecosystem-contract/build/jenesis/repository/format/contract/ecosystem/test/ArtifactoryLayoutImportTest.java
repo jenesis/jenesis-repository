@@ -144,6 +144,6 @@ class ArtifactoryLayoutImportTest {
     private ArtifactStore store(String name) throws IOException {
         Path directory = Files.createDirectories(root.resolve(name));
         return ArtifactStoreProvider.resolve("filesystem",
-                key -> "jenreg.filesystem.root".equals(key) ? directory.toString() : null);
+                key -> "jenrepo.filesystem.root".equals(key) ? directory.toString() : null);
     }
 }

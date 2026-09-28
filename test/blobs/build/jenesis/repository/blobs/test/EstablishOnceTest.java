@@ -31,7 +31,7 @@ class EstablishOnceTest {
      *  system property, so two tests in one JVM never share a root by accident. */
     private build.jenesis.repository.store.ArtifactStore store() {
         return ArtifactStoreProvider.resolve("filesystem",
-                key -> "jenreg.filesystem.root".equals(key) ? root.toString() : null);
+                key -> "jenrepo.filesystem.root".equals(key) ? root.toString() : null);
     }
 
     @Test

@@ -6,7 +6,7 @@ import org.junit.jupiter.api.Test;
 import static org.assertj.core.api.Assertions.assertThat;
 
 /**
- * The one rule for reading {@code jenreg.ui.admins}, which three readers had each written for themselves.
+ * The one rule for reading {@code jenrepo.ui.admins}, which three readers had each written for themselves.
  *
  * <p>They had already diverged: the console's authority policy honoured {@code *}, the deployment's super-admin set
  * treated it as a literal id matching nobody, and the advisory about the key parsed it a third time with a comment

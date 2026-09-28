@@ -45,7 +45,7 @@ class InstalledFormatsTest {
                 .as("the stub format this module registers is on by default, which is what the next step turns off")
                 .contains("twin-alpha");
 
-        Features.configure(key -> "jenreg.twin-alpha".equals(key) ? "false" : null);
+        Features.configure(key -> "jenrepo.twin-alpha".equals(key) ? "false" : null);
         List<RepositoryFormat> after = RepositoryFormat.installed();
         assertThat(after).extracting(RepositoryFormat::name)
                 .as("a format configured off is absent exactly as a missing module is - a held answer that "

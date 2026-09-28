@@ -12,7 +12,7 @@ import build.jenesis.repository.store.TenantsProvider;
 
 /**
  * Publishes this node's {@link NodeFingerprint} to the shared store on a heartbeat. A stable node id is
- * derived once - the {@code jenreg.consistency.node-id} setting if given, else the hostname, else a generated
+ * derived once - the {@code jenrepo.consistency.node-id} setting if given, else the hostname, else a generated
  * per-process id - and held as <em>instance</em> state on this bean (never a mutable static), so a fleet of in-process
  * nodes in a test each carry their own identity. A daemon scheduler re-publishes every heartbeat interval, so a node's
  * liveness (and its current config and tenant generation, cursor position and sampled counters) stays fresh for the
@@ -26,7 +26,7 @@ import build.jenesis.repository.store.TenantsProvider;
  * tenant set</em>, read through the {@link Tenants} view on every heartbeat (a directory read, never a scan) so a node
  * that missed a config or tenant change diverges rather than reporting the generation it booted with; the counters
  * come from the store's own in-memory meter where present. Publishing is <strong>opt-in</strong> per deployment via
- * {@code jenreg.consistency.enabled} - a single-node deployment writes nothing into an otherwise-clean store - and
+ * {@code jenrepo.consistency.enabled} - a single-node deployment writes nothing into an otherwise-clean store - and
  * best-effort: a write refused by a read-only deployment, or a transient store error, is logged at debug and retried
  * on the next heartbeat rather than failing the node. The derived-index cursor is not maintained here (there is no
  * background sweep in the core), so it is published as zero with the heartbeat as its advance time - honest for a
@@ -40,8 +40,8 @@ public final class NodeFingerprintPublisher implements AutoCloseable {
      *  the store backend, the default tenant, the operator tenant, the authorization mode and the read-only flag. One
      *  list for every composition, so no two peers of one mechanism disagree about what a split is; a setting unset
      *  on a deployment folds as blank on every node, which is why the union costs nothing. */
-    static final List<String> MUST_MATCH = List.of("jenreg.store", "jenreg.operator-tenant",
-            "jenreg.default-tenant", "jenreg.auth", "jenreg.read-only");
+    static final List<String> MUST_MATCH = List.of("jenrepo.store", "jenrepo.operator-tenant",
+            "jenrepo.default-tenant", "jenrepo.auth", "jenrepo.read-only");
 
     private final NodeConsistency consistency;
     private final ArtifactStore store;
@@ -74,12 +74,12 @@ public final class NodeFingerprintPublisher implements AutoCloseable {
         this.tenants = Objects.requireNonNull(tenants, "tenants");
         // Opt-in per deployment, like the other operational writers (demo seeding, batch ingestion): a single-node
         // deployment publishes nothing, so it never writes an operational key into an otherwise-clean store layout; a
-        // multi-node deployment sets jenreg.consistency.enabled=true so its nodes publish and can be compared.
-        this.enabled = "true".equalsIgnoreCase(String.valueOf(config.apply("jenreg.consistency.enabled")));
+        // multi-node deployment sets jenrepo.consistency.enabled=true so its nodes publish and can be compared.
+        this.enabled = "true".equalsIgnoreCase(String.valueOf(config.apply("jenrepo.consistency.enabled")));
         this.nodeId = nodeId(config);
         this.mustMatch = mustMatch(config);
         this.lastTenants = List.of(configuredTenant(config));
-        this.heartbeatMillis = Math.max(1000L, millis(config, "jenreg.consistency.heartbeat",
+        this.heartbeatMillis = Math.max(1000L, millis(config, "jenrepo.consistency.heartbeat",
                 consistency.settings().sweepIntervalMillis()));
         this.scheduler = Executors.newSingleThreadScheduledExecutor(runnable -> {
             Thread thread = new Thread(runnable, "jenesis-consistency-" + nodeId);
@@ -93,7 +93,7 @@ public final class NodeFingerprintPublisher implements AutoCloseable {
         return nodeId;
     }
 
-    /** Whether this node publishes its fingerprint - opt-in via {@code jenreg.consistency.enabled}. */
+    /** Whether this node publishes its fingerprint - opt-in via {@code jenrepo.consistency.enabled}. */
     public boolean enabled() {
         return enabled;
     }
@@ -165,7 +165,7 @@ public final class NodeFingerprintPublisher implements AutoCloseable {
     }
 
     private static String configuredTenant(UnaryOperator<String> config) {
-        String tenant = config.apply("jenreg.default-tenant");
+        String tenant = config.apply("jenrepo.default-tenant");
         return tenant == null || tenant.isBlank() ? "default" : tenant;
     }
 
@@ -173,7 +173,7 @@ public final class NodeFingerprintPublisher implements AutoCloseable {
      *  a stable id is preferable so a restart does not leave an orphan fingerprint object behind). The one derivation
      *  every per-node key uses - the fingerprint, the running marker - so they agree on which node this is. */
     public static String nodeId(UnaryOperator<String> config) {
-        String configured = config.apply("jenreg.consistency.node-id");
+        String configured = config.apply("jenrepo.consistency.node-id");
         if (configured != null && !configured.isBlank()) {
             return sanitize(configured.trim());
         }
@@ -186,8 +186,8 @@ public final class NodeFingerprintPublisher implements AutoCloseable {
             // fall through to a generated id
         }
         String generated = "node-" + Long.toHexString(UUID.randomUUID().getMostSignificantBits() & 0xffffffffL);
-        LOGGER.warn("SECURITY/OPS: jenreg.consistency.node-id is unset and the hostname is unavailable, so this node "
-                + "uses a generated per-process id ({}). Set a stable jenreg.consistency.node-id so a restart re-uses "
+        LOGGER.warn("SECURITY/OPS: jenrepo.consistency.node-id is unset and the hostname is unavailable, so this node "
+                + "uses a generated per-process id ({}). Set a stable jenrepo.consistency.node-id so a restart re-uses "
                 + "the same identity instead of leaving an orphan fingerprint behind.", generated);
         return generated;
     }

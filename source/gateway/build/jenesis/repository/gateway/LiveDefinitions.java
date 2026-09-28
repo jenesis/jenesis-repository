@@ -12,7 +12,7 @@ import build.jenesis.repository.settings.SettingsScopes;
 /**
  * The repository definitions, read live and per repository: a repository's own {@code routing} setting, stored in its
  * own settings document, over the deployment's runtime-stored {@code repositories.<name>}, over the file-configured
- * {@code jenreg.repositories.<name>} default - the deployment's through the same pin-over-store-over-file precedence
+ * {@code jenrepo.repositories.<name>} default - the deployment's through the same pin-over-store-over-file precedence
  * every other live dial takes ({@link LiveConfig#effective}) - so an added or changed definition routes on the next
  * request. The router takes {@link #definition} per request; the kernel takes the
  * two answers it needs through {@link RepositoryDefinitions}, which is what lets the kernel not require this module.
@@ -63,7 +63,7 @@ public final class LiveDefinitions implements RepositoryDefinitions {
      * The boot-time definition sweep: parse EVERY configured repository definition and
      * fail the boot LOUD, naming the offending repository and the remedy, on any one that does not parse. The swept set
      * is every {@code repositories.<name>} the deployment names - the file-configured
-     * {@code jenreg.repositories.<name>} defaults and the runtime-stored {@code repositories.<name>}
+     * {@code jenrepo.repositories.<name>} defaults and the runtime-stored {@code repositories.<name>}
      * overrides layered over them, resolved through the same effective lookup {@link #definition} uses - so a broken
      * definition is caught wherever it was written. A definition outside the clause grammar, an unknown option, a
      * policy option on a repository-name fallback, a {@code !writable}-with-no-fallbacks shape, or an unknown token
@@ -85,7 +85,7 @@ public final class LiveDefinitions implements RepositoryDefinitions {
                 definition = RepositoryDefinition.parse(specification);
             } catch (RuntimeException invalid) {
                 throw new IllegalStateException("Repository '" + name + "' has an invalid definition '" + specification
-                        + "': " + invalid.getMessage() + " Fix the definition under jenreg.repositories."
+                        + "': " + invalid.getMessage() + " Fix the definition under jenrepo.repositories."
                         + name + " (or the stored repositories." + name + " override), or remove it - a selected "
                         + "repository definition that cannot be parsed must never be silently ignored.", invalid);
             }

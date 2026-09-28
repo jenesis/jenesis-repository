@@ -5,7 +5,7 @@ import module java.base;
 /**
  * A logged-in session: the repository URL and the key the client sends, persisted under {@code ~/.jenesis} so a
  * later invocation reuses them. The file is written owner-only where the filesystem supports it, since it holds a
- * credential. The home directory is {@code ~/.jenesis} unless {@code JENREG_CLI_HOME} overrides it (which a test
+ * credential. The home directory is {@code ~/.jenesis} unless {@code JENREPO_CLI_HOME} overrides it (which a test
  * uses to stay out of the real home, as an environment variable or a system property).
  */
 public final class Session {
@@ -30,9 +30,9 @@ public final class Session {
     }
 
     public static Path home() {
-        String override = System.getenv("JENREG_CLI_HOME");
+        String override = System.getenv("JENREPO_CLI_HOME");
         if (override == null || override.isBlank()) {
-            override = System.getProperty("JENREG_CLI_HOME");
+            override = System.getProperty("JENREPO_CLI_HOME");
         }
         if (override != null && !override.isBlank()) {
             return Path.of(override);

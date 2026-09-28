@@ -28,7 +28,7 @@ class BlobsMissMemoryTest {
     @BeforeEach
     void setUp() {
         counting = FaultInjectingStore.wrap(ArtifactStoreProvider.resolve("filesystem",
-                key -> "jenreg.filesystem.root".equals(key) ? root.toString() : null));
+                key -> "jenrepo.filesystem.root".equals(key) ? root.toString() : null));
         store = NodeMemoStore.over(counting, new MissMemory(Duration.ofSeconds(10)), new DocumentMemory(Duration.ZERO));
     }
 

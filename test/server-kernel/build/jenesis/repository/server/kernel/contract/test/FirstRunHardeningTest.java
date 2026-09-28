@@ -85,7 +85,7 @@ class FirstRunHardeningTest {
     void first_run_is_no_persisted_settings_and_flips_the_first_time_anything_is_stored(@TempDir Path root)
             throws IOException {
         ArtifactStore store = ArtifactStoreProvider.resolve("filesystem",
-                key -> "jenreg.filesystem.root".equals(key) ? root.toString() : null);
+                key -> "jenrepo.filesystem.root".equals(key) ? root.toString() : null);
         Settings settings = new Settings(store);
 
         assertThat(FirstRunHardening.firstRun(settings)).as("a store with no config document is a fresh deploy")

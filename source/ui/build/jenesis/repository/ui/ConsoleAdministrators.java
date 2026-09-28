@@ -10,14 +10,14 @@ import build.jenesis.repository.store.ArtifactStore;
  * Who administers this deployment - one reader, over grants rather than over a setting.
  *
  * <h2>One key, three readers, three meanings</h2>
- * {@code jenreg.ui.admins} read in three places - the console, the downstream super-admin set and the security
+ * {@code jenrepo.ui.admins} read in three places - the console, the downstream super-admin set and the security
  * advisory - could mean three things. A shared parse settles what was <em>written</em>; this settles what it
  * <em>grants</em>: there is one reader, and what it answers is a grant - the same thing a minted key holds, in the
  * same store, matched by the same code.
  *
  * <h2>The setting is a seed, not the source of truth</h2>
  * At construction - every boot, before the console serves anything - each named id is granted every right at the
- * deployment scope, exactly as {@code jenreg.bootstrap-key} is re-provisioned on every boot for as long as it is
+ * deployment scope, exactly as {@code jenrepo.bootstrap-key} is re-provisioned on every boot for as long as it is
  * set. Two consequences an operator has to know, and both are the price of a seed rather than a mirror:
  *
  * <ul>
@@ -30,8 +30,8 @@ import build.jenesis.repository.store.ArtifactStore;
  * </ul>
  *
  * <h2>A read-only deployment that names an administrator refuses to boot</h2>
- * Seeding is a store write, so under {@code jenreg.read-only=true} it is refused and the console does not start -
- * naming the id it could not grant. That is the same answer {@code jenreg.bootstrap-key} already gives, and for
+ * Seeding is a store write, so under {@code jenrepo.read-only=true} it is refused and the console does not start -
+ * naming the id it could not grant. That is the same answer {@code jenrepo.bootstrap-key} already gives, and for
  * the same reason: a named administrator who holds nothing is the failure that reports success in both directions
  * at once, with the operator believing they granted something. A read-only deployment that leaves the setting
  * empty starts normally and reads back whatever grants the store already holds.
@@ -50,7 +50,7 @@ public class ConsoleAdministrators {
     private final Authorization authorization;
 
     /**
-     * Over {@code store}, seeded from a configured {@code jenreg.ui.admins} value.
+     * Over {@code store}, seeded from a configured {@code jenrepo.ui.admins} value.
      *
      * <p>It takes the <em>value</em> rather than a properties object on purpose. The two consoles bind that prefix
      * with their own configuration types - disjoint keys, deliberately not merged - so a shared reader that named
@@ -62,7 +62,7 @@ public class ConsoleAdministrators {
     }
 
     /**
-     * Over an {@link Authorization} a composition already holds, seeded from a configured {@code jenreg.ui.admins}
+     * Over an {@link Authorization} a composition already holds, seeded from a configured {@code jenrepo.ui.admins}
      * value.
      *
      * <p>The one to take where the deployment has an authorization bean of its own: a second instance over the same
@@ -99,13 +99,13 @@ public class ConsoleAdministrators {
                 // Including the unchecked ones: a read-only store answers ReadOnlyException, and that is precisely
                 // the case this message exists for - the refusal has to name the id it could not grant, or an
                 // operator reads a bare "writes are refused" with no way to tell which setting caused it.
-                throw new IllegalStateException("jenreg.ui.admins names '" + id + "', which could not be granted "
+                throw new IllegalStateException("jenrepo.ui.admins names '" + id + "', which could not be granted "
                         + "administration of this deployment: " + failed.getMessage(), failed);
             }
         }
         if (!ids.isEmpty()) {
             LOGGER.log(System.Logger.Level.INFO, "Granted deployment administration to {0} configured id(s) from "
-                    + "jenreg.ui.admins. The setting SEEDS these grants on every boot; it does not remove one that "
+                    + "jenrepo.ui.admins. The setting SEEDS these grants on every boot; it does not remove one that "
                     + "is dropped from it, and an administrator granted through the API is equally real.",
                     ids.size());
         }

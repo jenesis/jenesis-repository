@@ -15,9 +15,9 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 /**
  * The shared walk's signals are what this node's walks have seen, whichever walk instance saw it: every walk records
- * into one node-wide record, and the discovered {@link ArtifactWalkObservability} reports {@code jenreg.walk.segments}
- * (a bounded gauge of the pass's done segments against its segment count), {@code jenreg.walk.resumes} (a counter of
- * segments this node reclaimed from an expired holder) and a {@code jenreg.walk.pass} task status. The suites of this
+ * into one node-wide record, and the discovered {@link ArtifactWalkObservability} reports {@code jenrepo.walk.segments}
+ * (a bounded gauge of the pass's done segments against its segment count), {@code jenrepo.walk.resumes} (a counter of
+ * segments this node reclaimed from an expired holder) and a {@code jenrepo.walk.pass} task status. The suites of this
  * module share one JVM, so a counter is read as what this test's walks added. Exercised against a real
  * {@code FilesystemArtifactStore}, without the server or Micrometer.
  */
@@ -31,14 +31,14 @@ class WalkObservabilityTest {
     private final ArtifactWalkObservability signals = new ArtifactWalkObservability();
 
     private double resumes() {
-        return signals.metrics().stream().filter(metric -> metric.name().equals("jenreg.walk.resumes")).findFirst()
+        return signals.metrics().stream().filter(metric -> metric.name().equals("jenrepo.walk.resumes")).findFirst()
                 .map(Metric::value).orElse(0.0);
     }
 
     private ArtifactStore store(String name) {
         Path scoped = root.resolve(name);
         return ArtifactStoreProvider.resolve(
-                "filesystem", key -> "jenreg.filesystem.root".equals(key) ? scoped.toString() : null);
+                "filesystem", key -> "jenrepo.filesystem.root".equals(key) ? scoped.toString() : null);
     }
 
     private void seed(ArtifactStore store, String... names) throws IOException {
@@ -73,7 +73,7 @@ class WalkObservabilityTest {
 
         assertThat(signals.metrics()).satisfiesExactlyInAnyOrder(
                 segments -> {
-                    assertThat(segments.name()).isEqualTo("jenreg.walk.segments");
+                    assertThat(segments.name()).isEqualTo("jenrepo.walk.segments");
                     assertThat(segments.kind()).isEqualTo(Metric.Kind.GAUGE);
                     assertThat(segments.value()).isEqualTo(1.0);
                     assertThat(segments.limit()).hasValue(1.0);
@@ -81,7 +81,7 @@ class WalkObservabilityTest {
                     assertThat(segments.description()).isNotBlank();
                 },
                 resumes -> {
-                    assertThat(resumes.name()).isEqualTo("jenreg.walk.resumes");
+                    assertThat(resumes.name()).isEqualTo("jenrepo.walk.resumes");
                     assertThat(resumes.kind()).isEqualTo(Metric.Kind.COUNTER);
                     assertThat(resumes.value()).as("a clean pass takes nothing over").isEqualTo(resumed);
                     assertThat(resumes.limit()).isEmpty();
@@ -89,7 +89,7 @@ class WalkObservabilityTest {
                 });
 
         assertThat(signals.taskStatuses()).singleElement().satisfies(pass -> {
-            assertThat(pass.name()).isEqualTo("jenreg.walk.pass");
+            assertThat(pass.name()).isEqualTo("jenrepo.walk.pass");
             assertThat(pass.state()).isEqualTo(TaskStatus.State.IDLE);
             assertThat(pass.lastRun()).isNotNull();
             assertThat(pass.outcome()).contains("generation 1");
@@ -105,9 +105,9 @@ class WalkObservabilityTest {
         walk.walk(store, "test", List.of("publish"), key -> { });
 
         assertThat(signals.metrics()).extracting(Metric::name)
-                .allSatisfy(name -> assertThat(name).matches("jenreg\\.walk\\..+"));
+                .allSatisfy(name -> assertThat(name).matches("jenrepo\\.walk\\..+"));
         assertThat(signals.taskStatuses()).extracting(TaskStatus::name)
-                .allSatisfy(name -> assertThat(name).matches("jenreg\\.walk\\..+"));
+                .allSatisfy(name -> assertThat(name).matches("jenrepo\\.walk\\..+"));
     }
 
     @Test
@@ -149,7 +149,7 @@ class WalkObservabilityTest {
         ObservabilityReport report = ObservabilityReport.from(List.of(signals));
 
         assertThat(report.metrics()).extracting(Metric::name)
-                .containsExactly("jenreg.walk.resumes", "jenreg.walk.segments"); // name-sorted
-        assertThat(report.tasks()).extracting(TaskStatus::name).containsExactly("jenreg.walk.pass");
+                .containsExactly("jenrepo.walk.resumes", "jenrepo.walk.segments"); // name-sorted
+        assertThat(report.tasks()).extracting(TaskStatus::name).containsExactly("jenrepo.walk.pass");
     }
 }

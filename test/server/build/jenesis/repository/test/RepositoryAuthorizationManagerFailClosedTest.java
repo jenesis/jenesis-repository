@@ -156,7 +156,7 @@ public class RepositoryAuthorizationManagerFailClosedTest {
         // that knows both that a request was accepted and which credential accepted it. Until 2026-09 nothing in this
         // edition called it, so track-key-usage was a setting that did nothing here while doing something downstream.
         ArtifactStore store = ArtifactStoreProvider.resolve(
-                "filesystem", key -> "jenreg.filesystem.root".equals(key) ? root.toString() : null);
+                "filesystem", key -> "jenrepo.filesystem.root".equals(key) ? root.toString() : null);
         Authorization authorization = Authorization.enforcing(store);
         String key = Authorization.mint("acme");
         authorization.provision("acme", Authorization.hash(key), "k", null);
@@ -197,7 +197,7 @@ public class RepositoryAuthorizationManagerFailClosedTest {
 
         assertThat(result.isGranted())
                 .as("an unreadable store denies the request - the gate fails closed, never open").isFalse();
-        assertThat(attributes.get("jenreg.decision"))
+        assertThat(attributes.get("jenrepo.decision"))
                 .as("and specifically FORBIDDEN, which the entry point answers 403 - not a 401 or, worse, an allow")
                 .isEqualTo(Authorization.Decision.FORBIDDEN);
     }
@@ -207,7 +207,7 @@ public class RepositoryAuthorizationManagerFailClosedTest {
         // The control: over a clean store where the key carries repository:read, the identical request is allowed. So
         // the fail-closed deny above is the store fault at work, not a request that would have been refused anyway.
         ArtifactStore store = ArtifactStoreProvider.resolve(
-                "filesystem", key -> "jenreg.filesystem.root".equals(key) ? root.toString() : null);
+                "filesystem", key -> "jenrepo.filesystem.root".equals(key) ? root.toString() : null);
         Authorization authorization = Authorization.enforcing(store);
         String key = Authorization.mint("acme");
         authorization.provision("acme", Authorization.hash(key), "k", null);
@@ -217,6 +217,6 @@ public class RepositoryAuthorizationManagerFailClosedTest {
         var result = manager(authorization).authorize(() -> null, new RequestAuthorizationContext(request(key, attributes)));
 
         assertThat(result.isGranted()).as("a clean store with the right granted allows the request").isTrue();
-        assertThat(attributes.get("jenreg.decision")).isEqualTo(Authorization.Decision.ALLOWED);
+        assertThat(attributes.get("jenrepo.decision")).isEqualTo(Authorization.Decision.ALLOWED);
     }
 }

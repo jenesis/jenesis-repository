@@ -153,7 +153,7 @@ class NuGetImportCoordinateAgreementTest {
 
     private ArtifactStore store() {
         return ArtifactStoreProvider.resolve("filesystem",
-                key -> "jenreg.filesystem.root".equals(key) ? root.toString() : null);
+                key -> "jenrepo.filesystem.root".equals(key) ? root.toString() : null);
     }
 
     /** A minimal {@code .nupkg}: a zip whose entry is the {@code .nuspec} the push reads the id/version from. */

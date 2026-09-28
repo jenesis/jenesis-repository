@@ -18,10 +18,10 @@ import org.springframework.web.bind.annotation.RestController;
 /**
  * The credential surface: how an operator issues, scopes and revokes the keys this deployment authorizes with.
  *
- * <p>Without it an enforcing deployment could not be operated as configured. {@code jenreg.auth} is on by default
+ * <p>Without it an enforcing deployment could not be operated as configured. {@code jenrepo.auth} is on by default
  * and a keyless caller is rejected, so every credential had to be created out of band - and the only advice a
  * fresh install could be given was to switch authentication off, which is not a bootstrap but a different
- * deployment. The first key comes from {@code jenreg.bootstrap-key}; every key after it comes from here.
+ * deployment. The first key comes from {@code jenrepo.bootstrap-key}; every key after it comes from here.
  *
  * <p>The tenant administered is the one the deployment's routing answers for the request
  * ({@link RepositoryRouting#tenant}), as for every other {@code /api} call: the served tenant under the fixed routing,

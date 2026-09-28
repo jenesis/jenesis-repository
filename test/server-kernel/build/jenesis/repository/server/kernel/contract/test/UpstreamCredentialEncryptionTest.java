@@ -37,7 +37,7 @@ class UpstreamCredentialEncryptionTest {
     @BeforeEach
     void setUp() {
         store = ArtifactStoreProvider.resolve("filesystem",
-                key -> "jenreg.filesystem.root".equals(key) ? root.toString() : null);
+                key -> "jenrepo.filesystem.root".equals(key) ? root.toString() : null);
         keyed = SecretCipher.of("k1:" + key((byte) 9));
     }
 
@@ -102,7 +102,7 @@ class UpstreamCredentialEncryptionTest {
                 SecretCipher.of(null));
         assertThatThrownBy(() -> unkeyed.set("nexus.internal", "Authorization", "Bearer would-be-plaintext"))
                 .isInstanceOf(IllegalStateException.class)
-                .hasMessageContaining("JENREG_SECRETS_KEY");
+                .hasMessageContaining("JENREPO_SECRETS_KEY");
 
         // Nothing reached the store - no plaintext credential, no document at all.
         assertThat(store.readVersioned(PATH)).as("the refused write persisted nothing").isEmpty();

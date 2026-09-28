@@ -11,8 +11,8 @@ import build.jenesis.repository.compliance.SignalSourceProvider;
  * {@code openssf-endpoint} (default {@code https://api.osv.dev}, the API serving the dataset - a mirror or a proxy
  * overrides it). Off unless an operator turns it on: a lookup is an outbound call to a public API, and a
  * deployment that configured nothing has not agreed to make one. That deviation from the usual "unset means on"
- * gate is deliberate and is stated once, on {@code FeatureConventionTest}. An operator turns it on with {@code jenreg.openssf=true}, and
- * an operator opts back out with {@code jenreg.openssf=false}.
+ * gate is deliberate and is stated once, on {@code FeatureConventionTest}. An operator turns it on with {@code jenrepo.openssf=true}, and
+ * an operator opts back out with {@code jenrepo.openssf=false}.
  */
 public final class OpenSsfMaliciousSourceProvider implements SignalSourceProvider {
 

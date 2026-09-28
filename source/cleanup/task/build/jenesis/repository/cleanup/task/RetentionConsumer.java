@@ -25,7 +25,7 @@ import build.jenesis.repository.walk.WalkPass;
  */
 public final class RetentionConsumer implements WalkConsumer {
 
-    /** The consumer's name: its toggle ({@code jenreg.retention-sweep}) and how a walk entry names it - not
+    /** The consumer's name: its toggle ({@code jenrepo.retention-sweep}) and how a walk entry names it - not
      *  {@code retention}, which is the engine-selection dial. */
     public static final String NAME = "retention-sweep";
 

@@ -2,7 +2,7 @@ Scaleway
 ========
 
 Deploys Jenesis Repository as a **Serverless Container** over **Object Storage** through the `s3` backend:
-`JENREG_STORE=s3` against a bucket the Terraform provisions, at the regional endpoint `https://s3.<region>.scw.cloud`.
+`JENREPO_STORE=s3` against a bucket the Terraform provisions, at the regional endpoint `https://s3.<region>.scw.cloud`.
 The store credential is one IAM API key on an application holding `ObjectStorageFullAccess` on the project; its
 access key and secret reach the container as secret environment and nothing else is minted or stored.
 
@@ -15,7 +15,7 @@ OVHcloud's object storage ignores both headers and Exoscale's takes no ETag on `
     export SCW_ACCESS_KEY=... SCW_SECRET_KEY=... SCW_DEFAULT_PROJECT_ID=...
     terraform init
     terraform apply -var project_id=PROJECT -var bucket_name=UNIQUE-IN-REGION \
-      -var 'secrets={JENREG_BOOTSTRAP_KEY="jenk_...", JENREG_UI_ADMIN_KEY="..."}'
+      -var 'secrets={JENREPO_BOOTSTRAP_KEY="jenk_...", JENREPO_UI_ADMIN_KEY="..."}'
     # the `url` output is the repository; check <url>/actuator/health, and open <url> for the console
 
 The default image is the one on Docker Hub, and Scaleway advises against pulling from there for anything that
@@ -30,7 +30,7 @@ the copy:
 | Variable | Default | |
 |---|---|---|
 | `image` | `docker.io/jenesisbuild/jenesis-repository:latest` | see above |
-| `environment` | `{}` | further settings, `JENREG_*` names |
+| `environment` | `{}` | further settings, `JENREPO_*` names |
 | `secrets` | `{}` | settings that are credentials, as secret environment |
 | `allow_unauthenticated` | `false` | make the container public; access then rests on the repository's own auth |
 | `max_scale` | `1` | more than one instance over the bucket is the multi-node shape |

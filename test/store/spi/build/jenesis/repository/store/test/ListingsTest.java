@@ -21,7 +21,7 @@ class ListingsTest {
 
     @BeforeEach
     void setUp() throws IOException {
-        store = ArtifactStoreProvider.resolve("filesystem", key -> "jenreg.filesystem.root".equals(key) ? root.toString() : null);
+        store = ArtifactStoreProvider.resolve("filesystem", key -> "jenrepo.filesystem.root".equals(key) ? root.toString() : null);
         for (int index = 0; index < 26; index++) {
             store.write("rows/" + String.format("%02d", index), new ByteArrayInputStream(new byte[index]));
         }

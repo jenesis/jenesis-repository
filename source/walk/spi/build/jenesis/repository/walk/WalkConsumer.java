@@ -39,7 +39,7 @@ import build.jenesis.repository.store.Features;
  *     exactly as the first left it - same objects, same content - or the pass is a generator of garbage rather than a
  *     converge pass.</li>
  * <li><b>Absence sentinel.</b> {@link #name()} returns a non-blank, stable, lower-case name - the settings namespace,
- *     the {@code jenreg.<name>=false} toggle key and the consumer's own key space. {@code null} is never
+ *     the {@code jenrepo.<name>=false} toggle key and the consumer's own key space. {@code null} is never
  *     a legal return, and the hooks return nothing: a consumer signals "I could not converge" through its own durable
  *     say-so surface (clause 8), never by returning quietly.</li>
  * <li><b>Streaming.</b> {@link #onRetained} is handed a descriptor and the walked store, never the artifact's
@@ -68,7 +68,7 @@ import build.jenesis.repository.store.Features;
  *     the one outcome this SPI exists to prevent. The pass generation and {@link WalkPass#started()} are what a
  *     consumer stamps onto its projection so a reader can tell how fresh it is.</li>
  * <li><b>Lifecycle / ownership.</b> Instances come from {@link #discovered()}, which builds a fresh list per call from
- *     {@link ServiceLoader} and drops the ones a {@code jenreg.<name>=false} toggle disables, and the ones whose
+ *     {@link ServiceLoader} and drops the ones a {@code jenrepo.<name>=false} toggle disables, and the ones whose
  *     {@link #enabled()} says the feature they repair is off. A consumer
  *     therefore owns no threads and no clients, and - because a process death is indistinguishable from a fresh
  *     start - keeps no cross-pass state it cannot rebuild from the store.</li>
@@ -193,7 +193,7 @@ public interface WalkConsumer {
     String name();
 
     /**
-     * Whether this consumer has anything to do on this deployment at all, beyond its own {@code jenreg.<name>}
+     * Whether this consumer has anything to do on this deployment at all, beyond its own {@code jenrepo.<name>}
      * toggle: {@code true} by default, and {@code false} from a consumer that repairs a feature which is switched
      * off. Such a consumer is not {@link #discovered()}, so it is not driven by the walk, not charged for the
      * deliveries it declares, and not shown on the walks screen - it reports itself absent, which is what a repair
@@ -283,7 +283,7 @@ public interface WalkConsumer {
         return name();
     }
 
-    /** The settings keys (bare, without the {@code jenreg.} prefix) of the dials that govern what this consumer
+    /** The settings keys (bare, without the {@code jenrepo.} prefix) of the dials that govern what this consumer
      *  does with what it is handed, for the walks screen to show beside it; none by default. */
     default List<String> settings() {
         return List.of();
@@ -387,7 +387,7 @@ public interface WalkConsumer {
     }
 
     /** Every enabled consumer discovered via {@link ServiceLoader} (a parallel SPI: a
-     *  {@code jenreg.<name>=false} skips one, {@link Features}, and so does the consumer's own {@link #enabled()}
+     *  {@code jenrepo.<name>=false} skips one, {@link Features}, and so does the consumer's own {@link #enabled()}
      *  answering that the feature it repairs is off), in discovery order - what the scheduled walk pass drives
      *  from its one enumeration. */
     static List<WalkConsumer> discovered() {

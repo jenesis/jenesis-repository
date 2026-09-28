@@ -17,7 +17,7 @@ import build.jenesis.repository.ui.RepositoryPage;
  */
 public final class DeployConsoleModule implements ConsoleModuleProvider {
 
-    /** The module's name, its {@code jenreg.} gate, and the namespace its templates resolve under. */
+    /** The module's name, its {@code jenrepo.} gate, and the namespace its templates resolve under. */
     public static final String NAME = "deploy";
 
     @Override

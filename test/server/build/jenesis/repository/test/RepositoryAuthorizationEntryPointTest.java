@@ -95,7 +95,7 @@ class RepositoryAuthorizationEntryPointTest {
     private static HttpServletRequest request(String uri, Authorization.Decision decision) {
         HttpServletRequest request = mock(HttpServletRequest.class);
         when(request.getRequestURI()).thenReturn(uri);
-        when(request.getAttribute("jenreg.decision")).thenReturn(decision);
+        when(request.getAttribute("jenrepo.decision")).thenReturn(decision);
         return request;
     }
 }

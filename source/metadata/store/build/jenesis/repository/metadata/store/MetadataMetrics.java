@@ -12,14 +12,14 @@ import build.jenesis.repository.observation.ObservabilitySource;
  * {@link StoreMetadata} bumps; a test injects its own instance for a deterministic assertion.
  *
  * <ul>
- *   <li><strong>{@code jenreg.metadata.document.bytes}</strong> - the largest document observed on a write,
+ *   <li><strong>{@code jenrepo.metadata.document.bytes}</strong> - the largest document observed on a write,
  *       measured against a soft ceiling ({@link #SOFT_SIZE_LIMIT}) past which a mutate logs a WARNING. The document
  *       rewrites whole on every CAS, so growth costs latency and CPU, never billed request-bytes - a
  *       doc-growth guard, a signal not an enforced limit.</li>
- *   <li><strong>{@code jenreg.metadata.cas.retries}</strong> - section-scoped CAS commits re-read and retried
+ *   <li><strong>{@code jenrepo.metadata.cas.retries}</strong> - section-scoped CAS commits re-read and retried
  *       after a concurrent writer won the token: contention on the shared per-version document, converged by
  *       re-applying the section transform.</li>
- *   <li><strong>{@code jenreg.metadata.cas.exhausted}</strong> - mutations that lost the write race the full
+ *   <li><strong>{@code jenrepo.metadata.cas.exhausted}</strong> - mutations that lost the write race the full
  *       retry bound and failed to their caller.</li>
  * </ul>
  */
@@ -85,17 +85,17 @@ public final class MetadataMetrics implements ObservabilitySource {
     @Override
     public List<Metric> metrics() {
         return List.of(
-                Metric.bounded("jenreg.metadata.document.bytes",
+                Metric.bounded("jenrepo.metadata.document.bytes",
                         "The largest consolidated metadata document observed on a write, against the soft size "
                                 + "guard past which a mutate logs a warning (the document rewrites whole on every "
                                 + "CAS, so growth is latency and CPU, never billed request-bytes).",
                         largestBytes.get(), SOFT_SIZE_LIMIT, "bytes"),
-                Metric.counter("jenreg.metadata.cas.retries",
+                Metric.counter("jenrepo.metadata.cas.retries",
                         "Section-scoped CAS commits re-read and retried after a concurrent writer won the token - "
                                 + "contention on the shared per-version document, converged by re-applying the "
                                 + "section transform.",
                         retries.sum(), ""),
-                Metric.counter("jenreg.metadata.cas.exhausted",
+                Metric.counter("jenrepo.metadata.cas.exhausted",
                         "Metadata mutations that lost the write race the full retry bound and failed to their "
                                 + "caller - a sustained-contention signal, not a benign single conflict.",
                         exhausted.sum(), ""));

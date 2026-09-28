@@ -5,7 +5,7 @@ import module java.base;
 import build.jenesis.repository.ui.ConsoleAdministrators;
 
 /**
- * The env-configured super-admins ({@code JENREG_UI_ADMINS}): provider-qualified ids ({@code <provider>/<id>})
+ * The env-configured super-admins ({@code JENREPO_UI_ADMINS}): provider-qualified ids ({@code <provider>/<id>})
  * that are admins of every tenant and the only ones who may create, delete and see all tenants. The set is fixed at
  * deploy time and overrides any stored role, so a deployment cannot lock itself out. A super-admin is matched only on
  * the provider-verified stable id, never on a mutable display login (a reclaimable username or an unverified email),

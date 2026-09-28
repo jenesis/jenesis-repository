@@ -18,7 +18,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 /**
  * The shared rebuild pass has a driver of its own: {@link RebuildScheduler} runs it over a repository weekly unless
- * {@code jenreg.rebuild.interval} says otherwise, inert without a walk or a consumer, and a driven pass streams every retained pointer to every consumer - so a consumer's view
+ * {@code jenrepo.rebuild.interval} says otherwise, inert without a walk or a consumer, and a driven pass streams every retained pointer to every consumer - so a consumer's view
  * converges without an embedder and without a republish. Before this, {@code RebuildPass} shipped here
  * with nothing to run it.
  */
@@ -32,7 +32,7 @@ class RebuildSchedulerTest {
     @BeforeEach
     void setUp() {
         store = ArtifactStoreProvider.resolve("filesystem",
-                key -> "jenreg.filesystem.root".equals(key) ? root.toString() : null);
+                key -> "jenrepo.filesystem.root".equals(key) ? root.toString() : null);
     }
 
     @Test
@@ -42,7 +42,7 @@ class RebuildSchedulerTest {
             assertThat(scheduler.interval()).as("a week between passes unless configured - the safety cadence; a "
                     + "crash asks for its walk").isEqualTo(Duration.ofDays(7));
             scheduler.start();
-            assertThat(scheduler.status().name()).isEqualTo("jenreg.rebuild.pass");
+            assertThat(scheduler.status().name()).isEqualTo("jenrepo.rebuild.pass");
             assertThat(scheduler.taskStatuses())
                     .as("the started driver reports its own status").hasSize(1);
         }
@@ -56,7 +56,7 @@ class RebuildSchedulerTest {
         assertThat(RebuildScheduler.interval("off")).isZero();
         assertThat(RebuildScheduler.interval("0")).isZero();
         assertThatThrownBy(() -> RebuildScheduler.interval("soon")).isInstanceOf(IllegalArgumentException.class)
-                .hasMessageContaining("jenreg.rebuild.interval");
+                .hasMessageContaining("jenrepo.rebuild.interval");
     }
 
     @Test
@@ -119,7 +119,7 @@ class RebuildSchedulerTest {
 
     @Test
     void a_node_that_boots_over_its_own_running_marker_asks_for_a_walk_and_a_clean_shutdown_leaves_none() throws Exception {
-        UnaryOperator<String> config = key -> "jenreg.consistency.node-id".equals(key) ? "node-a" : null;
+        UnaryOperator<String> config = key -> "jenrepo.consistency.node-id".equals(key) ? "node-a" : null;
         try (RebuildScheduler first = new RebuildScheduler(store, store, config, Optional.empty(), List.of(), List.of())) {
             first.start();
             assertThat(RunningMarker.running(store, "node-a")).as("the marker is up while the node is").isTrue();

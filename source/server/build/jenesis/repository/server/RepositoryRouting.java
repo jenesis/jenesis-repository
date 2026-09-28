@@ -14,8 +14,8 @@ import jakarta.servlet.http.HttpServletRequest;
  * {@link ArtifactStore#scope(String) scoped} store ({@code root.scope(tenant).scope(repository)}), so switching a
  * deployment between fixed- and multi-tenant routing is a configuration change that finds the data where it was
  * left. Which routing a deployment runs on is <strong>discovered</strong>, through
- * {@link RepositoryRoutingProvider}: {@code jenreg.tenancy} names one of the installed providers, and naming none
- * binds the {@link FixedTenantRouting}, which serves the one configured tenant, {@code jenreg.default-tenant}.
+ * {@link RepositoryRoutingProvider}: {@code jenrepo.tenancy} names one of the installed providers, and naming none
+ * binds the {@link FixedTenantRouting}, which serves the one configured tenant, {@code jenrepo.default-tenant}.
  * A multi-tenant deployment installs a provider; it does not override a bean.
  *
  * <p><strong>The URL always names the tenant, and a routing decides only which tenants a request may

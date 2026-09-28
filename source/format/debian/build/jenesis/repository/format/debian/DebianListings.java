@@ -186,7 +186,7 @@ final class DebianListings {
      */
     private StoredListing.Header deriveCompressed(String suite, String component, String architecture,
                                                   StoredListing.Derived document) throws IOException {
-        Path compressed = OwnerOnly.createTempFile("jenreg-packages", ".gz");
+        Path compressed = OwnerOnly.createTempFile("jenrepo-packages", ".gz");
         try {
             MessageDigest md5 = digest("MD5");
             MessageDigest sha256 = digest("SHA-256");

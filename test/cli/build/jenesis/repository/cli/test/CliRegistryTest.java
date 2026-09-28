@@ -20,7 +20,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 @TestInstance(TestInstance.Lifecycle.PER_CLASS)
 public class CliRegistryTest {
 
-    private static final String OVERVIEW = "jenreg - operate a Jenesis repository";
+    private static final String OVERVIEW = "jenrepo - operate a Jenesis repository";
 
     @TempDir
     private static Path home;
@@ -29,12 +29,12 @@ public class CliRegistryTest {
     public void setUp() {
         // A home with no saved session: a command that needs one fails at the login check and a command that
         // validates its own arguments throws - either way it is routed, which is what is being asked.
-        System.setProperty("JENREG_CLI_HOME", home.toString());
+        System.setProperty("JENREPO_CLI_HOME", home.toString());
     }
 
     @AfterAll
     public void tearDown() {
-        System.clearProperty("JENREG_CLI_HOME");
+        System.clearProperty("JENREPO_CLI_HOME");
     }
 
     @Test

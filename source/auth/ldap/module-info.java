@@ -13,7 +13,7 @@
  * exposure worse: a plaintext {@code ldap://} URL is refused at boot unless StartTLS is on, or an operator says in so
  * many words that the connection is private.
  *
- * <p>Configured at boot from {@code jenreg.ui.ldap.*}; with no {@code url} the module contributes nothing.
+ * <p>Configured at boot from {@code jenrepo.ui.ldap.*}; with no {@code url} the module contributes nothing.
  *
  * @jenesis.release 25
  * @jenesis.bom pin-repository.properties

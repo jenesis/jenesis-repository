@@ -5,8 +5,8 @@ import module java.base;
 /**
  * The naming grammar every observability signal shares, kept in one place so a health check, a metric and a
  * background-task status all read like the configuration keys beside them. A signal name is
- * {@code jenreg.<feature>.<signal...>} - the same {@code jenreg.<feature>.*} convention the settings use - so a metric
- * called {@code jenreg.gc.reclaimed.bytes} lines up with the {@code jenreg.gc} feature it belongs to and is
+ * {@code jenrepo.<feature>.<signal...>} - the same {@code jenrepo.<feature>.*} convention the settings use - so a metric
+ * called {@code jenrepo.gc.reclaimed.bytes} lines up with the {@code jenrepo.gc} feature it belongs to and is
  * discoverable from either side. This is the checkable, {@code java.base} form of the grammar the generated
  * observability reference documents (and the Micrometer meter-name guard enforces at the registry): a name that breaks
  * it is rejected at construction, not at scrape time, because a signal name is a build-time constant - a broken one is
@@ -14,8 +14,8 @@ import module java.base;
  */
 public final class Signals {
 
-    /** The full grammar: dot-separated lowercase segments under the {@code jenreg} root. */
-    public static final Pattern NAME = Pattern.compile("^jenreg(\\.[a-z][a-z0-9]*)+$");
+    /** The full grammar: dot-separated lowercase segments under the {@code jenrepo} root. */
+    public static final Pattern NAME = Pattern.compile("^jenrepo(\\.[a-z][a-z0-9]*)+$");
 
     private static final Pattern SEGMENT = Pattern.compile("[a-z][a-z0-9]*");
 
@@ -23,12 +23,12 @@ public final class Signals {
     }
 
     /**
-     * Compose a signal name {@code jenreg.<feature>.<segments...>} from a feature and one or more trailing segments,
+     * Compose a signal name {@code jenrepo.<feature>.<segments...>} from a feature and one or more trailing segments,
      * validating each against the grammar. Throws {@link IllegalArgumentException} when a segment is null, empty or not
      * lowercase {@code [a-z][a-z0-9]*}.
      */
     public static String name(String feature, String... segments) {
-        StringBuilder builder = new StringBuilder("jenreg.").append(segment(feature));
+        StringBuilder builder = new StringBuilder("jenrepo.").append(segment(feature));
         for (String segment : segments) {
             builder.append('.').append(segment(segment));
         }
@@ -51,7 +51,7 @@ public final class Signals {
      *  in its constructor. */
     public static String require(String name) {
         if (!valid(name)) {
-            throw new IllegalArgumentException("Not a jenreg.<feature>.<signal> name: " + name);
+            throw new IllegalArgumentException("Not a jenrepo.<feature>.<signal> name: " + name);
         }
         return name;
     }

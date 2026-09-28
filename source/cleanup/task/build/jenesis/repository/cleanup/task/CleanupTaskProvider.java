@@ -44,7 +44,7 @@ public final class CleanupTaskProvider implements MaintenanceTaskProvider {
             return Optional.empty();
         }
         // The collector's dials are validated here, at boot, though the collector runs from the walk: a garbled
-        // jenreg.gc.grace fails the boot ruling by name rather than the first walk that carries the collector.
+        // jenrepo.gc.grace fails the boot ruling by name rather than the first walk that carries the collector.
         GarbageCollectorProvider.resolve(config);
         return Optional.of(new CleanupTask(INTERVAL.resolve(config)));
     }

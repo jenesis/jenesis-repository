@@ -9,7 +9,7 @@ import build.jenesis.repository.settings.SettingsContributor;
  * {@link InventoryBackfillConsumer} walk consumer, deployment-wide and effective on the next rebuild pass, so
  * flipping it needs no restart.
  *
- * <p>It carries no cadence dial. The pass runs on the walks setting ({@code jenreg.walks}) for every consumer at
+ * <p>It carries no cadence dial. The pass runs on the walks setting ({@code jenrepo.walks}) for every consumer at
  * once, and a second schedule here would be one this consumer does not own.
  */
 public final class InventoryBackfillSettingsContributor implements SettingsContributor {

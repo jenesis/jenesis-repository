@@ -195,7 +195,7 @@ final class CondaListings {
 
                     private void openSpool() throws IOException {
                         if (spool == null) {
-                            spool = OwnerOnly.createTempFile("jenreg-repodata-conda", ".tmp");
+                            spool = OwnerOnly.createTempFile("jenrepo-repodata-conda", ".tmp");
                             conda = new BufferedOutputStream(Files.newOutputStream(spool));
                         }
                     }
@@ -219,7 +219,7 @@ final class CondaListings {
                     // and the compression deliberately is not - it runs off the write's thread. So the bytes are
                     // copied to a file this derivation owns, before it queues. Reading document.body() from the
                     // deferred work would be reading the write's rendered file after the write deleted it.
-                    Path source = OwnerOnly.createTempFile("jenreg-repodata", ".json");
+                    Path source = OwnerOnly.createTempFile("jenrepo-repodata", ".json");
                     try (InputStream body = document.open()) {
                         Files.copy(body, source, StandardCopyOption.REPLACE_EXISTING);
                     } catch (IOException | RuntimeException failed) {
@@ -246,7 +246,7 @@ final class CondaListings {
                         @Override
                         public void run() {
                         try {
-                            Path compressed = OwnerOnly.createTempFile("jenreg-repodata", ".bz2");
+                            Path compressed = OwnerOnly.createTempFile("jenrepo-repodata", ".bz2");
                             try {
                                 StoredListing.Header header = CondaFormat.bzip2(source, compressed, seq);
                                 StoredListing.derive(store, twin, header, header.size(),

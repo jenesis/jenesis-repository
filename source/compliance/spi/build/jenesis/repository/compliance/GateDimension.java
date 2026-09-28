@@ -37,7 +37,7 @@ import module java.base;
  * The question {@code enforcing} answers is whether the dimension is <em>configured</em> - not what it would decide
  * once it runs. A {@code <dim>-action} of {@link Verdict#ALLOW} is a decision, so it makes the dimension
  * <em>evaluate and permit</em>; it does not withdraw the dimension from the gate. The deployment already has two ways
- * to switch a dimension off - the {@code jenreg.<name>} toggle and the provider's own
+ * to switch a dimension off - the {@code jenrepo.<name>} toggle and the provider's own
  * {@link GatePolicyProvider#requiredConfig() enablement} configuration - and a third, spelled as a verdict, would be
  * the weaker one. A dimension that withdraws itself is indistinguishable from one this deployment never installed, so
  * an incident review cannot tell "nobody configured provenance admission here" from "somebody set it to permit"; a

@@ -30,7 +30,7 @@ import io.micrometer.core.instrument.Tags;
  *       dashboard instead of serving its last value forever; a counter accumulates and is incremented straight onto the
  *       registry rather than collected and flushed.</li>
  *   <li><b>Bounded work.</b> Meter names and tag keys come from the tasks, whose names are a small fixed set; the
- *       {@code task} tag on the failure counter is therefore bounded, as a {@code jenreg.*} meter's tags must be.</li>
+ *       {@code task} tag on the failure counter is therefore bounded, as a {@code jenrepo.*} meter's tags must be.</li>
  * </ol>
  */
 public final class PassMetrics {
@@ -48,7 +48,7 @@ public final class PassMetrics {
         if (registry == null) {
             return;
         }
-        Counter.builder("jenreg.maintenance.failures")
+        Counter.builder("jenrepo.maintenance.failures")
                 .description("Maintenance passes or (tenant, repository) units that failed and were skipped")
                 .tag("task", task)
                 .register(registry)

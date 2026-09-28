@@ -20,7 +20,7 @@ import org.springframework.security.web.access.AccessDeniedHandler;
  * for a {@code FORBIDDEN} decision (a key that lacks the right) and {@code 401} otherwise (no key, a malformed or
  * expired key). The decision drives the status, so a present-but-unauthorized key is always a {@code 403}. Every
  * denial it answers is recorded on the {@link AuthFailures} accessor under the {@code key} mechanism, so a metrics
- * layer can surface {@code jenreg.auth.failures} without this component depending on any registry. A {@code 401}
+ * layer can surface {@code jenrepo.auth.failures} without this component depending on any registry. A {@code 401}
  * on an artifact path ({@code /repository/**}, {@code /v2/**}) additionally carries a {@code WWW-Authenticate: Basic}
  * challenge, because several ecosystem clients present their credentials only in answer to one - Maven on a read,
  * a Distribution client on everything - and without it they report the repository as unauthorized and never send
@@ -60,7 +60,7 @@ public final class RepositoryAuthorizationEntryPoint implements AuthenticationEn
     }
 
     private void respond(HttpServletRequest request, HttpServletResponse response) {
-        Object decision = request.getAttribute("jenreg.decision");
+        Object decision = request.getAttribute("jenrepo.decision");
         int status = decision == Authorization.Decision.FORBIDDEN ? 403 : 401;
         response.setStatus(status);
         if (status == 401 && artifact(request.getRequestURI())) {

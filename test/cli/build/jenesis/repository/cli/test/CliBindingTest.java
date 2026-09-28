@@ -137,7 +137,7 @@ public class CliBindingTest {
         // One answer for everything: this test is about the request, not the reply.
         server.stubFor(any(anyUrl()).willReturn(aResponse().withStatus(200)
                 .withHeader("Content-Type", "application/json").withBody("[]")));
-        System.setProperty("JENREG_CLI_HOME", home.toString());
+        System.setProperty("JENREPO_CLI_HOME", home.toString());
         // Log in through the CLI rather than writing its session file here: the format is the CLI's business, and
         // a fixture that hand-rolls it silently stops logging in the day that changes - which is exactly what
         // happened when this was first written, and every case then reported the command as unwired.
@@ -161,7 +161,7 @@ public class CliBindingTest {
 
     @AfterAll
     public void tearDown() {
-        System.clearProperty("JENREG_CLI_HOME");
+        System.clearProperty("JENREPO_CLI_HOME");
         if (server != null) {
             server.stop();
         }

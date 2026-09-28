@@ -2,7 +2,7 @@
  * The scheduled rebuild pass as a plugin module: a discovered
  * {@link build.jenesis.repository.maintenance.MaintenanceTaskProvider} answering to {@code rebuild} that drives
  * every discovered {@code WalkConsumer} from <em>one</em> shared enumeration of the pointer roots (the free
- * {@code RebuildPass}, scheduled by {@code jenreg.walks}) - the walk half of the two-route derived-metadata
+ * {@code RebuildPass}, scheduled by {@code jenrepo.walks}) - the walk half of the two-route derived-metadata
  * contract made scheduled: steady state stays with the publication events, and this pass is the first-activation
  * back-fill, the periodic refresh and the self-heal, so a consumer plugin enabled late rebuilds its whole view
  * with no operator re-publish or re-import. Degrades gracefully and never silently: with no walk implementation

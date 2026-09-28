@@ -91,7 +91,7 @@ class KnownPrincipalsTest {
 
     private ArtifactStore store() {
         return ArtifactStoreProvider.resolve("filesystem",
-                key -> "jenreg.filesystem.root".equals(key) ? root.toString() : null);
+                key -> "jenrepo.filesystem.root".equals(key) ? root.toString() : null);
     }
 
     /** Counts writes reaching the backend, so "a returning sign-in writes nothing" is a measurement rather than a

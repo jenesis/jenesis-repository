@@ -78,7 +78,7 @@ class GateHostContractTest {
     @BeforeEach
     void setUp() {
         store = ArtifactStoreProvider.resolve("filesystem",
-                key -> "jenreg.filesystem.root".equals(key) ? root.toString() : null);
+                key -> "jenrepo.filesystem.root".equals(key) ? root.toString() : null);
     }
 
     // --- promises 1 and 2: every failure shape the guest SPI permits reaches the same fail-closed leg --------------
@@ -110,7 +110,7 @@ class GateHostContractTest {
         for (String kind : List.of("malformed", "inspectorfault", "inspectorio")) {
             Path isolatedRoot = Files.createDirectories(root.resolve(kind));
             ArtifactStore isolated = ArtifactStoreProvider.resolve("filesystem",
-                    key -> "jenreg.filesystem.root".equals(key) ? isolatedRoot.toString() : null);
+                    key -> "jenrepo.filesystem.root".equals(key) ? isolatedRoot.toString() : null);
             String path = "/gatetest/" + kind + "/lib-1.0.jar";
             Publication publication = new Publication(isolated,
                     List.of(new ComplianceScreen(() -> gate(AdvisorySource.none()))));

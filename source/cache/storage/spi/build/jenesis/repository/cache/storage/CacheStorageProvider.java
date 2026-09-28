@@ -72,7 +72,7 @@ public interface CacheStorageProvider extends IconContributor {
      * Build the backend, reading its configuration through {@code config}: a property-key lookup
      * (e.g. {@code config.apply("s3.bucket")}) returning the configured value or {@code null}.
      * The caller backs it with the application's Spring {@code Environment}, so the same value can be set
-     * through a property or its relaxed-binding environment variable (e.g. {@code JENREG_S3_BUCKET}).
+     * through a property or its relaxed-binding environment variable (e.g. {@code JENREPO_S3_BUCKET}).
      */
     CacheStorage create(UnaryOperator<String> config);
 
@@ -97,7 +97,7 @@ public interface CacheStorageProvider extends IconContributor {
      * Resolve the cache storage. There is no name to pass: the cache has no backend of its own.
      *
      * <p>A second selection beside the artifact store's would make the product's storage configuration ambiguous:
-     * both roles read the same {@code jenreg.s3.*} keys, so a repository on disk with a cache in a bucket would be
+     * both roles read the same {@code jenrepo.s3.*} keys, so a repository on disk with a cache in a bucket would be
      * indistinguishable from a misconfiguration. One selection means one store.
      *
      * <p>Exactly one implementation always resolves, and its required configuration is validated before it is

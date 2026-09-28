@@ -21,7 +21,7 @@ class TenancyDefaultTest {
     @Test
     void the_properties_the_server_binds_default_to_fixed() {
         assertThat(new RepositoryProperties().getTenancy())
-                .as("the routing a shipped composition runs on when jenreg.tenancy is not set")
+                .as("the routing a shipped composition runs on when jenrepo.tenancy is not set")
                 .isEqualTo("fixed");
     }
 

@@ -33,7 +33,7 @@ class NuGetNuspecCapTest {
     @BeforeEach
     void setUp() {
         store = ArtifactStoreProvider.resolve("filesystem",
-                key -> "jenreg.filesystem.root".equals(key) ? root.toString() : null);
+                key -> "jenrepo.filesystem.root".equals(key) ? root.toString() : null);
     }
 
     @Test
@@ -72,7 +72,7 @@ class NuGetNuspecCapTest {
                 new ByteArrayInputStream(pkg));
         nuget.handle(lowered, store);
         assertThat(lowered.status)
-                .as("the operator lowered jenreg.archive.largest-entry below a .nuspec, so the coordinate cannot be "
+                .as("the operator lowered jenrepo.archive.largest-entry below a .nuspec, so the coordinate cannot be "
                         + "read and the push fails CLOSED - never from the prefix that fitted under the ceiling")
                 .isEqualTo(400);
 

@@ -62,13 +62,13 @@ public class CliRefreshTest {
                 .whenScenarioStateIs("finished")
                 .willReturn(aResponse().withStatus(200)
                         .withHeader("Content-Type", "application/json").withBody(DONE)));
-        System.setProperty("JENREG_CLI_HOME", home.toString());
+        System.setProperty("JENREPO_CLI_HOME", home.toString());
         Cli.run(new String[] {"login", "http://127.0.0.1:" + server.port() + "/", "--key", "test-key"});
     }
 
     @AfterAll
     public void tearDown() {
-        System.clearProperty("JENREG_CLI_HOME");
+        System.clearProperty("JENREPO_CLI_HOME");
         if (server != null) {
             server.stop();
         }

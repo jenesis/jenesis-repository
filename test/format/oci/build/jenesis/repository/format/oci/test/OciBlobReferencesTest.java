@@ -36,7 +36,7 @@ class OciBlobReferencesTest {
     @BeforeEach
     void setUp() {
         store = ArtifactStoreProvider.resolve(
-                "filesystem", key -> "jenreg.filesystem.root".equals(key) ? root.toString() : null);
+                "filesystem", key -> "jenrepo.filesystem.root".equals(key) ? root.toString() : null);
     }
 
     /** The collector the provider builds for a deployment with this format installed. */

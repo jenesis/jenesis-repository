@@ -19,7 +19,7 @@ import org.springframework.context.ConfigurableApplicationContext;
  * auto-configuration, so a consumer extends this module by overriding beans rather than
  * forking it; this class is a plain {@code @EnableAutoConfiguration} launcher rather than a component-scanning
  * {@code @SpringBootApplication}, so the module carries no beans that a consumer cannot override. The storage backend
- * is selected by {@code jenreg.store} through {@code ArtifactStoreProvider} (ServiceLoader, filesystem
+ * is selected by {@code jenrepo.store} through {@code ArtifactStoreProvider} (ServiceLoader, filesystem
  * fallback).
  *
  * <p><b>There is a second class of this name</b>, in the composition package, and the difference decides what a

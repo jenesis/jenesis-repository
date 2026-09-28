@@ -20,7 +20,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
  */
 class HttpFetcherDeadlineTest {
 
-    private static final String PROPERTY = "jenreg." + ProxySettingsContributor.DEADLINE_KEY;
+    private static final String PROPERTY = "jenrepo." + ProxySettingsContributor.DEADLINE_KEY;
 
     @AfterEach
     void clear() {

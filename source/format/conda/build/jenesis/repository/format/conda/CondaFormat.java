@@ -91,10 +91,10 @@ public final class CondaFormat implements RepositoryFormat, ArtifactLayout, Prox
     private static final String REPODATA_BZ2 = "repodata.json.bz2";
 
     // A hostile package cannot force a large allocation: the info/index.json read is bounded by the product's one
-    // archive-inflation ceiling, ArchiveInflation.largestEntry(), settable at jenreg.archive.largest-entry - not by a
+    // archive-inflation ceiling, ArchiveInflation.largestEntry(), settable at jenrepo.archive.largest-entry - not by a
     // private constant of this format's (RepositoryFormat contract clause 15). How far the WALK may run to
     // reach that member is the sibling bound one dimension over, ArchiveWalk.largestWalk(), settable at
-    // jenreg.archive.largest-walk - also shared, and also not this format's to restate. What IS this format's is the
+    // jenrepo.archive.largest-walk - also shared, and also not this format's to restate. What IS this format's is the
     // ratio below, which the legacy container needs and states at the call site that applies it.
 
     /** The legacy {@code .tar.bz2} is a single archive whose {@code info/index.json} may sit anywhere - even after a
@@ -499,7 +499,7 @@ public final class CondaFormat implements RepositoryFormat, ArtifactLayout, Prox
                 // it - the whole index twice, to answer one GET for the legacy variant.
                 Optional<StoredListing.Served> source0 = StoredListing.open(store, spec);
                 if (source0.isPresent()) {
-                    Path plain = OwnerOnly.createTempFile("jenreg-repodata", ".json");
+                    Path plain = OwnerOnly.createTempFile("jenrepo-repodata", ".json");
                     try {
                         long seq;
                         try (StoredListing.Served document = source0.get();
@@ -507,7 +507,7 @@ public final class CondaFormat implements RepositoryFormat, ArtifactLayout, Prox
                             seq = document.header().seq();
                             Files.copy(body, plain, StandardCopyOption.REPLACE_EXISTING);
                         }
-                        Path twin = OwnerOnly.createTempFile("jenreg-repodata", ".bz2");
+                        Path twin = OwnerOnly.createTempFile("jenrepo-repodata", ".bz2");
                         try {
                             StoredListing.Header header = bzip2(plain, twin, seq);
                             StoredListing.derive(store, spec.listing() + ".bz2", header, header.size(),

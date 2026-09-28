@@ -29,6 +29,6 @@ class MissTtlDefaultTest {
     void a_value_that_is_not_a_duration_is_refused_naming_the_key() {
         assertThatThrownBy(() -> MissMemory.ttl("soon"))
                 .isInstanceOf(IllegalArgumentException.class)
-                .hasMessageContaining("jenreg.cache.miss-ttl");
+                .hasMessageContaining("jenrepo.cache.miss-ttl");
     }
 }

@@ -22,7 +22,7 @@ import build.jenesis.repository.walk.WalkPass;
  */
 public final class GcConsumer implements WalkConsumer {
 
-    /** The consumer's name: its toggle ({@code jenreg.collect}) and how a walk entry names it. */
+    /** The consumer's name: its toggle ({@code jenrepo.collect}) and how a walk entry names it. */
     public static final String NAME = "collect";
 
     private static final Logger LOGGER = LoggerFactory.getLogger(GcConsumer.class);

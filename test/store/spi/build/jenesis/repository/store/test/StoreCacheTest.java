@@ -23,7 +23,7 @@ class StoreCacheTest {
     @BeforeEach
     void setUp() throws IOException {
         ArtifactStore filesystem = ArtifactStoreProvider.resolve("filesystem",
-                key -> "jenreg.filesystem.root".equals(key) ? root.toString() : null);
+                key -> "jenrepo.filesystem.root".equals(key) ? root.toString() : null);
         store = FaultInjectingStore.wrap(filesystem);
         filesystem.write("auth/k/grants", new ByteArrayInputStream("releases=read".getBytes(StandardCharsets.UTF_8)));
     }
@@ -91,10 +91,10 @@ class StoreCacheTest {
         assertThat(StoreCache.clearAll()).as("three entries across the two caches").isGreaterThanOrEqualTo(3);
         assertThat(one.size() + two.size()).isZero();
         assertThat(two.metrics()).extracting(metric -> metric.name())
-                .contains("jenreg.cache.two.hits", "jenreg.cache.two.misses", "jenreg.cache.two.entries");
+                .contains("jenrepo.cache.two.hits", "jenrepo.cache.two.misses", "jenrepo.cache.two.entries");
         assertThat(new StoreCacheObservability().metrics()).extracting(metric -> metric.name())
                 .as("the report carries the node-wide totals under fixed names, then each live cache's own")
-                .contains("jenreg.cache.hits", "jenreg.cache.misses", "jenreg.cache.entries", "jenreg.cache.two.hits");
+                .contains("jenrepo.cache.hits", "jenrepo.cache.misses", "jenrepo.cache.entries", "jenrepo.cache.two.hits");
     }
 
     @Test
@@ -105,7 +105,7 @@ class StoreCacheTest {
         assertThat(StoreCache.ttl("2m")).isEqualTo(Duration.ofMinutes(2));
         assertThat(StoreCache.ttl("500ms")).isEqualTo(Duration.ofMillis(500));
         assertThatThrownBy(() -> StoreCache.ttl("soon")).isInstanceOf(IllegalArgumentException.class)
-                .hasMessageContaining("jenreg.cache.ttl");
+                .hasMessageContaining("jenrepo.cache.ttl");
     }
 
     @Test
@@ -126,7 +126,7 @@ class StoreCacheTest {
 
     @Test
     void a_cache_name_that_is_not_a_signal_segment_is_refused_when_the_cache_is_made() {
-        // Its counters are named jenreg.cache.<name>.*, and a name the signal grammar refuses would drop every
+        // Its counters are named jenrepo.cache.<name>.*, and a name the signal grammar refuses would drop every
         // cache's counters from the report at render time; it is refused here instead, where the boot fails loudly.
         assertThatThrownBy(() -> new StoreCache("Not-A-Segment", store, Duration.ofMinutes(5)))
                 .isInstanceOf(IllegalArgumentException.class).hasMessageContaining("Not-A-Segment");

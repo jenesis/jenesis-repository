@@ -133,7 +133,7 @@ public class WorkersConfig {
         try {
             return Durations.parse(configured);
         } catch (RuntimeException malformed) {
-            throw new IllegalArgumentException("jenreg.cleanup-lease=" + configured + " is not a duration "
+            throw new IllegalArgumentException("jenrepo.cleanup-lease=" + configured + " is not a duration "
                     + "(e.g. PT10M or 10m). It is how long one node holds the single-writer background-maintenance "
                     + "lease, so it is refused rather than defaulted: a deployment must not believe it has an exclusion "
                     + "it does not have.", malformed);

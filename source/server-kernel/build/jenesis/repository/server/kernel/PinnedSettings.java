@@ -29,12 +29,12 @@ import org.springframework.core.env.SystemEnvironmentPropertySource;
  * The <em>origin</em> can only come from the walk: an {@link Environment} answers what a key resolves to and never
  * which source it came from, so naming the pinning source means finding it by hand. The <em>value</em> can only
  * come from the {@link Environment}: a {@link PropertySource} hands back its raw text, and an operator's own config
- * file is exactly where {@code jenreg.vulnerability-threshold=${THRESHOLD:HIGH}} is written, so the raw text is a
+ * file is exactly where {@code jenrepo.vulnerability-threshold=${THRESHOLD:HIGH}} is written, so the raw text is a
  * placeholder that nothing below the environment expands.
  *
  * <p>Reporting that raw text was not merely untidy. {@link #effective} hands a pin's value on as <em>the effective
  * value of the key</em>, so every consumer then parsed the literal: {@code Configuration.flag} read
- * {@code ${JENREG_AUTH:true}} as {@code false}, {@code Configuration.number} fell through to its default, and the
+ * {@code ${JENREPO_AUTH:true}} as {@code false}, {@code Configuration.number} fell through to its default, and the
  * settings screen greyed the knob and offered the placeholder as the thing pinning it. A dial resolving to the
  * opposite of what the operator wrote is the kind of quiet wrong answer a pin exists to prevent.
  *
@@ -47,14 +47,14 @@ import org.springframework.core.env.SystemEnvironmentPropertySource;
  * <p>Leaving the pin leg out is not a cosmetic slip, which is why the composition lives here rather than at each call
  * site: for a key an operator has pinned <em>and</em> the store also holds, a stored-over-environment read reports the
  * <b>stored</b> value, which is inert - the server runs on the pin. On a read whose job is to report how safe the
- * deployment is, that reports the deployment as configured rather than as running: {@code jenreg.auth}
+ * deployment is, that reports the deployment as configured rather than as running: {@code jenrepo.auth}
  * pinned {@code false} with {@code true} in the store makes a pin-blind posture read say authorization is on while
  * every request is being served anonymously.
  */
 public final class PinnedSettings {
 
     /** The namespace every runtime settings key sits under as a deployment property; the store holds the bare key. */
-    private static final String PREFIX = "jenreg.";
+    private static final String PREFIX = "jenrepo.";
 
     /** Spring Boot attaches a {@code ConfigurationPropertySourcesPropertySource} named {@code configurationProperties}
      *  at the top of the environment; it is not an origin but an aggregating view over every other source, so it would
@@ -95,8 +95,8 @@ public final class PinnedSettings {
     /**
      * The names under which a source may hold a property. Every source answers its canonical name; the process
      * environment also answers the two variable spellings Spring Boot binds - upper case with dots as underscores,
-     * the hyphens either kept as underscores ({@code JENREG_PROXY_ALLOW_INTERNAL}) or dropped
-     * ({@code JENREG_PROXYALLOWINTERNAL}). The environment source resolves only the first of those itself, while the
+     * the hyphens either kept as underscores ({@code JENREPO_PROXY_ALLOW_INTERNAL}) or dropped
+     * ({@code JENREPO_PROXYALLOWINTERNAL}). The environment source resolves only the first of those itself, while the
      * binder and {@code Environment.getProperty} resolve both - so without asking for the second here, a deployment
      * that sets the dropped-hyphen form has a working setting everywhere except in the pin chain, where a reader with
      * a literal fallback ({@code proxy-allow-internal}) then never sees it.
@@ -133,7 +133,7 @@ public final class PinnedSettings {
     /**
      * The whole runtime-settings precedence chain for a <em>bare</em> settings key, as one lookup: an operator's pin
      * from above the store wins outright, else the stored deployment-wide override, else the deployment's
-     * {@code jenreg.<key>} environment value ({@code null} when nothing sets it). This is the chain
+     * {@code jenrepo.<key>} environment value ({@code null} when nothing sets it). This is the chain
      * {@link LiveConfig} resolves the running server's dials through, so a surface that reports an effective value
      * reports what the server is running on rather than what the store happens to hold.
      */
@@ -180,8 +180,8 @@ public final class PinnedSettings {
 
     /**
      * The same chain behind a <em>full</em> property name, for a reader (the posture {@code Configuration}) whose keys
-     * arrive namespaced. A {@code jenreg.*} property resolves through {@link #effective}; anything else -
-     * {@code spring.profiles.active}, {@code jenreg.ui.admins} - has neither a stored form nor a pin above one, so it
+     * arrive namespaced. A {@code jenrepo.*} property resolves through {@link #effective}; anything else -
+     * {@code spring.profiles.active}, {@code jenrepo.ui.admins} - has neither a stored form nor a pin above one, so it
      * resolves from the environment alone rather than being silently answered from an unrelated store key.
      */
     public UnaryOperator<String> effectiveProperty(Settings settings, Environment environment, String tenant) {

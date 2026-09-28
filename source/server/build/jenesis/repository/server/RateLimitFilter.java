@@ -60,7 +60,7 @@ public class RateLimitFilter extends OncePerRequestFilter {
 
     /**
      * The ceiling as the runtime settings currently resolve it for a tenant: whatever {@code lookup} - given the
-     * tenant, {@code null} for the deployment's - answers for {@code jenreg.rate-limit}, which is
+     * tenant, {@code null} for the deployment's - answers for {@code jenrepo.rate-limit}, which is
      * {@link Features#lookup()} on the shell and the store-backed chain (pin over the tenant's stored value over the
      * deployment's over the environment) on a shell that has one - otherwise {@code fallback}, the boot property's
      * value. A value that does not parse as a non-negative number is ignored in favour of the fallback rather than
@@ -69,7 +69,7 @@ public class RateLimitFilter extends OncePerRequestFilter {
      */
     public static ToLongFunction<String> liveCeiling(Function<String, UnaryOperator<String>> lookup, long fallback) {
         return tenant -> {
-            String configured = lookup.apply(tenant).apply("jenreg.rate-limit");
+            String configured = lookup.apply(tenant).apply("jenrepo.rate-limit");
             if (configured == null || configured.isBlank()) {
                 return fallback;
             }
@@ -88,7 +88,7 @@ public class RateLimitFilter extends OncePerRequestFilter {
     }
 
     /** Requests shed with {@code 429} since startup, broken down by the bucket they metered against ({@code anonymous}
-     *  for a keyless request, else the tenant), so a metrics layer can tag {@code jenreg.ratelimit.rejected} by
+     *  for a keyless request, else the tenant), so a metrics layer can tag {@code jenrepo.ratelimit.rejected} by
      *  tenant. A snapshot view; a tenant that has never been rate-limited is absent rather than zero. */
     public Map<String, Long> rejectedByTenant() {
         return rejectedByTenant.entrySet().stream()

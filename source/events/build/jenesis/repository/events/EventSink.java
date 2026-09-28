@@ -167,7 +167,7 @@ import build.jenesis.repository.store.Providers;
 public interface EventSink {
 
     /** The SPI's selection key, the {@code <spi>} every resolution diagnostic points at - there is no
-     *  {@code jenreg.event-sink} setting, because the policy is {@code ALL} and nothing is selected, but
+     *  {@code jenrepo.event-sink} setting, because the policy is {@code ALL} and nothing is selected, but
      *  a refusal still names the SPI it refused for. */
     String SPI = "event-sink";
 

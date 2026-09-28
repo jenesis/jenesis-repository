@@ -22,7 +22,7 @@ public final class TornWriteReconcileSettingsContributor implements SettingsCont
                         "Judge crash-torn intermediate states whenever a walk of the store runs - a pointer whose "
                                 + "blob is missing (flagged loudly; impossible under the blob-before-pointer ordering, "
                                 + "so a signal of corruption) and a blob no pointer references (an orphan, confirmed "
-                                + "and left to garbage collection). A listener of the one walk (jenreg.walks) rather "
+                                + "and left to garbage collection). A listener of the one walk (jenrepo.walks) rather "
                                 + "than a sweep of its own, paying no read the walk did not already make; on by "
                                 + "default, and a dry run that flags and counts unless Apply is also set.",
                         Setting.Kind.BOOLEAN, "true", true).advanced(),

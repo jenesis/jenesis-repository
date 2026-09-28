@@ -146,7 +146,7 @@ public final class HardeningVerdicts {
     }
 
     /** The gateway-wide upstream-drift alarm: the count of immutable-coordinate re-fetches refused because the bytes
-     *  changed under a pinned verdict (the {@code jenreg.gateway.hardened.drift} counter {@link HardeningObservability}
+     *  changed under a pinned verdict (the {@code jenrepo.gateway.hardened.drift} counter {@link HardeningObservability}
      *  reports). A non-zero count is a compromise indicator for the upstream. */
     public record Drift(long alarms) {
 

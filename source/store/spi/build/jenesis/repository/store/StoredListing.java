@@ -60,7 +60,7 @@ import build.jenesis.repository.observation.ObservabilitySource;
  * ({@link Changes#put(String, byte[], long)}, {@link Generator.Sink#accept(String, byte[], long)}), the document
  * keeps every entry's source in a trailer after its body - invisible to a reader, since the header's size bounds
  * what is served - and a write of an entry lands only at or above the source the stored entry carries: a stale
- * put is dropped and counted ({@code jenreg.listing.superseded}), a stale regeneration keeps the fresher entry,
+ * put is dropped and counted ({@code jenrepo.listing.superseded}), a stale regeneration keeps the fresher entry,
  * and a removal leaves a tombstone at its source so an older put cannot resurrect what a newer source removed.
  * An entry written without a source, by a writer that derives it from nothing, behaves exactly as before: the
  * last writer wins, and a regeneration replaces it whole.
@@ -359,7 +359,7 @@ public final class StoredListing {
 
             private void open() throws IOException {
                 if (spool == null) {
-                    spool = OwnerOnly.createTempFile("jenreg-listing-spool", ".tmp");
+                    spool = OwnerOnly.createTempFile("jenrepo-listing-spool", ".tmp");
                     body = new BufferedOutputStream(Files.newOutputStream(spool));
                 }
             }
@@ -1055,7 +1055,7 @@ public final class StoredListing {
      * that keeps a repository-wide index (the OCI catalog, RubyGems' compact {@code versions}, NuGet's search
      * document, winget's index) puts that package's one entry into it - so a pass over P packages rewrote a P-entry
      * document P times. Batched, the pass rewrites the index once per batch of entries; the listing-rebuild canary
-     * counts those rewrites through {@code jenreg.listing.updates}.
+     * counts those rewrites through {@code jenrepo.listing.updates}.
      *
      * <p>Only single-entry changes are batched; a change carrying a prefix removal is applied at once, since a
      * prefix's effect depends on its order against the puts around it and a merged batch has no order. A thread
@@ -1827,7 +1827,7 @@ public final class StoredListing {
     /** Render {@code spec}'s generator into a temporary file, digesting as it goes; the sources it states go to
      *  a second file beside it, in the order they are emitted. */
     private static Rendered render(Spec spec) throws IOException {
-        Path file = OwnerOnly.createTempFile("jenreg-listing", ".tmp");
+        Path file = OwnerOnly.createTempFile("jenrepo-listing", ".tmp");
         Counter counter = new Counter();
         MessageDigest sha256 = digest("SHA-256");
         MessageDigest md5 = spec.md5() ? digest("MD5") : null;
@@ -1980,7 +1980,7 @@ public final class StoredListing {
      */
     private static Rendered merge(Spec spec, Joined stored, Items incoming, List<String> prefixes, boolean regenerate,
                                   Set<String> stale) throws IOException {
-        Path file = OwnerOnly.createTempFile("jenreg-listing", ".tmp");
+        Path file = OwnerOnly.createTempFile("jenrepo-listing", ".tmp");
         Counter counter = new Counter();
         MessageDigest sha256 = digest("SHA-256");
         MessageDigest md5 = spec.md5() ? digest("MD5") : null;
@@ -2100,8 +2100,8 @@ public final class StoredListing {
     /** A local copy of a stored document's body and trailer, so a regeneration can merge into it from re-openable
      *  files: the daily pass's cost is a temporary file, never the heap. */
     private static Rendered copy(Spec spec, Served stored) throws IOException {
-        Path file = OwnerOnly.createTempFile("jenreg-listing", ".tmp");
-        Path trailer = OwnerOnly.createTempFile("jenreg-listing-sources", ".tmp");
+        Path file = OwnerOnly.createTempFile("jenrepo-listing", ".tmp");
+        Path trailer = OwnerOnly.createTempFile("jenrepo-listing-sources", ".tmp");
         try {
             try (OutputStream out = Files.newOutputStream(file)) {
                 stored.body().transferTo(out);
@@ -2310,7 +2310,7 @@ public final class StoredListing {
 
         void line(String id, long seq, boolean absent) throws IOException {
             if (out == null) {
-                file = OwnerOnly.createTempFile("jenreg-listing-sources", ".tmp");
+                file = OwnerOnly.createTempFile("jenrepo-listing-sources", ".tmp");
                 out = new DigestOutputStream(new BufferedOutputStream(Files.newOutputStream(file)), sha256);
                 write("\n" + SOURCES + "\n");
             }
@@ -2644,7 +2644,7 @@ public final class StoredListing {
 
     // ---- observability ----
 
-    /** The counters every node keeps over its listing writes, reported as {@code jenreg.listing.*}. */
+    /** The counters every node keeps over its listing writes, reported as {@code jenrepo.listing.*}. */
     public static final class Observability implements ObservabilitySource {
 
         public Observability() {
@@ -2653,21 +2653,21 @@ public final class StoredListing {
         @Override
         public List<Metric> metrics() {
             return List.of(
-                    Metric.counter("jenreg.listing.updates", "Listing documents rewritten on the write path",
+                    Metric.counter("jenrepo.listing.updates", "Listing documents rewritten on the write path",
                             UPDATES.sum(), "writes"),
-                    Metric.counter("jenreg.listing.coalesced",
+                    Metric.counter("jenrepo.listing.coalesced",
                             "Listing changes that rode along another writer's rewrite instead of their own",
                             COALESCED.sum(), "writes"),
-                    Metric.counter("jenreg.listing.conflicts",
+                    Metric.counter("jenrepo.listing.conflicts",
                             "Listing writes retried after another node changed the document first",
                             CONFLICTS.sum(), "retries"),
-                    Metric.counter("jenreg.listing.materialised",
+                    Metric.counter("jenrepo.listing.materialised",
                             "Listing documents generated from the store - first use, or a rebuild",
                             MATERIALISED.sum(), "documents"),
-                    Metric.counter("jenreg.listing.forgotten",
+                    Metric.counter("jenrepo.listing.forgotten",
                             "Listing documents dropped for regeneration after a write could not land",
                             FORGOTTEN.sum(), "documents"),
-                    Metric.counter("jenreg.listing.superseded",
+                    Metric.counter("jenrepo.listing.superseded",
                             "Listing entries a write would have put from a source the stored entry had already "
                                     + "moved past - a rebuild's snapshot meeting a publish - kept as stored",
                             SUPERSEDED.sum(), "entries"));

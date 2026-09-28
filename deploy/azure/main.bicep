@@ -1,10 +1,10 @@
 // Jenesis Repository on Azure Container Apps, backed by Azure Blob Storage (the cloud's native object store).
 //
 // Provisions a Storage Account + blob container (the store), a Container Apps environment, and a
-// Container App running the image with JENREG_STORE=azure-blob wired to the provisioned account. The
+// Container App running the image with JENREPO_STORE=azure-blob wired to the provisioned account. The
 // connection string is composed from the account the template itself creates (the azure-blob backend
 // authenticates by connection string), so no key is hand-set by the operator. Every further setting is an
-// entry of `environment` (plain) or `secrets` (a container-app secret), under its JENREG_* name.
+// entry of `environment` (plain) or `secrets` (a container-app secret), under its JENREPO_* name.
 //
 //   az deployment group create -g <group> --template-file main.bicep --parameters secrets='{...}'
 //
@@ -36,17 +36,17 @@ param maxReplicas int = 3
 @description('Expose the repository on a PUBLIC ingress. Secure default is false: ingress is INTERNAL (reachable only from within the Container Apps environment / VNet), matching the server auth-on default. Set to true to publish it on the public internet, relying on the repository\'s own per-credential key auth for access control.')
 param ingressExternal bool = false
 
-@description('Further settings, as plain environment variables: any jenreg.* key under its JENREG_* name (Spring\'s relaxed binding), e.g. {"JENREG_MAVEN": "false"} to drop a format. The store selection is the template\'s and wins over an entry here.')
+@description('Further settings, as plain environment variables: any jenrepo.* key under its JENREPO_* name (Spring\'s relaxed binding), e.g. {"JENREPO_MAVEN": "false"} to drop a format. The store selection is the template\'s and wins over an entry here.')
 param environment object = {}
 
-@description('Settings that are credentials, each a container-app secret handed to the container as the environment variable it is keyed by. The first two a deployment wants, since authentication is on by default: JENREG_BOOTSTRAP_KEY, the API key the server provisions at boot, and JENREG_UI_ADMIN_KEY, the key that signs into the console\'s first-run setup.')
+@description('Settings that are credentials, each a container-app secret handed to the container as the environment variable it is keyed by. The first two a deployment wants, since authentication is on by default: JENREPO_BOOTSTRAP_KEY, the API key the server provisions at boot, and JENREPO_UI_ADMIN_KEY, the key that signs into the console\'s first-run setup.')
 @secure()
 param secrets object = {}
 
 // The store selection is the template's, so it replaces an entry of the same name in `environment`.
 var storeEnv = {
-  JENREG_STORE: 'azure-blob'
-  JENREG_AZURE_BLOB_CONTAINER: blobContainer
+  JENREPO_STORE: 'azure-blob'
+  JENREPO_AZURE_BLOB_CONTAINER: blobContainer
   PORT: '8080'
 }
 
@@ -114,7 +114,7 @@ resource app 'Microsoft.App/containerApps@2024-03-01' = {
             memory: memory
           }
           env: concat(plainEnv, [
-            { name: 'JENREG_AZURE_BLOB_CONNECTION_STRING', secretRef: 'storage-connection-string' }
+            { name: 'JENREPO_AZURE_BLOB_CONNECTION_STRING', secretRef: 'storage-connection-string' }
           ], secretEnv)
           probes: [
             {

@@ -23,7 +23,7 @@ class ConsoleSettingsEpochTest {
     @Test
     void every_console_write_moves_the_epoch_the_repository_servers_re_read_watches() throws IOException {
         ArtifactStore store = ArtifactStoreProvider.resolve("filesystem",
-                key -> "jenreg.filesystem.root".equals(key) ? root.toString() : null);
+                key -> "jenrepo.filesystem.root".equals(key) ? root.toString() : null);
         SettingsAdmin settings = new SettingsAdmin(store);
         Epoch epoch = new Epoch(store, SettingsDocuments.EPOCH);
         List<String> seen = new ArrayList<>(List.of(epoch.current()));

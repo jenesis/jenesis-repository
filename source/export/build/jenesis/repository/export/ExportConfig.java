@@ -6,7 +6,7 @@ import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.core.env.Environment;
 
-/** Wires the export endpoints over the server's routing and its {@code jenreg.*} settings. */
+/** Wires the export endpoints over the server's routing and its {@code jenrepo.*} settings. */
 @Configuration(proxyBeanMethods = false)
 public class ExportConfig {
 

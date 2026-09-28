@@ -377,7 +377,7 @@ class ReleaseImmutabilityTest {
     private ArtifactStore store(Format format) throws IOException {
         Path directory = Files.createDirectories(root.resolve(format.name()));
         ArtifactStore store = ArtifactStoreProvider.resolve("filesystem",
-                key -> "jenreg.filesystem.root".equals(key) ? directory.toString() : null);
+                key -> "jenrepo.filesystem.root".equals(key) ? directory.toString() : null);
         format.arrangement().arrange(store);
         return store;
     }

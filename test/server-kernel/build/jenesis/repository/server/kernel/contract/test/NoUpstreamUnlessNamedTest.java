@@ -26,7 +26,7 @@ class NoUpstreamUnlessNamedTest {
     @Test
     void a_format_that_knows_its_public_registry_fetches_from_nowhere_until_an_upstream_is_named() throws IOException {
         Settings settings = new Settings(ArtifactStoreProvider.resolve("filesystem",
-                key -> "jenreg.filesystem.root".equals(key) ? root.toString() : null));
+                key -> "jenrepo.filesystem.root".equals(key) ? root.toString() : null));
         RepositoryProperties defaults = new RepositoryProperties();
         assertThat(defaults.isProxyEnabled()).as("pull-through is on by default").isTrue();
         LiveConfig live = new LiveConfig(settings, defaults, AdvisorySource.none(), _ -> null);

@@ -152,7 +152,7 @@ public final class SignatureSweepTask implements MaintenanceTask {
             }
         });
         cadence.completed(context.now(), true);
-        context.gauge("jenreg.signatures.sweep.unenforceable",
+        context.gauge("jenrepo.signatures.sweep.unenforceable",
                 "Published versions the retroactive signature sweep would hold but cannot enforce because the "
                         + "blobs-namespace format resolved no served path or content hash - a wiring-regression alarm",
                 Map.of("tenant", context.tenant(), "repository", context.repository()), unenforceable[0]);
@@ -161,7 +161,7 @@ public final class SignatureSweepTask implements MaintenanceTask {
                     + " is retroactively holding " + held[0] + " version(s) whose recorded signature the current "
                     + "signature dials no longer admit");
         }
-        context.gauge("jenreg.signatures.sweep.held",
+        context.gauge("jenrepo.signatures.sweep.held",
                 "Published versions a repository is retroactively holding because the signature outcome or grade "
                         + "recorded at publish is one the current signature dials no longer admit",
                 Map.of("tenant", context.tenant(), "repository", context.repository()), held[0]);

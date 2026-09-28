@@ -101,7 +101,7 @@ class SwiftReleaseTest {
 
     private ArtifactStore store() {
         return ArtifactStoreProvider.resolve("filesystem",
-                key -> "jenreg.filesystem.root".equals(key) ? root.toString() : null);
+                key -> "jenrepo.filesystem.root".equals(key) ? root.toString() : null);
     }
 
     private static ContractExchange publish(ArtifactStore store, byte[] archive, String metadata) throws IOException {

@@ -32,7 +32,7 @@ class TornWriteConsumerTest {
     @BeforeEach
     void setUp() {
         store = ArtifactStoreProvider.resolve("filesystem",
-                        key -> "jenreg.filesystem.root".equals(key) ? root.toString() : null)
+                        key -> "jenrepo.filesystem.root".equals(key) ? root.toString() : null)
                 .scope("default").scope("releases");
     }
 
@@ -58,13 +58,13 @@ class TornWriteConsumerTest {
         assertThat(store.readVersioned("publish/raw/torn")).as("a dry run removes nothing").isPresent();
         assertThat(store.exists("blobs/" + orphan)).as("an orphan is the collector's, never removed here").isTrue();
         assertThat(new TornWriteConsumer.Observability().metrics()).extracting(Metric::name, Metric::value)
-                .contains(tuple("jenreg.reconcile.torn.dangling", 1.0), tuple("jenreg.reconcile.torn.orphans", 1.0),
-                        tuple("jenreg.reconcile.torn.removed", 0.0));
+                .contains(tuple("jenrepo.reconcile.torn.dangling", 1.0), tuple("jenrepo.reconcile.torn.orphans", 1.0),
+                        tuple("jenrepo.reconcile.torn.removed", 0.0));
     }
 
     @Test
     void with_apply_on_the_dangling_pointer_is_removed_through_the_guarded_delete() throws IOException {
-        Features.configure(key -> ("jenreg." + TornWriteConsumer.APPLY).equals(key) ? "true" : null);
+        Features.configure(key -> ("jenrepo." + TornWriteConsumer.APPLY).equals(key) ? "true" : null);
         store.writeVersioned("publish/raw/torn", MISSING.getBytes(StandardCharsets.UTF_8), null);
 
         RebuildPass.run(WALK, store, new Publication(store), roots(), List.of(new TornWriteConsumer()));

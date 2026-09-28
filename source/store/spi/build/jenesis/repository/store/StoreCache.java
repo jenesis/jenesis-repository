@@ -21,7 +21,7 @@ import build.jenesis.repository.observation.Signals;
  * wrote; the entry is dropped rather than overwritten, because a plain {@link ArtifactStore#write} leaves the store
  * to mint the version token and a cache must never hold a token the store did not issue. On a single node the cache
  * is therefore exact and the time bound never matters. <b>Time-bounded</b>: across nodes an entry may be stale by
- * up to the ttl - another node's grant, revocation or setting shows here within {@code jenreg.cache.ttl}, five
+ * up to the ttl - another node's grant, revocation or setting shows here within {@code jenrepo.cache.ttl}, five
  * minutes by default - and a deployment that needs a revoked key to stop within seconds on every node turns that
  * dial down; {@code 0} switches caching off and every read is the store's.
  *
@@ -51,7 +51,7 @@ public final class StoreCache {
     private static final Map<String, WeakReference<StoreCache>> SHARED = new HashMap<>();
 
     private final String name;
-    /** {@code jenreg.cache.<name>}, validated against the signal grammar when the cache is made - a name the report
+    /** {@code jenrepo.cache.<name>}, validated against the signal grammar when the cache is made - a name the report
      *  would refuse is refused here, at boot, rather than dropping every cache's counters from the report. */
     private final String prefix;
     private final ArtifactStore store;
@@ -253,7 +253,7 @@ public final class StoreCache {
         return (int) (entries.estimatedSize() + listings.estimatedSize());
     }
 
-    /** The counters this cache reports: hits, misses and live entries, under {@code jenreg.cache.<name>}. */
+    /** The counters this cache reports: hits, misses and live entries, under {@code jenrepo.cache.<name>}. */
     public List<Metric> metrics() {
         return List.of(
                 Metric.counter(prefix + ".hits", "Reads of the " + name + " cache answered without a store round trip.",

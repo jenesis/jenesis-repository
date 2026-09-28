@@ -36,7 +36,7 @@ public interface CacheStorageFixture extends AutoCloseable {
 
     /** The system property the strict CI lane sets to declare the environment complete; under it an
      *  {@link #unavailable()} fixture fails rather than skips. */
-    String REQUIRED_PROPERTY = "jenreg.test.required";
+    String REQUIRED_PROPERTY = "jenrepo.test.required";
 
     /** The {@code CacheStorageProvider} name this fixture drives. There is one - {@code delegating} - since the
      *  cache follows the repository's store rather than naming a backend; what a fixture varies is the STORE
@@ -107,7 +107,7 @@ public interface CacheStorageFixture extends AutoCloseable {
 
     /**
      * The skip-versus-fail decision, in one place for every backend. Returns the reason a caller should turn into a
-     * JUnit assumption, or empty when the fixture can run. Under {@code -Djenreg.test.required} - the strict CI
+     * JUnit assumption, or empty when the fixture can run. Under {@code -Djenrepo.test.required} - the strict CI
      * lane's process override - a {@link #required()} fixture that cannot start throws instead, because CI installs
      * every tool the selected suites need and a self-skip there would be a broken lane reported as green.
      */

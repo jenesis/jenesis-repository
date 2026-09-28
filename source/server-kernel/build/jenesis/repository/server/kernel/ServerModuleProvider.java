@@ -39,7 +39,7 @@ import build.jenesis.repository.store.Providers;
  * <li><b>Selection failure.</b> This is an {@code ALL} SPI: every installed module contributes and there is
  *     nothing to select, so nothing degrades. What is still a packaging error is a <em>collision</em>: two providers
  *     answering to one {@link #name()}, or one provider class registered twice. Two providers on one name share the
- *     single {@code jenreg.<name>} toggle - switching one off switches both off and an operator has no key
+ *     single {@code jenrepo.<name>} toggle - switching one off switches both off and an operator has no key
  *     naming either - so {@link #installed()} and {@link #enabled} throw, naming the colliding classes, rather than
  *     letting module-path order pick a winner. Two providers naming one {@link #configuration()} class is equally a
  *     packaging error - the import list is de-duplicated by class name, so the loser's toggle would silently govern
@@ -74,7 +74,7 @@ public interface ServerModuleProvider {
     String SPI = "server-module";
 
     /** The module name this provider answers to, e.g. {@code staging}, {@code quarantine}. It is also the module's
-     *  {@code jenreg.<name>} toggle key (the {@link Features} convention) and the key
+     *  {@code jenrepo.<name>} toggle key (the {@link Features} convention) and the key
      *  {@code ModuleTogglesSettingsContributor} catalogues, so it is lowercase and dotted/hyphenated like any other
      *  settings key. */
     String name();
@@ -103,8 +103,8 @@ public interface ServerModuleProvider {
     /**
      * The installed modules {@code config} leaves switched on, name-sorted - what the deferred import selector turns
      * into a configuration-class list. A module configured off by its provider name
-     * ({@code jenreg.<name>=false}, the {@link Features} convention, settable as
-     * {@code JENREG_<NAME>=false} through relaxed binding) is left out, so its endpoints degrade exactly
+     * ({@code jenrepo.<name>=false}, the {@link Features} convention, settable as
+     * {@code JENREPO_<NAME>=false} through relaxed binding) is left out, so its endpoints degrade exactly
      * as if the module were absent from the image; unset means enabled, so the one image carries every module until
      * configuration trims it.
      *

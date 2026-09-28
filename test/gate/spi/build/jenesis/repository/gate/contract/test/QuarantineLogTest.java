@@ -34,7 +34,7 @@ class QuarantineLogTest {
 
     private ArtifactStore resolve() {
         return ArtifactStoreProvider.resolve("filesystem",
-                key -> "jenreg.filesystem.root".equals(key) ? root.toString() : null);
+                key -> "jenrepo.filesystem.root".equals(key) ? root.toString() : null);
     }
 
     @Test

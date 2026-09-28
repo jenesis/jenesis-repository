@@ -71,9 +71,9 @@ final class AuthCommands {
         }
         String warning = switch (state) {
             case "evaluation" -> "not licensed - running in evaluation mode. Nothing is switched off; "
-                    + "set JENREG_LICENSE_KEY on the deployment to license it.";
+                    + "set JENREPO_LICENSE_KEY on the deployment to license it.";
             case "expired" -> "the licence on this deployment has EXPIRED. Nothing is switched off, but it is no "
-                    + "longer licensed for production - renew it and set the new JENREG_LICENSE_KEY.";
+                    + "longer licensed for production - renew it and set the new JENREPO_LICENSE_KEY.";
             case "invalid" -> "the licence key on this deployment did not verify and is being ignored. "
                     + "Nothing is switched off; check the key was copied whole.";
             default -> null;

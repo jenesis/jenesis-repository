@@ -68,7 +68,7 @@ public final class ProxyScreen {
             + "before the whole artifact was screened, so this decision covers only the part that was read";
 
     /** Screens that reached an {@code ALLOW} over an artifact an inspector could not read to the end, since the
-     *  gateway started - the {@code jenreg.gateway.screen.incomplete} counter. Static so every per-request screen
+     *  gateway started - the {@code jenrepo.gateway.screen.incomplete} counter. Static so every per-request screen
      *  contributes to the one gateway-wide count {@link HardeningObservability} reports, exactly as the hardened leg's
      *  drift alarm does. It counts the served ones only: a withheld artifact already carries the fact in its durable
      *  quarantine row. */

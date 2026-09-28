@@ -7,7 +7,7 @@ import com.github.benmanes.caffeine.cache.Caffeine;
 /**
  * A node's memory of the small documents it serves again and again: the stored listings - a packument, a Simple
  * page, a {@code maven-metadata.xml}, a {@code Packages} file, a tag list - that every build starting at once asks
- * for, kept in memory for {@code jenreg.cache.document-ttl} so a burst of uncached builds costs the store one read
+ * for, kept in memory for {@code jenrepo.cache.document-ttl} so a burst of uncached builds costs the store one read
  * per document rather than one per build. It is the positive half of what {@link MissMemory} is the negative half
  * of, and it rides the same {@link NodeMemoStore}: the store's stream face hands a remembered document back as
  * bytes, and every write and delete through the store forgets the key it touched.
@@ -27,7 +27,7 @@ import com.github.benmanes.caffeine.cache.Caffeine;
  */
 public final class DocumentMemory {
 
-    /** The setting the ttl is read from ({@code jenreg.cache.document-ttl}). */
+    /** The setting the ttl is read from ({@code jenrepo.cache.document-ttl}). */
     public static final String TTL_SETTING = "cache.document-ttl";
 
     /** The default as an operator writes it; {@link #DEFAULT_TTL} parses this. Thirty seconds: the length of a

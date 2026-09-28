@@ -90,7 +90,7 @@ class GcCostProbeTest {
         int slot = size == SIZES[0] ? 0 : 1;
         Path at = Files.createDirectories(root.resolve("size-" + size));
         ArtifactStore backing = ArtifactStoreProvider.resolve(
-                "filesystem", key -> "jenreg.filesystem.root".equals(key) ? at.toString() : null);
+                "filesystem", key -> "jenrepo.filesystem.root".equals(key) ? at.toString() : null);
         Set<String> collectable = seed(backing, size);
 
         FaultInjectingStore traced = FaultInjectingStore.wrap(backing).tracing((op, key) ->

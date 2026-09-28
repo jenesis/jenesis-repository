@@ -43,7 +43,7 @@ public final class QuarantineRetentionTask implements MaintenanceTask {
             return;
         }
         int removed = new QuarantineLog(context.store()).prune(context.now(), maxAge, maxCount);
-        context.gauge("jenreg.quarantine.log.pruned",
+        context.gauge("jenrepo.quarantine.log.pruned",
                 "Quarantine-log objects removed by the retention sweep this pass",
                 Map.of("repository", context.repository()), removed);
     }

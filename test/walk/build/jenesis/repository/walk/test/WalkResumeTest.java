@@ -27,7 +27,7 @@ class WalkResumeTest {
     private ArtifactStore store(String name) {
         Path scoped = root.resolve(name);
         return ArtifactStoreProvider.resolve(
-                "filesystem", key -> "jenreg.filesystem.root".equals(key) ? scoped.toString() : null);
+                "filesystem", key -> "jenrepo.filesystem.root".equals(key) ? scoped.toString() : null);
     }
 
     @Test

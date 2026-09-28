@@ -15,7 +15,7 @@ import build.jenesis.repository.server.spi.Authorization;
  * reading holds nothing a screen could show, which is the honest answer.
  *
  * <p>Deployment administration is checked first and separately, because an administrator of a deployment with no
- * tenant-scoped grant of their own is still an administrator - that is what {@code jenreg.ui.admins} seeds, and it
+ * tenant-scoped grant of their own is still an administrator - that is what {@code jenrepo.ui.admins} seeds, and it
  * is the grant that lets a fresh deployment be administered at all.
  *
  * <p>An unreadable store answers by throwing rather than by allowing: a console that opened because it could not

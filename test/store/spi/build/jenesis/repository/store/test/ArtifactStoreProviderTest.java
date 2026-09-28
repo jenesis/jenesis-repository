@@ -22,7 +22,7 @@ class ArtifactStoreProviderTest {
     @Test
     void the_filesystem_backend_resolves_by_name_and_reads_its_root_from_config() throws IOException {
         ArtifactStore store = ArtifactStoreProvider.resolve(
-                "filesystem", key -> "jenreg.filesystem.root".equals(key) ? root.toString() : null);
+                "filesystem", key -> "jenrepo.filesystem.root".equals(key) ? root.toString() : null);
         store.write("blobs/x", new ByteArrayInputStream("hi".getBytes(StandardCharsets.UTF_8)));
         assertThat(store.exists("blobs/x")).isTrue();
     }
@@ -31,7 +31,7 @@ class ArtifactStoreProviderTest {
     void no_backend_selected_falls_back_to_the_filesystem_provider() throws IOException {
         for (String unselected : new String[] {null, "", "  "}) {
             ArtifactStore store = ArtifactStoreProvider.resolve(
-                    unselected, key -> "jenreg.filesystem.root".equals(key) ? root.toString() : null);
+                    unselected, key -> "jenrepo.filesystem.root".equals(key) ? root.toString() : null);
             store.write("blobs/y", new ByteArrayInputStream("yo".getBytes(StandardCharsets.UTF_8)));
             assertThat(store.exists("blobs/y")).isTrue();
         }
@@ -43,7 +43,7 @@ class ArtifactStoreProviderTest {
         // filesystem while the intended bucket 404s - it fails loudly, naming the backend it could not resolve, the
         // default it refuses to fall back to, and what is actually installed.
         assertThatThrownBy(() -> ArtifactStoreProvider.resolve(
-                "does-not-exist", key -> "jenreg.filesystem.root".equals(key) ? root.toString() : null))
+                "does-not-exist", key -> "jenrepo.filesystem.root".equals(key) ? root.toString() : null))
                 .isInstanceOf(IllegalStateException.class)
                 .hasMessageContaining("'does-not-exist'")
                 .hasMessageContaining("refusing to fall back to the 'filesystem' default")
@@ -59,7 +59,7 @@ class ArtifactStoreProviderTest {
         assertThatThrownBy(() -> ArtifactStoreProvider.resolve("filesystem", key -> null))
                 .isInstanceOf(IllegalStateException.class)
                 .hasMessageContaining("filesystem")
-                .hasMessageContaining("jenreg.filesystem.root");
+                .hasMessageContaining("jenrepo.filesystem.root");
     }
 
     @Test
@@ -70,7 +70,7 @@ class ArtifactStoreProviderTest {
         // writable layer, and gone on the next restart.
         assertThatThrownBy(() -> ArtifactStoreProvider.resolve(null, key -> null))
                 .isInstanceOf(IllegalStateException.class)
-                .hasMessageContaining("jenreg.filesystem.root");
+                .hasMessageContaining("jenrepo.filesystem.root");
     }
 
     @Test
@@ -80,7 +80,7 @@ class ArtifactStoreProviderTest {
         // happily against the selected backend while everything the operator expects to find is in the bucket they
         // also configured and nothing reads.
         assertThatThrownBy(() -> ArtifactStoreProvider.resolve("filesystem", key -> switch (key) {
-            case "jenreg.filesystem.root" -> root.toString();
+            case "jenrepo.filesystem.root" -> root.toString();
             case "NEEDY_BUCKET" -> "a-bucket-that-was-meant";
             default -> null;
         }))
@@ -98,7 +98,7 @@ class ArtifactStoreProviderTest {
         // defaults; a rule that fired on a present-but-blank key would refuse to start on every deployment there
         // is. Blank and absent both mean unconfigured.
         ArtifactStore store = ArtifactStoreProvider.resolve("filesystem", key -> switch (key) {
-            case "jenreg.filesystem.root" -> root.toString();
+            case "jenrepo.filesystem.root" -> root.toString();
             case "NEEDY_BUCKET" -> "   ";
             default -> null;
         });

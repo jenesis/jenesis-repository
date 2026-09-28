@@ -28,7 +28,7 @@ import org.thymeleaf.spring6.templateresolver.SpringResourceTemplateResolver;
 import build.jenesis.repository.scope.Scopes;
 
 /**
- * Wires key-based console sign-in unless {@code jenreg.key-login=false}, and nothing at all when it is, so switching
+ * Wires key-based console sign-in unless {@code jenrepo.key-login=false}, and nothing at all when it is, so switching
  * it off leaves the other sign-in chains untouched. It contributes a form-login leg to the shared security chain (a
  * {@link LoginContributor}) backed by {@link KeyLoginAuthenticationProvider}, a "Sign in with a key" option to the
  * login page (a {@link LoginOptions}), the key-entry page, the issued keys' API and console screen over one
@@ -43,7 +43,7 @@ public class KeyLoginConfig {
 
     private static final Logger LOGGER = LoggerFactory.getLogger(KeyLoginConfig.class);
 
-    /** True unless {@code jenreg.key-login=false} ({@link KeyLoginMechanism#onByDefault()}): switched off, this
+    /** True unless {@code jenrepo.key-login=false} ({@link KeyLoginMechanism#onByDefault()}): switched off, this
      *  configuration and every bean it declares is absent, so the other sign-in chains are byte-for-byte untouched and
      *  no key is ever accepted. */
     public static class KeyLoginEnabled implements Condition {
@@ -55,10 +55,10 @@ public class KeyLoginConfig {
     }
 
     public KeyLoginConfig(UiProperties properties) {
-        LOGGER.info("Key-based console sign-in is on (jenreg.key-login). Switch it off with jenreg.key-login=false "
+        LOGGER.info("Key-based console sign-in is on (jenrepo.key-login). Switch it off with jenrepo.key-login=false "
                 + "once single sign-on (OIDC) or a directory (LDAP) signs people in.");
         if (!properties.getAdminKey().isBlank()) {
-            LOGGER.warn("SECURITY: a full-access bootstrap admin key is set (JENREG_UI_ADMIN_KEY) - it grants "
+            LOGGER.warn("SECURITY: a full-access bootstrap admin key is set (JENREPO_UI_ADMIN_KEY) - it grants "
                     + "super-admin over every tenant. Use it only to bootstrap, then issue scoped login keys and "
                     + "rotate or remove it.");
         }
@@ -95,8 +95,8 @@ public class KeyLoginConfig {
                                                                          UiProperties properties, AuditTrail audit,
                                                                          Superadmins superadmins) {
         RateLimiter limiter = RateLimiterProvider.resolve(environment::getProperty);
-        double permits = environment.getProperty("jenreg.key-login.rate-limit", Double.class, 30.0);
-        String tenant = environment.getProperty("jenreg.default-tenant", Scopes.DEFAULT_TENANT);
+        double permits = environment.getProperty("jenrepo.key-login.rate-limit", Double.class, 30.0);
+        String tenant = environment.getProperty("jenrepo.default-tenant", Scopes.DEFAULT_TENANT);
         return new KeyLoginAuthenticationProvider(keys, firstRunKey, properties.getAdminKey().trim(), limiter, permits,
                 audit, tenant, superadmins::is);
     }

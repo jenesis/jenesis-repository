@@ -59,7 +59,7 @@ public class StoreConfig {
      * {@code artifactStore} bean.
      *
      * <p>Redeclaring that bean would mean restating the resolution and the wrappers around it, and a restatement
-     * can drop one of them - the deployment-wide {@code jenreg.quota} cap, say - with nothing to read. A
+     * can drop one of them - the deployment-wide {@code jenrepo.quota} cap, say - with nothing to read. A
      * contribution cannot drop what it does not contain.
      *
      * <p>Order is the point: the meter sits closest to the backend and the node's memories above it, so a read
@@ -94,26 +94,26 @@ public class StoreConfig {
     @Bean
     public Authorization authorization(RepositoryProperties properties, ArtifactStore store) throws IOException {
         // The strictly-opt-in anonymous role, read the same way this bean reads auth/read-only - off the
-        // @ConfigurationProperties-bound RepositoryProperties (jenreg.anonymous-rights), not an ad-hoc
+        // @ConfigurationProperties-bound RepositoryProperties (jenrepo.anonymous-rights), not an ad-hoc
         // config.apply, as isAuth()/isReadOnly() do. Default empty ⇒ no anonymous
         // access whatsoever, byte-for-byte today's keyless rejection.
         String anonymousRights = properties.getAnonymousRights().strip();
         if (!properties.isAuth()) {
             // Secure-defaults principle: an insecure configuration must be loud, not silent. Per-credential
-            // authorization is on by default; this deployment turned it off explicitly (jenreg.auth=false),
+            // authorization is on by default; this deployment turned it off explicitly (jenrepo.auth=false),
             // so warn at boot that every request is served with no credential. Anonymous is a legitimate explicit
             // choice, so this warns rather than failing the boot.
-            LOGGER.warn("SECURITY: per-credential authorization is DISABLED (jenreg.auth=false) - the "
+            LOGGER.warn("SECURITY: per-credential authorization is DISABLED (jenrepo.auth=false) - the "
                     + "repository is running ANONYMOUS/OPEN and every request is served without a credential. This is "
-                    + "an explicit opt-out; unset it or set jenreg.auth=true (the default) to enforce "
+                    + "an explicit opt-out; unset it or set jenrepo.auth=true (the default) to enforce "
                     + "authorization.");
             // Guardrail: anonymous-rights is only meaningful under an enforcing deployment. Under auth=false the
             // instance is ALREADY fully open, so a configured anonymous-rights is redundant and ignored - warn so the
             // operator is not misled into thinking it is narrowing an open deployment (mirrors the autoconfig).
             if (!anonymousRights.isEmpty()) {
-                LOGGER.warn("SECURITY: jenreg.anonymous-rights is set but jenreg.auth=false, so "
+                LOGGER.warn("SECURITY: jenrepo.anonymous-rights is set but jenrepo.auth=false, so "
                         + "the deployment is ALREADY fully open (every request is served anonymously) and the "
-                        + "anonymous-rights grant is redundant and ignored. Set jenreg.auth=true to make it "
+                        + "anonymous-rights grant is redundant and ignored. Set jenrepo.auth=true to make it "
                         + "meaningful: keys are then required and a keyless caller is limited to exactly this grant.");
             }
             return Authorization.anonymous();
@@ -121,7 +121,7 @@ public class StoreConfig {
         // Second guardrail: a loud startup WARN naming exactly what a keyless caller may do, escalated for
         // write/admin - the mirror of the free RepositoryAutoConfiguration WARN (this bean wins over the free
         // @ConditionalOnMissingBean authorization bean, so the free WARN never fires here). The
-        // jenreg.anonymous.* security-posture advisories (logged by the logSecurityPosture at boot, which runs in
+        // jenrepo.anonymous.* security-posture advisories (logged by the logSecurityPosture at boot, which runs in
         // this deployment) carry the governance escalation onto the console and GET /api/posture. Default (empty) ⇒ no
         // anonymous access and no warning, byte-for-byte today's behaviour.
         if (!anonymousRights.isEmpty()) {
@@ -129,12 +129,12 @@ public class StoreConfig {
                 LOGGER.warn("SECURITY: anonymous access ENABLED with WRITE/ADMIN rights: {}. A keyless caller may "
                         + "mutate or administer artifacts with NO credential (a public drop-box / open admin) - the "
                         + "loudest anonymous combination. This is an explicit opt-in; unset "
-                        + "jenreg.anonymous-rights to require a key for every request.", anonymousRights);
+                        + "jenrepo.anonymous-rights to require a key for every request.", anonymousRights);
             } else {
                 LOGGER.warn("SECURITY: anonymous access ENABLED: {}. A keyless caller is granted these rights with no "
-                        + "credential (the public-mirror pattern - pair with jenreg.read-only=true for a "
+                        + "credential (the public-mirror pattern - pair with jenrepo.read-only=true for a "
                         + "browsable-but-immutable mirror). This is an explicit opt-in; unset "
-                        + "jenreg.anonymous-rights to require a key for every request.", anonymousRights);
+                        + "jenrepo.anonymous-rights to require a key for every request.", anonymousRights);
             }
         }
         // The one choke-point: hand the anonymous grant set to the free Authorization the multi-tenant
@@ -145,7 +145,7 @@ public class StoreConfig {
                 .withLifetimes(properties.getCredentialDefaultLifetime(), properties.getCredentialMaxLifetime())
                 .withAnonymousRights(anonymousRights);
         // The first credential of an enforcing deployment: every route that could mint one requires one already, so
-        // jenreg.bootstrap-key is provisioned here - the same contract the server's authorization bean carries,
+        // jenrepo.bootstrap-key is provisioned here - the same contract the server's authorization bean carries,
         // which this bean replaces and therefore has to honour. An object-store deployment has no other route in.
         String tenant;
         try {
@@ -154,7 +154,7 @@ public class StoreConfig {
             throw new IllegalStateException(malformed.getMessage(), malformed);
         }
         if (tenant != null) {
-            LOGGER.warn("SECURITY: a bootstrap key is provisioned for tenant '{}' (jenreg.bootstrap-key) - it grants "
+            LOGGER.warn("SECURITY: a bootstrap key is provisioned for tenant '{}' (jenrepo.bootstrap-key) - it grants "
                     + "EVERY right on every repository of that tenant and never expires. Use it to issue the "
                     + "credentials you actually want, then unset it; it is re-provisioned on every boot for as long "
                     + "as it is set.", tenant);
@@ -172,7 +172,7 @@ public class StoreConfig {
         // store credentials themselves: read from the environment through the same
         // effective-config lookup the other env-only credentials use (github-token, the store-backend credentials), so
         // "secrets-key"
-        // (the env var JENREG_SECRETS_KEY via Spring relaxed binding) is a first-class, allowlisted
+        // (the env var JENREPO_SECRETS_KEY via Spring relaxed binding) is a first-class, allowlisted
         // bootstrap config read rather than a stranded key. A malformed value fails fast here (at boot), naming the
         // variable.
         UnaryOperator<String> config = Features.namespaced(environment::getProperty);

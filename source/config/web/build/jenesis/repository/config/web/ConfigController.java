@@ -286,7 +286,7 @@ public class ConfigController {
 
     /** The repositories defined at runtime ({@code repositories.<name>} in the settings store): each name with its
      *  routing specification (one or more {@code writable} / {@code fallback <source> [options]} clauses). They add to
-     *  or override the deployment's file-configured repositories ({@code jenreg.repositories.<name>}) and
+     *  or override the deployment's file-configured repositories ({@code jenrepo.repositories.<name>}) and
      *  route on the next request. With {@code ?tenant=}, the ones that tenant set for itself, which route its
      *  repositories over the deployment's. Either way it reads settings documents - one object per module under a
      *  constant prefix - and nothing that grows with what the repositories hold. */
@@ -616,7 +616,7 @@ public class ConfigController {
 
 
     /** Refuse a SECRET write the deployment cannot encrypt at rest (no master key configured): {@code 400} with the
-     *  remedy, which names {@code JENREG_SECRETS_KEY}. Nothing was persisted. */
+     *  remedy, which names {@code JENREPO_SECRETS_KEY}. Nothing was persisted. */
     private static void refuseSecret(HttpServletResponse response, IllegalStateException refused) throws IOException {
         text(response, 400, refused.getMessage());
     }

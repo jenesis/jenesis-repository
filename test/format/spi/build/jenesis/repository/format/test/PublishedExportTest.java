@@ -31,7 +31,7 @@ class PublishedExportTest {
     @BeforeEach
     void setUp() throws IOException {
         store = ArtifactStoreProvider.resolve("filesystem",
-                key -> "jenreg.filesystem.root".equals(key) ? root.toString() : null);
+                key -> "jenrepo.filesystem.root".equals(key) ? root.toString() : null);
         for (String name : List.of("maven-metadata.xml", "lib-1.0.jar.sha1", "lib-1.0.jar.asc", "lib-1.0.pom",
                 "lib-1.0.jar")) {
             publish(VERSION + "/" + name, name);

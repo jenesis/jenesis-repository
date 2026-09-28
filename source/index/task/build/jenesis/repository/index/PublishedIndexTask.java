@@ -223,8 +223,8 @@ public final class PublishedIndexTask implements MaintenanceTask {
         if (rebase && retraction.isPresent()) {
             index.retraction().clearIf(retraction.get().token());
         }
-        gauges.gauge("jenreg.index.chunks", "Published index chunks in the current chain", chain.size());
-        gauges.gauge("jenreg.index.bytes", "Compressed size of the published index chain",
+        gauges.gauge("jenrepo.index.chunks", "Published index chunks in the current chain", chain.size());
+        gauges.gauge("jenrepo.index.bytes", "Compressed size of the published index chain",
                 chain.stream().mapToLong(IndexDescriptor.Chunk::compressedSize).sum());
     }
 

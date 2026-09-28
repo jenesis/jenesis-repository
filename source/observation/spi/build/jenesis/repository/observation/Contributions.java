@@ -187,8 +187,8 @@ public final class Contributions {
 
     /**
      * The stable {@code [a-z][a-z0-9]*} key a failure row is filed under, derived from the contributor's own
-     * implementation class: {@code jenreg.observation.unavailable.<segment>},
-     * {@code jenreg.posture.unavailable.<segment>}, a failed panel's anchor. It is derived from the class rather than
+     * implementation class: {@code jenrepo.observation.unavailable.<segment>},
+     * {@code jenrepo.posture.unavailable.<segment>}, a failed panel's anchor. It is derived from the class rather than
      * declared by the contributor because these additive SPIs carry no {@code name()} - and it is stable for as long as
      * the class name is, which is what a row key and a docs anchor need.
      */

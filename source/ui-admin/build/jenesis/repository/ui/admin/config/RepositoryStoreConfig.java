@@ -19,7 +19,7 @@ import org.springframework.core.env.Environment;
 /**
  * The artifact-repository store the console manages, alongside the cache's CacheStorage. The console reads and
  * writes the repository through this multi-tenant {@link ArtifactStore} root (a backend chosen by
- * {@code jenreg.store}); {@code RepositoryAdmin} scopes it to the signed-in user's tenant and the
+ * {@code jenrepo.store}); {@code RepositoryAdmin} scopes it to the signed-in user's tenant and the
  * selected repository, so the same console fronts both products.
  *
  * <p>The same store also holds the access credentials under {@code auth/<tenant>/<hash>/}, managed through an
@@ -33,12 +33,12 @@ public class RepositoryStoreConfig {
 
     @Bean
     public ArtifactStore repositoryStore(Environment environment) {
-        String backend = environment.getProperty("jenreg.store", "filesystem");
+        String backend = environment.getProperty("jenrepo.store", "filesystem");
         ArtifactStore store = ArtifactStoreProvider.resolve(backend, environment::getProperty);
         // In read-only mode the console browses/downloads but refuses its own admin writes (credentials, settings,
         // tenants) at the same store choke point the repository server uses, so a mutating action cannot slip past
         // the mode by going through the console's store instead of the server's.
-        return environment.getProperty("jenreg.read-only", Boolean.class, false)
+        return environment.getProperty("jenrepo.read-only", Boolean.class, false)
                 ? new ReadOnlyArtifactStore(store)
                 : store;
     }
@@ -67,7 +67,7 @@ public class RepositoryStoreConfig {
         // The console records through the same discovered trail as the server; always enabled here (the console
         // only sees signed-in actors) and never pruning (the server's retention owns that). In read-only mode the
         // trail is off, since it is itself a store write and there is no mutation to record.
-        boolean readOnly = environment.getProperty("jenreg.read-only", Boolean.class, false);
+        boolean readOnly = environment.getProperty("jenrepo.read-only", Boolean.class, false);
         return AuditTrailProvider.resolve(repositoryStore,
                 key -> "audit".equals(key) && readOnly ? "false" : "audit-retention".equals(key) ? "" : null);
     }

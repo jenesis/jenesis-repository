@@ -49,7 +49,7 @@ public final class ReleaseImmutability {
 
     private static final Logger LOGGER = LoggerFactory.getLogger(ReleaseImmutability.class);
 
-    /** Release re-point refusals raised since boot - the loud {@code jenreg.immutability.refused} counter,
+    /** Release re-point refusals raised since boot - the loud {@code jenrepo.immutability.refused} counter,
      *  mirroring the hardened proxy's drift counter, so a refused re-point is observable, not silent. */
     private static final AtomicLong REFUSALS = new AtomicLong();
 

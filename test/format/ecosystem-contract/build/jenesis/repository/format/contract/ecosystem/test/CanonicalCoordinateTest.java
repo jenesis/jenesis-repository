@@ -20,7 +20,7 @@ class CanonicalCoordinateTest {
     @Test
     void a_declared_spelling_is_answered_as_the_layout_keys_it() {
         StoreRepositoryInventory inventory = new StoreRepositoryInventory(ArtifactStoreProvider.resolve("filesystem",
-                key -> "jenreg.filesystem.root".equals(key) ? root.toString() : null));
+                key -> "jenrepo.filesystem.root".equals(key) ? root.toString() : null));
 
         assertThat(inventory.canonical("NuGet", "Demo", "1.0.0"))
                 .as("a NuGet id is lower-cased in every path the protocol serves")

@@ -23,7 +23,7 @@ import module java.base;
  * read-then-write, so a lost race never costs a pass of cadence.
  *
  * <p><b>A delta may be deferred.</b> {@link #addLater} keeps the delta in this process and a flusher folds every
- * pending delta of a key into one compare-and-set per {@code jenreg.counters.flush} (a minute by default) and on
+ * pending delta of a key into one compare-and-set per {@code jenrepo.counters.flush} (a minute by default) and on
  * shutdown; {@link #read} answers the stored value plus what this node still holds, so the node that wrote sees
  * its own deltas at once and the check a write makes against its limit is exact here. The folder-size roll-ups
  * paid five or six compare-and-sets per publish through this counter, each a round trip and a write-class call on

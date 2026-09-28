@@ -46,7 +46,7 @@ class ConsoleAccessTest {
 
     @Test
     void a_deployment_administrator_holds_something_without_any_tenant_grant_of_its_own() {
-        // The grant jenreg.ui.admins seeds is deployment-wide, and it is what lets a fresh deployment be
+        // The grant jenrepo.ui.admins seeds is deployment-wide, and it is what lets a fresh deployment be
         // administered at all - so an administrator that no tenant has ever heard of still gets in.
         assertThat(access(store(), "oidc/alice").holdsAnything("oidc/alice")).isTrue();
     }
@@ -76,6 +76,6 @@ class ConsoleAccessTest {
 
     private ArtifactStore store() {
         return ArtifactStoreProvider.resolve("filesystem",
-                key -> "jenreg.filesystem.root".equals(key) ? root.toString() : null);
+                key -> "jenrepo.filesystem.root".equals(key) ? root.toString() : null);
     }
 }

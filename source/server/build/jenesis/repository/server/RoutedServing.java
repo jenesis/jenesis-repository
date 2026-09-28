@@ -13,7 +13,7 @@ import build.jenesis.repository.format.RepositoryFormat;
  * local miss and caches per its definition, a group consults its members in order with the first hit winning, a
  * {@code nocache} leg stays a pure view), while a plain hosted repository is left to the {@link FormatDispatcher} so it
  * keeps the format-level pull-through, through the serving tenant's upstream or the deployment's
- * ({@code jenreg.proxy.<format>}). Writes are not routed here - a routed group deploy already lands in its push-target
+ * ({@code jenrepo.proxy.<format>}). Writes are not routed here - a routed group deploy already lands in its push-target
  * member on the write path - so this only governs reads.
  *
  * <p>The read-side quarantine guard ({@link build.jenesis.repository.store.PublishInterceptor#withheld}) still bites:

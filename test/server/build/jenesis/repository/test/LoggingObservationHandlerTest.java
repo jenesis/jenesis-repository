@@ -18,8 +18,8 @@ public class LoggingObservationHandlerTest {
 
     @Test
     void the_servers_own_operations_and_the_request_line_are_logged() {
-        assertThat(handler.supportsContext(named("jenreg.deploy"))).isTrue();
-        assertThat(handler.supportsContext(named("jenreg.proxy.fetch"))).isTrue();
+        assertThat(handler.supportsContext(named("jenrepo.deploy"))).isTrue();
+        assertThat(handler.supportsContext(named("jenrepo.proxy.fetch"))).isTrue();
         assertThat(handler.supportsContext(named("http.server.requests"))).isTrue();
     }
 

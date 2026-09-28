@@ -103,7 +103,7 @@ public final class GatePolicyContract {
         SYMMETRY_MATCHES_BEHAVIOUR,
 
         /** Every route by which a deployment does not carry this dimension yields {@link Optional#empty()} - the
-         *  {@code jenreg.<name>} toggle, an unset {@link GatePolicyProvider#requiredConfig()} key, and
+         *  {@code jenrepo.<name>} toggle, an unset {@link GatePolicyProvider#requiredConfig()} key, and
          *  (for a {@link GatePolicyFixture.Presence#CONFIGURED} dimension) nothing configured to gate on. Absent,
          *  never a policy object that finds nothing, and never {@code null}. A
          *  {@link GatePolicyFixture.Presence#ALWAYS} dimension is held to the opposite over the same settings. */
@@ -408,7 +408,7 @@ public final class GatePolicyContract {
                 resolved = underTest.resolve(switchedOff, underTest.carried().getFirst());
             } catch (RuntimeException wedged) {
                 throw underTest.failure("refused '" + broken.key() + "=" + broken.value() + "' out of resolve() even "
-                        + "though the dimension was switched off with jenreg." + underTest.name()
+                        + "though the dimension was switched off with jenrepo." + underTest.name()
                         + "=false: " + wedged.getMessage() + ". Enablement is read before anything is created, so an "
                         + "operator can always disable a dimension they cannot presently configure correctly.");
             }
@@ -580,7 +580,7 @@ public final class GatePolicyContract {
                                     + "never whether the gate carries it: a withdrawn dimension evaluates nothing and "
                                     + "shows up in no report or audit trail, which is indistinguishable from one this "
                                     + "deployment never installed. Two ways to switch a dimension off already exist "
-                                    + "(the jenreg." + underTest.name() + " toggle and its own required "
+                                    + "(the jenrepo." + underTest.name() + " toggle and its own required "
                                     + "configuration); a third spelled as a verdict is the weakest of the three."));
                     for (GatePolicyFixture.Case scenario : underTest.cases()) {
                         if (scenario.actionGoverned().contains(path)) {
@@ -808,7 +808,7 @@ public final class GatePolicyContract {
         throw underTest.failure(detail.toString());
     }
 
-    /** The {@code jenreg.*}-prefixed lookup a provider is handed, over a fixed map; an unset key answers
+    /** The {@code jenrepo.*}-prefixed lookup a provider is handed, over a fixed map; an unset key answers
      *  {@code null}, exactly as the server's accessor does. */
     private static UnaryOperator<String> settings(Map<String, String> values) {
         Map<String, String> copy = Map.copyOf(values);

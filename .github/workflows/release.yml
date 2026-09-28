@@ -93,10 +93,10 @@ jobs:
             exit 1
           fi
           git clean -fdX sdk/
-          BASE="jenreg-${VERSION}"
+          BASE="jenrepo-${VERSION}"
           mkdir -p "sdk/${BASE}/lib"
           cp -r sdk/bin "sdk/${BASE}/bin"
-          cp "${LAUNCHER}" "sdk/${BASE}/lib/jenreg.jar"
+          cp "${LAUNCHER}" "sdk/${BASE}/lib/jenrepo.jar"
           cp LICENSE NOTICE "sdk/${BASE}/"
           cp "${LAUNCHER}" "sdk/${BASE}.jar"
           (cd sdk && zip -r "${BASE}.zip" "${BASE}")
@@ -123,7 +123,7 @@ jobs:
           JRELEASER_HOMEBREW_GITHUB_TOKEN: ${{ secrets.HOMEBREW_GITHUB_TOKEN }}
           JRELEASER_SCOOP_GITHUB_TOKEN: ${{ secrets.SCOOP_GITHUB_TOKEN }}
 
-      # SDKMAN waits until the jenreg candidate exists there: then uncomment this step and set the SDKMAN_EMAIL and
+      # SDKMAN waits until the jenrepo candidate exists there: then uncomment this step and set the SDKMAN_EMAIL and
       # SDKMAN_PASSWORD secrets.
       # - name: Publish the SDKMAN candidate
       #   env:
@@ -144,26 +144,26 @@ jobs:
       #       exit 1
       #     fi
       #     echo "::add-mask::${TOKEN}"
-      #     DOWNLOAD="https://github.com/jenesis/jenesis-repository/releases/download/v${VERSION}/jenreg-${VERSION}.zip"
+      #     DOWNLOAD="https://github.com/jenesis/jenesis-repository/releases/download/v${VERSION}/jenrepo-${VERSION}.zip"
       #     curl -fsIL -o /dev/null "${DOWNLOAD}"
       #     curl -sS --fail-with-body -X POST https://state.sdkman.io/versions \
       #       -H "Authorization: Bearer ${TOKEN}" \
       #       -H 'Content-Type: application/json' \
       #       -d "$(jq -n \
-      #               --arg candidate jenreg \
+      #               --arg candidate jenrepo \
       #               --arg version "${VERSION}" \
       #               --arg url "${DOWNLOAD}" \
-      #               --arg sha256sum "$(sha256sum "sdk/jenreg-${VERSION}.zip" | cut -d' ' -f1)" \
+      #               --arg sha256sum "$(sha256sum "sdk/jenrepo-${VERSION}.zip" | cut -d' ' -f1)" \
       #               '{candidate: $candidate, version: $version, platform: "UNIVERSAL", visible: true,
       #                 url: $url, sha256sum: $sha256sum, tags: ["latest"]}')"
 
-      - name: Publish the jenreg packslip for mise
+      - name: Publish the jenrepo packslip for mise
         uses: jdx/packslip@74c75db7d611b36dd5a157999ec16cf823ccf80c # v1.2.0
         with:
-          project: github.com/jenesis/jenesis-repository/jenreg
+          project: github.com/jenesis/jenesis-repository/jenrepo
           tag: v${{ steps.version.outputs.version }}
-          artifacts: sdk/jenreg-${{ steps.version.outputs.version }}.zip
-          bin: jenreg
+          artifacts: sdk/jenrepo-${{ steps.version.outputs.version }}.zip
+          bin: jenrepo
           require: bin:java@25
 
       - name: Upload JReleaser logs

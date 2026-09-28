@@ -19,7 +19,7 @@ import org.springframework.web.servlet.mvc.method.annotation.RequestMappingHandl
  * {@link build.jenesis.repository.server.kernel.PublishTenantFilter} and the
  * {@link build.jenesis.repository.gateway.DeployEdgeHooks} {@code EdgeHooks} bean, never a forked deploy controller.
  * The storage backend is selected by
- * {@code jenreg.store} through {@code ArtifactStoreProvider} (ServiceLoader, filesystem fallback).
+ * {@code jenrepo.store} through {@code ArtifactStoreProvider} (ServiceLoader, filesystem fallback).
  *
  * <p>The {@code RepositorySecurityAutoConfiguration} is not excluded: it runs and this distribution
  * <em>composes over</em> its chain rather than forking it. A contributed authorization manager (a
@@ -31,8 +31,8 @@ import org.springframework.web.servlet.mvc.method.annotation.RequestMappingHandl
  * the security one: every one of its beans is {@code @ConditionalOnMissingBean}, so each backs off behind this
  * module's richer replacement (the serving controller is registered here under the bean name
  * {@code repositoryController} so the one backs off too). One prefix carries one schema: the pull-through switch is
- * {@code jenreg.proxy-enabled}, the per-format upstreams are {@code jenreg.proxy.<format>}, and the repository
- * definitions are {@code jenreg.repositories.<name>}.
+ * {@code jenrepo.proxy-enabled}, the per-format upstreams are {@code jenrepo.proxy.<format>}, and the repository
+ * definitions are {@code jenrepo.repositories.<name>}.
  *
  * <p><b>Nothing ships this.</b> It was an image of its own once; the shipped artifact is the bundle,
  * which imports this composition. The module declares no {@code @jenesis.main}, so no launcher is built from it -

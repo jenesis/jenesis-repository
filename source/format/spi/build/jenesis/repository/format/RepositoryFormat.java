@@ -201,7 +201,7 @@ import build.jenesis.repository.store.Providers;
 public interface RepositoryFormat extends IconContributor {
 
     /** A stable identifier for the format, e.g. {@code maven}, {@code oci}, {@code npm}. It is the format's feature
-     *  toggle key ({@code jenreg.<name>}), the key {@link #installed(String)} looks one up by, and - as
+     *  toggle key ({@code jenrepo.<name>}), the key {@link #installed(String)} looks one up by, and - as
      *  the inherited {@link IconContributor#name()} - the identity its console mark is attributed to and generated
      *  from, so it is chosen once and not renamed. */
     @Override
@@ -318,7 +318,7 @@ public interface RepositoryFormat extends IconContributor {
     /** Every format on the module path, whatever its toggle says: validated once (two answering to one name is a
      *  packaging error and throws rather than being settled by discovery order), name-ordered, and one instance set
      *  for the process. This is the set a catalogue reads - the settings contributor that lists every format's
-     *  {@code jenreg.<name>} toggle, the capabilities report - and never the set that serves: a format configured
+     *  {@code jenrepo.<name>} toggle, the capabilities report - and never the set that serves: a format configured
      *  off is here and absent from {@link #installed()}. Nothing but this SPI module loads the service; a consumer
      *  reaches every format through these statics and carries no {@code uses} clause of its own. */
     static List<RepositoryFormat> declared() {
@@ -344,7 +344,7 @@ public interface RepositoryFormat extends IconContributor {
 
     /** Every {@link Features#active switched-on, fully configured} format in the deployment's one configuration
      *  ({@link Features#configure}) - the set that serves, dispatches, imports, promotes and screens, so a format
-     *  configured off ({@code jenreg.<name>=false}) or with required config unset is absent exactly as a missing
+     *  configured off ({@code jenrepo.<name>=false}) or with required config unset is absent exactly as a missing
      *  module is, on every one of those paths alike. An import, a staging promotion, the gate's sibling read or a
      *  hold's replay that discovered the formats raw would serve a switched-off one.
      *

@@ -11,7 +11,7 @@ import build.jenesis.repository.settings.SettingsContributor;
  * wizard asks the deployment's and a tenant's limits screen edits its own, both through the catalogue.
  *
  * <p>Not {@code quota}: that key is the deployment-wide cap over the whole store the environment sets at boot
- * ({@code jenreg.quota}), which is not this setting and must not be written into by the stored one.
+ * ({@code jenrepo.quota}), which is not this setting and must not be written into by the stored one.
  */
 public final class QuotaSettingsContributor implements SettingsContributor {
 

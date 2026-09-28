@@ -40,7 +40,7 @@ class PublishRecordingTest {
     @BeforeEach
     void setUp() {
         store = FaultInjectingStore.wrap(ArtifactStoreProvider.resolve("filesystem",
-                        key -> "jenreg.filesystem.root".equals(key) ? root.toString() : null)
+                        key -> "jenrepo.filesystem.root".equals(key) ? root.toString() : null)
                 .scope("default").scope("releases"))
                 .tracing((op, key) -> {
                     if (op == FaultInjectingStore.Op.WRITE_VERSIONED) {

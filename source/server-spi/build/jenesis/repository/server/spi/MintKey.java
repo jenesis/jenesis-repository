@@ -6,7 +6,7 @@ import build.jenesis.repository.scope.Scopes;
 
 /**
  * Mints a well-formed repository key from the command line, for the one key nobody can issue through the API: the
- * bootstrap key a deployment starts from ({@code JENREG_BOOTSTRAP_KEY}). The server provisions that key at boot with
+ * bootstrap key a deployment starts from ({@code JENREPO_BOOTSTRAP_KEY}). The server provisions that key at boot with
  * every right on its tenant, so it has to be well-formed - the tenant is read out of it and the checksum is checked
  * before anything else - and it has to be secret, so it comes from {@link Authorization#mint} rather than from a
  * hand-typed string or a snippet in another language that has to keep the format in step.

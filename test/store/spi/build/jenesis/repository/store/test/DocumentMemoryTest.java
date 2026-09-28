@@ -60,7 +60,7 @@ class DocumentMemoryTest {
     @BeforeEach
     void setUp() throws IOException {
         ArtifactStore filesystem = ArtifactStoreProvider.resolve("filesystem",
-                key -> "jenreg.filesystem.root".equals(key) ? root.toString() : null);
+                key -> "jenrepo.filesystem.root".equals(key) ? root.toString() : null);
         counting = FaultInjectingStore.wrap(filesystem);
         clock = new Moving();
         memory = new DocumentMemory(Duration.ofSeconds(30), clock);
@@ -194,6 +194,6 @@ class DocumentMemoryTest {
         assertThat(DocumentMemory.ttl("0")).isZero();
         assertThat(DocumentMemory.ttl("2m")).isEqualTo(Duration.ofMinutes(2));
         assertThatThrownBy(() -> DocumentMemory.ttl("later")).isInstanceOf(IllegalArgumentException.class)
-                .hasMessageContaining("jenreg.cache.document-ttl");
+                .hasMessageContaining("jenrepo.cache.document-ttl");
     }
 }

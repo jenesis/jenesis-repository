@@ -61,7 +61,7 @@ import build.jenesis.repository.format.Semver;
  *     <li>a module version the <b>database does not carry</b> - a private or internal module, the {@code GOPRIVATE}
  *         territory a public database is not asked about. Cached unverified rather than refused, exactly as the Maven
  *         leg caches an artifact whose {@code .sha1} sibling the upstream does not publish;</li>
- *     <li>a deployment that set <b>{@code jenreg.go.sumdb=off}</b>, or one whose database is unreachable while the
+ *     <li>a deployment that set <b>{@code jenrepo.go.sumdb=off}</b>, or one whose database is unreachable while the
  *         GOPROXY is not: no digest is advertised to this repository at all;</li>
  *     <li>an entry the dirhash cannot be <b>computed</b> for - a {@code .zip} whose entries exceed the shared
  *         archive-walk ceiling or its entry cap. This one is <em>not</em> cached: an uncomputable digest is "we
@@ -395,7 +395,7 @@ public final class GoFormat implements RepositoryFormat, ProxyLeg, BlobLayout, R
                 LOGGER.warn("Refusing the proxied Go module {}: the checksum database advertises {} but the upstream "
                                 + "body {}. Nothing was cached or served.", rest, expected,
                         actual == null
-                                ? "could not be hashed within the archive-walk bound (jenreg.archive.largest-walk)"
+                                ? "could not be hashed within the archive-walk bound (jenrepo.archive.largest-walk)"
                                 : "hashes to " + actual);
                 return false;
             }

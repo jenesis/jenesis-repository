@@ -2,9 +2,9 @@
 apiVersion: v1
 kind: PersistentVolumeClaim
 metadata:
-  name: {{ include "jenreg.fullname" . }}-data
+  name: {{ include "jenrepo.fullname" . }}-data
   labels:
-    {{- include "jenreg.labels" . | nindent 4 }}
+    {{- include "jenrepo.labels" . | nindent 4 }}
 spec:
   accessModes:
     - {{ .Values.store.filesystem.persistence.accessMode }}

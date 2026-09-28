@@ -12,8 +12,8 @@ import static org.assertj.core.api.Assertions.assertThat;
 
 /**
  * The limiter is its own {@link build.jenesis.repository.observation.ObservabilitySource}: it reports the number of
- * keys it is currently tracking as the {@code jenreg.ratelimit.buckets} gauge (one bucket per active key - the
- * memory-exhaustion vector the shared {@code anonymous} bucket bounds), a {@code jenreg.ratelimit.limiter} health
+ * keys it is currently tracking as the {@code jenrepo.ratelimit.buckets} gauge (one bucket per active key - the
+ * memory-exhaustion vector the shared {@code anonymous} bucket bounds), a {@code jenrepo.ratelimit.limiter} health
  * check, and no background task; the signals collect into the single {@link ObservabilityReport} view the
  * distribution, Actuator and the docs all read.
  */
@@ -24,7 +24,7 @@ class RateLimiterObservabilityTest {
         TokenBucketRateLimiter limiter = new TokenBucketRateLimiter();
 
         assertThat(limiter.metrics()).singleElement().satisfies(metric -> {
-            assertThat(metric.name()).isEqualTo("jenreg.ratelimit.buckets");
+            assertThat(metric.name()).isEqualTo("jenrepo.ratelimit.buckets");
             assertThat(metric.kind()).isEqualTo(Metric.Kind.GAUGE);
             assertThat(metric.value()).isZero();
             assertThat(metric.limit()).isEmpty();
@@ -52,10 +52,10 @@ class RateLimiterObservabilityTest {
 
         ObservabilityReport report = ObservabilityReport.from(List.of(limiter));
 
-        assertThat(report.metrics()).extracting(Metric::name).containsExactly("jenreg.ratelimit.buckets");
+        assertThat(report.metrics()).extracting(Metric::name).containsExactly("jenrepo.ratelimit.buckets");
         assertThat(report.metrics()).first().extracting(Metric::value).isEqualTo(1.0);
         assertThat(report.healthChecks()).singleElement().satisfies(check -> {
-            assertThat(check.name()).isEqualTo("jenreg.ratelimit.limiter");
+            assertThat(check.name()).isEqualTo("jenrepo.ratelimit.limiter");
             assertThat(check.status()).isEqualTo(Health.UP);
             assertThat(check.description()).isNotBlank();
         });
@@ -69,8 +69,8 @@ class RateLimiterObservabilityTest {
         limiter.allow("acme", 60);
 
         assertThat(limiter.metrics()).extracting(Metric::name)
-                .allSatisfy(name -> assertThat(name).matches("jenreg\\.ratelimit\\..+"));
+                .allSatisfy(name -> assertThat(name).matches("jenrepo\\.ratelimit\\..+"));
         assertThat(limiter.healthChecks()).extracting(HealthCheck::name)
-                .allSatisfy(name -> assertThat(name).matches("jenreg\\.ratelimit\\..+"));
+                .allSatisfy(name -> assertThat(name).matches("jenrepo\\.ratelimit\\..+"));
     }
 }

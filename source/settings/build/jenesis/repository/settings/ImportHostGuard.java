@@ -14,7 +14,7 @@ import build.jenesis.repository.net.PrivateHosts;
  * <p>The layering is most-specific-wins and, crucially, <em>fail-closed</em> when nothing is set:
  * <ol>
  *   <li>the stored {@code block-private-import-hosts} setting, if present, wins;</li>
- *   <li>else the deployment's {@code jenreg.block-private-import-hosts} env-field, if explicitly set;</li>
+ *   <li>else the deployment's {@code jenrepo.block-private-import-hosts} env-field, if explicitly set;</li>
  *   <li>else {@code true} (block) - for <em>every</em> edition.</li>
  * </ol>
  * There is deliberately no tenancy-derived "off for the single-tenant {@code fixed} edition" convenience: a

@@ -24,7 +24,7 @@ class RepositoryPropertiesTest {
         RepositoryProperties open = new RepositoryProperties();
         open.setAuth(false);
         assertThat(open.isAuth())
-                .as("anonymous/open is honoured only as an explicit opt-out (jenreg.auth=false)").isFalse();
+                .as("anonymous/open is honoured only as an explicit opt-out (jenrepo.auth=false)").isFalse();
     }
 
     @Test

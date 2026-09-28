@@ -15,7 +15,7 @@ import tools.jackson.databind.json.JsonMapper;
  * resume names or what a job has done.
  *
  * <p>The URL is screened as a migration URL is, under the same dial: https only, and no address that resolves inside
- * the deployment's own network, unless {@code jenreg.block-private-import-hosts=false} allows migrating to one. The
+ * the deployment's own network, unless {@code jenrepo.block-private-import-hosts=false} allows migrating to one. The
  * credential is kept for the job's life and never written; a resume therefore names it again.
  */
 public final class Exports {
@@ -72,7 +72,7 @@ public final class Exports {
         if (refusal != null) {
             return new Started(400, null, "export url is refused: " + refusal + "; an export sends the repository's "
                     + "contents and a credential, so it must be an https URL to a public host (set "
-                    + "jenreg.block-private-import-hosts=false to migrate to an internal or plaintext one)");
+                    + "jenrepo.block-private-import-hosts=false to migrate to an internal or plaintext one)");
         }
         URI target;
         try {

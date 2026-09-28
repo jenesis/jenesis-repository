@@ -121,7 +121,7 @@ public interface SettingsContributor {
 
     /**
      * The keys this module reads that the catalogue deliberately leaves out, each as its full property name
-     * ({@code jenreg.<key>}): a node's own identity, a switch the context settles as it starts, a credential that must
+     * ({@code jenrepo.<key>}): a node's own identity, a switch the context settles as it starts, a credential that must
      * never be stored, or - ending in {@code .*} - a prefix under which the operator names the keys, such as one
      * entry per format. No surface lists them as settings; they are named here only so the boot check for
      * unrecognised settings knows that something reads them. Empty by default.

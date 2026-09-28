@@ -23,7 +23,7 @@ import org.springframework.web.bind.annotation.RestController;
  * <h2>Tenants</h2>
  *
  * <p>The host is not only how Terraform finds the registry - it is also how this product already routes tenants
- * ({@code jenreg.tenant-hosts}). So a deployment mapping {@code acme.example.com} to tenant {@code acme} gets a
+ * ({@code jenrepo.tenant-hosts}). So a deployment mapping {@code acme.example.com} to tenant {@code acme} gets a
  * per-tenant Terraform registry for free: the discovery document is the same for every host, and the requests it
  * points at carry the Host that resolves the tenant. Nothing here needs to know which tenant asked.
  *

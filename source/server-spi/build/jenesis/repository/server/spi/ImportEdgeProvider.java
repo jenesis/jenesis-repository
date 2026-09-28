@@ -23,7 +23,7 @@ import build.jenesis.repository.store.Providers;
  *
  * <p>With no provider installed (the product) the built-in import edge serves - the same guarantee the
  * {@link CapabilityContributor} zero-contributor case gives. Discovery honours the
- * shared {@link Features} enable/disable convention (a {@code jenreg.<name>=false} switch and the
+ * shared {@link Features} enable/disable convention (a {@code jenrepo.<name>=false} switch and the
  * required-config self-disable), so a provider that is present but not configured for is inert, exactly as a missing
  * module would be.
  *
@@ -38,7 +38,7 @@ import build.jenesis.repository.store.Providers;
  *       without this SPI. Neither {@link #name()} nor {@link #requiredConfig()} may return {@code null}.</li>
  *   <li><b>Selection failure.</b> There is nothing to select: this is a presence signal, not a named capability, so no
  *       configuration can name an edge that is absent. Unlike the named singleton SPIs beside it there is no
- *       {@code jenreg.import-edge=<name>} key, so the "explicitly selected but unavailable" case
+ *       {@code jenrepo.import-edge=<name>} key, so the "explicitly selected but unavailable" case
  *       cannot arise here and setting such a key changes nothing. A provider that is installed but inert (switched
  *       off, required config unset) is indistinguishable from an absent module <em>by design</em>, and yielding the
  *       edge back to the controller is the intended outcome rather than a silent fallback.</li>
@@ -65,7 +65,7 @@ import build.jenesis.repository.store.Providers;
 public interface ImportEdgeProvider {
 
     /** The distribution-owned import edge's feature name, e.g. {@code downstream-import}. Toggled off with
-     *  {@code jenreg.<name>=false} through the shared {@link Features} convention, so a deployment can fall
+     *  {@code jenrepo.<name>=false} through the shared {@link Features} convention, so a deployment can fall
      *  back to the import edge without removing the module. */
     String name();
 

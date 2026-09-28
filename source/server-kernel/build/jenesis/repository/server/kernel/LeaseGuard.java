@@ -25,7 +25,7 @@ import build.jenesis.repository.store.Lease;
  * chosen here, and the reason:
  * <ol>
  *   <li><b>It is a pass failure, not a skip.</b> {@link Holding#lost()} flips and stays flipped, and the caller counts
- *       the pass as failed - so {@code jenreg.maintenance.failures} rises and the task reports FAILED.
+ *       the pass as failed - so {@code jenrepo.maintenance.failures} rises and the task reports FAILED.
  *       A refused <em>acquire</em> stays what it always was (a normal, uncounted skip in a fleet); losing a lease you
  *       already held is not that.</li>
  *   <li><b>The pass stops enlarging the window.</b> The caller polls {@link Holding#lost()} between fan-out batches and
@@ -61,7 +61,7 @@ public final class LeaseGuard implements AutoCloseable {
     private static final Logger LOGGER = LoggerFactory.getLogger(LeaseGuard.class);
 
     /** The operator-facing dial the ttl comes from - named in the refusal so a degenerate value points at its key. */
-    private static final String TTL_KEY = "jenreg.cleanup-lease";
+    private static final String TTL_KEY = "jenrepo.cleanup-lease";
 
     private final Lease lease;
     private final String holder;

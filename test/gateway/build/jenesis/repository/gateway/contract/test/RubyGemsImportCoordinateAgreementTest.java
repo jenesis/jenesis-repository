@@ -63,7 +63,7 @@ class RubyGemsImportCoordinateAgreementTest {
 
     private ArtifactStore store() {
         return ArtifactStoreProvider.resolve("filesystem",
-                key -> "jenreg.filesystem.root".equals(key) ? root.toString() : null);
+                key -> "jenrepo.filesystem.root".equals(key) ? root.toString() : null);
     }
 
     /** A minimal {@code .gem}: a tar carrying a {@code metadata.gz} whose gzipped YAML is the gemspec the format reads. */

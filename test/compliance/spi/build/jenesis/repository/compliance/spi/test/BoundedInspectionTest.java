@@ -99,7 +99,7 @@ class BoundedInspectionTest {
 
     @Test
     void the_manifest_tier_an_inspector_reads_under_is_the_operator_settable_shared_ceiling() throws IOException {
-        // The inspectors' manifest tier and the formats' ceiling are one bound, jenreg.archive.largest-entry: two
+        // The inspectors' manifest tier and the formats' ceiling are one bound, jenrepo.archive.largest-entry: two
         // numbers parallel only by convention would let an operator move the FORMATS' ceiling and not the GATE's.
         byte[] manifest = new byte[512];
         assertThat(ArchiveInflation.entry(new ByteArrayInputStream(manifest)).exhausted())
@@ -183,7 +183,7 @@ class BoundedInspectionTest {
 
     @Test
     void the_walk_bound_is_the_operator_settable_shared_one() throws IOException {
-        // The gate's archive-walk ceiling is the one bound jenreg.archive.largest-walk sets for the gate and every
+        // The gate's archive-walk ceiling is the one bound jenrepo.archive.largest-walk sets for the gate and every
         // archive-cracking format alike, and the walk that applies it honours the key without any inspector knowing
         // about it - a private constant and byte-counting stream per module would each ignore the key.
         byte[] archive = zip(Map.of("manifest", "root"));

@@ -44,7 +44,7 @@ public final class Authorization {
 
     public static final String MANAGE_WRITE = "manage:write";
 
-    /** How long a credential document is cached: {@code jenreg.auth.cache-ttl}, fifteen minutes by default. */
+    /** How long a credential document is cached: {@code jenrepo.auth.cache-ttl}, fifteen minutes by default. */
     public static final String CACHE_TTL_SETTING = "auth.cache-ttl";
 
     /** The default, deliberately longer than the deployment-wide {@code cache.ttl}: an authorization happens on
@@ -87,7 +87,7 @@ public final class Authorization {
         this.groups = new GroupMembership(space, tenants);
     }
 
-    /** An open deployment: every request is allowed, the explicit {@code jenreg.auth=false} opt-out for the free
+    /** An open deployment: every request is allowed, the explicit {@code jenrepo.auth=false} opt-out for the free
      *  single-token deployment. */
     public static Authorization anonymous() {
         return new Authorization(null);
@@ -478,7 +478,7 @@ public final class Authorization {
     }
 
     /**
-     * Provision {@code key} as the deployment's bootstrap credential - the {@code jenreg.bootstrap-key} contract: a
+     * Provision {@code key} as the deployment's bootstrap credential - the {@code jenrepo.bootstrap-key} contract: a
      * non-expiring key labelled {@code bootstrap} holding every privilege on every repository of the tenant the key
      * itself names. Idempotent, since the key's own hash is its identity: re-provisioning the same key on every boot
      * converges rather than accumulating. A blank key provisions nothing and answers {@code null}; a malformed one
@@ -496,7 +496,7 @@ public final class Authorization {
         // tenantOf answers null rather than throwing for anything it does not recognise, so the check is on the answer.
         String tenant = tenantOf(stripped);
         if (tenant == null || tenant.isBlank()) {
-            throw new IllegalArgumentException("jenreg.bootstrap-key is not a well-formed key: it must look like "
+            throw new IllegalArgumentException("jenrepo.bootstrap-key is not a well-formed key: it must look like "
                     + "jenk_<tenant>.<secret><checksum>, since the tenant it provisions is read out of the key itself");
         }
         String hash = hash(stripped);

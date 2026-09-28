@@ -26,7 +26,7 @@ class NpmImportTarTest {
     @Test
     void a_ustar_prefix_tarball_is_imported_not_dropped() throws IOException {
         ArtifactStore store = ArtifactStoreProvider.resolve("filesystem",
-                key -> "jenreg.filesystem.root".equals(key) ? root.toString() : null);
+                key -> "jenrepo.filesystem.root".equals(key) ? root.toString() : null);
         byte[] tgz = ustarPrefixTarGz("package", "package.json",
                 "{\"name\":\"@acme/widget\",\"version\":\"1.2.3\"}".getBytes(StandardCharsets.UTF_8));
 
@@ -46,7 +46,7 @@ class NpmImportTarTest {
     @Test
     void an_over_ceiling_tarball_imports_nothing() throws IOException {
         ArtifactStore store = ArtifactStoreProvider.resolve("filesystem",
-                key -> "jenreg.filesystem.root".equals(key) ? root.toString() : null);
+                key -> "jenrepo.filesystem.root".equals(key) ? root.toString() : null);
         // A body past MAX_TARBALL (256 MiB) - streamed cheaply, never a real 256 MiB array in the test - is dropped
         // before it is buffered whole or parsed, so nothing lands under npm/.
         InputStream oversized = new InputStream() {
@@ -82,7 +82,7 @@ class NpmImportTarTest {
     @Test
     void a_package_json_inflating_past_the_ceiling_is_rejected() throws IOException {
         ArtifactStore store = ArtifactStoreProvider.resolve("filesystem",
-                key -> "jenreg.filesystem.root".equals(key) ? root.toString() : null);
+                key -> "jenrepo.filesystem.root".equals(key) ? root.toString() : null);
         // A tiny tarball (it compresses to a few KB) whose package/package.json inflates past MAX_PACKAGE_JSON (8 MiB):
         // the gunzip-bomb cap returns no manifest, so the importer writes nothing rather than reading an unbounded body.
         byte[] inflated = new byte[8 * 1024 * 1024 + 16];

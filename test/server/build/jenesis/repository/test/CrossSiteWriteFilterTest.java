@@ -62,7 +62,7 @@ class CrossSiteWriteFilterTest {
     @Test
     void the_trusted_origins_are_read_from_the_setting_and_none_are_trusted_unset() {
         assertThat(CrossSiteWriteFilter.live(_ -> null).get()).isEmpty();
-        assertThat(CrossSiteWriteFilter.live(key -> key.equals("jenreg." + CrossSiteWriteFilter.KEY)
+        assertThat(CrossSiteWriteFilter.live(key -> key.equals("jenrepo." + CrossSiteWriteFilter.KEY)
                 ? " https://a.example.com , http://b.example.com:8080,null" : null).get())
                 .containsExactlyInAnyOrder("https://a.example.com:443", "http://b.example.com:8080");
     }

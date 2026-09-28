@@ -267,6 +267,6 @@ class TerraformProxyTest {
     private ArtifactStore store() throws IOException {
         Path directory = Files.createDirectories(root.resolve("store"));
         return ArtifactStoreProvider.resolve("filesystem",
-                key -> "jenreg.filesystem.root".equals(key) ? directory.toString() : null);
+                key -> "jenrepo.filesystem.root".equals(key) ? directory.toString() : null);
     }
 }

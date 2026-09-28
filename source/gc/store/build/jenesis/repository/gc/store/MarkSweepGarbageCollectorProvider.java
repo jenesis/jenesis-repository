@@ -10,15 +10,15 @@ import build.jenesis.repository.store.Durations;
 
 /**
  * Provides the {@link MarkSweepGarbageCollector} as {@code mark-sweep} - the default selection when no
- * {@code jenreg.gc} names another. It rides the shared artifact walk, so with no walk implementation
+ * {@code jenrepo.gc} names another. It rides the shared artifact walk, so with no walk implementation
  * installed (or one configured off) it resolves to empty and the deployment simply has no garbage collection - the
  * SPI's no-op default, never a collector that enumerates its own way. Settings, read through the config lookup:
- * {@code jenreg.gc.stride} - the checkpoint stride of the collector's own walk passes (default 20000), which
+ * {@code jenrepo.gc.stride} - the checkpoint stride of the collector's own walk passes (default 20000), which
  * bounds three things at once: the reference batch a mark buffers in memory, the re-work a crash costs, and how
- * often a segment claim is renewed (keep stride x per-item time well under {@code jenreg.walk.ttl}). A malformed
+ * often a segment claim is renewed (keep stride x per-item time well under {@code jenrepo.walk.ttl}). A malformed
  * value fails loudly rather than collecting with a silently-wrong stride.
  *
- * <p>{@code jenreg.gc.grace} - an ISO-8601 wall-clock floor on the condemn-to-collect grace, on top of the rule that a
+ * <p>{@code jenrepo.gc.grace} - an ISO-8601 wall-clock floor on the condemn-to-collect grace, on top of the rule that a
  * blob is condemned in one pass and collected in a later one: {@link GarbageCollector#defaultGrace()} when unset, and
  * {@code PT0S} for the purely generation-based rule. It guarantees a blob carries its condemned marker for at least
  * this long before deletion even when generations advance faster than the collection interval - frequent collection,

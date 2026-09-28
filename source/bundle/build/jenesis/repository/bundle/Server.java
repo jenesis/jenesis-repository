@@ -27,8 +27,8 @@ import org.springframework.context.annotation.Import;
  * {@code ConsoleUrlSpace}, and the repository's is the unmatched fall-through, because its space carries arbitrary
  * artifact coordinates and cannot be enumerated.
  *
- * <p>Every capability on the module path runs until configured off - {@code jenreg.<feature>=false} degrades an
- * implementation exactly like a missing module, {@code jenreg.<spi>=<feature>} selects among exclusive ones - so
+ * <p>Every capability on the module path runs until configured off - {@code jenrepo.<feature>=false} degrades an
+ * implementation exactly like a missing module, {@code jenrepo.<spi>=<feature>} selects among exclusive ones - so
  * the image this launcher fronts is trimmed with {@code docker run -e}, never rebuilt.
  */
 @SpringBootConfiguration

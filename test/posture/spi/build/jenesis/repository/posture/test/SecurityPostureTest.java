@@ -29,8 +29,8 @@ final class SecurityPostureTest {
 
     @Test
     void idGrammarAcceptsTheConventionAndRejectsGarbage() {
-        assertThat(Advisories.valid("jenreg.auth.open")).isTrue();
-        assertThat(Advisories.valid("jenreg.importer.ssrf")).isTrue();
+        assertThat(Advisories.valid("jenrepo.auth.open")).isTrue();
+        assertThat(Advisories.valid("jenrepo.importer.ssrf")).isTrue();
         assertThat(Advisories.valid("Jenesis.Auth.Open")).isFalse();
         assertThat(Advisories.valid("jenesis")).isFalse();
         assertThat(Advisories.valid("auth.open")).isFalse();
@@ -42,9 +42,9 @@ final class SecurityPostureTest {
         assertThatThrownBy(() -> SecurityAdvisory.deployment("not a name", Severity.WARN, "t", "w", "f", "k", "v", "d"))
                 .isInstanceOf(IllegalArgumentException.class);
         // A tenant-scoped advisory must name its tenant; a deployment-wide one must not.
-        assertThatThrownBy(() -> new SecurityAdvisory("jenreg.x.y", Severity.WARN, Scope.TENANT, "", "t", "w", "f",
+        assertThatThrownBy(() -> new SecurityAdvisory("jenrepo.x.y", Severity.WARN, Scope.TENANT, "", "t", "w", "f",
                 "k", "v", "d")).isInstanceOf(IllegalArgumentException.class);
-        assertThatThrownBy(() -> new SecurityAdvisory("jenreg.x.y", Severity.WARN, Scope.DEPLOYMENT, "acme", "t", "w",
+        assertThatThrownBy(() -> new SecurityAdvisory("jenrepo.x.y", Severity.WARN, Scope.DEPLOYMENT, "acme", "t", "w",
                 "f", "k", "v", "d")).isInstanceOf(IllegalArgumentException.class);
     }
 
@@ -61,9 +61,9 @@ final class SecurityPostureTest {
 
     @Test
     void aReportSortsCriticalFirstThenById() {
-        SecurityAdvisory info = SecurityAdvisory.deployment("jenreg.a.info", Severity.INFO, "t", "w", "f", "k", "v", "d");
-        SecurityAdvisory warn = SecurityAdvisory.deployment("jenreg.b.warn", Severity.WARN, "t", "w", "f", "k", "v", "d");
-        SecurityAdvisory crit = SecurityAdvisory.deployment("jenreg.c.crit", Severity.CRITICAL, "t", "w", "f", "k", "v", "d");
+        SecurityAdvisory info = SecurityAdvisory.deployment("jenrepo.a.info", Severity.INFO, "t", "w", "f", "k", "v", "d");
+        SecurityAdvisory warn = SecurityAdvisory.deployment("jenrepo.b.warn", Severity.WARN, "t", "w", "f", "k", "v", "d");
+        SecurityAdvisory crit = SecurityAdvisory.deployment("jenrepo.c.crit", Severity.CRITICAL, "t", "w", "f", "k", "v", "d");
         PostureReport report = PostureReport.from(List.of(c -> List.of(info, warn, crit)), config());
         assertThat(report.advisories()).containsExactly(crit, warn, info);
         assertThat(report.count()).isEqualTo(3);
@@ -74,28 +74,28 @@ final class SecurityPostureTest {
     @Test
     void discoveryFindsTheProvidesDeclaredAdvisorAndHonoursTheDisabledIsSilentRule() {
         // Absent its key, the sample advisor (a stand-in for a disabled feature) contributes nothing.
-        assertThat(PostureReport.discover(config()).advisories()).noneMatch(a -> a.id().equals("jenreg.sample.unsafe"));
+        assertThat(PostureReport.discover(config()).advisories()).noneMatch(a -> a.id().equals("jenrepo.sample.unsafe"));
         // Flip its key and the same discovery surfaces it.
         assertThat(PostureReport.discover(config(SampleSafetyAdvisor.KEY, "true")).advisories())
-                .anyMatch(a -> a.id().equals("jenreg.sample.unsafe"));
+                .anyMatch(a -> a.id().equals("jenrepo.sample.unsafe"));
     }
 
     @Test
     void theCoreSeederIsSilentOnTheSecureDefault() {
         // The secure defaults (auth on, SSRF screen on, no dev profile, admins named, not a writable demo) raise nothing.
-        assertThat(new SecurityPosture().advise(config("jenreg.rate-limit", "600"))).isEmpty();
+        assertThat(new SecurityPosture().advise(config("jenrepo.rate-limit", "600"))).isEmpty();
     }
 
     @Test
     void theCoreSeederFlagsAuthOffAsCritical() {
         List<SecurityAdvisory> advisories = new SecurityPosture()
-                .advise(config("jenreg.auth", "false", "jenreg.rate-limit", "600"));
+                .advise(config("jenrepo.auth", "false", "jenrepo.rate-limit", "600"));
         assertThat(advisories).hasSize(1);
         SecurityAdvisory advisory = advisories.get(0);
-        assertThat(advisory.id()).isEqualTo("jenreg.auth.open");
+        assertThat(advisory.id()).isEqualTo("jenrepo.auth.open");
         assertThat(advisory.severity()).isEqualTo(Severity.CRITICAL);
         assertThat(advisory.scope()).isEqualTo(Scope.DEPLOYMENT);
-        assertThat(advisory.settingKey()).isEqualTo("jenreg.auth");
+        assertThat(advisory.settingKey()).isEqualTo("jenrepo.auth");
         assertThat(advisory.settingValue()).isEqualTo("true");
     }
 
@@ -106,62 +106,62 @@ final class SecurityPostureTest {
         // immutable public demo, the recommended safe configuration - must independently NOT fire. This pins the
         // second half of the &&: a demo that is read-only is browsable-but-immutable, exactly the advisory's own fix.
         List<String> ids = new SecurityPosture().advise(config(
-                        "jenreg.demo", "true",
-                        "jenreg.read-only", "true",
-                        "jenreg.rate-limit", "600"))
+                        "jenrepo.demo", "true",
+                        "jenrepo.read-only", "true",
+                        "jenrepo.rate-limit", "600"))
                 .stream().map(SecurityAdvisory::id).toList();
         assertThat(ids).as("a read-only demo is the safe configuration and raises no writable-demo advisory")
-                .doesNotContain("jenreg.demo.writable");
+                .doesNotContain("jenrepo.demo.writable");
     }
 
     @Test
     void theCoreSeederFlagsTheRealFootgunsOnTheirActualKeys() {
         Configuration config = config(
-                "jenreg.auth", "false",
-                "jenreg.block-private-import-hosts", "false",
+                "jenrepo.auth", "false",
+                "jenrepo.block-private-import-hosts", "false",
                 "spring.profiles.active", "prod,dev",
-                "jenreg.demo", "true",
-                "jenreg.read-only", "false",
-                "jenreg.rate-limit", "0");
+                "jenrepo.demo", "true",
+                "jenrepo.read-only", "false",
+                "jenrepo.rate-limit", "0");
         List<String> ids = new SecurityPosture().advise(config).stream().map(SecurityAdvisory::id).toList();
-        assertThat(ids).contains("jenreg.auth.open", "jenreg.importer.ssrf", "jenreg.ratelimit.unset",
-                "jenreg.profile.dev", "jenreg.demo.writable");
+        assertThat(ids).contains("jenrepo.auth.open", "jenrepo.importer.ssrf", "jenrepo.ratelimit.unset",
+                "jenrepo.profile.dev", "jenrepo.demo.writable");
     }
 
     @Test
     void anUnsetRateLimitIsTheDefaultCeilingAndRaisesNothing() {
         // Unset is not unlimited: the server applies its default ceiling, so a fresh deployment is throttled and a
         // warning here would be a false one on every first boot. Only an explicit 0 switches the limiter off.
-        assertThat(new SecurityPosture().advise(config("jenreg.auth", "true")))
-                .extracting(SecurityAdvisory::id).doesNotContain("jenreg.ratelimit.unset");
-        assertThat(new SecurityPosture().advise(config("jenreg.auth", "true", "jenreg.rate-limit", "plenty")))
+        assertThat(new SecurityPosture().advise(config("jenrepo.auth", "true")))
+                .extracting(SecurityAdvisory::id).doesNotContain("jenrepo.ratelimit.unset");
+        assertThat(new SecurityPosture().advise(config("jenrepo.auth", "true", "jenrepo.rate-limit", "plenty")))
                 .as("an unparseable value falls back to the default ceiling, as the limiter reads it")
-                .extracting(SecurityAdvisory::id).doesNotContain("jenreg.ratelimit.unset");
-        assertThat(new SecurityPosture().advise(config("jenreg.auth", "true", "jenreg.rate-limit", "0")))
-                .extracting(SecurityAdvisory::id).contains("jenreg.ratelimit.unset");
+                .extracting(SecurityAdvisory::id).doesNotContain("jenrepo.ratelimit.unset");
+        assertThat(new SecurityPosture().advise(config("jenrepo.auth", "true", "jenrepo.rate-limit", "0")))
+                .extracting(SecurityAdvisory::id).contains("jenrepo.ratelimit.unset");
     }
 
     @Test
     void theCoreSeederWarnsOnAnonymousReadAndEscalatesAnonymousWriteOrAdmin() {
         // Read-only anonymous (the public-mirror pattern) is a WARN on its actual key.
         List<SecurityAdvisory> read = new SecurityPosture().advise(
-                config("jenreg.auth", "true", "jenreg.anonymous-rights", "repository:read",
-                        "jenreg.rate-limit", "600"));
-        SecurityAdvisory anonymous = read.stream().filter(a -> a.id().equals("jenreg.anonymous.enabled"))
+                config("jenrepo.auth", "true", "jenrepo.anonymous-rights", "repository:read",
+                        "jenrepo.rate-limit", "600"));
+        SecurityAdvisory anonymous = read.stream().filter(a -> a.id().equals("jenrepo.anonymous.enabled"))
                 .findFirst().orElseThrow();
         assertThat(anonymous.severity()).isEqualTo(Severity.WARN);
         assertThat(anonymous.scope()).isEqualTo(Scope.DEPLOYMENT);
 
         // Anonymous write (or any manage/admin) escalates to a governance-level CRITICAL.
         List<String> writeIds = new SecurityPosture().advise(
-                        config("jenreg.auth", "true", "jenreg.anonymous-rights",
-                                "repository:read,repository:write", "jenreg.rate-limit", "600"))
+                        config("jenrepo.auth", "true", "jenrepo.anonymous-rights",
+                                "repository:read,repository:write", "jenrepo.rate-limit", "600"))
                 .stream().map(SecurityAdvisory::id).toList();
-        assertThat(writeIds).contains("jenreg.anonymous.write").doesNotContain("jenreg.anonymous.enabled");
+        assertThat(writeIds).contains("jenrepo.anonymous.write").doesNotContain("jenrepo.anonymous.enabled");
         SecurityAdvisory writeAdvisory = new SecurityPosture().advise(
-                        config("jenreg.auth", "true", "jenreg.anonymous-rights", "manage:read",
-                                "jenreg.rate-limit", "600"))
-                .stream().filter(a -> a.id().equals("jenreg.anonymous.write")).findFirst().orElseThrow();
+                        config("jenrepo.auth", "true", "jenrepo.anonymous-rights", "manage:read",
+                                "jenrepo.rate-limit", "600"))
+                .stream().filter(a -> a.id().equals("jenrepo.anonymous.write")).findFirst().orElseThrow();
         assertThat(writeAdvisory.severity()).as("any manage/admin anonymous right is CRITICAL")
                 .isEqualTo(Severity.CRITICAL);
     }
@@ -169,13 +169,13 @@ final class SecurityPostureTest {
     @Test
     void theCoreSeederIsSilentOnAnonymousRightsWhenUnsetOrWhenTheInstanceIsAlreadyOpen() {
         // Unset (the default) => no anonymous advisory at all.
-        assertThat(new SecurityPosture().advise(config("jenreg.rate-limit", "600")))
-                .noneMatch(a -> a.id().startsWith("jenreg.anonymous"));
-        // Under auth=false the instance is already fully open (jenreg.auth.open owns that), so anonymous-rights is
+        assertThat(new SecurityPosture().advise(config("jenrepo.rate-limit", "600")))
+                .noneMatch(a -> a.id().startsWith("jenrepo.anonymous"));
+        // Under auth=false the instance is already fully open (jenrepo.auth.open owns that), so anonymous-rights is
         // redundant and raises no separate anonymous advisory.
-        assertThat(new SecurityPosture().advise(config("jenreg.auth", "false",
-                "jenreg.anonymous-rights", "repository:read", "jenreg.rate-limit", "600")))
-                .noneMatch(a -> a.id().startsWith("jenreg.anonymous"));
+        assertThat(new SecurityPosture().advise(config("jenrepo.auth", "false",
+                "jenrepo.anonymous-rights", "repository:read", "jenrepo.rate-limit", "600")))
+                .noneMatch(a -> a.id().startsWith("jenrepo.anonymous"));
     }
 
     @Test
@@ -185,10 +185,10 @@ final class SecurityPostureTest {
         // firing advisories read, assert the seeds actually fired (so the check is not vacuous), then prove no
         // advisory's rendered text - title, why, fix, AND the recommended settingValue - repeats the sentinel.
         Configuration config = config(
-                "jenreg.auth", "false",
-                "jenreg.ui.admins", "github/SECRETVALUE",
+                "jenrepo.auth", "false",
+                "jenrepo.ui.admins", "github/SECRETVALUE",
                 "spring.profiles.active", "SECRETVALUE,dev",
-                "jenreg.demo", "true");
+                "jenrepo.demo", "true");
         List<SecurityAdvisory> advisories = new SecurityPosture().advise(config);
         assertThat(advisories).as("the seeds fired, so the doesNotContain checks below are non-vacuous").isNotEmpty();
         for (SecurityAdvisory advisory : advisories) {

@@ -17,7 +17,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 /**
  * The collector's grace ships at two hours, and a deployment that names none gets it.
  *
- * <p>Every suite that reclaims inside its own window names {@code jenreg.gc.grace=PT0S}, as it should, which leaves
+ * <p>Every suite that reclaims inside its own window names {@code jenrepo.gc.grace=PT0S}, as it should, which leaves
  * the shipped value the one no suite reads - so this one does. The catalogue leg reads what the settings screen and
  * the generated reference render; the second leg has the content, asking a collector resolved with nothing set to
  * run its confirming pass over a blob condemned a moment ago, and requiring it spared - with the dial at zero, as the
@@ -48,7 +48,7 @@ class GcGraceDefaultTest {
 
     private static boolean confirmingPassDeletes(Path at, UnaryOperator<String> config) throws IOException {
         ArtifactStore store = ArtifactStoreProvider.resolve("filesystem",
-                key -> "jenreg.filesystem.root".equals(key) ? at.toString() : null);
+                key -> "jenrepo.filesystem.root".equals(key) ? at.toString() : null);
         String orphan = new Publication(store).storeBlob(
                 new ByteArrayInputStream("unreferenced".getBytes(StandardCharsets.UTF_8)));
         GarbageCollector collector = GarbageCollectorProvider.resolve(config).orElseThrow();

@@ -52,7 +52,7 @@ public final class ComplianceScreen implements PublishInterceptor {
     /** The JVM-wide live gate the ServiceLoader-constructed screen reads, set by the deployment at boot. */
     private static final AtomicReference<Supplier<ComplianceGate>> LIVE = new AtomicReference<>();
 
-    /** A JVM-wide sink the deployment wires so every committed verdict is counted ({@code jenreg.gate.verdicts}),
+    /** A JVM-wide sink the deployment wires so every committed verdict is counted ({@code jenrepo.gate.verdicts}),
      *  across EVERY publish path (the deploy, staging, batch) - not just the deploy controller's own
      *  observation. Registry-free: the sink is a plain callback and the Micrometer counter lives in the distribution,
      *  so the gate module stays free of any metrics dependency. */
@@ -74,13 +74,13 @@ public final class ComplianceScreen implements PublishInterceptor {
     private static final AtomicReference<FeedMissListener> FEED_MISSES = new AtomicReference<>();
 
     /** A registry-free sink the deployment wires so an artifact an inspector could not parse is counted
-     *  ({@code jenreg.gate.unparseable} tagged by format) rather than only logged - the make-errors-visible
+     *  ({@code jenrepo.gate.unparseable} tagged by format) rather than only logged - the make-errors-visible
      *  diagnostic. Registry-free like {@link #VERDICTS}: the Micrometer counter lives in the distribution. */
     private static final AtomicReference<UnparseableListener> UNPARSEABLE_METER = new AtomicReference<>();
 
     /** Whether a blobs-namespace format that resolves no reverse hold mapping for the publish it just laid out
      *  {@code throws} (failing the publish) or only alarms. The deployment wires this from
-     *  {@code jenreg.strict-hold-mapping} (default false): production stays alarm-not-abort so one broken
+     *  {@code jenrepo.strict-hold-mapping} (default false): production stays alarm-not-abort so one broken
      *  format cannot DoS publishes (the {@code hold.unenforceable} gauge reasoning), while every test that publishes
      *  through a format flips
      *  it on so a broken mapping fails on the FIRST publish in CI rather than surfacing in a later audit. Unset (the
@@ -88,8 +88,8 @@ public final class ComplianceScreen implements PublishInterceptor {
     private static final AtomicReference<BooleanSupplier> STRICT_HOLD_MAPPING = new AtomicReference<>();
 
     /** A registry-free sink the deployment wires so a publish whose blobs-namespace reverse mapping does not resolve
-     *  the artifact just served is counted ({@code jenreg.publish.holdmapping.broken} tagged by ecosystem) - a
-     *  wiring-regression alarm, the publish-time sibling of the sweep's {@code jenreg.vulnerabilities.hold.unenforceable}
+     *  the artifact just served is counted ({@code jenrepo.publish.holdmapping.broken} tagged by ecosystem) - a
+     *  wiring-regression alarm, the publish-time sibling of the sweep's {@code jenrepo.vulnerabilities.hold.unenforceable}
      *  gauge. Registry-free like {@link #VERDICTS}: the Micrometer meter lives in the distribution, so the gate module
      *  stays free of any metrics dependency. */
     private static final AtomicReference<HoldMappingBrokenListener> HOLD_MAPPING_BROKEN = new AtomicReference<>();
@@ -262,7 +262,7 @@ public final class ComplianceScreen implements PublishInterceptor {
     }
 
     /** Wire whether the publish-time hold-mapping round-trip check ({@link #onPublished}) throws on a break: the
-     *  deployment supplies {@code jenreg.strict-hold-mapping} through {@code LiveConfig}, so the value is
+     *  deployment supplies {@code jenrepo.strict-hold-mapping} through {@code LiveConfig}, so the value is
      *  read from the effective settings the same way the gate dials are (default false in production, on in the test
      *  config). Closing the returned handle retires the wiring (only if it is still the current one). */
     public static AutoCloseable strictHoldMapping(BooleanSupplier strict) {
@@ -687,7 +687,7 @@ public final class ComplianceScreen implements PublishInterceptor {
      *  coordinate - so it must never read as a clean admit (no silent fallback on a correctness-bearing path). The
      *  upload is HELD in quarantine unconditionally, never admitted: "could not fully screen ⇒ do not serve". The hold
      *  is made visible rather than a silent reject - a WARNING naming the path is logged, the unparseable meter is
-     *  bumped ({@code jenreg.gate.unparseable}, tagged by format), and the parse-failure reason is stashed so {@link
+     *  bumped ({@code jenrepo.gate.unparseable}, tagged by format), and the parse-failure reason is stashed so {@link
      *  #committed} names it in the quarantine log (which artifact, which inspector's message, why) and records a
      *  distinct {@link Finding.Kind#INSPECTION} finding on the coordinate - so an operator sees a scoped reason for the
      *  hold and can investigate or release it. A real artifact that trips a stricter parser is held by design (the owner

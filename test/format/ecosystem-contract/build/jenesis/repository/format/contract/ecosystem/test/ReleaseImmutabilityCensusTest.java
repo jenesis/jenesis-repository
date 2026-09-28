@@ -70,7 +70,7 @@ class ReleaseImmutabilityCensusTest {
             return;   // held to its refusal, one upload after another and racing, by ReleaseImmutabilityTest
         }
         ArtifactStore store = ArtifactStoreProvider.resolve("filesystem",
-                key -> "jenreg.filesystem.root".equals(key) ? root.toString() : null);
+                key -> "jenrepo.filesystem.root".equals(key) ? root.toString() : null);
         // A format that parses what it is sent publishes a real package, and its fixture builds the same version with
         // other bytes; any other takes the bytes it is given.
         ContractExchange.recordWrites();

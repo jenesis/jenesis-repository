@@ -151,7 +151,7 @@ public final class KevEnforceTask implements MaintenanceTask {
             }
         });
         cadence.completed(context.now(), true);
-        context.gauge("jenreg.vulnerabilities.hold.unenforceable",
+        context.gauge("jenrepo.vulnerabilities.hold.unenforceable",
                 "Released coordinates a retroactive hold would cover but cannot enforce because the blobs-namespace "
                         + "format resolved no served path or content hash - a wiring-regression alarm",
                 Map.of("tenant", context.tenant(), "repository", context.repository(), "sweep", "kev"),
@@ -160,7 +160,7 @@ public final class KevEnforceTask implements MaintenanceTask {
             LOGGER.warn("Repository {}/{} is retroactively holding {} known-exploited release(s)",
                     context.tenant(), context.repository(), held[0]);
         }
-        context.gauge("jenreg.vulnerabilities.kev.held",
+        context.gauge("jenrepo.vulnerabilities.kev.held",
                 "Released coordinates a repository is retroactively holding because their CVE is on a "
                         + "known-exploited catalogue",
                 Map.of("tenant", context.tenant(), "repository", context.repository()), held[0]);

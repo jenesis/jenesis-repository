@@ -75,7 +75,7 @@ Configuration
 -------------
 
 The server binds all of its configuration through Spring Boot `@ConfigurationProperties`
-(`jenreg.cache.*`, plus `jenreg.s3.*` / `jenreg.azure-blob.*` for the cloud backends). Each property
+(`jenrepo.cache.*`, plus `jenrepo.s3.*` / `jenrepo.azure-blob.*` for the cloud backends). Each property
 also accepts the relaxed-binding environment variable below, which is how the Docker images configure
 it; the admin (ui) image reads the shared concepts (root, backend, eviction) from the very same
 variables:
@@ -83,20 +83,20 @@ variables:
 | variable                 | default      | meaning                                                            |
 | ------------------------ | ------------ | ------------------------------------------------------------------ |
 | `PORT`                   | `8080`       | listening port                                                     |
-| `JENREG_CACHE_ROOT`     | `data`       | storage directory holding the tenant folders; mount a volume here |
-| `JENREG_CACHE_MAX_BYTES`| `2147483648` | per-entry upload cap (2 GiB)                                        |
-| `JENREG_CACHE_PROJECTS` | `256`        | project configurations kept in the in-memory LRU cache             |
-| `JENREG_CACHE_REAPER`   | `PT1H`       | interval of the `ttl` reaper sweep (ISO-8601 duration; `0`/`off` disables it) |
-| `JENREG_CACHE_MIN_FREE` | *(unset)*    | minimum free **bytes** on the volume; below it a global sweep across all projects reclaims space (`0`/unset = off) |
-| `JENREG_CACHE_MIN_FREE_PERCENT` | *(unset)* | minimum free **percent** of the volume (0-100); below it the same global sweep runs (`0`/unset = off) |
-| `JENREG_CACHE_DEFAULT_PROJECT`  | `default` | project assumed when the `Jenesis-Cache-Project` header is absent |
-| `JENREG_CACHE_PROJECT_REQUIRED` | `false`   | require the project header (disable the fallback above); a missing one is then `400` |
-| `JENREG_CACHE_KEY`              | *(unset)* | a single **trial** bootstrap key: a request presenting exactly it gets full read+write on the default tenant, with no stored credential (logged with a strong warning) |
-| `JENREG_CACHE_DEFAULT_TENANT`   | `default` | the tenant the bootstrap key grants |
+| `JENREPO_CACHE_ROOT`     | `data`       | storage directory holding the tenant folders; mount a volume here |
+| `JENREPO_CACHE_MAX_BYTES`| `2147483648` | per-entry upload cap (2 GiB)                                        |
+| `JENREPO_CACHE_PROJECTS` | `256`        | project configurations kept in the in-memory LRU cache             |
+| `JENREPO_CACHE_REAPER`   | `PT1H`       | interval of the `ttl` reaper sweep (ISO-8601 duration; `0`/`off` disables it) |
+| `JENREPO_CACHE_MIN_FREE` | *(unset)*    | minimum free **bytes** on the volume; below it a global sweep across all projects reclaims space (`0`/unset = off) |
+| `JENREPO_CACHE_MIN_FREE_PERCENT` | *(unset)* | minimum free **percent** of the volume (0-100); below it the same global sweep runs (`0`/unset = off) |
+| `JENREPO_CACHE_DEFAULT_PROJECT`  | `default` | project assumed when the `Jenesis-Cache-Project` header is absent |
+| `JENREPO_CACHE_PROJECT_REQUIRED` | `false`   | require the project header (disable the fallback above); a missing one is then `400` |
+| `JENREPO_CACHE_KEY`              | *(unset)* | a single **trial** bootstrap key: a request presenting exactly it gets full read+write on the default tenant, with no stored credential (logged with a strong warning) |
+| `JENREPO_CACHE_DEFAULT_TENANT`   | `default` | the tenant the bootstrap key grants |
 
 By default a request without a `Jenesis-Cache-Project` header uses project `default` (rename it with
-`JENREG_CACHE_DEFAULT_PROJECT`, or require the header with `JENREG_CACHE_PROJECT_REQUIRED`). A key is
-always required. For a quick trial, `JENREG_CACHE_KEY=<secret>` makes the server accept that one key
+`JENREPO_CACHE_DEFAULT_PROJECT`, or require the header with `JENREPO_CACHE_PROJECT_REQUIRED`). A key is
+always required. For a quick trial, `JENREPO_CACHE_KEY=<secret>` makes the server accept that one key
 (compared in constant time) as a full-access credential on the default tenant, so a single client can
 use the cache without provisioning anything - it logs a prominent warning that this is for trials only
 and that real keys should be issued per credential through the admin console. Normal
@@ -105,7 +105,7 @@ and that real keys should be issued per credential through the admin console. No
 Everything else is per tenant and per project. Under the root, each tenant is a
 folder; inside it each project holds its entries plus its own settings documents, and the
 tenant's credentials live under `.users/`. A project's policy is read on first use and kept
-in an LRU cache for the policy window (`jenreg.cache.ttl`), and grants are read through the
+in an LRU cache for the policy window (`jenrepo.cache.ttl`), and grants are read through the
 credential space's cache - so revoking a grant takes effect at once without re-reading
 every document on every request:
 
@@ -140,12 +140,12 @@ project wizard, `/api/cache/projects/<name>/settings` and `jenesis-repo settings
 
 `project-size`/`project-lru` eviction is reactive, triggered on a store that pushes the project over
 its cap. `project-ttl` eviction is periodic: a single reaper thread sweeps every project root each
-`JENREG_CACHE_REAPER` interval and drops entries idle longer than that project's lifetime (a GET or
+`JENREPO_CACHE_REAPER` interval and drops entries idle longer than that project's lifetime (a GET or
 HEAD touch counts as use, so an actively-read entry never ages out).
 
 Disk headroom is a property of the shared volume, not any one project, so it is configured
-server-wide (the env vars above) rather than per project. When `JENREG_CACHE_MIN_FREE` (bytes) or
-`JENREG_CACHE_MIN_FREE_PERCENT` is set and the volume drops below either, a **global**
+server-wide (the env vars above) rather than per project. When `JENREPO_CACHE_MIN_FREE` (bytes) or
+`JENREPO_CACHE_MIN_FREE_PERCENT` is set and the volume drops below either, a **global**
 least-recently-used sweep across every project reclaims space until both floors are satisfied - on
 each reaper tick and again before a store, where a PUT that still cannot fit is refused with `507
 Insufficient Storage`. This is the safety net against a full disk: per-project size and lifetime caps
@@ -163,7 +163,7 @@ Deployment
 **The cache is not deployed on its own.** There is no cache-only image: the two images this
 product publishes is the bundle, and the cache is a
 capability inside them. A deployment that wants only the build cache runs the ordinary node
-with every format switched off - `JENREG_<FORMAT>=false` for each - and that is a supported
+with every format switched off - `JENREPO_<FORMAT>=false` for each - and that is a supported
 state rather than a misconfiguration: with no format enabled the artifact half simply is not
 there, the node is healthy, and a request to `/repository/...` is unclaimed rather than an
 error. `ServerToggleE2ETest` holds that, enumerating the formats from the SPI so a format
@@ -185,7 +185,7 @@ Security
 - Serve over HTTPS in production - the key is a bearer credential. TLS is terminated
   where the node's is, because it is the same node; the client refuses to send the key
   over plain http to anything but loopback (override only for testing with
-  `-Djenreg.cache.insecure=true`).
+  `-Djenrepo.cache.insecure=true`).
 - Treat keys like API tokens: mint one credential per holder (in the admin console),
   grant it `read` or `read,write` on the projects it needs, and revoke by deleting the
   credential (it takes effect on the next request). Only the key's SHA-256 is stored,

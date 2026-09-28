@@ -24,7 +24,7 @@ class FormatDiscoveryTest {
         assertThat(RepositoryFormat.installed()).extracting(RepositoryFormat::name).contains("maven");
         assertThat(RepositoryFormat.installed("maven")).isPresent();
 
-        Features.configure(key -> "jenreg.maven".equals(key) ? "false" : null);
+        Features.configure(key -> "jenrepo.maven".equals(key) ? "false" : null);
 
         assertThat(RepositoryFormat.declared()).as("the catalogue still lists it").extracting(RepositoryFormat::name).contains("maven");
         assertThat(RepositoryFormat.installed()).as("nothing serves it").extracting(RepositoryFormat::name).doesNotContain("maven");

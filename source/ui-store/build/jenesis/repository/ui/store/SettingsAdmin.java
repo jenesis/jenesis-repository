@@ -153,7 +153,7 @@ public class SettingsAdmin {
      * not a setting - an upstream credential, a purge - is recorded through {@code audit}, attributed to the
      * {@code actor} under the {@code current} tenant, and a settings change the editor records the same way.
      * {@code credentialConfig} is what the upstream-credential source reads its deploy-time bootstrap keys from -
-     * notably {@code secrets-key} ({@code JENREG_SECRETS_KEY}), the master key that envelope-encrypts a stored
+     * notably {@code secrets-key} ({@code JENREPO_SECRETS_KEY}), the master key that envelope-encrypts a stored
      * credential at rest - so a credential set through the console is encrypted under the same key as through the
      * API. A fixture that passes no config resolves an unconfigured cipher, so any credential write it makes is
      * refused - as at rest it must be.
@@ -287,7 +287,7 @@ public class SettingsAdmin {
 
     /** The security-posture screen's model for a named tenant: every potentially-unsafe configuration a
      *  {@code ServiceLoader}-discovered {@code SafetyAdvisor} raises against the effective configuration, each naming
-     *  <em>why</em> it is unsafe, the exact {@code jenreg.*} key/value that fixes it and a docs link, severity-sorted
+     *  <em>why</em> it is unsafe, the exact {@code jenrepo.*} key/value that fixes it and a docs link, severity-sorted
      *  (critical first) and split by {@link ScopedPosture} into what this tenant's view may see.
      *
      *  <p>The effective configuration is the one that tenant's deployment would actually run with - the same chain
@@ -295,7 +295,7 @@ public class SettingsAdmin {
      *  <em>pin</em> over that tenant's document (for a {@link SettingsScopes#tenantOverridable} key only, so a
      *  deployment-wide dial can never pick up a tenant's value) over the deployment document over the
      *  {@code deployment} lookup the caller hands in ({@code environment::getProperty} from the console's Spring
-     *  layer). A non-{@code jenreg.} key ({@code spring.profiles.active}) is read straight off the deployment.
+     *  layer). A non-{@code jenrepo.} key ({@code spring.profiles.active}) is read straight off the deployment.
      *
      *  <p>Exactly one tenant's document is consulted, so a report collected here can carry a tenant-scoped row only
      *  about {@code tenant} - and {@link ScopedPosture} then renders only that tenant's rows, so the two scoping
@@ -346,13 +346,13 @@ public class SettingsAdmin {
     /** The uncached collection: one tenant's effective chain, evaluated by every discovered advisor and split into
      *  what that tenant's view may see. */
     private ScopedPosture collectPosture(String selected, UnaryOperator<String> deployment) throws IOException {
-        String prefix = "jenreg.";
+        String prefix = "jenrepo.";
         Properties stored = read();
         Properties overrides = selected.isEmpty() ? new Properties() : read(selected);
         Configuration base = Configuration.of(fullKey -> {
-            // The advisor asks by full key (jenreg.auth); the store is keyed by the bare key, so strip the
+            // The advisor asks by full key (jenrepo.auth); the store is keyed by the bare key, so strip the
             // prefix and walk the effective chain, falling back to the deployment lookup - and read a
-            // non-jenreg. key (spring.profiles.active) straight off the deployment.
+            // non-jenrepo. key (spring.profiles.active) straight off the deployment.
             if (fullKey.startsWith(prefix)) {
                 String key = fullKey.substring(prefix.length());
                 Optional<PinnedSettings.Pin> pin = pins.apply(key);

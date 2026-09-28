@@ -32,9 +32,9 @@ import build.jenesis.repository.store.OwnerOnly;
  *       <em>always</em> reclaimed - on success, on a budget refusal, and on a mid-stream error - so a crashed or
  *       refused request leaves no orphaned spool. A per-request spool is an {@link AutoCloseable}; the router closes it
  *       once the request is served (see {@link #acquire()}).</li>
- *   <li><b>Metrics.</b> It is its own {@link ObservabilitySource}: a bounded {@code jenreg.gateway.spool.bytes} gauge
- *       (spooled bytes vs the size budget - a used-vs-available signal), a bounded {@code jenreg.gateway.spool.count}
- *       gauge (spools in flight vs the concurrency budget) and a {@code jenreg.gateway.spool.exhausted} counter
+ *   <li><b>Metrics.</b> It is its own {@link ObservabilitySource}: a bounded {@code jenrepo.gateway.spool.bytes} gauge
+ *       (spooled bytes vs the size budget - a used-vs-available signal), a bounded {@code jenrepo.gateway.spool.count}
+ *       gauge (spools in flight vs the concurrency budget) and a {@code jenrepo.gateway.spool.exhausted} counter
  *       (budget-exhaustion events, each a 503). The store is its own source, reported from the context that built
  *       it, without touching a meter registry - as {@code RevalidatingFetcher} reports its cache gauge.</li>
  * </ul>
@@ -161,13 +161,13 @@ public final class SpoolStore implements ObservabilitySource {
         return new SpoolLease().root();
     }
 
-    /** Bytes currently spooled to temp files across every in-flight spool - the live {@code jenreg.gateway.spool.bytes}
+    /** Bytes currently spooled to temp files across every in-flight spool - the live {@code jenrepo.gateway.spool.bytes}
      *  gauge value. */
     public long bytesInFlight() {
         return bytesInFlight.get();
     }
 
-    /** Spools currently streaming a body - the live {@code jenreg.gateway.spool.count} gauge value. */
+    /** Spools currently streaming a body - the live {@code jenrepo.gateway.spool.count} gauge value. */
     public int activeSpools() {
         return activeSpools.get();
     }
@@ -180,17 +180,17 @@ public final class SpoolStore implements ObservabilitySource {
     @Override
     public List<Metric> metrics() {
         return List.of(
-                Metric.bounded("jenreg.gateway.spool.bytes",
+                Metric.bounded("jenrepo.gateway.spool.bytes",
                         "Untrusted-upstream bytes currently spooled to temp files while being fully screened, against "
                                 + "the in-flight spool size budget past which a further spool is refused with 503 - a "
                                 + "used-vs-available signal for how close the hardening proxy's pre-verdict staging is "
                                 + "to its disk ceiling.",
                         bytesInFlight.get(), budget.maxInFlightBytes(), "bytes"),
-                Metric.bounded("jenreg.gateway.spool.count",
+                Metric.bounded("jenrepo.gateway.spool.count",
                         "Spools in flight right now - untrusted bodies being staged and screened concurrently - "
                                 + "against the concurrency budget past which a further spool is refused with 503.",
                         activeSpools.get(), budget.maxConcurrentSpools(), ""),
-                Metric.counter("jenreg.gateway.spool.exhausted",
+                Metric.counter("jenrepo.gateway.spool.exhausted",
                         "Times a spool was refused because a budget - in-flight bytes or concurrency - was exhausted, "
                                 + "each answered to the client as a 503: resource pressure made visible rather than an "
                                 + "unbounded spool or a screening bypass.",
@@ -199,7 +199,7 @@ public final class SpoolStore implements ObservabilitySource {
 
     @Override
     public List<HealthCheck> healthChecks() {
-        return List.of(HealthCheck.up("jenreg.gateway.spool",
+        return List.of(HealthCheck.up("jenrepo.gateway.spool",
                 "The budgeted pre-verdict spool store is installed, staging untrusted upstream bodies to bounded, "
                         + "owner-only temp files for full screening before any byte is served."));
     }

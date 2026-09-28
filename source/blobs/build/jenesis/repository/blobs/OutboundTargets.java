@@ -18,7 +18,7 @@ import build.jenesis.repository.settings.PrivateHostGuard;
  * {@link ProxyLeg}'s contract clause 9 already names them, so they are the two methods here rather than two habits:
  * <ul>
  *   <li>{@link #configuredRefusal(URI, boolean)} - an <b>operator-configured</b> root: the proxy upstream itself and
- *       the Go checksum database ({@code jenreg.go.sumdb}). The operator chose the address, so the question is only
+ *       the Go checksum database ({@code jenrepo.go.sumdb}). The operator chose the address, so the question is only
  *       what this deployment will put on the wire to reach it. <b>The transport half only</b>, for a reason
  *       that has not changed: an internal, privately-addressed mirror is a legitimate and common deployment,
  *       and this value is also rendered on console GET paths where resolving a host would be an external lookup on a

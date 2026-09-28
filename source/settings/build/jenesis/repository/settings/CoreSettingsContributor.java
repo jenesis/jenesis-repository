@@ -110,6 +110,6 @@ public final class CoreSettingsContributor implements SettingsContributor {
      *  operator's choice of format opens - {@code format-upstream.maven}, {@code format-upstream.npm}. */
     @Override
     public Set<String> startupKeys() {
-        return Set.of("jenreg.format-upstream.*");
+        return Set.of("jenrepo.format-upstream.*");
     }
 }

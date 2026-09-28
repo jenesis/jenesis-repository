@@ -38,7 +38,7 @@ public class SpiCatalogController {
      *  with each module's effective installed / enabled state and its contributed settings - the same effective-value
      *  chain the modules screen shows, which is the chain {@link ModuleCapability#catalog} documents its lookup as and the
      *  chain the running server resolves a gate through: an operator's pin over the stored value over the
-     *  {@code jenreg.*} default. This read once resolved stored-over-environment and so reported a
+     *  {@code jenrepo.*} default. This read once resolved stored-over-environment and so reported a
      *  gated implementation as enabled off a stored value the pin above it makes inert. {@code version} lets a future
      *  shape change be detected. */
     @GetMapping("/api/admin/spi")

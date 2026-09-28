@@ -37,7 +37,7 @@ class StoreFindingsSectionTest {
     @BeforeEach
     void setUp() {
         store = ArtifactStoreProvider.resolve(
-                "filesystem", key -> "jenreg.filesystem.root".equals(key) ? root.toString() : null);
+                "filesystem", key -> "jenrepo.filesystem.root".equals(key) ? root.toString() : null);
         metadata = MetadataProvider.installed().over(store);
         findings = new StoreFindings(store, metadata);
     }

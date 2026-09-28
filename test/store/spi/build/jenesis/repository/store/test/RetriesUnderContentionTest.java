@@ -39,7 +39,7 @@ class RetriesUnderContentionTest {
     @ValueSource(ints = {2, 4, 8})
     void no_writer_gives_up_and_no_increment_is_lost(int nodes) throws Exception {
         ArtifactStore filesystem = ArtifactStoreProvider.resolve("filesystem",
-                        key -> "jenreg.filesystem.root".equals(key) ? root.toString() : null)
+                        key -> "jenrepo.filesystem.root".equals(key) ? root.toString() : null)
                 .scope("default").scope("releases");
         ArtifactStore store = FaultInjectingStore.wrap(filesystem).tracing((op, _) -> {
             if (op == Op.READ_VERSIONED || op == Op.WRITE_VERSIONED) {

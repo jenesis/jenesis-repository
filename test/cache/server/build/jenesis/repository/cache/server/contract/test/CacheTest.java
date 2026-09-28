@@ -71,15 +71,15 @@ public class CacheTest {
     }
 
     private ArtifactStore store() {
-        return ArtifactStoreProvider.resolve("filesystem", key -> "jenreg.filesystem.root".equals(key) ? root.toString() : null);
+        return ArtifactStoreProvider.resolve("filesystem", key -> "jenrepo.filesystem.root".equals(key) ? root.toString() : null);
     }
 
     private static double count(MeterRegistry registry, String outcome) {
-        return registry.get("jenreg.cache.requests").tags("tenant", "acme", "project", "demo", "outcome", outcome).counter().count();
+        return registry.get("jenrepo.cache.requests").tags("tenant", "acme", "project", "demo", "outcome", outcome).counter().count();
     }
 
     private Authorization authorization() {
-        return Authorization.enforcing(ArtifactStoreProvider.resolve("filesystem", cfgKey -> "jenreg.filesystem.root".equals(cfgKey) ? root.toString() : null));
+        return Authorization.enforcing(ArtifactStoreProvider.resolve("filesystem", cfgKey -> "jenrepo.filesystem.root".equals(cfgKey) ? root.toString() : null));
     }
 
     @Test
@@ -477,9 +477,9 @@ public class CacheTest {
         // can mint one - its made-up tenant name must never become a meter tag or a storage-scope map entry.
         assertThat(cache.resolve("demo", Authorization.mint("forged_tenant"), "aa", "01", false))
                 .isInstanceOf(Rejected.class);
-        assertThat(registry.find("jenreg.cache.requests").tags("tenant", "forged_tenant").counter())
+        assertThat(registry.find("jenrepo.cache.requests").tags("tenant", "forged_tenant").counter())
                 .as("an unauthenticated request's tenant is not trusted into the meter registry").isNull();
-        assertThat(registry.get("jenreg.cache.requests").tags("tenant", "none", "outcome", "forbidden")
+        assertThat(registry.get("jenrepo.cache.requests").tags("tenant", "none", "outcome", "forbidden")
                 .counter().count()).isEqualTo(1.0);
     }
 

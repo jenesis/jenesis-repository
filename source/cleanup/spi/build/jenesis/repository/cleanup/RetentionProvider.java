@@ -24,13 +24,13 @@ import build.jenesis.repository.store.Providers;
  *     {@link #resolve} alike: the cleanup and retention endpoints answer {@code 501} and the console hides the
  *     surface. {@code null} is never a legal return from {@link #name()}, {@link #create} or
  *     {@link #requiredConfig()}.</li>
- * <li><b>Selection failure.</b> An explicit {@code jenreg.retention=<name>} that no installed
+ * <li><b>Selection failure.</b> An explicit {@code jenrepo.retention=<name>} that no installed
  *     engine answers to - its module is off the path, its name is misspelled - or whose provider declines because
  *     its {@link #requiredConfig() required configuration} is unset throws {@link IllegalStateException} at
  *     resolution, naming the selection and the installed engine names. It does <em>not</em> degrade to
  *     no-retention: that would leave the endpoints answering {@code 501} while artifacts the operator meant to age
  *     out are held forever with nothing said. An explicit selection outranks the
- *     {@code jenreg.<name>=false} toggle; only an <em>unselected</em> deployment degrades to empty, and
+ *     {@code jenrepo.<name>=false} toggle; only an <em>unselected</em> deployment degrades to empty, and
  *     two <em>enabled</em> engines with no selection are ambiguous and throw rather than resolving by discovery
  *     order.</li>
  * <li><b>Tenant scoping.</b> The sweeper applies its plan through a repository's own inventory, so every
@@ -67,12 +67,12 @@ public interface RetentionProvider {
     }
 
     /** The configured engine, resolved through the shared {@link Providers#optionalUnique} policy: an explicit
-     *  {@code jenreg.retention=<name>} selects one by name and a selection nothing can honour
+     *  {@code jenrepo.retention=<name>} selects one by name and a selection nothing can honour
      *  <em>throws</em> rather than degrading to no-retention, a
-     *  {@code jenreg.<name>=false} or an unset {@link #requiredConfig()} switches one off, more than one
+     *  {@code jenrepo.<name>=false} or an unset {@link #requiredConfig()} switches one off, more than one
      *  enabled engine is ambiguous rather than a discovery-order winner, and only an <em>unselected</em> deployment
      *  with nothing enabled degrades to empty. */
-    /** The names of every installed retention engine - the keys {@code jenreg.<name>} switches off - for the
+    /** The names of every installed retention engine - the keys {@code jenrepo.<name>} switches off - for the
      *  settings catalogue to list. */
     static Set<String> installed() {
         return Providers.installedNames("retention",

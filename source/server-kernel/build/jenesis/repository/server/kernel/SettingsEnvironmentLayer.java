@@ -45,7 +45,7 @@ public final class SettingsEnvironmentLayer implements ApplicationListener<Appli
         ConfigurableEnvironment environment = event.getEnvironment();
         try {
             ArtifactStore store = ArtifactStoreProvider.resolve(
-                    environment.getProperty("jenreg.store", "filesystem"), environment::getProperty);
+                    environment.getProperty("jenrepo.store", "filesystem"), environment::getProperty);
             Map<String, Object> overrides = new HashMap<>();
             for (String child : store.list(SettingsDocuments.ROOT)) {
                 if (!child.endsWith(".json")) {
@@ -71,7 +71,7 @@ public final class SettingsEnvironmentLayer implements ApplicationListener<Appli
      *  another node's change to a key that is read through an {@link org.springframework.core.env.Environment} lookup
      *  - rather than the live {@link Settings} snapshot - within the refresh interval; the environment is mutable at
      *  runtime, so the scheduled {@link SettingsRefresh} calls this after re-reading the store. Keys are namespaced
-     *  under {@code jenreg.} exactly as the boot-time seeding does, and the source is re-inserted in place,
+     *  under {@code jenrepo.} exactly as the boot-time seeding does, and the source is re-inserted in place,
      *  so the precedence rule (stored below an operator's pins, above the packaged defaults) holds on every refresh and
      *  a cleared key stops shadowing the packaged default rather than leaving a stale value behind. */
     public static void refresh(ConfigurableEnvironment environment, Map<String, String> overrides) {

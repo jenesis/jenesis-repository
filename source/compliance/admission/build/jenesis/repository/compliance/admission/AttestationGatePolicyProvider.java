@@ -13,7 +13,7 @@ import build.jenesis.repository.compliance.Verdict;
  * {@code provenance-admission-action} (default {@link Verdict#QUARANTINE}), and builds an {@link AttestationPolicy}
  * applied identically on both legs - a mis-attested upstream pull-through is the same risk as a first-party upload, so
  * it is not softened for the proxy. The dimension is named {@code provenance-admission}, so
- * {@code jenreg.provenance-admission=false} turns it off; it also self-disables when no trust anchor is
+ * {@code jenrepo.provenance-admission=false} turns it off; it also self-disables when no trust anchor is
  * configured ({@link #requiredConfig()}), because without a key there is nothing to verify a signature against and an
  * attestation's builder / source claims would be self-asserted. A key or verdict that does not parse throws, so a
  * live settings rebuild can reject and roll back.

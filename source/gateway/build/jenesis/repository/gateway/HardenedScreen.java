@@ -362,7 +362,7 @@ public final class HardenedScreen {
     }
 
     /** Immutable-coordinate drift alarm events (each a refused re-fetch of an immutable coordinate whose bytes changed
-     *  under it) since the gateway started - the loud {@code jenreg.gateway.hardened.drift} counter. Static so a
+     *  under it) since the gateway started - the loud {@code jenrepo.gateway.hardened.drift} counter. Static so a
      *  per-request screen still contributes to the one gateway-wide alarm the {@link HardeningObservability} reports. */
     private static final AtomicLong DRIFT_EVENTS = new AtomicLong();
 
@@ -708,7 +708,7 @@ public final class HardenedScreen {
     }
 
     /** Refuse an immutable-coordinate re-fetch whose bytes drifted from the pinned baseline, and raise the loud drift
-     *  ALARM: a {@code WARNING} log, the {@code jenreg.gateway.hardened.drift} counter, and a durable
+     *  ALARM: a {@code WARNING} log, the {@code jenrepo.gateway.hardened.drift} counter, and a durable
      *  {@link build.jenesis.repository.gate.QuarantineLog} {@code REJECT} row - never silently serving the changed
      *  bytes. The baseline verdict is left untouched so the swapped bytes stay refused on every subsequent re-fetch. */
     private Optional<ProxyFormat.Download> driftRefuse(String path, String digest, VerdictSection.Recorded baseline)

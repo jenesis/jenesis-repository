@@ -25,7 +25,7 @@ import build.jenesis.repository.store.Durations;
  * alike; a large artifact's body transfer is not clipped by it, and a body that ends short of its declared
  * {@code Content-Length} surfaces as an {@link IOException} on the read (buffered) or on the stream the caller copies
  * into the store (streamed), so a truncated response is never written as a complete cached artifact. The timeout
- * defaults to a minute and is overridable with the {@code jenreg.proxy.request-timeout} system property, a duration
+ * defaults to a minute and is overridable with the {@code jenrepo.proxy.request-timeout} system property, a duration
  * in the deployment's one grammar ({@code PT30S} or {@code 30s}).
  *
  * <p>Redirects are followed manually rather than by the JDK client's automatic {@code NORMAL} policy, because that
@@ -76,7 +76,7 @@ public final class HttpFetcher implements ProxyFormat.Fetcher {
      *  loopback fixture. */
     private final Predicate<String> blockedRedirectHost;
 
-    /** The default fetcher: a per-request timeout from {@code jenreg.proxy.request-timeout}, or one minute. */
+    /** The default fetcher: a per-request timeout from {@code jenrepo.proxy.request-timeout}, or one minute. */
     public HttpFetcher() {
         this(requestTimeout());
     }
@@ -251,7 +251,7 @@ public final class HttpFetcher implements ProxyFormat.Fetcher {
      *  ProxySettingsContributor#FLOOR_KEY}, else the client's own; a value that does not parse, or is negative, is the
      *  client's own rather than none. */
     static long throughputFloor() {
-        String configured = Features.lookup().apply("jenreg." + ProxySettingsContributor.FLOOR_KEY);
+        String configured = Features.lookup().apply("jenrepo." + ProxySettingsContributor.FLOOR_KEY);
         if (configured == null || configured.isBlank()) {
             return ScreenedHttpClient.THROUGHPUT_FLOOR;
         }
@@ -266,7 +266,7 @@ public final class HttpFetcher implements ProxyFormat.Fetcher {
     /** The deadline on one upstream fetch, as the operator set it now: {@link ProxySettingsContributor#DEADLINE_KEY},
      *  else none; a value that does not parse is none, as the default is, rather than a guess at what was meant. */
     static Duration deadline() {
-        String configured = Features.lookup().apply("jenreg." + ProxySettingsContributor.DEADLINE_KEY);
+        String configured = Features.lookup().apply("jenrepo." + ProxySettingsContributor.DEADLINE_KEY);
         if (configured == null || configured.isBlank()) {
             return Duration.ZERO;
         }
@@ -277,10 +277,10 @@ public final class HttpFetcher implements ProxyFormat.Fetcher {
         }
     }
 
-    /** The configured per-request timeout: {@code jenreg.proxy.request-timeout} ({@code PT30S}, {@code 30s}), or a
+    /** The configured per-request timeout: {@code jenrepo.proxy.request-timeout} ({@code PT30S}, {@code 30s}), or a
      *  minute. */
     private static Duration requestTimeout() {
-        String value = System.getProperty("jenreg.proxy.request-timeout");
+        String value = System.getProperty("jenrepo.proxy.request-timeout");
         return value == null || value.isBlank() ? Duration.ofSeconds(60) : Durations.parse(value);
     }
 

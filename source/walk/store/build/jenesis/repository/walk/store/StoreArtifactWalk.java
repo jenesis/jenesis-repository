@@ -34,16 +34,16 @@ import build.jenesis.repository.walk.WalkSegment;
  * cursor: node death costs at most one checkpoint stride of re-visits, never a restart.
  *
  * <p>The segment plan is static per pass: each root's children are paged up to a planning cap and packed into
- * contiguous ranges toward the {@code jenreg.walk.segments} target; a root whose fan-out exceeds the cap and whose
+ * contiguous ranges toward the {@code jenrepo.walk.segments} target; a root whose fan-out exceeds the cap and whose
  * sampled children are all long lowercase hex (the content-addressed {@code blobs/} namespace) is cut by leading hex
  * byte instead - uniform by construction, with no listing at all - and any other over-cap root conservatively stays
  * one segment. Adaptive mid-pass splitting is deliberately out of scope: splitting a claimed range safely needs a
  * two-object CAS the store does not have.
  *
  * <p>What a walk sees is recorded node-wide ({@code WalkRecord}), not on the instance, and the discovered
- * {@code ArtifactWalkObservability} reports it: {@code jenreg.walk.segments}, the pass last joined or finished as done
- * segments against its segment count; {@code jenreg.walk.resumes}, the segments this node took over from an expired
- * holder; and {@code jenreg.walk.pass}, that pass's generation and state. A walk is resolved wherever one is asked
+ * {@code ArtifactWalkObservability} reports it: {@code jenrepo.walk.segments}, the pass last joined or finished as done
+ * segments against its segment count; {@code jenrepo.walk.resumes}, the segments this node took over from an expired
+ * holder; and {@code jenrepo.walk.pass}, that pass's generation and state. A walk is resolved wherever one is asked
  * for, so an instance's own figures would restart at every resolve. Pass state itself stays durable in the walked
  * store; a node that has never walked reports nothing.
  */
@@ -264,7 +264,7 @@ public final class StoreArtifactWalk implements ArtifactWalk {
             }
             String cursor = stale ? null : segment.cursor();
             // A same-generation CLAIMED segment that reached here is an expired holder's (a live one was skipped
-            // above): reclaiming it is a takeover resuming from its committed cursor, the jenreg.walk.resumes
+            // above): reclaiming it is a takeover resuming from its committed cursor, the jenrepo.walk.resumes
             // signal. A pending or stale-generation segment is a fresh claim, not a resume.
             boolean takeover = !stale && segment.state() == WalkSegment.State.CLAIMED;
             byte[] content = Documents.bytes(serialize(manifest.generation(), index, manifest.ranges().get(index),

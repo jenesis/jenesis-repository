@@ -91,7 +91,7 @@ class SchedulerHostContractTest {
     @BeforeEach
     void setUp() throws IOException {
         store = ArtifactStoreProvider.resolve("filesystem",
-                key -> "jenreg.filesystem.root".equals(key) ? root.toString() : null);
+                key -> "jenrepo.filesystem.root".equals(key) ? root.toString() : null);
         RepositoryProperties properties = new RepositoryProperties();
         properties.setProxyEnabled(false);
         LiveConfig live = new LiveConfig(new Settings(store), properties, AdvisorySource.none(), _ -> null);
@@ -138,7 +138,7 @@ class SchedulerHostContractTest {
         assertThat(sane.get()).as("the OTHER task ran - containment is per task, not per iteration").isPositive();
         assertThat(failures(scheduler, "hostile")).as("nothing was swallowed: the Error is counted for its task")
                 .isPositive();
-        assertThat(counter("hostile")).as("and on jenreg.maintenance.failures{task=hostile}").isPositive();
+        assertThat(counter("hostile")).as("and on jenrepo.maintenance.failures{task=hostile}").isPositive();
 
         long iterations = scheduler.worker().iterations();
         await(() -> scheduler.worker().iterations() > iterations,
@@ -298,7 +298,7 @@ class SchedulerHostContractTest {
     }
 
     private double counter(String task) {
-        Counter counter = registry.find("jenreg.maintenance.failures").tag("task", task).counter();
+        Counter counter = registry.find("jenrepo.maintenance.failures").tag("task", task).counter();
         return counter == null ? 0d : counter.count();
     }
 

@@ -14,7 +14,7 @@ import build.jenesis.repository.walk.WalkPass;
  * The torn-write reconcile as a listener of the one walk. A dangling pointer - one whose blob is gone, impossible
  * under the blob-before-pointer ordering and so a loud sign of corruption - is found by asking the pool whether the
  * blob a pointer names is stored, one probe per pointer; it is counted, warned about, and with
- * {@code jenreg.torn-write-apply} removed through the guarded delete. The judgement cannot be read off the
+ * {@code jenrepo.torn-write-apply} removed through the guarded delete. The judgement cannot be read off the
  * descriptor's size: the blob's length rides the pointer, so the size is the pointer's own and says nothing about the
  * pool, and a pointer whose blob had been deleted would never be flagged, every pointer reading as referenced. The
  * probe is the reconcile's own cost, paid only where the reconcile is
@@ -22,7 +22,7 @@ import build.jenesis.repository.walk.WalkPass;
  * pointer references - is judged at the end of the pass from two sets of hash prefixes, the pointers' and the
  * pool's, gathered from the pointer and blob streams in whichever order the walk delivers them; counted, never
  * removed, since reclaiming it is the collector's. The counts are on the observability report as
- * {@code jenreg.reconcile.torn.*}, summed over the last pass of every repository.
+ * {@code jenrepo.reconcile.torn.*}, summed over the last pass of every repository.
  *
  * <p>The sets are per store and per pass, eight bytes a hash, and whole only when one worker drove the whole
  * generation - a pass resumed by another worker after a crash sees a fragment, and says so by counting no orphans
@@ -30,7 +30,7 @@ import build.jenesis.repository.walk.WalkPass;
  */
 public final class TornWriteConsumer implements WalkConsumer {
 
-    /** The consumer's name: its toggle ({@code jenreg.torn-write}), its scenario, its settings row. */
+    /** The consumer's name: its toggle ({@code jenrepo.torn-write}), its scenario, its settings row. */
     public static final String NAME = "torn-write";
 
     /** The switch that turns flagging into removal. */
@@ -169,13 +169,13 @@ public final class TornWriteConsumer implements WalkConsumer {
                 orphans += result.orphans();
             }
             return List.of(
-                    Metric.gauge("jenreg.reconcile.torn.dangling", "Pointers resolving to a missing blob found by the "
+                    Metric.gauge("jenrepo.reconcile.torn.dangling", "Pointers resolving to a missing blob found by the "
                             + "last walk of each repository (impossible under blob-before-pointer ordering, so a loud "
                             + "signal of corruption).", dangling, "pointers"),
-                    Metric.gauge("jenreg.reconcile.torn.removed", "Dangling pointers removed by the last walk of each "
-                            + "repository (zero on a dry run; removal needs jenreg.torn-write-apply).", removed,
+                    Metric.gauge("jenrepo.reconcile.torn.removed", "Dangling pointers removed by the last walk of each "
+                            + "repository (zero on a dry run; removal needs jenrepo.torn-write-apply).", removed,
                             "pointers"),
-                    Metric.gauge("jenreg.reconcile.torn.orphans", "Orphan blobs confirmed by the last walk of each "
+                    Metric.gauge("jenrepo.reconcile.torn.orphans", "Orphan blobs confirmed by the last walk of each "
                             + "repository - stored, referenced by no pointer, left to the garbage collector.", orphans,
                             "blobs"));
         }

@@ -24,7 +24,7 @@ class ImportSourceDiscoveryTest {
         assertThat(ImportSourceProvider.declared()).extracting(ImportSourceProvider::name).contains("nexus", "artifactory", "maven");
         assertThat(ImportSourceProvider.installed("nexus", key -> null)).isPresent();
 
-        Features.configure(key -> "jenreg.nexus".equals(key) ? "false" : null);
+        Features.configure(key -> "jenrepo.nexus".equals(key) ? "false" : null);
 
         assertThat(ImportSourceProvider.declared()).extracting(ImportSourceProvider::name).contains("nexus");
         assertThat(ImportSourceProvider.installed()).extracting(ImportSourceProvider::name).doesNotContain("nexus").contains("artifactory");

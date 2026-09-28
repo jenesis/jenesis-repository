@@ -20,7 +20,7 @@ import org.springframework.security.web.authentication.WebAuthenticationDetails;
  * {@link UsernamePasswordAuthenticationToken} carrying the principal's authorities - so every per-tenant rule
  * ({@code TenantAuthorization} over {@code Memberships}) applies to
  * it unchanged, with no parallel authorization path. Three key sources: the env bootstrap admin key
- * ({@code JENREG_UI_ADMIN_KEY}, full super-admin over every tenant), the {@link FirstRunKey} a deployment nobody can
+ * ({@code JENREPO_UI_ADMIN_KEY}, full super-admin over every tenant), the {@link FirstRunKey} a deployment nobody can
  * sign in to yet prints at start (the same session, for its hour and until an administrator exists), and the
  * admin-issued {@link KeyLoginKeys} (a principal signed in at {@code ROLE_USER}, its tenant role resolved per request
  * from the membership file the key was bound to). Keys are matched only by their one-way hash - the admin key in constant time, an issued key by hash lookup

@@ -44,7 +44,7 @@ import org.springframework.web.context.WebApplicationContext;
  * artifact store purely to borrow its file-shaped API. Nothing moved; the borrowed name went.
  *
  * <p>Building the first over {@code repositoryStore} rather than resolving it separately also puts it behind the
- * same {@code jenreg.read-only} choke point the repository server uses, which a separately-resolved root silently
+ * same {@code jenrepo.read-only} choke point the repository server uses, which a separately-resolved root silently
  * bypassed.
  */
 @Configuration

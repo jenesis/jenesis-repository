@@ -92,14 +92,14 @@ public class CliDispatcherTest {
                 .extensions(new Dispatcher()));
         server.start();
         server.stubFor(any(anyUrl()).willReturn(aResponse().withTransformers("cli-dispatch")));
-        System.setProperty("JENREG_CLI_HOME", home.toString());
+        System.setProperty("JENREPO_CLI_HOME", home.toString());
         new Session(URI.create("http://localhost:" + server.port()), "jenk_test").save(home);
     }
 
     @AfterAll
     public void tearDown() {
         server.stop();
-        System.clearProperty("JENREG_CLI_HOME");
+        System.clearProperty("JENREPO_CLI_HOME");
     }
 
     @Test

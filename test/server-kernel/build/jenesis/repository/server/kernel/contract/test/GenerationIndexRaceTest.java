@@ -22,7 +22,7 @@ class GenerationIndexRaceTest {
     void a_rebuild_whose_marker_moved_under_it_loses_the_flip_and_leaves_the_newer_marker(@TempDir Path root)
             throws Exception {
         ArtifactStore store = ArtifactStoreProvider.resolve("filesystem",
-                key -> "jenreg.filesystem.root".equals(key) ? root.toString() : null);
+                key -> "jenrepo.filesystem.root".equals(key) ? root.toString() : null);
         GenerationIndex index = new GenerationIndex(store, "rank");
         index.rebuild("s1", prefix -> entry(store, prefix, "first"), index::reclaimFlat);
         GenerationIndex rival = new GenerationIndex(store, "rank");

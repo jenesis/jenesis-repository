@@ -12,7 +12,7 @@ import build.jenesis.repository.store.StoredListing;
  * {@code publish/<name>} pointer mirror and the {@code publish/quarantine/<name>} review mirror beside it, its
  * stored listings, and (for a blobs-namespace format) each declared blob root with its listings. A format module
  * carries none of this itself, so without it a format dropped from an image - or toggled off with
- * {@code jenreg.<name>=false}, which the reclaiming passes treat identically - would hold data no manifest entry
+ * {@code jenrepo.<name>=false}, which the reclaiming passes treat identically - would hold data no manifest entry
  * described: invisible to the orphaned-data diagnostic, unreachable for the explicit purge, and the repository it
  * lived in refused by the collector forever. With the entry persisted while the format is installed, its absence
  * later reads exactly like

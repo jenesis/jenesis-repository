@@ -250,7 +250,7 @@ class OciDerivationAgreementTest {
     /** A manifest document padded with an ignored field to exactly {@code size} bytes, so a leg can sit either side of
      *  the parse bound the one derivation enforces. */
     private static String padded(String manifest, int size) {
-        String head = manifest.substring(0, manifest.length() - 1) + ",\"jenreg.pad\":\"";
+        String head = manifest.substring(0, manifest.length() - 1) + ",\"jenrepo.pad\":\"";
         String tail = "\"}";
         return head + "x".repeat(size - head.length() - tail.length()) + tail;
     }
@@ -417,6 +417,6 @@ class OciDerivationAgreementTest {
 
     private ArtifactStore store() {
         return ArtifactStoreProvider.resolve("filesystem",
-                key -> "jenreg.filesystem.root".equals(key) ? root.toString() : null);
+                key -> "jenrepo.filesystem.root".equals(key) ? root.toString() : null);
     }
 }

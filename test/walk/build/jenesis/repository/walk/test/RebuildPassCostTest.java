@@ -34,7 +34,7 @@ class RebuildPassCostTest {
     @Test
     void a_pass_reads_each_pointer_its_marker_and_its_blob_length_and_nothing_else_per_object() throws IOException {
         ArtifactStore filesystem = ArtifactStoreProvider.resolve("filesystem",
-                key -> "jenreg.filesystem.root".equals(key) ? root.toString() : null);
+                key -> "jenrepo.filesystem.root".equals(key) ? root.toString() : null);
         for (int index = 0; index < POINTERS; index++) {
             String hash = filesystem.writeBlob(new ByteArrayInputStream(("content " + index).getBytes(StandardCharsets.UTF_8)));
             filesystem.writeVersioned("publish/maven/com/acme/lib/" + index + "/lib-" + index + ".jar",

@@ -11,7 +11,7 @@ import module java.base;
  *
  * <p><strong>This is the artifact store's rule, not a second one.</strong> {@code S3ArtifactStoreProvider} and
  * {@code GcsArtifactStoreProvider} already refuse a non-https endpoint override unless
- * {@code JENREG_S3_ALLOW_INSECURE_ENDPOINT} / {@code JENREG_GCS_ALLOW_INSECURE_ENDPOINT} is {@code true}, and the
+ * {@code JENREPO_S3_ALLOW_INSECURE_ENDPOINT} / {@code JENREPO_GCS_ALLOW_INSECURE_ENDPOINT} is {@code true}, and the
  * rule, the opt-out spelling and the {@link Boolean#parseBoolean} reading of it are reproduced here verbatim so one
  * environment variable governs both stores of a deployment that runs them side by side (the combined image runs
  * exactly that). The store's own copy cannot be called: {@code build.jenesis.repository.store.s3} exports its
@@ -58,7 +58,7 @@ public final class Endpoints {
     }
 
     /** The relaxed-binding environment-variable spelling of a DEPLOYMENT key
-     *  ({@code jenreg.s3.endpoint} is {@code JENREG_S3_ENDPOINT}), so a diagnostic names the
+     *  ({@code jenrepo.s3.endpoint} is {@code JENREPO_S3_ENDPOINT}), so a diagnostic names the
      *  key in both the spellings an operator may have used. Pass a namespaced key - a bare setting name would derive
      *  a variable no deployment sets. */
     public static String variable(String key) {

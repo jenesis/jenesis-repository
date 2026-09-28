@@ -184,15 +184,15 @@ public class RateLimitFilterTest {
 
     @Test
     void the_live_ceiling_resolves_the_rate_limit_setting_and_falls_back_to_the_boot_value() {
-        assertThat(RateLimitFilter.liveCeiling(_ -> Map.of("jenreg.rate-limit", "0")::get, DEFAULT_CEILING)
+        assertThat(RateLimitFilter.liveCeiling(_ -> Map.of("jenrepo.rate-limit", "0")::get, DEFAULT_CEILING)
                 .applyAsLong(null))
                 .as("an operator who writes 0 disables the limiter").isEqualTo(0);
-        assertThat(RateLimitFilter.liveCeiling(_ -> Map.of("jenreg.rate-limit", "120")::get, DEFAULT_CEILING)
+        assertThat(RateLimitFilter.liveCeiling(_ -> Map.of("jenrepo.rate-limit", "120")::get, DEFAULT_CEILING)
                 .applyAsLong(null))
                 .isEqualTo(120);
         assertThat(RateLimitFilter.liveCeiling(_ -> Map.<String, String>of()::get, DEFAULT_CEILING).applyAsLong(null))
                 .as("nothing written at runtime leaves the boot property in force").isEqualTo(DEFAULT_CEILING);
-        assertThat(RateLimitFilter.liveCeiling(_ -> Map.of("jenreg.rate-limit", "plenty")::get, DEFAULT_CEILING)
+        assertThat(RateLimitFilter.liveCeiling(_ -> Map.of("jenrepo.rate-limit", "plenty")::get, DEFAULT_CEILING)
                 .applyAsLong(null))
                 .as("a value that is not a number never turns every request into an error")
                 .isEqualTo(DEFAULT_CEILING);
@@ -200,8 +200,8 @@ public class RateLimitFilterTest {
 
     @Test
     void the_live_ceiling_is_the_tenants_own_setting_over_the_deployments() {
-        Map<String, String> deployment = Map.of("jenreg.rate-limit", "120");
-        Map<String, String> acme = Map.of("jenreg.rate-limit", "30");
+        Map<String, String> deployment = Map.of("jenrepo.rate-limit", "120");
+        Map<String, String> acme = Map.of("jenrepo.rate-limit", "30");
         ToLongFunction<String> ceiling = RateLimitFilter.liveCeiling(
                 tenant -> "acme".equals(tenant) ? acme::get : deployment::get, DEFAULT_CEILING);
 

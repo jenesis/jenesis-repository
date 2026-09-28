@@ -3,10 +3,10 @@
  * ({@code google-api-services-storage}, the generated client the Cloud Client Library itself speaks HTTP with) and
  * Google's auth library. A pure storage provider: it implements the {@code ArtifactStore} SPI and is discovered
  * through {@code provides}, so the server adds it to its module graph at deploy time and selects it with
- * {@code jenreg.store=gcs}, with no compile-time dependency from the server.
+ * {@code jenrepo.store=gcs}, with no compile-time dependency from the server.
  *
  * <p>Credentials are Application Default Credentials: a service-account key file named by
- * {@code jenreg.gcs.credentials} or {@code GOOGLE_APPLICATION_CREDENTIALS}, a developer's {@code gcloud} login, or
+ * {@code jenrepo.gcs.credentials} or {@code GOOGLE_APPLICATION_CREDENTIALS}, a developer's {@code gcloud} login, or
  * the metadata server on GCE, GKE and Cloud Run - which is what lets a deployment run keyless under Workload
  * Identity. No HMAC interoperability key is involved. The version token is the object <em>generation</em>, GCS's own
  * per-incarnation number, and a conditional write is {@code ifGenerationMatch} on the insert, so a lost

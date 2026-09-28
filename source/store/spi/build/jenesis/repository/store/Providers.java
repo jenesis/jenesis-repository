@@ -95,7 +95,7 @@ import module java.base;
 public final class Providers {
 
     /** Namespace shared with {@link Features} - a diagnostic points at the exact key an operator must change. */
-    private static final String NAMESPACE = "jenreg.";
+    private static final String NAMESPACE = "jenrepo.";
 
     private Providers() {
     }
@@ -106,7 +106,7 @@ public final class Providers {
      * empty {@link Optional} - it is configured off in a way its enablement predicate does not see - is left out.
      * A disabled provider is never asked to create anything.
      *
-     * @param spi        the SPI's selection key, the {@code <spi>} in {@code jenreg.<spi>=<name>}, used
+     * @param spi        the SPI's selection key, the {@code <spi>} in {@code jenrepo.<spi>=<name>}, used
      *                   verbatim in every diagnostic.
      * @param discovered the discovered providers, normally the SPI home's own {@code ServiceLoader.load(X.class)}.
      * @param name       each provider's {@code name()} - its toggle key and attribution key.
@@ -155,10 +155,10 @@ public final class Providers {
      * is chosen by which implementation is installed and enabled, never by name.
      *
      * <p>It exists so the ambiguity diagnostic can tell the truth. The selection-taking form advises an operator to
-     * "select it with {@code jenreg.<spi>=<name>}", and eleven call sites passed {@code Optional.empty()} for the
+     * "select it with {@code jenrepo.<spi>=<name>}", and eleven call sites passed {@code Optional.empty()} for the
      * selection - hard-wired, not merely unset - so that key was never read for any of them. Following the advice
      * therefore did nothing, and for {@code search} and {@code staging} it did something worse than nothing:
-     * {@code jenreg.search} and {@code jenreg.staging} are those server modules' own documented off-switches, so an
+     * {@code jenrepo.search} and {@code jenrepo.staging} are those server modules' own documented off-switches, so an
      * operator resolving an ambiguity by the message's instruction switched the console module off instead of
      * selecting an implementation. A key answered by someone else is the sharper half of the namespace this SPI
      * family shares.

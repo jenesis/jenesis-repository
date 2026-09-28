@@ -155,7 +155,7 @@ public class EdgeHooksTest {
     @BeforeEach
     void setUp() {
         store = ArtifactStoreProvider.resolve(
-                "filesystem", key -> "jenreg.filesystem.root".equals(key) ? root.toString() : null);
+                "filesystem", key -> "jenrepo.filesystem.root".equals(key) ? root.toString() : null);
     }
 
     private static ScreenedDispatch edge(RepositoryFormat format, EdgeHooks hooks) {

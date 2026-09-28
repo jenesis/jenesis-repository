@@ -21,7 +21,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
  * <li>"the first enabled provider in discovery order" is <b>no longer a policy</b> - with more than one enabled
  *     fetcher and nothing selected, resolution fails naming the candidates instead of letting the module path decide
  *     which transport a deployment proxies through;</li>
- * <li>an <em>explicitly selected</em> {@code jenreg.fetcher=<name>} that no provider answers to, or whose
+ * <li>an <em>explicitly selected</em> {@code jenrepo.fetcher=<name>} that no provider answers to, or whose
  *     provider declines, <b>throws</b> instead of silently answering {@link ProxyFormat.Fetcher#NONE}, which would be
  *     a silent fallback. Only an <em>unselected</em> deployment with nothing enabled gets the sentinel.</li>
  * </ul>
@@ -33,7 +33,7 @@ class FetcherProviderTest {
         Features.reset();
     }
 
-    /** A config lookup over a fixed map, so a test controls the {@code jenreg.*} feature toggles the
+    /** A config lookup over a fixed map, so a test controls the {@code jenrepo.*} feature toggles the
      *  resolver reads without touching real system properties or the environment. */
     private static UnaryOperator<String> config(Map<String, String> values) {
         return values::get;
@@ -52,9 +52,9 @@ class FetcherProviderTest {
 
     @Test
     void an_explicit_selection_picks_that_provider_by_name() throws IOException {
-        assertThat(status(FetcherProvider.resolve(configured(Map.of("jenreg.fetcher", "beta")))))
+        assertThat(status(FetcherProvider.resolve(configured(Map.of("jenrepo.fetcher", "beta")))))
                 .as("beta is selected by name").isEqualTo(202);
-        assertThat(status(FetcherProvider.resolve(configured(Map.of("jenreg.fetcher", "alpha")))))
+        assertThat(status(FetcherProvider.resolve(configured(Map.of("jenrepo.fetcher", "alpha")))))
                 .as("alpha is selected by name").isEqualTo(201);
     }
 
@@ -63,16 +63,16 @@ class FetcherProviderTest {
         // Naming an implementation that is also switched off is contradictory configuration; the selection wins
         // rather than quietly resolving to a different transport.
         UnaryOperator<String> contradictory = configured(Map.of(
-                "jenreg.fetcher", "beta",
-                "jenreg.beta", "false"));
+                "jenrepo.fetcher", "beta",
+                "jenrepo.beta", "false"));
         assertThat(FetcherProvider.resolve(contradictory)).isNotSameAs(ProxyFormat.Fetcher.NONE);
     }
 
     @Test
     void the_single_enabled_fetcher_resolves_without_a_selection() throws IOException {
         UnaryOperator<String> onlyAlpha = configured(Map.of(
-                "jenreg.empty", "false",
-                "jenreg.beta", "false"));
+                "jenrepo.empty", "false",
+                "jenrepo.beta", "false"));
         assertThat(status(FetcherProvider.resolve(onlyAlpha)))
                 .as("exactly one enabled fetcher needs no selection").isEqualTo(201);
     }
@@ -81,13 +81,13 @@ class FetcherProviderTest {
     void two_enabled_fetchers_without_a_selection_are_ambiguous_rather_than_a_discovery_order_winner() {
         // Answering alpha only because the module path happened to list it before beta would make which transport a
         // deployment proxies through a packaging accident rather than a configuration decision.
-        UnaryOperator<String> ambiguous = configured(Map.of("jenreg.empty", "false"));
+        UnaryOperator<String> ambiguous = configured(Map.of("jenrepo.empty", "false"));
         assertThatThrownBy(() -> FetcherProvider.resolve(ambiguous))
                 .isInstanceOf(IllegalStateException.class)
                 .hasMessageContaining("More than one fetcher implementation is enabled")
                 .hasMessageContaining("alpha")
                 .hasMessageContaining("beta")
-                .hasMessageContaining("jenreg.fetcher=<name>");
+                .hasMessageContaining("jenrepo.fetcher=<name>");
     }
 
     @Test
@@ -95,17 +95,17 @@ class FetcherProviderTest {
         // The lone enabled provider builds nothing (its own configuration switches it off in a way the toggle does
         // not see): unselected, that is a legitimate absence and degrades to NONE.
         UnaryOperator<String> onlyDeclining = configured(Map.of(
-                "jenreg.alpha", "false",
-                "jenreg.beta", "false"));
+                "jenrepo.alpha", "false",
+                "jenrepo.beta", "false"));
         assertThat(FetcherProvider.resolve(onlyDeclining)).isSameAs(ProxyFormat.Fetcher.NONE);
     }
 
     @Test
     void nothing_enabled_resolves_to_the_none_fetcher() {
         UnaryOperator<String> allOff = configured(Map.of(
-                "jenreg.empty", "false",
-                "jenreg.alpha", "false",
-                "jenreg.beta", "false"));
+                "jenrepo.empty", "false",
+                "jenrepo.alpha", "false",
+                "jenrepo.beta", "false"));
         assertThat(FetcherProvider.resolve(allOff))
                 .as("with every provider disabled the resolver answers the NONE singleton by identity")
                 .isSameAs(ProxyFormat.Fetcher.NONE);
@@ -115,7 +115,7 @@ class FetcherProviderTest {
     void an_explicitly_selected_fetcher_no_provider_answers_to_fails_loudly() {
         // Answering NONE would have a deployment that misspelled its transport - or forgot its
         // module - serve every proxy route as a 404 that looks exactly like "upstream does not have it".
-        UnaryOperator<String> misspelled = configured(Map.of("jenreg.fetcher", "htpp"));
+        UnaryOperator<String> misspelled = configured(Map.of("jenrepo.fetcher", "htpp"));
         assertThatThrownBy(() -> FetcherProvider.resolve(misspelled))
                 .isInstanceOf(IllegalStateException.class)
                 .hasMessageContaining("'htpp'")
@@ -127,7 +127,7 @@ class FetcherProviderTest {
 
     @Test
     void an_explicitly_selected_fetcher_that_declines_fails_loudly() {
-        UnaryOperator<String> declining = configured(Map.of("jenreg.fetcher", "empty"));
+        UnaryOperator<String> declining = configured(Map.of("jenrepo.fetcher", "empty"));
         assertThatThrownBy(() -> FetcherProvider.resolve(declining))
                 .isInstanceOf(IllegalStateException.class)
                 .hasMessageContaining("'empty'")

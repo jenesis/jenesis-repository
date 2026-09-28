@@ -219,14 +219,14 @@ public interface QualityInspector {
     /**
      * The key an operator raises or lowers {@link #prefixInspectionLimit()} with.
      *
-     * <p>Deployment-global and read live, exactly as {@code jenreg.archive.largest-walk} beside it is, and for the
+     * <p>Deployment-global and read live, exactly as {@code jenrepo.archive.largest-walk} beside it is, and for the
      * same reason: it is a per-process budget on heap taken on the publish thread, and a store round-trip per
      * artifact to learn it would be absurd. A registry whose artifacts genuinely carry their declaration further in
      * than 32 MiB should be able to say so rather than silently screening a prefix - the truncated case is handled
      * (the screen falls back to a path-derived subject and records the incomplete screening), but "handled" is not
      * the same as "what the operator wanted".
      */
-    String PREFIX_INSPECTION_LIMIT_KEY = "jenreg.inspection.prefix-bytes";
+    String PREFIX_INSPECTION_LIMIT_KEY = "jenrepo.inspection.prefix-bytes";
 
     /**
      * The configured prefix tier - {@link #PREFIX_INSPECTION_LIMIT} unless an operator set
@@ -245,7 +245,7 @@ public interface QualityInspector {
     }
 
     /** The configured full-body tier, twice the prefix tier unless set outright. */
-    String FULL_BODY_INSPECTION_LIMIT_KEY = "jenreg.inspection.full-body-bytes";
+    String FULL_BODY_INSPECTION_LIMIT_KEY = "jenrepo.inspection.full-body-bytes";
 
     /** The configured full-body ceiling - twice {@link #prefixInspectionLimit()} unless an operator overrides it. */
     static long fullBodyInspectionLimit() {

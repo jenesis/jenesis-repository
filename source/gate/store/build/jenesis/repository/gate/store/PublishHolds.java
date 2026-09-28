@@ -221,8 +221,8 @@ final class PublishHolds {
      * {@code blobHashes} resolves. A format whose {@code describe} emits a coordinate (so a retroactive KEV/license
      * sweep enumerates the version) but whose {@code blobKeys}/{@code servedPaths} resolve NOTHING back would hold
      * un-retractably - the RPM/conda/conan class that shipped five times and surfaced only in a later audit. Caught
-     * here it fails on the FIRST publish. On a break: emit {@code jenreg.publish.holdmapping.broken{eco}} + one WARN,
-     * and {@code throw} only when {@code jenreg.strict-hold-mapping} is on (every test config sets it) - production
+     * here it fails on the FIRST publish. On a break: emit {@code jenrepo.publish.holdmapping.broken{eco}} + one WARN,
+     * and {@code throw} only when {@code jenrepo.strict-hold-mapping} is on (every test config sets it) - production
      * stays alarm-not-abort, since a broken format must not DoS publishes (the {@code hold.unenforceable} gauge
      * reasoning). Scoped strictly to the JUST-published path/hash, which the format just wrote, so an
      * evicted-but-still- enumerated sibling version - which legitimately resolves to nothing at describe time - never
@@ -266,7 +266,7 @@ final class PublishHolds {
             throw new IOException("hold-mapping round-trip broken for " + ecosystem + " " + coordinate + ":" + version
                     + " at " + artifact.path() + " - the blobs-namespace format enumerates this version but its "
                     + "blobKeys/servedPaths resolve neither the served path nor the stored content hash "
-                    + "(jenreg.strict-hold-mapping is on)");
+                    + "(jenrepo.strict-hold-mapping is on)");
         }
     }
 

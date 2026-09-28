@@ -35,7 +35,7 @@ class ConsoleQuotaSettingTest {
     @Test
     void setting_a_quota_stores_the_limit_without_recounting_the_tenants_blobs() throws IOException {
         ArtifactStore filesystem = ArtifactStoreProvider.resolve("filesystem",
-                key -> "jenreg.filesystem.root".equals(key) ? root.toString() : null);
+                key -> "jenrepo.filesystem.root".equals(key) ? root.toString() : null);
         ArtifactStore tenant = filesystem.scope("acme");
         tenant.scope("alpha").write("blobs/one", content(11));
         // A stale counter, deliberately wrong: if setting a quota still recounted, this would be corrected to 11.

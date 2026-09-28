@@ -130,13 +130,13 @@ public final class TrustedRootTask implements MaintenanceTask {
         ArtifactStore store = context.store();
         Optional<ArtifactStore.Versioned> current = store.readVersioned(FetchedTrustedRoot.DOCUMENT);
         if (current.isPresent() && Arrays.equals(current.get().content(), root)) {
-            context.gauge("jenreg.signature.trusted-root-bytes", "The size of the Sigstore trusted root held",
+            context.gauge("jenrepo.signature.trusted-root-bytes", "The size of the Sigstore trusted root held",
                     Map.of("source", "fetched"), root.length);
             return;   // unchanged: no write, so a daily pass over an unchanging document costs one read
         }
         store.writeVersioned(FetchedTrustedRoot.DOCUMENT, root,
                 current.map(ArtifactStore.Versioned::token).orElse(null));
-        context.gauge("jenreg.signature.trusted-root-bytes", "The size of the Sigstore trusted root held",
+        context.gauge("jenrepo.signature.trusted-root-bytes", "The size of the Sigstore trusted root held",
                 Map.of("source", "fetched"), root.length);
     }
 

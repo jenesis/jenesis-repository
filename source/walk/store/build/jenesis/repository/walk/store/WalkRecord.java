@@ -22,7 +22,7 @@ final class WalkRecord {
     private WalkRecord() {
     }
 
-    /** A pass this node joined, advanced or finished - the one the {@code jenreg.walk.*} signals describe. */
+    /** A pass this node joined, advanced or finished - the one the {@code jenrepo.walk.*} signals describe. */
     static void observed(WalkPass pass) {
         observed = pass;
     }

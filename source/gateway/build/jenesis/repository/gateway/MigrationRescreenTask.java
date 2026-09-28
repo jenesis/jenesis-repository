@@ -217,10 +217,10 @@ public final class MigrationRescreenTask implements MaintenanceTask {
         } finally {
             close(spool);
         }
-        context.gauge("jenreg.gateway.hardened.rescreen.screened",
+        context.gauge("jenrepo.gateway.hardened.rescreen.screened",
                 "Pre-harden cached artifacts re-screened from local bytes this migration pass",
                 Map.of("tenant", context.tenant(), "repository", context.repository()), screened[0]);
-        context.gauge("jenreg.gateway.hardened.rescreen.evicted",
+        context.gauge("jenrepo.gateway.hardened.rescreen.evicted",
                 "Pre-harden cached artifacts evicted this migration pass because they re-screened non-ALLOW",
                 Map.of("tenant", context.tenant(), "repository", context.repository()), evicted[0]);
     }

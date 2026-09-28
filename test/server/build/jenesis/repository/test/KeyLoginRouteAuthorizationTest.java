@@ -31,7 +31,7 @@ class KeyLoginRouteAuthorizationTest {
     @Test
     void only_a_manage_key_of_the_operator_tenant_administers_login_keys() throws IOException {
         ArtifactStore store = ArtifactStoreProvider.resolve(
-                "filesystem", key -> "jenreg.filesystem.root".equals(key) ? root.toString() : null);
+                "filesystem", key -> "jenrepo.filesystem.root".equals(key) ? root.toString() : null);
         Authorization authorization = Authorization.enforcing(store);
         RepositoryProperties properties = new RepositoryProperties();
         properties.setOperatorTenant("operator");

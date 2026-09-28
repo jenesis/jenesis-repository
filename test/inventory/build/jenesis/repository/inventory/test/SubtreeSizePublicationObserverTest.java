@@ -35,7 +35,7 @@ class SubtreeSizePublicationObserverTest {
     @BeforeEach
     void setUp() {
         store = ArtifactStoreProvider.resolve("filesystem",
-                        key -> "jenreg.filesystem.root".equals(key) ? root.toString() : null)
+                        key -> "jenrepo.filesystem.root".equals(key) ? root.toString() : null)
                 .scope("default").scope("releases");
         counting = new ListCountingStore(store);
         // Only the observer under test runs (no ServiceLoader discovery), fired through the real after-commit seam.

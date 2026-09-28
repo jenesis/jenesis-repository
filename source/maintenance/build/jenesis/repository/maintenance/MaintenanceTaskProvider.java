@@ -30,7 +30,7 @@ import build.jenesis.repository.icon.IconContributor;
  *       re-run and back-fill from durable state when enabled late; the provider itself does no work.</li>
  *   <li><b>Absence sentinel.</b> {@code create} returns an empty {@link Optional} when the pass is switched off;
  *       {@code null} is never legal. Disabling has exactly <em>two</em> routes and gains no third: the neutral
- *       {@code jenreg.<name>=false} toggle plus the {@link #requiredConfig()} self-disable, both applied by
+ *       {@code jenrepo.<name>=false} toggle plus the {@link #requiredConfig()} self-disable, both applied by
  *       {@link Features#active} before a provider is asked, and the provider's own enablement setting returning empty.
  *       A cadence of zero is <em>not</em> a disable route (see {@link IntervalSetting}).</li>
  *   <li><b>Construction failure is phase-dependent.</b> A provider's own value or construction failure (a
@@ -100,7 +100,7 @@ public interface MaintenanceTaskProvider extends IconContributor {
      * <em>stored</em> settings change, so a failure caused by a stored setting heals when an operator fixes it - but
      * one caused by an environment variable, a config file or a transient condition at boot has nothing to trigger a
      * re-resolve and would stay unscheduled until a restart. An operator who meant to run without the pass says so
-     * ({@code jenreg.<name>=false}) and restarts; an operator who did not gets told at once instead of
+     * ({@code jenrepo.<name>=false}) and restarts; an operator who did not gets told at once instead of
      * discovering a silently incomplete deployment later on an observability screen.
      *
      * <p>A failure is reported as an {@link IllegalStateException} naming the provider, its implementing class and the
@@ -115,7 +115,7 @@ public interface MaintenanceTaskProvider extends IconContributor {
                     + ". A pass that cannot be built at startup fails the boot rather than being dropped: unless the "
                     + "setting it reads is a stored one, nothing on a running deployment would re-resolve it and the "
                     + "pass would stay unscheduled until a restart. Fix the setting it reads, or disable the pass "
-                    + "explicitly with jenreg." + provider.name() + "=false.", misconfigured);
+                    + "explicitly with jenrepo." + provider.name() + "=false.", misconfigured);
         });
         return tasks;
     }
@@ -131,7 +131,7 @@ public interface MaintenanceTaskProvider extends IconContributor {
      * vanish from a shorter list.
      *
      * <p>Containment covers a provider's own value or construction failure, including one that originates in another
-     * repository's code - a malformed {@code jenreg.gc.grace} reaching the garbage collector through the
+     * repository's code - a malformed {@code jenrepo.gc.grace} reaching the garbage collector through the
      * retention provider - which no provider-local {@code catch} in this repository could fix.
      *
      * <p>An {@link IllegalStateException} is deliberately <em>not</em> contained here either: that is what the shared

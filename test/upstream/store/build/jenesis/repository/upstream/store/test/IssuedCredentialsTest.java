@@ -33,7 +33,7 @@ class IssuedCredentialsTest {
         CountingIssuer.NOW.set(Instant.parse("2026-09-24T12:00:00Z"));
         CountingIssuer.failing = false;
         store = ArtifactStoreProvider.resolve("filesystem",
-                key -> "jenreg.filesystem.root".equals(key) ? root.toString() : null);
+                key -> "jenrepo.filesystem.root".equals(key) ? root.toString() : null);
         // No master key: an issued credential stores no secret, so it needs none.
         credentials = new StoreUpstreamCredentials(store, Duration.ofMinutes(1), SecretCipher.of(null),
                 clock());

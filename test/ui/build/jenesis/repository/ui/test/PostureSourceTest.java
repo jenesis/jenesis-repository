@@ -18,8 +18,8 @@ class PostureSourceTest {
     @Test
     void the_environment_source_reports_what_the_process_was_started_with() throws IOException {
         PostureSource source = PostureSource.ofEnvironment(key -> switch (key) {
-            case "jenreg.auth" -> "false";
-            case "jenreg.rate-limit" -> "600";
+            case "jenrepo.auth" -> "false";
+            case "jenrepo.rate-limit" -> "600";
             default -> null;
         });
 
@@ -31,8 +31,8 @@ class PostureSourceTest {
     @Test
     void a_hardened_configuration_reports_nothing_rather_than_failing_to_read() throws IOException {
         PostureSource source = PostureSource.ofEnvironment(key -> switch (key) {
-            case "jenreg.auth" -> "true";
-            case "jenreg.rate-limit" -> "600";
+            case "jenrepo.auth" -> "true";
+            case "jenrepo.rate-limit" -> "600";
             default -> null;
         });
 

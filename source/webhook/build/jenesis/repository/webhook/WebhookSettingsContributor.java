@@ -49,7 +49,7 @@ public final class WebhookSettingsContributor implements SettingsContributor {
                                 + "'); an endpoint with NO entry is delivered unsigned, which leaves its receiver "
                                 + "unable to distinguish a genuine event from a forged POST - set one for every "
                                 + "endpoint unless that receiver authenticates some other way. The "
-                                + "'jenreg.webhook.unsigned' gauge counts this tenant's endpoints that have none. "
+                                + "'jenrepo.webhook.unsigned' gauge counts this tenant's endpoints that have none. "
                                 + "Write-only: stored as a secret, so it is redacted on read-back and kept out of the "
                                 + "settings export bundle.",
                         Setting.Kind.SECRET, "", false, Setting.Scope.TENANT).standard(),

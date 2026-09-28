@@ -42,7 +42,7 @@
         <p th:if="${nextCursor != null}"><small>Showing the first <span th:text="${users.size()}">200</span> members;
             <a th:href="@{/ui/admin(cursor=${nextCursor})}">more</a>.</small></p>
         <th:block th:if="${users.isEmpty()}">
-            <div th:replace="~{base :: empty('No members yet — an env super-admin (JENREG_UI_ADMINS) can add the first one below.')}"></div>
+            <div th:replace="~{base :: empty('No members yet — an env super-admin (JENREPO_UI_ADMINS) can add the first one below.')}"></div>
         </th:block>
         <form th:if="${isAdmin}" method="post" th:action="@{/ui/admin/users}">
             <div class="grid">

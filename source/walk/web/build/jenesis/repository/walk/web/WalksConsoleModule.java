@@ -8,7 +8,7 @@ import build.jenesis.repository.ui.NavEntry;
 /** The walks screen as a console module: its gate, its configuration and its menu entry. */
 public final class WalksConsoleModule implements ConsoleModuleProvider {
 
-    /** The module's name: its {@code jenreg.} gate and the namespace its templates resolve under - not
+    /** The module's name: its {@code jenrepo.} gate and the namespace its templates resolve under - not
      *  {@code walks}, which is the document the screen edits. */
     public static final String NAME = "walks-screen";
 

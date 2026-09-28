@@ -65,7 +65,7 @@ class ConfigControllerTest {
         settings = new Settings(store);
         LiveConfig live = new LiveConfig(settings, new RepositoryProperties(), AdvisorySource.none(), _ -> null);
         SettingsEditor editor = new SettingsEditor(settings,
-                Web.pins(Web.environment(Map.of("jenreg." + PINNED, "REJECT")))::pinned, live, audit);
+                Web.pins(Web.environment(Map.of("jenrepo." + PINNED, "REJECT")))::pinned, live, audit);
         return new ConfigController(repositories, editor, credentials, audit, Web.routing(store, repositories),
                 _ -> operator);
     }
@@ -389,7 +389,7 @@ class ConfigControllerTest {
                         response.servlet());
 
         assertThat(response.status()).isEqualTo(400);
-        assertThat(response.body()).contains("JENREG_SECRETS_KEY");
+        assertThat(response.body()).contains("JENREPO_SECRETS_KEY");
         assertThat(audit.rows()).isEmpty();
     }
 

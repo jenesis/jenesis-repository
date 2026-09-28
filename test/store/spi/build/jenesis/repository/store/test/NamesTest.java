@@ -24,7 +24,7 @@ class NamesTest {
     @BeforeEach
     void setUp() throws IOException {
         store = ArtifactStoreProvider.resolve("filesystem",
-                        key -> "jenreg.filesystem.root".equals(key) ? root.toString() : null)
+                        key -> "jenrepo.filesystem.root".equals(key) ? root.toString() : null)
                 .scope("default");
         for (int i = 0; i < 25; i++) {
             store.write("rows/" + String.format("%02d", i) + ".json", new ByteArrayInputStream(new byte[] {1}));

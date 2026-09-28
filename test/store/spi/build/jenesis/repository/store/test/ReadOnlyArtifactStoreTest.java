@@ -23,7 +23,7 @@ class ReadOnlyArtifactStoreTest {
 
     private ArtifactStore delegate() {
         return ArtifactStoreProvider.resolve(
-                "filesystem", key -> "jenreg.filesystem.root".equals(key) ? root.toString() : null);
+                "filesystem", key -> "jenrepo.filesystem.root".equals(key) ? root.toString() : null);
     }
 
     private static ByteArrayInputStream bytes(int length) {

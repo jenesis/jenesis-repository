@@ -48,10 +48,10 @@ final class JsonGcs implements ResponseDefinitionTransformerV2 {
     /** The settings that point the provider at a stub on {@code port}: plaintext, opted in, and no credential. */
     static Map<String, String> settings(int port, String bucket) {
         return Map.of(
-                "jenreg.gcs.bucket", bucket,
-                "jenreg.gcs.endpoint", "http://localhost:" + port,
-                "jenreg.gcs.allow-insecure-endpoint", "true",
-                "jenreg.gcs.credentials", GcsArtifactStoreProvider.ANONYMOUS);
+                "jenrepo.gcs.bucket", bucket,
+                "jenrepo.gcs.endpoint", "http://localhost:" + port,
+                "jenrepo.gcs.allow-insecure-endpoint", "true",
+                "jenrepo.gcs.credentials", GcsArtifactStoreProvider.ANONYMOUS);
     }
 
     @Override

@@ -23,7 +23,7 @@ import org.slf4j.LoggerFactory;
  * under that now-stale token that must be refused. Any other answer names the endpoint and stops the node. The key is
  * deleted afterwards whatever happened; the cost is four writes, one version read and a delete per boot.
  *
- * <p>A deployment may switch the probe off - {@code jenreg.<backend>.conditional-write-probe=false}, one key per
+ * <p>A deployment may switch the probe off - {@code jenrepo.<backend>.conditional-write-probe=false}, one key per
  * object-store backend - for an endpoint it has satisfied itself about by other means, or one that refuses writes
  * under the system space; it then boots with a warning that says what it has given up.
  */

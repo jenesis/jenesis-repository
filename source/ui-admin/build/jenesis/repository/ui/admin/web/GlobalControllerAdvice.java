@@ -78,7 +78,7 @@ public class GlobalControllerAdvice {
         this.tenancy = tenancy;
     }
 
-    /** Whether the deployment runs read-only ({@code jenreg.read-only}), so every view can show a banner
+    /** Whether the deployment runs read-only ({@code jenrepo.read-only}), so every view can show a banner
      *  and a mutating affordance can hide itself. Read straight off the environment - the console observes the mode,
      *  the store choke point enforces it. */
     /**
@@ -106,18 +106,18 @@ public class GlobalControllerAdvice {
 
     @ModelAttribute("readOnly")
     public boolean readOnly() {
-        return environment.getProperty("jenreg.read-only", Boolean.class, false);
+        return environment.getProperty("jenrepo.read-only", Boolean.class, false);
     }
 
-    /** The strictly-opt-in anonymous-role grant ({@code jenreg.anonymous-rights}, env
-     *  {@code JENREG_ANONYMOUS_RIGHTS}), so every view shows an explicit "Anonymous access" banner when it
+    /** The strictly-opt-in anonymous-role grant ({@code jenrepo.anonymous-rights}, env
+     *  {@code JENREPO_ANONYMOUS_RIGHTS}), so every view shows an explicit "Anonymous access" banner when it
      *  is set - visible, never hidden. This is the one advice publishing it and every other attribute below. Read
      *  straight off the environment,
      *  like {@link #readOnly()} - the console observes the posture, the {@code Authorization} choke point enforces it.
      *  Blank (the default) ⇒ no anonymous access and no banner. */
     @ModelAttribute("anonymousRights")
     public String anonymousRights() {
-        return environment.getProperty("jenreg.anonymous-rights", "").trim();
+        return environment.getProperty("jenrepo.anonymous-rights", "").trim();
     }
 
     /** The header's security-posture badge - the advisory count a super-admin sees on every view,

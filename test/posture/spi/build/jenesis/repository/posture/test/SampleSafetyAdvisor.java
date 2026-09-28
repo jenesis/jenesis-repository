@@ -15,7 +15,7 @@ import build.jenesis.repository.posture.Severity;
 public final class SampleSafetyAdvisor implements SafetyAdvisor {
 
     /** The key a test flips to prove the advisor fires and that a report discovers it. */
-    public static final String KEY = "jenreg.sample.unsafe";
+    public static final String KEY = "jenrepo.sample.unsafe";
 
     private static final AtomicInteger BUILT = new AtomicInteger();
 
@@ -33,10 +33,10 @@ public final class SampleSafetyAdvisor implements SafetyAdvisor {
         if (!config.flag(KEY, false)) {
             return List.of();
         }
-        return List.of(SecurityAdvisory.deployment("jenreg.sample.unsafe", Severity.INFO,
+        return List.of(SecurityAdvisory.deployment("jenrepo.sample.unsafe", Severity.INFO,
                 "The sample feature is in its unsafe demo mode",
                 "The sample feature is running in a demonstration mode that is not meant for production.",
                 "Turn the sample feature's unsafe mode off.",
-                KEY, "false", "https://jenesis.build/repository/operations/#jenreg.sample.unsafe"));
+                KEY, "false", "https://jenesis.build/repository/operations/#jenrepo.sample.unsafe"));
     }
 }

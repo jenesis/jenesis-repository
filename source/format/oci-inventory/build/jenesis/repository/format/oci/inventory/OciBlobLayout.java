@@ -448,7 +448,7 @@ public final class OciBlobLayout implements RepositoryFormat, BlobLayout {
      * <p>A blob layout is generally a lender too ({@link BlobRoots} extends the seam) and this one declares
      * the {@code oci/} root itself, so the inventory side is filtered out by its type: it lends nothing, because
      * {@code OciFormat} owns the document's dialect. Resolved per call rather than latched, so a format an operator switched
-     * off ({@code jenreg.oci=false}) stops lending immediately, exactly as it stops serving.
+     * off ({@code jenrepo.oci=false}) stops lending immediately, exactly as it stops serving.
      */
     private static BlobReferences lender() {
         for (BlobReferences lender : BlobReferences.installed()) {

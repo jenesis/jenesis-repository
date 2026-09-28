@@ -30,7 +30,7 @@ class ImportJobReapTest {
     @BeforeEach
     void setUp() {
         store = ArtifactStoreProvider.resolve("filesystem",
-                key -> "jenreg.filesystem.root".equals(key) ? root.toString() : null);
+                key -> "jenrepo.filesystem.root".equals(key) ? root.toString() : null);
         task = new CleanupTask(Duration.ofHours(1));
     }
 

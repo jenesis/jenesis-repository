@@ -14,7 +14,7 @@ import org.springframework.web.context.request.RequestContextHolder;
 @Component
 public class SessionCurrentTenant implements CurrentTenant {
 
-    public static final String ATTRIBUTE = "jenreg.console.selected-tenant";
+    public static final String ATTRIBUTE = "jenrepo.console.selected-tenant";
 
     @Override
     public String name() {

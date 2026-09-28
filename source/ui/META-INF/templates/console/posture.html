@@ -8,7 +8,7 @@
     <header th:replace="~{base :: pageHeader('Security posture')}"></header>
     <p><small>Every potentially-unsafe configuration this deployment currently carries, in one place — each advisory
         names <strong>why</strong> it is unsafe and the <strong>safer alternative</strong> (the exact
-        <code>jenreg.*</code> setting to change), grounded in best practice. This screen is <strong>read-only</strong>
+        <code>jenrepo.*</code> setting to change), grounded in best practice. This screen is <strong>read-only</strong>
         — observing posture never changes it — and it <strong>names the risk, never a secret value</strong>. It surfaces
         the same list the <code>/api/admin/posture</code> admin API returns. A clean deployment raises nothing, so an
         empty screen is the healthy state.</small></p>
@@ -59,7 +59,7 @@
             <div class="module-head">
                 <div>
                     <strong th:text="${advisory.title()}">This tenant admits packages known to be malicious</strong>
-                    <br><code class="setting-doc" th:text="${advisory.id()}">jenreg.feature.signal</code>
+                    <br><code class="setting-doc" th:text="${advisory.id()}">jenrepo.feature.signal</code>
                     <small>— tenant <strong th:text="${advisory.tenant()}">acme</strong></small>
                 </div>
                 <div class="module-badges">
@@ -72,7 +72,7 @@
             <p><small th:text="${advisory.why()}">Why this configuration is unsafe.</small></p>
             <p><small><strong>Suggested fix:</strong> <span th:text="${advisory.fix()}">The safer alternative.</span></small></p>
             <p th:if="${!advisory.settingKey().isEmpty()}"><small>Set
-                <code th:text="${advisory.settingKey()} + '=' + ${advisory.settingValue()}">jenreg.key=value</code>
+                <code th:text="${advisory.settingKey()} + '=' + ${advisory.settingValue()}">jenrepo.key=value</code>
                 for this tenant on the <a href="/ui/settings/tenant">tenant settings</a> screen</small></p>
             <p th:if="${!advisory.docs().isEmpty()}"><small><a th:href="${advisory.docs()}" rel="noopener noreferrer"
                 target="_blank">Read more &rarr;</a></small></p>
@@ -89,7 +89,7 @@
             <div class="module-head">
                 <div>
                     <strong th:text="${advisory.title()}">The instance is fully open</strong>
-                    <br><code class="setting-doc" th:text="${advisory.id()}">jenreg.feature.signal</code>
+                    <br><code class="setting-doc" th:text="${advisory.id()}">jenrepo.feature.signal</code>
                 </div>
                 <div class="module-badges">
                     <span class="app-badge" title="A property of the whole deployment; it applies to every tenant">deployment</span>
@@ -101,7 +101,7 @@
             <p><small th:text="${advisory.why()}">Why this configuration is unsafe.</small></p>
             <p><small><strong>Suggested fix:</strong> <span th:text="${advisory.fix()}">The safer alternative.</span></small></p>
             <p th:if="${!advisory.settingKey().isEmpty()}"><small>Set
-                <code th:text="${advisory.settingKey()} + '=' + ${advisory.settingValue()}">jenreg.key=value</code></small></p>
+                <code th:text="${advisory.settingKey()} + '=' + ${advisory.settingValue()}">jenrepo.key=value</code></small></p>
             <p th:if="${!advisory.docs().isEmpty()}"><small><a th:href="${advisory.docs()}" rel="noopener noreferrer"
                 target="_blank">Read more &rarr;</a></small></p>
         </article>

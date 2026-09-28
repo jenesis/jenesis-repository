@@ -42,7 +42,7 @@ class DemoSeederTest {
     @BeforeEach
     void setUp() throws Exception {
         tenant = ArtifactStoreProvider.resolve("filesystem",
-                        key -> "jenreg.filesystem.root".equals(key) ? root.toString() : null)
+                        key -> "jenrepo.filesystem.root".equals(key) ? root.toString() : null)
                 .scope("default");
         store = tenant.scope("maven");
     }

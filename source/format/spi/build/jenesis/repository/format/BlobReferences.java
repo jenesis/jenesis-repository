@@ -145,7 +145,7 @@ public interface BlobReferences {
      * Every installed format that lends its reference sets, discovered through the same {@link ServiceLoader}
      * {@code uses RepositoryFormat} clause the dispatcher and the layout seams ride - never a second registry or a
      * second {@code provides} clause per format. A format switched off
-     * ({@code jenreg.<name>=false}, {@link Features}) is skipped exactly as a missing module is, so a
+     * ({@code jenrepo.<name>=false}, {@link Features}) is skipped exactly as a missing module is, so a
      * disabled format lends nothing.
      *
      * <p>The sanctioned lookup for a neutral consumer - the mark phase of a garbage collector - that must find these

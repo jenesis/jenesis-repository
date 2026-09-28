@@ -40,7 +40,7 @@ class SettingLevelsTest {
     @BeforeEach
     void setUp() throws IOException {
         store = ArtifactStoreProvider.resolve("filesystem",
-                key -> "jenreg.filesystem.root".equals(key) ? root.toString() : null);
+                key -> "jenrepo.filesystem.root".equals(key) ? root.toString() : null);
         settings = new Settings(store);
         live = new LiveConfig(settings, new RepositoryProperties(), AdvisorySource.none(), _ -> null);
         editor = new SettingsEditor(settings, _ -> Optional.empty(), live, AuditTrail.none());

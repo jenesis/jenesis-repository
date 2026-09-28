@@ -62,7 +62,7 @@ class MaintenanceContentionTest {
     @BeforeEach
     void setUp() throws IOException {
         store = ArtifactStoreProvider.resolve("filesystem",
-                key -> "jenreg.filesystem.root".equals(key) ? root.toString() : null);
+                key -> "jenrepo.filesystem.root".equals(key) ? root.toString() : null);
         RepositoryProperties properties = new RepositoryProperties();
         properties.setProxyEnabled(false);
         LiveConfig live = new LiveConfig(new Settings(store), properties, AdvisorySource.none(), _ -> null);
@@ -133,7 +133,7 @@ class MaintenanceContentionTest {
         }
 
         assertThat(units.get()).as("the rival owns this pass; the body must not run here").isZero();
-        assertThat(registry.find("jenreg.maintenance.failures").counter())
+        assertThat(registry.find("jenrepo.maintenance.failures").counter())
                 .as("a refused acquisition is the normal fleet behaviour - exactly one node sweeps and the others "
                         + "skip - so it must not be counted as a failure")
                 .isNull();
@@ -238,7 +238,7 @@ class MaintenanceContentionTest {
         assertThat(swept).as("the pass stopped submitting units the moment single-writer status was lost, bounding "
                         + "the window in which two nodes sweep the same store to the unit already running")
                 .containsExactly("a-first");
-        assertThat(registry.get("jenreg.maintenance.failures").tag("task", "c5").counter().count())
+        assertThat(registry.get("jenrepo.maintenance.failures").tag("task", "c5").counter().count())
                 .as("losing a lease you held is a pass failure, not a skip: it is counted").isEqualTo(1.0);
         TaskSchedule.TaskRun run = scheduler.taskRuns().get("c5");
         assertThat(run).isNotNull();
@@ -262,7 +262,7 @@ class MaintenanceContentionTest {
         scheduler.close();
 
         assertThat(swept).as("every unit ran").containsExactlyInAnyOrder("a-first", "b-second", "c-third");
-        assertThat(registry.find("jenreg.maintenance.failures").counter())
+        assertThat(registry.find("jenrepo.maintenance.failures").counter())
                 .as("and nothing was counted").isNull();
     }
 
@@ -365,7 +365,7 @@ class MaintenanceContentionTest {
                     .as("Lease.acquire refuses a live lease regardless of holder - including this node's own - so an "
                             + "admin run can never double the in-flight scheduled pass")
                     .isZero();
-            assertThat(registry.find("jenreg.maintenance.failures").counter())
+            assertThat(registry.find("jenrepo.maintenance.failures").counter())
                     .as("and the refused admin run is an INFO skip, never a counted failure").isNull();
             release.countDown();
             worker.join(10_000L);
@@ -404,7 +404,7 @@ class MaintenanceContentionTest {
             scheduler.runNow(NOW);
         }
         assertThat(units.get()).as("a 100ms lease is short but usable, and the pass runs").isEqualTo(1);
-        assertThat(registry.find("jenreg.maintenance.failures").counter())
+        assertThat(registry.find("jenrepo.maintenance.failures").counter())
                 .as("no scheduleAtFixedRate failure was counted").isNull();
     }
 

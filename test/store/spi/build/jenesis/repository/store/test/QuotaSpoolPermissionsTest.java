@@ -30,7 +30,7 @@ class QuotaSpoolPermissionsTest {
                 "owner-only permission tightening is only observable on a POSIX filesystem");
 
         ArtifactStore delegate = ArtifactStoreProvider.resolve(
-                "filesystem", key -> "jenreg.filesystem.root".equals(key) ? root.toString() : null);
+                "filesystem", key -> "jenrepo.filesystem.root".equals(key) ? root.toString() : null);
         QuotaArtifactStore store = new QuotaArtifactStore(delegate, 1_000_000);
 
         Path tmp = Path.of(System.getProperty("java.io.tmpdir"));

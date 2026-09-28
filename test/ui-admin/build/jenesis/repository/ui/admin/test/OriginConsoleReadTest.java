@@ -36,7 +36,7 @@ public class OriginConsoleReadTest {
     @BeforeEach
     void setUp() throws IOException {
         ArtifactStore store = ArtifactStoreProvider.resolve("filesystem",
-                key -> "jenreg.filesystem.root".equals(key) ? root.toString() : null);
+                key -> "jenrepo.filesystem.root".equals(key) ? root.toString() : null);
         browse = new RepositoryBrowse(store, new CurrentTenant() {
             @Override
             public String name() {

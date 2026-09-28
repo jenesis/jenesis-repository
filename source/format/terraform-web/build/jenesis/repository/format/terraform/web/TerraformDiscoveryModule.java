@@ -5,7 +5,7 @@ import build.jenesis.repository.server.kernel.ServerModuleProvider;
 /**
  * Announces the Terraform service-discovery document to the repository server's {@code ServerModuleProvider}
  * discovery, so the server imports {@link TerraformDiscoveryConfig} - and with it the one root-level path this
- * product serves - without naming it anywhere. Toggled off by {@code jenreg.terraform=false} (the {@code Features}
+ * product serves - without naming it anywhere. Toggled off by {@code jenrepo.terraform=false} (the {@code Features}
  * convention), it degrades exactly as if the module were absent from the image.
  */
 public final class TerraformDiscoveryModule implements ServerModuleProvider {

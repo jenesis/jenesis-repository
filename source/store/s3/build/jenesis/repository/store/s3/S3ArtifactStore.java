@@ -94,7 +94,7 @@ public final class S3ArtifactStore extends S3CompatibleArtifactStore {
      * Applies the store's server-side encryption to an object write. Every {@code PutObject} the store issues -
      * plain, content-addressed or conditional - is built through here, so an object is never written unencrypted:
      * SSE-S3 ({@link ServerSideEncryption#AES256}) by default, or {@code aws:kms} with {@code kmsKeyId} when one is
-     * configured ({@code jenreg.s3.sse-kms-key-id}). There is deliberately no way to switch encryption off
+     * configured ({@code jenrepo.s3.sse-kms-key-id}). There is deliberately no way to switch encryption off
      * - a blank or absent key simply falls back to the AES256 default rather than disabling it.
      */
     public static PutObjectRequest.Builder encrypt(PutObjectRequest.Builder builder, String kmsKeyId) {

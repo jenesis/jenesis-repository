@@ -43,7 +43,7 @@ public final class FirstRunWelcome implements ApplicationListener<ContextRefresh
             issued = firstRunKey.issueIfNeeded();
         } catch (IOException | RuntimeException refused) {
             LOGGER.warn("Nobody can sign in to this deployment yet, and no one-time key could be stored for it: {}. "
-                    + "Set a console admin key (JENREG_UI_ADMIN_KEY) or an administrator (JENREG_UI_ADMINS) "
+                    + "Set a console admin key (JENREPO_UI_ADMIN_KEY) or an administrator (JENREPO_UI_ADMINS) "
                     + "instead.", refused.getMessage());
             return;
         }

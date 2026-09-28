@@ -20,7 +20,7 @@ import build.jenesis.repository.walk.WalkPass;
  */
 public final class ListingRebuildConsumer implements WalkConsumer {
 
-    /** The consumer's name: its toggle ({@code jenreg.listing-rebuild}), its scenario, its settings row. */
+    /** The consumer's name: its toggle ({@code jenrepo.listing-rebuild}), its scenario, its settings row. */
     public static final String NAME = "listing-rebuild";
 
     private static final Logger LOGGER = LoggerFactory.getLogger(ListingRebuildConsumer.class);

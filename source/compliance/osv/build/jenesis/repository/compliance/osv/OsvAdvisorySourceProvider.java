@@ -15,7 +15,7 @@ import build.jenesis.repository.compliance.SignalSourceProvider;
  * <p>It was briefly documented as on by default, in this javadoc, in its {@code Setting} and in the generated
  * settings reference, because a defaults map on the plain server's launcher switched it on. The shipped image never
  * ran that launcher, so no deployment ever had it on by default and the documentation described a posture that did
- * not exist. Both now say the same thing: {@code jenreg.osv=true} turns it on.
+ * not exist. Both now say the same thing: {@code jenrepo.osv=true} turns it on.
  */
 public final class OsvAdvisorySourceProvider implements SignalSourceProvider {
 

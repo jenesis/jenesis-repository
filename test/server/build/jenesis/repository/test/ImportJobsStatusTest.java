@@ -23,7 +23,7 @@ class ImportJobsStatusTest {
 
     private CountingStore store() {
         return new CountingStore(ArtifactStoreProvider.resolve(
-                "filesystem", key -> "jenreg.filesystem.root".equals(key) ? root.toString() : null));
+                "filesystem", key -> "jenrepo.filesystem.root".equals(key) ? root.toString() : null));
     }
 
     @Test

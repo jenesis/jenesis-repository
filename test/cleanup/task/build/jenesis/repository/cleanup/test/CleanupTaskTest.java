@@ -35,7 +35,7 @@ class CleanupTaskTest {
 
     @Test
     void an_explicitly_selected_retention_engine_that_no_module_answers_fails_fast() {
-        // An operator who names a retention engine (jenreg.retention=<name>) has chosen
+        // An operator who names a retention engine (jenrepo.retention=<name>) has chosen
         // it; a name no installed engine answers to must stop the start, not degrade silently to no-retention -
         // which would leave the cleanup endpoints answering 501 while artifacts the operator meant to age out are
         // held forever with nothing said. The message names the unsatisfiable selection so an operator can fix it.

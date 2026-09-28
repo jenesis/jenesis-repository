@@ -3,11 +3,11 @@ package build.jenesis.repository.ui;
 import org.springframework.boot.context.properties.ConfigurationProperties;
 
 /**
- * GitHub OAuth client credentials, bound from {@code jenreg.ui.github.*} ({@code JENREG_UI_GITHUB_CLIENT_ID} /
+ * GitHub OAuth client credentials, bound from {@code jenrepo.ui.github.*} ({@code JENREPO_UI_GITHUB_CLIENT_ID} /
  * {@code _SECRET}). When the client id is blank, GitHub login
  * is disabled.
  */
-@ConfigurationProperties(prefix = "jenreg.ui.github")
+@ConfigurationProperties(prefix = "jenrepo.ui.github")
 public class GithubProperties {
 
     private String clientId = "";

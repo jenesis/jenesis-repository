@@ -21,7 +21,7 @@ import org.springframework.security.core.authority.SimpleGrantedAuthority;
  * services</em>, not about this policy: which provider-qualified id each service asks the authority seam about,
  * and that the seam records what it was asked. A realistic policy makes those readable; a mock would assert the
  * same thing less legibly. The admin-list behaviour itself is no longer asserted, because it is no longer
- * shipped - {@code jenreg.ui.admins} reaches the console through {@code Superadmins} now.
+ * shipped - {@code jenrepo.ui.admins} reaches the console through {@code Superadmins} now.
  */
 public class AdminListAuthorities implements LoginAuthorities {
 

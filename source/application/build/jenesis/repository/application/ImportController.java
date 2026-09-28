@@ -115,7 +115,7 @@ public class ImportController {
         if (request.resume() != null) {
             RepositoryRequests.rejectTraversal(request.resume());
         }
-        return Observations.observe(observations, "jenreg.import", repo, tenant, observation -> {
+        return Observations.observe(observations, "jenrepo.import", repo, tenant, observation -> {
             observation.lowCardinalityKeyValue("source",
                     request.source() == null || request.source().isBlank() ? "none" : request.source());
             ImportJobs jobs = new ImportJobs();
@@ -244,7 +244,7 @@ public class ImportController {
             return null;
         }
         // Discover the import source, but honour the same Features toggle the format/feed discovery applies
-        // (ServingConfig.enabledFormats/importSources): a source disabled with jenreg.<name>=false
+        // (ServingConfig.enabledFormats/importSources): a source disabled with jenrepo.<name>=false
         // must degrade exactly like an absent module - it drops out of /api/capabilities and must not be usable
         // here either, or a config-disabled connector stays reachable to any repository:write caller.
         ImportSourceProvider provider = ImportSourceProvider

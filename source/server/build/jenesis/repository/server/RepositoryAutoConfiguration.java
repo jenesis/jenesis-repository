@@ -43,11 +43,11 @@ import io.micrometer.observation.ObservationRegistry;
  * {@code requires build.jenesis.repository.server} and extend it by overriding beans rather than forking the module.
  * Every bean is {@link ConditionalOnMissingBean conditional}: the storage backend (a name resolved through
  * {@code ArtifactStoreProvider}), the {@link Authorization} (enforcing by default, anonymous only when {@code
- * jenreg.auth=false}), the {@link RepositoryFormat} plugins discovered with {@link ServiceLoader}, the pull-through
- * {@code upstreams} (format name to upstream URI, from {@code jenreg.proxy.*}) and upstream
+ * jenrepo.auth=false}), the {@link RepositoryFormat} plugins discovered with {@link ServiceLoader}, the pull-through
+ * {@code upstreams} (format name to upstream URI, from {@code jenrepo.proxy.*}) and upstream
  * {@link ProxyFormat.Fetcher}, the framework-neutral {@link FormatDispatcher}, the {@link RepositoryRouting} (the
  * {@link FixedTenantRouting} default, resolving every request to a repository of the configured
- * {@code jenreg.default-tenant}), the {@link Tenants}
+ * {@code jenrepo.default-tenant}), the {@link Tenants}
  * directory (resolved through {@code TenantsProvider}; the fixed single tenant unless a tenants module is
  * discovered), and the {@link RepositoryController} itself. Because an auto-configuration is applied after
  * user configuration, a bean an embedder contributes - an audited or replicating {@link ArtifactStore} decorator, a
@@ -62,13 +62,13 @@ public class RepositoryAutoConfiguration {
 
     public RepositoryAutoConfiguration(Environment environment) {
         // The clock every stored stamp is made with, before any bean stamps anything: the system clock, offset by
-        // jenreg.clock.skew when a fleet test wants this node's clock to run ahead of its peers'.
-        String skew = environment.getProperty("jenreg.clock.skew");
+        // jenrepo.clock.skew when a fleet test wants this node's clock to run ahead of its peers'.
+        String skew = environment.getProperty("jenrepo.clock.skew");
         if (skew != null && !skew.isBlank()) {
             Clocks.install(Clock.offset(Clock.systemUTC(), Duration.parse(skew.strip())));
         }
         // Hand the Spring Environment to the config-driven SPI enable/disable convention before any bean below
-        // discovers providers, so every jenreg.* toggle - including its JENREG_* environment
+        // discovers providers, so every jenrepo.* toggle - including its JENREPO_* environment
         // spelling through relaxed binding - gates ServiceLoader discovery deployment-wide.
         Features.configure(environment::getProperty);
         logSecurityPosture(environment);
@@ -118,7 +118,7 @@ public class RepositoryAutoConfiguration {
     @ConditionalOnMissingBean
     public Authorization authorization(RepositoryProperties properties, ArtifactStore store) {
         // Secure-defaults principle: an insecure configuration must be loud, not silent. The auth=false open-deployment
-        // WARN is not an ad-hoc line here; it is the jenreg.auth.open security-posture advisory
+        // WARN is not an ad-hoc line here; it is the jenrepo.auth.open security-posture advisory
         // (SecurityPosture), logged once at boot by logSecurityPosture(...) and surfaced on the console and
         // GET /api/posture - one source of truth, no divergent second list.
         String anonymousRights = properties.getAnonymousRights().strip();
@@ -127,28 +127,28 @@ public class RepositoryAutoConfiguration {
             // instance is ALREADY fully open, so a configured anonymous-rights is redundant and ignored - warn so the
             // operator is not misled into thinking it is narrowing an open deployment.
             if (!anonymousRights.isEmpty()) {
-                LOGGER.warn("SECURITY: jenreg.anonymous-rights is set but jenreg.auth=false, so "
+                LOGGER.warn("SECURITY: jenrepo.anonymous-rights is set but jenrepo.auth=false, so "
                         + "the deployment is ALREADY fully open (every request is served anonymously) and the "
-                        + "anonymous-rights grant is redundant and ignored. Set jenreg.auth=true to make it "
+                        + "anonymous-rights grant is redundant and ignored. Set jenrepo.auth=true to make it "
                         + "meaningful: keys are then required and a keyless caller is limited to exactly this grant.");
             }
             return Authorization.anonymous();
         }
         // Second guardrail: a loud startup WARN naming exactly what a keyless caller may do, escalated for
         // write/admin. This names the exact grant (the posture surface names the risk, never the value); the
-        // jenreg.anonymous.* security-posture advisories carry the governance escalation onto the console and
+        // jenrepo.anonymous.* security-posture advisories carry the governance escalation onto the console and
         // GET /api/posture. Default (empty) => no anonymous access and no warning, byte-for-byte today's behaviour.
         if (!anonymousRights.isEmpty()) {
             if (AnonymousRights.grantsWriteOrAdmin(anonymousRights)) {
                 LOGGER.warn("SECURITY: anonymous access ENABLED with WRITE/ADMIN rights: {}. A keyless caller may "
                         + "mutate or administer artifacts with NO credential (a public drop-box / open admin) - the "
                         + "loudest anonymous combination. This is an explicit opt-in; unset "
-                        + "jenreg.anonymous-rights to require a key for every request.", anonymousRights);
+                        + "jenrepo.anonymous-rights to require a key for every request.", anonymousRights);
             } else {
                 LOGGER.warn("SECURITY: anonymous access ENABLED: {}. A keyless caller is granted these rights with no "
-                        + "credential (the public-mirror pattern - pair with jenreg.read-only=true for a "
+                        + "credential (the public-mirror pattern - pair with jenrepo.read-only=true for a "
                         + "browsable-but-immutable mirror). This is an explicit opt-in; unset "
-                        + "jenreg.anonymous-rights to require a key for every request.", anonymousRights);
+                        + "jenrepo.anonymous-rights to require a key for every request.", anonymousRights);
             }
         }
         Authorization authorization = Authorization.enforcing(store)
@@ -179,12 +179,12 @@ public class RepositoryAutoConfiguration {
         } catch (IllegalArgumentException malformed) {
             throw new IllegalStateException(malformed.getMessage(), malformed);
         } catch (IOException unwritable) {
-            throw new IllegalStateException("jenreg.bootstrap-key could not be provisioned into the store", unwritable);
+            throw new IllegalStateException("jenrepo.bootstrap-key could not be provisioned into the store", unwritable);
         }
         if (tenant == null) {
             return;
         }
-        LOGGER.warn("SECURITY: a bootstrap key is provisioned for tenant '{}' (jenreg.bootstrap-key) - it grants "
+        LOGGER.warn("SECURITY: a bootstrap key is provisioned for tenant '{}' (jenrepo.bootstrap-key) - it grants "
                 + "EVERY right on every repository of that tenant and never expires. Use it to issue the "
                 + "credentials you actually want, then unset it; it is re-provisioned on every boot for as long "
                 + "as it is set.", tenant);
@@ -302,7 +302,7 @@ public class RepositoryAutoConfiguration {
                 // authorization bean takes for anonymous mode. A non-HTTPS upstream is proxied verbatim (a build tool
                 // pulls its dependencies through it), so a MITM on that hop can inject or tamper with artifacts. Warn
                 // loudly at boot rather than refuse: a plaintext internal mirror is a legitimate explicit choice and
-                // refusing would break the documented `jenreg.proxy.<format>=<url>` config shape. Point the
+                // refusing would break the documented `jenrepo.proxy.<format>=<url>` config shape. Point the
                 // upstream at an https:// URL to remove this warning.
                 LOGGER.warn("SECURITY: the '{}' proxy upstream {} is NOT HTTPS - artifacts are pulled through over a "
                         + "plaintext/untrusted transport and can be tampered with in transit. This is an explicit "
@@ -343,7 +343,7 @@ public class RepositoryAutoConfiguration {
     @ConditionalOnMissingBean
     public LoggingObservationHandler loggingObservationHandler() {
         // The one logging pillar of the Observation API, registered once beside the Observations wrapper so every
-        // jenreg.* operation logs from a single handler. Boot attaches it to the auto-configured ObservationRegistry.
+        // jenrepo.* operation logs from a single handler. Boot attaches it to the auto-configured ObservationRegistry.
         return new LoggingObservationHandler();
     }
 
@@ -360,7 +360,7 @@ public class RepositoryAutoConfiguration {
     @ConditionalOnMissingBean
     public RepositoryRouting repositoryRouting(ArtifactStore store, RepositoryProperties properties,
                                                Environment environment) {
-        return RepositoryRoutingProvider.resolve(environment.getProperty("jenreg." + RepositoryRoutingProvider.SETTING),
+        return RepositoryRoutingProvider.resolve(environment.getProperty("jenrepo." + RepositoryRoutingProvider.SETTING),
                 new RoutingContext() {
                     @Override
                     public ArtifactStore root() {
@@ -369,7 +369,7 @@ public class RepositoryAutoConfiguration {
 
                     @Override
                     public String config(String key) {
-                        return environment.getProperty("jenreg." + key);
+                        return environment.getProperty("jenrepo." + key);
                     }
 
                     @Override
@@ -438,7 +438,7 @@ public class RepositoryAutoConfiguration {
     }
 
     /** The recent-logs ring: a bounded in-memory store of the most recent entries, sized from
-     *  {@code jenreg.logs-buffer} at startup - the bound behind {@code GET /api/logs}. */
+     *  {@code jenrepo.logs-buffer} at startup - the bound behind {@code GET /api/logs}. */
     @Bean
     @ConditionalOnMissingBean
     public LogRingBuffer logRingBuffer(RepositoryProperties properties) {
@@ -477,7 +477,7 @@ public class RepositoryAutoConfiguration {
     }
 
     /** The multi-node consistency check: the fingerprint compare over the shared store, tuned from the
-     *  {@code jenreg.consistency.*} settings. Reads only the {@code consistency/nodes/} prefix, never a scan. */
+     *  {@code jenrepo.consistency.*} settings. Reads only the {@code consistency/nodes/} prefix, never a scan. */
     @Bean
     @ConditionalOnMissingBean
     public NodeConsistency nodeConsistency(ArtifactStore store, Environment environment) {
@@ -537,7 +537,7 @@ public class RepositoryAutoConfiguration {
                                                      RoutedServing routed,
                                                      Environment environment) {
         // A format reads a runtime toggle off the exchange (the Maven metadata computation opt-in); resolve the bare
-        // setting key against the environment under the shared jenreg.* prefix, into which a stored
+        // setting key against the environment under the shared jenrepo.* prefix, into which a stored
         // setting is layered at boot, so the format needs no settings dependency. The un-scoped store is handed in so
         // the /api/assets enumeration can scope to an explicitly named repo within the request's tenant. The routed
         // serving seam (NONE here, a router in a multi-repository distribution) drives a read of a proxy/group repo.
@@ -569,7 +569,7 @@ public class RepositoryAutoConfiguration {
     /**
      * Matches when <em>no</em> {@link ImportEdgeProvider} is installed, so the {@link ImportEdgeController} is
      * registered only while a richer distribution has not claimed the import edge. Installs the shared
-     * {@link Features} lookup against the effective {@link Environment} first, so the same {@code jenreg.*}
+     * {@link Features} lookup against the effective {@link Environment} first, so the same {@code jenrepo.*}
      * enable/disable toggles gate the provider discovery here as everywhere else (and a provider missing its required
      * config is inert - the edge is then served).
      */

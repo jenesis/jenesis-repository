@@ -17,7 +17,7 @@ import build.jenesis.repository.maintenance.RepositoryContext;
  * compares the composite freshness stamp - scan freshness plus eviction epoch - the index carries against the live one),
  * so a pass that finds nothing changed writes nothing. When they have moved, the findings are streamed - never buffered
  * whole - into a fresh index generation and published with one atomic marker flip; a failed rebuild <em>throws</em>, so
- * the scheduler logs it, counts it on {@code jenreg.maintenance.failures} and reports the pass FAILED
+ * the scheduler logs it, counts it on {@code jenrepo.maintenance.failures} and reports the pass FAILED
  * ({@link MaintenanceTask} clause 4). That is a visibility decision, not a serving one: a rebuild that failed never
  * reached the marker flip, so the previous generation still stands and a selective query keeps paging it (or falls back
  * to the live walk before the first build) - always correct, never stale. The read path degrading gracefully is exactly

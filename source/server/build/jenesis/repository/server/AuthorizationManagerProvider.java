@@ -31,7 +31,7 @@ import org.springframework.security.web.access.intercept.RequestAuthorizationCon
  *   <li><b>Absence sentinel.</b> No provider installed is not an error: {@link #resolve} answers an empty
  *       {@link Optional} and the caller keeps its own manager. {@link #create} declines the same way;
  *       {@code null} is never a legal return from either, nor from {@link #name()}.</li>
- *   <li><b>Selection failure.</b> An explicit {@code jenreg.authorization-manager=<name>} that no
+ *   <li><b>Selection failure.</b> An explicit {@code jenrepo.authorization-manager=<name>} that no
  *       installed provider answers to, or whose provider declines, throws at resolution naming the selection and
  *       the installed names. It does <em>not</em> fall back to the server's manager: a deployment that asked for
  *       a policy and silently got a weaker one is a silent fallback, and here it is the defect that decides

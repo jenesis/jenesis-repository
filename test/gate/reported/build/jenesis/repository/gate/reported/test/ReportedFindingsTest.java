@@ -45,7 +45,7 @@ class ReportedFindingsTest {
     @BeforeEach
     void publish() throws IOException {
         store = ArtifactStoreProvider.resolve("filesystem",
-                key -> "jenreg.filesystem.root".equals(key) ? root.toString() : null)
+                key -> "jenrepo.filesystem.root".equals(key) ? root.toString() : null)
                 .scope("default").scope("releases");
         Publication publication = new Publication(store);
         publication.link(PATH, publication.storeBlob(

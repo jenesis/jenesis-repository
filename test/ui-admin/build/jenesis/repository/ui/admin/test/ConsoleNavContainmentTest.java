@@ -101,7 +101,7 @@ class ConsoleNavContainmentTest {
     void a_switched_off_console_module_contributes_no_nav_link() {
         StandardEnvironment switchedOff = new StandardEnvironment();
         switchedOff.getPropertySources().addFirst(new MapPropertySource("test",
-                Map.of("jenreg." + new NavigatingConsoleModule().name(), "false")));
+                Map.of("jenrepo." + new NavigatingConsoleModule().name(), "false")));
 
         assertThat(new CapabilityService(switchedOff).moduleNav())
                 .as("a module the deployment switched off is not imported, so a link to its screen is a link to a "

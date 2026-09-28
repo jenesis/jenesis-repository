@@ -368,7 +368,7 @@ class MavenSourceTest {
         assertThatThrownBy(() -> source.forEach((format, path, content) -> { }, cursor -> { }))
                 .isInstanceOf(IOException.class)
                 .hasMessageContaining("archive-inflation bound")
-                .hasMessageContaining("jenreg.archive.largest-entry");
+                .hasMessageContaining("jenrepo.archive.largest-entry");
     }
 
     @Test

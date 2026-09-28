@@ -16,7 +16,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 /**
  * The core walk contract over a real filesystem store: one total lexicographic order across roots and segments,
  * every key exactly once per pass, pass state durable under {@code walks/<consumer>/}, generation turnover once a
- * pass completes, and the ServiceLoader provider resolution with its {@code jenreg.walk} selection.
+ * pass completes, and the ServiceLoader provider resolution with its {@code jenrepo.walk} selection.
  */
 class StoreWalkTest {
 
@@ -27,7 +27,7 @@ class StoreWalkTest {
 
     private ArtifactStore store() {
         return ArtifactStoreProvider.resolve(
-                "filesystem", key -> "jenreg.filesystem.root".equals(key) ? root.toString() : null);
+                "filesystem", key -> "jenrepo.filesystem.root".equals(key) ? root.toString() : null);
     }
 
     private StoreArtifactWalk walk(int checkpoint, int segments) {
@@ -124,10 +124,10 @@ class StoreWalkTest {
 
     @Test
     void an_explicitly_selected_walk_no_provider_answers_to_fails_loudly() {
-        // Resolving to empty would let `jenreg.walk=other` silently turn every
+        // Resolving to empty would let `jenrepo.walk=other` silently turn every
         // walk-riding sweep - garbage collection, reconcile, retroactive hold enforcement - into a no-op that looks
         // exactly like a healthy idle system.
-        Features.configure(key -> "jenreg.walk".equals(key) ? "other" : null);
+        Features.configure(key -> "jenrepo.walk".equals(key) ? "other" : null);
         try {
             assertThatThrownBy(() -> WalkProvider.resolve(key -> null))
                     .isInstanceOf(IllegalStateException.class)
@@ -143,7 +143,7 @@ class StoreWalkTest {
     @Test
     void a_walk_switched_off_resolves_to_the_empty_sentinel() {
         // Unselected absence is the one outcome that still degrades: nothing enumerates and the caller says so.
-        Features.configure(key -> "jenreg.paged-descent".equals(key) ? "false" : null);
+        Features.configure(key -> "jenrepo.paged-descent".equals(key) ? "false" : null);
         try {
             assertThat(WalkProvider.resolve(key -> null)).isEmpty();
             assertThat(WalkProvider.installed()).isFalse();

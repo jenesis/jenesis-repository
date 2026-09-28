@@ -41,7 +41,7 @@ class HoldReleaseFailClosedTest {
     @BeforeEach
     void setUp() {
         store = ArtifactStoreProvider.resolve("filesystem",
-                key -> "jenreg.filesystem.root".equals(key) ? root.toString() : null);
+                key -> "jenrepo.filesystem.root".equals(key) ? root.toString() : null);
     }
 
     /** A hold kind whose every leg fails, the way a module with a broken backend behind it does. */

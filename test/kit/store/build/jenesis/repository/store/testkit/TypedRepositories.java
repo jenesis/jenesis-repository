@@ -32,7 +32,7 @@ public final class TypedRepositories {
     public static void create(Path root, String tenant, String repository, String format) {
         try {
             new RepositoryDocument(format, Instant.now()).create(ArtifactStoreProvider.resolve("filesystem",
-                    key -> "jenreg.filesystem.root".equals(key) ? root.toString() : null)
+                    key -> "jenrepo.filesystem.root".equals(key) ? root.toString() : null)
                     .scope(tenant).scope(repository));
         } catch (IOException e) {
             throw new UncheckedIOException(e);

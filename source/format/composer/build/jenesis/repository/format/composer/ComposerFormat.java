@@ -113,11 +113,11 @@ public final class ComposerFormat implements RepositoryFormat, ArtifactLayout, P
     private static final String DEV = "~dev";
 
     // A hostile archive cannot force a large allocation: the composer.json read is bounded by the product's one
-    // archive-inflation ceiling, ArchiveInflation.largestEntry(), settable at jenreg.archive.largest-entry - not by a
+    // archive-inflation ceiling, ArchiveInflation.largestEntry(), settable at jenrepo.archive.largest-entry - not by a
     // private constant of this format's (RepositoryFormat contract clause 15).
 
     // How far the walk for the root composer.json may run is the product's one archive-walk bound,
-    // ArchiveWalk.largestWalk(), settable at jenreg.archive.largest-walk - not a private constant of this format's
+    // ArchiveWalk.largestWalk(), settable at jenrepo.archive.largest-walk - not a private constant of this format's
     // (RepositoryFormat contract clause 15 /, one dimension over from the inflation ceiling). An archive that
     // will not yield its composer.json inside it is treated as unindexable (a 400 publish).
 

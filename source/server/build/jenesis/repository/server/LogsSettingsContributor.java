@@ -5,7 +5,7 @@ import build.jenesis.repository.settings.Setting;
 import build.jenesis.repository.settings.SettingsContributor;
 
 /**
- * Describes the recent-logs viewer's dial, so {@code jenreg.logs-buffer} surfaces on the settings screens, the
+ * Describes the recent-logs viewer's dial, so {@code jenrepo.logs-buffer} surfaces on the settings screens, the
  * {@code /api/settings} endpoint and the CLI beside the {@link LogRingBuffer} it sizes: the number of most recent
  * entries the ring retains before the oldest is evicted, defaulting to {@link LogRingBuffer#DEFAULT_CAPACITY}.
  * Restart-only ({@code live=false}) - the ring is sized once when the appender is attached at startup. The key is the

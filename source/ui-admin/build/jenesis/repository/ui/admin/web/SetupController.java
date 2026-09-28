@@ -73,8 +73,8 @@ public class SetupController {
     }
 
     private SetupWizard.Starter starter(Authentication authentication) {
-        return new SetupWizard.Starter(StarterCredential.signedInWith(authentication), set("jenreg.ui.admin-key"),
-                set("jenreg.bootstrap-key"));
+        return new SetupWizard.Starter(StarterCredential.signedInWith(authentication), set("jenrepo.ui.admin-key"),
+                set("jenrepo.bootstrap-key"));
     }
 
     private boolean set(String key) {

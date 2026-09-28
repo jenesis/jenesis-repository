@@ -62,7 +62,7 @@ class ArtifactStoreDecoratorOrderTest {
         properties.setReadOnly(true);
         StandardEnvironment environment = new StandardEnvironment();
         environment.getPropertySources().addFirst(new MapPropertySource("test",
-                Map.of("jenreg.filesystem.root", root.toString())));
+                Map.of("jenrepo.filesystem.root", root.toString())));
 
         ArtifactStore store = new RepositoryAutoConfiguration(environment)
                 .artifactStore(properties, environment, beans.getBeanProvider(ArtifactStoreDecorator.class));

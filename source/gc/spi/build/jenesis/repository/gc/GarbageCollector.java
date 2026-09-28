@@ -122,7 +122,7 @@ public interface GarbageCollector {
     GcPlan collect(ArtifactStore store, Known<List<String>> pointerRoots, Instant now) throws IOException;
 
     /**
-     * The wall-clock floor between condemning a blob and deleting it when {@code jenreg.gc.grace} names none: two
+     * The wall-clock floor between condemning a blob and deleting it when {@code jenrepo.gc.grace} names none: two
      * hours. An upload in several steps leaves its pieces unreferenced for a while - a {@code docker push} sends its
      * layers before the manifest naming them - and where an operator schedules collection often, two passes could
      * otherwise fall inside that while and take the pieces. Harbor spares blobs uploaded within the last two hours

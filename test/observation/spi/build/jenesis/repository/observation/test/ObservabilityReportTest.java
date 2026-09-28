@@ -41,33 +41,33 @@ class ObservabilityReportTest {
     @Test
     void merges_and_name_sorts_the_signals_of_every_source() {
         ObservabilityReport report = ObservabilityReport.from(List.of(
-                source(HealthCheck.up("jenreg.zeta.check", "z"),
-                        Metric.gauge("jenreg.zeta.gauge", "z", 1, ""),
-                        TaskStatus.idle("jenreg.zeta.task", "z")),
-                source(HealthCheck.up("jenreg.alpha.check", "a"),
-                        Metric.gauge("jenreg.alpha.gauge", "a", 1, ""),
-                        TaskStatus.idle("jenreg.alpha.task", "a"))));
+                source(HealthCheck.up("jenrepo.zeta.check", "z"),
+                        Metric.gauge("jenrepo.zeta.gauge", "z", 1, ""),
+                        TaskStatus.idle("jenrepo.zeta.task", "z")),
+                source(HealthCheck.up("jenrepo.alpha.check", "a"),
+                        Metric.gauge("jenrepo.alpha.gauge", "a", 1, ""),
+                        TaskStatus.idle("jenrepo.alpha.task", "a"))));
 
         assertThat(report.healthChecks()).extracting(HealthCheck::name)
-                .containsExactly("jenreg.alpha.check", "jenreg.zeta.check");
+                .containsExactly("jenrepo.alpha.check", "jenrepo.zeta.check");
         assertThat(report.metrics()).extracting(Metric::name)
-                .containsExactly("jenreg.alpha.gauge", "jenreg.zeta.gauge");
+                .containsExactly("jenrepo.alpha.gauge", "jenrepo.zeta.gauge");
         assertThat(report.tasks()).extracting(TaskStatus::name)
-                .containsExactly("jenreg.alpha.task", "jenreg.zeta.task");
+                .containsExactly("jenrepo.alpha.task", "jenrepo.zeta.task");
     }
 
     @Test
     void overall_health_is_the_worst_across_all_checks() {
         ObservabilityReport clean = ObservabilityReport.from(List.of(
-                source(HealthCheck.up("jenreg.a.check", "a"),
-                        Metric.gauge("jenreg.a.g", "a", 1, ""), TaskStatus.idle("jenreg.a.t", "a"))));
+                source(HealthCheck.up("jenrepo.a.check", "a"),
+                        Metric.gauge("jenrepo.a.g", "a", 1, ""), TaskStatus.idle("jenrepo.a.t", "a"))));
         assertThat(clean.overall()).isEqualTo(Health.UP);
 
         ObservabilityReport mixed = ObservabilityReport.from(List.of(
-                source(HealthCheck.up("jenreg.a.check", "a"),
-                        Metric.gauge("jenreg.a.g", "a", 1, ""), TaskStatus.idle("jenreg.a.t", "a")),
-                source(HealthCheck.of("jenreg.b.check", "b", Health.DOWN, "dead"),
-                        Metric.gauge("jenreg.b.g", "b", 1, ""), TaskStatus.idle("jenreg.b.t", "b"))));
+                source(HealthCheck.up("jenrepo.a.check", "a"),
+                        Metric.gauge("jenrepo.a.g", "a", 1, ""), TaskStatus.idle("jenrepo.a.t", "a")),
+                source(HealthCheck.of("jenrepo.b.check", "b", Health.DOWN, "dead"),
+                        Metric.gauge("jenrepo.b.g", "b", 1, ""), TaskStatus.idle("jenrepo.b.t", "b"))));
         assertThat(mixed.overall()).isEqualTo(Health.DOWN);
     }
 
@@ -95,15 +95,15 @@ class ObservabilityReportTest {
         // other plugin's health, metrics and task statuses included.
         ObservabilityReport report = ObservabilityReport.from(List.of(
                 new ThrowingSource(),
-                source(HealthCheck.up("jenreg.alpha.check", "a"),
-                        Metric.gauge("jenreg.alpha.gauge", "a", 1, ""),
-                        TaskStatus.idle("jenreg.alpha.task", "a"))));
+                source(HealthCheck.up("jenrepo.alpha.check", "a"),
+                        Metric.gauge("jenrepo.alpha.gauge", "a", 1, ""),
+                        TaskStatus.idle("jenrepo.alpha.task", "a"))));
 
         assertThat(report.healthChecks()).as("the healthy source is collected in full")
                 .extracting(HealthCheck::name)
-                .containsExactly("jenreg.alpha.check", "jenreg.observation.unavailable.throwingsource");
-        assertThat(report.metrics()).extracting(Metric::name).containsExactly("jenreg.alpha.gauge");
-        assertThat(report.tasks()).extracting(TaskStatus::name).containsExactly("jenreg.alpha.task");
+                .containsExactly("jenrepo.alpha.check", "jenrepo.observation.unavailable.throwingsource");
+        assertThat(report.metrics()).extracting(Metric::name).containsExactly("jenrepo.alpha.gauge");
+        assertThat(report.tasks()).extracting(TaskStatus::name).containsExactly("jenrepo.alpha.task");
 
         HealthCheck substitute = report.healthChecks().stream()
                 .filter(check -> check.name().endsWith("throwingsource")).findFirst().orElseThrow();
@@ -140,9 +140,9 @@ class ObservabilityReportTest {
     @Test
     void discovers_the_service_loader_installed_source() {
         ObservabilityReport report = ObservabilityReport.discover();
-        assertThat(report.healthChecks()).extracting(HealthCheck::name).contains("jenreg.gc.worker");
-        assertThat(report.metrics()).extracting(Metric::name).contains("jenreg.quota.used.bytes");
-        assertThat(report.tasks()).extracting(TaskStatus::name).contains("jenreg.gc.sweep");
+        assertThat(report.healthChecks()).extracting(HealthCheck::name).contains("jenrepo.gc.worker");
+        assertThat(report.metrics()).extracting(Metric::name).contains("jenrepo.quota.used.bytes");
+        assertThat(report.tasks()).extracting(TaskStatus::name).contains("jenrepo.gc.sweep");
         assertThat(report.overall()).isEqualTo(Health.DEGRADED);
     }
 
@@ -151,7 +151,7 @@ class ObservabilityReportTest {
 
         @Override
         public List<Metric> metrics() {
-            return List.of(Metric.gauge("jenreg.owned.value", "The value this instance was built with", value, ""));
+            return List.of(Metric.gauge("jenrepo.owned.value", "The value this instance was built with", value, ""));
         }
     }
 
@@ -163,17 +163,17 @@ class ObservabilityReportTest {
 
         assertThat(report.metrics()).extracting(Metric::name)
                 .as("its own source once, however often it holds it, and the discovered ones beside it")
-                .containsOnlyOnce("jenreg.owned.value")
-                .contains("jenreg.quota.used.bytes");
+                .containsOnlyOnce("jenrepo.owned.value")
+                .contains("jenrepo.quota.used.bytes");
     }
 
     @Test
     void two_contexts_in_one_jvm_each_report_their_own_instance() {
         assertThat(ObservabilityReport.of(List.of(new Owned(1))).metrics())
-                .filteredOn(metric -> metric.name().equals("jenreg.owned.value"))
+                .filteredOn(metric -> metric.name().equals("jenrepo.owned.value"))
                 .singleElement().extracting(Metric::value).isEqualTo(1.0);
         assertThat(ObservabilityReport.of(List.of(new Owned(2))).metrics())
-                .filteredOn(metric -> metric.name().equals("jenreg.owned.value"))
+                .filteredOn(metric -> metric.name().equals("jenrepo.owned.value"))
                 .singleElement().extracting(Metric::value).isEqualTo(2.0);
     }
 
@@ -186,6 +186,6 @@ class ObservabilityReportTest {
         assertThat(report.healthChecks()).extracting(HealthCheck::name)
                 .as("the context's own instance reports, and the discovered one of the same class does not report "
                         + "a second time")
-                .containsOnlyOnce("jenreg.gc.worker");
+                .containsOnlyOnce("jenrepo.gc.worker");
     }
 }

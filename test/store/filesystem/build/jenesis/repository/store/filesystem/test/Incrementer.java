@@ -18,7 +18,7 @@ public final class Incrementer {
 
     public static void main(String[] arguments) throws IOException {
         ArtifactStore store = ArtifactStoreProvider.resolve("filesystem",
-                key -> "jenreg.filesystem.root".equals(key) ? arguments[0] : null);
+                key -> "jenrepo.filesystem.root".equals(key) ? arguments[0] : null);
         int increments = Integer.parseInt(arguments[1]);
         long lost = 0;
         for (int each = 0; each < increments; each++) {

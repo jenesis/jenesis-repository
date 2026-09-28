@@ -15,7 +15,7 @@ import org.springframework.scheduling.annotation.Scheduled;
  *       through {@code resolve(config)} - which converges the keys the hot paths read live; and</li>
  *   <li>the mutable {@link org.springframework.core.env.Environment}'s stored-settings property source
  *       ({@link SettingsEnvironmentLayer}) - which converges the keys a plugin or a format reads through a
- *       {@code jenreg.*} lookup rather than the live snapshot, and lets a cleared key stop shadowing its
+ *       {@code jenrepo.*} lookup rather than the live snapshot, and lets a cleared key stop shadowing its
  *       packaged default rather than leaving the boot-time value behind; and</li>
  *   <li>the {@link MaintenanceScheduler}'s enabled task list - so a background pass (cleanup, scan, dependents) toggled
  *       through the modules console starts or drops out on the worker's next iteration without a restart.</li>
@@ -57,7 +57,7 @@ public final class SettingsRefresh {
         this.converged = settings.overrides();
     }
 
-    @Scheduled(fixedRateString = "${jenreg.settings-refresh-millis:30000}")
+    @Scheduled(fixedRateString = "${jenrepo.settings-refresh-millis:30000}")
     public void refresh() {
         try {
             // One point read decides whether anything changed: a store this node or another wrote to bumps the epoch,

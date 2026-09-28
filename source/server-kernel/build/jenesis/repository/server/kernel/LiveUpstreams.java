@@ -9,7 +9,7 @@ import build.jenesis.repository.server.FormatDispatcher;
 /**
  * The pull-through upstream table as a live view for {@code FormatDispatcher}: a lookup by tenant and format name
  * answers the upstream the operator named for that tenant, else for the deployment ({@code format-upstream.<format>},
- * editable over {@code /api/upstreams}, or {@code jenreg.proxy.<format>}), and {@code null} for a format nobody named
+ * editable over {@code /api/upstreams}, or {@code jenrepo.proxy.<format>}), and {@code null} for a format nobody named
  * one for and for everything when the deployment's proxy switch is off - read through {@link LiveConfig} on every
  * request, so a settings change applies on the next fetch without a restart. The dispatcher calls {@link #upstream};
  * the map face ({@link #get}, {@link #entrySet}) is the deployment's own table, for any other reader.

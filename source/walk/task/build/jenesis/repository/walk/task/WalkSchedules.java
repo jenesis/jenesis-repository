@@ -9,7 +9,7 @@ import tools.jackson.databind.node.ArrayNode;
 import tools.jackson.databind.node.ObjectNode;
 
 /**
- * The walks a deployment schedules, as the {@code jenreg.walks} setting holds them: a JSON array of entries, each a
+ * The walks a deployment schedules, as the {@code jenrepo.walks} setting holds them: a JSON array of entries, each a
  * name, a cron expression and the consumers that ride it, {@code enabled} unless said otherwise. A walk is a
  * configured thing because it costs: every object the store holds is read at least once per walk, and on an
  * object store that is a bill per pass, so an operator states which walks run, when, and carrying what.
@@ -22,7 +22,7 @@ import tools.jackson.databind.node.ObjectNode;
  */
 public final class WalkSchedules {
 
-    /** The setting; bare key, as every dial's: {@code jenreg.walks}. */
+    /** The setting; bare key, as every dial's: {@code jenrepo.walks}. */
     public static final String SETTING = "walks";
 
     /**
@@ -85,11 +85,11 @@ public final class WalkSchedules {
         try {
             root = JSON.readTree(document);
         } catch (RuntimeException malformed) {
-            throw new IllegalArgumentException("jenreg.walks is not a JSON array of entries: " + malformed.getMessage(),
+            throw new IllegalArgumentException("jenrepo.walks is not a JSON array of entries: " + malformed.getMessage(),
                     malformed);
         }
         if (!(root instanceof ArrayNode entries)) {
-            throw new IllegalArgumentException("jenreg.walks is a JSON array of {name, cron, consumers, enabled} "
+            throw new IllegalArgumentException("jenrepo.walks is a JSON array of {name, cron, consumers, enabled} "
                     + "entries, not " + root.getNodeType());
         }
         List<Entry> parsed = new ArrayList<>();
@@ -98,21 +98,21 @@ public final class WalkSchedules {
         for (JsonNode node : entries) {
             index++;
             if (!(node instanceof ObjectNode entry)) {
-                throw new IllegalArgumentException("jenreg.walks entry " + index + " is not an object");
+                throw new IllegalArgumentException("jenrepo.walks entry " + index + " is not an object");
             }
             String name = entry.path("name").asString("").trim();
             if (!NAME.matcher(name).matches()) {
-                throw new IllegalArgumentException("jenreg.walks entry " + index + ": a name is lower-case letters, "
+                throw new IllegalArgumentException("jenrepo.walks entry " + index + ": a name is lower-case letters, "
                         + "digits and hyphens, not '" + name + "'");
             }
             if (!names.add(name)) {
-                throw new IllegalArgumentException("jenreg.walks names '" + name + "' twice");
+                throw new IllegalArgumentException("jenrepo.walks names '" + name + "' twice");
             }
             String cron = entry.path("cron").asString("").trim();
             try {
                 CronExpression.parse(cron);
             } catch (IllegalArgumentException invalid) {
-                throw new IllegalArgumentException("jenreg.walks entry '" + name + "': " + invalid.getMessage(),
+                throw new IllegalArgumentException("jenrepo.walks entry '" + name + "': " + invalid.getMessage(),
                         invalid);
             }
             List<String> consumers = new ArrayList<>();
@@ -123,7 +123,7 @@ public final class WalkSchedules {
                 }
             }
             if (consumers.isEmpty()) {
-                throw new IllegalArgumentException("jenreg.walks entry '" + name + "' names no consumer; \"*\" is "
+                throw new IllegalArgumentException("jenrepo.walks entry '" + name + "' names no consumer; \"*\" is "
                         + "every consumer installed");
             }
             parsed.add(new Entry(name, cron, consumers, entry.path("enabled").asBoolean(true)));

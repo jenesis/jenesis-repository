@@ -15,7 +15,7 @@ public final class ListingRebuildSettingsContributor implements SettingsContribu
                                 + "pages, Packages files, repodata, sparse-index files, tag lists and search documents "
                                 + "a client fetches, each maintained incrementally by the write that changes it and "
                                 + "materialised on first read - so any drift an interrupted write could have left is "
-                                + "corrected by the walk (jenreg.walks) and never by a read. A listener of the one "
+                                + "corrected by the walk (jenrepo.walks) and never by a read. A listener of the one "
                                 + "walk rather than a daily pass of its own; on by default.",
                         Setting.Kind.BOOLEAN, "true", true).advanced());
     }

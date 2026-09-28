@@ -19,7 +19,7 @@ import build.jenesis.repository.walk.WalkPass;
  */
 public final class InventoryReconcileConsumer implements WalkConsumer {
 
-    /** The consumer's name: its toggle ({@code jenreg.reconcile}), its scenario, its settings row. */
+    /** The consumer's name: its toggle ({@code jenrepo.reconcile}), its scenario, its settings row. */
     public static final String NAME = "reconcile";
 
     private final Map<Object, StoreRepositoryInventory> inventories = new ConcurrentHashMap<>();

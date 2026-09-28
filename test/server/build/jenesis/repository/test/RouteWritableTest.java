@@ -73,7 +73,7 @@ public class RouteWritableTest {
     @BeforeEach
     void setUp() throws IOException {
         tenant = ArtifactStoreProvider.resolve(
-                "filesystem", key -> "jenreg.filesystem.root".equals(key) ? root.toString() : null)
+                "filesystem", key -> "jenrepo.filesystem.root".equals(key) ? root.toString() : null)
                 .scope("default");
         store = tenant.scope("default");
         new RepositoryDocument("nothing", Instant.now()).create(store);

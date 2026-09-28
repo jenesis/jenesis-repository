@@ -233,7 +233,7 @@ public final class ReanalysisTask implements MaintenanceTask {
             released[0]++;
         });
         cadence.completed(context.now(), !failed.any());
-        context.gauge("jenreg.vulnerabilities.kev.autoreleased",
+        context.gauge("jenrepo.vulnerabilities.kev.autoreleased",
                 "Retroactively KEV-held coordinates this pass auto-released because their known-exploited intel cleared",
                 Map.of("tenant", context.tenant(), "repository", context.repository()), released[0]);
         // The release count above is a true statement about the holds this pass really converged, so it is published

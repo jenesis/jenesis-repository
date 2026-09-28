@@ -39,7 +39,7 @@ import build.jenesis.repository.walk.WalkPass;
  * {@code gc/condemned/<hash>} marker removed; an unreferenced one is <em>condemned</em> (marker created, stamped
  * with this pass) the first time and <em>deleted only when its marker carries an earlier pass</em> - the marker is
  * the clock, giving every crash-torn or in-flight publish a full mark-pass enumeration of grace (spared the moment it
- * is referenced) with no store-timestamp API, and a wall-clock floor on top ({@code jenreg.gc.grace}, two hours
+ * is referenced) with no store-timestamp API, and a wall-clock floor on top ({@code jenrepo.gc.grace}, two hours
  * unless set) so a fast generation turnover across nodes cannot shorten it. The marker is the arbiter between the
  * delete and a publish relying on the same bytes ({@link Condemned}): the sweep claims it by compare-and-set over the
  * token it judged the blob by, and deletes only once the claim has landed, while a dedup re-publish spares the blob
@@ -81,7 +81,7 @@ public final class MarkSweepGarbageCollector implements GarbageCollector {
     private final ArtifactWalk walk;
 
     /** A wall-clock floor on the condemn-to-collect grace, on top of the one-pass generation gap: two hours in a
-     *  deployment unless {@code jenreg.gc.grace} names another ({@link GarbageCollector#defaultGrace()}), zero for a
+     *  deployment unless {@code jenrepo.gc.grace} names another ({@link GarbageCollector#defaultGrace()}), zero for a
      *  collector built without one. Zero keeps the grace purely generation-based: condemn in one pass, collect in the
      *  next. A positive value guards the
      *  case where generations advance faster than the nominal collection interval - several nodes each running
@@ -452,7 +452,7 @@ public final class MarkSweepGarbageCollector implements GarbageCollector {
         private final Markers markers;
         private long condemned, spared, collected;
         /** Blobs this sweep left carrying a condemned marker - newly condemned this pass plus those still within
-         *  their grace - the in-flight {@code gc/condemned/} set the jenreg.gc.condemned gauge reports. */
+         *  their grace - the in-flight {@code gc/condemned/} set the jenrepo.gc.condemned gauge reports. */
         private long standing;
         private final List<String> sample = new ArrayList<>();
 
@@ -669,7 +669,7 @@ public final class MarkSweepGarbageCollector implements GarbageCollector {
     }
 
     /** A condemned marker's content: the pass whose judgment condemned the blob (the clock the grace interval is
-     *  measured in) and when - the {@code since} a console shows and the {@code jenreg.gc.grace} floor measures. */
+     *  measured in) and when - the {@code since} a console shows and the {@code jenrepo.gc.grace} floor measures. */
     private record Marker(long pass, Instant since) {
     }
 

@@ -12,7 +12,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 /**
- * Every {@code jenreg.consistency.*} duration reads the deployment's one grammar, and a value it cannot read stops
+ * Every {@code jenrepo.consistency.*} duration reads the deployment's one grammar, and a value it cannot read stops
  * the node rather than being swallowed.
  *
  * <p>These were the only durations in the product spelled as bare millisecond counts, and they swallowed anything
@@ -37,8 +37,8 @@ class ConsistencyDialGrammarTest {
     @Test
     void a_sweep_interval_is_read_in_the_suffixed_grammar_every_other_dial_takes() {
         var settings = NodeConsistency.settingsFrom(config(Map.of(
-                "jenreg.consistency.sweep-interval", "2s",
-                "jenreg.consistency.dead-after", "5m")));
+                "jenrepo.consistency.sweep-interval", "2s",
+                "jenrepo.consistency.dead-after", "5m")));
         assertThat(settings.sweepIntervalMillis()).isEqualTo(Duration.ofSeconds(2).toMillis());
         assertThat(settings.deadAfterMillis()).isEqualTo(Duration.ofMinutes(5).toMillis());
     }
@@ -48,9 +48,9 @@ class ConsistencyDialGrammarTest {
         // The fail-fast half. A swallowed value is worse than a refused one here: the node runs, and it runs on a window
         // the operator did not choose, which is what a fleet judges its peers late and dead on.
         assertThatThrownBy(() -> NodeConsistency.settingsFrom(config(Map.of(
-                "jenreg.consistency.sweep-interval", "2000"))))
+                "jenrepo.consistency.sweep-interval", "2000"))))
                 .isInstanceOf(IllegalStateException.class)
-                .hasMessageContaining("jenreg.consistency.sweep-interval")
+                .hasMessageContaining("jenrepo.consistency.sweep-interval")
                 .hasMessageContaining("2000");
     }
 
@@ -59,24 +59,24 @@ class ConsistencyDialGrammarTest {
         // The dial that was missed. A bare millisecond count is refused here exactly as it is for the other five -
         // one family, one grammar - and the message says what to write instead.
         ArtifactStore store = ArtifactStoreProvider.resolve("filesystem",
-                key -> "jenreg.filesystem.root".equals(key) ? root.toString() : null);
+                key -> "jenrepo.filesystem.root".equals(key) ? root.toString() : null);
         NodeConsistency consistency = new NodeConsistency(store, NodeConsistency.settingsFrom(config(Map.of())));
         assertThatThrownBy(() -> new NodeFingerprintPublisher(consistency, store, config(Map.of(
-                "jenreg.consistency.enabled", "true",
-                "jenreg.consistency.heartbeat", "2000"))))
+                "jenrepo.consistency.enabled", "true",
+                "jenrepo.consistency.heartbeat", "2000"))))
                 .isInstanceOf(IllegalStateException.class)
-                .hasMessageContaining("jenreg.consistency.heartbeat")
+                .hasMessageContaining("jenrepo.consistency.heartbeat")
                 .hasMessageContaining("2000");
     }
 
     @Test
     void a_heartbeat_in_the_shared_grammar_is_accepted() {
         ArtifactStore store = ArtifactStoreProvider.resolve("filesystem",
-                key -> "jenreg.filesystem.root".equals(key) ? root.toString() : null);
+                key -> "jenrepo.filesystem.root".equals(key) ? root.toString() : null);
         NodeConsistency consistency = new NodeConsistency(store, NodeConsistency.settingsFrom(config(Map.of())));
         assertThat(new NodeFingerprintPublisher(consistency, store, config(Map.of(
-                "jenreg.consistency.enabled", "true",
-                "jenreg.consistency.heartbeat", "2s"))))
+                "jenrepo.consistency.enabled", "true",
+                "jenrepo.consistency.heartbeat", "2s"))))
                 .as("the spelling the fleet kit and every other duration dial use")
                 .isNotNull();
     }

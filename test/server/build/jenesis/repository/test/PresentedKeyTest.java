@@ -65,7 +65,7 @@ class PresentedKeyTest {
     @Test
     void a_key_presented_as_a_bearer_token_authorizes_exactly_like_the_native_header() throws IOException {
         ArtifactStore store = ArtifactStoreProvider.resolve(
-                "filesystem", key -> "jenreg.filesystem.root".equals(key) ? root.toString() : null);
+                "filesystem", key -> "jenrepo.filesystem.root".equals(key) ? root.toString() : null);
         Authorization authorization = Authorization.enforcing(store);
         authorization.provision("acme", Authorization.hash(KEY), "k", null);
         authorization.grant(KEY, "*", Authorization.REPOSITORY_READ);
@@ -74,7 +74,7 @@ class PresentedKeyTest {
         Map<String, Object> bearer = new HashMap<>();
         assertThat(manager.authorize(() -> null, new RequestAuthorizationContext(request(null, "Bearer " + KEY, bearer)))
                 .isGranted()).as("Authorization: Bearer jenk_… reads the artifact").isTrue();
-        assertThat(bearer.get("jenreg.decision")).isEqualTo(Authorization.Decision.ALLOWED);
+        assertThat(bearer.get("jenrepo.decision")).isEqualTo(Authorization.Decision.ALLOWED);
 
         Map<String, Object> foreign = new HashMap<>();
         assertThat(manager.authorize(() -> null, new RequestAuthorizationContext(request(null, "Bearer not-ours", foreign)))

@@ -43,7 +43,7 @@ public record WebhookEndpoint(URI url, Set<EventType> events, String secret) {
      * many real receivers (chat and CI incoming-webhook URLs above all) authenticate by possession of a secret-bearing
      * {@code https} URL, and this side cannot tell such a URL from a public one. A refusal must rest on something the
      * refusing side can see; refusing every secretless endpoint would be refusing on a guess and would break the
-     * commonest receivers there are. So the condition is <em>reported</em> instead - the {@code jenreg.webhook.unsigned}
+     * commonest receivers there are. So the condition is <em>reported</em> instead - the {@code jenrepo.webhook.unsigned}
      * gauge {@link WebhookDeliveryTask} publishes each pass, and the {@code webhook-endpoints} / {@code webhook-secrets}
      * setting text at the point an operator configures one. Contrast the endpoint's <em>transport</em>, which the URL
      * states outright and which is therefore refused - {@link #refusalReason(URI, boolean)}.

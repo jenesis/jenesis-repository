@@ -36,7 +36,7 @@ public final class HookStores {
         reset.run();
         Path directory = Files.createDirectories(root.resolve(name.replaceAll("[^A-Za-z0-9]", "_")));
         FaultInjectingStore store = FaultInjectingStore.wrap(ArtifactStoreProvider.resolve("filesystem",
-                key -> "jenreg.filesystem.root".equals(key) ? directory.toString() : null));
+                key -> "jenrepo.filesystem.root".equals(key) ? directory.toString() : null));
         if (fixture instanceof Deployment deployment) {
             deployment.deploy(store);
             // The tenant-scoping check publishes into store.scope("acme").scope("main"), and a per-repository gate is

@@ -28,7 +28,7 @@ import org.springframework.security.web.servlet.util.matcher.PathPatternRequestM
 import org.thymeleaf.spring6.templateresolver.SpringResourceTemplateResolver;
 
 /**
- * Directory sign-in, wired only when {@code jenreg.ui.ldap.url} is set.
+ * Directory sign-in, wired only when {@code jenrepo.ui.ldap.url} is set.
  *
  * <p>It authenticates through a filter and an authentication manager of its own on {@code POST /login/ldap} rather
  * than the chain's shared form login, because another mechanism may already own that: a second form login would
@@ -46,7 +46,7 @@ public class LdapLoginConfig {
 
         @Override
         public boolean matches(ConditionContext context, AnnotatedTypeMetadata metadata) {
-            String url = context.getEnvironment().getProperty("jenreg.ui.ldap.url");
+            String url = context.getEnvironment().getProperty("jenrepo.ui.ldap.url");
             return url != null && !url.isBlank();
         }
     }

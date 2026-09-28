@@ -151,8 +151,8 @@ public class S3ConditionalWritesProbeTest {
         config.put(S3ArtifactStoreProvider.BUCKET_KEY, "repo");
         config.put(S3ArtifactStoreProvider.ENDPOINT_KEY, "http://localhost:" + server.port());
         config.put(S3ArtifactStoreProvider.ALLOW_INSECURE_KEY, "true");
-        config.put("jenreg.s3.access-key-id", "ak");
-        config.put("jenreg.s3.secret-access-key", "sk");
+        config.put("jenrepo.s3.access-key-id", "ak");
+        config.put("jenrepo.s3.secret-access-key", "sk");
         return config;
     }
 }

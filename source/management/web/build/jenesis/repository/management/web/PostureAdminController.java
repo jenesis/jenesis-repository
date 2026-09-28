@@ -21,7 +21,7 @@ import org.springframework.web.bind.annotation.RestController;
 /**
  * The security-posture admin read: {@code GET /api/admin/posture} returns every potentially-unsafe
  * configuration a discovered {@link build.jenesis.repository.posture.SafetyAdvisor} raises against this deployment's
- * effective configuration - each row naming <em>why</em> the setting is unsafe, the exact {@code jenreg.*} key/value
+ * effective configuration - each row naming <em>why</em> the setting is unsafe, the exact {@code jenrepo.*} key/value
  * that fixes it and a docs link, severity-sorted (critical first). It is the superadmin-gated peer of the
  * free key-gated {@code /api/posture}, the JSON the console's Security-posture page renders and a headless agent reads.
  *
@@ -44,8 +44,8 @@ import org.springframework.web.bind.annotation.RestController;
  * <p>Resolving stored-over-environment and never above a pin would fail open on this surface rather than merely
  * disagree: for a key an operator has pinned <b>and</b> the store also holds, the stored value is inert - the server
  * runs on the pin - so the report would describe the deployment as configured instead of as running. With
- * {@code jenreg.auth} pinned {@code false} and {@code true} left in the store, the report would carry no
- * {@code jenreg.auth.open} row while every request, including the one reading the report, was being served with no
+ * {@code jenrepo.auth} pinned {@code false} and {@code true} left in the store, the report would carry no
+ * {@code jenrepo.auth.open} row while every request, including the one reading the report, was being served with no
  * credential at all. {@link SpiCatalogController} reads the same chain for the same reason.
  *
  * <h2>One <em>named</em> tenant, never all of them</h2>
@@ -67,7 +67,7 @@ import org.springframework.web.bind.annotation.RestController;
  *       document over the deployment document over the environment, through
  *       {@link PinnedSettings#effective(Settings, Environment, String)}), and the tenant
  *       reaches the advisors through the reserved {@link TenantPosture#scoped} context key rather than the
- *       environment - so an ambient {@code JENREG_POSTURE_TENANT} can re-attribute neither a named read nor an
+ *       environment - so an ambient {@code JENREPO_POSTURE_TENANT} can re-attribute neither a named read nor an
  *       unnamed one.</li>
  *   <li>The rows emitted are the ones {@link PostureReport#forTenant} selects for the named tenant plus the
  *       {@link Scope#DEPLOYMENT} ones - never every {@code TENANT}-scoped row the fan-out happened to return. A row
@@ -119,15 +119,15 @@ public class PostureAdminController {
         }
         // The effective configuration an advisor reads, resolved through the one chain the running server resolves its
         // dials through (PinnedSettings): an operator's PIN from above the store, else the stored
-        // jenreg.* value, else the deployment Environment - and the Environment alone for a
-        // non-jenreg.repository key (spring.profiles.active, jenreg.ui.admins), which has no stored form to pin. With
+        // jenrepo.* value, else the deployment Environment - and the Environment alone for a
+        // non-jenrepo.repository key (spring.profiles.active, jenrepo.ui.admins), which has no stored form to pin. With
         // a tenant named, the tenant-overridable middle of that chain resolves against THAT tenant's document first -
         // exactly one tenant's, which is what keeps a tenant-scoped row attributable to the tenant it names.
         Configuration config = Configuration.of(
                 pins.effectiveProperty(settings, environment, named.isEmpty() ? null : named));
         // The reserved tenant context key is answered by TenantPosture#scoped in both directions - the named tenant
         // for a scoped read, nothing at all for the deployment-wide one - so it never falls through to the
-        // environment and an ambient JENREG_POSTURE_TENANT cannot make either read start attributing rows.
+        // environment and an ambient JENREPO_POSTURE_TENANT cannot make either read start attributing rows.
         PostureReport report = PostureReport.discover(TenantPosture.scoped(named.isEmpty() ? null : named, config));
         // What this document may carry: the named tenant's own rows (none when unnamed) and the deployment-wide ones.
         // Anything else - a row for a tenant that was not asked about - is emitted by neither leg, and the tallies are

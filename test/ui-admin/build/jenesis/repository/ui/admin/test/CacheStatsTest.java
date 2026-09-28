@@ -35,7 +35,7 @@ class CacheStatsTest {
     /** The projects' settings, over the store the cache keeps them in. */
     private SettingsAdmin settings() {
         return new SettingsAdmin(ArtifactStoreProvider.resolve("filesystem",
-                key -> "jenreg.filesystem.root".equals(key) ? cacheRoot.toString() : null));
+                key -> "jenrepo.filesystem.root".equals(key) ? cacheRoot.toString() : null));
     }
 
     @Test

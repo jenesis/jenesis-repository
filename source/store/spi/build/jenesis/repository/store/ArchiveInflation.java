@@ -59,13 +59,13 @@ public final class ArchiveInflation {
     public static final int LARGEST_ENTRY = 1 << 20;
 
     /**
-     * The key an operator raises or lowers {@link #largestEntry()} with, in the shared {@code jenreg.} namespace and
-     * so also settable as {@code JENREG_ARCHIVE_LARGEST_ENTRY} in a plain {@code docker run -e}. It is deploy-time
+     * The key an operator raises or lowers {@link #largestEntry()} with, in the shared {@code jenrepo.} namespace and
+     * so also settable as {@code JENREPO_ARCHIVE_LARGEST_ENTRY} in a plain {@code docker run -e}. It is deploy-time
      * configuration rather than a console dial on purpose: it is a per-process heap ceiling sized against the JVM's
      * own heap, read on the publish thread where a store round-trip per archive member would be absurd, and it is
      * deployment-global where a stored setting would be per tenant.
      */
-    public static final String LARGEST_ENTRY_KEY = "jenreg.archive.largest-entry";
+    public static final String LARGEST_ENTRY_KEY = "jenrepo.archive.largest-entry";
 
     private ArchiveInflation() {
         throw new UnsupportedOperationException("ArchiveInflation is a static utility");

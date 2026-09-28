@@ -13,9 +13,9 @@ import build.jenesis.repository.settings.SettingsContributor;
  * here, they are on the settings screen and in the generated reference, and the boot check for unrecognised settings
  * knows them, in every composition that carries the reader.
  *
- * <p>Two siblings are deliberately absent - {@code jenreg.consistency.node-id} is the node's own identity, taken
+ * <p>Two siblings are deliberately absent - {@code jenrepo.consistency.node-id} is the node's own identity, taken
  * from its environment (a fleet sets it from the container hostname) and a caller must not be able to rename a node
- * out from under its lease, and {@code jenreg.consistency.enabled} decides whether the publisher is registered at
+ * out from under its lease, and {@code jenrepo.consistency.enabled} decides whether the publisher is registered at
  * all, which the context settles as it starts. Both are named as {@link #startupKeys()} instead, so the boot check
  * for unrecognised settings knows them.
  */
@@ -73,6 +73,6 @@ public final class ConsistencySettingsContributor implements SettingsContributor
 
     @Override
     public Set<String> startupKeys() {
-        return Set.of("jenreg.consistency.enabled", "jenreg.consistency.node-id");
+        return Set.of("jenrepo.consistency.enabled", "jenrepo.consistency.node-id");
     }
 }

@@ -27,8 +27,8 @@ import org.springframework.security.oauth2.core.user.OAuth2User;
 
 /**
  * Builds the OAuth2/OIDC client registrations from configuration: the built-in GitHub provider when
- * {@code jenreg.ui.github.client-id} is set, and a generic OpenID Connect provider - its endpoints and JWK set
- * discovered from {@code jenreg.ui.oidc.issuer-uri} - when that issuer and a client id are set (so any OIDC identity
+ * {@code jenrepo.ui.github.client-id} is set, and a generic OpenID Connect provider - its endpoints and JWK set
+ * discovered from {@code jenrepo.ui.oidc.issuer-uri} - when that issuer and a client id are set (so any OIDC identity
  * provider, e.g. Google, Keycloak, Okta, Azure AD, works). Every bean here exists only when at least one provider is
  * configured, so the app still starts with login disabled rather than failing - the sign-in page says so itself,
  * from the {@link LoginOptions} the installed mechanisms contribute, which is where that notice belongs: a
@@ -40,8 +40,8 @@ import org.springframework.security.oauth2.core.user.OAuth2User;
  * ever differed, which is why one wiring serves whatever authority model a deployment installs.
  *
  * <p>This existed twice, once here and once as a downstream module, with the condition and the contributor
- * byte-identical and the rest differing only in which properties class bound {@code jenreg.ui.github.*} and
- * {@code jenreg.ui.oidc.*} - two bindings of one documented key, with identical fields and identical defaults.
+ * byte-identical and the rest differing only in which properties class bound {@code jenrepo.ui.github.*} and
+ * {@code jenrepo.ui.oidc.*} - two bindings of one documented key, with identical fields and identical defaults.
  * A console that wants the mechanism optional imports this through its module seam; one that always carries it
  * component-scans it. Both get the same beans.
  */
@@ -53,9 +53,9 @@ public class OAuth2ClientConfig {
     public static class AnyProviderConfigured implements Condition {
         @Override
         public boolean matches(ConditionContext context, AnnotatedTypeMetadata metadata) {
-            return configured(context, "jenreg.ui.github.client-id")
-                    || (configured(context, "jenreg.ui.oidc.issuer-uri")
-                    && configured(context, "jenreg.ui.oidc.client-id"));
+            return configured(context, "jenrepo.ui.github.client-id")
+                    || (configured(context, "jenrepo.ui.oidc.issuer-uri")
+                    && configured(context, "jenrepo.ui.oidc.client-id"));
         }
 
         private static boolean configured(ConditionContext context, String key) {

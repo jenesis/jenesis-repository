@@ -44,7 +44,7 @@ public class TenantsControllerTest {
         tenants.create("globex");
         new UserDirectory(Authorization.enforcing(rootStorage.store()), "acme").put("github/1", Role.VIEWER, "octo");
         ArtifactStore repositoryStore = ArtifactStoreProvider.resolve("filesystem",
-                key -> "jenreg.filesystem.root".equals(key) ? root.resolve("repo").toString() : null);
+                key -> "jenrepo.filesystem.root".equals(key) ? root.resolve("repo").toString() : null);
         TenantPurge purge = new TenantPurge(tenants, repositoryStore, Authorization.enforcing(repositoryStore),
                 AuditTrail.NONE, () -> "octo", "operator");
         SessionCurrentTenant current = new SessionCurrentTenant() {

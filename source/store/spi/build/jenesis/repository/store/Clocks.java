@@ -7,7 +7,7 @@ import module java.base;
  * rebuild's boundary, a pin - with an instant, and the mechanisms that compare stamps across nodes carry allowances
  * for a peer whose clock runs ahead. A deployment cannot be asked to skew a node's clock to prove those allowances,
  * and a container cannot skew its own, so the clock the product reads is installed once at boot: the system clock,
- * or the system clock offset by {@code jenreg.clock.skew}, a dial that exists so a fleet's tolerance to a peer whose
+ * or the system clock offset by {@code jenrepo.clock.skew}, a dial that exists so a fleet's tolerance to a peer whose
  * clock runs ahead is a thing a test can provoke rather than a thing a javadoc asserts. Reading {@link #now()} where a
  * stamp is made, instead of {@link Instant#now()}, is what puts a mechanism under that test.
  */

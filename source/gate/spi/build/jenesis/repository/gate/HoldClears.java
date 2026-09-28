@@ -87,7 +87,7 @@ public final class HoldClears {
      *
      * <p>{@code cleared} counts markers the store actually lifted, not calls that did not throw, so an already-absent
      * marker - the idempotent re-run after a crash, and every marker a racing pass had lifted first - is never
-     * reported to the operator (or to the {@code jenreg.withheld.markers.lifted} gauge) as work this pass did.
+     * reported to the operator (or to the {@code jenrepo.withheld.markers.lifted} gauge) as work this pass did.
      * Only what was really lifted is reverified, too: re-marking a hash this call never cleared would assert a fresh
      * withhold rather than close a race it opened.
      */

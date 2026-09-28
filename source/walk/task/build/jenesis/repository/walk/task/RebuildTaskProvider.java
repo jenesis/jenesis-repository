@@ -10,7 +10,7 @@ import build.jenesis.repository.walk.WalkProvider;
 /**
  * Discovers the scheduled walks: on by default when this module is installed ({@code rebuild=false} switches them
  * all off - the neutral scheduler's {@code Features} gate, checked before {@link #tasks(UnaryOperator)} is reached), each on the
- * cron its entry of {@code jenreg.walks} gives it ({@link WalkSchedules}): the {@code rebuild} walk every consumer
+ * cron its entry of {@code jenrepo.walks} gives it ({@link WalkSchedules}): the {@code rebuild} walk every consumer
  * rides and a standing request runs, weekly by default, and a walk of its own per further entry, carrying the
  * consumers the entry names. A walk is the repair for what a crash left behind and the back-fill for a consumer
  * installed late, never the steady state, which the publication events keep - so without a crash no walk is

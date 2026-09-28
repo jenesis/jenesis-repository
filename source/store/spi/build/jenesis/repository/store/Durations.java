@@ -8,7 +8,7 @@ import module java.base;
  * <p>Two grammars would disagree in the direction that wastes an operator's afternoon: a reader of the environment
  * accepting the suffixed style an environment variable naturally carries - {@code 6h}, {@code 90s},
  * {@code 500ms} - while the console or {@code PUT /api/config} validated with a bare {@code Duration.parse}, which
- * refuses every suffixed form, so {@code JENREG_<KEY>=6h} would be honoured while typing {@code 6h} into the
+ * refuses every suffixed form, so {@code JENREPO_<KEY>=6h} would be honoured while typing {@code 6h} into the
  * settings screen was not. The suffixed style is what an environment variable carries, so the grammar takes both
  * ISO-8601 and suffixed forms, and it is stated here once, in the module both the validator and the readers can
  * see.

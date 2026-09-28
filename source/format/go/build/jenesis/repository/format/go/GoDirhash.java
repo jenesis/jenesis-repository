@@ -27,7 +27,7 @@ import build.jenesis.repository.store.ArchiveWalk;
  * <h2>Bounded, and never materialised</h2>
  * The zip walk streams: each entry is digested 8 KiB at a time and only its 32-byte digest is kept, so a module of any
  * size costs one pass and no member ever lands in heap. Two dimensions are bounded, both off the product's one shared,
- * operator-settable archive-walk ceiling ({@link ArchiveWalk#largestWalk(long, long)}, {@code jenreg.archive.largest-walk}):
+ * operator-settable archive-walk ceiling ({@link ArchiveWalk#largestWalk(long, long)}, {@code jenrepo.archive.largest-walk}):
  * the bytes drawn from the archive itself (the walk's own screen) and the <em>decompressed</em> bytes the entries
  * inflate to, which the screen cannot see because a zip chooses its own ratio. A bomb reaches whichever comes first.
  * The entry <em>count</em> is bounded too ({@link #MAX_ENTRIES}), because the names have to be held to be ordered.

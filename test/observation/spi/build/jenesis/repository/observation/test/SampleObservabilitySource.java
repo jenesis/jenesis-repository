@@ -17,17 +17,17 @@ public final class SampleObservabilitySource implements ObservabilitySource {
 
     @Override
     public List<HealthCheck> healthChecks() {
-        return List.of(HealthCheck.of("jenreg.gc.worker", "The reclamation worker thread",
+        return List.of(HealthCheck.of("jenrepo.gc.worker", "The reclamation worker thread",
                 Health.DEGRADED, "queue saturated"));
     }
 
     @Override
     public List<Metric> metrics() {
-        return List.of(Metric.bounded("jenreg.quota.used.bytes", "Tenant quota consumed", 500, 1000, "bytes"));
+        return List.of(Metric.bounded("jenrepo.quota.used.bytes", "Tenant quota consumed", 500, 1000, "bytes"));
     }
 
     @Override
     public List<TaskStatus> taskStatuses() {
-        return List.of(TaskStatus.idle("jenreg.gc.sweep", "Periodic reclamation sweep"));
+        return List.of(TaskStatus.idle("jenrepo.gc.sweep", "Periodic reclamation sweep"));
     }
 }

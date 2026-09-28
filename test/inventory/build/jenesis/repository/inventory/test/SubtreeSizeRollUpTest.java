@@ -32,7 +32,7 @@ class SubtreeSizeRollUpTest {
     @BeforeEach
     void setUp() throws IOException {
         store = ArtifactStoreProvider.resolve("filesystem",
-                        key -> "jenreg.filesystem.root".equals(key) ? root.toString() : null)
+                        key -> "jenrepo.filesystem.root".equals(key) ? root.toString() : null)
                 .scope("default").scope("releases");
         Publication publication = new Publication(store);
         publish(publication, "/test/grp/lib/1.0/lib-1.0.bin", LIB_1);

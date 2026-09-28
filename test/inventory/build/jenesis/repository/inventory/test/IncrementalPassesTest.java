@@ -33,7 +33,7 @@ class IncrementalPassesTest {
     @BeforeEach
     void setUp() {
         store = ArtifactStoreProvider.resolve("filesystem",
-                key -> "jenreg.filesystem.root".equals(key) ? root.toString() : null).scope("default").scope("app");
+                key -> "jenrepo.filesystem.root".equals(key) ? root.toString() : null).scope("default").scope("app");
         inventory = new StoreRepositoryInventory(store);
     }
 
@@ -99,7 +99,7 @@ class IncrementalPassesTest {
         IncrementalPasses first = IncrementalPasses.over(store, "probe", "probe/passes", key -> null);
         first.completed(NOW, true);
         ArtifactStore deployment = ArtifactStoreProvider.resolve("filesystem",
-                key -> "jenreg.filesystem.root".equals(key) ? root.toString() : null);
+                key -> "jenrepo.filesystem.root".equals(key) ? root.toString() : null);
         Requests.installRoot(deployment);
         Requests.request(deployment, "probe", "the catalogue changed");
 

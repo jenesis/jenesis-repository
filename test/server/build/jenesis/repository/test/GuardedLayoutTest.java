@@ -30,7 +30,7 @@ class GuardedLayoutTest {
     @BeforeEach
     void setUp() {
         disk = ArtifactStoreProvider.resolve("filesystem",
-                key -> "jenreg.filesystem.root".equals(key) ? root.toString() : null);
+                key -> "jenrepo.filesystem.root".equals(key) ? root.toString() : null);
     }
 
     @Test

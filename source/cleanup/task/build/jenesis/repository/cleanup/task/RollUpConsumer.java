@@ -17,7 +17,7 @@ import build.jenesis.repository.walk.WalkPass;
  */
 public final class RollUpConsumer implements WalkConsumer {
 
-    /** The consumer's name: its walk-entry name and its toggle ({@code jenreg.rollup}). */
+    /** The consumer's name: its walk-entry name and its toggle ({@code jenrepo.rollup}). */
     public static final String NAME = "rollup";
 
     private final Set<Object> riding = ConcurrentHashMap.newKeySet();

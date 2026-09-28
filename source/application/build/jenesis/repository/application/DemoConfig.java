@@ -102,7 +102,7 @@ public class DemoConfig {
     }
 
     /**
-     * Warn once, at boot, about any {@code jenreg.*} property this deployment does not read.
+     * Warn once, at boot, about any {@code jenrepo.*} property this deployment does not read.
      *
      * <p>The gap it closes: settings change by clean cutover here - compatibility shims are disallowed - while an
      * unrecognised key is silently ignored, so a rename leaves whoever had the old key set with a value that quietly
@@ -115,7 +115,7 @@ public class DemoConfig {
      * class-file extractor but perfectly visible here); every {@code @ConfigurationProperties} object bound under the
      * namespace supplies the boot-only properties the catalogue deliberately omits, which are most of a real
      * deployment's configuration; and a {@code Map}-bound property opens its prefix, which is what keeps
-     * {@code jenreg.proxy.<format>} from being reported as unknown without anyone writing that exception down.
+     * {@code jenrepo.proxy.<format>} from being reported as unknown without anyone writing that exception down.
      *
      * <p>Returned as a bean for the reason the hardening advice is: the boot computation is then first-class and
      * testable wiring rather than a side effect buried in another bean.
@@ -126,7 +126,7 @@ public class DemoConfig {
         List<UnrecognisedSettings.Bound> bound = new ArrayList<>();
         ConfigurationPropertiesBean.getAll(context).values().forEach(each -> {
             String prefix = each.getAnnotation().prefix();
-            if (prefix.startsWith("jenreg") && each.getInstance() != null) {
+            if (prefix.startsWith("jenrepo") && each.getInstance() != null) {
                 bound.add(new UnrecognisedSettings.Bound(prefix, each.getInstance()));
             }
         });
@@ -134,7 +134,7 @@ public class DemoConfig {
         for (PropertySource<?> source : environment.getPropertySources()) {
             if (source instanceof EnumerablePropertySource<?> enumerable) {
                 for (String name : enumerable.getPropertyNames()) {
-                    if (name.regionMatches(true, 0, "jenreg", 0, "jenreg".length())) {
+                    if (name.regionMatches(true, 0, "jenrepo", 0, "jenrepo".length())) {
                         configured.add(name);
                     }
                 }
@@ -146,7 +146,7 @@ public class DemoConfig {
                 UnrecognisedSettings.known(SettingsContributor.all(), bound, declared));
         if (!report.isEmpty()) {
             StringBuilder message = new StringBuilder("UNRECOGNISED SETTINGS: this deployment sets "
-                    + report.findings().size() + " jenreg.* propert"
+                    + report.findings().size() + " jenrepo.* propert"
                     + (report.findings().size() == 1 ? "y" : "ies") + " that nothing reads. Their values have no "
                     + "effect - most often a key renamed by a release, since settings change here by cutover rather "
                     + "than by keeping the old spelling alive.");

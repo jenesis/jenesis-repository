@@ -12,7 +12,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatIllegalStateException;
 
 /**
- * {@code jenreg.ui.admins} is a <em>seed</em>, not a mirror, and these are the two halves of that word - the two
+ * {@code jenrepo.ui.admins} is a <em>seed</em>, not a mirror, and these are the two halves of that word - the two
  * things an operator cannot infer from the setting's name and that the class javadoc therefore has to promise.
  *
  * <p>Both are asserted over one store across two constructions, because the claim is about what survives a boot.
@@ -64,12 +64,12 @@ class ConsoleAdministratorsTest {
         ArtifactStore readOnly = new ReadOnlyArtifactStore(store());
         assertThatIllegalStateException()
                 .isThrownBy(() -> new ConsoleAdministrators(readOnly, "oidc/alice"))
-                .withMessageContaining("jenreg.ui.admins")
+                .withMessageContaining("jenrepo.ui.admins")
                 .withMessageContaining("oidc/alice");
     }
 
     private ArtifactStore store() {
         return ArtifactStoreProvider.resolve("filesystem",
-                key -> "jenreg.filesystem.root".equals(key) ? root.toString() : null);
+                key -> "jenrepo.filesystem.root".equals(key) ? root.toString() : null);
     }
 }

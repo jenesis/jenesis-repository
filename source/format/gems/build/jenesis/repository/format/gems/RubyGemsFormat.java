@@ -947,8 +947,8 @@ public final class RubyGemsFormat implements RepositoryFormat, ProxyLeg, BlobLay
 
     /** The keys an operator moves the two ceilings above with - format-local, for the registry whose gems are
      *  legitimately larger than RubyGems' own conventions, and defaulting to the constants for everyone else. */
-    private static final String MAX_COMPRESSED_METADATA_KEY = "jenreg.rubygems.compressed-metadata-bytes";
-    private static final String MAX_GEMSPEC_YAML_KEY = "jenreg.rubygems.gemspec-yaml-bytes";
+    private static final String MAX_COMPRESSED_METADATA_KEY = "jenrepo.rubygems.compressed-metadata-bytes";
+    private static final String MAX_GEMSPEC_YAML_KEY = "jenrepo.rubygems.gemspec-yaml-bytes";
 
     private static int maxCompressedMetadata() {
         return Limits.positive(MAX_COMPRESSED_METADATA_KEY, MAX_COMPRESSED_METADATA);

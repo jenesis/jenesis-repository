@@ -5,7 +5,7 @@ import build.jenesis.repository.settings.Setting;
 import build.jenesis.repository.store.Features;
 
 /**
- * The boot check that tells an operator when a {@code jenreg.*} property they set is one nothing reads.
+ * The boot check that tells an operator when a {@code jenrepo.*} property they set is one nothing reads.
  *
  * <p>It exists because this product changes settings by clean cutover - compatibility shims are disallowed
  * outright - while an unrecognised key is <em>silently ignored</em>. Those two together mean a rename or a
@@ -30,7 +30,7 @@ import build.jenesis.repository.store.Features;
  *     binds nothing. A store backend declares them on its provider, any other module as its settings contributor's
  *     startup keys. The module declares them, and a key it declares is recognised whichever backend is selected.</li>
  * <li><b>Open prefixes</b> for a property bound as a {@link Map} or a collection, where the sub-key is chosen by the
- *     operator rather than declared - {@code jenreg.proxy.<format>} being the one that matters. A prefix is not a
+ *     operator rather than declared - {@code jenrepo.proxy.<format>} being the one that matters. A prefix is not a
  *     special case written down here; it is what a {@code Map}-typed property <em>means</em>.</li>
  * </ul>
  *
@@ -41,7 +41,7 @@ import build.jenesis.repository.store.Features;
  *
  * <p>The comparison errs deliberately towards <b>silence</b>. Keys are flattened to alphanumerics before matching, so
  * every spelling Spring's relaxed binding accepts - {@code s3-allow-insecure-endpoint}, {@code s3AllowInsecureEndpoint},
- * {@code JENREG_S3_ALLOW_INSECURE_ENDPOINT} - is one key here, and an open prefix swallows anything beneath it. That
+ * {@code JENREPO_S3_ALLOW_INSECURE_ENDPOINT} - is one key here, and an open prefix swallows anything beneath it. That
  * can accept a key nobody reads; it cannot reject one somebody does. The asymmetry is the point: a false negative is
  * silence, while a false positive is noise, and a warning that cries wolf on a valid deployment gets muted - after
  * which the real one is invisible too, which is the very failure this is here to end.
@@ -69,7 +69,7 @@ public final class UnrecognisedSettings {
     /**
      * One bound {@code @ConfigurationProperties} object and the prefix it binds under. A list of these rather than a
      * map keyed by prefix, because two objects may bind one prefix with disjoint keys - the console's shell and its
-     * identity layer both bind {@code jenreg.ui} - and a map kept one of them, so the other's keys read as unknown.
+     * identity layer both bind {@code jenrepo.ui} - and a map kept one of them, so the other's keys read as unknown.
      */
     public record Bound(String prefix, Object properties) {
     }
@@ -95,7 +95,7 @@ public final class UnrecognisedSettings {
      *
      * @param catalogue the runtime-editable dials, {@code SettingsContributor.all()}
      * @param bound     each {@code @ConfigurationProperties} object and its prefix (with or without the
-     *                  {@code jenreg.} namespace); a {@code Map} or collection property contributes an open prefix
+     *                  {@code jenrepo.} namespace); a {@code Map} or collection property contributes an open prefix
      * @param declared  the full keys installed modules declare they read, such as a store backend's; one ending in
      *                  {@code .*} opens that prefix, as a {@code Map} property does
      */
@@ -134,12 +134,12 @@ public final class UnrecognisedSettings {
 
     /**
      * A bound object's prefix as a key stem. The namespace itself is the empty stem - a property of the
-     * {@code jenreg}-rooted object is named by nothing but its own name - while a narrower root
-     * ({@code jenreg.ui.oidc}) keeps what remains once the namespace is dropped.
+     * {@code jenrepo}-rooted object is named by nothing but its own name - while a narrower root
+     * ({@code jenrepo.ui.oidc}) keeps what remains once the namespace is dropped.
      */
     private static String root(String prefix) {
         String flat = flatten(prefix);
-        return flat.equals("jenreg") ? "" : flat;
+        return flat.equals("jenrepo") ? "" : flat;
     }
 
     /**
@@ -151,8 +151,8 @@ public final class UnrecognisedSettings {
         String bare = key;
         if (bare.regionMatches(true, 0, NAMESPACE, 0, NAMESPACE.length())) {
             bare = bare.substring(NAMESPACE.length());
-        } else if (bare.regionMatches(true, 0, "JENREG_", 0, "JENREG_".length())) {
-            bare = bare.substring("JENREG_".length());
+        } else if (bare.regionMatches(true, 0, "JENREPO_", 0, "JENREPO_".length())) {
+            bare = bare.substring("JENREPO_".length());
         }
         StringBuilder flat = new StringBuilder(bare.length());
         for (int index = 0; index < bare.length(); index++) {
@@ -220,7 +220,7 @@ public final class UnrecognisedSettings {
             String key = prefix + property;
             Class<?> type = method.getReturnType();
             if (Map.class.isAssignableFrom(type) || Collection.class.isAssignableFrom(type)) {
-                prefixes.add(key);   // the sub-key is the operator's: jenreg.proxy.<format>
+                prefixes.add(key);   // the sub-key is the operator's: jenrepo.proxy.<format>
                 keys.add(key);       // and the property itself is nameable, as a list
             } else if (simple(type)) {
                 keys.add(key);

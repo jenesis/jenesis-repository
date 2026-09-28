@@ -47,7 +47,7 @@ public final class Web {
     /** A real filesystem-backed store rooted at {@code root} - the same provider a deployment resolves. */
     public static ArtifactStore store(Path root) {
         return ArtifactStoreProvider.resolve("filesystem",
-                key -> "jenreg.filesystem.root".equals(key) ? root.toString() : null);
+                key -> "jenrepo.filesystem.root".equals(key) ? root.toString() : null);
     }
 
     /** The kernel's repository view over {@code store}, with the proxy off and no advisory source - the arrangement

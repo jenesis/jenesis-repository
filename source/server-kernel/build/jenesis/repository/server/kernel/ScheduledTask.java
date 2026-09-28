@@ -6,7 +6,7 @@ import build.jenesis.repository.maintenance.MaintenanceTask;
 /**
  * One discovered {@link MaintenanceTask} paired with the two declarations the scheduler reads off it <b>once, at
  * resolution</b>: its {@linkplain MaintenanceTask#name() name} and its {@linkplain MaintenanceTask#interval()
- * cadence}. Every later use - the {@code locks/<name>} single-writer lease, the {@code jenreg.<name>}
+ * cadence}. Every later use - the {@code locks/<name>} single-writer lease, the {@code jenrepo.<name>}
  * bookkeeping key, the {@code task} meter tag, the due-time arithmetic and every diagnostic - reads this record
  * rather than re-entering the task.
  *
@@ -48,7 +48,7 @@ record ScheduledTask(String name, Duration interval, MaintenanceTask task) {
         String name = read(task, "name", task::name);
         if (name == null || name.isBlank()) {
             throw new IllegalStateException("Maintenance task " + task.getClass().getName() + " has a blank name. A "
-                    + "task name is its jenreg.<name> toggle, its locks/<name> single-writer lease object "
+                    + "task name is its jenrepo.<name> toggle, its locks/<name> single-writer lease object "
                     + "and the key its run status and failure counter are kept under, so an unnamed task cannot be "
                     + "scheduled, locked or reported.");
         }

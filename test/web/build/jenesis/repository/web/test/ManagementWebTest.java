@@ -174,7 +174,7 @@ class ManagementWebTest {
 
     @Test
     void the_posture_report_reads_the_effective_chain_and_tallies_what_it_emits() throws IOException {
-        ConfigurableEnvironment open = Web.environment(Map.of("jenreg.auth", "false"));
+        ConfigurableEnvironment open = Web.environment(Map.of("jenrepo.auth", "false"));
         PostureAdminController posture = new PostureAdminController(new Settings(store), open, Web.pins(open));
 
         PostureAdminController.PostureView deployment = posture.posture(null);
@@ -182,9 +182,9 @@ class ManagementWebTest {
         assertThat(deployment.version()).isEqualTo(1);
         assertThat(deployment.tenant()).isEmpty();
         assertThat(deployment.advisories()).anySatisfy(row -> {
-            assertThat(row.id()).isEqualTo("jenreg.auth.open");
+            assertThat(row.id()).isEqualTo("jenrepo.auth.open");
             assertThat(row.severity()).isEqualTo("CRITICAL");
-            assertThat(row.settingKey()).isEqualTo("jenreg.auth");
+            assertThat(row.settingKey()).isEqualTo("jenrepo.auth");
         });
         assertThat(deployment.count()).isEqualTo(deployment.advisories().size());
         assertThat(deployment.critical() + deployment.warn() + deployment.info()).isEqualTo(deployment.count());

@@ -36,7 +36,7 @@ class TenantsApiControllerTest {
     void setUp() {
         rootStorage = CacheStorages.documents(root);
         repositoryStore = ArtifactStoreProvider.resolve("filesystem",
-                key -> "jenreg.filesystem.root".equals(key) ? root.resolve("repo").toString() : null);
+                key -> "jenrepo.filesystem.root".equals(key) ? root.resolve("repo").toString() : null);
         controller = new TenantsApiController(rootStorage, repositoryStore, Authorization.enforcing(repositoryStore),
                 audit(), "operator");
     }

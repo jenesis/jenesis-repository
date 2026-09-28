@@ -476,7 +476,7 @@ final class RpmPackageDigests {
             drawn += bytes;
             if (drawn > ceiling) {
                 throw new UnreadableIndex("The primary index at " + index + " exceeds the " + ceiling
-                        + "-byte read bound (jenreg.archive.largest-walk); refusing to build a package-digest map "
+                        + "-byte read bound (jenrepo.archive.largest-walk); refusing to build a package-digest map "
                         + "from a truncated index");
             }
         }

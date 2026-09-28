@@ -53,7 +53,7 @@ class HoldLifecycleTest {
         // The doubly-scoped tenant/repository space the review surfaces operate over, and a published artifact so the
         // path resolves to its coordinate (the observers key their records by the descriptor's coordinate).
         store = ArtifactStoreProvider.resolve("filesystem",
-                key -> "jenreg.filesystem.root".equals(key) ? root.toString() : null)
+                key -> "jenrepo.filesystem.root".equals(key) ? root.toString() : null)
                 .scope("default").scope("releases");
         Publication publication = new Publication(store);
         publication.link(PATH, publication.storeBlob(

@@ -34,7 +34,7 @@ public class RepositoryRouterTest {
     @BeforeAll
     public void setUp() throws IOException {
         store = ArtifactStoreProvider.resolve("filesystem",
-                key -> "jenreg.filesystem.root".equals(key) ? root.toString() : null);
+                key -> "jenrepo.filesystem.root".equals(key) ? root.toString() : null);
         Map<String, byte[]> upstream = Map.of("http://up/remote.txt", "from the upstream".getBytes(StandardCharsets.UTF_8));
         fetches = new AtomicInteger();
         ProxyFormat.Fetcher.Buffered fetcher = (url, _) -> {

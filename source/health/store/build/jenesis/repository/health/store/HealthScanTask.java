@@ -30,7 +30,7 @@ import build.jenesis.repository.maintenance.UnitFailures;
  * <p><strong>A sweep that could not do its work fails and does not stamp itself fresh</strong> ({@link
  * MaintenanceTask} clause 4). A read that gives way propagates at once. A refused ledger upsert is contained
  * per coordinate - one coordinate must not cost the rest of the walk its pass - then named and raised before the unit
- * returns, so the outage reaches {@code jenreg.maintenance.failures} and the task's reported status.
+ * returns, so the outage reaches {@code jenrepo.maintenance.failures} and the task's reported status.
  * Either way the {@link HealthLedger#scanned health stamp} is <em>not</em> advanced: the stamp is what the health panel reads as "this is
  * how current the scores are", and a sweep that recorded nothing while stamping itself fresh does not merely hide the
  * outage, it asserts the opposite.
@@ -128,7 +128,7 @@ public final class HealthScanTask implements MaintenanceTask {
         // reading are as of now": writing it over a walk whose upserts were refused would state the opposite of
         // what happened (clause 4), and an incremental pass cannot make the claim at all.
         cadence.completed(context.now(), !failed.any());
-        context.gauge("jenreg.health.scored.count",
+        context.gauge("jenrepo.health.scored.count",
                 "Coordinates held, published or cached from an upstream, whose maintainer-health the sweep scored "
                         + "and persisted this pass",
                 Map.of("tenant", context.tenant(), "repository", context.repository()), scored[0]);

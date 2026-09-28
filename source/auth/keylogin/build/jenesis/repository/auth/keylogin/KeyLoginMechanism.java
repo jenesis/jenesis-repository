@@ -6,7 +6,7 @@ import build.jenesis.repository.ui.NavEntry;
 
 /**
  * Discovers the key-based sign-in mechanism: the console imports {@link KeyLoginConfig} exactly like a Boot
- * auto-configuration, whose condition keeps every bean away when {@code jenreg.key-login=false} - so this module
+ * auto-configuration, whose condition keeps every bean away when {@code jenrepo.key-login=false} - so this module
  * installed but switched off still means "sign-in not offered", matching the OIDC and LDAP mechanisms. Named
  * {@code key-login}, a {@link ConsoleModuleProvider} sibling to {@code oidc} and {@code ldap}.
  *
@@ -19,12 +19,12 @@ import build.jenesis.repository.ui.NavEntry;
  *
  * <p>The name is the module's toggle key, and it is deliberately the <em>same</em> spelling as the enablement gate
  * {@link KeyLoginSettingsContributor} catalogues and {@link KeyLoginConfig.KeyLoginEnabled} reads. A toggle one
- * spelling out from those - {@code jenreg.keylogin} beside {@code jenreg.key-login} - would let the documented switch
+ * spelling out from those - {@code jenrepo.keylogin} beside {@code jenrepo.key-login} - would let the documented switch
  * reach the module's beans but never its import, leaving the undocumented one the only way to un-import it.
  */
 public final class KeyLoginMechanism implements ConsoleModuleProvider {
 
-    /** The <b>operator</b> spelling: the module name, its {@code jenreg.<name>} toggle, the settings key
+    /** The <b>operator</b> spelling: the module name, its {@code jenrepo.<name>} toggle, the settings key
      *  {@link KeyLoginSettingsContributor} catalogues and the property {@link KeyLoginConfig.KeyLoginEnabled} reads.
      *  Every one of those four is rendered from this constant, so the four cannot drift apart. */
     public static final String NAME = "key-login";

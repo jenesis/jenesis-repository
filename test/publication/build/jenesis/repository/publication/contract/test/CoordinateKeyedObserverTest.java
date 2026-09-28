@@ -42,7 +42,7 @@ class CoordinateKeyedObserverTest {
     @BeforeEach
     void setUp() throws IOException {
         store = ArtifactStoreProvider.resolve("filesystem",
-                key -> "jenreg.filesystem.root".equals(key) ? root.toString() : null).scope("acme").scope("main");
+                key -> "jenrepo.filesystem.root".equals(key) ? root.toString() : null).scope("acme").scope("main");
         PublicationHookContractTest.reset();
     }
 

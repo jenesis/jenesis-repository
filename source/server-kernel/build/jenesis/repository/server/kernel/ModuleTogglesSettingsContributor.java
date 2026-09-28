@@ -13,7 +13,7 @@ import build.jenesis.repository.settings.SettingsContributor;
 
 /**
  * Catalogues the config-driven enable/disable convention's per-implementation toggles
- * ({@code jenreg.<feature>=true|false}, the {@code Features} convention) for the discovered modules
+ * ({@code jenrepo.<feature>=true|false}, the {@code Features} convention) for the discovered modules
  * that carry no settings contributor of their own: every {@link RepositoryFormat}, {@link ImportSourceProvider}
  * and removable {@link ServerModuleProvider} feature surface, and every provider the maintenance, gate-policy,
  * signal-source and provenance-signer SPI homes switch off by name. Each toggle is a documented {@code BOOLEAN} setting

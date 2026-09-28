@@ -116,7 +116,7 @@ public class MaintenanceController {
         // The block-with-return binds this to the value-returning exclusively overload (an expression lambda would be
         // ambiguous against the void overload the scheduler uses).
         Optional<CleanupReport> outcome = maintenance.exclusively("cleanup", Instant.now(), () -> {
-            return Observations.observe(observations, "jenreg.cleanup", repo, tenant,
+            return Observations.observe(observations, "jenrepo.cleanup", repo, tenant,
                     observation -> {
                         StoreRepositoryInventory inventory = new StoreRepositoryInventory(repositories.store(tenant, repo));
                         CleanupPlan plan = sweeper.get()

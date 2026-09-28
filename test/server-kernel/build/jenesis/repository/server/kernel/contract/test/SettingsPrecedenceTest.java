@@ -32,7 +32,7 @@ class SettingsPrecedenceTest {
     /** The config names the applications ship, pinned as literals - see the class javadoc. */
     private static final List<String> PACKAGED = List.of("repository", "cache", "combined", "ui");
 
-    private static final String PROPERTY = "jenreg.vulnerability-threshold";
+    private static final String PROPERTY = "jenrepo.vulnerability-threshold";
 
     /** How Spring names the property source of an app's packaged classpath config file. */
     private static String packaged(String configName) {
@@ -48,8 +48,8 @@ class SettingsPrecedenceTest {
 
     /** An environment carrying only the sources a leg builds. The ambient {@code systemProperties} and
      *  {@code systemEnvironment} would sit <em>above</em> everything here, so a sibling suite's {@code -D} (this module
-     *  has one that pins {@code jenreg.auth} for a booted server) or a developer's exported
-     *  {@code JENREG_*} would be read as the pin these legs are about - a real precedence rule, but not the
+     *  has one that pins {@code jenrepo.auth} for a booted server) or a developer's exported
+     *  {@code JENREPO_*} would be read as the pin these legs are about - a real precedence rule, but not the
      *  one under test, and one that would make the answer depend on what else ran. */
     private static StandardEnvironment isolated() {
         StandardEnvironment environment = new StandardEnvironment();
@@ -89,7 +89,7 @@ class SettingsPrecedenceTest {
         // The process environment spells a key two ways and the binder reads both: hyphens as underscores, or
         // hyphens dropped (Spring Boot's canonical form). The pin chain must see both, or a deployment on the second
         // has a working setting everywhere except for the readers that take a pin or a literal default.
-        for (String spelling : List.of("JENREG_PROXY_ALLOW_INTERNAL", "JENREG_PROXYALLOWINTERNAL")) {
+        for (String spelling : List.of("JENREPO_PROXY_ALLOW_INTERNAL", "JENREPO_PROXYALLOWINTERNAL")) {
             StandardEnvironment environment = isolated();
             environment.getPropertySources().addFirst(new SystemEnvironmentPropertySource(
                     StandardEnvironment.SYSTEM_ENVIRONMENT_PROPERTY_SOURCE_NAME, Map.of(spelling, "true")));
@@ -114,20 +114,20 @@ class SettingsPrecedenceTest {
 
     /**
      * The concrete harm the stale matcher did, as its own leg: the shipped defaults are written as environment
-     * placeholders ({@code jenreg.auth=${JENREG_AUTH:true}}), and a {@code PropertySource}
+     * placeholders ({@code jenrepo.auth=${JENREPO_AUTH:true}}), and a {@code PropertySource}
      * hands back the <em>raw</em> text - only the {@code Environment} expands a placeholder. So a probe that walks past
      * the packaged defaults does not merely mis-attribute the origin; it reports the key as pinned to the literal
-     * {@code ${JENREG_AUTH:true}}, which every consumer of the chain then reads as a value. The posture
+     * {@code ${JENREPO_AUTH:true}}, which every consumer of the chain then reads as a value. The posture
      * report's {@code Configuration.flag} accepts only a literal {@code "true"}, so that string reads as <b>false</b>
-     * and {@code SecurityPosture} raises its CRITICAL {@code jenreg.auth.open} row against a deployment whose
-     * authorization is on. No suite could see it: every server-booting suite pins {@code jenreg.auth=false}
+     * and {@code SecurityPosture} raises its CRITICAL {@code jenrepo.auth.open} row against a deployment whose
+     * authorization is on. No suite could see it: every server-booting suite pins {@code jenrepo.auth=false}
      * from a source above the store, which is the one arrangement in which the walk stops before the packaged file.
      */
     @Test
     void a_packaged_default_holding_an_unresolved_placeholder_is_not_reported_as_a_pin() {
         StandardEnvironment environment = isolated();
         environment.getPropertySources().addLast(new MapPropertySource(packaged("repository"),
-                Map.of("jenreg.auth", "${JENREG_AUTH:true}")));
+                Map.of("jenrepo.auth", "${JENREPO_AUTH:true}")));
 
         assertThat(new PinnedSettings(environment).pinned("auth"))
                 .as("the shipped secure default is not an operator's pin, and its unexpanded placeholder is not a "
@@ -158,7 +158,7 @@ class SettingsPrecedenceTest {
      * A pin written as a placeholder reports what it resolves to, not how it is spelled.
      *
      * <p>An operator's own config file is a pin, and it is exactly where a deployment writes
-     * {@code jenreg.vulnerability-threshold=${THRESHOLD:HIGH}}. A {@link org.springframework.core.env.PropertySource}
+     * {@code jenrepo.vulnerability-threshold=${THRESHOLD:HIGH}}. A {@link org.springframework.core.env.PropertySource}
      * hands back that text verbatim, so a pin read straight off the source carried the literal - and
      * {@code effective} hands a pin's value on as the effective value of the key, so every consumer then parsed the
      * placeholder. The threshold parsed as no threshold; a flag written this way parsed as {@code false}.

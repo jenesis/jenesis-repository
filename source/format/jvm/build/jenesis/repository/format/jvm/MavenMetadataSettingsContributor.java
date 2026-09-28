@@ -10,7 +10,7 @@ import build.jenesis.repository.settings.SettingsContributor;
  * full wire-fidelity behaviour. Switching it on has an artifact-level document's {@code <versions>} list reconciled
  * against the stored folders (every other field kept as the publisher wrote it) and a document derived for a
  * coordinate that never had one uploaded - the importer / batch case. The Maven format reads the value off the
- * exchange from the {@code jenreg.} environment, into which a stored setting is layered at boot, so it is
+ * exchange from the {@code jenrepo.} environment, into which a stored setting is layered at boot, so it is
  * restart-bound ({@code live=false}) and this module describes it without the format depending on the settings
  * layer.
  *

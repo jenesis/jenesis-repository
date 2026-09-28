@@ -14,7 +14,7 @@ import org.springframework.security.web.SecurityFilterChain;
  * The Jenesis build-cache server's composition: a Spring Boot configuration whose wire protocol, multi-tenant
  * auth and eviction live in {@link Cache} (HTTP-framework-independent) and {@link CacheController}.
  * Persistence is a {@link build.jenesis.repository.cache.storage.CacheStorage} that delegates into a
- * segment of the repository's own store, so it is configured by {@code JENREG_STORE} and that store's
+ * segment of the repository's own store, so it is configured by {@code JENREPO_STORE} and that store's
  * keys rather than by a selection of its own; see {@link CacheConfig} for the environment configuration. Configuration is loaded from {@code cache.properties}
  * ({@code spring.config.name=cache}) rather than {@code application.properties}, so the credential
  * store's artifact-repository module - which ships its own {@code application.properties} - cannot
@@ -45,7 +45,7 @@ public class CacheServer {
      * The management surface of a cache running alone: the probe paths and nothing else.
      *
      * <p>Without this chain, {@code /actuator/prometheus} would answer anyone - with
-     * {@code jenreg_cache_requests_total} labelled by {@code tenant} and {@code project}, that hands every tenant and
+     * {@code jenrepo_cache_requests_total} labelled by {@code tenant} and {@code project}, that hands every tenant and
      * project name to whoever can reach the port - because the only other chain here claims {@code /build/**} and
      * this launcher excludes the repository's security auto-configuration by name, so everything under
      * {@code /actuator} would be matched by no chain at all. A request nothing matches is not a request nothing

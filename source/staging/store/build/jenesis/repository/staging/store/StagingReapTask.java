@@ -41,7 +41,7 @@ public final class StagingReapTask implements MaintenanceTask {
             return;
         }
         int reaped = new StoreStaging(context.store()).reap(context.now(), ttl);
-        context.gauge("jenreg.staging.reaped",
+        context.gauge("jenrepo.staging.reaped",
                 "Staging ids reaped (abandoned stagings dropped, sealed markers removed) this pass",
                 Map.of("repository", context.repository()), reaped);
     }
