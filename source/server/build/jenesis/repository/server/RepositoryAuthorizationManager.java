@@ -135,9 +135,11 @@ public class RepositoryAuthorizationManager implements AuthorizationManager<Requ
     }
 
     /** Whether a path reads or writes the whole deployment rather than a tenant's own space, so that a manage right
-     *  is not enough and the caller must also be the operator tenant. */
+     *  is not enough and the caller must also be the operator tenant. The issued login keys are among them: a login
+     *  key can bind a principal into any tenant, so a tenant's own administrator issuing one would reach past it. */
     private static boolean global(String path) {
         return path.startsWith("/api/settings") || path.startsWith("/api/repositories")
+                || path.equals("/api/keylogin") || path.startsWith("/api/keylogin/")
                 || path.startsWith("/api/upstreams") || path.startsWith("/api/admin/")
                 || path.equals("/api/logs") || path.startsWith("/api/logs/")
                 || path.equals("/api/consistency") || path.startsWith("/api/consistency/")

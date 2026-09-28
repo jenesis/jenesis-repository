@@ -1,6 +1,8 @@
 package build.jenesis.repository.auth.keylogin;
 
+import module java.base;
 import build.jenesis.repository.ui.ConsoleModuleProvider;
+import build.jenesis.repository.ui.NavEntry;
 
 /**
  * Discovers the key-based sign-in mechanism: the console imports {@link KeyLoginConfig} exactly like a Boot
@@ -58,5 +60,13 @@ public final class KeyLoginMechanism implements ConsoleModuleProvider {
     @Override
     public Class<?> configuration() {
         return KeyLoginConfig.class;
+    }
+
+    /** The issued keys' screen, under Settings: a login key can bind a principal into any tenant, so it is the
+     *  super-admin's, as the route's place under {@code /ui/settings/} makes it. */
+    @Override
+    public List<NavEntry> navEntries() {
+        return List.of(new NavEntry("Login keys", KeyLoginScreenController.ROUTE, NavEntry.Access.SUPERADMIN,
+                NavEntry.Group.SETTINGS));
     }
 }

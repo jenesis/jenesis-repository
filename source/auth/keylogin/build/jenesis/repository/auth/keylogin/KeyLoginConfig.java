@@ -31,7 +31,8 @@ import build.jenesis.repository.scope.Scopes;
  * Wires key-based console sign-in unless {@code jenreg.key-login=false}, and nothing at all when it is, so switching
  * it off leaves the other sign-in chains untouched. It contributes a form-login leg to the shared security chain (a
  * {@link LoginContributor}) backed by {@link KeyLoginAuthenticationProvider}, a "Sign in with a key" option to the
- * login page (a {@link LoginOptions}), the key-entry page, the operator admin API and the {@link FirstRunKey} a
+ * login page (a {@link LoginOptions}), the key-entry page, the issued keys' API and console screen over one
+ * implementation ({@link KeyLogins}), and the {@link FirstRunKey} a
  * deployment nobody can sign in to yet announces when it has started ({@link FirstRunWelcome}). A full-access admin key
  * in the environment is still announced with a WARN. Registering the provider as a bean also stops Boot from
  * auto-creating a default in-memory user.
@@ -142,10 +143,20 @@ public class KeyLoginConfig {
         return ConsoleTemplates.resolver(context, KeyLoginMechanism.QUALIFIER);
     }
 
+    /** The one implementation of listing, issuing and revoking login keys, which the API and the screen both call. */
     @Bean
-    public KeyLoginController keyLoginController(KeyLoginKeys keys,
-                                                @Qualifier("rootStorage") Documents rootStorage,
-                                                Authorization authorization, AuditTrail audit) {
-        return new KeyLoginController(keys, rootStorage, authorization, audit);
+    public KeyLogins keyLogins(KeyLoginKeys keys, @Qualifier("rootStorage") Documents rootStorage,
+                               Authorization authorization, AuditTrail audit) {
+        return new KeyLogins(keys, rootStorage, authorization, audit);
+    }
+
+    @Bean
+    public KeyLoginController keyLoginController(KeyLogins keyLogins) {
+        return new KeyLoginController(keyLogins);
+    }
+
+    @Bean
+    public KeyLoginScreenController keyLoginScreenController(KeyLogins keyLogins) {
+        return new KeyLoginScreenController(keyLogins);
     }
 }

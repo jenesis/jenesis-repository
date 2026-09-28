@@ -1,12 +1,14 @@
 /**
  * Tests for the key-based console sign-in module: the issued-key store (hash-at-rest, resolve, revoke, concurrency),
  * the authentication provider (env admin key to super-admin, issued key to its tenant role, invalid key refused,
- * rate-limit and audit), the operator admin API (super-admin gate, membership binding) and ServiceLoader discovery of
+ * rate-limit and audit), the one implementation the issued keys' API and console screen share (membership binding,
+ * audit, refusals) and ServiceLoader discovery of
  * the mechanism and its settings. Pure in-JVM over a real {@code Documents} store; nothing external, so it always
  * runs.
  *
  * @jenesis.release 25
  * @jenesis.test build.jenesis.repository.auth.keylogin
+ * @jenesis.attach org.mockito
  * @jenesis.bom pin-repository.properties
  * @jenesis.signature signature-repository.properties
  */
@@ -25,6 +27,10 @@ open module build.jenesis.repository.auth.keylogin.test {
     requires build.jenesis.repository.maintenance;
     requires spring.security.core;
     requires spring.web;
+    requires spring.webmvc;
+    requires spring.context;
+    requires org.mockito;
+    requires jakarta.servlet;
     requires org.junit.jupiter;
     requires org.assertj.core;
     uses build.jenesis.repository.ui.ConsoleModuleProvider;

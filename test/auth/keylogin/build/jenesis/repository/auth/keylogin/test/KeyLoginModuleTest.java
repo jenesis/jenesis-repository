@@ -12,6 +12,7 @@ import build.jenesis.repository.maintenance.StorageNamespace;
 import build.jenesis.repository.settings.Setting;
 import build.jenesis.repository.settings.SettingsContributor;
 import build.jenesis.repository.ui.ConsoleModuleProvider;
+import build.jenesis.repository.ui.NavEntry;
 import static org.assertj.core.api.Assertions.assertThat;
 
 /**
@@ -33,7 +34,9 @@ public class KeyLoginModuleTest {
                 .findFirst()
                 .orElseThrow();
         assertThat(keyLogin.configuration()).isEqualTo(KeyLoginConfig.class);
-        assertThat(keyLogin.navEntries()).isEmpty();
+        // The issued keys' screen, the super-admin's under Settings, as its route under /ui/settings/ makes it.
+        assertThat(keyLogin.navEntries()).containsExactly(new NavEntry("Login keys", "/ui/settings/login-keys",
+                NavEntry.Access.SUPERADMIN, NavEntry.Group.SETTINGS));
     }
 
     @Test

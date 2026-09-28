@@ -9,6 +9,10 @@
  * offered and the production chain is untouched. A {@code ConsoleModuleProvider} sibling to {@code auth/oidc} and
  * {@code auth/ldap}, and the way into a deployment's console before either is configured.
  *
+ * <p>The issued keys are administered by the operator through one implementation that three surfaces reach: the
+ * {@code /api/keylogin} routes, which the repository chain holds to a manage key of the operator tenant, the CLI's
+ * {@code keylogin} commands over them, and the console's login keys screen under Settings.
+ *
  * @jenesis.release 25
  * @jenesis.bom pin-repository.properties
  * @jenesis.signature signature-repository.properties
@@ -19,6 +23,7 @@ open module build.jenesis.repository.auth.keylogin {
     exports build.jenesis.repository.auth.keylogin to build.jenesis.repository.auth.keylogin.test,
             build.jenesis.repository.auth.keylogin.e2e;
     requires build.jenesis.repository.ui.identity;
+    requires build.jenesis.repository.ui.store;
     requires build.jenesis.repository.store;
     requires build.jenesis.repository.server;
     requires build.jenesis.repository.server.spi;
@@ -30,6 +35,8 @@ open module build.jenesis.repository.auth.keylogin {
     requires spring.context;
     requires spring.core;
     requires spring.web;
+    requires spring.webmvc;
+    requires jakarta.servlet;
     requires spring.security.config;
     requires spring.security.core;
     requires spring.security.web;

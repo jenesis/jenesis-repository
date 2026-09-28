@@ -257,9 +257,9 @@ public final class AccessClient extends ClientCalls {
     /**
      * The deployment's issued login keys.
      *
-     * <p>A login key is a deployment-wide credential, so these are super-admin calls; the controller enforces that
-     * itself rather than through the shared chain. Its javadoc has always said the surface is reachable "through
-     * the console, CLI or a headless agent", and until these methods existed the middle one was not true.
+     * <p>A login key can bind a principal into any tenant, so these are the operator's calls: the server holds
+     * {@code /api/keylogin} to a manage key of the operator tenant, as it does every deployment-wide route. The
+     * console's login keys screen issues and revokes through the same implementation.
      */
     public String keyLogins() throws IOException, InterruptedException {
         HttpResponse<String> response = send("GET", "/api/keylogin", null, null);
