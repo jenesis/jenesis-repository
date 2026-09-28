@@ -8,6 +8,8 @@ import build.jenesis.repository.cache.storage.testkit.CacheStorages;
 import build.jenesis.repository.audit.AuditTrail;
 import build.jenesis.repository.store.ArtifactStore;
 import build.jenesis.repository.store.ArtifactStoreProvider;
+import build.jenesis.repository.server.spi.AccessDenial;
+import build.jenesis.repository.store.Features;
 import build.jenesis.repository.ui.admin.security.Memberships;
 import build.jenesis.repository.ui.admin.security.MembershipCache;
 import build.jenesis.repository.ui.admin.security.SessionCurrentTenant;
@@ -26,7 +28,8 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
  * Switching the console's active tenant is gated: {@code /tenants/select} is only {@code .authenticated()} in the
  * security config, so this membership re-check is the sole barrier stopping a signed-in user from switching into a
  * tenant it does not belong to (and then reading that tenant's credentials and projects). A member may select its
- * tenant, a super-admin may select any, and a non-member or an unknown tenant is refused.
+ * tenant, a super-admin may select any, and a non-member or an unknown tenant is refused - alike, so a member cannot
+ * learn which tenants exist by selecting names, unless the deployment's {@link AccessDenial} says to refuse honestly.
  */
 public class TenantsControllerTest {
 
@@ -65,9 +68,28 @@ public class TenantsControllerTest {
         assertThat(selected).isEqualTo("acme");
     }
 
+    @AfterEach
+    public void restore() {
+        Features.reset();
+    }
+
     @Test
-    public void a_non_member_is_refused() {
+    public void a_non_member_is_told_what_an_absent_tenant_is_told() {
+        Features.configure(_ -> null);
         assertThatThrownBy(() -> controller.select("globex", member("github/1")))
+                .isInstanceOf(IllegalArgumentException.class).hasMessage("No such tenant 'globex'.");
+        assertThatThrownBy(() -> controller.select("nope", member("github/1")))
+                .isInstanceOf(IllegalArgumentException.class).hasMessage("No such tenant 'nope'.");
+        assertThat(selected).as("the tenant was not switched").isNull();
+    }
+
+    @Test
+    public void a_non_member_is_refused_honestly_when_the_deployment_says_so() {
+        Features.configure(Map.of("jenrepo." + AccessDenial.KEY, AccessDenial.FORBIDDEN_VALUE)::get);
+        assertThatThrownBy(() -> controller.select("globex", member("github/1")))
+                .isInstanceOf(IllegalArgumentException.class).hasMessageContaining("do not have access");
+        assertThatThrownBy(() -> controller.select("nope", member("github/1")))
+                .as("and so is a tenant that does not exist, since the refusal comes before it is looked up")
                 .isInstanceOf(IllegalArgumentException.class).hasMessageContaining("do not have access");
         assertThat(selected).as("the tenant was not switched").isNull();
     }
@@ -79,8 +101,8 @@ public class TenantsControllerTest {
     }
 
     @Test
-    public void an_unknown_tenant_is_refused() {
-        assertThatThrownBy(() -> controller.select("nope", member("github/1")))
+    public void a_super_admin_is_told_a_tenant_does_not_exist() {
+        assertThatThrownBy(() -> controller.select("nope", superadmin("github/9")))
                 .isInstanceOf(IllegalArgumentException.class).hasMessageContaining("No such tenant");
     }
 

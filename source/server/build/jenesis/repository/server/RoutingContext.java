@@ -70,12 +70,12 @@ public interface RoutingContext {
 
     /**
      * The route for a request a routing has confined to {@code tenant}: the tenant it answers for, whatever else the
-     * URL names. A URL naming another tenant is a {@code 404}, which says no more about that tenant than an absent
-     * repository would; a URL naming none - the OCI registry's version probe - routes to {@code tenant}.
+     * URL names. A URL naming another tenant is {@link RepositoryRouting#denied refused}, whether or not that tenant
+     * exists; a URL naming none - the OCI registry's version probe - routes to {@code tenant}.
      */
     default RepositoryRouting.Route confined(String tenant, RepositoryRouting.Target target) {
         if (!target.tenant().isEmpty() && !target.tenant().equals(tenant)) {
-            throw new ResponseStatusException(HttpStatus.NOT_FOUND, "No such tenant");
+            throw RepositoryRouting.denied("The request may not address tenant '" + target.tenant() + "'");
         }
         return route(tenant, target);
     }

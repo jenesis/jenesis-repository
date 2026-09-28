@@ -13,9 +13,11 @@ import build.jenesis.repository.settings.StoredSettings;
 import build.jenesis.repository.store.ArtifactStore;
 import build.jenesis.repository.scope.Scopes;
 import build.jenesis.repository.cache.storage.testkit.CacheStorages;
+import build.jenesis.repository.server.spi.AccessDenial;
 import build.jenesis.repository.server.spi.Authorization;
 import build.jenesis.repository.server.spi.KeyUsageTracker;
 import build.jenesis.repository.store.ArtifactStoreProvider;
+import build.jenesis.repository.store.Features;
 import build.jenesis.repository.walk.Traversal;
 import io.micrometer.core.instrument.MeterRegistry;
 import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
@@ -32,6 +34,9 @@ import static org.assertj.core.api.Assertions.assertThat;
  * miss, read/write and wildcard grants, tenant and project isolation, the default-project fallback and
  * its required mode, the trial bootstrap key, traversal safety, grant revocation/narrowing,
  * size/ttl/free-space eviction, per-tenant metrics, HEAD.
+ *
+ * <p>The suite runs with {@code access-denied-status=forbidden}, so a refusal answers {@code 403} and can be told from a
+ * miss, which answers {@code 404}; what a refusal answers with nothing set is its own test below.
  */
 public class CacheTest {
 
@@ -54,6 +59,18 @@ public class CacheTest {
 
     @TempDir
     private Path root;
+
+    @BeforeEach
+    void refuseHonestly() {
+        UnaryOperator<String> deployment = Features.lookup();
+        Features.configure(key -> ("jenrepo." + AccessDenial.KEY).equals(key)
+                ? AccessDenial.FORBIDDEN_VALUE : deployment.apply(key));
+    }
+
+    @AfterEach
+    void restore() {
+        Features.reset();
+    }
 
     private Cache cache() {
         return cache(new SimpleMeterRegistry());
@@ -216,6 +233,20 @@ public class CacheTest {
         credential("acme", ACME_RW, "*=cache:read,cache:write");
         assertThat(get(cache, "demo", ACME_RW, "zz", "bb")).isEqualTo(400);
         assertThat(get(cache, "demo", ACME_RW, "aa", "gg")).isEqualTo(400);
+    }
+
+    @Test
+    public void a_refusal_answers_as_an_absent_entry_by_default_whether_the_project_exists_or_not() throws Exception {
+        Features.reset();
+        Cache cache = cache();
+        credential("acme", ACME_RW, "*=cache:read,cache:write");
+        credential("acme", ACME_OTHER, "other=cache:read,cache:write");
+        assertThat(put(cache, "demo", ACME_RW, "aa", "bb", new byte[]{1})).isEqualTo(201);
+        assertThat(get(cache, "demo", ACME_OTHER, "aa", "bb"))
+                .as("a key without a grant on the project, asking for an entry that is there").isEqualTo(404);
+        assertThat(get(cache, "absent", ACME_OTHER, "aa", "bb"))
+                .as("the same key on a project nothing was ever stored in").isEqualTo(404);
+        assertThat(get(cache, "demo", GLOBEX_SECRET, "aa", "bb")).as("another tenant's key").isEqualTo(404);
     }
 
     @Test

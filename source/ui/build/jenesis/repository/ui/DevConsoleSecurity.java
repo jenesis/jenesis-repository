@@ -36,13 +36,16 @@ public class DevConsoleSecurity {
     /** Where the dev form is served and where it posts - the same URL, as Spring Security's form login expects. */
     public static final String PATH = "/ui/login/dev";
 
-    /** The dev chain, scoped and authorized by the edition's policy and identical in every other respect. */
+    /** The dev chain, scoped and authorized by the edition's policy, refusing as the production chain refuses, and
+     *  identical in every other respect. */
     @Bean
     @Order(2)
-    public SecurityFilterChain devSecurityFilterChain(HttpSecurity http, DevConsolePolicy policy) throws Exception {
+    public SecurityFilterChain devSecurityFilterChain(HttpSecurity http, DevConsolePolicy policy, ConsoleAccess access)
+            throws Exception {
         return http
                 .securityMatcher(policy.space().toArray(String[]::new))
                 .authorizeHttpRequests(policy::rules)
+                .exceptionHandling(exceptions -> exceptions.accessDeniedHandler(new NoAccessRedirect(access)))
                 .formLogin(form -> form
                         .loginPage(PATH)
                         .loginProcessingUrl(PATH)

@@ -2,12 +2,12 @@ package build.jenesis.repository.server;
 
 import module java.base;
 
-import build.jenesis.repository.format.RepositoryType;
 import build.jenesis.repository.server.spi.KeyUsageTracker;
+import build.jenesis.repository.server.spi.AccessDenial;
 import build.jenesis.repository.server.spi.Authorization;
 import build.jenesis.repository.server.spi.RateLimiter;
 import build.jenesis.repository.store.Features;
-import jakarta.servlet.http.HttpServletRequest;
+import jakarta.servlet.DispatcherType;
 import org.springframework.core.env.Environment;
 
 import org.springframework.beans.factory.ObjectProvider;
@@ -34,8 +34,8 @@ import org.springframework.security.web.authentication.UsernamePasswordAuthentic
  * browser sends from another site is refused by the {@link CrossSiteWriteFilter}, since a key presented as a Basic
  * password is one a browser attaches for itself. Both the
  * authentication entry point and the access-denied handler are the {@link RepositoryAuthorizationEntryPoint}, so a
- * denied request answers the status the credential model intends ({@code 401} unauthorized, {@code 403} forbidden)
- * whichever Spring Security failure path it takes.
+ * denied request answers the status the credential model intends whichever Spring Security failure path it takes:
+ * {@code 401} for a caller with no usable credential, and the deployment's {@link AccessDenial} for one refused.
  *
  * <p>The chain is a <em>composition seam</em>, not a fixed chain. The authorization manager, the {@link RateLimitFilter}
  * and the chain itself are {@link ConditionalOnMissingBean conditional}, and every discovered
@@ -132,11 +132,13 @@ public class RepositorySecurityAutoConfiguration {
                                                    RateLimitFilter rateLimitFilter,
                                                    AuthFailures authFailures,
                                                    ObjectProvider<SecurityChainCustomizer> customizers,
-                                                   ObjectProvider<RepositoryRouting> routing,
                                                    ObjectProvider<FormatDispatcher> dispatcher)
             throws Exception {
+        // A value the catalogue would refuse can still arrive from the environment: refuse it here, at the start,
+        // rather than answer every later refusal with a 500.
+        AccessDenial.configured();
         RepositoryAuthorizationEntryPoint entryPoint = new RepositoryAuthorizationEntryPoint(authFailures,
-                request -> challenges(request, routing.getIfAvailable(), dispatcher.getIfAvailable()));
+                () -> challenges(dispatcher.getIfAvailable()), AccessDenial::configured);
         http
                 .csrf(csrf -> csrf.disable())
                 .httpBasic(basic -> basic.disable())
@@ -146,6 +148,11 @@ public class RepositorySecurityAutoConfiguration {
                         .authenticationEntryPoint(entryPoint)
                         .accessDeniedHandler(entryPoint))
                 .authorizeHttpRequests(authorize -> authorize
+                        // An error page renders the answer a request was already given - its status decided by the
+                        // manager, a filter or a controller - so its dispatch is not decided again: deciding it would
+                        // replace that status with the manager's verdict on the error page, which turned the cross-site
+                        // filter's 403 into the refusal a credential without a wildcard read gets.
+                        .dispatcherTypeMatchers(DispatcherType.ERROR).permitAll()
                         // The three paths a container platform probes, and nothing else. They answer a
                         // summarized state - UP or DOWN - and are open because a kubelet has no credential to
                         // present and a probe that needs one is a probe that fails the pod.
@@ -180,23 +187,12 @@ public class RepositorySecurityAutoConfiguration {
         return http.build();
     }
 
-    /** The schemes the format of the repository {@code request} addresses declares for a {@code 401}, or none when
-     *  the request cannot be resolved to a repository holding a type - a denial is never made to fail by the lookup
-     *  that decorates it. */
-    private static List<String> challenges(HttpServletRequest request, RepositoryRouting routing,
-                                           FormatDispatcher dispatcher) {
-        if (routing == null || dispatcher == null) {
+    /** Every scheme an installed format declares for a {@code 401}, in discovery order and each once - none when
+     *  this composition dispatches no formats. */
+    private static List<String> challenges(FormatDispatcher dispatcher) {
+        if (dispatcher == null) {
             return List.of();
         }
-        return routing.resolve(request).flatMap(route -> {
-                    try {
-                        return routing.document(route);
-                    } catch (IOException unreadable) {
-                        return Optional.empty();
-                    }
-                })
-                .flatMap(document -> RepositoryType.of(document.format(), dispatcher.formats()))
-                .map(type -> type.formats().stream().flatMap(format -> format.challenges().stream()).distinct().toList())
-                .orElse(List.of());
+        return dispatcher.formats().stream().flatMap(format -> format.challenges().stream()).distinct().toList();
     }
 }

@@ -2,9 +2,12 @@ package build.jenesis.repository.server;
 
 import module java.base;
 
+import build.jenesis.repository.server.spi.AccessDenial;
 import build.jenesis.repository.store.ArtifactStore;
 import build.jenesis.repository.store.RepositoryDocument;
 import jakarta.servlet.http.HttpServletRequest;
+import org.springframework.http.HttpStatusCode;
+import org.springframework.web.server.ResponseStatusException;
 
 /**
  * The seam that resolves an incoming request to the artifact space and format path the {@link FormatDispatcher}
@@ -24,16 +27,30 @@ import jakarta.servlet.http.HttpServletRequest;
  * may let the URL choose, confine a request to the tenant its {@code Jenesis-Repository-Key} names, or to the tenant
  * its {@code Host} maps to. This interface deliberately says none of that: it hands back a {@link Route} and every
  * caller above it is blind to how the tenant was decided, which is what lets one {@code RepositoryController} serve
- * all of those deployments.
+ * all of those deployments. What every routing shares is how it refuses a request naming a tenant it may not address:
+ * {@link #denied}.
  */
 public interface RepositoryRouting {
 
     /**
      * Resolve the request to a {@link Route}; never {@code null}. A request the routing refuses - a name that is not
-     * routable ({@code 400}), a tenant the request may not address ({@code 404}, or {@code 403} for a credential
-     * naming another) - throws the refusal as a {@code ResponseStatusException}.
+     * routable ({@code 400}), a tenant the request may not address ({@link #denied}) - throws the refusal as a
+     * {@code ResponseStatusException}.
      */
     Route route(HttpServletRequest request);
+
+    /**
+     * The refusal of a request that may not address the tenant it names - a credential of another tenant, or a URL
+     * naming a tenant the routing does not answer for this request - answered as the deployment's
+     * {@link AccessDenial} says, as every other surface answers a caller without access. It is decided from the names
+     * alone, never from whether the tenant exists, so it is the same refusal for an existing tenant and an absent one.
+     *
+     * @param reason why the request was refused, carried only when a refusal does not hide the name.
+     */
+    static ResponseStatusException denied(String reason) {
+        AccessDenial denial = AccessDenial.configured();
+        return new ResponseStatusException(HttpStatusCode.valueOf(denial.status()), denial.explain("Not found", reason));
+    }
 
     /**
      * The tenant a request that addresses none answers for - an {@code /api} call, which names its repository in a

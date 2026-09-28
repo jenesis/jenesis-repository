@@ -15,7 +15,9 @@ public final class AuthFailures {
 
     private final ConcurrentHashMap<String, AtomicLong> counts = new ConcurrentHashMap<>();
 
-    /** Record one denial: {@code mechanism} is {@code key}/{@code oidc}/{@code saml}, {@code outcome} the HTTP status. */
+    /** Record one denial: {@code mechanism} is {@code key}/{@code oidc}/{@code saml}, {@code outcome} {@code 401} for a
+     *  caller with no usable credential and {@code 403} for one refused - whatever status the refusal was answered
+     *  with, which {@link build.jenesis.repository.server.spi.AccessDenial} decides. */
     public void record(String mechanism, int outcome) {
         counts.computeIfAbsent(mechanism + ":" + outcome, key -> new AtomicLong()).incrementAndGet();
     }

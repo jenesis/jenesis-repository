@@ -4,6 +4,7 @@ import module java.base;
 import build.jenesis.repository.cache.storage.CacheStorage;
 import build.jenesis.repository.cache.storage.Names;
 import build.jenesis.repository.cache.storage.ProjectPolicy;
+import build.jenesis.repository.server.spi.AccessDenial;
 import build.jenesis.repository.server.spi.Authorization;
 import build.jenesis.repository.server.spi.KeyUsageTracker;
 import build.jenesis.repository.walk.Traversal;
@@ -227,8 +228,10 @@ public class Cache {
     /**
      * Authorise a request addressed to {@code named}'s cache - {@code /build/<tenant>/...} - and resolve its entry.
      * The URL names the tenant and the key decides whether it may be addressed: a key reaches its own tenant's cache
-     * and no other, and the bootstrap key the default tenant's. A key naming another tenant is a {@code 403}, never
-     * a crossing; {@code null} addresses the key's own.
+     * and no other, and the bootstrap key the default tenant's. A key naming another tenant, or lacking the right on
+     * the project, is refused as the deployment's {@link AccessDenial} says, never a crossing, and the refusal is
+     * decided from the names alone, so it is the same for a project or tenant that exists and one that does not;
+     * {@code null} addresses the key's own.
      */
     public Resolution resolve(String named, String project, String key, String step, String inputs, boolean write) {
         String name = project;
@@ -261,7 +264,7 @@ public class Cache {
         }
         if (named != null && !named.equals(tenant)) {
             count("", Outcome.FORBIDDEN);
-            return new Rejected(403);
+            return new Rejected(AccessDenial.configured().status());
         }
         String metric = tenant + "/" + name;
         if (!bootstrap) {
@@ -283,7 +286,7 @@ public class Cache {
                 // attributing) and a forged-but-well-formed key (attacker-chosen names that must not become
                 // meter tags) - only a provisioned credential's denial is tagged with its names.
                 count(provisioned(tenant, key) ? metric : "", Outcome.FORBIDDEN);
-                return new Rejected(403);
+                return new Rejected(AccessDenial.configured().status());
             }
             if (usageTracker.enabled()) {
                 usageTracker.record(tenant, Authorization.hash(key), null);

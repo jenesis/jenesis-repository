@@ -45,11 +45,13 @@ import org.springframework.web.util.UriUtils;
  *
  * <p>The computed {@link Authorization.Decision} is recorded on the request so
  * {@link RepositoryAuthorizationEntryPoint} can answer {@code 401} for an unauthorized request (no key, a malformed
- * or expired key) and {@code 403} for a forbidden one (a key that lacks the right, or whose source address lies
- * outside the credential's allowlist). The source address is the connection peer unless that peer is a configured
- * {@code jenrepo.trusted-proxies} hop, in which case it is taken from {@code X-Forwarded-For}, so a client cannot
- * spoof the allowlist by setting the header itself. It is contributed as a bean by
- * {@link RepositorySecurityAutoConfiguration}.
+ * or expired key) and refuse a forbidden one (a key that lacks the right, or whose source address lies outside the
+ * credential's allowlist) as the deployment's {@link build.jenesis.repository.server.spi.AccessDenial} says. Every
+ * decision here is taken from the name a request addresses and never from whether that name exists, which is what
+ * makes a refusal the same answer for an existing name and an absent one. The source address is the connection peer
+ * unless that peer is a configured {@code jenrepo.trusted-proxies} hop, in which case it is taken from
+ * {@code X-Forwarded-For}, so a client cannot spoof the allowlist by setting the header itself. It is contributed as
+ * a bean by {@link RepositorySecurityAutoConfiguration}.
  */
 public class RepositoryAuthorizationManager implements AuthorizationManager<RequestAuthorizationContext> {
 

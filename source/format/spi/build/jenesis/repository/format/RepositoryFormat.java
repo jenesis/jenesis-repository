@@ -214,8 +214,9 @@ public interface RepositoryFormat extends IconContributor {
      * The authentication schemes a {@code 401} on this format's paths names beside {@code Basic}. A client that sends
      * its credential only in answer to a challenge it recognises needs its own named: cargo asks for its sparse
      * index's {@code config.json} without a token and retries with one only when the answer names {@code Cargo}. The
-     * server asks the format of the repository a denied request addresses, so it holds no list of formats that need
-     * one. None by default.
+     * server names every installed format's schemes on every such {@code 401}, so it holds no list of formats that
+     * need one, and the challenge says nothing about whether the addressed repository exists or what it holds. None
+     * by default.
      */
     default List<String> challenges() {
         return List.of();

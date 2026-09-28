@@ -5,13 +5,16 @@ import module org.junit.jupiter.api;
 import build.jenesis.repository.audit.AuditTrail;
 import build.jenesis.repository.cache.storage.testkit.CacheStorages;
 import build.jenesis.repository.server.PresentedKey;
+import build.jenesis.repository.server.spi.AccessDenial;
 import build.jenesis.repository.server.spi.Authorization;
+import build.jenesis.repository.store.Features;
 import build.jenesis.repository.store.ArtifactStore;
 import build.jenesis.repository.store.ArtifactStoreProvider;
 import build.jenesis.repository.store.Documents;
 import build.jenesis.repository.console.api.TenantsApiController;
 import build.jenesis.repository.ui.store.TenantService;
 import jakarta.servlet.http.HttpServletRequest;
+import org.springframework.http.ResponseEntity;
 
 import static java.nio.charset.StandardCharsets.UTF_8;
 import static org.assertj.core.api.Assertions.assertThat;
@@ -70,11 +73,29 @@ class TenantsApiControllerTest {
 
     @Test
     void a_key_outside_the_operator_tenant_and_a_request_without_one_are_refused() throws IOException {
-        HttpServletRequest tenantAdmin = request(Authorization.mint("acme"));
-        assertThat(controller.create("globex", tenantAdmin).getStatusCode().value()).isEqualTo(403);
-        assertThat(controller.list(tenantAdmin).getStatusCode().value()).isEqualTo(403);
-        assertThat(controller.create("globex", request(null)).getStatusCode().value()).isEqualTo(403);
-        assertThat(new TenantService(rootStorage).exists("globex")).as("nothing was created").isFalse();
+        new TenantService(rootStorage).create("initech");
+        try {
+            for (AccessDenial denial : AccessDenial.values()) {
+                Features.configure(Map.of("jenrepo." + AccessDenial.KEY, denial.value())::get);
+                HttpServletRequest tenantAdmin = request(Authorization.mint("acme"));
+                // An existing tenant and an absent one, refused alike: the refusal is decided before either is read.
+                for (String name : List.of("initech", "globex")) {
+                    ResponseEntity<?> refused = controller.delete(name, tenantAdmin);
+                    assertThat(refused.getStatusCode().value()).as("%s: %s", denial.value(), name)
+                            .isEqualTo(denial.status());
+                    assertThat(refused.getBody()).as("%s: %s", denial.value(), name)
+                            .isEqualTo(controller.delete("globex", tenantAdmin).getBody());
+                }
+                assertThat(controller.create("globex", tenantAdmin).getStatusCode().value()).isEqualTo(denial.status());
+                assertThat(controller.list(tenantAdmin).getStatusCode().value()).isEqualTo(denial.status());
+                assertThat(controller.create("globex", request(null)).getStatusCode().value())
+                        .isEqualTo(denial.status());
+                assertThat(new TenantService(rootStorage).exists("globex")).as("nothing was created").isFalse();
+                assertThat(new TenantService(rootStorage).exists("initech")).as("nothing was deleted").isTrue();
+            }
+        } finally {
+            Features.reset();
+        }
     }
 
     /** A request presenting {@code key} in the header a script sends it in, and nothing else. */

@@ -4,6 +4,7 @@ import module java.base;
 import build.jenesis.repository.audit.AuditTrail;
 import build.jenesis.repository.scope.Scopes;
 import build.jenesis.repository.server.PresentedKey;
+import build.jenesis.repository.server.spi.AccessDenial;
 import build.jenesis.repository.server.spi.Authorization;
 import build.jenesis.repository.store.ArtifactStore;
 import build.jenesis.repository.store.Documents;
@@ -107,15 +108,17 @@ public class TenantsApiController {
         return ResponseEntity.ok(new Tenant(name));
     }
 
-    /** The refusal a key outside the operator tenant gets; nothing when authorization is switched off. */
+    /** The refusal a key outside the operator tenant gets, answered as the deployment's {@link AccessDenial} says and
+     *  before any tenant is looked up; nothing when authorization is switched off. */
     private Optional<ResponseEntity<?>> refused(HttpServletRequest request) {
         if (!authorization.enforced()) {
             return Optional.empty();
         }
         String key = PresentedKey.from(request);
         if (key == null || !operatorTenant.equals(Authorization.tenantOf(key))) {
-            return Optional.of(ResponseEntity.status(403).body("Tenants are administered with a key of the operator "
-                    + "tenant, '" + operatorTenant + "'."));
+            AccessDenial denial = AccessDenial.configured();
+            return Optional.of(ResponseEntity.status(denial.status()).body(denial.explain("Not found.",
+                    "Tenants are administered with a key of the operator tenant, '" + operatorTenant + "'.")));
         }
         return Optional.empty();
     }

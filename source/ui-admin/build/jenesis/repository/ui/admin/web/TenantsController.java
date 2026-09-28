@@ -1,6 +1,7 @@
 package build.jenesis.repository.ui.admin.web;
 
 import module java.base;
+import build.jenesis.repository.server.spi.AccessDenial;
 import build.jenesis.repository.ui.admin.security.Memberships;
 import build.jenesis.repository.ui.admin.security.SessionCurrentTenant;
 import build.jenesis.repository.ui.store.TenantPurge;
@@ -47,14 +48,22 @@ public class TenantsController {
         return "tenants";
     }
 
+    /**
+     * Select the tenant the console works in. A member's membership is asked before anything else, so a tenant they
+     * are not a member of is answered the same whether it exists or not - as an absent one, unless the deployment's
+     * {@link AccessDenial} says to refuse it honestly - and costs the same one membership read either way. Only a
+     * super-admin, who may select any tenant, is told a tenant does not exist.
+     */
     @PostMapping("/ui/tenants/select")
     public String select(@RequestParam("tenant") String tenant, Authentication authentication) {
-        boolean superadmin = hasSuperadmin(authentication);
-        if (!tenants.exists(tenant)) {
-            throw new IllegalArgumentException("No such tenant '" + tenant + "'.");
-        }
-        if (!superadmin && memberships.roleIn(tenant, authentication.getName()).isEmpty()) {
-            throw new IllegalArgumentException("You do not have access to tenant '" + tenant + "'.");
+        String absent = "No such tenant '" + tenant + "'.";
+        if (!hasSuperadmin(authentication)) {
+            if (memberships.roleIn(tenant, authentication.getName()).isEmpty()) {
+                throw new IllegalArgumentException(AccessDenial.configured()
+                        .explain(absent, "You do not have access to tenant '" + tenant + "'."));
+            }
+        } else if (!tenants.exists(tenant)) {
+            throw new IllegalArgumentException(absent);
         }
         current.select(tenant);
         return "redirect:/ui/repositories";
