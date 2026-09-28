@@ -40,8 +40,4 @@ open module build.jenesis.repository.ui.test {
     requires org.junit.jupiter;
     requires org.assertj.core;
     requires org.mockito;
-    // A format declaring a mark, discovered the same way, so the booted console resolves a namespace's mark through
-    // the panel's own ServiceLoader path rather than only through a lookup a unit test hands in. No format module is
-    // otherwise on the console's graph.
-    provides build.jenesis.repository.format.RepositoryFormat with build.jenesis.repository.ui.test.MarkedFormat;
 }
