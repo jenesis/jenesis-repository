@@ -12,6 +12,7 @@ import build.jenesis.repository.blobs.OutboundTargets;
 import build.jenesis.repository.blobs.ProxyLeg;
 import build.jenesis.repository.blobs.ProxyRelay;
 import build.jenesis.repository.format.FormatExchange;
+import build.jenesis.repository.format.lifecycle.Lifecycle;
 import build.jenesis.repository.icon.IconResource;
 import build.jenesis.repository.format.ProxyFormat;
 import build.jenesis.repository.format.ArtifactSignatures;
@@ -220,6 +221,14 @@ public final class NuGetFormat implements RepositoryFormat, ProxyLeg, BlobLayout
     public void serve(FormatExchange exchange, ArtifactStore store) throws IOException {
         Blobs blobs = new Blobs(store);
         String rest = exchange.path().substring("/nuget/".length());
+        if (exchange.method().equals("DELETE")) {
+            if (rest.startsWith(PUSH + "/")) {
+                unlist(rest.substring(PUSH.length() + 1), blobs, store, exchange);
+            } else {
+                exchange.respond(405);
+            }
+            return;
+        }
         if (exchange.method().equals("PUT")) {
             // A push goes to the one resource the service index advertises as PackagePublish/2.0.0, and nowhere else
             // The coordinate comes from the .nuspec rather than from the path, so without this check EVERY PUT under
@@ -628,6 +637,30 @@ public final class NuGetFormat implements RepositoryFormat, ProxyLeg, BlobLayout
 
     /** The {@code .nupkg} pointer key a version's bytes live at - the identity every version-enumerating surface judges
      *  an enumerated version folder by, so the stored listings and the download cannot drift apart. */
+    /**
+     * {@code dotnet nuget delete <id> <version>}: {@code DELETE} on the publish resource followed by
+     * {@code /<id>/<version>}, which nuget.org answers by unlisting the version rather than deleting it - and so does
+     * this repository. The unlisting is the product's own yanked mark, written through the one path the console and the
+     * API use ({@link Lifecycle#mark(FormatExchange, ArtifactStore, String, String, Lifecycle.Flag)}), so the
+     * registration leaf renders {@code listed: false} and {@code jenrepo lifecycle} shows it whichever surface set it.
+     * {@code 204} for a version this feed holds, already unlisted or not; {@code 404} for one it does not.
+     */
+    private static void unlist(String rest, Blobs blobs, ArtifactStore store, FormatExchange exchange)
+            throws IOException {
+        int slash = rest.indexOf('/');
+        String id = slash < 0 ? "" : rest.substring(0, slash).toLowerCase(Locale.ROOT);
+        String version = slash < 0 ? "" : rest.substring(slash + 1).toLowerCase(Locale.ROOT);
+        if (!BlobLayout.addressable(id, version) || version.contains("/")
+                || blobs.hash(nupkgKey(id, version)).isEmpty()) {
+            exchange.respond(404);
+            return;
+        }
+        if (Lifecycle.read(store, id, version).filter(flag -> flag.state() == Lifecycle.State.YANKED).isEmpty()) {
+            Lifecycle.mark(exchange, store, id, version, new Lifecycle.Flag(Lifecycle.State.YANKED, ""));
+        }
+        exchange.respond(204);
+    }
+
     static String nupkgKey(String id, String version) {
         return "nuget/" + id + "/" + version + "/" + id + "." + version + ".nupkg";
     }

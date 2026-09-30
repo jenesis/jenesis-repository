@@ -76,6 +76,8 @@ public final class CargoFormat implements RepositoryFormat, ArtifactLayout, Prox
     private static final String NEW = "api/v1/crates/new";
     private static final String API_CRATES = "api/v1/crates/";
     private static final String DOWNLOAD = "/download";
+    private static final String YANK = "/yank";
+    private static final String UNYANK = "/unyank";
     private static final String CONFIG = "config.json";
 
     /** Cargo's publish response - the empty warning envelope every registry returns on a successful upload. */
@@ -126,6 +128,10 @@ public final class CargoFormat implements RepositoryFormat, ArtifactLayout, Prox
         String method = exchange.method();
         if (method.equals("PUT") && sub.equals(NEW)) {
             publish(repo, exchange, store);
+        } else if (sub.startsWith(API_CRATES) && method.equals("DELETE") && sub.endsWith(YANK)) {
+            yank(repo, sub.substring(API_CRATES.length(), sub.length() - YANK.length()), true, store, exchange);
+        } else if (sub.startsWith(API_CRATES) && method.equals("PUT") && sub.endsWith(UNYANK)) {
+            yank(repo, sub.substring(API_CRATES.length(), sub.length() - UNYANK.length()), false, store, exchange);
         } else if (!method.equals("GET") && !method.equals("HEAD")) {
             exchange.respond(405);
         } else if (sub.equals(CONFIG)) {
@@ -390,6 +396,39 @@ public final class CargoFormat implements RepositoryFormat, ArtifactLayout, Prox
         String auth = exchange.setting("auth");
         String anonymous = exchange.setting("anonymous-rights");
         return (auth == null || !auth.equalsIgnoreCase("false")) && (anonymous == null || anonymous.isBlank());
+    }
+
+    /**
+     * {@code cargo yank} ({@code DELETE api/v1/crates/<name>/<version>/yank}) and {@code cargo yank --undo}
+     * ({@code PUT .../unyank}): the product's own lifecycle mark, written and cleared through the one path the console
+     * and the API use ({@link Lifecycle#mark(FormatExchange, ArtifactStore, String, String, Lifecycle.Flag)}), so the
+     * index line a resolver reads carries {@code yanked} and {@code jenrepo lifecycle} shows it whichever surface set
+     * it. Both are idempotent, as crates.io's are: {@code {"ok":true}} for a version already in the asked state, and
+     * Cargo's error document with a {@code 404} for a version this registry does not hold.
+     */
+    private static void yank(String repo, String middle, boolean yank, ArtifactStore store, FormatExchange exchange)
+            throws IOException {
+        int last = middle.lastIndexOf('/');
+        String crate = last < 0 ? "" : canonical(middle.substring(0, last));
+        String version = last < 0 ? "" : middle.substring(last + 1);
+        if (crate.isEmpty() || version.isEmpty() || Keys.unsafe(crate) || Keys.unsafe(version)
+                || new Blobs(store).hash(crateKey(repo, crate, version)).isEmpty()) {
+            ObjectNode error = MAPPER.createObjectNode();
+            error.putArray("errors").addObject().put("detail",
+                    "crate `" + crate + "` does not have a version `" + version + "`");
+            exchange.setResponseHeader("Content-Type", "application/json");
+            exchange.respond(404, MAPPER.writeValueAsBytes(error));
+            return;
+        }
+        String coordinate = repo + "/" + crate;
+        boolean yanked = Lifecycle.read(store, coordinate, version).isPresent();
+        if (yank && !yanked) {
+            Lifecycle.mark(exchange, store, coordinate, version, new Lifecycle.Flag(Lifecycle.State.YANKED, ""));
+        } else if (!yank && yanked) {
+            Lifecycle.clear(exchange, store, coordinate, version);
+        }
+        exchange.setResponseHeader("Content-Type", "application/json");
+        exchange.respond(200, MAPPER.writeValueAsBytes(Map.of("ok", true)));
     }
 
     /** Serve a crate archive from the CAS. The path is {@code api/v1/crates/<name>/<version>/download}. */

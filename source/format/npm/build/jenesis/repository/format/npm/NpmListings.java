@@ -271,7 +271,10 @@ final class NpmListings {
     }
 
     /** A version's packument entry: its stored metadata with the tarball URL (the placeholder base) and the
-     *  lifecycle deprecation; {@code null} when the stored metadata is not a JSON object. */
+     *  lifecycle deprecation; {@code null} when the stored metadata is not a JSON object. The {@code deprecated}
+     *  string is the mark's alone: whatever the stored document says was written by the client's own
+     *  {@code npm deprecate}, which set the mark as it did, so a mark cleared anywhere - the console, the API, an
+     *  empty {@code npm deprecate} - leaves no warning behind in the stored text. */
     private static byte[] render(byte[] metadata, String shortName, String version, Lifecycle.Flag flag)
             throws IOException {
         if (!(NpmFormat.MAPPER.readTree(metadata) instanceof ObjectNode object)) {
@@ -279,6 +282,7 @@ final class NpmListings {
         }
         ObjectNode dist = object.get("dist") instanceof ObjectNode existing ? existing : object.putObject("dist");
         dist.put("tarball", BASE + "/-/" + shortName + "-" + version + ".tgz");
+        object.remove("deprecated");
         if (flag != null) {
             object.put("deprecated", NpmFormat.deprecation(flag));
         }

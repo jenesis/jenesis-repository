@@ -48,6 +48,9 @@ public final class FormatDrive {
          *  cell that says nothing sees the shipped default of every dial, which for a guard means the guard on. */
         private final Map<String, String> settings = new LinkedHashMap<>();
         public final Map<String, String> responseHeaders = new LinkedHashMap<>();
+        /** What the format recorded through {@link #audit}, each as {@code "<action> <target>"}. */
+        public final List<String> audited = new ArrayList<>();
+        private final Map<String, String> query = new LinkedHashMap<>();
         public int status = -1;
         private final ByteArrayOutputStream captured = new ByteArrayOutputStream();
 
@@ -64,6 +67,17 @@ public final class FormatDrive {
         public Call header(String name, String value) {
             requestHeaders.put(name, value);
             return this;
+        }
+
+        /** A query parameter this exchange's request carries. */
+        public Call query(String name, String value) {
+            query.put(name, value);
+            return this;
+        }
+
+        @Override
+        public void audit(String action, String target) {
+            audited.add(action + " " + target);
         }
 
         /** Set the deployment value of one runtime setting for this exchange. */
@@ -102,7 +116,7 @@ public final class FormatDrive {
 
         @Override
         public String queryParameter(String name) {
-            return null;
+            return query.get(name);
         }
 
         @Override

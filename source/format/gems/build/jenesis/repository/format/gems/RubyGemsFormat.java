@@ -18,6 +18,7 @@ import build.jenesis.repository.blobs.Keys;
 import build.jenesis.repository.blobs.ProxyLeg;
 import build.jenesis.repository.blobs.ProxyRelay;
 import build.jenesis.repository.format.FormatExchange;
+import build.jenesis.repository.format.lifecycle.Lifecycle;
 import build.jenesis.repository.icon.IconResource;
 import build.jenesis.repository.format.ProxyFormat;
 import build.jenesis.repository.format.ArtifactSignatures;
@@ -275,10 +276,12 @@ public final class RubyGemsFormat implements RepositoryFormat, ProxyLeg, BlobLay
         String method = exchange.method();
         if (method.equals("POST") && rest.equals("api/v1/gems")) {
             push(exchange, blobs, store);
+        } else if (method.equals("DELETE") && rest.equals("api/v1/gems/yank")) {
+            yank(exchange, blobs, store);
         } else if (!method.equals("GET") && !method.equals("HEAD")) {
             // Every read route below serves a body; gate the write verbs so a PUT/DELETE (or a POST to a read path) is a
-            // 405 rather than being answered as a download, like the other formats do. The only write is the gem push
-            // (POST api/v1/gems) handled above.
+            // 405 rather than being answered as a download, like the other formats do. The only writes are the gem push
+            // (POST api/v1/gems) and the yank (DELETE api/v1/gems/yank) handled above.
             exchange.respond(405);
         } else if (rest.equals("versions")) {
             versions(blobs, exchange);
@@ -374,6 +377,64 @@ public final class RubyGemsFormat implements RepositoryFormat, ProxyLeg, BlobLay
      * of Sigstore bundles, in whichever order the client sends them. The bundles are kept beside the gem before the
      * version is discoverable, exactly as the npm leg keeps a publish's attestations.
      */
+    /** The most a yank's form body may carry: a gem name, a version and a platform, with room to spare. */
+    private static final int YANK_FORM = 4096;
+
+    /**
+     * {@code gem yank <name> -v <version> [--platform <platform>]}: {@code DELETE api/v1/gems/yank} with the gem, the
+     * version and an optional platform as form fields. The yank is the product's own lifecycle mark, written through
+     * the one path the console and the API write it through ({@link Lifecycle#mark(FormatExchange, ArtifactStore,
+     * String, String, Lifecycle.Flag)}), so the version leaves the index a resolver reads and {@code jenrepo lifecycle}
+     * shows it, whichever surface yanked it. Answered as rubygems.org answers: {@code 200} with its sentence, {@code 404}
+     * for a version this repository does not hold, {@code 422} for one already yanked.
+     */
+    private static void yank(FormatExchange exchange, Blobs blobs, ArtifactStore store) throws IOException {
+        Map<String, String> form = form(exchange);
+        String name = form.get("gem_name"), version = form.get("version"), platform = form.get("platform");
+        if (name == null || version == null || name.isEmpty() || version.isEmpty() || Keys.unsafe(name)
+                || Keys.unsafe(version) || (platform != null && Keys.unsafe(platform))) {
+            exchange.respond(400, "Specify a gem name and a version to yank.".getBytes(StandardCharsets.UTF_8));
+            return;
+        }
+        String held = platform == null || platform.isEmpty() || platform.equals("ruby") ? version
+                : version + "-" + platform;
+        if (blobs.hash(gemKey(name, held)).isEmpty()) {
+            exchange.respond(404, ("The version " + version + " does not exist.").getBytes(StandardCharsets.UTF_8));
+            return;
+        }
+        if (Lifecycle.read(store, name, held).filter(flag -> flag.state() == Lifecycle.State.YANKED).isPresent()) {
+            exchange.respond(422, ("The version " + version + " has already been yanked.")
+                    .getBytes(StandardCharsets.UTF_8));
+            return;
+        }
+        Lifecycle.mark(exchange, store, name, held, new Lifecycle.Flag(Lifecycle.State.YANKED, ""));
+        exchange.respond(200, ("Successfully deleted gem: " + name + " (" + held + ")")
+                .getBytes(StandardCharsets.UTF_8));
+    }
+
+    /** The fields a yank sends, from its form body and, where a client puts them there, its query string. */
+    private static Map<String, String> form(FormatExchange exchange) throws IOException {
+        Map<String, String> fields = new HashMap<>();
+        for (String field : List.of("gem_name", "version", "platform")) {
+            String value = exchange.queryParameter(field);
+            if (value != null) {
+                fields.put(field, value);
+            }
+        }
+        byte[] body;
+        try (InputStream in = exchange.requestStream()) {
+            body = in.readNBytes(YANK_FORM);
+        }
+        for (String pair : new String(body, StandardCharsets.UTF_8).split("&")) {
+            int split = pair.indexOf('=');
+            if (split > 0) {
+                fields.putIfAbsent(URLDecoder.decode(pair.substring(0, split), StandardCharsets.UTF_8),
+                        URLDecoder.decode(pair.substring(split + 1), StandardCharsets.UTF_8).strip());
+            }
+        }
+        return fields;
+    }
+
     private void push(FormatExchange exchange, Blobs blobs, ArtifactStore store) throws IOException {
         Optional<String> boundary = MultipartBody.boundary(exchange.requestHeader("Content-Type"));
         if (boundary.isEmpty()) {

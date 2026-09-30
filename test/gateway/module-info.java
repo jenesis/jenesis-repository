@@ -30,6 +30,9 @@ open module build.jenesis.repository.gateway.contract.test {
     requires build.jenesis.repository.format.nuget;
     requires build.jenesis.repository.format.pypi;
     requires build.jenesis.repository.format.gems;
+    requires build.jenesis.repository.format.cargo;
+    requires build.jenesis.repository.format.lifecycle;
+    requires build.jenesis.repository.audit;
     requires build.jenesis.repository.format.debian;
     requires build.jenesis.repository.format.composer;
     requires build.jenesis.repository.format.cocoapods;

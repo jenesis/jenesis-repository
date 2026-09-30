@@ -359,8 +359,49 @@ public final class NpmFormat implements RepositoryFormat, ProxyLeg, BlobLayout, 
             }
         }
         index(name, envelope, blobs, store);
+        deprecations(name, envelope, blobs, store, exchange);
         exchange.setResponseHeader("Content-Type", "application/json");
         exchange.respond(201, MAPPER.writeValueAsString(Map.of("ok", true)).getBytes(StandardCharsets.UTF_8));
+    }
+
+    /**
+     * {@code npm deprecate <pkg>@<range> "<message>"}: the client rewrites the package document with a
+     * {@code deprecated} message on each version the range names - an empty one to undo it - and PUTs it back. Each
+     * stored version whose message changed becomes the product's own lifecycle mark, written through the one path the
+     * console and the API use ({@link Lifecycle#mark(FormatExchange, ArtifactStore, String, String, Lifecycle.Flag)}),
+     * so {@code jenrepo lifecycle} and the console show a deprecation whichever surface made it, and a later mark
+     * never silently replaces the client's text.
+     *
+     * <p>A client sends back every version's {@code deprecated} as it read it, so a message equal to what the version
+     * already renders is no change; a version absent the field says nothing; and a yank, which npm can only render as
+     * a deprecation, is never turned into one or undone from here.
+     */
+    private static void deprecations(String name, Envelope envelope, Blobs blobs, ArtifactStore store,
+                                     FormatExchange exchange) throws IOException {
+        String shortName = shortName(name);
+        for (Map.Entry<String, byte[]> version : envelope.versions().entrySet()) {
+            String file = shortName + "-" + version.getKey() + ".tgz";
+            if (!envelope.published().contains(file) && !blobs.exists("npm/" + name + "/tarballs/" + file)) {
+                continue;
+            }
+            JsonNode deprecated = MAPPER.readTree(version.getValue()).get("deprecated");
+            if (deprecated == null || !deprecated.isString()) {
+                continue;
+            }
+            String message = deprecated.asString();
+            Optional<Lifecycle.Flag> mark = Lifecycle.read(store, name, version.getKey());
+            if (mark.filter(flag -> flag.state() == Lifecycle.State.YANKED).isPresent()) {
+                continue;
+            }
+            if (message.isEmpty()) {
+                if (mark.isPresent()) {
+                    Lifecycle.clear(exchange, store, name, version.getKey());
+                }
+            } else if (mark.map(NpmFormat::deprecation).filter(message::equals).isEmpty()) {
+                Lifecycle.mark(exchange, store, name, version.getKey(),
+                        new Lifecycle.Flag(Lifecycle.State.DEPRECATED, message));
+            }
+        }
     }
 
     /** The stronger of two commits' verdicts ({@code null} - no commit at all - loses to any present one): the
