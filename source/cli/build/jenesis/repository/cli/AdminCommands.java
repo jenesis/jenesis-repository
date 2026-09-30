@@ -10,6 +10,10 @@ import module java.base;
  */
 final class AdminCommands {
 
+    /** Said after a write the server answered with {@code Jenesis-Applies-On: restart}. */
+    private static final String RESTART = " It takes effect when the server next restarts.";
+
+
     private AdminCommands() {
     }
 
@@ -22,8 +26,8 @@ final class AdminCommands {
             if (args.length < 4) {
                 throw new IllegalArgumentException("Usage: setup set <key> <value>");
             }
-            client.settings().setSetting(args[2], args[3]);
-            System.out.println("Set " + args[2] + ".");
+            boolean restart = client.settings().setSetting(args[2], args[3]);
+            System.out.println("Set " + args[2] + "." + (restart ? RESTART : ""));
             return 0;
         }
         for (SettingsClient.SetupStep step : client.settings().setup().steps()) {
@@ -74,23 +78,20 @@ final class AdminCommands {
                 if (rest.size() < 3) {
                     throw new IllegalArgumentException("Usage: settings set <key> <value>" + usage);
                 }
-                if (tenant != null) {
-                    client.settings().setSetting(tenant, rest.get(1), rest.get(2));
-                } else {
-                    client.settings().setSetting(rest.get(1), rest.get(2));
-                }
-                System.out.println("Set " + rest.get(1) + " (" + scope + ").");
+                boolean restart = tenant != null
+                        ? client.settings().setSetting(tenant, rest.get(1), rest.get(2))
+                        : client.settings().setSetting(rest.get(1), rest.get(2));
+                System.out.println("Set " + rest.get(1) + " (" + scope + ")." + (restart ? RESTART : ""));
             }
             case "clear" -> {
                 if (rest.size() < 2) {
                     throw new IllegalArgumentException("Usage: settings clear <key>" + usage);
                 }
-                if (tenant != null) {
-                    client.settings().clearSetting(tenant, rest.get(1));
-                } else {
-                    client.settings().clearSetting(rest.get(1));
-                }
-                System.out.println("Cleared " + rest.get(1) + " (" + scope + "); it inherits the wider value again.");
+                boolean restart = tenant != null
+                        ? client.settings().clearSetting(tenant, rest.get(1))
+                        : client.settings().clearSetting(rest.get(1));
+                System.out.println("Cleared " + rest.get(1) + " (" + scope + "); it inherits the wider value again."
+                        + (restart ? RESTART : ""));
             }
             case "export", "import" -> exchange(client, rest, tenant, scope);
             default -> throw new IllegalArgumentException("Unknown settings command '" + rest.get(0) + "'");

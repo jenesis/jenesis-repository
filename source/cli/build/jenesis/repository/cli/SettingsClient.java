@@ -25,13 +25,21 @@ public final class SettingsClient extends ClientCalls {
         return List.of(JSON.readValue(response.body(), Setting[].class));
     }
 
-    public void setSetting(String name, String value) throws IOException, InterruptedException {
-        require(send("PUT", "/api/settings/" + name, body(Map.of("value", value)), "application/json"),
-                200, "set " + name);
+    /** Set a deployment-wide setting; {@code true} when the server says the change waits for its next restart. */
+    public boolean setSetting(String name, String value) throws IOException, InterruptedException {
+        return waitsForRestart(send("PUT", "/api/settings/" + name, body(Map.of("value", value)), "application/json"),
+                "set " + name);
     }
 
-    public void clearSetting(String name) throws IOException, InterruptedException {
-        require(send("DELETE", "/api/settings/" + name, null, null), 200, "clear " + name);
+    /** Clear a deployment-wide setting; {@code true} when the server says the change waits for its next restart. */
+    public boolean clearSetting(String name) throws IOException, InterruptedException {
+        return waitsForRestart(send("DELETE", "/api/settings/" + name, null, null), "clear " + name);
+    }
+
+    /** Whether a setting write the server accepted applies only once it restarts, as its answer says. */
+    private static boolean waitsForRestart(HttpResponse<String> response, String action) throws IOException {
+        require(response, 200, action);
+        return response.headers().firstValue("Jenesis-Applies-On").filter("restart"::equals).isPresent();
     }
 
     /** The first boot's wizard: its steps, each with the settings rows it asks, as the console runs it. */
@@ -66,14 +74,16 @@ public final class SettingsClient extends ClientCalls {
         return List.of(JSON.readValue(response.body(), Setting[].class));
     }
 
-    public void setSetting(String tenant, String name, String value) throws IOException, InterruptedException {
-        require(send("PUT", "/api/settings/" + name + "?tenant=" + enc(tenant), body(Map.of("value", value)),
-                "application/json"), 200, "set " + name + " for tenant " + tenant);
+    /** Set a tenant's setting; {@code true} when the server says the change waits for its next restart. */
+    public boolean setSetting(String tenant, String name, String value) throws IOException, InterruptedException {
+        return waitsForRestart(send("PUT", "/api/settings/" + name + "?tenant=" + enc(tenant),
+                body(Map.of("value", value)), "application/json"), "set " + name + " for tenant " + tenant);
     }
 
-    public void clearSetting(String tenant, String name) throws IOException, InterruptedException {
-        require(send("DELETE", "/api/settings/" + name + "?tenant=" + enc(tenant), null, null),
-                200, "clear " + name + " for tenant " + tenant);
+    /** Clear a tenant's setting; {@code true} when the server says the change waits for its next restart. */
+    public boolean clearSetting(String tenant, String name) throws IOException, InterruptedException {
+        return waitsForRestart(send("DELETE", "/api/settings/" + name + "?tenant=" + enc(tenant), null, null),
+                "clear " + name + " for tenant " + tenant);
     }
 
     /** A repository's settings: each repository setting with the repository's effective value, what it inherits from

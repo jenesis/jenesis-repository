@@ -50,6 +50,11 @@ import org.springframework.web.bind.annotation.RestController;
 @RestController
 public class ConfigController {
 
+    /** The header a setting write answers with: {@code now} when the change applies at once, {@code restart} when the
+     *  setting is read as the node starts - a feed switch, a store backend - so the write waits for the next start. */
+    public static final String APPLIES_ON = "Jenesis-Applies-On";
+
+
     private final Repositories repositories;
     /** The one place a setting is changed, which every write here goes through; its settings are what the reads
      *  here render. */
@@ -156,7 +161,8 @@ public class ConfigController {
     /** Set a runtime override for one editable setting, deployment-wide or - with a {@code tenant} - for that tenant,
      *  through the one settings editor ({@link SettingsEditor}): {@code 400} naming the refusal when the catalogue
      *  refuses the value or the deployment would not resolve with it, {@code 409} when an operator pinned the key
-     *  above the store. A live setting takes effect on this node at once; the rest apply on restart. */
+     *  above the store. A live setting takes effect on this node at once; the rest apply on restart, and the answer
+     *  says which in {@value #APPLIES_ON} ({@code now} or {@code restart}) so a script is told as the console is. */
     @PutMapping("/api/settings/{key}")
     public void setSetting(@PathVariable("key") String key,
                            @RequestHeader(value = Repositories.KEY, required = false) String authKey,
@@ -177,6 +183,10 @@ public class ConfigController {
                 editor.deployment(values, actor);
             }
         });
+        if (response.getStatus() == 200) {
+            SettingsScopes.declared(key).ifPresent(setting ->
+                    response.setHeader(APPLIES_ON, setting.live() ? "now" : "restart"));
+        }
     }
 
     /** Clear a runtime override, reverting the setting to its file/env default (or, with a {@code tenant}, to the
