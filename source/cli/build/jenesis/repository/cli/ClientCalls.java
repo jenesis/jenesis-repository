@@ -107,8 +107,9 @@ abstract class ClientCalls {
         if (response.statusCode() == expected) {
             return;
         }
-        if (response.statusCode() == 404 || response.statusCode() == 501) {
-            throw new RepositoryClient.EndpointMissing(action, response.statusCode());
+        if (response.statusCode() == 404
+                && response.headers().firstValue("Jenesis-Installed").filter("false"::equals).isPresent()) {
+            throw new RepositoryClient.NotInstalled(action);
         }
         throw new IOException("Could not " + action + " (HTTP " + response.statusCode() + ")");
     }

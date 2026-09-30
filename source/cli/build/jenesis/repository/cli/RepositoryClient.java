@@ -126,19 +126,19 @@ public final class RepositoryClient extends ClientCalls {
     }
 
     /**
-     * The server did not answer an endpoint at all.
+     * The server has no route for the call: the module that would serve it is not part of this deployment.
      *
-     * <p>Distinguished from every other refusal because it is the one whose cause is usually not the request: this
-     * product is assembled from modules a deployment may leave out, and an absent module serves nothing. The
-     * dispatcher catches this and asks {@code /api/capabilities} whether the feature behind the command is
-     * installed, so the caller is told which of the two happened instead of being handed a bare 404.
+     * <p>Told apart from every other {@code 404} by the server itself - a node answers a request no route matched with
+     * {@code Jenesis-Installed: false} - because the same status for "you asked for something absent" and "this
+     * deployment does not offer that at all" leaves a caller retrying what can never work. The dispatcher turns it
+     * into its own exit code.
      */
-    public static final class EndpointMissing extends IOException {
+    public static final class NotInstalled extends IOException {
 
         private static final long serialVersionUID = 1L;
 
-        EndpointMissing(String action, int status) {
-            super("Could not " + action + " (HTTP " + status + "): the server serves nothing at that endpoint.");
+        NotInstalled(String action) {
+            super("The server has no route to " + action + ".");
         }
     }
 

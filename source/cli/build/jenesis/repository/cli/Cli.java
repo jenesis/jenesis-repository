@@ -110,9 +110,6 @@ public final class Cli {
                 return detail(first);
             }
         }
-        // The catch wraps both modes. It once wrapped only the JSON one, which made the whole not-installed
-        // diagnosis - the reason a noun names its module at all - silently unavailable to anyone not passing a
-        // flag they had no reason to pass.
         try {
             if (!Output.isJson()) {
                 return noun.handler().run(args, Session.home());
@@ -129,47 +126,10 @@ public final class Cli {
             }
             Output.flush(Output.utf8(real));
             return code;
-        } catch (RepositoryClient.EndpointMissing missing) {
-            return explain(noun, missing);
+        } catch (RepositoryClient.NotInstalled missing) {
+            return report(3, "'" + noun.name() + "' is not served by this deployment.",
+                    missing.getMessage() + " Run 'capabilities' to see what it carries.");
         }
-    }
-
-    /**
-     * Turn "the server answered 404" into which of its two meanings it was.
-     *
-     * <p>A module this deployment did not install serves nothing, and so does a path that is simply wrong - the
-     * status code is the same and the caller is left guessing. Since the noun declares the module behind it, the
-     * capabilities read answers it outright: not installed, installed but switched off, or installed and answering,
-     * in which case the 404 is about the thing asked for rather than the feature.
-     */
-    private static int explain(Commands.Noun noun, RepositoryClient.EndpointMissing missing) {
-        if (noun.module() == null) {
-            return report(1, missing.getMessage(), null);
-        }
-        RepositoryClient.Module state = null;
-        try {
-            RepositoryClient.Capabilities capabilities = CliSupport.client(Session.home()).capabilities();
-            if (capabilities != null && capabilities.modules() != null) {
-                state = capabilities.modules().stream()
-                        .filter(each -> noun.module().equals(each.module()))
-                        .findFirst()
-                        .orElse(null);
-            }
-        } catch (Exception unreachable) {
-            // Best effort by design: this runs while something has already gone wrong, and a second failure here
-            // must not replace the first. Falling through prints the plain 404, which is still true.
-        }
-        if (state != null && !state.installed()) {
-            return report(3, "'" + noun.name() + "' is not installed on this server.",
-                    noun.summary() + " is served by " + noun.module()
-                            + ", which this deployment does not carry. Run 'capabilities' to see what it does.");
-        }
-        if (state != null && state.enableKey() != null && !state.enabled()) {
-            return report(3, "'" + noun.name() + "' is installed but switched off.",
-                    "Enable it with: settings set " + state.enableKey() + " true"
-                            + (state.live() ? "" : " (takes effect on the next restart)"));
-        }
-        return report(1, missing.getMessage(), null);
     }
 
     /** An error, in whichever shape the caller asked for; always on stderr, so stdout stays parseable. */
@@ -232,9 +192,6 @@ public final class Cli {
             return 2;
         }
         System.out.println(noun.name() + " - " + noun.summary());
-        if (noun.module() != null) {
-            System.out.println("served by " + noun.module());
-        }
         System.out.println();
         int width = noun.actions().stream().mapToInt(action -> action.form().length()).max().orElse(0);
         for (Commands.Action action : noun.actions()) {
@@ -312,10 +269,10 @@ public final class Cli {
                   0  it worked
                   1  the server refused, or could not be reached - the message says which
                   2  the command line was wrong (unknown command, missing argument)
-                  3  the feature is not installed, or is installed and switched off, on this server
+                  3  this deployment does not serve the command - the server said it has no route for it
 
-                  Code 3 is the one worth handling: it means the request was well formed and this deployment simply
-                  does not offer that capability. Do not retry it, and do not treat it as a bug in your arguments.
+                  Code 3 is the one worth handling: the request was well formed and this deployment simply does not
+                  offer that capability. Do not retry it, and do not treat it as a bug in your arguments.
 
                 OUTPUT
                   A command that starts work outliving the request returns as soon as the work is accepted; it
