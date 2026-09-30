@@ -1,6 +1,8 @@
 package build.jenesis.repository.format.lifecycle;
 
 import module java.base;
+import build.jenesis.repository.audit.AuditActions;
+import build.jenesis.repository.format.FormatExchange;
 import build.jenesis.repository.store.Retries;
 import build.jenesis.repository.store.ArtifactDescriptor;
 import build.jenesis.repository.store.ArtifactStore;
@@ -229,6 +231,37 @@ public final class Lifecycle {
         store.delete(key);
         Publication.notifyMarked(subject(coordinate, version), store);
         return true;
+    }
+
+    /**
+     * Mark a version as an ecosystem client's own command asked - {@code gem yank}, {@code cargo yank},
+     * {@code npm deprecate} - and record it on the audit trail as the caller that sent it. It writes the same mark
+     * {@link #mark(ArtifactStore, String, String, Flag)} writes for the operator's surfaces, under the same action
+     * name, so one state results whichever surface changed it.
+     */
+    public static void mark(FormatExchange exchange, ArtifactStore store, String coordinate, String version, Flag flag)
+            throws IOException {
+        mark(store, coordinate, version, flag);
+        exchange.audit(action(flag.state()), coordinate + "@" + version);
+    }
+
+    /** Clear a version's mark as an ecosystem client's own command asked ({@code cargo yank --undo}, an empty
+     *  {@code npm deprecate}), recording it on the audit trail when there was one to clear. */
+    public static boolean clear(FormatExchange exchange, ArtifactStore store, String coordinate, String version)
+            throws IOException {
+        boolean cleared = clear(store, coordinate, version);
+        if (cleared) {
+            exchange.audit(AuditActions.LIFECYCLE_CLEAR, coordinate + "@" + version);
+        }
+        return cleared;
+    }
+
+    /** The audit action a mark of {@code state} is recorded under, on every surface that sets one. */
+    public static String action(State state) {
+        return switch (state) {
+            case DEPRECATED -> AuditActions.LIFECYCLE_DEPRECATED;
+            case YANKED -> AuditActions.LIFECYCLE_YANKED;
+        };
     }
 
     /** The lifecycle-mark event's subject: the coordinate and version, no ecosystem (a mark is keyed without one). */

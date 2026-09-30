@@ -40,10 +40,6 @@ public final class Repositories {
      *  ({@link build.jenesis.repository.server.RepositoryRouting#tenant}), never read off this header alone. */
     public static final String KEY = "Jenesis-Repository-Key";
 
-    /** The header a NuGet client pushes with ({@code dotnet nuget push --api-key}), the one credential carrier the
-     *  ecosystem clients use that is neither the native header nor {@code Authorization}. */
-    public static final String NUGET_API_KEY = "X-NuGet-ApiKey";
-
     private final ArtifactStore root;
     private final Authorization authorization;
     private final LiveConfig live;
@@ -82,12 +78,7 @@ public final class Repositories {
      * credential model. {@code null} when the request presents none.
      */
     public static String key(HttpServletRequest request) {
-        String presented = PresentedKey.from(request);
-        if (presented != null) {
-            return presented;
-        }
-        String nuget = request.getHeader(NUGET_API_KEY);
-        return nuget != null && Authorization.wellFormed(nuget) ? nuget : null;
+        return PresentedKey.fromAnyClient(request);
     }
 
     public boolean stagingInstalled() {

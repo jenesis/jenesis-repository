@@ -38,9 +38,23 @@ public final class PresentedKey {
     private PresentedKey() {
     }
 
+    /** NuGet's own credential header, which {@code dotnet nuget push} and {@code delete} send the key in. */
+    public static final String NUGET_API_KEY = "X-NuGet-ApiKey";
+
     /** The key a request presents, or {@code null} when it presents none; see the class comment for where it may be. */
     public static String from(HttpServletRequest request) {
         return from(request.getHeader(HEADER), request.getHeader("Authorization"));
+    }
+
+    /** The key a request presents in any ecosystem client's own form: {@link #from(HttpServletRequest)}, else a
+     *  well-formed key in NuGet's {@value #NUGET_API_KEY}; {@code null} when it presents none. */
+    public static String fromAnyClient(HttpServletRequest request) {
+        String presented = from(request);
+        if (presented != null) {
+            return presented;
+        }
+        String nuget = request.getHeader(NUGET_API_KEY);
+        return nuget != null && Authorization.wellFormed(nuget) ? nuget : null;
     }
 
     public static String from(String header, String authorization) {

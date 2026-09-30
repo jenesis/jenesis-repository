@@ -95,6 +95,15 @@ public final class AuditActions {
     // A trust change is recorded by the core's own trusts surface, which owns those two names; the console
     // references build.jenesis.repository.server.TrustsController.SET / .REMOVE rather than restating them here.
 
+    /** A version marked deprecated - by an operator, or by the ecosystem client's own command. */
+    public static final String LIFECYCLE_DEPRECATED = action("lifecycle.deprecated");
+
+    /** A version marked yanked - by an operator, or by the ecosystem client's own command. */
+    public static final String LIFECYCLE_YANKED = action("lifecycle.yanked");
+
+    /** A version's lifecycle mark cleared. */
+    public static final String LIFECYCLE_CLEAR = action("lifecycle.clear");
+
     /** A format's proxy upstream set. */
     public static final String UPSTREAM_SET = action("upstream.set");
 

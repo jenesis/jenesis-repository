@@ -5,6 +5,7 @@ import module org.slf4j;
 import build.jenesis.repository.server.spi.Authorization;
 import build.jenesis.repository.server.spi.CapabilityContributor;
 import build.jenesis.repository.server.spi.ImportEdgeProvider;
+import build.jenesis.repository.audit.AuditTrail;
 import build.jenesis.repository.format.ProxyFormat;
 import build.jenesis.repository.format.RepositoryFormat;
 import build.jenesis.repository.format.RepositoryType;
@@ -70,6 +71,7 @@ public class RepositoryController {
     private final ArtifactStore root;
     private final RoutedServing routed;
     private final EdgeHooks hooks;
+    private final AuditTrail audit;
 
     /** The screened edge restricted to one repository type's formats, per type: a repository's request is offered to
      *  the formats it holds and to no other, so a path another format would claim is not served out of it. */
@@ -91,7 +93,8 @@ public class RepositoryController {
                                 FormatDispatcher dispatcher,
                                 List<ImportSourceProvider> importSources,
                                 ProxyFormat.Fetcher fetcher) {
-        this(routing, dispatcher, importSources, fetcher, null, key -> null, null, RoutedServing.NONE, EdgeHooks.NONE);
+        this(routing, dispatcher, importSources, fetcher, null, key -> null, null, RoutedServing.NONE, EdgeHooks.NONE,
+                AuditTrail.NONE);
     }
 
     /**
@@ -114,6 +117,9 @@ public class RepositoryController {
      * @param hooks     the ingress concerns - tenant binding, release-immutability, quarantine dispatch, deploy
      *                  observation - threaded into the one shared screening edge; {@link EdgeHooks#NONE} is the
      *                  no-op.
+     * @param audit     where a change a format makes through its own protocol - a client's yank or deprecate - is
+     *                  recorded, as the request's caller in the request's tenant; {@link AuditTrail#NONE} records
+     *                  nothing.
      */
     public RepositoryController(RepositoryRouting routing,
                                 FormatDispatcher dispatcher,
@@ -123,7 +129,8 @@ public class RepositoryController {
                                 UnaryOperator<String> settings,
                                 ArtifactStore root,
                                 RoutedServing routed,
-                                EdgeHooks hooks) {
+                                EdgeHooks hooks,
+                                AuditTrail audit) {
         this.routing = routing;
         this.dispatcher = dispatcher;
         this.screened = new ScreenedDispatch(dispatcher, hooks);
@@ -134,6 +141,7 @@ public class RepositoryController {
         this.root = root;
         this.routed = routed;
         this.hooks = hooks;
+        this.audit = audit;
     }
 
     /**
@@ -174,8 +182,10 @@ public class RepositoryController {
             return;
         }
         RepositoryType type = held.get().type();
+        String key = PresentedKey.fromAnyClient(request);
         ServletFormatExchange exchange = new ServletFormatExchange(request, response, held.get().path(), settings,
-                type.mount());
+                type.mount(), (action, target) -> audit.record(route.tenant(),
+                        key == null ? "anonymous" : Authorization.hash(key), action, route.repository() + "/" + target));
         // A write (PUT/POST/PATCH/DELETE) to a route that is not a valid write target is a 405 before any layout - the
         // seam a routing uses to reject a write to a read-only repository.
         if (write && !route.writable()) {

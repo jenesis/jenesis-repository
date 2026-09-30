@@ -132,4 +132,13 @@ public interface FormatExchange {
      */
     default void laidOut(build.jenesis.repository.store.ArtifactDescriptor artifact) {
     }
+
+    /**
+     * Record a privileged change this request made through a format's own protocol - a client's own yank or
+     * deprecate - on the audit trail, as the caller that sent it, under an action name the audit trail owns. The edge
+     * that dispatched the request knows who is acting and which tenant it acts in; a format knows only what it
+     * changed. An exchange no edge wraps records nothing.
+     */
+    default void audit(String action, String target) {
+    }
 }

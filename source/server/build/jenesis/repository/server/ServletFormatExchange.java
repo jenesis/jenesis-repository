@@ -23,6 +23,7 @@ public final class ServletFormatExchange implements FormatExchange {
     private final String path;
     private final UnaryOperator<String> settings;
     private final String mount;
+    private final BiConsumer<String, String> audit;
 
     public ServletFormatExchange(HttpServletRequest request, HttpServletResponse response, String path) {
         this(request, response, path, key -> null);
@@ -45,11 +46,25 @@ public final class ServletFormatExchange implements FormatExchange {
      */
     public ServletFormatExchange(HttpServletRequest request, HttpServletResponse response, String path,
                                  UnaryOperator<String> settings, String mount) {
+        this(request, response, path, settings, mount, (_, _) -> {
+        });
+    }
+
+    /** As above, recording what a format changes through {@link #audit} with {@code audit}, which the edge binds to
+     *  the request's tenant and caller. */
+    public ServletFormatExchange(HttpServletRequest request, HttpServletResponse response, String path,
+                                 UnaryOperator<String> settings, String mount, BiConsumer<String, String> audit) {
         this.request = request;
         this.response = response;
         this.path = path;
         this.settings = settings;
         this.mount = mount;
+        this.audit = audit;
+    }
+
+    @Override
+    public void audit(String action, String target) {
+        audit.accept(action, target);
     }
 
     @Override

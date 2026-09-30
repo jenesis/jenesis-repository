@@ -1,6 +1,7 @@
 package build.jenesis.repository.format.lifecycle.web;
 
 import module java.base;
+import build.jenesis.repository.audit.AuditActions;
 import build.jenesis.repository.server.RepositoryRouting;
 import build.jenesis.repository.audit.AuditTrail;
 import build.jenesis.repository.server.kernel.Repositories;
@@ -151,8 +152,7 @@ public class LifecycleController {
         }
         Lifecycle.mark(repositories.store(tenant, repository), coordinate, version,
                 new Lifecycle.Flag(parsed, message == null ? "" : message));
-        audit(tenant, key, "lifecycle." + parsed.name().toLowerCase(Locale.ROOT),
-                repository + "/" + coordinate + "@" + version);
+        audit(tenant, key, Lifecycle.action(parsed), repository + "/" + coordinate + "@" + version);
         response.setStatus(200);
     }
 
@@ -170,7 +170,7 @@ public class LifecycleController {
         RepositoryRequests.rejectTraversal(coordinate);
         RepositoryRequests.rejectTraversal(version);
         if (Lifecycle.clear(repositories.store(tenant, repository), coordinate, version)) {
-            audit(tenant, key, "lifecycle.clear", repository + "/" + coordinate + "@" + version);
+            audit(tenant, key, AuditActions.LIFECYCLE_CLEAR, repository + "/" + coordinate + "@" + version);
         }
         response.setStatus(200);
     }
