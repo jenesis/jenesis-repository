@@ -65,6 +65,12 @@ public final class MavenFormat implements RepositoryFormat, ProxyFormat, Artifac
         return "";
     }
 
+    /** A Maven repository is a folder tree, and some clients list its folders where the metadata is missing. */
+    @Override
+    public boolean browsable() {
+        return true;
+    }
+
     @Override
     public boolean handles(String path) {
         return path.startsWith("/maven/");

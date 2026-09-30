@@ -90,5 +90,6 @@ open module build.jenesis.repository.server {
                  build.jenesis.repository.server.LogsSettingsContributor,
                  build.jenesis.repository.server.UploadLimitSettingsContributor,
                  build.jenesis.repository.server.CrossSiteSettingsContributor,
-                 build.jenesis.repository.server.AccessDenialSettingsContributor;
+                 build.jenesis.repository.server.AccessDenialSettingsContributor,
+                 build.jenesis.repository.server.FolderListingSettingsContributor;
 }

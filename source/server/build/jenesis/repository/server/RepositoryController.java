@@ -70,7 +70,7 @@ public class RepositoryController {
     private final List<ImportSourceProvider> importSources;
     private final ProxyFormat.Fetcher fetcher;
     private final BatchIngestion batch;
-    private final UnaryOperator<String> settings;
+    private final RepositorySettings settings;
     private final ArtifactStore root;
     private final RoutedServing routed;
     private final EdgeHooks hooks;
@@ -97,8 +97,30 @@ public class RepositoryController {
                                 FormatDispatcher dispatcher,
                                 List<ImportSourceProvider> importSources,
                                 ProxyFormat.Fetcher fetcher) {
-        this(routing, dispatcher, importSources, fetcher, null, key -> null, null, RoutedServing.NONE, EdgeHooks.NONE,
+        this(routing, dispatcher, importSources, fetcher, null, RepositorySettings.NONE, null, RoutedServing.NONE,
+                EdgeHooks.NONE,
                 AuditTrail.NONE, Reads.NONE);
+    }
+
+    /**
+     * The effective value of a setting for the repository a request addresses - its own value where the key is a
+     * repository setting and it set one, else its tenant's, else the deployment's - or the deployment's alone when
+     * {@code tenant} and {@code repository} are {@code null}; {@code null} when nothing sets it. It is what a format
+     * reads off {@link build.jenesis.repository.format.FormatExchange#setting(String)} and what the edge's own flags
+     * read.
+     */
+    @FunctionalInterface
+    public interface RepositorySettings {
+
+        /** Nothing is set: every format and every flag on its shipped default. */
+        RepositorySettings NONE = (_, _, _) -> null;
+
+        String value(String tenant, String repository, String key);
+
+        /** The deployment's value of {@code key}. */
+        default String deployment(String key) {
+            return value(null, null, key);
+        }
     }
 
     /**
@@ -124,9 +146,9 @@ public class RepositoryController {
      *                  through the same dispatcher when it claims the archive; {@code null} leaves the header an
      *                  inert plain upload.
      * @param settings  resolves each request's {@link build.jenesis.repository.format.FormatExchange#setting(String)}
-     *                  - a bare setting key to its effective value, {@code null} when unset - so a format can read a
-     *                  deployment toggle off the exchange; {@code key -> null} keeps every format on its shipped
-     *                  default.
+     *                  - a bare setting key to its effective value for the repository the request addresses,
+     *                  {@code null} when unset - so a format can read a toggle off the exchange;
+     *                  {@link RepositorySettings#NONE} keeps every format on its shipped default.
      * @param root      the un-scoped store, so the {@code /api/assets} enumeration can scope to an explicitly named
      *                  {@code repo} within the request's tenant; {@code null} leaves it on the request's own routed
      *                  space.
@@ -147,7 +169,7 @@ public class RepositoryController {
                                 List<ImportSourceProvider> importSources,
                                 ProxyFormat.Fetcher fetcher,
                                 BatchIngestion batch,
-                                UnaryOperator<String> settings,
+                                RepositorySettings settings,
                                 ArtifactStore root,
                                 RoutedServing routed,
                                 EdgeHooks hooks,
@@ -207,7 +229,8 @@ public class RepositoryController {
         RepositoryType type = held.get().type();
         String key = PresentedKey.fromAnyClient(request);
         request.setAttribute(FAILING_FORMAT, held.get());
-        ServletFormatExchange exchange = new ServletFormatExchange(request, response, held.get().path(), settings,
+        ServletFormatExchange exchange = new ServletFormatExchange(request, response, held.get().path(),
+                setting -> settings.value(route.tenant(), route.repository(), setting),
                 type.mount(), (action, target) -> audit.record(route.tenant(),
                         key == null ? "anonymous" : Authorization.hash(key), action, route.repository() + "/" + target),
                 path -> readable(request, route, type, path));
@@ -250,6 +273,13 @@ public class RepositoryController {
             } else {
                 response.setStatus(404);
             }
+            return;
+        }
+        // A folder of a format whose paths are a folder tree answers a listing of the repository's own store, where the
+        // repository turned listings on. A routed repository never reaches here, so a proxy or a group never lists
+        // what it would then have to fetch.
+        if (held.get().claiming().filter(RepositoryFormat::browsable).isPresent() && FolderListing.asked(exchange)) {
+            FolderListing.answer(exchange, route.store());
             return;
         }
         // A claimed single-body write (PUT/POST/PATCH on a screened() format) is screened at this ingress edge before
@@ -478,7 +508,7 @@ public class RepositoryController {
     public void capabilities(HttpServletResponse response) throws IOException {
         Map<String, Object> base = new LinkedHashMap<>();
         base.put("readOnly", readOnly());
-        base.put("auth", Boolean.parseBoolean(settings.apply("auth")));
+        base.put("auth", Boolean.parseBoolean(settings.deployment("auth")));
         // Advertise the strictly-opt-in anonymous role so a console shows an explicit "Anonymous access"
         // banner and a client knows keyless reads are served. Empty (the default) means no anonymous access. Read off
         // the same jenrepo.* settings the other flags read, so no extra dependency is threaded in.
@@ -488,7 +518,7 @@ public class RepositoryController {
         // conflict; with no contributor the body is the base map
         // unchanged. The discovery itself lives in the SPI home, not here, so this surface and every other consumer
         // of the same flags read one answer from one pipeline rather than each loading its own.
-        CapabilityContributor.Merged merged = CapabilityContributor.merge(base, contributors, settings);
+        CapabilityContributor.Merged merged = CapabilityContributor.merge(base, contributors, settings::deployment);
         report(merged);
         response.setHeader("Content-Type", "application/json");
         respond(response, 200, JSON.writeValueAsString(merged.capabilities()));
@@ -513,13 +543,13 @@ public class RepositoryController {
     /** The deployment-wide read-only flag, read off the same {@code jenrepo.*} settings the formats read a
      *  toggle from, so no extra dependency is threaded in; unset means read-write. */
     private boolean readOnly() {
-        return Boolean.parseBoolean(settings.apply("read-only"));
+        return Boolean.parseBoolean(settings.deployment("read-only"));
     }
 
     /** The strictly-opt-in anonymous-role grant advertised on {@code /api/capabilities}, read off the same
      *  {@code jenrepo.*} settings; empty (the default) means no anonymous access. */
     private String anonymousRights() {
-        String value = settings.apply("anonymous-rights");
+        String value = settings.deployment("anonymous-rights");
         return value == null ? "" : value.trim();
     }
 

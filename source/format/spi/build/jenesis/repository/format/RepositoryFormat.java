@@ -234,6 +234,17 @@ public interface RepositoryFormat extends IconContributor {
     }
 
     /**
+     * Whether this format's paths are a folder tree a client or a person may browse, as a Maven repository's are: a
+     * folder of such a repository - a path ending in {@code /} - answers a listing of what it serves where the
+     * repository's {@code folder-listing} setting is on. The edge answers it, bounded and screened, so a format only
+     * says whether its layout is one; {@code false}, the default, leaves every folder to the format, which answers
+     * {@code 404} unless it serves a listing of its own.
+     */
+    default boolean browsable() {
+        return false;
+    }
+
+    /**
      * Whether a repository can be created to hold this format. Every format that serves requests can; a provider
      * that rides this seam for a capability alone and never serves one answers {@code false}, so no surface offers it
      * as a repository's format.

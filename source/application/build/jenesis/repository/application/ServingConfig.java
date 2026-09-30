@@ -35,6 +35,8 @@ import build.jenesis.repository.gateway.RedirectHandlerProvider;
 import build.jenesis.repository.compliance.ComplianceGate;
 import build.jenesis.repository.inventory.DownloadTracker;
 import build.jenesis.repository.settings.PrivateHostGuard;
+import build.jenesis.repository.settings.Setting;
+import build.jenesis.repository.settings.SettingsScopes;
 import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.security.authorization.AuthorizationManager;
@@ -300,6 +302,7 @@ public class ServingConfig {
                                                                                   RoutedServing routedServing,
                                                                                   DeployEdgeHooks deployEdgeHooks,
                                                                                   AuditTrail auditTrail,
+                                                                                  LiveConfig liveConfig,
                                                                                   @Qualifier("repositoryAuthorizationManager")
                                                                                   ObjectProvider<AuthorizationManager<
                                                                                           RequestAuthorizationContext>>
@@ -323,8 +326,15 @@ public class ServingConfig {
         // by the PublishTenantFilter. The write target / 405 rides Route.writable() (MultiTenantRouting), the quota
         // 507 the store + this controller's own handler, and the format-claim/verdict/batch loop ScreenedDispatch +
         // BatchIngestion.
+        // A repository setting a format reads - folder listings - resolves live for the repository the request
+        // addresses, through its tenant's and the deployment's values; every other key is the boot environment's, as
+        // the restart-bound toggles it names have always been read.
+        UnaryOperator<String> environmental = Features.namespaced(environment::getProperty);
         return new build.jenesis.repository.server.RepositoryController(routing, dispatcher, importSources,
-                upstreamFetcher, batchIngestion, Features.namespaced(environment::getProperty), null,
+                upstreamFetcher, batchIngestion, (tenant, repository, key) ->
+                        SettingsScopes.settableAt(key, Setting.Scope.REPOSITORY)
+                                ? liveConfig.effective(tenant, repository, key, environmental.apply(key))
+                                : environmental.apply(key), null,
                 routedServing, deployEdgeHooks, auditTrail,
                 new build.jenesis.repository.server.AuthorizedReads(authorization::getIfAvailable));
     }

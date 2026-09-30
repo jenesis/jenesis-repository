@@ -126,7 +126,8 @@ class EdgeReadableTest {
         FormatDispatcher formats = new FormatDispatcher(List.of(format, new Asking("other")), Map.of(),
                 ProxyFormat.Fetcher.NONE);
         RepositoryController controller = new RepositoryController(new Routing(), formats, List.of(),
-                ProxyFormat.Fetcher.NONE, null, key -> null, null, RoutedServing.NONE, EdgeHooks.NONE,
+                ProxyFormat.Fetcher.NONE, null, RepositoryController.RepositorySettings.NONE, null, RoutedServing.NONE,
+                EdgeHooks.NONE,
                 AuditTrail.NONE, (_, requested) -> {
                     asked.add(requested);
                     return permitted;
