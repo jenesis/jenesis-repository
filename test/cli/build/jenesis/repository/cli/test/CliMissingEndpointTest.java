@@ -67,6 +67,20 @@ public class CliMissingEndpointTest {
                 .hasMessageContaining("HTTP 404");
     }
 
+    @Test
+    void a_failure_the_server_did_not_mean_names_its_reference() {
+        server.stubFor(get(urlPathEqualTo("/api/scans")).willReturn(aResponse().withStatus(500)
+                .withHeader("Content-Type", "application/problem+json")
+                .withBody("{\"type\":\"about:blank\",\"title\":\"Something went wrong on the server.\","
+                        + "\"status\":500,\"reference\":\"4mqg6m86dkqr\",\"instance\":\"/api/scans\"}")));
+
+        assertThatThrownBy(() -> Cli.run(new String[] {"scans"}))
+                .as("the message carries what an operator searches the log for")
+                .isInstanceOf(IOException.class)
+                .hasMessageContaining("HTTP 500")
+                .hasMessageContaining("Reference: 4mqg6m86dkqr");
+    }
+
     private interface Body {
         void run() throws Exception;
     }

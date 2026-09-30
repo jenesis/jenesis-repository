@@ -50,6 +50,7 @@ open module build.jenesis.repository.ui.admin {
             build.jenesis.repository.ui.admin.installed.test;
     requires transitive build.jenesis.repository.ui.store;
     requires build.jenesis.repository.ui.identity;
+    requires build.jenesis.repository.failure;
     requires build.jenesis.repository.cache.storage;
     requires build.jenesis.repository.server;
     requires build.jenesis.repository.scope;

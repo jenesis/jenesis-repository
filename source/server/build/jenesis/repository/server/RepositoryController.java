@@ -25,6 +25,9 @@ import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestMethod;
 import org.springframework.web.bind.annotation.RestController;
+import build.jenesis.repository.failure.Failures;
+import org.springframework.web.ErrorResponse;
+import org.springframework.web.util.DisconnectedClientHelper;
 
 /**
  * The HTTP surface of the repository, mirroring {@link RepositoryApplication}'s framework-neutral
@@ -203,6 +206,7 @@ public class RepositoryController {
         }
         RepositoryType type = held.get().type();
         String key = PresentedKey.fromAnyClient(request);
+        request.setAttribute(FAILING_FORMAT, held.get());
         ServletFormatExchange exchange = new ServletFormatExchange(request, response, held.get().path(), settings,
                 type.mount(), (action, target) -> audit.record(route.tenant(),
                         key == null ? "anonymous" : Authorization.hash(key), action, route.repository() + "/" + target),
@@ -540,8 +544,9 @@ public class RepositoryController {
      *  again, the bytes are stored again. {@code 503} with a {@code Retry-After} is how a client is told to do that. */
     @ExceptionHandler(Publication.BlobCollected.class)
     public void blobCollected(Publication.BlobCollected exception, HttpServletResponse response) throws IOException {
+        LOGGER.debug("A publish raced a collection and is answered 503: {}", exception.getMessage());
         response.setHeader("Retry-After", "1");
-        respond(response, 503, exception.getMessage());
+        respond(response, 503, "The upload raced a cleanup of the same content; send it again.");
     }
 
     /** A write whose compare-and-set lost every try to peers on the same document is a transient refusal, not a
@@ -549,8 +554,9 @@ public class RepositoryController {
      *  told to do that. */
     @ExceptionHandler(Retries.Contended.class)
     public void contended(Retries.Contended exception, HttpServletResponse response) throws IOException {
+        LOGGER.debug("A write lost every compare-and-set and is answered 503: {}", exception.getMessage());
         response.setHeader("Retry-After", "1");
-        respond(response, 503, exception.getMessage());
+        respond(response, 503, "The repository was busy with a concurrent change to the same item; send it again.");
     }
 
     /** A write refused because the deployment is read-only maps to {@code 403 Forbidden} - the store choke point
@@ -559,6 +565,34 @@ public class RepositoryController {
     public void readOnly(ReadOnlyException exception, HttpServletResponse response) throws IOException {
         respond(response, 403, exception.getMessage());
     }
+
+    /**
+     * A failure no handler above meant: logged once with a reference ({@link Failures}), and answered with the sentence
+     * and the reference in the claiming format's own error dialect ({@link RepositoryFormat#failed}), so a client prints
+     * something a person can quote and nothing of the failure's insides. Spring's own typed status exceptions keep
+     * their answers, and a route no format claimed is answered by Spring's error page, which references it the same
+     * way; a response already streaming can only be cut short, and the log line is all there is.
+     */
+    @ExceptionHandler(Exception.class)
+    public void failed(Exception failure, HttpServletRequest request, HttpServletResponse response) throws Exception {
+        Optional<RepositoryFormat> format = request.getAttribute(FAILING_FORMAT) instanceof HeldFormat held
+                ? held.claiming() : Optional.empty();
+        if (failure instanceof ErrorResponse || format.isEmpty()) {
+            throw failure;          // a typed status, or no format to answer in: Spring's error page answers it
+        }
+        if (DisconnectedClientHelper.isClientDisconnectedException(failure)) {
+            return;                 // the client hung up mid-response: nothing failed on this side
+        }
+        String reference = Failures.record(request.getMethod() + " " + request.getRequestURI(), failure);
+        if (!response.isCommitted()) {
+            response.resetBuffer();
+            format.get().failed(new ServletFormatExchange(request, response, request.getRequestURI()),
+                    Failures.sentence(reference));
+        }
+    }
+
+    /** The request attribute the format a request was dispatched to is kept under, for {@link #failed}. */
+    private static final String FAILING_FORMAT = RepositoryController.class.getName() + ".format";
 
     private static void respond(HttpServletResponse response, int status, String body) throws IOException {
         response.setStatus(status);

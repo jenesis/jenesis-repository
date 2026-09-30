@@ -217,6 +217,12 @@ public final class OciFormat implements RepositoryFormat, ProxyFormat, Repositor
         }
     }
 
+    /** A failure in the Distribution error envelope, under the spec's catch-all code, so a registry client prints it. */
+    @Override
+    public void failed(FormatExchange exchange, String sentence) throws IOException {
+        error(exchange, 500, "UNKNOWN", sentence);
+    }
+
     /** An answer in the Distribution error envelope: {@code {"errors":[{"code":...,"message":...}]}}. */
     static void error(FormatExchange exchange, int status, String code, String message) throws IOException {
         Map<String, Object> error = new LinkedHashMap<>();

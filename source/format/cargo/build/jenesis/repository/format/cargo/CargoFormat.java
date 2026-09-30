@@ -157,6 +157,15 @@ public final class CargoFormat implements RepositoryFormat, ArtifactLayout, Prox
      * choke point (this endpoint is the only way a crate is hosted-published here), so declaring {@code false} does
      * not leave the format unscreened.
      */
+    /** A failure in Cargo's registry error document, {@code {"errors":[{"detail":...}]}}, which cargo prints. */
+    @Override
+    public void failed(FormatExchange exchange, String sentence) throws IOException {
+        ObjectNode error = MAPPER.createObjectNode();
+        error.putArray("errors").addObject().put("detail", sentence);
+        exchange.setResponseHeader("Content-Type", "application/json");
+        exchange.respond(500, MAPPER.writeValueAsBytes(error));
+    }
+
     @Override
     public boolean screened() {
         return false;

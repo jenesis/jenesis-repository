@@ -3,6 +3,7 @@ package build.jenesis.repository.ui.admin.web;
 import module java.base;
 import module org.slf4j;
 
+import build.jenesis.repository.failure.Failures;
 import build.jenesis.repository.store.ReadOnlyException;
 import build.jenesis.repository.ui.PrincipalNameResolver;
 import build.jenesis.repository.ui.NavEntry;
@@ -29,6 +30,8 @@ import org.springframework.ui.Model;
 import org.springframework.web.bind.annotation.ControllerAdvice;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.ModelAttribute;
+import org.springframework.http.HttpStatus;
+import org.springframework.web.bind.annotation.ResponseStatus;
 
 /**
  * Cross-cutting web concerns of the console's screens - the {@link ConsoleScreen}s, and nothing else in the context,
@@ -357,10 +360,12 @@ public class GlobalControllerAdvice {
     }
 
     @ExceptionHandler(IOException.class)
-    public String storageError(IOException e, Model model) {
-        LOGGER.warn("Storage error handling a console request", e);
+    @ResponseStatus(HttpStatus.INTERNAL_SERVER_ERROR)
+    public String storageError(IOException e, HttpServletRequest request, Model model) {
+        String reference = Failures.record(request.getMethod() + " " + request.getRequestURI(), e);
         model.addAttribute("error", "A storage error occurred. Please retry, and contact your administrator if it "
                 + "persists.");
+        model.addAttribute("reference", reference);
         return "error";
     }
 }

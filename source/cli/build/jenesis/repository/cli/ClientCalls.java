@@ -111,7 +111,27 @@ abstract class ClientCalls {
                 && response.headers().firstValue("Jenesis-Installed").filter("false"::equals).isPresent()) {
             throw new RepositoryClient.NotInstalled(action);
         }
-        throw new IOException("Could not " + action + " (HTTP " + response.statusCode() + ")");
+        throw new IOException("Could not " + action + " (HTTP " + response.statusCode() + ")" + referenced(response));
+    }
+
+    /** What the server said of a failure it did not mean, as its problem document names it - the sentence and the
+     *  reference that finds the failure in its log - so the message carries what to quote; empty for any other
+     *  answer, and for a body that is not such a document. */
+    private static String referenced(HttpResponse<String> response) {
+        if (response.statusCode() < 500 || response.body() == null || response.body().isBlank()) {
+            return "";
+        }
+        try {
+            JsonNode problem = JSON.readTree(response.body());
+            JsonNode reference = problem.get("reference");
+            if (reference != null && reference.isString()) {
+                return ": " + problem.path("title").asString("Something went wrong on the server.") + " Reference: "
+                        + reference.asString();
+            }
+        } catch (RuntimeException unreadable) {
+            // Not a problem document - a proxy's page, a truncated body - so there is no reference to name.
+        }
+        return "";
     }
 
     static String enc(String value) {

@@ -23,6 +23,7 @@ open module build.jenesis.repository.test {
     requires build.jenesis.repository.server;
     // The audit trail the edge's full constructor is handed, off in EdgeReadableTest.
     requires build.jenesis.repository.audit;
+    requires build.jenesis.repository.failure;
     requires build.jenesis.repository.settings;
     requires build.jenesis.repository.server.spi;
     requires build.jenesis.repository.store;

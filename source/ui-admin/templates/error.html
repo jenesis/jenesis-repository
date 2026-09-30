@@ -14,6 +14,10 @@
             deployment - <strong>Settings → Modules</strong> lists what is installed and on.</p>
         <p th:unless="${status == 404}" class="app-alert app-alert--danger" role="alert"
            th:text="${error} ?: (${message} ?: 'Unexpected error.')">Unexpected error.</p>
+        <!--/* A failure the server did not mean carries the reference its whole story was logged under: the one thing
+             to quote to whoever runs the deployment, and all of it the page shows. */-->
+        <p th:if="${reference}">Reference <code th:text="${reference}">0000000000aa</code> - quote it to whoever runs this
+            deployment; it finds the details in the server's log.</p>
         <p th:if="${status}"><small>Status <span th:text="${status}">500</span></small></p>
         <a th:href="@{/ui/}" role="button" class="app-primary">Back to the console</a>
     </article>
