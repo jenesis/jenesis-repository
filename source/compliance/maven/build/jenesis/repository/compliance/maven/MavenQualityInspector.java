@@ -25,6 +25,7 @@ import build.jenesis.repository.dependency.CycloneDxParser;
 import build.jenesis.repository.dependency.DependencyComponent;
 import build.jenesis.repository.dependency.DependencyGraph;
 import build.jenesis.repository.dependency.DependencyLicense;
+import build.jenesis.repository.xml.Xml;
 
 /**
  * The JVM quality inspector: the publishing quality gate for the two JVM layouts, as a plugin of its own. It claims
@@ -324,10 +325,7 @@ public final class MavenQualityInspector implements QualityInspector {
      */
     private static ManifestSubjectBuilder dependenciesFromPom(ManifestSubjectBuilder declared, byte[] pom) {
         try {
-            DocumentBuilderFactory factory = DocumentBuilderFactory.newInstance();
-            factory.setFeature("http://apache.org/xml/features/disallow-doctype-decl", true);
-            factory.setNamespaceAware(false);
-            Element project = factory.newDocumentBuilder().parse(new ByteArrayInputStream(pom)).getDocumentElement();
+            Element project = Xml.parse(pom).getDocumentElement();
             ManifestSubjectBuilder read = declared.readsDependencies();
             for (Element dependencies : children(project, "dependencies")) {
                 for (Element dependency : children(dependencies, "dependency")) {
@@ -344,7 +342,7 @@ public final class MavenQualityInspector implements QualityInspector {
                 }
             }
             return read;
-        } catch (ParserConfigurationException | SAXException | IOException | RuntimeException unreadable) {
+        } catch (SAXException | IOException | RuntimeException unreadable) {
             return declared;         // a POM that does not parse declares nothing this can read
         }
     }
@@ -381,10 +379,7 @@ public final class MavenQualityInspector implements QualityInspector {
 
     private static List<Maintainer> maintainersFromPom(byte[] pom) {
         try {
-            DocumentBuilderFactory factory = DocumentBuilderFactory.newInstance();
-            factory.setFeature("http://apache.org/xml/features/disallow-doctype-decl", true);
-            factory.setNamespaceAware(false);
-            Document document = factory.newDocumentBuilder().parse(new ByteArrayInputStream(pom));
+            Document document = Xml.parse(pom);
             List<Maintainer> named = new ArrayList<>();
             for (String tag : List.of("developer", "contributor")) {
                 NodeList people = document.getElementsByTagName(tag);
@@ -845,10 +840,7 @@ public final class MavenQualityInspector implements QualityInspector {
 
     private static ManifestSubjectBuilder licensesFromPom(byte[] pom) {
         try {
-            DocumentBuilderFactory factory = DocumentBuilderFactory.newInstance();
-            factory.setFeature("http://apache.org/xml/features/disallow-doctype-decl", true);
-            factory.setNamespaceAware(false);
-            Document document = factory.newDocumentBuilder().parse(new ByteArrayInputStream(pom));
+            Document document = Xml.parse(pom);
             NodeList nodes = document.getElementsByTagName("license");
             ManifestSubjectBuilder licenses = ManifestSubjectBuilder.of(ECOSYSTEM);
             for (int index = 0; index < nodes.getLength(); index++) {

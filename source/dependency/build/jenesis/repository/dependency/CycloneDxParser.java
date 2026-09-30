@@ -3,6 +3,7 @@ package build.jenesis.repository.dependency;
 import module java.base;
 import module java.xml;
 import module tools.jackson.databind;
+import build.jenesis.repository.xml.Xml;
 
 /**
  * Parses a CycloneDX 1.x BOM - the SBOM standard a Jenesis build embeds in every jar - into the format-neutral
@@ -225,12 +226,8 @@ public final class CycloneDxParser {
     private static DependencyGraph parseXml(byte[] document, boolean strict) throws MalformedSbomException {
         Element bom;
         try {
-            DocumentBuilderFactory factory = DocumentBuilderFactory.newInstance();
-            factory.setNamespaceAware(true);
-            harden(factory);
-            Document parsed = factory.newDocumentBuilder().parse(new ByteArrayInputStream(document));
-            bom = parsed.getDocumentElement();
-        } catch (ParserConfigurationException | SAXException | IOException cause) {
+            bom = Xml.namespaced(document).getDocumentElement();
+        } catch (SAXException | IOException cause) {
             if (strict) {
                 throw new MalformedSbomException("CycloneDX XML BOM is not readable XML", cause);
             }
@@ -365,14 +362,6 @@ public final class CycloneDxParser {
             }
         }
         return null;
-    }
-
-    private static void harden(DocumentBuilderFactory factory) throws ParserConfigurationException {
-        factory.setFeature("http://apache.org/xml/features/disallow-doctype-decl", true);
-        factory.setFeature("http://xml.org/sax/features/external-general-entities", false);
-        factory.setFeature("http://xml.org/sax/features/external-parameter-entities", false);
-        factory.setXIncludeAware(false);
-        factory.setExpandEntityReferences(false);
     }
 
     private static Element firstChild(Element parent, String localName) {

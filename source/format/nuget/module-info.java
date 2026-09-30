@@ -18,7 +18,7 @@ module build.jenesis.repository.format.nuget {
     requires build.jenesis.repository.walk;
     requires build.jenesis.repository.blobs;
     requires org.slf4j;
-    requires java.xml;
+    requires build.jenesis.repository.xml;
     requires build.jenesis.repository.multipart;
     requires tools.jackson.databind;
     exports build.jenesis.repository.format.nuget to

@@ -1,38 +1,19 @@
 package build.jenesis.repository.importer.maven;
 
 import module java.base;
-import javax.xml.XMLConstants;
-import javax.xml.parsers.DocumentBuilderFactory;
-import javax.xml.parsers.ParserConfigurationException;
+import build.jenesis.repository.xml.Xml;
 import org.w3c.dom.Element;
 import org.w3c.dom.Node;
 import org.w3c.dom.NodeList;
 import org.xml.sax.SAXException;
 
 /**
- * The two Maven documents the metadata refresh reads, parsed with the JDK's DOM - hardened against document type
- * declarations and external entities, since the documents come from the (semi-trusted) migration source and an
+ * The two Maven documents the metadata refresh reads, parsed through the shared hardened reader - no document type
+ * declaration and no external entity, since the documents come from the (semi-trusted) migration source and an
  * entity expansion must not become a fetch. Both readers navigate direct children only, so a {@code packaging}
  * buried in a plugin configuration or a {@code version} outside the versions block is never mistaken for the value.
  */
 final class MavenXml {
-
-    /** A configured, hardened {@link DocumentBuilderFactory} per thread. {@code newInstance()} does a JAXP provider
-     *  service lookup - too costly to repeat for every {@code maven-metadata.xml} and pom the index-fallback refresh
-     *  parses (one per coordinate, one per version) - and a factory is not safe to share across threads, so each thread
-     *  reuses its own and mints a fresh {@code DocumentBuilder} per parse. */
-    private static final ThreadLocal<DocumentBuilderFactory> FACTORY = ThreadLocal.withInitial(() -> {
-        try {
-            DocumentBuilderFactory factory = DocumentBuilderFactory.newInstance();
-            factory.setFeature("http://apache.org/xml/features/disallow-doctype-decl", true);
-            factory.setFeature(XMLConstants.FEATURE_SECURE_PROCESSING, true);
-            factory.setXIncludeAware(false);
-            factory.setExpandEntityReferences(false);
-            return factory;
-        } catch (ParserConfigurationException impossible) {
-            throw new IllegalStateException("A hardened XML parser is unavailable", impossible);
-        }
-    });
 
     private MavenXml() {
     }
@@ -86,8 +67,8 @@ final class MavenXml {
 
     private static Element parse(byte[] document) {
         try {
-            return FACTORY.get().newDocumentBuilder().parse(new ByteArrayInputStream(document)).getDocumentElement();
-        } catch (ParserConfigurationException | SAXException | IOException unparseable) {
+            return Xml.parse(document).getDocumentElement();
+        } catch (SAXException | IOException unparseable) {
             return null;
         }
     }

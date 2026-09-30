@@ -30,6 +30,7 @@ import build.jenesis.repository.store.StoredListing;
 import build.jenesis.repository.store.Publication;
 import build.jenesis.repository.store.Withheld;
 import build.jenesis.repository.format.Semver;
+import build.jenesis.repository.xml.Xml;
 
 /**
  * The NuGet v3 format, so {@code dotnet nuget push} and {@code dotnet restore} work over the same store. It owns
@@ -834,11 +835,8 @@ public final class NuGetFormat implements RepositoryFormat, ProxyLeg, BlobLayout
                     // which is the degrade an already-published package's derived view is allowed.
                     byte[] xml = ArchiveInflation.entry(zip).required("NuGet package", ".nuspec");
                     try {
-                        DocumentBuilderFactory factory = DocumentBuilderFactory.newInstance();
-                        factory.setFeature("http://apache.org/xml/features/disallow-doctype-decl", true);
-                        factory.setNamespaceAware(false);
-                        return factory.newDocumentBuilder().parse(new ByteArrayInputStream(xml));
-                    } catch (ParserConfigurationException | SAXException unreadable) {
+                        return Xml.parse(xml);
+                    } catch (SAXException unreadable) {
                         // A .nuspec that will not parse is not a usable manifest. It is reported as the unreadable
                         // archive member it is, so the walk bound and a corrupt member stay distinguishable: the
                         // callers turn either into their 400 / no-dependency-groups degrade, but only a genuine bound

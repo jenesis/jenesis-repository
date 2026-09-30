@@ -14,7 +14,7 @@
 module build.jenesis.repository.dependency {
     requires build.jenesis.repository.store;
     requires com.github.benmanes.caffeine;
-    requires java.xml;
+    requires build.jenesis.repository.xml;
     requires tools.jackson.databind;
     exports build.jenesis.repository.dependency;
 }
