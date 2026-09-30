@@ -74,7 +74,10 @@ jobs:
         env:
           VERSION: ${{ steps.version.outputs.version }}
         run: |
+          # Every archive entry carries the released commit's time rather than the runner's clock, so the same
+          # commit builds the same archives.
           java -Djenesis.project.version=${VERSION} \
+               -Djenesis.archive.timestamp="$(git log -1 --format=%cI)" \
                -Djenesis.project.sources=true \
                -Djenesis.project.documentation=true \
                -Djenesis.dependency.pin=strict \

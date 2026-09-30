@@ -83,4 +83,8 @@ jobs:
           DOCKER_HUB_USER: ${{ vars.DOCKER_HUB_USER }}
           DOCKER_HUB_TOKEN: ${{ secrets.DOCKER_HUB_TOKEN }}
           DOCKER_HUB_NAMESPACE: ${{ vars.DOCKER_HUB_NAMESPACE }}
-        run: java -Djenesis.test.skip=true -Djenesis.make.profiles=hub build/jenesis/Make.java export/custom/images
+        # The images' jars carry the published commit's time rather than the runner's clock.
+        run: >-
+          java -Djenesis.test.skip=true -Djenesis.make.profiles=hub
+          -Djenesis.archive.timestamp="$(git log -1 --format=%cI)"
+          build/jenesis/Make.java export/custom/images
