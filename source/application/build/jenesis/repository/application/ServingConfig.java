@@ -3,6 +3,7 @@ package build.jenesis.repository.application;
 import module java.base;
 import module org.slf4j;
 
+import build.jenesis.repository.audit.AuditTrail;
 import build.jenesis.repository.definitions.RepositoryDefinition;
 import build.jenesis.repository.server.kernel.AuthFetcher;
 import build.jenesis.repository.server.kernel.LiveConfig;
@@ -295,6 +296,7 @@ public class ServingConfig {
                                                                                   BatchIngestion batchIngestion,
                                                                                   RoutedServing routedServing,
                                                                                   DeployEdgeHooks deployEdgeHooks,
+                                                                                  AuditTrail auditTrail,
                                                                                   Environment environment) {
         // The controller is the one serving AND writing surface now: reads and writes both dispatch
         // through the routing seam and the free ScreenedDispatch edge. Registered under the bean name
@@ -316,7 +318,7 @@ public class ServingConfig {
         // BatchIngestion.
         return new build.jenesis.repository.server.RepositoryController(routing, dispatcher, importSources,
                 upstreamFetcher, batchIngestion, Features.namespaced(environment::getProperty), null,
-                routedServing, deployEdgeHooks);
+                routedServing, deployEdgeHooks, auditTrail);
     }
 
     @Bean
