@@ -44,19 +44,18 @@ class ConsoleNavigationTest {
         assertThat(navigation.sidebar().title()).isEqualTo("releases");
         assertThat(navigation.sidebar().back().href()).isEqualTo("/ui/repositories");
         assertThat(navigation.sidebar().sections()).extracting(Navigation.Section::heading)
-                .containsExactly("Contents", "Review", "Lifecycle");
+                .as("the repository's name heads the first topic").containsExactly("", "Review", "Lifecycle");
         assertThat(links(navigation)).filteredOn(Navigation.Link::current)
                 .extracting(Navigation.Link::href).containsExactly("/ui/repositories/releases/pins");
     }
 
     @Test
-    void the_repositories_group_names_the_tenants_repositories_and_says_when_there_are_more() {
-        List<String> many = IntStream.range(0, 60).mapToObj(index -> "repo" + index).toList();
-        Navigation navigation = ConsoleNavigation.resolve(ENTRIES, PAGES, () -> many, "/ui/limits");
+    void the_repositories_group_lists_its_pages_and_leaves_the_repositories_to_the_screen() {
+        Navigation navigation = resolve("/ui/limits");
 
         assertThat(links(navigation)).extracting(Navigation.Link::label)
-                .contains("All repositories", "Limits", "repo0", "More repositories\u2026")
-                .doesNotContain("repo59");
+                .as("the repositories are the screen's table, which filters them")
+                .containsExactly("All repositories", "Limits");
     }
 
     @Test
@@ -75,7 +74,7 @@ class ConsoleNavigationTest {
     }
 
     private static Navigation resolve(String path) {
-        return ConsoleNavigation.resolve(ENTRIES, PAGES, () -> List.of("releases"), path);
+        return ConsoleNavigation.resolve(ENTRIES, PAGES, path);
     }
 
     private static List<Navigation.Link> links(Navigation navigation) {

@@ -199,6 +199,35 @@ public class RepositoryBrowse extends TenantScope {
     public record CoordinateVersion(String version, String published, boolean pinned, boolean served,
                                     List<String> paths, boolean browsable, Long downloads, String lastDownloaded,
                                     boolean cached, String upstream) {
+
+        /** The folder every path lies in, ending in {@code /} - the longest prefix they share, cut back to a folder -
+         *  or the empty string when they share none below the root, so a row names it once instead of per file. */
+        public String folder() {
+            if (paths.isEmpty()) {
+                return "";
+            }
+            String shared = paths.getFirst();
+            for (String path : paths) {
+                int length = 0;
+                while (length < shared.length() && length < path.length()
+                        && shared.charAt(length) == path.charAt(length)) {
+                    length++;
+                }
+                shared = shared.substring(0, length);
+            }
+            int slash = shared.lastIndexOf('/');
+            return slash <= 0 ? "" : shared.substring(0, slash + 1);
+        }
+
+        /** The paths as the row lists them: each with {@link #folder()} taken off, in the order they are served. */
+        public List<ServedFile> files() {
+            String folder = folder();
+            return paths.stream().map(path -> new ServedFile(path.substring(folder.length()), path)).toList();
+        }
+    }
+
+    /** One path a version is served at: its {@code name} below the version's shared folder, and the whole path. */
+    public record ServedFile(String name, String path) {
     }
 
     /** A recorded instant as a row shows it, blank when nothing was recorded. */

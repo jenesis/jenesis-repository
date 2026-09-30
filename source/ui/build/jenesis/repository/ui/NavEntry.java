@@ -85,6 +85,6 @@ public record NavEntry(String label, String path, Access access, Group group, St
 
     /** The minimum role a nav entry is shown to. */
     public enum Access {
-        USER, ADMIN, SUPERADMIN
+        USER, EDITOR, ADMIN, SUPERADMIN
     }
 }

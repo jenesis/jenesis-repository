@@ -218,10 +218,12 @@ public class GlobalControllerAdvice {
         if (authentication == null) {
             return Navigation.NONE;
         }
+        boolean editor = roleAtLeast(authentication, Role.EDITOR);
         boolean admin = roleAtLeast(authentication, Role.ADMIN);
         boolean superadmin = hasSuperadmin(authentication);
         List<NavEntry> entries = new ArrayList<>();
         entries.add(new NavEntry("All repositories", "/ui/repositories", Group.REPOSITORIES));
+        entries.add(new NavEntry("New repository", "/ui/new/repository", Access.EDITOR, Group.REPOSITORIES));
         entries.add(new NavEntry("Limits", "/ui/limits", Group.REPOSITORIES));
         entries.add(new NavEntry("Projects", "/ui/projects", Group.BUILD_CACHE));
         entries.add(new NavEntry("Credentials", "/ui/credentials", Access.ADMIN, Group.ACCESS));
@@ -261,12 +263,11 @@ public class GlobalControllerAdvice {
         }
         return ConsoleNavigation.resolve(
                 entries.stream()
-                        .filter(entry -> visibleTo(entry.access(), admin, superadmin) && capabilities.has(entry.requires()))
+                        .filter(entry -> visibleTo(entry.access(), editor, admin, superadmin) && capabilities.has(entry.requires()))
                         .toList(),
                 pages.stream()
-                        .filter(page -> visibleTo(page.access(), admin, superadmin) && capabilities.has(page.requires()))
+                        .filter(page -> visibleTo(page.access(), editor, admin, superadmin) && capabilities.has(page.requires()))
                         .toList(),
-                this::listedRepositories,
                 path);
     }
 
@@ -287,21 +288,11 @@ public class GlobalControllerAdvice {
                 .orElseGet(() -> new RepositoryHeader(repository, null, null));
     }
 
-    /** The tenant's repositories as the sidebar names them. A listing that fails costs the sidebar its names and
-     *  nothing else: navigation that cannot render takes every page of the console with it. */
-    private List<String> listedRepositories() {
-        try {
-            return repositories.listedRepositories();
-        } catch (IOException | RuntimeException e) {
-            LOGGER.warn("The repositories could not be listed for the console's sidebar, which names none", e);
-            return List.of();
-        }
-    }
-
     /** Whether a page's access floor is cleared by the current user's role. */
-    private static boolean visibleTo(NavEntry.Access access, boolean admin, boolean superadmin) {
+    private static boolean visibleTo(NavEntry.Access access, boolean editor, boolean admin, boolean superadmin) {
         return switch (access) {
             case USER -> true;
+            case EDITOR -> editor;
             case ADMIN -> admin;
             case SUPERADMIN -> superadmin;
         };

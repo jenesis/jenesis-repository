@@ -87,14 +87,14 @@ public final class ConsoleLayout {
     public static final String RUNNING = "running";
 
     /** The heading every page about one repository opens with, taking the title and an optional page between the
-     *  repository and this one: the trail back to the repository, the title and the repository's identity, from the
+     *  repository and this one: the trail back to the repository, ended by the page's title, from the
      *  {@link RepositoryHeader} the console resolves for the request. */
     public static final String REPOSITORY_HEADER = "repositoryHeader";
 
     /** The repository overview's heading, where the repository is the page. */
     public static final String REPOSITORY_OVERVIEW_HEADER = "repositoryOverviewHeader";
 
-    /** The format a repository holds and the URL a client reaches it at, for a page with a trail of its own. */
+    /** The format a repository holds and the URL a client reaches it at, said once, on the repository's overview. */
     public static final String REPOSITORY_IDENTITY = "repositoryIdentity";
 
     /** The two views of the installed modules - by module and by the contract each implements - taking the current

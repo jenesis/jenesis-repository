@@ -400,3 +400,46 @@
         }
     });
 })();
+
+/*
+ * A list filter.
+ *
+ * An input carrying `data-filter` names, as a selector, the items it filters - table rows, cards - and typing in it
+ * keeps the items whose `data-search` contains what was typed. It works over what is already rendered and asks the
+ * server nothing. The element whose id `data-filter-empty` names shows while nothing matches, and a `q` query
+ * parameter fills the filter, so a link from another screen lands on what it names.
+ */
+(function () {
+    'use strict';
+
+    document.addEventListener('DOMContentLoaded', function () {
+        document.querySelectorAll('input[data-filter]').forEach(function (input) {
+            var items = Array.prototype.slice.call(document.querySelectorAll(input.getAttribute('data-filter')));
+            var empty = input.hasAttribute('data-filter-empty')
+                ? document.getElementById(input.getAttribute('data-filter-empty')) : null;
+
+            function apply() {
+                var query = input.value.trim().toLowerCase();
+                var anyVisible = false;
+                items.forEach(function (item) {
+                    var show = query === ''
+                        || (item.getAttribute('data-search') || '').toLowerCase().indexOf(query) !== -1;
+                    item.hidden = !show;
+                    if (show) {
+                        anyVisible = true;
+                    }
+                });
+                if (empty) {
+                    empty.hidden = query === '' || anyVisible;
+                }
+            }
+
+            input.addEventListener('input', apply);
+            var named = new URLSearchParams(window.location.search).get('q');
+            if (named) {
+                input.value = named;
+                apply();
+            }
+        });
+    });
+})();

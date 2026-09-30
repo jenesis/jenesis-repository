@@ -26,7 +26,7 @@
             to report yet. Install a plugin that reports health, metrics or task status and it appears here.</small></p>
 
         <label th:unless="${empty}">Search
-            <input type="search" id="observability-filter"
+            <input type="search" id="observability-filter" autocomplete="off" data-filter=".observability-item"
                    aria-label="Filter signals by name or description"
                    placeholder="Filter by signal name or description">
         </label>
@@ -103,22 +103,5 @@
         </th:block>
     </div>
 </main>
-<!--/* A purely in-memory filter over the rendered items, matching each item's data-search (name + description + state),
-     like the settings screen's option filter - no request wiring. */-->
-<script th:inline="none">
-    (function () {
-        var input = document.getElementById('observability-filter');
-        if (!input) {
-            return;
-        }
-        input.addEventListener('input', function () {
-            var q = input.value.trim().toLowerCase();
-            document.querySelectorAll('.observability-item').forEach(function (el) {
-                var hay = (el.getAttribute('data-search') || '').toLowerCase();
-                el.style.display = (!q || hay.indexOf(q) >= 0) ? '' : 'none';
-            });
-        });
-    })();
-</script>
 </body>
 </html>

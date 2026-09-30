@@ -430,13 +430,20 @@ body:not(:has(.app-sidebar)) > main {
     font-weight: 600;
     overflow-wrap: anywhere;
 }
+/* A topic heading is a label and never a link, so it looks like neither a link nor the page it heads: a hairline
+   above it closes the topic before, and it is set small, bold and spaced in the text colour, where the links are the
+   muted colour and change on hover. */
 .app-sidebar__heading {
-    margin: 0 0 var(--app-space-1);
-    padding: 0 var(--app-space-3);
-    color: var(--pico-muted-color);
-    font-size: var(--app-font-size-xs);
+    margin: 0 var(--app-space-3) var(--app-space-1);
+    padding-top: var(--app-space-3);
+    border-top: 1px solid var(--pico-muted-border-color);
+    color: var(--pico-color);
+    font-size: 0.6875rem;
+    font-weight: 700;
     text-transform: uppercase;
-    letter-spacing: 0.04em;
+    letter-spacing: 0.1em;
+    cursor: default;
+    user-select: none;
 }
 /* The groups again, for a narrow screen where the header has no room for them. */
 .app-sidebar__groups {
@@ -577,9 +584,33 @@ figure {
 .app-page-header__heading {
     margin: 0;
 }
+/* A trail and its page read as one line: the crumbs small and muted, and the page - the heading - as its last step,
+   set large, so the title is said once and the reader sees at a glance which step is here. */
+.app-page-header__heading:has(> nav) {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: baseline;
+    column-gap: var(--app-space-2);
+}
+.app-page-header__heading > nav .app-breadcrumb {
+    margin: 0;
+}
+.app-page-header__heading > nav .app-breadcrumb li:last-child::after {
+    content: "/";
+    margin-left: var(--app-space-1);
+    color: var(--pico-muted-border-color);
+}
 .app-page-header__title {
     margin: 0;
     font-size: var(--app-font-size-2xl);
+}
+/* Pico sets the last child of an hgroup as a subtitle - muted, unweighted, 1rem - and a page's heading is the last
+   child of its trail's hgroup, so it is named here with the weight to stay the page's heading. */
+hgroup.app-page-header__heading > h1.app-page-header__title {
+    --pico-color: var(--pico-h1-color);
+    --pico-font-weight: 700;
+    font-size: var(--app-font-size-2xl);
+    overflow-wrap: anywhere;
 }
 .app-page-header__actions {
     display: flex;
@@ -1315,4 +1346,37 @@ main .app-switch {
     .app-signout__button {
         padding: var(--app-space-2) var(--app-space-3);
     }
+}
+
+/* ---- A row with a detail row under it ------------------------------------------------------------------------ */
+/* A row whose detail runs across the table beneath it - a version and the files it is served as - reads as one
+   entry: the rule between the two goes, and the detail sits close under its lead. */
+.app-list tr.app-list__lead > td {
+    border-bottom: none;
+    padding-bottom: var(--app-space-1);
+}
+.app-list tr.app-list__detail > td {
+    padding-top: 0;
+}
+.app-list__detail small + small,
+.app-list__detail small + .app-files {
+    margin-left: var(--app-space-2);
+}
+.app-list__origin code,
+.app-list__detail code {
+    white-space: nowrap;
+}
+/* The files of one entry flow across the width, as many to a line as fit. */
+.app-files {
+    display: inline-flex;
+    flex-wrap: wrap;
+    gap: var(--app-space-1) var(--app-space-3);
+    margin: 0;
+    padding: 0;
+    list-style: none;
+    font-size: var(--app-font-size-sm);
+}
+.app-files > li {
+    margin: 0;
+    list-style: none;
 }

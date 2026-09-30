@@ -41,8 +41,8 @@ public final class AdminConsoleLayout implements ConsoleLayout.Extension {
                 // Every screen that starts work off the request path renders this instead of telling the reader to
                 // reload: the rescans, the blast radius, the project count, both cleanup notices and the migration.
                 ConsoleLayout.RUNNING,
-                // Every page about one repository opens with its trail and identity; the modules have two views.
-                ConsoleLayout.REPOSITORY_HEADER, ConsoleLayout.REPOSITORY_OVERVIEW_HEADER,
-                ConsoleLayout.REPOSITORY_IDENTITY, ConsoleLayout.MODULE_VIEWS);
+                // Every page about one repository opens with its trail, its overview with the repository's identity
+                // too; the modules have two views.
+                ConsoleLayout.REPOSITORY_HEADER, ConsoleLayout.REPOSITORY_OVERVIEW_HEADER, ConsoleLayout.MODULE_VIEWS);
     }
 }

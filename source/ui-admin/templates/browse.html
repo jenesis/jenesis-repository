@@ -27,23 +27,20 @@
                 <ol class="app-breadcrumb">
                     <li><a th:href="@{/ui/repositories}">Repositories</a></li>
                     <li><a th:href="@{/ui/repositories/{repo}(repo=${repo})}" th:text="${repo}">name</a></li>
-                    <li>
-                        <span th:if="${crumbs.isEmpty()}" aria-current="page">Browse</span>
-                        <a th:unless="${crumbs.isEmpty()}"
-                           th:href="@{/ui/repositories/{repo}/browse(repo=${repo},sort=${sort},dir=${dir})}">Browse</a>
+                    <li th:unless="${crumbs.isEmpty()}">
+                        <a th:href="@{/ui/repositories/{repo}/browse(repo=${repo},sort=${sort},dir=${dir})}">Browse</a>
                     </li>
-                    <li th:each="c : ${crumbs}">
-                        <span th:if="${c.current}" th:text="${c.label}" aria-current="page">segment</span>
-                        <a th:unless="${c.current}"
-                           th:href="@{/ui/repositories/{repo}/browse(repo=${repo},prefix=${c.prefix},sort=${sort},dir=${dir})}"
+                    <li th:each="c : ${crumbs}" th:unless="${c.current}">
+                        <a th:href="@{/ui/repositories/{repo}/browse(repo=${repo},prefix=${c.prefix},sort=${sort},dir=${dir})}"
                            th:text="${c.label}">segment</a>
                     </li>
                 </ol>
             </nav>
-            <h1 class="app-page-header__title">Browse</h1>
+            <!--/* The folder the reader is in ends the trail as the page's heading; the browse root is "Browse". */-->
+            <h1 class="app-page-header__title"
+                th:text="${searching or crumbs.isEmpty()} ? 'Browse' : ${crumbs[crumbs.size() - 1].label}">Browse</h1>
         </hgroup>
     </header>
-    <p th:replace="~{base :: repositoryIdentity}"></p>
 
     <form method="get" th:action="@{/ui/repositories/{repo}/browse(repo=${repo})}">
         <div class="grid">

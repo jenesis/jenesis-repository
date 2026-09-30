@@ -7,7 +7,9 @@
     <div th:replace="~{fragments :: messages}"></div>
     <header th:replace="~{base :: pageHeader('Repositories')}"></header>
     <p><small>Named artifact repositories, each holding one format. Open one to browse its releases
-        and manage staging, retention and pins.</small></p>
+        and manage staging, retention and pins<th:block th:if="${isEditor}">, or
+        <a th:href="@{/ui/new/repository}">create a new repository</a> - its name, its format and the settings it
+        needs from the start, a step at a time, with nothing written until the last</th:block>.</small></p>
 
     <!--/* A non-blocking notice for every VALID-but-risky repository definition - a mixed screening
          strength (a hardened upstream beside a weaker one), an unscreened upstream, or a plaintext upstream.
@@ -23,12 +25,17 @@
         </ul>
     </article>
 
-    <!--/* The repositories and the way to add one, side by side where the screen is wide - the list the wider of the
-         two - and one under the other where it is not. */-->
-    <div class="app-panels app-panels--lead">
-    <article>
-        <h2>Current repositories</h2>
-        <figure th:unless="${repositories.isEmpty()}">
+    <!--/* The repositories across the whole width, and a filter over the rows already rendered: it matches a
+         repository's name, format and description, and asks the server nothing. */-->
+    <th:block th:unless="${repositories.isEmpty()}">
+        <label>Search
+            <input type="search" id="repository-filter" autocomplete="off" data-filter=".repository-row"
+                   data-filter-empty="repository-nomatch"
+                   aria-label="Filter repositories by name, format or description"
+                   placeholder="Filter by name, format or description">
+        </label>
+        <p class="setting-nomatch" id="repository-nomatch" hidden>No repository matches that filter.</p>
+        <figure>
             <table class="app-list">
                 <thead>
                 <tr>
@@ -38,7 +45,8 @@
                 </tr>
                 </thead>
                 <tbody>
-                <tr th:each="r : ${repositories}">
+                <tr th:each="r : ${repositories}" class="repository-row"
+                    th:attr="data-search=${r.name + ' ' + (r.format == null ? '' : r.format) + ' ' + r.description}">
                     <td class="app-list__name">
                         <!--/* The marks of the formats this repository holds, rendered inline so each mark's
                              stroke="currentColor" inherits the text colour and inverts with the theme; sized uniformly by
@@ -86,18 +94,10 @@
                 </tbody>
             </table>
         </figure>
-        <th:block th:if="${repositories.isEmpty()}">
-            <div th:replace="~{base :: empty('No repositories yet. Create one, then publish into it.')}"></div>
-        </th:block>
-    </article>
-    <article th:if="${isEditor}">
-        <h2>New repository</h2>
-        <p><small>A repository is created with its name, its format and the settings it needs from the start - its
-            retention, and where it fetches from - asked a step at a time, and nothing is written until the
-            last.</small></p>
-        <a th:href="@{/ui/new/repository}" role="button" class="app-primary">New repository</a>
-    </article>
-    </div>
+    </th:block>
+    <th:block th:if="${repositories.isEmpty()}">
+        <div th:replace="~{base :: empty('No repositories yet. Create one, then publish into it.')}"></div>
+    </th:block>
 </main>
 </body>
 </html>

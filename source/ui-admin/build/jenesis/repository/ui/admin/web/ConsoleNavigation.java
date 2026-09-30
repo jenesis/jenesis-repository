@@ -19,19 +19,15 @@ public final class ConsoleNavigation {
     /** The collection the repository pages live below. */
     static final String REPOSITORIES = "/ui/repositories";
 
-    /** How many repositories the Repositories group's sidebar names before pointing at the whole list. */
-    static final int LISTED = 50;
-
     private ConsoleNavigation() {
     }
 
     /**
      * The navigation for {@code path}, given the top-level {@code entries} and the repository {@code pages} the reader
-     * may open, each in the order it is to be listed, and the tenant's {@code repositories} - asked for only when the
-     * reader is in the Repositories group and not inside one of them, since that is the one sidebar that names them.
+     * may open, each in the order it is to be listed. A group's sidebar lists its entries alone: the repositories are
+     * the Repositories screen's table, which filters them, so the sidebar does not repeat them.
      */
-    public static Navigation resolve(List<NavEntry> entries, List<RepositoryPage> pages,
-                              Supplier<List<String>> repositories, String path) {
+    public static Navigation resolve(List<NavEntry> entries, List<RepositoryPage> pages, String path) {
         NavEntry current = current(entries, path);
         String repository = repository(path);
         NavEntry.Group group = repository != null ? NavEntry.Group.REPOSITORIES
@@ -51,22 +47,8 @@ public final class ConsoleNavigation {
                 .filter(entry -> entry.group() == group)
                 .map(entry -> new Navigation.Link(entry.label(), entry.path(), entry == current))
                 .toList();
-        List<Navigation.Section> sections = new ArrayList<>();
-        sections.add(new Navigation.Section("", links));
-        if (group == NavEntry.Group.REPOSITORIES) {
-            // The repositories themselves, the way the documentation lists its chapters. Operators create them, so
-            // there are few; past the bound the list says there are more and the collection screen has them all.
-            List<String> names = repositories.get();
-            List<Navigation.Link> named = new ArrayList<>();
-            for (String name : names.subList(0, Math.min(names.size(), LISTED))) {
-                named.add(new Navigation.Link(name, REPOSITORIES + "/" + name, false));
-            }
-            if (names.size() > LISTED) {
-                named.add(new Navigation.Link("More repositories\u2026", REPOSITORIES, false));
-            }
-            sections.add(new Navigation.Section("", named));
-        }
-        return new Navigation(groups, new Navigation.Sidebar(group.label(), null, sections));
+        return new Navigation(groups, new Navigation.Sidebar(group.label(), null,
+                List.of(new Navigation.Section("", links))));
     }
 
     /** The sidebar inside one repository: its pages under their topics, and the way back to the collection. */
@@ -90,7 +72,8 @@ public final class ConsoleNavigation {
                 }
             }
             if (!links.isEmpty()) {
-                sections.add(new Navigation.Section(topic.label(), links));
+                // The repository's name heads the sidebar, so the first topic needs no heading of its own.
+                sections.add(new Navigation.Section(sections.isEmpty() ? "" : topic.label(), links));
             }
         }
         return new Navigation.Sidebar(repository, new Navigation.Link("All repositories", REPOSITORIES, false),

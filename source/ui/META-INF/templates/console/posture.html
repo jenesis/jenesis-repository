@@ -42,7 +42,7 @@
         changes.</small></p>
 
     <label th:unless="${posture.empty()}">Search
-        <input type="search" id="posture-filter"
+        <input type="search" id="posture-filter" autocomplete="off" data-filter=".posture-item"
                aria-label="Filter advisories by name, reason or setting"
                placeholder="Filter by title, id, reason or setting">
     </label>
@@ -107,22 +107,5 @@
         </article>
     </section>
 </main>
-<!--/* A purely in-memory filter over the rendered advisories, matching each item's data-search (id + title + why +
-     setting + severity + scope), like the metrics-overview and settings screens - no request wiring. */-->
-<script th:inline="none">
-    (function () {
-        var input = document.getElementById('posture-filter');
-        if (!input) {
-            return;
-        }
-        input.addEventListener('input', function () {
-            var q = input.value.trim().toLowerCase();
-            document.querySelectorAll('.posture-item').forEach(function (el) {
-                var hay = (el.getAttribute('data-search') || '').toLowerCase();
-                el.style.display = (!q || hay.indexOf(q) >= 0) ? '' : 'none';
-            });
-        });
-    })();
-</script>
 </body>
 </html>

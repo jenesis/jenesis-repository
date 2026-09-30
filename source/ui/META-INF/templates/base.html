@@ -15,7 +15,8 @@
     signInShell                     - the header alone, for a page a reader sees before they are anywhere.
     footer                          - the colophon: the product and whatever its edition publishes.
     pageHeader(title)               - a page header with just a title.
-    pageHeaderCrumbs(title, crumbs) - a page header with a breadcrumb (crumbs: List<Map{href,label}>, last is current).
+    pageHeaderCrumbs(title, crumbs) - a page header with a breadcrumb (crumbs: List<Map{href,label}>, last is current,
+                                      and the title stands in for it as the trail's last step).
     empty(message)                  - the one empty-state treatment.
     field(label, name, value, help) - a labelled text input with inline help text.
     alert(message, kind)            - a flash/outcome banner; kind in {pass,warn,danger} or null for info.
@@ -174,14 +175,15 @@
     </hgroup>
 </header>
 
+<!--/* The trail's last step is the page, and the page's title is that step: the heading ends the trail on its line
+     rather than repeating it under it. */-->
 <header th:fragment="pageHeaderCrumbs(title, crumbs)" class="app-page-header">
     <hgroup class="app-page-header__heading">
-        <nav th:if="${crumbs != null and !crumbs.isEmpty()}" aria-label="Breadcrumb">
+        <nav th:if="${crumbs != null and crumbs.size() > 1}" aria-label="Breadcrumb">
             <ol class="app-breadcrumb">
-                <li th:each="crumb, iter : ${crumbs}">
-                    <a th:if="${!iter.last and crumb.href != null}" th:href="${crumb.href}" th:text="${crumb.label}">crumb</a>
-                    <span th:unless="${!iter.last and crumb.href != null}" th:text="${crumb.label}"
-                          th:attr="aria-current=${iter.last} ? 'page' : null">crumb</span>
+                <li th:each="crumb, iter : ${crumbs}" th:unless="${iter.last}">
+                    <a th:if="${crumb.href != null}" th:href="${crumb.href}" th:text="${crumb.label}">crumb</a>
+                    <span th:unless="${crumb.href != null}" th:text="${crumb.label}">crumb</span>
                 </li>
             </ol>
         </nav>
@@ -189,8 +191,8 @@
     </hgroup>
 </header>
 
-<!--/* The header every page about one repository opens with: the trail back to the repository, the page's title and
-     the repository's identity - the format it holds and the URL a client reaches it at. The console resolves
+<!--/* The header every page about one repository opens with: the trail back to the repository, ended by the page's
+     title. The repository's identity - its format and its URL - is its overview's to say, once. The console resolves
      `repositoryHeader` from the request path, so a page contributed by any module opens the same way. `parent` and
      `parentHref` name a page between the repository and this one (a signer's page sits under Signers), or are null. */-->
 <th:block th:fragment="repositoryHeader(title, parent, parentHref)">
@@ -202,13 +204,11 @@
                     <li><a th:href="@{/ui/repositories/{r}(r=${repositoryHeader.name()})}"
                            th:text="${repositoryHeader.name()}">releases</a></li>
                     <li th:if="${parent != null}"><a th:href="${parentHref}" th:text="${parent}">Parent</a></li>
-                    <li><span aria-current="page" th:text="${title}">Page</span></li>
                 </ol>
             </nav>
             <h1 class="app-page-header__title" th:text="${title}">Page</h1>
         </hgroup>
     </header>
-    <p th:replace="~{base :: repositoryIdentity}"></p>
 </th:block>
 
 <!--/* The repository overview's header: the repository is the page, so the trail ends at it. */-->
@@ -218,7 +218,6 @@
             <nav aria-label="Breadcrumb" th:if="${repositoryHeader != null}">
                 <ol class="app-breadcrumb">
                     <li><a th:href="@{/ui/repositories}">Repositories</a></li>
-                    <li><span aria-current="page" th:text="${repositoryHeader.name()}">releases</span></li>
                 </ol>
             </nav>
             <h1 class="app-page-header__title" th:text="${repositoryHeader?.name()}">releases</h1>
