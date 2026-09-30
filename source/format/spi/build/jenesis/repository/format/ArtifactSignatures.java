@@ -159,6 +159,18 @@ public interface ArtifactSignatures extends EcosystemLayout {
     }
 
     /**
+     * {@link #covers(String)}, for material that names what it covers in its own bytes rather than in its path - an
+     * OCI referrer, pushed by digest, whose {@code subject} is a field of the manifest. {@code published} opens the
+     * bytes just published at {@code path}; a format reads at most {@link Material#LARGEST_SIGNATURE} of them, and
+     * only for a path its path-only answer leaves open. The default is the path-only answer and opens nothing.
+     *
+     * @throws IOException when the published bytes could not be read
+     */
+    default Optional<String> covers(String path, Signed published) throws IOException {
+        return covers(path);
+    }
+
+    /**
      * The inbound signature material for the artifact at this request path: each signature, and the bytes it commits
      * to. The caller verifies; this only produces.
      *

@@ -17,12 +17,16 @@ import build.jenesis.repository.store.Retries;
 import build.jenesis.repository.store.ArtifactDescriptor;
 import build.jenesis.repository.store.ArtifactStore;
 import build.jenesis.repository.store.StoredListing;
+import build.jenesis.repository.store.PublishInterceptor;
 import build.jenesis.repository.store.Withheld;
 import tools.jackson.core.JsonGenerator;
 import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.json.JsonMapper;
 import build.jenesis.repository.format.OciTags;
 import build.jenesis.repository.format.Checksums;
+import build.jenesis.repository.audit.AuditActions;
+import build.jenesis.repository.cleanup.VersionRemoval;
+import build.jenesis.repository.walk.BoundedChildren;
 
 /**
  * The OCI / Docker registry format (the {@code /v2/} Distribution API), so {@code docker push} and
@@ -51,8 +55,23 @@ import build.jenesis.repository.format.Checksums;
  * as the signed document and the manifest digest the payload names as the binding, which is what makes a signature
  * over a payload naming another image a finding rather than a match. The signature manifest is a sidecar of the
  * image it names ({@link #covers}), so one pushed after its image re-derives the image's verdict as a late
- * {@code .asc} does. The referrers API, which newer cosign versions can attach a whole Sigstore bundle through, is
- * not served here yet; the tag convention is what every cosign version pushes by default.
+ * {@code .asc} does.
+ *
+ * <h2>Referrers</h2>
+ *
+ * A manifest pushed with a {@code subject} is a referrer of the manifest it names - a signature, an SBOM, an
+ * attestation - and {@code GET /v2/<name>/referrers/<digest>} lists them, from an index {@link OciReferrers} keeps on
+ * the write path. The push is answered with {@code OCI-Subject}, which tells a client this registry keeps that index
+ * so it does not fall back to maintaining one itself under a tag. The signature evidence reads that index as well as
+ * the tag convention: a cosign signature attached as a referrer, or a Sigstore bundle, decides the image's verdict the
+ * same way, and one attached after its image re-derives it through {@link #covers(String, ArtifactSignatures.Signed)},
+ * since a referrer's path does not name what it covers.
+ *
+ * <h2>Removal and mount</h2>
+ *
+ * {@code DELETE} of a manifest or a tag removes versions through the product's one removal ({@link VersionRemoval}),
+ * and a blob upload that names {@code mount} and {@code from} links a blob the caller may read in another repository
+ * of the tenant instead of taking it again.
  */
 public final class OciFormat implements RepositoryFormat, ProxyFormat, RepositoryImporter, BlobReferences,
         ArtifactSignatures, RepositoryExporter {
@@ -154,6 +173,18 @@ public final class OciFormat implements RepositoryFormat, ProxyFormat, Repositor
             tags(rest.substring(0, rest.length() - "/tags/list".length()), store, exchange);
             return;
         }
+        // The last /referrers/ followed by a digest and nothing else: an image may itself be named .../referrers/...
+        int referrers = rest.lastIndexOf("/referrers/");
+        if (referrers > 0 && rest.startsWith("sha256:", referrers + "/referrers/".length())
+                && rest.indexOf('/', referrers + "/referrers/".length()) < 0) {
+            String name = rest.substring(0, referrers);
+            if (!isImageName(name) || !(exchange.method().equals("GET") || exchange.method().equals("HEAD"))) {
+                exchange.respond(isImageName(name) ? 405 : 404);
+                return;
+            }
+            new OciReferrers(store).serve(name, rest.substring(referrers + "/referrers/".length()), exchange);
+            return;
+        }
         int uploads = rest.indexOf("/blobs/uploads");
         if (uploads >= 0) {
             upload(rest.substring(0, uploads), rest.substring(uploads + "/blobs/uploads".length()), store, exchange);
@@ -170,6 +201,29 @@ public final class OciFormat implements RepositoryFormat, ProxyFormat, Repositor
             return;
         }
         exchange.respond(404);
+    }
+
+    /**
+     * A write the edge refuses before this format sees it - a {@code DELETE} or a push to a repository that takes no
+     * write - answered with the Distribution error envelope, {@code UNSUPPORTED} for the {@code 405} the specification
+     * names for a registry that does not allow the operation.
+     */
+    @Override
+    public void refuse(FormatExchange exchange, int status) throws IOException {
+        if (status == 405) {
+            error(exchange, 405, "UNSUPPORTED", "this repository takes no writes: it serves what it holds or fetches");
+        } else {
+            error(exchange, status, "DENIED", "the request was refused");
+        }
+    }
+
+    /** An answer in the Distribution error envelope: {@code {"errors":[{"code":...,"message":...}]}}. */
+    static void error(FormatExchange exchange, int status, String code, String message) throws IOException {
+        Map<String, Object> error = new LinkedHashMap<>();
+        error.put("code", code);
+        error.put("message", message);
+        exchange.setResponseHeader("Content-Type", "application/json");
+        exchange.respond(status, JSON.writeValueAsBytes(Map.of("errors", List.of(error))));
     }
 
     private void blob(String digest, ArtifactStore store, FormatExchange exchange) throws IOException {
@@ -214,6 +268,11 @@ public final class OciFormat implements RepositoryFormat, ProxyFormat, Repositor
             // reclaimed - and released from the quota counter - without needing a scheduler. Paced: the sweep lists
             // every open session, so it runs at most once per REAP_INTERVAL per node rather than on every push.
             reapPaced(store);
+            String mount = exchange.queryParameter("mount");
+            String from = exchange.queryParameter("from");
+            if (mount != null && from != null && mounted(name, mount, from, store, exchange)) {
+                return;
+            }
             String digest = exchange.queryParameter("digest");
             if (digest != null) {
                 store(digest, exchange.requestStream(), store, name, exchange);
@@ -252,6 +311,50 @@ public final class OciFormat implements RepositoryFormat, ProxyFormat, Repositor
             return;
         }
         exchange.respond(404);
+    }
+
+    /**
+     * A cross-repository blob mount - {@code POST .../blobs/uploads/?mount=<digest>&from=<name>} - which links a blob
+     * the client already pushed to another repository of this tenant instead of uploading it again: {@code 201} with
+     * the blob's location when the caller may read {@code from} and the blob is there, and {@code false} otherwise,
+     * so the caller opens an ordinary upload session and the client uploads.
+     *
+     * <p>{@code from} is the other image's name as the client addresses it, and whether the caller may read it is
+     * decided by the edge exactly as a {@code GET} of that blob would be ({@link FormatExchange#readable}). Every
+     * refusal - a name the caller may not read, a repository that does not exist or holds another format, a blob that
+     * is absent or withheld there - is the same fallback, so a mount is never a way to learn whether something the
+     * caller may not read exists.
+     *
+     * <p>A blob is stored per repository, so linking it is a copy streamed from one repository's store into this
+     * one's, written by digest and held to it; a blob this repository already holds is linked by nothing at all.
+     */
+    private boolean mounted(String name, String mount, String from, ArtifactStore store, FormatExchange exchange)
+            throws IOException {
+        String hex = hex(mount);
+        if (!mount.startsWith("sha256:") || !Checksums.isSha256Hex(hex) || !isImageName(from)) {
+            return false;
+        }
+        Optional<ArtifactStore> source = exchange.readable("/v2/" + from + "/blobs/sha256:" + hex);
+        if (source.isEmpty()) {
+            return false;
+        }
+        String key = "blobs/" + hex;
+        if (!source.get().exists(key) || Withheld.is(source.get(), hex) || Withheld.is(store, hex)) {
+            return false;
+        }
+        if (!store.exists(key)) {
+            try (InputStream in = source.get().open(key)) {
+                if (!store.writeBlob(in).equals(hex)) {
+                    return false;                               // not the bytes the digest names: upload them instead
+                }
+            } catch (NoSuchFileException gone) {
+                return false;
+            }
+        }
+        exchange.setResponseHeader("Location", exchange.external("/v2/" + name + "/blobs/sha256:" + hex));
+        exchange.setResponseHeader("Docker-Content-Digest", "sha256:" + hex);
+        exchange.respond(201);
+        return true;
     }
 
     /** Stream one received chunk straight to its own object under the upload session, indexed by its arrival order, so
@@ -399,7 +502,8 @@ public final class OciFormat implements RepositoryFormat, ProxyFormat, Repositor
      * body names a blob is the tag pointer, and it names the <em>manifest</em>. An image's config and layer digests
      * live inside the manifest JSON, behind no key at all, and a manifest pulled by digest carries no tag pointer
      * either - yet it is live content this format serves (a {@code GET /v2/<name>/manifests/sha256:<hex>} reads
-     * {@code blobs/<hex>} directly, and there is no DELETE in this API to retire it). So both faces are resolved here:
+     * {@code blobs/<hex>} directly, and only a client's own {@code DELETE} of that digest retires it). So both faces are
+     * resolved here:
      * <ul>
      *   <li>{@code oci/<name>/tags/<tag>} - the tag pointer, whose body resolves the manifest;</li>
      *   <li>{@code oci/types/<hex>} - the media-type sidecar, the durable record that {@code <hex>} is a manifest this
@@ -572,6 +676,10 @@ public final class OciFormat implements RepositoryFormat, ProxyFormat, Repositor
             exchange.respond(404);                              // a traversal-laced image name names no manifest
             return;
         }
+        if (exchange.method().equals("DELETE")) {
+            delete(name, reference, store, exchange);
+            return;
+        }
         if (exchange.method().equals("PUT")) {
             if (!reference.startsWith("sha256:") && !OciTags.isTag(reference)) {
                 // A manifest is pushed either by digest (sha256:...) or by tag; a reference that is neither a digest
@@ -617,6 +725,9 @@ public final class OciFormat implements RepositoryFormat, ProxyFormat, Repositor
                         + "\"the manifest body does not hash to the referenced digest\"}]}").getBytes(StandardCharsets.UTF_8));
                 return;
             }
+            // The subject a referrer names is confirmed, so a client knows this registry keeps the referrers index
+            // and does not fall back to maintaining the tag-schema index itself.
+            ingested.subject().ifPresent(subject -> exchange.setResponseHeader("OCI-Subject", "sha256:" + subject));
             switch (ingested.disposition()) {
                 case ACCEPT -> {
                     exchange.setResponseHeader("Docker-Content-Digest", "sha256:" + hex);
@@ -657,15 +768,17 @@ public final class OciFormat implements RepositoryFormat, ProxyFormat, Repositor
             return;
         }
         String key = "blobs/" + hex;
-        // A withheld manifest 404s exactly as a withheld blob does (the withheld/<hash> convention above), so a held
-        // image cannot be pulled by digest or tag while its layers 404.
-        if (!store.exists(key) || Withheld.is(store, hex)) {
+        // A manifest serves while this registry records it as one - its media-type sidecar, written when a push,
+        // a fill or an import accepted it and retired when a client deletes it - and a withheld one 404s exactly as a
+        // withheld blob does (the withheld/<hash> convention above), so a held image cannot be pulled by digest or
+        // tag while its layers 404. A blob that was never accepted as a manifest is not served as one.
+        Optional<ArtifactStore.Versioned> sidecar = store.readVersioned("oci/types/" + hex);
+        if (sidecar.isEmpty() || !store.exists(key) || Withheld.is(store, hex)) {
             exchange.respond(404);
             return;
         }
-        String type = store.readVersioned("oci/types/" + hex)
-                .map(versioned -> new String(versioned.content(), StandardCharsets.UTF_8).trim())
-                .orElse(OCI_MANIFEST);
+        String recorded = new String(sidecar.get().content(), StandardCharsets.UTF_8).trim();
+        String type = recorded.isEmpty() ? OCI_MANIFEST : recorded;
         long size = store.size(key);
         exchange.setResponseHeader("Content-Type", type);
         exchange.setResponseHeader("Docker-Content-Digest", "sha256:" + hex);
@@ -677,6 +790,87 @@ public final class OciFormat implements RepositoryFormat, ProxyFormat, Repositor
         try (OutputStream out = exchange.respond(200, size)) {
             store.read(key, out);
         }
+    }
+
+    /**
+     * {@code DELETE /v2/<name>/manifests/<reference>}: a tag removes that tag alone, a digest the manifest and every tag
+     * of the image naming it - each version through the product's one removal ({@link VersionRemoval}), which is the
+     * eviction retention removes a version by, so the same pointers go, the same observers hear of it and the blobs
+     * are left to the collector. Answered {@code 202} and recorded on the audit trail as the caller that asked.
+     *
+     * <p>A reference that does not serve - absent, or withheld by a hold - is {@code 404 MANIFEST_UNKNOWN}, the
+     * answer a pull of it gets, so a delete discloses nothing a pull would not and a held version stays with its
+     * reviewer. A pinned version is refused with {@code 403 DENIED}: a pin is an operator's decision to keep it,
+     * which retention honours and a client's delete must too; the operator unpins first. With no inventory
+     * installed nothing can be removed through the one path, and the answer is {@code 405 UNSUPPORTED}.
+     *
+     * <p>Removing a manifest by digest reads the pointers of the image's own tags to find those naming it - the
+     * specification's "every tag", paid by the delete, never by a read.
+     */
+    private void delete(String name, String reference, ArtifactStore store, FormatExchange exchange)
+            throws IOException {
+        VersionRemoval removal = Removal.INSTALLED;
+        if (!removal.supported()) {
+            error(exchange, 405, "UNSUPPORTED", "this deployment removes no version: no inventory is installed");
+            return;
+        }
+        boolean digest = reference.startsWith("sha256:");
+        if (digest ? !Checksums.isSha256Hex(hex(reference)) : !OciTags.isTag(reference)) {
+            error(exchange, digest ? 400 : 404, digest ? "DIGEST_INVALID" : "MANIFEST_UNKNOWN",
+                    "not a manifest reference: " + reference);
+            return;
+        }
+        String hex;
+        List<String> tags = new ArrayList<>();
+        if (digest) {
+            hex = hex(reference);
+            if (!store.exists("oci/types/" + hex)) {
+                hex = null;
+            } else {
+                String named = hex;
+                BoundedChildren.draining().scan(store, "oci/" + name + "/tags", tag -> {
+                    if (OciTags.isTag(tag) && store.readVersioned("oci/" + name + "/tags/" + tag)
+                            .map(pointer -> hex(new String(pointer.content(), StandardCharsets.UTF_8).trim()))
+                            .filter(named::equals).isPresent()) {
+                        tags.add(tag);
+                    }
+                });
+            }
+        } else {
+            hex = store.readVersioned("oci/" + name + "/tags/" + reference)
+                    .map(pointer -> hex(new String(pointer.content(), StandardCharsets.UTF_8).trim()))
+                    .filter(Checksums::isSha256Hex)
+                    .orElse(null);
+            tags.add(reference);
+        }
+        if (hex == null || Withheld.is(store, hex)) {
+            error(exchange, 404, "MANIFEST_UNKNOWN", "manifest unknown: " + reference);
+            return;
+        }
+        List<String> versions = new ArrayList<>(tags);
+        if (digest) {
+            versions.add("sha256:" + hex);
+        }
+        for (String version : versions) {
+            if (removal.pinned(store, ecosystem(), name, version)) {
+                error(exchange, 403, "DENIED", name + ":" + version + " is pinned; an operator unpins it before it "
+                        + "can be deleted");
+                return;
+            }
+        }
+        for (String version : versions) {
+            removal.remove(store, ecosystem(), name, version);
+        }
+        if (digest) {
+            new OciReferrers(store).forget(name, hex);
+        }
+        exchange.audit(AuditActions.ARTIFACT_DELETE, digest ? name + "@sha256:" + hex : name + ":" + reference);
+        exchange.respond(202);
+    }
+
+    /** The installed removal, resolved once: {@link VersionRemoval#installed} runs the discovery on every call. */
+    private static final class Removal {
+        static final VersionRemoval INSTALLED = VersionRemoval.installed();
     }
 
     /**
@@ -1380,6 +1574,13 @@ public final class OciFormat implements RepositoryFormat, ProxyFormat, Repositor
                         SIGNATURE_TAG_PREFIX.length(), reference[1].length() - SIGNATURE_TAG_SUFFIX.length()));
     }
 
+    /**
+     * The signature material an image carries, found both ways a client attaches it: under cosign's tag convention
+     * ({@code sha256-<hex>.sig}), and among the image's referrers - a cosign signature pushed with a {@code subject},
+     * or a Sigstore bundle - read out of the subject's stored index, the same document a referrers request is
+     * answered from. Either way the manifest is found by the image's own digest, so it is the verdict of the
+     * manifest the client pulls that the material decides.
+     */
     @Override
     public List<ArtifactSignatures.Evidence> evidence(String path, ArtifactSignatures.Material material)
             throws IOException {
@@ -1393,16 +1594,79 @@ public final class OciFormat implements RepositoryFormat, ProxyFormat, Repositor
         // the body is hashed rather than the tag pointer read: this is the one derivation that cannot disagree with
         // what cosign computed on the client.
         String hex = digest(body.get());
+        List<ArtifactSignatures.Evidence> evidence = new ArrayList<>();
         String signaturePath = "/v2/" + name + "/manifests/" + SIGNATURE_TAG_PREFIX + hex + SIGNATURE_TAG_SUFFIX;
         Optional<byte[]> signatureManifest = material.sibling(signaturePath, ArtifactSignatures.Material.LARGEST_SIGNATURE)
                 .filter(bounded -> !bounded.truncated())
                 .map(bounded -> bounded.content());
-        if (signatureManifest.isEmpty()) {
+        if (signatureManifest.isPresent()) {
+            evidence.addAll(cosign(name, signaturePath, signatureManifest.get(), material));
+        }
+        evidence.addAll(referred(name, hex, body.get(), material));
+        return evidence;
+    }
+
+    /**
+     * The evidence among the image's referrers: each one its subject's stored index lists as a cosign signature or a
+     * Sigstore bundle, in the index's order. An index or a listed referrer that is there and cannot be read is
+     * material present and unreadable (the seam's clause 6), never an unsigned image.
+     */
+    private static List<ArtifactSignatures.Evidence> referred(String name, String hex, ArtifactSignatures.Signed body,
+                                                              ArtifactSignatures.Material material)
+            throws IOException {
+        Optional<PublishInterceptor.Content.Bounded> index = material.recorded(
+                StoredListing.key(OciReferrers.listing(name, hex)), ArtifactSignatures.Material.LARGEST_SIGNATURE);
+        if (index.isEmpty()) {
             return List.of();
         }
+        if (index.get().truncated()) {
+            throw new IOException("the referrers of sha256:" + hex + " under " + name + " exceed "
+                    + ArtifactSignatures.Material.LARGEST_SIGNATURE + " bytes");
+        }
+        List<ArtifactSignatures.Evidence> evidence = new ArrayList<>();
+        for (JsonNode descriptor : OciReferrers.descriptors(index.get().content())) {
+            String type = descriptor.path("artifactType").asString("");
+            if (!type.equals(OciReferrers.COSIGN_SIGNATURE) && !type.startsWith(OciReferrers.SIGSTORE_BUNDLE)) {
+                continue;
+            }
+            String referrer = "/v2/" + name + "/manifests/" + descriptor.path("digest").asString("");
+            byte[] manifest = material.sibling(referrer, ArtifactSignatures.Material.LARGEST_SIGNATURE)
+                    .filter(bounded -> !bounded.truncated())
+                    .map(bounded -> bounded.content())
+                    .orElseThrow(() -> new IOException("the referrer " + referrer + " the index lists is not held"));
+            if (type.equals(OciReferrers.COSIGN_SIGNATURE)) {
+                evidence.addAll(cosign(name, referrer, manifest, material));
+                continue;
+            }
+            OciReferrers.Manifest bundle = OciReferrers.Manifest.of(manifest)
+                    .orElseThrow(() -> new IOException("the referrer " + referrer + " is not a JSON manifest"));
+            int layer = 0;
+            for (OciReferrers.Manifest.Layer carried : bundle.layers()) {
+                if (carried.mediaType().startsWith(OciReferrers.SIGSTORE_BUNDLE)) {
+                    String blob = "/v2/" + name + "/blobs/sha256:" + carried.hex();
+                    byte[] content = material.sibling(blob, ArtifactSignatures.Material.LARGEST_SIGNATURE)
+                            .filter(bounded -> !bounded.truncated())
+                            .map(bounded -> bounded.content())
+                            .orElseThrow(() -> new IOException("the referrer " + referrer + " names a bundle "
+                                    + blob + " the registry does not hold"));
+                    // The bundle signs the image manifest itself - a message signature over its digest, or a DSSE
+                    // statement naming it as a subject - so the bytes it covers are the manifest's own.
+                    evidence.add(new ArtifactSignatures.Evidence(ArtifactSignatures.Scheme.SIGSTORE_BUNDLE, content,
+                            body, referrer + "#" + layer));
+                }
+                layer++;
+            }
+        }
+        return evidence;
+    }
+
+    /** The evidence in a cosign signature manifest: each layer carrying a signature annotation, its payload the
+     *  signed document naming the image by digest. */
+    private static List<ArtifactSignatures.Evidence> cosign(String name, String signaturePath, byte[] signatureManifest,
+                                                            ArtifactSignatures.Material material) throws IOException {
         JsonNode layers;
         try {
-            layers = JSON.readTree(new String(signatureManifest.get(), StandardCharsets.UTF_8)).path("layers");
+            layers = JSON.readTree(new String(signatureManifest, StandardCharsets.UTF_8)).path("layers");
         } catch (RuntimeException notJson) {
             throw new IOException("the signature manifest at " + signaturePath + " is not a JSON manifest");
         }
@@ -1432,6 +1696,33 @@ public final class OciFormat implements RepositoryFormat, ProxyFormat, Repositor
             index++;
         }
         return evidence;
+    }
+
+    /**
+     * What a referrer pushed by digest covers: its {@code subject}, when it is signature material - a cosign
+     * signature or a Sigstore bundle - so the image's verdict is re-derived when its signature lands after it, as a
+     * late {@code .sig} tag is. The path names no subject, so the manifest's own bytes are read, bounded.
+     */
+    @Override
+    public Optional<String> covers(String path, ArtifactSignatures.Signed published) throws IOException {
+        Optional<String> tagged = covers(path);
+        if (tagged.isPresent()) {
+            return tagged;
+        }
+        Optional<String[]> reference = manifest(path);
+        if (reference.isEmpty()) {
+            return Optional.empty();
+        }
+        byte[] head;
+        try (InputStream in = published.open()) {
+            head = in.readNBytes(ArtifactSignatures.Material.LARGEST_SIGNATURE + 1);
+        }
+        if (head.length > ArtifactSignatures.Material.LARGEST_SIGNATURE) {
+            return Optional.empty();
+        }
+        return OciReferrers.Manifest.of(head)
+                .filter(OciReferrers.Manifest::signature)
+                .map(manifest -> "/v2/" + reference.get()[0] + "/manifests/sha256:" + manifest.subject().orElseThrow());
     }
 
     /** The manifest digest a cosign simple-signing payload names, {@code critical.image.docker-manifest-digest}, as

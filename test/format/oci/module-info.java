@@ -24,6 +24,10 @@ open module build.jenesis.repository.format.oci.test {
     requires build.jenesis.repository.gc;
     requires build.jenesis.repository.gc.store;
     requires build.jenesis.repository.walk.store;
+    // The referrers index answered as JSON, read back as JSON rather than by string search.
+    requires tools.jackson.databind;
+    // The removal seam, which this graph carries no inventory to provide: a DELETE answers as unsupported here.
+    requires build.jenesis.repository.cleanup;
     requires org.junit.jupiter;
     requires org.assertj.core;
     // A PublishInterceptor IS a PublicationObserver, discovered through the single seam and split into

@@ -72,6 +72,7 @@ public class RepositoryController {
     private final RoutedServing routed;
     private final EdgeHooks hooks;
     private final AuditTrail audit;
+    private final Reads reads;
 
     /** The screened edge restricted to one repository type's formats, per type: a repository's request is offered to
      *  the formats it holds and to no other, so a path another format would claim is not served out of it. */
@@ -94,7 +95,21 @@ public class RepositoryController {
                                 List<ImportSourceProvider> importSources,
                                 ProxyFormat.Fetcher fetcher) {
         this(routing, dispatcher, importSources, fetcher, null, key -> null, null, RoutedServing.NONE, EdgeHooks.NONE,
-                AuditTrail.NONE);
+                AuditTrail.NONE, Reads.NONE);
+    }
+
+    /**
+     * Whether the caller of a request may read another path - asked when a format reads there on the caller's behalf
+     * ({@link build.jenesis.repository.format.FormatExchange#readable}), and decided as the deployment's
+     * authorization decides a {@code GET} of that path.
+     */
+    @FunctionalInterface
+    public interface Reads {
+
+        /** Nothing is readable on a caller's behalf. */
+        Reads NONE = (_, _) -> false;
+
+        boolean permits(HttpServletRequest request, String path);
     }
 
     /**
@@ -120,6 +135,9 @@ public class RepositoryController {
      * @param audit     where a change a format makes through its own protocol - a client's yank or deprecate - is
      *                  recorded, as the request's caller in the request's tenant; {@link AuditTrail#NONE} records
      *                  nothing.
+     * @param reads     whether the caller may read another repository's path, for a format that reads there on its
+     *                  behalf - a registry's cross-repository blob mount; {@link Reads#NONE} permits nothing, so such
+     *                  a read always falls back.
      */
     public RepositoryController(RepositoryRouting routing,
                                 FormatDispatcher dispatcher,
@@ -130,7 +148,8 @@ public class RepositoryController {
                                 ArtifactStore root,
                                 RoutedServing routed,
                                 EdgeHooks hooks,
-                                AuditTrail audit) {
+                                AuditTrail audit,
+                                Reads reads) {
         this.routing = routing;
         this.dispatcher = dispatcher;
         this.screened = new ScreenedDispatch(dispatcher, hooks);
@@ -142,6 +161,7 @@ public class RepositoryController {
         this.routed = routed;
         this.hooks = hooks;
         this.audit = audit;
+        this.reads = reads;
     }
 
     /**
@@ -185,11 +205,18 @@ public class RepositoryController {
         String key = PresentedKey.fromAnyClient(request);
         ServletFormatExchange exchange = new ServletFormatExchange(request, response, held.get().path(), settings,
                 type.mount(), (action, target) -> audit.record(route.tenant(),
-                        key == null ? "anonymous" : Authorization.hash(key), action, route.repository() + "/" + target));
+                        key == null ? "anonymous" : Authorization.hash(key), action, route.repository() + "/" + target),
+                path -> readable(request, route, type, path));
         // A write (PUT/POST/PATCH/DELETE) to a route that is not a valid write target is a 405 before any layout - the
-        // seam a routing uses to reject a write to a read-only repository.
+        // seam a routing uses to reject a write to a read-only repository - answered in the claiming format's own
+        // error dialect.
         if (write && !route.writable()) {
-            response.setStatus(405);
+            Optional<RepositoryFormat> claiming = held.get().claiming();
+            if (claiming.isPresent()) {
+                claiming.get().refuse(exchange, 405);
+            } else {
+                response.setStatus(405);
+            }
             return;
         }
         // A write the repository's type does not take from the format that claims it - a Jenesis PUT into a java
@@ -228,6 +255,32 @@ public class RepositoryController {
         // this is byte-for-byte a direct dispatch; it carries the full ComplianceScreen chain under fixed tenancy.
         if (!screened.dispatch(route.tenant(), exchange, route.store())) {
             response.setStatus(404);
+        }
+    }
+
+    /**
+     * The store of another repository of the request's tenant, for a format reading {@code path} there on the caller's
+     * behalf: present only when the caller may read the path - decided first, and as a {@code GET} of it would be -
+     * and it names a repository of this tenant that holds the same format. One empty answer for every refusal, so
+     * the question discloses nothing.
+     */
+    private Optional<ArtifactStore> readable(HttpServletRequest request, RepositoryRouting.Route route,
+                                             RepositoryType type, String path) {
+        RepositoryRouting.Target named = RepositoryRouting.target(path);
+        if (route.repository().isEmpty() || named.repository().isEmpty() || !named.tenant().equals(route.tenant())
+                || !reads.permits(request, path)) {
+            return Optional.empty();
+        }
+        try {
+            Optional<RepositoryRouting.Route> other = routing.route(named.tenant(), named.repository(), named.path());
+            if (other.isEmpty()) {
+                return Optional.empty();
+            }
+            Optional<HeldFormat> held = HeldFormat.of(routing, other.get(), dispatcher.formats());
+            return held.isPresent() && held.get().type().name().equals(type.name())
+                    ? Optional.of(other.get().store()) : Optional.empty();
+        } catch (IOException | RuntimeException unreadable) {
+            return Optional.empty();
         }
     }
 

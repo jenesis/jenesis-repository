@@ -85,10 +85,11 @@ import build.jenesis.repository.format.Checksums;
  * store and fails if a live image's config or layer is collected, or if an evicted one is not. Read that suite, not
  * this sentence, for what today's core does.
  *
- * <p><b>What no version of this covers, deliberately.</b> A manifest that only ever existed by digest has no eviction
- * handle: the {@code /v2/} API exposes no DELETE and a digest reference resolves no pointer key, so
- * {@link #blobKeys} is empty for it and nothing evicts it - permanent content by design, and a collection pass deleting
- * it is the defect rather than a reclamation route to restore. GC is not switched off for OCI either way: a blob
+ * <p><b>What retention does not cover, deliberately.</b> A manifest that only ever existed by digest has no eviction
+ * handle: a digest reference resolves no pointer key, so {@link #blobKeys} is empty for it and no retention pass
+ * evicts it - it may be one platform of an index a live tag serves. Only a client's own {@code DELETE} of that digest
+ * retires it, through {@link #removalKeys}; a collection pass deleting it otherwise is the defect rather than a
+ * reclamation route to restore. GC is not switched off for OCI either way: a blob
  * no manifest names (an abandoned upload, an orphaned layer) is still condemned and collected. And {@link #blobHashes}
  * stays the hold side's <em>posture</em> alone, never consulted by the collector - it asks the seam the same
  * question the mark phase does and then degrades where the collector refuses, because under-enforcing a hold is
@@ -164,9 +165,8 @@ public final class OciBlobLayout implements RepositoryFormat, BlobLayout {
      *
      * <p>A tag reference maps to its {@code oci/<name>/tags/<tag>} pointer; a digest reference names no pointer key at
      * all (content-addressed - one {@code withheld/<hex>} marker retracts it, which {@code discardBlobs} deliberately
-     * never lifts), so it stays empty and a digest-only manifest has no eviction handle. That is the {@code /v2/}
-     * API's shape rather than an oversight here: it exposes no DELETE, so a manifest that was only ever pulled by
-     * digest is permanent content by design.
+     * never lifts), so it stays empty and a digest-only manifest has no eviction handle; a client's {@code DELETE} by
+     * digest reaches it through {@link #removalKeys} instead.
      *
      * <p><b>Why the sidecar is an eviction key at all.</b> The {@code BlobReferences} seam lends the reference
      * scan the blobs an image keeps alive, resolved from either of the two keys that name a manifest: the tag pointer,
@@ -214,6 +214,35 @@ public final class OciBlobLayout implements RepositoryFormat, BlobLayout {
         return List.of(key, "oci/types/" + hex);
     }
 
+    /**
+     * {@link #blobKeys}, and for a digest reference the manifest's {@code oci/types/<hex>} sidecar - the record this
+     * registry serves a manifest through - when no live tag pointer anywhere in the repository still names it.
+     *
+     * <p>A client that deletes a manifest by digest has already had every tag of the image naming it removed, and
+     * what it asks to go is the manifest itself; the sidecar is the one key that says it is one. A retention
+     * eviction of the same row takes nothing ({@link #blobKeys} answers empty for a digest), and must not: a manifest
+     * pushed by digest is typically one platform's entry in an image index a live tag serves, and retiring its record
+     * would stop that index resolving.
+     *
+     * <p>The sibling guard is the tag eviction's, fail-closed the same way; it witnesses its own descent by the
+     * sidecar it is deciding about, which it knows is there.
+     */
+    @Override
+    public List<String> removalKeys(String coordinate, String version, ArtifactStore store) throws IOException {
+        if (!version.startsWith("sha256:")) {
+            return blobKeys(coordinate, version, store);
+        }
+        String hex = hex(version);
+        if (hex == null || !isImageName(coordinate)) {
+            return List.of();
+        }
+        String sidecar = "oci/types/" + hex;
+        if (!store.exists(sidecar) || sharedByAnotherTag(sidecar, hex, store)) {
+            return List.of();
+        }
+        return List.of(sidecar);
+    }
+
     /** The bounds the sibling-tag scan descends {@code oci/} under. The step budget is what really bounds it (one
      *  {@link ArtifactStore#exists} probe per opened node); the entry cap is a per-call continuation the loop below
      *  follows to the end, never a shortened answer - a truncated scan that reported "unshared" would delete a sidecar
@@ -222,8 +251,10 @@ public final class OciBlobLayout implements RepositoryFormat, BlobLayout {
     private static final PagedTreeWalk ALIASES = PagedTreeWalk.bounded().steps(5_000_000).page(BoundedChildren.DRAIN_PAGE);
 
     /**
-     * Whether a live tag pointer OTHER than {@code own} resolves to the manifest {@code hex} - the cross-alias guard
-     * that keeps {@code oci/types/<hex>} standing while any sibling tag still serves that manifest.
+     * Whether a live tag pointer other than {@code witness} resolves to the manifest {@code hex} - the cross-alias
+     * guard that keeps {@code oci/types/<hex>} standing while any sibling tag still serves that manifest.
+     * {@code witness} is a key the caller has just read and knows is there: the tag pointer being evicted, or the
+     * sidecar itself when a manifest is removed by digest.
      *
      * <p>The scan is the shared bounded tree walk over {@code oci/} (iterative and paged, so an
      * attacker-shaped multi-segment image name cannot overflow a stack and a wide level is never listed whole),
@@ -244,18 +275,18 @@ public final class OciBlobLayout implements RepositoryFormat, BlobLayout {
      * listing</em> - and an empty listing is indistinguishable, to a "did anyone else claim this hash" question, from
      * a repository with no other tags at all. Answering "unshared" there would delete a sidecar every alias still
      * needs, on a store hiccup. So the scan validates itself against a key it already knows is there: it must have
-     * been handed {@code own}, the very tag pointer this eviction read a moment ago. A descent that did not deliver it
+     * been handed {@code witness}, which this removal read a moment ago. A descent that did not deliver it
      * enumerated something other than the live tag space and is refused. The check is conservative in the safe
      * direction only - a tag pointer that also carries child keys is not a leaf, so it is not delivered, and this
      * simply keeps the sidecar.
      */
-    private static boolean sharedByAnotherTag(String own, String hex, ArtifactStore store) {
+    private static boolean sharedByAnotherTag(String witness, String hex, ArtifactStore store) {
         boolean[] sawOwn = {false};
         try {
             String cursor = null;
             while (true) {
                 Traversal.Result result = ALIASES.walk(store, "oci", cursor, leaf -> {
-                    if (leaf.equals(own)) {
+                    if (leaf.equals(witness)) {
                         sawOwn[0] = true;       // the liveness check: this descent really did reach the tag space
                         return;
                     }
@@ -276,11 +307,11 @@ public final class OciBlobLayout implements RepositoryFormat, BlobLayout {
         } catch (SharedAlias _) {
             return true;
         } catch (IOException | RuntimeException unreadable) {
-            return withheld(own, hex, "the tag-space descent failed: " + unreadable);
+            return withheld(witness, hex, "the tag-space descent failed: " + unreadable);
         }
-        return sawOwn[0] ? false : withheld(own, hex, "the tag-space descent never delivered that tag pointer itself, "
-                + "so it did not enumerate the live tag space (a listing that degraded to empty reads exactly like a "
-                + "repository with no other tags)");
+        return sawOwn[0] ? false : withheld(witness, hex, "the tag-space descent never delivered " + witness
+                + " itself, so it did not enumerate the live tag space (a listing that degraded to empty reads exactly "
+                + "like a repository with no other tags)");
     }
 
     /** Keep the sidecar and say why - the one place the guard's fail-closed degrade is recorded, so "retained rather

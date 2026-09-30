@@ -49,7 +49,9 @@ import build.jenesis.repository.store.PublicationObserver;
  * <h2>What it costs</h2>
  *
  * It runs only when the published path is signature material some installed format claims - a {@code .asc}, not a jar -
- * so an ordinary publish pays one {@code covers} call per signature-declaring format and nothing else. When it does
+ * so an ordinary publish pays one {@code covers} call per signature-declaring format and nothing else, except where a
+ * format's material names what it covers in its own bytes: an OCI manifest's head is read to learn whether it is a
+ * referrer carrying a signature. When it does
  * fire it re-reads one artifact, streaming: the signature is a few hundred bytes and the body is fed through a digest
  * in bounded chunks, so a multi-gigabyte package costs no heap. It writes one section of one version document.
  *
@@ -72,9 +74,16 @@ public final class SignatureCompletionObserver implements PublicationObserver {
         // an artifact's signature is simply never re-derived. That is the ecosystem fan-out rule this codebase
         // states for advisory lookups - ask all of them and union the answers.
         Set<String> candidates = new LinkedHashSet<>();
+        // The published bytes, opened only by a format whose material names what it covers in its own bytes - an OCI
+        // referrer - and only for a path its path-only answer leaves open.
+        ArtifactSignatures.Signed published = () -> {
+            Optional<String> hash = artifact.hash() != null ? Optional.of(artifact.hash())
+                    : storedHash(artifact.path(), store);
+            return hash.isPresent() ? new Blobs(store).open(hash.get()) : InputStream.nullInputStream();
+        };
         for (RepositoryFormat installed : RepositoryFormat.installed()) {
             if (installed instanceof ArtifactSignatures format) {
-                format.covers(artifact.path()).ifPresent(candidates::add);
+                format.covers(artifact.path(), published).ifPresent(candidates::add);
             }
         }
         if (candidates.isEmpty()) {

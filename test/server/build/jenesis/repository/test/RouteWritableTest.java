@@ -142,6 +142,42 @@ public class RouteWritableTest {
     }
 
     @Test
+    void a_refused_write_is_answered_in_the_claiming_format_s_own_dialect() throws Exception {
+        // A format that claims the path and speaks an error dialect of its own: the refusal is handed to it rather
+        // than answered bare, which is how a registry's DELETE on a proxy repository answers UNSUPPORTED.
+        List<Integer> refused = new ArrayList<>();
+        RepositoryFormat claiming = new RepositoryFormat() {
+            @Override
+            public String name() {
+                return "nothing";
+            }
+
+            @Override
+            public boolean handles(String path) {
+                return true;
+            }
+
+            @Override
+            public void serve(FormatExchange exchange, ArtifactStore store) {
+                throw new AssertionError("a refused write never reaches the format's serve");
+            }
+
+            @Override
+            public void refuse(FormatExchange exchange, int status) {
+                refused.add(status);
+            }
+        };
+        RepositoryRouting.Route route = new RepositoryRouting.Route("default", "default", store, "/x", false);
+        RepositoryController controller = new RepositoryController(new FixedRoute(route),
+                new FormatDispatcher(List.of(claiming), Map.of(), ProxyFormat.Fetcher.NONE), List.of(),
+                ProxyFormat.Fetcher.NONE);
+        Status status = new Status();
+        controller.handle(request("DELETE"), response(status));
+        assertThat(refused).containsExactly(405);
+        assertThat(status.value).as("the format answered it, the edge set nothing of its own").isEqualTo(-1);
+    }
+
+    @Test
     void a_read_to_a_non_writable_route_is_not_gated() throws Exception {
         Status status = new Status();
         controller(false).handle(request("GET"), response(status));

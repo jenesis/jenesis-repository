@@ -36,6 +36,8 @@ import org.springframework.context.annotation.Condition;
 import org.springframework.context.annotation.ConditionContext;
 import org.springframework.context.annotation.Conditional;
 import org.springframework.core.env.Environment;
+import org.springframework.security.authorization.AuthorizationManager;
+import org.springframework.security.web.access.intercept.RequestAuthorizationContext;
 import org.springframework.core.type.AnnotatedTypeMetadata;
 import io.micrometer.observation.ObservationRegistry;
 
@@ -537,6 +539,9 @@ public class RepositoryAutoConfiguration {
                                                      ArtifactStore store,
                                                      RoutedServing routed,
                                                      ObjectProvider<AuditTrail> audit,
+                                                     @Qualifier("repositoryAuthorizationManager")
+                                                     ObjectProvider<AuthorizationManager<RequestAuthorizationContext>>
+                                                             authorization,
                                                      Environment environment) {
         // A format reads a runtime toggle off the exchange (the Maven metadata computation opt-in); resolve the bare
         // setting key against the environment under the shared jenrepo.* prefix, into which a stored
@@ -545,7 +550,7 @@ public class RepositoryAutoConfiguration {
         // serving seam (NONE here, a router in a multi-repository distribution) drives a read of a proxy/group repo.
         return new RepositoryController(routing, dispatcher, importSources, fetcher, batch,
                 key -> environment.getProperty(Features.key(key)), store, routed, EdgeHooks.NONE,
-                audit.getIfAvailable(() -> AuditTrail.NONE));
+                audit.getIfAvailable(() -> AuditTrail.NONE), new AuthorizedReads(authorization::getIfAvailable));
     }
 
     /**

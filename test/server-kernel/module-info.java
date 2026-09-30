@@ -49,6 +49,9 @@ open module build.jenesis.repository.server.kernel.contract.test {
     requires build.jenesis.repository.format.maven;
     requires build.jenesis.repository.format.oci.inventory;
     requires build.jenesis.repository.walk;
+    // The walk the resolved collector runs over, for the OCI delete's leg that proves the collector reclaims what a
+    // removal released and keeps what another image still carries.
+    requires build.jenesis.repository.walk.store;
     requires jakarta.servlet;
     requires micrometer.core;
     requires org.slf4j;

@@ -3,6 +3,7 @@ package build.jenesis.repository.format.oci.test;
 import module java.base;
 
 import build.jenesis.repository.format.FormatExchange;
+import build.jenesis.repository.store.ArtifactStore;
 
 /**
  * An in-memory {@link FormatExchange} for driving a format's {@code handle}/{@code proxy} without an HTTP server: it
@@ -21,6 +22,8 @@ final class FakeExchange implements FormatExchange {
     private final Map<String, String> responseHeaders = new LinkedHashMap<>();
     private final ByteArrayOutputStream responseBody = new ByteArrayOutputStream();
     private int status = -1;
+    private Function<String, Optional<ArtifactStore>> readable = _ -> Optional.empty();
+    private final List<String> audited = new ArrayList<>();
 
     FakeExchange(String method, String path) {
         this(method, path, new byte[0], Map.of(), Map.of());
@@ -73,6 +76,27 @@ final class FakeExchange implements FormatExchange {
     public OutputStream respond(int status, long contentLength) {
         this.status = status;
         return responseBody;
+    }
+
+    /** Answer {@link #readable} with {@code readable}, as an edge would for the caller it serves. */
+    FakeExchange readable(Function<String, Optional<ArtifactStore>> readable) {
+        this.readable = readable;
+        return this;
+    }
+
+    @Override
+    public Optional<ArtifactStore> readable(String path) {
+        return readable.apply(path);
+    }
+
+    @Override
+    public void audit(String action, String target) {
+        audited.add(action + " " + target);
+    }
+
+    /** What the format recorded on the audit trail, as {@code "<action> <target>"}. */
+    List<String> audited() {
+        return audited;
     }
 
     int status() {

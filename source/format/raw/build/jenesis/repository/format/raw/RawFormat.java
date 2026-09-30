@@ -1,6 +1,7 @@
 package build.jenesis.repository.format.raw;
 
 import module java.base;
+import build.jenesis.repository.audit.AuditActions;
 import build.jenesis.repository.store.ArtifactDescriptor;
 import build.jenesis.repository.store.Publication;
 import build.jenesis.repository.store.ServableNames;
@@ -66,6 +67,7 @@ public final class RawFormat implements RepositoryFormat, ProxyFormat, Repositor
             case "DELETE" -> {
                 publication.unpublish(path);
                 new RawListings(store).refresh(path);
+                exchange.audit(AuditActions.ARTIFACT_DELETE, path);
                 exchange.respond(204);
             }
             // HEAD must answer exactly what a GET would: located() applies the withheld (quarantine/retraction)

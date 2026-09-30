@@ -3,16 +3,18 @@ package build.jenesis.repository.format.oci;
 import module java.base;
 import module org.slf4j;
 
+import build.jenesis.repository.format.Checksums;
 import build.jenesis.repository.store.ArtifactDescriptor;
 import build.jenesis.repository.store.ArtifactStore;
 import build.jenesis.repository.store.ListingObserver;
 import build.jenesis.repository.store.StoredListing;
 
 /**
- * Keeps the OCI {@linkplain OciListings stored tag lists and catalog} in step with the transitions that happen off
- * the push path - a hold on a pushed manifest and its release, a removal - by re-deciding the tag's membership (or
- * every tag of the image, for a manifest addressed by digest). A transition that names no image rebuilds every OCI
- * listing in place.
+ * Keeps the OCI {@linkplain OciListings stored tag lists and catalog} and the {@linkplain OciReferrers referrers
+ * indexes} in step with the transitions that happen off the push path - a hold on a pushed manifest and its release, a
+ * removal - by re-deciding the tag's membership (or every tag of the image, for a manifest addressed by digest) and,
+ * for a referrer, its entry in its subject's index. A transition that names no image rebuilds every OCI listing in
+ * place.
  */
 public final class OciListingObserver implements ListingObserver {
 
@@ -43,6 +45,15 @@ public final class OciListingObserver implements ListingObserver {
             reference = subject.path().substring(manifests + "/manifests/".length());
         }
         if (name != null) {
+            if (OciFormat.isImageName(name)) {
+                // The manifest a hold, a release or a removal is about, when it can be named: by digest, or by the
+                // hash a removed pointer named. A referrer among them leaves or rejoins its subject's index.
+                String hex = reference != null && reference.startsWith("sha256:") ? OciFormat.hex(reference)
+                        : subject.hash();
+                if (hex != null && Checksums.isSha256Hex(hex)) {
+                    new OciReferrers(store).refresh(name, hex);
+                }
+            }
             if (store.isEmpty("oci/" + name + "/tags")) {
                 return;
             }

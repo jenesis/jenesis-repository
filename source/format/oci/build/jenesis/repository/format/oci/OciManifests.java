@@ -9,7 +9,6 @@ import build.jenesis.repository.store.Publication;
 import build.jenesis.repository.store.PublishInterceptor;
 import build.jenesis.repository.store.ServableNames;
 import build.jenesis.repository.store.Withheld;
-import tools.jackson.databind.json.JsonMapper;
 
 /**
  * The OCI manifest choke point: the one place a manifest write - a {@code docker push} PUT, a pull-through
@@ -49,8 +48,6 @@ final class OciManifests {
 
     private static final String OCI_MANIFEST = "application/vnd.oci.image.manifest.v1+json";
 
-    private static final JsonMapper JSON = JsonMapper.builder().build();
-
     private OciManifests() {
     }
 
@@ -70,7 +67,7 @@ final class OciManifests {
      *  the manifest was stored under ({@code blobs/<hex>}) - present whatever the verdict, since {@code screen} stores
      *  the bytes content-addressed before it gates. A push maps the disposition to a protocol code; an import and a
      *  proxy have no client response and only need the layout the helper already applied. */
-    record Ingested(PublishInterceptor.Disposition disposition, String hex) {
+    record Ingested(PublishInterceptor.Disposition disposition, String hex, Optional<String> subject) {
     }
 
     /**
@@ -92,9 +89,12 @@ final class OciManifests {
         if (content.length > OciFormat.MAX_MANIFEST) {
             throw new InvalidManifest("manifest exceeds the " + OciFormat.MAX_MANIFEST + "-byte limit");
         }
-        if (!parsesAsJsonObject(content)) {
+        Optional<OciReferrers.Manifest> parsed = OciReferrers.Manifest.of(content);
+        if (parsed.isEmpty()) {
             throw new InvalidManifest("manifest is not a parseable JSON object");
         }
+        OciReferrers.Manifest manifest = parsed.get();
+        String servedType = mediaTypeOrNull == null ? OCI_MANIFEST : mediaTypeOrNull;
         String path = "/v2/" + name + "/manifests/" + reference;
         // The neutral descriptor other formats build for the edge: ecosystem oci, coordinate the image name, version
         // the reference, path the request path - what a deny-list interceptor keys on and a metric/observer records.
@@ -111,8 +111,7 @@ final class OciManifests {
                 accepted -> {
                     // The media-type sidecar is a parse result, not a serving surface - written first, through the
                     // sidecar seam, which refuses a publish/ key so a pointer can never be smuggled in ahead of it.
-                    accepted.sidecar("oci/types/" + accepted.hash(), (mediaTypeOrNull == null
-                            ? OCI_MANIFEST : mediaTypeOrNull).getBytes(StandardCharsets.UTF_8));
+                    accepted.sidecar("oci/types/" + accepted.hash(), servedType.getBytes(StandardCharsets.UTF_8));
                     return Publication.Visibility
                             .through((hex, _, target) -> {
                                 if (!reference.startsWith("sha256:")) {
@@ -122,7 +121,11 @@ final class OciManifests {
                                     new OciListings(target).refresh(name, reference);
                                 }
                             })
-                            .andThrough((hex, _, target) -> clearStaleHold(target, path, hex, descriptor));
+                            .andThrough((hex, _, target) -> clearStaleHold(target, path, hex, descriptor))
+                            // A referrer joins its subject's index once it serves, and before the observers hear of
+                            // it: the signature completion re-reads the subject through that index.
+                            .andThrough((hex, _, target) -> new OciReferrers(target)
+                                    .record(name, hex, content, manifest, servedType, true));
                 });
         String hex = commit.hash();
         if (commit.disposition() != PublishInterceptor.Disposition.ACCEPT) {
@@ -131,8 +134,14 @@ final class OciManifests {
             // withheld/<hex> write) joins the OCI choke point to the withhold-change feed and the one marker idiom;
             // the disposition body is dropped (marker presence is the signal, never read). No sidecar, no tag link.
             Withheld.mark(store, hex, descriptor);
+            if (commit.disposition() == PublishInterceptor.Disposition.QUARANTINE) {
+                // A held referrer is recorded but not listed: a reviewer's release lists it, a discard never does.
+                new OciReferrers(store).record(name, hex, content, manifest, servedType, false);
+            }
         }
-        return new Ingested(commit.disposition(), hex);
+        return new Ingested(commit.disposition(), hex,
+                commit.disposition() == PublishInterceptor.Disposition.REJECT
+                        ? Optional.empty() : manifest.subject());
     }
 
     /**
@@ -213,14 +222,4 @@ final class OciManifests {
         }
     }
 
-    /** Whether the bytes parse as a JSON object - the shape every OCI manifest and image index takes, the shape whose
-     *  {@code config}/{@code layers}/{@code manifests} a hold's layer enumeration reads. A parse failure or a non-object
-     *  top level (array/scalar) is contained here rather than thrown as a raw Jackson {@code RuntimeException}. */
-    private static boolean parsesAsJsonObject(byte[] content) {
-        try {
-            return JSON.readTree(new String(content, StandardCharsets.UTF_8)).isObject();
-        } catch (RuntimeException notJson) {
-            return false;
-        }
-    }
 }

@@ -24,6 +24,7 @@ public final class ServletFormatExchange implements FormatExchange {
     private final UnaryOperator<String> settings;
     private final String mount;
     private final BiConsumer<String, String> audit;
+    private final Function<String, Optional<ArtifactStore>> readable;
 
     public ServletFormatExchange(HttpServletRequest request, HttpServletResponse response, String path) {
         this(request, response, path, key -> null);
@@ -54,17 +55,31 @@ public final class ServletFormatExchange implements FormatExchange {
      *  the request's tenant and caller. */
     public ServletFormatExchange(HttpServletRequest request, HttpServletResponse response, String path,
                                  UnaryOperator<String> settings, String mount, BiConsumer<String, String> audit) {
+        this(request, response, path, settings, mount, audit, _ -> Optional.empty());
+    }
+
+    /** As above, answering {@link #readable} with {@code readable}, which the edge binds to the request's tenant and
+     *  caller and decides as it would decide a read of the path. */
+    public ServletFormatExchange(HttpServletRequest request, HttpServletResponse response, String path,
+                                 UnaryOperator<String> settings, String mount, BiConsumer<String, String> audit,
+                                 Function<String, Optional<ArtifactStore>> readable) {
         this.request = request;
         this.response = response;
         this.path = path;
         this.settings = settings;
         this.mount = mount;
         this.audit = audit;
+        this.readable = readable;
     }
 
     @Override
     public void audit(String action, String target) {
         audit.accept(action, target);
+    }
+
+    @Override
+    public Optional<ArtifactStore> readable(String path) {
+        return readable.apply(path);
     }
 
     @Override

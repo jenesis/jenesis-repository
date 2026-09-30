@@ -18,4 +18,5 @@ module build.jenesis.repository.cleanup {
     requires build.jenesis.repository.store;
     exports build.jenesis.repository.cleanup;
     uses build.jenesis.repository.cleanup.RetentionProvider;
+    uses build.jenesis.repository.cleanup.VersionRemoval;
 }

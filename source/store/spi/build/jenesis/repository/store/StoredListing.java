@@ -2485,6 +2485,17 @@ public final class StoredListing {
         return framed;
     }
 
+    /**
+     * The document a listing's stored bytes hold - for a reader handed those bytes by a bounded point read of
+     * {@link #key} rather than through {@link #open}, which is how a format reads a listing of its own through a
+     * caller's reader that knows nothing of listings.
+     *
+     * @throws IOException when the bytes are not a listing document
+     */
+    public static Document parse(byte[] stored) throws IOException {
+        return parse(stored, "a listing document");
+    }
+
     private static Document parse(byte[] framed, String key) throws IOException {
         int end = headerEnd(framed, key);
         Header header = header(new String(framed, 0, end, StandardCharsets.US_ASCII), key);

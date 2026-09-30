@@ -3,15 +3,17 @@ package build.jenesis.repository.server;
 import module java.base;
 
 import build.jenesis.repository.format.FormatExchange;
+import build.jenesis.repository.store.ArtifactStore;
 import build.jenesis.repository.store.Publication;
 
 /**
  * A {@link FormatExchange} that wraps a real request/response exchange but restreams its request body from an
  * already-stored source instead of the socket, so an ingress edge can hand an accepted blob back to the claiming
  * {@link build.jenesis.repository.format.RepositoryFormat} for pure layout. Everything except the body - the method,
- * path, query, headers, settings, and the whole response side (status, headers, streamed body, range/conditional
- * handling) - delegates to the wrapped exchange, so the format writes its response straight to the original client
- * exactly as it would on a direct dispatch; only {@link #requestStream()} is redirected to the stored blob.
+ * path, query, headers, settings, the audit trail, the reads made on the caller's behalf, and the whole response
+ * side (status, headers, streamed body, range/conditional handling) - delegates to the wrapped exchange, so the
+ * format writes its response straight to the original client exactly as it would on a direct dispatch; only
+ * {@link #requestStream()} is redirected to the stored blob.
  *
  * <p>This is the core, edition-neutral restream exchange the edge screening choreography builds on: after
  * {@link build.jenesis.repository.store.Publication#screen} accepts a body, the edge hands the format a
@@ -89,5 +91,15 @@ public final class RestreamExchange implements FormatExchange {
     @Override
     public OutputStream respond(int status, long contentLength) throws IOException {
         return delegate.respond(status, contentLength);
+    }
+
+    @Override
+    public void audit(String action, String target) {
+        delegate.audit(action, target);
+    }
+
+    @Override
+    public Optional<ArtifactStore> readable(String path) {
+        return delegate.readable(path);
     }
 }

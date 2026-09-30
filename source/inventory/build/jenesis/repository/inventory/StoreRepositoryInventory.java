@@ -868,6 +868,23 @@ public final class StoreRepositoryInventory implements RepositoryInventory {
         eviction.evict(release);
     }
 
+    /**
+     * Remove a version a client asked to remove, through {@link #evict}'s one body: the same pointers unpublished,
+     * the same observers told, the same rows reaped, the blobs left to the collector. Only a version holding no
+     * pointer of its own gives up more - the record its layout serves it through ({@link BlobLayout#removalKeys}) -
+     * because a client naming it is asking for exactly that. Refused like {@link #evict} when no installed format
+     * can place the ecosystem.
+     */
+    public void remove(Release release) throws IOException {
+        eviction.remove(release);
+    }
+
+    /** Whether an operator pinned the version: its {@code pinned/} marker, read whether or not the version still
+     *  has a published row. */
+    public boolean pinned(String ecosystem, String coordinate, String version) throws IOException {
+        return store.exists(pinnedKey(ecosystem, coordinate, version));
+    }
+
     /** Reclaim a re-heatable cached fallback blob under quota/disk pressure while retaining its {@code origin} and
      *  {@code verdict} meta-document sections: the bytes are discarded (pointers
      *  unpublished, the blob garbage-collected) but the audit records survive, so a pull-through can re-heat the

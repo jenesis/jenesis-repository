@@ -286,6 +286,15 @@ public interface RepositoryFormat extends IconContributor {
     }
 
     /**
+     * Answer a request the edge refuses before this format is offered it - a write to a repository that takes none,
+     * a proxy or a group view, is a {@code 405} - in this format's own error dialect, so a client that reads a
+     * refusal's body is told why in the shape its protocol defines. The default answers the bare status.
+     */
+    default void refuse(FormatExchange exchange, int status) throws IOException {
+        exchange.respond(status);
+    }
+
+    /**
      * Request paths this format suggests seeding a fresh, empty repository with, so an evaluator has real data to
      * look at - browse rows, a proxied artifact, and (when a coordinate is old and benign-but-vulnerable) a lit-up
      * vulnerability and quarantine surface. Each entry is a plain request path this format {@link #handles claims}

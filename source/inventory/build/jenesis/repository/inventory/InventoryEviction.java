@@ -101,6 +101,25 @@ final class InventoryEviction {
     }
 
     void evict(Release release) throws IOException {
+        evict(release, BlobLayout::blobKeys);
+    }
+
+    /**
+     * Remove a version a client asked to remove: the eviction, taking the keys the layout gives up for a client's
+     * removal ({@link BlobLayout#removalKeys}) rather than for a retention eviction, which differ only for a
+     * version that holds no pointer of its own.
+     */
+    void remove(Release release) throws IOException {
+        evict(release, BlobLayout::removalKeys);
+    }
+
+    /** The keys a blobs-namespace layout gives up for one coordinate version. */
+    @FunctionalInterface
+    private interface Keys {
+        List<String> of(BlobLayout layout, String coordinate, String version, ArtifactStore store) throws IOException;
+    }
+
+    private void evict(Release release, Keys keys) throws IOException {
         // Nothing is destroyed unless the pointers can be found: the layout-driven unpublish legs below no-op for an
         // absent format, and every delete under them would still run unconditionally.
         if (!pointersEnumerable(release.ecosystem(), release.coordinate(), release.version())) {
@@ -145,7 +164,7 @@ final class InventoryEviction {
         // descriptor's path the raw store key (the walk's convention for a pointer outside publish/) and its blob
         // identity read off the pointer before the delete - so npm/PyPI/Cargo removals are observed like any other.
         for (BlobLayout blobLayout : StoreRepositoryInventory.blobLayoutsFor(release.ecosystem())) {
-            for (String key : blobLayout.blobKeys(release.coordinate(), release.version(), store)) {
+            for (String key : keys.of(blobLayout, release.coordinate(), release.version(), store)) {
                 Optional<ArtifactStore.Versioned> pointer = store.readVersioned(key);
                 if (pointer.isPresent()) {
                     store.delete(key);

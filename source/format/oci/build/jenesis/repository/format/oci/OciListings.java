@@ -344,10 +344,16 @@ final class OciListings {
         }
     }
 
-    /** Regenerate the listing at this key if it is an OCI one: an image's tag list or the catalog. */
+    /** Regenerate the listing at this key if it is an OCI one: an image's tag list, the catalog, or a manifest's
+     *  referrers index. */
     boolean rebuild(String listing) throws IOException {
         if (listing.equals(CATALOG)) {
             StoredListing.rebuild(store, catalogSpec());
+            return true;
+        }
+        Optional<String[]> referrers = OciReferrers.parse(listing);
+        if (referrers.isPresent()) {
+            StoredListing.rebuild(store, new OciReferrers(store).spec(referrers.get()[0], referrers.get()[1]));
             return true;
         }
         if (listing.startsWith("oci/") && listing.endsWith("/tags/list")) {

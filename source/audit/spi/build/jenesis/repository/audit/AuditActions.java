@@ -104,6 +104,9 @@ public final class AuditActions {
     /** A version's lifecycle mark cleared. */
     public static final String LIFECYCLE_CLEAR = action("lifecycle.clear");
 
+    /** A version removed by the ecosystem client's own delete - a registry's manifest or tag {@code DELETE}. */
+    public static final String ARTIFACT_DELETE = action("artifact.delete");
+
     /** A format's proxy upstream set. */
     public static final String UPSTREAM_SET = action("upstream.set");
 

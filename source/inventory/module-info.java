@@ -45,6 +45,8 @@ module build.jenesis.repository.inventory {
     provides build.jenesis.repository.maintenance.StorageNamespace
             with build.jenesis.repository.inventory.InventoryStorageNamespace,
                     build.jenesis.repository.inventory.FormatStorageNamespaces;
+    provides build.jenesis.repository.cleanup.VersionRemoval
+            with build.jenesis.repository.inventory.StoreVersionRemoval;
     provides build.jenesis.repository.store.PublicationObserver
             with build.jenesis.repository.inventory.SubtreeSizePublicationObserver,
                     build.jenesis.repository.inventory.CachedHoldingObserver;

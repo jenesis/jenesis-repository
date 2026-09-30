@@ -36,6 +36,9 @@ import build.jenesis.repository.compliance.ComplianceGate;
 import build.jenesis.repository.inventory.DownloadTracker;
 import build.jenesis.repository.settings.PrivateHostGuard;
 import org.springframework.beans.factory.ObjectProvider;
+import org.springframework.beans.factory.annotation.Qualifier;
+import org.springframework.security.authorization.AuthorizationManager;
+import org.springframework.security.web.access.intercept.RequestAuthorizationContext;
 import build.jenesis.repository.gateway.SpoolStore;
 import io.micrometer.observation.ObservationRegistry;
 import build.jenesis.repository.store.ArtifactStore;
@@ -297,6 +300,10 @@ public class ServingConfig {
                                                                                   RoutedServing routedServing,
                                                                                   DeployEdgeHooks deployEdgeHooks,
                                                                                   AuditTrail auditTrail,
+                                                                                  @Qualifier("repositoryAuthorizationManager")
+                                                                                  ObjectProvider<AuthorizationManager<
+                                                                                          RequestAuthorizationContext>>
+                                                                                          authorization,
                                                                                   Environment environment) {
         // The controller is the one serving AND writing surface now: reads and writes both dispatch
         // through the routing seam and the free ScreenedDispatch edge. Registered under the bean name
@@ -318,7 +325,8 @@ public class ServingConfig {
         // BatchIngestion.
         return new build.jenesis.repository.server.RepositoryController(routing, dispatcher, importSources,
                 upstreamFetcher, batchIngestion, Features.namespaced(environment::getProperty), null,
-                routedServing, deployEdgeHooks, auditTrail);
+                routedServing, deployEdgeHooks, auditTrail,
+                new build.jenesis.repository.server.AuthorizedReads(authorization::getIfAvailable));
     }
 
     @Bean

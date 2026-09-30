@@ -141,4 +141,18 @@ public interface FormatExchange {
      */
     default void audit(String action, String target) {
     }
+
+    /**
+     * The store of another repository of this request's tenant, for a read this request makes there on the caller's
+     * behalf - a registry's cross-repository blob mount - when the caller may read {@code path} and that repository
+     * holds the format this request is served by. {@code path} is the full request path a client would send to read
+     * it there, repository prefix included, so it is decided exactly as that read would be.
+     *
+     * <p>Empty when the caller may not read it, when the path names no repository of this tenant or one of another
+     * format, and on an exchange no edge wraps - one answer for all of them, so asking discloses nothing about what
+     * the caller may not read.
+     */
+    default Optional<build.jenesis.repository.store.ArtifactStore> readable(String path) {
+        return Optional.empty();
+    }
 }

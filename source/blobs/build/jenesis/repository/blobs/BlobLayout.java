@@ -124,6 +124,18 @@ public interface BlobLayout extends BlobRoots {
      *  when the coordinate version maps to no live pointer. */
     List<String> blobKeys(String coordinate, String version, ArtifactStore store) throws IOException;
 
+    /**
+     * The keys a removal a client asked for deletes for one coordinate version - {@link #blobKeys}, and for a
+     * version that holds no pointer of its own, the record that makes it servable at all. An OCI manifest a client
+     * deletes by digest is the case: nothing points at it, and what it asks to go is the media-type record the
+     * registry serves it through, which a retention eviction of the same row must never take because an image
+     * index a live tag serves may name that manifest. Screened and bounded exactly as {@link #blobKeys}; the default
+     * is {@link #blobKeys}.
+     */
+    default List<String> removalKeys(String coordinate, String version, ArtifactStore store) throws IOException {
+        return blobKeys(coordinate, version, store);
+    }
+
     /** The content hashes this format's blobs-namespace pointers for one coordinate version resolve to - the set a
      *  retroactive withhold marks under the {@code withheld/<hash>} convention, and the set a name-enumeration screen
      *  probes to hide a held version. The default resolves {@link #blobKeys} and keeps only the pointer bodies that are a
