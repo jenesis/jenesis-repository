@@ -1,6 +1,6 @@
 /**
  * The carrier: one launchable module whose {@code requires} closure is every free SPI implementation -
- * all twenty-five layouts, retention, staging, the scheduled walk, the settings and management APIs, the build cache
+ * all twenty-five layouts, retention, staging, the scheduled walk, search, the settings and management APIs, the build cache
  * for Jenesis builds, all four store backends
  * ({@code filesystem}, {@code s3}, {@code gcs}, {@code azure}), all five import connectors, the upstream HTTP
  * fetcher ({@code proxy}), the OIDC token exchange ({@code oidc}), the token-bucket rate limiter, the credential
@@ -126,6 +126,9 @@ open module build.jenesis.repository.bundle {
     requires build.jenesis.repository.index;
     requires build.jenesis.repository.index.web;
     requires build.jenesis.repository.downloads;
+    // Search: a lookup by name in every repository, and the full-text index for a repository that switches it on.
+    requires build.jenesis.repository.search.web;
+    requires build.jenesis.repository.search.lucene;
     // The settings and management APIs the CLI and the first-run guide speak to, and the console's deploy screen.
     requires build.jenesis.repository.config.web;
     requires build.jenesis.repository.management.web;

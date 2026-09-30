@@ -3,6 +3,7 @@ package build.jenesis.repository.ui.admin.test;
 import module java.base;
 import module org.junit.jupiter.api;
 import build.jenesis.repository.search.LicenseFacet;
+import build.jenesis.repository.search.SearchMode;
 import build.jenesis.repository.search.SearchQuery;
 import build.jenesis.repository.search.SearchQueryProvider;
 import build.jenesis.repository.store.ArtifactStore;
@@ -17,15 +18,21 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.tuple;
 
 /**
- * The console repository search routed through the installed search index, and the license inventory it backs.
- * When a {@link SearchQueryProvider} is present, {@link RepositoryBrowse#search} takes its match set from the index -
- * honouring {@code license:}/{@code category:} filter tokens the live substring scan cannot - and enriches each hit
- * with the ecosystem and browse folder joined from the release index; {@link RepositoryBrowse#licenses} rolls the
- * index's declared-license fields into the console's per-category and per-SPDX-id facet counts. With no provider (or an
- * index that has not been built) both degrade gracefully: search falls back to the substring scan, and the license
- * inventory reports itself not-indexed rather than showing a false clean bill.
+ * The console repository search in its two modes, and the licence inventory the full-text index backs. With a
+ * repository's full-text search on and its index answering, {@link RepositoryBrowse#search} takes its match set from
+ * the index - honouring the {@code license:}/{@code category:} filter tokens the licence inventory drills down with -
+ * led by the name lookup's hits for the same query, and places each hit in the browse tree;
+ * {@link RepositoryBrowse#licenses} rolls the index's facets into the console's per-category and per-SPDX-id counts.
+ * With it off, or its index not built, search is the lookup by name and the licence inventory reports itself
+ * not-indexed rather than showing a false clean bill.
  */
 public class RepositoryLicenseInventoryTest {
+
+    /** A repository that has asked for a full-text index. */
+    private static final UnaryOperator<String> FULL_TEXT = key -> SearchMode.SETTING.equals(key) ? "true" : null;
+
+    /** A repository with nothing set, which answers by name. */
+    private static final UnaryOperator<String> NOTHING_SET = key -> null;
 
     @TempDir
     Path root;
@@ -51,18 +58,23 @@ public class RepositoryLicenseInventoryTest {
         return new RepositoryBrowse(store, () -> "acme", ObservationRegistry.NOOP, search);
     }
 
+    private static List<String> coordinates(RepositoryBrowse.SearchPage page) {
+        return page.results().stream().map(RepositoryBrowse.SearchResult::coordinate).toList();
+    }
+
     @Test
-    void search_takes_its_match_set_from_the_index_enriched_from_the_release_index() throws IOException {
-        // The index returns tool; the substring "lib" would not have matched it - so tool among the results proves
-        // the index's match set drove the search, not a live scan. The hit is still enriched from the release index:
-        // ecosystem Maven and the browse folder the Maven layout places the coordinate at. lib is there as well, from
-        // the newest-releases window every search leads with, so what was just published is found before the index
-        // has caught up with it.
-        FakeSearch index = new FakeSearch(List.of("org.acme:tool:2.0"), List.of());
-        List<RepositoryBrowse.SearchResult> results = admin(Optional.of(index)).search("releases", "lib").results();
-        assertThat(results).extracting(RepositoryBrowse.SearchResult::coordinate)
-                .containsExactly("org.acme:lib", "org.acme:tool");
-        assertThat(results).filteredOn(hit -> hit.coordinate().equals("org.acme:tool")).singleElement()
+    void full_text_takes_its_match_set_from_the_index_led_by_the_name_lookup() throws IOException {
+        // The index returns tool for "org.acme:l", which no name starting with that would match - so tool among the
+        // results proves the index's match set drove the search. lib leads, from the name lookup every first page of a
+        // full-text answer starts with, so what was just published is found before the index has caught up with it.
+        FakeSearch index = new FakeSearch(List.of(SearchQuery.Hit.coordinate("Maven", "org.acme:tool", "2.0")),
+                List.of());
+        RepositoryBrowse.SearchPage page = admin(Optional.of(index)).search("releases", FULL_TEXT, "org.acme:l",
+                null);
+        assertThat(page.mode()).isEqualTo(SearchMode.FULL_TEXT);
+        assertThat(page.indexed()).isTrue();
+        assertThat(coordinates(page)).containsExactly("org.acme:lib", "org.acme:tool");
+        assertThat(page.results()).filteredOn(hit -> hit.coordinate().equals("org.acme:tool")).singleElement()
                 .satisfies(hit -> {
                     assertThat(hit.version()).isEqualTo("2.0");
                     assertThat(hit.ecosystem()).isEqualTo("Maven");
@@ -70,41 +82,46 @@ public class RepositoryLicenseInventoryTest {
                 });
         // The raw query and the tenant/repository scope reached the index unchanged, so the provider can cache and
         // filter on them.
-        assertThat(index.lastQuery).isEqualTo("lib");
+        assertThat(index.lastQuery).isEqualTo("org.acme:l");
         assertThat(index.lastScope).isEqualTo("acme/releases");
     }
 
     @Test
-    void search_passes_a_license_filter_token_to_the_index_the_substring_scan_could_not_honour() throws IOException {
-        // A category: filter token no coordinate string contains: the substring scan would match nothing, so a result
-        // of lib proves the token was passed to the index (which resolves it against the stored license fields) rather
-        // than filtered by the fall-back scan.
-        FakeSearch index = new FakeSearch(List.of("org.acme:lib:1.0"), List.of());
-        assertThat(admin(Optional.of(index)).search("releases", "category:permissive").results())
-                .extracting(RepositoryBrowse.SearchResult::coordinate).containsExactly("org.acme:lib");
+    void full_text_passes_the_licence_inventorys_filter_token_to_the_index() throws IOException {
+        // A category: filter token no coordinate name starts with: a lookup by name would find nothing, so lib proves
+        // the token reached the index, which resolves it against the stored licence fields.
+        FakeSearch index = new FakeSearch(List.of(SearchQuery.Hit.coordinate("Maven", "org.acme:lib", "1.0")),
+                List.of());
+        assertThat(coordinates(admin(Optional.of(index)).search("releases", FULL_TEXT, "category:permissive", null)))
+                .containsExactly("org.acme:lib");
         assertThat(index.lastQuery).isEqualTo("category:permissive");
     }
 
     @Test
-    void search_falls_back_to_the_substring_scan_when_the_index_has_no_usable_snapshot() throws IOException {
-        // The provider is installed but its index has not been built (search returns null): RepositoryBrowse falls back
-        // to the live substring scan, so "lib" matches the lib coordinate the scan finds - the absent page is the
-        // fall-through signal, not a present-but-empty page the scan would have filled.
-        FakeSearch index = new FakeSearch(null, null);
-        assertThat(admin(Optional.of(index)).search("releases", "lib").results())
-                .extracting(RepositoryBrowse.SearchResult::coordinate).containsExactly("org.acme:lib");
+    void full_text_answers_by_name_until_its_index_is_built() throws IOException {
+        // The index is installed and the repository asked for it, but it is not built (search answers empty): the
+        // name lookup answers meanwhile, and says so - an absent page, not a present-but-empty one.
+        RepositoryBrowse.SearchPage page = admin(Optional.of(new FakeSearch(null, null)))
+                .search("releases", FULL_TEXT, "org.acme:l", null);
+        assertThat(page.mode()).isEqualTo(SearchMode.FULL_TEXT);
+        assertThat(page.indexed()).isFalse();
+        assertThat(coordinates(page)).containsExactly("org.acme:lib");
     }
 
     @Test
-    void search_without_the_index_module_is_the_live_substring_scan() throws IOException {
-        // No provider at all: the search is the built-in substring scan over the published coordinates, and the console
-        // hides the license-inventory link because the facets need the index.
-        RepositoryBrowse admin = admin(Optional.empty());
-        assertThat(admin.searchIndexAvailable()).isFalse();
-        assertThat(admin.search("releases", "tool").results())
-                .extracting(RepositoryBrowse.SearchResult::coordinate).containsExactly("org.acme:tool");
-        assertThat(admin.search("releases", "").results()).as("empty query lists all")
-                .extracting(RepositoryBrowse.SearchResult::coordinate).containsExactly("org.acme:lib", "org.acme:tool");
+    void a_repository_with_nothing_set_looks_up_by_name_and_never_asks_the_index() throws IOException {
+        FakeSearch index = new FakeSearch(List.of(SearchQuery.Hit.coordinate("Maven", "org.acme:lib", "1.0")),
+                List.of());
+        RepositoryBrowse admin = admin(Optional.of(index));
+        RepositoryBrowse.SearchPage page = admin.search("releases", NOTHING_SET, "org.acme:t", null);
+        assertThat(page.mode()).isEqualTo(SearchMode.NAME);
+        assertThat(coordinates(page)).containsExactly("org.acme:tool");
+        assertThat(index.lastQuery).as("the index is not asked").isNull();
+        assertThat(coordinates(admin.search("releases", NOTHING_SET, "", null))).as("an empty query lists all")
+                .containsExactly("org.acme:lib", "org.acme:tool");
+        assertThat(coordinates(admin(Optional.empty()).search("releases", FULL_TEXT, "org.acme:t", null)))
+                .as("and a composition with no index answers by name whatever the setting asks")
+                .containsExactly("org.acme:tool");
     }
 
     @Test
@@ -116,9 +133,7 @@ public class RepositoryLicenseInventoryTest {
                 new LicenseFacet(LicenseFacet.CATEGORY, "strong-copyleft", 1),
                 new LicenseFacet(LicenseFacet.LICENSE, "Apache-2.0", 2),
                 new LicenseFacet(LicenseFacet.LICENSE, "GPL-3.0-only", 1)));
-        RepositoryBrowse admin = admin(Optional.of(index));
-        assertThat(admin.searchIndexAvailable()).isTrue();
-        RepositoryBrowse.LicenseInventory inventory = admin.licenses("releases");
+        RepositoryBrowse.LicenseInventory inventory = admin(Optional.of(index)).licenses("releases", FULL_TEXT);
         assertThat(inventory.indexed()).isTrue();
         assertThat(inventory.categories()).extracting(RepositoryBrowse.LicenseCount::value, RepositoryBrowse.LicenseCount::count)
                 .containsExactly(tuple("permissive", 3L), tuple("strong-copyleft", 1L));
@@ -127,19 +142,17 @@ public class RepositoryLicenseInventoryTest {
     }
 
     @Test
-    void licenses_reports_not_indexed_when_the_index_has_no_snapshot_or_the_module_is_absent() throws IOException {
-        // The provider is installed but the index is not built (licenses returns null): the inventory is reported
-        // not-indexed with empty facets - the module is present (so the link shows) but this repository has no facets
-        // yet, the same signal search gives.
-        RepositoryBrowse.LicenseInventory unbuilt = admin(Optional.of(new FakeSearch(null, null))).licenses("releases");
-        assertThat(unbuilt.indexed()).isFalse();
+    void licenses_report_not_indexed_while_full_text_is_off_unbuilt_or_absent() throws IOException {
+        FakeSearch built = new FakeSearch(List.of(), List.of(new LicenseFacet(LicenseFacet.CATEGORY, "permissive", 3)));
+        assertThat(admin(Optional.of(built)).licenses("releases", NOTHING_SET).indexed())
+                .as("off: the repository has no index to count its licences").isFalse();
+        RepositoryBrowse.LicenseInventory unbuilt = admin(Optional.of(new FakeSearch(null, null)))
+                .licenses("releases", FULL_TEXT);
+        assertThat(unbuilt.indexed()).as("on, not built yet").isFalse();
         assertThat(unbuilt.categories()).isEmpty();
         assertThat(unbuilt.licenses()).isEmpty();
-        // No provider at all: also not-indexed, and the link is hidden.
-        RepositoryBrowse.LicenseInventory absent = admin(Optional.empty()).licenses("releases");
-        assertThat(absent.indexed()).isFalse();
-        assertThat(absent.categories()).isEmpty();
-        assertThat(absent.licenses()).isEmpty();
+        assertThat(admin(Optional.empty()).licenses("releases", FULL_TEXT).indexed()).as("no index installed")
+                .isFalse();
     }
 
     /** A canned search index for the test: it returns a fixed match set for {@link #search} and fixed facets for
@@ -148,12 +161,12 @@ public class RepositoryLicenseInventoryTest {
      *  them through unchanged. */
     private static final class FakeSearch implements SearchQueryProvider, SearchQuery {
 
-        private final List<String> matches;
+        private final List<SearchQuery.Hit> matches;
         private final List<LicenseFacet> facets;
         private String lastQuery;
         private String lastScope;
 
-        FakeSearch(List<String> matches, List<LicenseFacet> facets) {
+        FakeSearch(List<SearchQuery.Hit> matches, List<LicenseFacet> facets) {
             this.matches = matches;
             this.facets = facets;
         }

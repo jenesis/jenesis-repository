@@ -1,0 +1,75 @@
+<!DOCTYPE html>
+<!--
+  licenses.html — the per-repository license inventory: facet counts per license category and per resolved SPDX id,
+  counted by the repository's full-text index (RepositoryBrowse.licenses). Each row drills down through the browse
+  search with a category:/license: filter token, so a count is a live link into the coordinates behind it. The counts
+  are the index's, so the screen reports itself not-indexed (rather than scanning every artifact's metadata on the
+  request path) while the repository's full-text search is off or its index not built - as /api/licenses does.
+-->
+<html lang="en" xmlns:th="http://www.thymeleaf.org">
+<head th:replace="~{fragments :: head('Licenses')}"></head>
+<body>
+<header th:replace="~{fragments :: nav}"></header>
+<main id="main">
+    <div th:replace="~{fragments :: messages}"></div>
+    <th:block th:replace="~{base :: repositoryHeader('Licenses', null, null)}"></th:block>
+
+    <p th:unless="${inventory.indexed()}">
+        The license inventory is counted by this repository's full-text index, so it needs full-text search switched
+        on in the repository's <a th:href="@{/ui/repositories/{repo}/settings(repo=${repo})}">settings</a>, and
+        appears once the index is built.
+    </p>
+
+    <th:block th:if="${inventory.indexed()}">
+        <th:block th:if="${inventory.categories().isEmpty() and inventory.licenses().isEmpty()}">
+            <div th:replace="~{base :: empty('No declared licenses across this repository&rsquo;s indexed coordinates.')}"></div>
+        </th:block>
+
+        <article th:unless="${inventory.categories().isEmpty()}">
+            <h2>By category</h2>
+            <p><small>The coarse license class an artifact's declared licenses resolve to. Follow a row to the
+                coordinates carrying it.</small></p>
+            <figure>
+                <table class="app-list">
+                    <thead>
+                    <tr>
+                        <th scope="col">Category</th>
+                        <th scope="col" class="app-list__num">Coordinates</th>
+                    </tr>
+                    </thead>
+                    <tbody>
+                    <tr th:each="c : ${inventory.categories()}">
+                        <td><a th:href="@{/ui/repositories/{repo}/browse(repo=${repo},q='category:' + ${c.value()})}"
+                               th:text="${c.value()}">permissive</a></td>
+                        <td class="app-list__num" th:text="${c.count()}">0</td>
+                    </tr>
+                    </tbody>
+                </table>
+            </figure>
+        </article>
+
+        <article th:unless="${inventory.licenses().isEmpty()}">
+            <h2>By license</h2>
+            <p><small>The resolved SPDX id an artifact declares. Follow a row to the coordinates carrying it.</small></p>
+            <figure>
+                <table class="app-list">
+                    <thead>
+                    <tr>
+                        <th scope="col">SPDX id</th>
+                        <th scope="col" class="app-list__num">Coordinates</th>
+                    </tr>
+                    </thead>
+                    <tbody>
+                    <tr th:each="l : ${inventory.licenses()}">
+                        <td><a th:href="@{/ui/repositories/{repo}/browse(repo=${repo},q='license:' + ${l.value()})}"
+                               th:text="${l.value()}">Apache-2.0</a></td>
+                        <td class="app-list__num" th:text="${l.count()}">0</td>
+                    </tr>
+                    </tbody>
+                </table>
+            </figure>
+        </article>
+    </th:block>
+</main>
+</body>
+</html>

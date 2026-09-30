@@ -2,6 +2,7 @@ package build.jenesis.repository.inventory.test;
 
 import module java.base;
 
+import build.jenesis.repository.inventory.AboutSection;
 import build.jenesis.repository.inventory.LicenseInventory;
 import build.jenesis.repository.inventory.OriginSection;
 import build.jenesis.repository.inventory.ProvenanceSection;
@@ -56,6 +57,7 @@ class PublishRecordingTest {
                 .origin("a".repeat(64))
                 .licenses(APACHE)
                 .provenance(true, "b".repeat(64))
+                .about(new AboutSection.About("A small library", List.of("tooling"), List.of("Ada Lovelace")))
                 .commit();
 
         String document = MetadataKey.version(ECO, COORD, "1.0");
@@ -66,6 +68,12 @@ class PublishRecordingTest {
         assertThat(metadata.section(ECO, COORD, "1.0", OriginSection.TAG)).as("the origin row").isPresent();
         assertThat(new LicenseInventory(store).read(ECO, COORD, "1.0")).as("the licences").contains(APACHE);
         assertThat(metadata.section(ECO, COORD, "1.0", ProvenanceSection.TAG)).as("the provenance summary").isPresent();
+        assertThat(inventory.searchable(ECO, COORD, "1.0")).as("what the manifest said, in the same write")
+                .hasValueSatisfying(searchable -> {
+                    assertThat(searchable.licenses()).contains(APACHE);
+                    assertThat(searchable.about()).contains(new AboutSection.About("A small library",
+                            List.of("tooling"), List.of("Ada Lovelace")));
+                });
     }
 
     @Test

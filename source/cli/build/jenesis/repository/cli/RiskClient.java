@@ -18,7 +18,8 @@ public final class RiskClient extends ClientCalls {
     }
 
     /** The declared-license inventory of a repository rolled into per-category and per-SPDX-id facet counts.
-     *  {@code indexed} is false when the search index is absent, so empty facets are not a clean bill. */
+     *  {@code indexed} is false while the repository's full-text index is off or not built, so empty facets are not a
+     *  clean bill. */
     public LicensesView licenses(String repo) throws IOException, InterruptedException {
         HttpResponse<String> response = send("GET", "/api/licenses?repo=" + enc(repo), null, null);
         require(response, 200, "read the license inventory of " + repo);

@@ -4,6 +4,7 @@ import module java.base;
 import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.json.JsonMapper;
 import build.jenesis.repository.compliance.ComplianceGate;
+import build.jenesis.repository.compliance.Maintainer;
 import build.jenesis.repository.compliance.ManifestSubjectBuilder;
 import build.jenesis.repository.compliance.QualityInspector;
 
@@ -54,6 +55,12 @@ public final class OciQualityInspector implements QualityInspector {
 
     /** The OCI image spec's licence annotation - an SPDX expression, declared by the publisher. */
     private static final String LICENSES = "org.opencontainers.image.licenses";
+
+    /** The OCI image spec's description annotation - what the publisher says the image is for. */
+    private static final String DESCRIPTION = "org.opencontainers.image.description";
+
+    /** The OCI image spec's authors annotation - whom the publisher credits. */
+    private static final String AUTHORS = "org.opencontainers.image.authors";
 
     private static final JsonMapper JSON = JsonMapper.builder().build();
 
@@ -119,7 +126,23 @@ public final class OciQualityInspector implements QualityInspector {
         }
         return ManifestSubjectBuilder.of(ECOSYSTEM)
                 .licenses(licences(content))
+                .about(annotation(content, DESCRIPTION), List.of(),
+                        Maintainer.person(annotation(content, AUTHORS)).map(Maintainer::name).stream().toList())
                 .subject(name, reference);
+    }
+
+    /** One annotation of the manifest as its publisher wrote it, or {@code null} where it carries none or does not
+     *  parse - an annotation is optional beside the coordinate the path yields. */
+    private static String annotation(byte[] manifest, String key) {
+        if (manifest == null || manifest.length == 0) {
+            return null;
+        }
+        try {
+            JsonNode value = JSON.readTree(manifest).path("annotations").path(key);
+            return value.isString() && !value.stringValue().isBlank() ? value.stringValue().trim() : null;
+        } catch (RuntimeException unreadable) {
+            return null;
+        }
     }
 
     /**

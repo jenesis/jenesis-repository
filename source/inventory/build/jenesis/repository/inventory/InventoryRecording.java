@@ -138,6 +138,9 @@ final class InventoryRecording {
             if (recording.dependencies != null) {
                 mutations.put(DependencySection.TAG, DependencySection.record(recording.dependencies, now));
             }
+            if (recording.about != null) {
+                mutations.put(AboutSection.TAG, AboutSection.record(recording.about, now));
+            }
             if (recording.provenanceVerified != null) {
                 mutations.put(ProvenanceSection.TAG,
                         ProvenanceSection.record(recording.provenanceVerified, recording.provenanceSha256, now));
@@ -326,6 +329,13 @@ final class InventoryRecording {
     Optional<List<DependencySection.Declared>> dependencies(String ecosystem, String coordinate, String version)
             throws IOException {
         return DependencySection.declared(metadata.section(ecosystem, coordinate, version, DependencySection.TAG));
+    }
+
+    /** What a version's document records for a full-text index - see {@link StoreRepositoryInventory#searchable}. */
+    Optional<StoreRepositoryInventory.Searchable> searchable(String ecosystem, String coordinate, String version)
+            throws IOException {
+        return metadata.read(ecosystem, coordinate, version).map(document -> new StoreRepositoryInventory.Searchable(
+                declaredIn(document), AboutSection.about(document.section(AboutSection.TAG))));
     }
 
     /** When a coordinate version was recorded as published, or empty. */

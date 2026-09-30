@@ -332,6 +332,45 @@ final class InventoryReleases {
         return new StoreRepositoryInventory.ReleasePage(releases, more ? window.getLast() : null);
     }
 
+    /** The coordinates of an ecosystem whose names start with {@code prefix} - see
+     *  {@link StoreRepositoryInventory#coordinates(String, String, String, int)}. The listing is ordered, so the
+     *  matching names are one contiguous run starting at the prefix: the page starts just below it and stops at the
+     *  first name past the run. */
+    StoreRepositoryInventory.CoordinatePage coordinates(String ecosystem, String prefix, String after, int limit)
+            throws IOException {
+        if (limit <= 0) {
+            return new StoreRepositoryInventory.CoordinatePage(List.of(), null);
+        }
+        String root = StoreRepositoryInventory.publishedRoot() + "/" + ArtifactStore.segment(ecosystem);
+        String encoded = StoreRepositoryInventory.encode(prefix == null ? "" : prefix);
+        String start = after != null && !after.isEmpty() ? StoreRepositoryInventory.encode(after) : below(encoded);
+        List<String> names = new ArrayList<>();
+        store.page(root, start, ArtifactStore.oneMoreThan(limit), names::add);
+        List<String> matching = new ArrayList<>();
+        for (String name : names) {
+            if (!name.startsWith(encoded)) {
+                break;
+            }
+            matching.add(name);
+        }
+        boolean more = matching.size() > limit;
+        List<String> window = more ? matching.subList(0, limit) : matching;
+        List<String> coordinates = window.stream().map(StoreRepositoryInventory::decode).toList();
+        return new StoreRepositoryInventory.CoordinatePage(coordinates, more ? coordinates.getLast() : null);
+    }
+
+    /** The greatest key strictly below every name starting with {@code encoded}: the name with its last character
+     *  lowered by one and the highest character after it, so a page started after it begins at the first name of the
+     *  run rather than at every name sharing all but the last character. An encoded coordinate is ASCII, so the
+     *  highest character sorts after any of its characters in both the store's character order and its byte order. */
+    private static String below(String encoded) {
+        if (encoded.isEmpty()) {
+            return "";
+        }
+        char last = encoded.charAt(encoded.length() - 1);
+        return encoded.substring(0, encoded.length() - 1) + (char) (last - 1) + Character.MAX_VALUE;
+    }
+
     /** The most recently published releases - see {@link StoreRepositoryInventory#recent}. */
     StoreRepositoryInventory.ReleasePage recent(String after, int limit) throws IOException {
         NewestFirst.Page page = NewestFirst.RELEASES.page(store, after, limit);

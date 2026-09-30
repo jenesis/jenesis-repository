@@ -66,26 +66,32 @@ public final class ContentsClient extends ClientCalls {
     }
 
     /**
-     * A repository's published coordinates ({@code group:artifact:version}) matching a substring (empty for all).
-     * The endpoint answers one bounded page at a time, so this follows its cursor to the end rather than
-     * returning the first page as if it were the whole match set - a client may page where a request path may not.
-     * A page that reports itself truncated without offering a cursor is the no-index substring-scan degrade, which
-     * has no resume point; it stops there, and the rows it returns are all the server can reach.
+     * A repository's search: its published coordinates ({@code group:artifact:version}) - or the paths of artifacts
+     * with no coordinate - matching {@code query}, and how the repository answered it. A repository answers by the
+     * start of a name unless its full-text index is on. The endpoint answers one bounded page at a time, so this
+     * follows its cursor to the end rather than returning the first page as if it were the whole match set - a
+     * client may page where a request path may not.
      */
-    public List<String> search(String repo, String query) throws IOException, InterruptedException {
+    public Found search(String repo, String query) throws IOException, InterruptedException {
         List<String> results = new ArrayList<>();
         String cursor = null;
+        Search page;
         do {
             HttpResponse<String> response = send("GET", "/api/search?repo=" + enc(repo) + "&q=" + enc(query)
                     + (cursor == null ? "" : "&cursor=" + enc(cursor)), null, null);
             require(response, 200, "search " + repo);
-            Search page = JSON.readValue(response.body(), Search.class);
+            page = JSON.readValue(response.body(), Search.class);
             results.addAll(page.results());
             String next = page.nextCursor();
             // Strictly advancing, so this terminates; a repeated or blank cursor is a server that cannot page on.
             cursor = next == null || next.isBlank() || next.equals(cursor) ? null : next;
         } while (cursor != null);
-        return List.copyOf(results);
+        return new Found(page.mode(), page.indexed(), List.copyOf(results));
+    }
+
+    /** A whole search: the mode the repository answers in ({@code NAME} or {@code FULL_TEXT}), whether its full-text
+     *  index answered, and every row. */
+    public record Found(String mode, boolean indexed, List<String> results) {
     }
 
     /** Deploy bytes to a repository at the given path within it (a Maven repository's {@code /maven/...}, an npm
@@ -281,8 +287,8 @@ public final class ContentsClient extends ClientCalls {
     private record Listing(List<String> entries) {
     }
 
-    /** One page of {@code /api/search}: the rows, whether matches remain past it, and the cursor to resume after
-     *  ({@code null} when nothing remains, and also on the no-index degrade, which truncates without a resume point). */
-    private record Search(List<String> results, boolean truncated, String nextCursor) {
+    /** One page of {@code /api/search}: how the repository answered, the rows, and the cursor to resume after -
+     *  {@code null} when nothing remains. */
+    private record Search(String mode, boolean indexed, List<String> results, String nextCursor) {
     }
 }

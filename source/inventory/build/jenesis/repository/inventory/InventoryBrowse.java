@@ -113,67 +113,10 @@ final class InventoryBrowse {
                 result.cursor().map(key -> key.substring(key.lastIndexOf('/') + 1)).orElse(null));
     }
 
-    /**
-     * Published PATHS under {@code prefix} whose name contains {@code query} - the operator's find-tool for the
-     * artifacts that have no coordinate to search by.
-     *
-     * <p>The console's search reads the COORDINATE inventory, which is the right index for a package: a name, a
-     * version, a licence facet. A raw upload has none of that - a raw path IS the address - so without this it would
-     * be found by browse and by nothing else, and an operator hunting an installer by name would get an empty page
-     * with no hint that the artifact was sitting one folder away. This covers both deployments:
-     * the walk runs whether or not a search index is installed, so an indexed registry and a Lucene-less one answer
-     * the same question the same way.
-     *
-     * <p>Bounded twice over, because this is a tree walk on a request path: at most {@code limit} hits are kept and
-     * at most {@code MAX_VISITED} entries are examined, and reaching either reports truncation rather than
-     * presenting a clamped list as the whole match set. Screened under {@code policy} at every level, so a held
-     * artifact is no more findable here than it is in a listing.
-     */
-    StoreRepositoryInventory.ChildPage paths(String prefix, String query, int limit, ServableNames.Policy policy)
-            throws IOException {
-        List<String> hits = new ArrayList<>();
-        boolean[] truncated = {false};
-        int[] visited = {0};
-        walkPaths(prefix == null ? "" : prefix, query, limit, policy, hits, truncated, visited);
-        return new StoreRepositoryInventory.ChildPage(hits, truncated[0], null);
-    }
-
-    /** How many published names one path search may examine - the bound that keeps a search over an enormous
-     *  repository a bounded read rather than a full enumeration per request. */
-    private static final int MAX_VISITED = 20_000;
-
-    private void walkPaths(String prefix, String query, int limit, ServableNames.Policy policy,
-                           List<String> hits, boolean[] truncated, int[] visited) throws IOException {
-        if (hits.size() >= limit || visited[0] >= MAX_VISITED) {
-            truncated[0] = true;
-            return;
-        }
-        List<String> children = new ArrayList<>();
-        Traversal.Result page = ScreenedNames.paths(servableNames, policy)
-                .containers(this::isContainer)
-                .scan(store, ServableNames.PUBLISHED + prefix, (name, _) -> children.add(name));
-        if (page.truncated()) {
-            truncated[0] = true;
-        }
-        for (String child : children) {
-            visited[0]++;
-            // Always slash-joined: PUBLISHED is a bare prefix, and browse's own paging passes a parent that already
-            // carries its leading separator. Composing without one scans "publishraw" and finds nothing.
-            String path = prefix + "/" + child;
-            if (isContainer(ServableNames.PUBLISHED + path)) {
-                walkPaths(path, query, limit, policy, hits, truncated, visited);
-            } else if (query.isEmpty() || child.contains(query) || path.contains(query)) {
-                if (hits.size() >= limit) {
-                    truncated[0] = true;
-                    return;
-                }
-                hits.add(path);
-            }
-            if (visited[0] >= MAX_VISITED) {
-                truncated[0] = true;
-                return;
-            }
-        }
+    /** Whether a served request path may be disclosed under {@code policy} - see
+     *  {@link StoreRepositoryInventory#disclosablePath}. */
+    boolean disclosablePath(String requestPath, ServableNames.Policy policy) throws IOException {
+        return servableNames.disclosable(requestPath, policy);
     }
 
     /** Whether a published coordinate version may be disclosed by a name-enumeration surface under {@code policy} - see

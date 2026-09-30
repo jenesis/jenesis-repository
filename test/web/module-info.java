@@ -1,7 +1,7 @@
 /**
  * The server and console handlers of the free core's {@code *-web} modules, driven in process: the walks screen and
  * its API, the deploy screen publishing through the repository's own edge, the deployment-config surface, the
- * repository-maintenance surface and the management API.
+ * repository-maintenance surface, the management API, and browse and search.
  *
  * <p>Each handler is constructed over a real filesystem store with the shared {@code Web} wiring and called
  * directly - no Spring context, no server, no container - so what a suite asserts is what the handler answered and
@@ -15,6 +15,7 @@
  * @jenesis.test build.jenesis.repository.config.web
  * @jenesis.test build.jenesis.repository.cleanup.web
  * @jenesis.test build.jenesis.repository.management.web
+ * @jenesis.test build.jenesis.repository.search.web
  * @jenesis.bom pin-repository.properties
  * @jenesis.signature signature-repository.properties
  */
@@ -26,6 +27,9 @@ open module build.jenesis.repository.web.test {
     requires build.jenesis.repository.config.web;
     requires build.jenesis.repository.cleanup.web;
     requires build.jenesis.repository.management.web;
+    requires build.jenesis.repository.search.web;
+    requires build.jenesis.repository.search.service;
+    requires build.jenesis.repository.scope;
     requires build.jenesis.repository.cleanup;
     requires build.jenesis.repository.cleanup.task;
     requires build.jenesis.repository.ratelimit;

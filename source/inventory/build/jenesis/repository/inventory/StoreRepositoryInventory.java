@@ -238,6 +238,20 @@ public final class StoreRepositoryInventory implements RepositoryInventory {
         return recording.dependencies(ecosystem, coordinate, version);
     }
 
+    /**
+     * What a version's document records that a full-text index reads beside the coordinate: the licences it declares
+     * and what its manifest says about it, from one read of the document. Empty when the version has no document;
+     * either part is empty when the document has no such section - a version published before it was recorded, or by
+     * a format whose inspector reads no manifest - which a caller may fill another way or leave out.
+     */
+    public Optional<Searchable> searchable(String ecosystem, String coordinate, String version) throws IOException {
+        return recording.searchable(ecosystem, coordinate, version);
+    }
+
+    /** A version's recorded licences and what its manifest says about it, each empty where the document holds none. */
+    public record Searchable(Optional<List<LicenseInventory.Declared>> licenses, Optional<AboutSection.About> about) {
+    }
+
     /** When a coordinate version was recorded as published - its {@code published} section's instant - or empty if it
      *  has none, so a non-retroactive backstop (forwarding self-repair) can compare a publication against a watermark
      *  without enumerating every {@link Release}. Reads only the version's document, never an artifact blob. */
@@ -313,12 +327,6 @@ public final class StoreRepositoryInventory implements RepositoryInventory {
         return browse.children(prefix, after, limit, policy);
     }
 
-    /** Published paths matching {@code query} - the find-tool for artifacts with no coordinate to search by. See
-     *  {@code InventoryBrowse#paths}. */
-    public ChildPage paths(String prefix, String query, int limit, ServableNames.Policy policy) throws IOException {
-        return browse.paths(prefix, query, limit, policy);
-    }
-
     /** A screened page of immediate children: the {@code names} a listing renders (folders and disclosable leaves, the
      *  quarantine root child and any withheld/torn leaf already dropped), at most the requested window wide, plus
      *  {@code truncated} - whether the bounded screened scan proved stored children remain past the window. Truncation
@@ -346,43 +354,31 @@ public final class StoreRepositoryInventory implements RepositoryInventory {
         return browse.disclosable(ecosystem, coordinate, version, policy);
     }
 
-    /** Whether a search-index hit - a {@code coordinate:version} display string, the form the Lucene leg returns and the
-     *  substring scan builds - may be disclosed under {@code policy}. Resolves the hit's ecosystem by the same bounded
-     *  top-level probe of the version documents the console search uses to place a hit, then screens it through
-     *  {@link #disclosable(String, String, String, ServableNames.Policy)}. The {@code coordinate:version} split is
-     *  probed at every colon right-to-left (not just the last), so a digest-pinned OCI display {@code <name>:sha256:<hex>}
-     *  places on its {@code (<name>, sha256:<hex>)} split and screens rather than mis-splitting to {@code (<name>:sha256,
-     *  <hex>)} and leaking; the first split some ecosystem places wins. A hit no installed ecosystem places on
-     *  any split is disclosable, since membership is the only truth there (the ghost-coordinate contract). The one eco-resolution the
-     *  console {@code RepositoryBrowse} and the REST {@code /api/search} share, so both search surfaces screen a held
-     *  {@code coordinate:version} identically rather than each re-implementing it. Reads
-     *  only the small version documents and, under {@link ServableNames.Policy#HIDE_WITHHELD}, the tiny
-     *  quarantine pointers / {@code withheld/<hash>} markers - never an artifact blob.
+    /** Whether the artifact served at {@code requestPath} - one with no coordinate, as a raw upload is - may be
+     *  disclosed by a name-enumeration surface under {@code policy}: the name-level face of the servable-name seam,
+     *  over this inventory's own withheld chain. */
+    public boolean disclosablePath(String requestPath, ServableNames.Policy policy) throws IOException {
+        return browse.disclosablePath(requestPath, policy);
+    }
+
+    /** Whether a {@code coordinate:version} display string may be disclosed under {@code policy}, for a surface that
+     *  holds the display rather than its parts. Resolves the display's ecosystem by a bounded top-level probe of the
+     *  version documents, then screens it through {@link #disclosable(String, String, String, ServableNames.Policy)}.
+     *  The {@code coordinate:version} split is probed at every colon right-to-left (not just the last), so a
+     *  digest-pinned OCI display {@code <name>:sha256:<hex>} places on its {@code (<name>, sha256:<hex>)} split and
+     *  screens rather than mis-splitting to {@code (<name>:sha256, <hex>)} and leaking; the first split some ecosystem
+     *  places wins. A display no installed ecosystem places on any split is disclosable, since membership is the only
+     *  truth there (the ghost-coordinate contract). Reads only the small version documents and, under
+     *  {@link ServableNames.Policy#HIDE_WITHHELD}, the tiny quarantine pointers / {@code withheld/<hash>} markers -
+     *  never an artifact blob.
      *
      *  <p>A colon-less {@code display} (a bare name carrying no {@code :version}) is rejected with
      *  {@link IllegalArgumentException}: this is the {@code coordinate:version} face, and a name-level surface must
      *  screen through {@code ServableNames} instead. Answering {@code true} for it would be the fail-open, where the
-     *  right-to-left split loop never runs and the method falls through to the ghost-coordinate {@code return true};
-     *  no caller passes a bare name (every caller supplies a {@code coordinate + ":" + version} or an
-     *  already-versioned {@code group:name:version}), so it is refused rather than left to leak. The colon-BEARING
-     *  ghost-coordinate contract is preserved: a
-     *  {@code coordinate:version} display no installed ecosystem places on any split still discloses (membership is the
-     *  only truth there). Accepted residual: a cross-ecosystem {@code coordinate:version} collision resolves
-     *  to the first ecosystem whose version documents place the split, so two ecosystems that share an identical
-     *  {@code coordinate:version} are screened by whichever the probe reaches first. */
-    /**
-     * Whether a search hit may be disclosed, whichever of the two shapes it is.
-     *
-     * <p>A {@code coordinate:version} display goes to {@link #disclosableDisplay}; a served request path goes to
-     * {@link ServableNames#disclosable}, the name-level face that one refuses to be. The discriminator is the
-     * leading {@code /}: a request path always carries one and a {@code coordinate:version} display never does.
-     * Sending a path to the display face is not a near miss - it throws on a colon-less argument by design, having
-     * once returned {@code true} unconditionally for one, which is the fail-open it was closed against.
-     */
-    public boolean disclosableHit(String hit, ServableNames.Policy policy) throws IOException {
-        return hit.startsWith("/") ? new ServableNames(store).disclosable(hit, policy) : disclosableDisplay(hit, policy);
-    }
-
+     *  right-to-left split loop never runs and the method falls through to the ghost-coordinate {@code return true}.
+     *  Accepted residual: a cross-ecosystem {@code coordinate:version} collision resolves to the first ecosystem whose
+     *  version documents place the split, so two ecosystems that share an identical {@code coordinate:version} are
+     *  screened by whichever the probe reaches first. */
     public boolean disclosableDisplay(String display, ServableNames.Policy policy) throws IOException {
         if (display.indexOf(':') < 0) {
             throw new IllegalArgumentException("disclosableDisplay is the coordinate:version screening face and requires "
@@ -669,6 +665,21 @@ public final class StoreRepositoryInventory implements RepositoryInventory {
 
     public ReleasePage versions(String ecosystem, String coordinate, String after, int limit) throws IOException {
         return enumeration.versions(ecosystem, coordinate, after, limit);
+    }
+
+    /**
+     * One bounded page of the coordinates of {@code ecosystem} whose names start with {@code prefix} ({@code ""} for
+     * every one), in the order the repository keys them, resumable strictly after the coordinate the previous page
+     * ended on ({@code null} for the first): the face a lookup by name reads through. One listing page and no
+     * document read. A coordinate named here may hold no published version - a copy cached from an upstream, a
+     * licence record - which its {@link #versions(String, String, String, int) versions page} answers empty.
+     */
+    public CoordinatePage coordinates(String ecosystem, String prefix, String after, int limit) throws IOException {
+        return enumeration.coordinates(ecosystem, prefix, after, limit);
+    }
+
+    /** A bounded page of coordinate names and the one to continue after - {@code null} when the page was the last. */
+    public record CoordinatePage(List<String> coordinates, String next) {
     }
 
     /**

@@ -19,8 +19,10 @@ import build.jenesis.repository.metadata.MetadataProvider;
 import build.jenesis.repository.metadata.MetadataStore;
 import build.jenesis.repository.metadata.Section;
 import build.jenesis.repository.search.LicenseFacet;
+import build.jenesis.repository.search.SearchMode;
 import build.jenesis.repository.search.SearchQuery;
 import build.jenesis.repository.search.SearchQueryProvider;
+import build.jenesis.repository.search.service.RepositorySearch;
 import build.jenesis.repository.store.ArtifactDescriptor;
 import build.jenesis.repository.store.ArtifactStore;
 import build.jenesis.repository.store.Publication;
@@ -49,47 +51,25 @@ public class RepositoryBrowse extends TenantScope {
      *  literal here would render "no index published yet" if the writer ever moved it - wrong, and quiet. */
     private static final String INDEX_DESCRIPTOR = PublishedIndexKeys.DESCRIPTOR;
 
-    /** The most matches the no-index substring-scan degrade holds in heap at once, so a Lucene-less deployment's search
-     *  panel (an empty query matches every coordinate) does not buffer a whole large repository per request. */
-    private static final int MAX_SCAN = 1000;
-
-    /** The most published versions an un-indexed search examines for one request; past it the page is answered as
-     *  cut short. The search index lifts the bound - a query served from it never walks the inventory. */
-    static final int MAX_EXAMINED = 20_000;
-
-    /** How many of the newest releases every search examines before the index or the scan answers the rest, and
-     *  the stride they are read in - the window that makes what was just published findable at once. */
-    static final int RECENT_WINDOW = 5_000;
-
-    private static final int RECENT_STRIDE = 500;
-
-    private static final class Enough extends RuntimeException {
-        private Enough() {
-            super(null, null, false, false);
-        }
-    }
-
     /** The most immediate children a single browse level pages through the store, so a coordinate with an enormous
      *  fan-out (hundreds of thousands of timestamped versions) is navigated into, not materialised whole in heap per
      *  browse request - the same bound the console tree and {@code /api/browse} apply. */
     private static final int MAX_CHILDREN = 1000;
 
-    /** The installed search index, resolved once so its per-repository searchers cache across requests; empty when the
-     *  index module is absent, in which case search is the live substring scan and the license inventory is
-     *  unavailable. Resolved once, the way every caller of this provider should. */
-    private final Optional<SearchQueryProvider> search;
+    /** The repository's one search, resolved once so the index's per-repository searchers survive across requests. */
+    private final RepositorySearch search;
 
     public RepositoryBrowse(ArtifactStore repositoryStore, CurrentTenant current, ObservationRegistry observations) {
         this(repositoryStore, current, observations, SearchQueryProvider.installed());
     }
 
-    /** Embedding/test seam: bind an explicit search index provider (empty for the built-in substring scan) rather than
-     *  discovering it through {@link SearchQueryProvider#installed()}, so a caller can exercise both the indexed and
-     *  the fall-back path without a ServiceLoader registration. */
+    /** Embedding/test seam: bind an explicit full-text index provider (empty for none) rather than discovering it
+     *  through {@link SearchQueryProvider#installed()}, so a caller can drive both modes without a ServiceLoader
+     *  registration. */
     public RepositoryBrowse(ArtifactStore repositoryStore, CurrentTenant current, ObservationRegistry observations,
-                            Optional<SearchQueryProvider> search) {
+                            Optional<SearchQueryProvider> index) {
         super(repositoryStore, current, observations);
-        this.search = search;
+        this.search = new RepositorySearch(index);
     }
 
     /** The immediate entries under a path in a repository's layout, for navigating the tree. */
@@ -643,175 +623,68 @@ public class RepositoryBrowse extends TenantScope {
         return String.format(Locale.ROOT, "%.1f %s", value, units[unit]);
     }
 
-    /** One in-repo search hit rendered in the same generic list as the browse: a published coordinate and version
-     *  whose {@code coordinate:version} matched the query, its ecosystem (the list's "type"), and the request-path
-     *  folder the coordinate version occupies - so the row links into the browse tree at that folder. The location is
-     *  blank when no installed format can place the coordinate, in which case the console shows the hit inert. */
-    public record SearchResult(String coordinate, String version, String ecosystem, String location) {
+    /** One search hit rendered in the same generic list as the browse: what a person reads for it - a
+     *  {@code coordinate:version}, or the path of an artifact with no coordinate - its parts, and the browse folder it
+     *  occupies, so the row links into the tree there. The location is blank when no installed format can place the
+     *  coordinate, in which case the console links the hit to its coordinate's own page, or shows it inert. */
+    public record SearchResult(String display, String coordinate, String version, String ecosystem,
+                               String location) {
     }
 
-    /** One screen's worth of search hits and whether matches remain past it - the visible outcome at the bound,
-     *  so the browse screen states that it stopped rather than presenting a clamped list as the whole match
-     *  set. The index path resumes through a cursor; the no-index substring scan has none to offer and only says it
-     *  stopped. */
-    public record SearchPage(List<SearchResult> results, boolean truncated) {
+    /** One page of a search as the search bar shows it: the mode the repository answers in, whether its full-text
+     *  index answered this page, the hits, and the cursor to the next page - {@code null} when nothing remains, so
+     *  a clamped page never reads as the whole match set. */
+    public record SearchPage(SearchMode mode, boolean indexed, List<SearchResult> results, String nextCursor) {
 
         public SearchPage {
             results = List.copyOf(results);
         }
+
+        /** Whether matches remain past this page. */
+        public boolean truncated() {
+            return nextCursor != null;
+        }
     }
 
-    /** The published coordinate versions in a repository matching the query, each carrying the folder it occupies so a
-     *  hit navigates into the browse tree - read from the precomputed release index and the owning format's layout,
-     *  never by scanning the artifact tree. When the search index module is installed, the match set comes from the
-     *  index (honouring {@code license:}/{@code category:} filter tokens the substring scan cannot); otherwise every
-     *  release whose {@code coordinate:version} contains the query matches (all for an empty query), the live
-     *  substring scan the endpoint falls back to: the index is the read-first
-     *  path, the scan the graceful degrade. Sorted by coordinate then version so the list is stable. */
-    public SearchPage search(String repository, String query) throws IOException {
+    /** One page of the repository's search - see {@link RepositorySearch} - with each hit placed in the browse tree.
+     *  {@code config} is the repository's effective configuration, which decides whether it answers by name or from
+     *  its full-text index; {@code cursor} is a previous page's, or {@code null}. */
+    public SearchPage search(String repository, UnaryOperator<String> config, String query, String cursor)
+            throws IOException {
+        RepositorySearch.Answer answer = search.search(scope(repository), tenant() + '/' + repository, config, query,
+                cursor, RepositorySearch.PAGE);
         StoreRepositoryInventory inventory = inventory(repository);
-        Optional<SearchQuery.Hits> indexed = indexedCoordinates(repository, query);
         List<SearchResult> results = new ArrayList<>();
-        // Whether matches remain past the window this screen renders - the index's own outcome on the read-first
-        // path, the scan's own cap on the degrade. Never inferred from the row count, which screening shortens.
-        boolean[] truncated = {indexed.map(SearchQuery.Hits::truncated).orElse(false)};
-        // The newest releases first, from the newest-first index, whatever serves the rest: the search index is
-        // rebuilt on a schedule and the live scan walks in key order, so a release published moments ago would be
-        // found by neither until the next sweep or the end of the walk. A bounded window of the newest releases
-        // is examined for the substring, so what was just published is found at once.
-        Set<String> seen = new HashSet<>();
-        if (!query.isEmpty() && !query.contains(":")) {
-            String after = null;
-            int examined = 0;
-            while (examined < RECENT_WINDOW) {
-                StoreRepositoryInventory.ReleasePage page = inventory.recent(after,
-                        Math.min(RECENT_STRIDE, RECENT_WINDOW - examined));
-                for (Release release : page.releases()) {
-                    examined++;
-                    String coordinate = release.coordinate() + ":" + release.version();
-                    if (coordinate.contains(query) && inventory.disclosable(release.ecosystem(),
-                            release.coordinate(), release.version(), ServableNames.Policy.HIDE_WITHHELD)
-                            && seen.add(release.ecosystem() + " " + coordinate)) {
-                        results.add(new SearchResult(release.coordinate(), release.version(), release.ecosystem(),
-                                safePrefix(inventory.locate(release.ecosystem(), release.coordinate(),
-                                        release.version()))));
-                    }
-                }
-                if (page.next() == null) {
-                    break;
-                }
-                after = page.next();
+        for (SearchQuery.Hit hit : answer.hits()) {
+            if (hit.pathAddressed()) {
+                int slash = hit.path().lastIndexOf('/');
+                results.add(new SearchResult(hit.display(), "", "", "",
+                        safePrefix(slash <= 0 ? "" : hit.path().substring(0, slash))));
+            } else {
+                results.add(new SearchResult(hit.display(), hit.coordinate(), hit.version(), hit.ecosystem(),
+                        safePrefix(inventory.locate(hit.ecosystem(), hit.coordinate(), hit.version()))));
             }
         }
-        if (indexed.isPresent()) {
-            // The index already identified the exact hits, so resolve each one directly instead of enumerating the
-            // whole published set just to filter it down to those hits (read-first: a full-store walk per request
-            // when the index answered). The ecosystem is the only fact the coordinate:version display string does not
-            // carry, so it is recovered by a bounded probe over the few top-level ecosystems - a per-coordinate version
-            // listing that reads only the small version documents, never a walk of every coordinate.
-            List<String> ecosystems = ecosystems(repository);
-            for (String hit : indexed.get().coordinates()) {
-                int split = hit.lastIndexOf(':');
-                if (split < 0) {
-                    continue;
-                }
-                String coordinate = hit.substring(0, split);
-                String version = hit.substring(split + 1);
-                for (String ecosystem : ecosystems) {
-                    boolean present = inventory.publishedAt(ecosystem, coordinate, version).isPresent();
-                    if (present) {
-                        // A held coordinate:version is still a member but a GET 404s it, so screen it out of the
-                        // hit list under HIDE_WITHHELD (the membership policy - a blob-less-but-not-withheld ghost
-                        // coordinate is NOT withheld and stays found). The coordinate belongs to this one ecosystem, so
-                        // stop probing the rest whether it discloses or is screened.
-                        if (seen.add(ecosystem + " " + hit) && inventory.disclosable(ecosystem, coordinate, version,
-                                ServableNames.Policy.HIDE_WITHHELD)) {
-                            results.add(new SearchResult(coordinate, version, ecosystem,
-                                    safePrefix(inventory.locate(ecosystem, coordinate, version))));
-                        }
-                        break;
-                    }
-                }
-            }
-        } else {
-            // No usable index: the documented graceful degrade is the live substring scan. Stream the coordinate walk
-            // and keep at most MAX_SCAN matches in heap rather than materialising the whole published set (the
-            // inventory's coordinates() list plus a results copy, each match also a locate() read) - an empty query
-            // matches every coordinate, so on a Lucene-less deployment the panel would otherwise buffer the whole
-            // repository per request. The scan still walks the tree; only this many matches are retained and resolved.
-            // Without the search index the scan walks the published set in key order and stops at the first bound it
-            // meets: the result window, or the examined budget - so a query that matches nothing on a very large
-            // repository still answers, marked as cut short, instead of walking every version for one request. A
-            // held coordinate:version is screened out under HIDE_WITHHELD before it takes a window slot.
-            int[] examined = {0};
-            try {
-                inventory.coordinates(held -> {
-                    if (examined[0]++ >= MAX_EXAMINED || results.size() >= MAX_SCAN) {
-                        throw new Enough();
-                    }
-                    String coordinate = held.coordinate() + ":" + held.version();
-                    if ((query.isEmpty() || coordinate.contains(query))
-                            && seen.add(held.ecosystem() + " " + coordinate)
-                            && inventory.disclosable(held.ecosystem(), held.coordinate(), held.version(),
-                                    ServableNames.Policy.HIDE_WITHHELD)) {
-                        results.add(new SearchResult(held.coordinate(), held.version(), held.ecosystem(),
-                                safePrefix(inventory.locate(held.ecosystem(), held.coordinate(), held.version()))));
-                    }
-                });
-            } catch (Enough _) {
-                truncated[0] = true;
-            }
+        return new SearchPage(answer.mode(), answer.indexed(), results, answer.nextCursor());
+    }
+
+    /** The license inventory over a repository for the console screen: the per-category and per-SPDX-id facet counts
+     *  its full-text index counted (never a scan of artifact metadata on the request path). Reports
+     *  {@code indexed=false} with empty facets when the repository's full-text search is off or its index not built
+     *  yet - the same answer {@code /api/licenses} gives - so the screen states it rather than showing a false clean
+     *  bill. */
+    public LicenseInventory licenses(String repository, UnaryOperator<String> config) throws IOException {
+        Optional<List<LicenseFacet>> facets = search.licenses(scope(repository), tenant() + '/' + repository, config);
+        if (facets.isEmpty()) {
+            return new LicenseInventory(false, List.of(), List.of());
         }
-        results.sort(Comparator.comparing(SearchResult::coordinate).thenComparing(SearchResult::version));
-        return new SearchPage(results, truncated[0]);
-    }
-
-    /** The ecosystems this repository has published releases under - the top level of its version documents,
-     *  bounded by the installed-format count; the inventory's own enumeration, over this repository's store. */
-    private List<String> ecosystems(String repository) throws IOException {
-        return new ArrayList<>(StoreRepositoryInventory.ecosystems(scope(repository)));
-    }
-
-    /** One bounded page of the {@code coordinate:version} display strings the installed search index matches for
-     *  {@code query}, or empty when no index is installed or this repository's index has not been built yet - the
-     *  signal to fall back to the live substring scan (which cannot honour the {@code license:}/{@code category:}
-     *  filter tokens the index does). A present-but-empty page is the opposite answer: the index is usable and nothing
-     *  matched. The enrichment to a {@link SearchResult} - ecosystem and browse folder - is joined from the release
-     *  index in {@link #search}, so a hit reads the same whichever path produced it. */
-    private Optional<SearchQuery.Hits> indexedCoordinates(String repository, String query) throws IOException {
-        if (search.isEmpty()) {
-            return Optional.empty();
+        List<LicenseCount> categories = new ArrayList<>();
+        List<LicenseCount> licenses = new ArrayList<>();
+        for (LicenseFacet facet : facets.get()) {
+            (facet.kind().equals(LicenseFacet.CATEGORY) ? categories : licenses)
+                    .add(new LicenseCount(facet.value(), facet.count()));
         }
-        return search.get().over(scope(repository), tenant() + '/' + repository).search(query, null, MAX_SCAN);
-    }
-
-    /** Whether the search index module is installed on this deployment, so the console shows the license-inventory link
-     *  and its filters (facets need the index; a deployment without {@code search/lucene} keeps the coordinate scan and
-     *  no facets). */
-    public boolean searchIndexAvailable() {
-        return search.isPresent();
-    }
-
-    /** The license inventory over a repository for the console screen: the per-category and per-SPDX-id facet counts,
-     *  read from the search index's stored license fields (never by scanning artifact metadata on the request path).
-     *  Reports {@code indexed=false} with empty facets when the search index module is absent or this repository's
-     *  index has not been built yet - the same graceful degrade {@code /api/licenses} gives - so the screen states it
-     *  is not indexed rather than showing a false clean bill. */
-    public LicenseInventory licenses(String repository) throws IOException {
-        if (search.isPresent()) {
-            Optional<List<LicenseFacet>> facets =
-                    search.get().over(scope(repository), tenant() + '/' + repository).licenses();
-            if (facets.isPresent()) {
-                List<LicenseCount> categories = new ArrayList<>();
-                List<LicenseCount> licenses = new ArrayList<>();
-                for (LicenseFacet facet : facets.get()) {
-                    (facet.kind().equals(LicenseFacet.CATEGORY) ? categories : licenses)
-                            .add(new LicenseCount(facet.value(), facet.count()));
-                }
-                return new LicenseInventory(true, categories, licenses);
-            }
-        }
-        return new LicenseInventory(false, List.of(), List.of());
+        return new LicenseInventory(true, categories, licenses);
     }
 
     /** One license-inventory facet row for the console: a license category or resolved SPDX id and the number of
@@ -820,8 +693,8 @@ public class RepositoryBrowse extends TenantScope {
     public record LicenseCount(String value, long count) {
     }
 
-    /** The license inventory the console screen renders: whether the search index backed it ({@code false} when the
-     *  index module is absent or this repository's index has not been built), the per-category counts and the
+    /** The license inventory the console screen renders: whether the full-text index backed it ({@code false} while
+     *  the repository's full-text search is off or its index not built), the per-category counts and the
      *  per-SPDX-id counts. */
     public record LicenseInventory(boolean indexed, List<LicenseCount> categories, List<LicenseCount> licenses) {
     }

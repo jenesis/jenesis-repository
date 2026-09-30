@@ -9,6 +9,7 @@ import build.jenesis.repository.format.FormatMarks;
 import build.jenesis.repository.format.RepositoryType;
 import build.jenesis.repository.icon.Mark;
 import build.jenesis.repository.icon.Marks;
+import build.jenesis.repository.search.SearchMode;
 import build.jenesis.repository.ui.store.RepositoryAdmin;
 import build.jenesis.repository.ui.store.RepositoryBrowse;
 import build.jenesis.repository.ui.store.RepositoryImports;
@@ -408,10 +409,17 @@ public class RepositoryAdminController {
         return "repository-retention";
     }
 
+    /**
+     * A level of the repository's browse tree, or one page of its search. The search bar says which of the two modes
+     * the repository answers in - its {@code full-text-search} setting, resolved over the repository's, the tenant's
+     * and the deployment's settings documents, one object per module under a constant prefix - before anything is
+     * searched.
+     */
     @GetMapping("/ui/repositories/{repo}/browse")
     public String browse(@PathVariable("repo") String repo,
                          @RequestParam(name = "prefix", defaultValue = "") String prefix,
                          @RequestParam(name = "q", defaultValue = "") String query,
+                         @RequestParam(name = "cursor", required = false) String cursor,
                          @RequestParam(name = "sort", defaultValue = "name") String sort,
                          @RequestParam(name = "dir", defaultValue = "asc") String dir,
                          Model model) throws IOException {
@@ -421,16 +429,23 @@ public class RepositoryAdminController {
         model.addAttribute("prefix", safe);
         model.addAttribute("query", query);
         model.addAttribute("searching", searching);
+        UnaryOperator<String> config = settings.repositoryConfig(tenant.name(), repo);
+        // The search bar says how this repository answers before anything is typed into it: a lookup by name, or the
+        // full-text index where the repository has it on.
+        model.addAttribute("fullText", SearchMode.of(config) == SearchMode.FULL_TEXT);
         if (searching) {
-            RepositoryBrowse.SearchPage page = browse.search(repo, query);
+            RepositoryBrowse.SearchPage page = browse.search(repo, config, query, cursor);
             List<SearchRow> results = new ArrayList<>();
             for (RepositoryBrowse.SearchResult hit : page.results()) {
-                results.add(new SearchRow(hit.coordinate(), hit.version(), hit.ecosystem(), hit.location(),
-                        ecosystemMark(hit.ecosystem())));
+                results.add(new SearchRow(hit.display(), hit.coordinate(), hit.version(), hit.ecosystem(),
+                        hit.location(), ecosystemMark(hit.ecosystem())));
             }
             model.addAttribute("results", results);
-            // The bound is visible: a clamped hit list says so rather than reading as the whole match set.
+            model.addAttribute("indexed", page.indexed());
+            // The bound is visible: a clamped hit list says so, and links the next page, rather than reading as the
+            // whole match set.
             model.addAttribute("truncated", page.truncated());
+            model.addAttribute("nextCursor", page.nextCursor());
             model.addAttribute("neutralMark", Marks.neutral());
         } else {
             boolean descending = "desc".equals(dir);
@@ -782,8 +797,10 @@ public class RepositoryAdminController {
 
     /** A browse search hit as the results list renders it: the {@link RepositoryBrowse.SearchResult} it wraps plus
      *  the mark of the format that owns its ecosystem, so a hit shows its format's mark beside the coordinate -
-     *  {@code null} only for a hit that carries no ecosystem at all, which the view draws as the neutral mark. */
-    public record SearchRow(String coordinate, String version, String ecosystem, String location, Mark mark) {
+     *  {@code null} only for a hit that carries no ecosystem at all (an artifact with no coordinate), which the view
+     *  draws as the neutral mark. */
+    public record SearchRow(String display, String coordinate, String version, String ecosystem, String location,
+                            Mark mark) {
     }
 
     /** A repository's retention rendered for the form: durations as ISO-8601 text, blank when a dial is unset. */

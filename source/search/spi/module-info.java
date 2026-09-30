@@ -1,12 +1,11 @@
 /**
- * The free-text search query contract: the read-side seam the search box (the {@code /api/search} endpoint and the
- * console) reaches an installed search index through <em>without</em> a compile-time dependency on the optional index
- * module. A {@link build.jenesis.repository.search.SearchQueryProvider} is discovered with {@code ServiceLoader} and
- * binds a repository's scoped store to a {@link build.jenesis.repository.search.SearchQuery}; with no provider
- * installed the query degrades - {@code /api/search} falls back to the built-in live substring scan of the
- * published-coordinate pointers - so a deployment without the index module still searches, just without the index.
- * Kept minimal-dependency (only the store SPI) so the core graph stays light: the Lucene index itself, its sweep and
- * its volatile-swap reader ride in the separate {@code build.jenesis.repository.search.lucene} implementation module.
+ * The search contract: the {@link build.jenesis.repository.search.SearchMode} a repository answers in, and the seam
+ * the one search reaches a full-text index through <em>without</em> a compile-time dependency on the module that
+ * builds it. A {@link build.jenesis.repository.search.SearchQueryProvider} is discovered with {@code ServiceLoader}
+ * and binds a repository's scoped store to a {@link build.jenesis.repository.search.SearchQuery}; a repository whose
+ * index is off, not built yet, or not installed answers by name instead. Kept minimal-dependency (only the store
+ * SPI): the Lucene index, its sweep and its reader ride in {@code build.jenesis.repository.search.lucene}, and the
+ * search both surfaces call in {@code build.jenesis.repository.search.service}.
  *
  * @jenesis.release 25
  * @jenesis.bom pin-repository.properties

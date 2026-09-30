@@ -29,7 +29,8 @@ module build.jenesis.repository.compliance.maven {
     requires org.slf4j;
     // Gradle Module Metadata is a JSON descriptor; a maintained parser rather than a hand-rolled one.
     requires tools.jackson.databind;
-    exports build.jenesis.repository.compliance.maven to build.jenesis.repository.gateway.test;
+    exports build.jenesis.repository.compliance.maven to build.jenesis.repository.gateway.test,
+            build.jenesis.repository.compliance.maven.test;
     provides build.jenesis.repository.compliance.QualityInspector
             with build.jenesis.repository.compliance.maven.MavenQualityInspector;
 }

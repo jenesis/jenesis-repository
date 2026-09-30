@@ -7,6 +7,8 @@ import build.jenesis.repository.hooks.testkit.Hooks;
 import build.jenesis.repository.index.PublishedIndex;
 import build.jenesis.repository.store.ArtifactDescriptor;
 import build.jenesis.repository.store.ArtifactStore;
+import build.jenesis.repository.store.PublicationObserver;
+import build.jenesis.repository.store.DirtyIndexFeed;
 import build.jenesis.repository.store.ArtifactStoreProvider;
 import build.jenesis.repository.store.Publication;
 import build.jenesis.repository.webhook.WebhookOutbox;
@@ -52,6 +54,46 @@ class CoordinateKeyedObserverTest {
     }
 
     // --- the webhook: durable on return, and no route back --------------------------------------------------------
+
+    // --- the search index's coordinate gate, and its rebuild ------------------------------------------------------
+
+    @Test
+    void the_search_feed_marks_a_coordinate_and_skips_a_publish_that_carries_none() throws IOException {
+        new SearchFixture().deploy(store);
+        PublicationObserver observer = new SearchFixture().create();
+        ArtifactDescriptor sidecar = publish("/kit/app-1.0.jar.sha256");
+        ArtifactDescriptor artifact = coordinate(publish("/kit/app-1.0.jar"), "com.acme:app", "1.0");
+
+        observer.onPublished(sidecar, store);
+        assertThat(new DirtyIndexFeed(store, SearchFixture.SPACE).pending())
+                .as("a publish with no coordinate is not a search document - marking one would make every .sha256 "
+                        + "beside an artifact re-index it")
+                .isEmpty();
+
+        observer.onPublished(artifact, store);
+        assertThat(new DirtyIndexFeed(store, SearchFixture.SPACE).pending())
+                .extracting(DirtyIndexFeed.Entry::coordinate)
+                .as("while a coordinate-bearing publish is marked exactly once")
+                .containsExactly(build.jenesis.repository.search.lucene.SearchIndexTask.coordinateKey(
+                        "kit", "com.acme:app", "1.0"));
+    }
+
+    @Test
+    void the_search_reconcile_rebuilds_from_truth_and_retires_the_feed() throws IOException {
+        SearchFixture fixture = new SearchFixture();
+        fixture.deploy(store);
+        fixture.create().onPublished(coordinate(publish("/kit/app-1.0.jar"), "com.acme:app", "1.0"), store);
+        assertThat(new DirtyIndexFeed(store, SearchFixture.SPACE).pending()).isNotEmpty();
+
+        fixture.repair(store);
+
+        // The repair leg is the real SearchIndexTask reconcile: it re-derives the coordinate set from the published
+        // sections and only THEN GCs the feed with a pre-enumeration cutoff. An emptied feed is that pass having run and
+        // taken ownership of the markers - the executable half of "a dropped call is healed by a walk".
+        assertThat(new DirtyIndexFeed(store, SearchFixture.SPACE).pending())
+                .as("the reconcile consumed the feed it no longer needs")
+                .isEmpty();
+    }
 
     @Test
     void a_webhook_note_is_durable_when_the_callback_returns_and_the_drain_delivers_it() throws IOException {

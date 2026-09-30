@@ -402,17 +402,29 @@ public final class ComplianceGate {
      * artifact depends on ({@link Dependency}), recorded at publish so the SBOM and the dependents index can answer
      * for a format whose artifacts carry no SBOM of their own: empty where the manifest declares none, and
      * {@code null} where the inspector reads no dependency list at all - two different facts, since only the first
-     * lets a screen say the artifact depends on nothing.
+     * lets a screen say the artifact depends on nothing. {@code about} is what the same document says the package is
+     * for ({@link About}), recorded at publish so a full-text index finds it by what a person would type; {@code null}
+     * where the inspector reads no such document.
      */
     public record Subject(String ecosystem, String coordinate, String version, List<DeclaredLicense> licenses,
                           Reachability reachability, List<DetectedSecret> secrets, Attestation attestation,
-                          List<Signature> signatures, List<Maintainer> maintainers, List<Dependency> dependencies) {
+                          List<Signature> signatures, List<Maintainer> maintainers, List<Dependency> dependencies,
+                          About about) {
 
         public Subject {
             secrets = secrets == null ? List.of() : List.copyOf(secrets);
             signatures = signatures == null ? List.of() : List.copyOf(signatures);
             maintainers = maintainers == null ? List.of() : List.copyOf(maintainers);
             dependencies = dependencies == null ? null : List.copyOf(dependencies);
+        }
+
+        /** The shape before a subject said what its package is for, kept so the callers that build a subject
+         *  without it need not restate a {@code null}. */
+        public Subject(String ecosystem, String coordinate, String version, List<DeclaredLicense> licenses,
+                       Reachability reachability, List<DetectedSecret> secrets, Attestation attestation,
+                       List<Signature> signatures, List<Maintainer> maintainers, List<Dependency> dependencies) {
+            this(ecosystem, coordinate, version, licenses, reachability, secrets, attestation, signatures,
+                    maintainers, dependencies, null);
         }
 
         /** The shape before declared dependencies were a subject fact, kept so the callers that build a subject
@@ -452,7 +464,7 @@ public final class ComplianceGate {
          *  inspector uses to hand its detections to the discovered secret-scan gate dimension. */
         public Subject withSecrets(List<DetectedSecret> secrets) {
             return new Subject(ecosystem, coordinate, version, licenses, reachability, secrets, attestation,
-                    signatures, maintainers, dependencies);
+                    signatures, maintainers, dependencies, about);
         }
 
         /** This subject re-stamped with the inbound attestation an inspector read from the artifact's co-located
@@ -460,7 +472,7 @@ public final class ComplianceGate {
          *  verified attestation, exactly as {@link #withSecrets} hands the secret-scan dimension its detections. */
         public Subject withAttestation(Attestation attestation) {
             return new Subject(ecosystem, coordinate, version, licenses, reachability, secrets, attestation,
-                    signatures, maintainers, dependencies);
+                    signatures, maintainers, dependencies, about);
         }
 
         /** This subject re-stamped with the inbound signatures the signature inspector verified for it - the seam that
@@ -468,21 +480,28 @@ public final class ComplianceGate {
          *  {@link #withAttestation} hand theirs to the secret-scan and admission dimensions. */
         public Subject withSignatures(List<Signature> signatures) {
             return new Subject(ecosystem, coordinate, version, licenses, reachability, secrets, attestation,
-                    signatures, maintainers, dependencies);
+                    signatures, maintainers, dependencies, about);
         }
 
         /** This subject re-stamped with whom its metadata names as maintainers - the seam an ecosystem inspector
          *  uses to hand the trust what a key-discovery source that looks keys up by their owner needs. */
         public Subject withMaintainers(List<Maintainer> maintainers) {
             return new Subject(ecosystem, coordinate, version, licenses, reachability, secrets, attestation,
-                    signatures, maintainers, dependencies);
+                    signatures, maintainers, dependencies, about);
         }
 
         /** This subject re-stamped with what its manifest declares it depends on - the seam an ecosystem inspector
          *  uses to hand the publish record what the SBOM and the dependents index are built from. */
         public Subject withDependencies(List<Dependency> dependencies) {
             return new Subject(ecosystem, coordinate, version, licenses, reachability, secrets, attestation,
-                    signatures, maintainers, dependencies);
+                    signatures, maintainers, dependencies, about);
+        }
+
+        /** This subject re-stamped with what its manifest says the package is for - the seam an ecosystem inspector
+         *  uses to hand the publish record what a full-text index finds the package by. */
+        public Subject withAbout(About about) {
+            return new Subject(ecosystem, coordinate, version, licenses, reachability, secrets, attestation,
+                    signatures, maintainers, dependencies, about);
         }
 
         /** Whether this is a <em>content-scan</em> subject - one an inspector derived from an artifact's bytes (an
@@ -493,6 +512,56 @@ public final class ComplianceGate {
          *  reaches the unknown-license branch. */
         public boolean contentScan() {
             return licenses.isEmpty() && (!secrets.isEmpty() || attestation != null || !signatures.isEmpty());
+        }
+    }
+
+    /**
+     * What a package's own manifest says it is for and who wrote it, as a person would search for it: its one-line or
+     * longer {@code description} ({@code null} where it gives none), its {@code keywords} - npm's keywords, a NuGet
+     * package's tags, a crate's keywords, a chart's - and the names of its {@code authors} where the manifest credits
+     * people by name without the address a {@link Maintainer} is bound by. Bounded when it is made, since it is written
+     * into the version's metadata document on every publish and read back by the index: the description to
+     * {@link #DESCRIPTION} characters, at most {@link #KEYWORDS} keywords of at most {@link #KEYWORD} characters and at
+     * most {@link #KEYWORDS} authors of at most {@link #KEYWORD} characters, blank ones dropped.
+     */
+    public record About(String description, List<String> keywords, List<String> authors) {
+
+        /** The most characters of a description kept. */
+        public static final int DESCRIPTION = 1_000;
+
+        /** The most keywords, and the most authors, kept. */
+        public static final int KEYWORDS = 32;
+
+        /** The most characters of one keyword or author kept. */
+        public static final int KEYWORD = 64;
+
+        public About {
+            description = description == null || description.isBlank() ? null
+                    : clip(description.strip(), DESCRIPTION);
+            keywords = bounded(keywords);
+            authors = bounded(authors);
+        }
+
+        /** Whether the manifest said anything at all. */
+        public boolean empty() {
+            return description == null && keywords.isEmpty() && authors.isEmpty();
+        }
+
+        private static List<String> bounded(List<String> values) {
+            List<String> kept = new ArrayList<>();
+            for (String value : values == null ? List.<String>of() : values) {
+                if (value != null && !value.isBlank() && kept.size() < KEYWORDS) {
+                    String clipped = clip(value.strip(), KEYWORD);
+                    if (!kept.contains(clipped)) {
+                        kept.add(clipped);
+                    }
+                }
+            }
+            return List.copyOf(kept);
+        }
+
+        private static String clip(String text, int most) {
+            return text.length() <= most ? text : text.substring(0, most);
         }
     }
 

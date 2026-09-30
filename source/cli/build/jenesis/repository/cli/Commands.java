@@ -65,7 +65,8 @@ public final class Commands {
                                     "one window of the children under a path, each a folder or an artifact with its "
                                             + "size, and the cursor to the next")),
                     noun("search", "find published coordinates", DiscoveryCommands::search,
-                            act("search <repo> [query]", "coordinates matching a substring")),
+                            act("search <repo> [query]", "coordinates whose name starts with the query, or matching "
+                                    + "it anywhere where the repository's full-text search is on")),
                     noun("assets", "export the published-asset walk", DiscoveryCommands::assets,
                             act("assets <repo> [--limit N] [--cursor T] [--all]",
                                     "path, size and SHA-256 of every published asset")),

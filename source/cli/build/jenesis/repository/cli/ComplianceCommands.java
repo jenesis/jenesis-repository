@@ -203,8 +203,8 @@ final class ComplianceCommands {
         }
         RiskClient.LicensesView view = CliSupport.client(home).risk().licenses(args[1]);
         if (!view.indexed()) {
-            System.out.println(
-                    "License facets need the search index (search/lucene is not installed or the index is empty).");
+            System.out.println("The license inventory is counted by the repository's full-text index: switch "
+                    + "full-text-search on for " + args[1] + ", and it appears once the index is built.");
             return 0;
         }
         if (view.categories().isEmpty() && view.licenses().isEmpty()) {

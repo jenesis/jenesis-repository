@@ -1,0 +1,26 @@
+package build.jenesis.repository.search.web;
+
+import module java.base;
+import build.jenesis.repository.ui.RepositoryPage;
+import build.jenesis.repository.ui.ConsoleModuleProvider;
+
+/** This feature's console surface, contributed through the console's seam so the console learns none of its
+ *  vocabulary: without this module the screen is simply not there. */
+public final class SearchConsoleModule implements ConsoleModuleProvider {
+
+    @Override
+    public String name() {
+        return "search";
+    }
+
+    @Override
+    public Class<?> configuration() {
+        return SearchConsoleConfig.class;
+    }
+
+    /** The licence inventory of every repository, where the search index that answers it is present. */
+    @Override
+    public List<RepositoryPage> repositoryPages() {
+        return List.of(new RepositoryPage("Licenses", "/licenses", RepositoryPage.Topic.RISK, "search"));
+    }
+}

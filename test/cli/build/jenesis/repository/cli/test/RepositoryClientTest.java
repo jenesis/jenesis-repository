@@ -53,7 +53,8 @@ public class RepositoryClientTest {
     private static final String SETTINGS_BUNDLE =
             "{\n  \"core\": {\n    \"immaturity-hold-days\": \"3\"\n  }\n}\n";
     private static final String BROWSE = "{\"prefix\":\"/maven\",\"entries\":[\"org\",\"com\"]}";
-    private static final String SEARCH = "{\"results\":[\"org.acme:lib:1.0\",\"org.acme:lib:2.0\"]}";
+    private static final String SEARCH = "{\"mode\":\"NAME\",\"indexed\":false,"
+            + "\"results\":[\"org.acme:lib:1.0\",\"org.acme:lib:2.0\"]}";
     private static final String CREDENTIALS = "[{\"id\":\"abc123\",\"label\":\"ci\",\"created\":\"\","
             + "\"expires\":\"2027-01-01T00:00:00Z\",\"lastUsed\":\"\",\"lastUsedAddress\":\"\",\"useCount\":3,"
             + "\"allowedAddresses\":\"\",\"grants\":{\"*/releases\":\"deploy\"}}]";
@@ -311,8 +312,11 @@ public class RepositoryClientTest {
     }
 
     @Test
-    void search_lists_matching_coordinates() throws IOException, InterruptedException {
-        assertThat(client.contents().search("releases", "lib")).containsExactly("org.acme:lib:1.0", "org.acme:lib:2.0");
+    void search_lists_matching_coordinates_and_how_the_repository_answered() throws IOException, InterruptedException {
+        ContentsClient.Found found = client.contents().search("releases", "lib");
+        assertThat(found.results()).containsExactly("org.acme:lib:1.0", "org.acme:lib:2.0");
+        assertThat(found.mode()).isEqualTo("NAME");
+        assertThat(found.indexed()).isFalse();
         assertThat(lastQuery).contains("q=lib");
     }
 

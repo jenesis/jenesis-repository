@@ -12,8 +12,9 @@ import module java.base;
  * screen. So a module that declares an essential setting of a scope has put a question into that scope's wizard on
  * every surface that runs it, by declaring it - there is no second list to add it to.
  * <ul>
- * <li>{@link #SETUP} is the first boot's: the deployment's own essential settings, and a tenant's, which it asks as
- *     the deployment-wide value every tenant inherits;</li>
+ * <li>{@link #SETUP} is the first boot's: the deployment's own essential settings, and a tenant's and a repository's,
+ *     which it asks as the deployment-wide value every tenant and repository inherits - a repository's routing, which
+ *     has no wider value, excepted;</li>
  * <li>{@link #REPOSITORY} is a new repository's: its essential repository settings, stored in its own documents;</li>
  * <li>{@link #PROJECT} is a new build-cache project's, likewise.</li>
  * </ul>
@@ -23,7 +24,7 @@ import module java.base;
  */
 public enum Wizard {
 
-    SETUP(Setting.Scope.GLOBAL, Setting.Scope.GLOBAL, Setting.Scope.TENANT),
+    SETUP(Setting.Scope.GLOBAL, Setting.Scope.GLOBAL, Setting.Scope.TENANT, Setting.Scope.REPOSITORY),
     REPOSITORY(Setting.Scope.REPOSITORY, Setting.Scope.REPOSITORY),
     PROJECT(Setting.Scope.PROJECT, Setting.Scope.PROJECT);
 

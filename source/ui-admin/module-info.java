@@ -66,6 +66,7 @@ open module build.jenesis.repository.ui.admin {
     requires build.jenesis.repository.findings;
     requires build.jenesis.repository.health;
     requires build.jenesis.repository.settings;
+    requires build.jenesis.repository.search;
     requires build.jenesis.repository.audit;
     requires build.jenesis.repository.upstream;
     requires build.jenesis.repository.cleanup;

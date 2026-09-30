@@ -5,11 +5,10 @@ import build.jenesis.repository.store.ArtifactStore;
 import build.jenesis.repository.store.Providers;
 
 /**
- * Discovers the free-text search index and binds it to a repository's scoped store, so the search surface reaches the
- * read model through {@code ServiceLoader} rather than a compile-time dependency on the optional index module. A
- * deployment that carries the {@code build.jenesis.repository.search.lucene} module provides one; a deployment without
- * it has none, so {@link #installed()} is empty and {@code /api/search} falls back to the built-in live substring
- * scan while the rest of the app runs.
+ * Discovers the full-text search index and binds it to a repository's scoped store, so the one search reaches the
+ * index through {@code ServiceLoader} rather than a compile-time dependency on the module that builds it. The free
+ * core's {@code build.jenesis.repository.search.lucene} provides one; a composition without it has none, so
+ * {@link #installed()} is empty and every repository answers by name, whatever its {@link SearchMode} setting asks.
  *
  * <p>A single provider instance serves every tenant and repository and may keep a per-scope in-memory searcher behind
  * the scenes, so a caller resolves the provider <em>once</em> (a final field) and calls {@link #over} per request: the
@@ -22,11 +21,11 @@ import build.jenesis.repository.store.Providers;
  *     request, concurrently, so the provider, its per-scope searcher cache and the {@link SearchQuery} it returns
  *     must all be thread-safe.</li>
  * <li><b>Absence sentinel.</b> {@link #installed()} answers an empty {@link Optional} when no index module is on
- *     the module path, and {@code /api/search} falls back to the built-in live substring scan. {@code null} is
+ *     the module path, and a search answers by name. {@code null} is
  *     never a legal return from {@link #installed()}, from {@link #over}, or from either leg of the
  *     {@link SearchQuery} it hands back: a repository whose index has not been built - or whose stored index is a
  *     format the reader cannot open - answers an empty {@link Optional} from {@link SearchQuery#search} and
- *     {@link SearchQuery#licenses}, which is the signal to degrade to the live scan. That sentinel is
+ *     {@link SearchQuery#licenses}, which is the signal to answer by name. That sentinel is
  *     <em>load-bearing</em> and distinct from an empty answer: a present-but-empty page means the index is usable
  *     and nothing matched, and rendering the two alike would serve a false-empty result (which is where the
  *     {@code null} this clause always forbade was finally removed from the query surface).</li>

@@ -60,6 +60,7 @@ open module build.jenesis.repository.ui.store {
     requires build.jenesis.repository.maintenance;
     requires build.jenesis.repository.staging;
     requires build.jenesis.repository.search;
+    requires build.jenesis.repository.search.service;
     requires build.jenesis.repository.settings;
     requires build.jenesis.repository.upstream;
     requires build.jenesis.repository.dependents.spi;

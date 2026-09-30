@@ -276,7 +276,7 @@ class RepositoryAdminControllerTest {
         publish("files", "/notes.txt", "notes");
         ExtendedModelMap rootLevel = new ExtendedModelMap();
 
-        assertThat(controller.browse("files", "", "", "name", "asc", rootLevel)).isEqualTo("browse");
+        assertThat(controller.browse("files", "", "", null, "name", "asc", rootLevel)).isEqualTo("browse");
 
         assertThat(rootLevel).containsEntry("searching", false).containsEntry("hasParent", false)
                 .containsEntry("dir", "asc");
@@ -284,7 +284,7 @@ class RepositoryAdminControllerTest {
         assertThat((List<?>) rootLevel.get("crumbs")).isEmpty();
 
         ExtendedModelMap nested = new ExtendedModelMap();
-        controller.browse("files", "/docs/guide", "", "size", "desc", nested);
+        controller.browse("files", "/docs/guide", "", null, "size", "desc", nested);
         assertThat(nested).containsEntry("hasParent", true).containsEntry("parent", "/docs")
                 .containsEntry("dir", "desc");
         assertThat(nested.get("crumbs")).asInstanceOf(InstanceOfAssertFactories.LIST).containsExactly(
@@ -307,11 +307,19 @@ class RepositoryAdminControllerTest {
         create("files", "raw");
         ExtendedModelMap model = new ExtendedModelMap();
 
-        assertThat(controller.browse("files", "", "readme", "name", "asc", model)).isEqualTo("browse");
+        assertThat(controller.browse("files", "", "readme", null, "name", "asc", model)).isEqualTo("browse");
 
         assertThat(model).containsEntry("searching", true).containsEntry("query", "readme")
-                .containsKey("truncated").containsKey("neutralMark");
+                .containsKey("truncated").containsKey("nextCursor").containsKey("neutralMark");
         assertThat((List<?>) model.get("results")).isNotNull();
+        assertThat(model).as("a repository with nothing set shows the search bar as a lookup by name")
+                .containsEntry("fullText", false).containsEntry("indexed", false);
+
+        settings.saveRepository(TENANT, "files", Map.of("full-text-search", "true"), true);
+        ExtendedModelMap switchedOn = new ExtendedModelMap();
+        controller.browse("files", "", "", null, "name", "asc", switchedOn);
+        assertThat(switchedOn).as("switched on, the bar says so before anything is searched")
+                .containsEntry("fullText", true);
     }
 
     @Test

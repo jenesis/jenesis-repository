@@ -4,6 +4,7 @@ import module java.base;
 import module org.junit.jupiter.api;
 import build.jenesis.repository.inventory.StoreRepositoryInventory;
 import build.jenesis.repository.search.LicenseFacet;
+import build.jenesis.repository.search.SearchMode;
 import build.jenesis.repository.search.SearchQuery;
 import build.jenesis.repository.search.SearchQueryProvider;
 import build.jenesis.repository.store.ArtifactStore;
@@ -16,12 +17,12 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatCode;
 
 /**
- * When the search index answers, the console must resolve each hit's location by a bounded direct lookup - not by
- * enumerating the whole {@code meta/} tree per request just to filter it down to the indexed hits (a full-store
- * walk on a read path). This drives {@link RepositoryBrowse#search} with a fake index that returns one hit, over a
- * store that <em>refuses to list an ecosystem folder</em> ({@code meta/<eco>}, the coordinate-enumeration step a
- * full walk needs and a direct lookup never takes). The search still resolves the hit, proving it took the direct
- * path rather than a repository walk.
+ * When the full-text index answers, the console places each hit by a bounded direct lookup - never by enumerating the
+ * whole {@code meta/} tree per request just to filter it down to the indexed hits (a full-store walk on a read path).
+ * This drives {@link RepositoryBrowse#search} with a fake index that returns one hit, over a store that <em>refuses to
+ * list an ecosystem folder whole</em> ({@code meta/<eco>}, the coordinate enumeration a full walk needs) while it still
+ * pages one bounded window of it, as the name lookup leading the page does. The search still places the hit, proving
+ * it took the direct path rather than a repository walk.
  */
 public class RepositorySearchDirectLookupTest {
 
@@ -47,10 +48,12 @@ public class RepositorySearchDirectLookupTest {
     void an_indexed_hit_is_resolved_without_walking_the_published_tree() throws IOException {
         ListRefusingStore refusingRoot = new ListRefusingStore(backing);
         RepositoryBrowse admin = new RepositoryBrowse(refusingRoot, () -> "acme",
-                ObservationRegistry.NOOP, Optional.of(new FakeIndex(List.of("org.acme:lib:1.0"))));
+                ObservationRegistry.NOOP,
+                Optional.of(new FakeIndex(List.of(SearchQuery.Hit.coordinate("maven", "org.acme:lib", "1.0")))));
 
         List<RepositoryBrowse.SearchResult> results = new ArrayList<>();
-        assertThatCode(() -> results.addAll(admin.search("releases", "lib").results()))
+        assertThatCode(() -> results.addAll(admin.search("releases",
+                        key -> SearchMode.SETTING.equals(key) ? "true" : null, "lib", null).results()))
                 .as("resolving the indexed hit never enumerates all coordinates under an ecosystem")
                 .doesNotThrowAnyException();
 
@@ -62,7 +65,7 @@ public class RepositorySearchDirectLookupTest {
     }
 
     /** The fake installed index: returns a fixed hit set so {@link RepositoryBrowse#search} takes its indexed branch. */
-    private record FakeIndex(List<String> hits) implements SearchQueryProvider, SearchQuery {
+    private record FakeIndex(List<SearchQuery.Hit> hits) implements SearchQueryProvider, SearchQuery {
         @Override
         public SearchQuery over(ArtifactStore store, String scope) {
             return this;
@@ -79,11 +82,11 @@ public class RepositorySearchDirectLookupTest {
         }
     }
 
-    /** A store that refuses to list or page an ecosystem folder ({@code meta/<eco>}) - the coordinate-enumeration a
-     *  full repository walk performs. A direct hit lookup lists only {@code meta} (the ecosystems) and
-     *  {@code meta/<eco>/<coordinate>} (one coordinate's versions), never the ecosystem folder itself, so it
-     *  passes; a full-walk search would throw here. Reads and writes delegate untouched; {@link #scope}
-     *  propagates the guard. A test double, never a backend. */
+    /** A store that refuses to list or scan an ecosystem folder ({@code meta/<eco>}) whole - the coordinate
+     *  enumeration a full repository walk performs - while it pages one bounded window of it through to the
+     *  delegate. A direct hit lookup reads only point keys and bounded pages, so it passes; a full-walk search would
+     *  throw here. Reads and writes delegate untouched; {@link #scope} propagates the guard. A test double, never a
+     *  backend. */
     private static final class ListRefusingStore implements ArtifactStore {
         @Override
         public Object identity() {
@@ -109,6 +112,11 @@ public class RepositorySearchDirectLookupTest {
                 throw new AssertionError("full coordinate walk: enumerated every coordinate under " + prefix);
             }
             return delegate.list(prefix);
+        }
+
+        @Override
+        public void pageListed(String prefix, String startAfter, int limit, Consumer<Listed> consumer) {
+            delegate.pageListed(prefix, startAfter, limit, consumer);
         }
 
         @Override

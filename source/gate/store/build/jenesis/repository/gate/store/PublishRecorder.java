@@ -19,6 +19,7 @@ import build.jenesis.repository.findings.Findings;
 import build.jenesis.repository.findings.FindingsProvider;
 import build.jenesis.repository.health.HealthLedger;
 import build.jenesis.repository.health.HealthLedgerProvider;
+import build.jenesis.repository.inventory.AboutSection;
 import build.jenesis.repository.inventory.DependencySection;
 import build.jenesis.repository.inventory.LicenseInventory;
 import build.jenesis.repository.inventory.Recording;
@@ -455,6 +456,13 @@ final class PublishRecorder {
                                 dependency.requirement()))
                         .toList());
             }
+            // What the manifest says the package is for, and whom it credits by name, for a full-text index to find
+            // it by: in the same write as the rest, so it costs no store operation of its own.
+            ComplianceGate.About about = subject.about();
+            List<String> authors = new ArrayList<>(about == null ? List.of() : about.authors());
+            subject.maintainers().stream().map(Maintainer::name).filter(Objects::nonNull).forEach(authors::add);
+            recording.about(new AboutSection.About(about == null ? null : about.description(),
+                    about == null ? List.of() : about.keywords(), authors));
             ComplianceGate.Attestation attestation = subject.attestation();
             if (attestation != null) {
                 recording.provenance(attestation.artifactPresent() && attestation.artifactDigest() != null,

@@ -55,9 +55,15 @@ final class DiscoveryCommands {
             throw new IllegalArgumentException("Usage: search <repo> [query]");
         }
         String query = args.length > 2 ? args[2] : "";
-        List<String> results = CliSupport.client(home).contents().search(args[1], query);
-        results.forEach(System.out::println);
-        if (results.isEmpty()) {
+        ContentsClient.Found found = CliSupport.client(home).contents().search(args[1], query);
+        if (!"FULL_TEXT".equals(found.mode())) {
+            System.out.println("Looked up by the start of a name: full-text search is off for " + args[1] + ".");
+        } else if (!found.indexed()) {
+            System.out.println("Looked up by the start of a name: the full-text index of " + args[1]
+                    + " is not built yet.");
+        }
+        found.results().forEach(System.out::println);
+        if (found.results().isEmpty()) {
             System.out.println("No matches.");
         }
         return 0;

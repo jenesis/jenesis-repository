@@ -45,14 +45,15 @@ class WizardStepsTest {
     void a_wizard_asks_the_essential_settings_of_its_own_level_and_nothing_else() {
         assertThat(asked(Wizard.REPOSITORY)).containsExactly("probe-asked", "probe-local");
         assertThat(asked(Wizard.PROJECT)).containsExactly("probe-project");
-        assertThat(asked(Wizard.SETUP)).as("the deployment's own, and a tenant's as the value every tenant inherits")
-                .containsExactly("probe-global", "probe-tenant");
+        assertThat(asked(Wizard.SETUP)).as("the deployment's own, and a tenant's and a repository's as the value "
+                        + "every tenant and repository inherits - but not one only a repository holds")
+                .containsExactly("probe-asked", "probe-global", "probe-tenant");
     }
 
     @Test
     void a_step_is_a_settings_group_in_catalogue_order() {
         assertThat(Wizard.SETUP.steps(CATALOGUE)).extracting(Wizard.Step::group)
-                .containsExactly("Probe alpha", "Probe limits");
+                .containsExactly("Probe", "Probe alpha", "Probe limits");
         assertThat(Wizard.REPOSITORY.steps(CATALOGUE)).singleElement()
                 .satisfies(step -> assertThat(step.group()).isEqualTo("Probe"));
     }

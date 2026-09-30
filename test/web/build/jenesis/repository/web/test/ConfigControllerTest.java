@@ -182,10 +182,11 @@ class ConfigControllerTest {
         assertThat(setup.steps().getFirst().settings()).isEmpty();
         List<String> asked = setup.steps().stream().flatMap(step -> step.settings().stream())
                 .map(ConfigController.SettingView::key).toList();
-        assertThat(asked).as("every essential deployment and tenant setting, and nothing else")
+        assertThat(asked).as("every essential deployment, tenant and repository setting, and nothing else")
                 .containsExactlyElementsOf(Wizard.SETUP.steps().stream()
                         .flatMap(step -> step.settings().stream()).map(Setting::key).toList());
-        assertThat(asked).contains("vulnerability-threshold").doesNotContain("keep-last");
+        assertThat(asked).as("a repository's essential setting is asked as the default every repository inherits")
+                .contains("vulnerability-threshold", "keep-last", "full-text-search");
     }
 
     @Test

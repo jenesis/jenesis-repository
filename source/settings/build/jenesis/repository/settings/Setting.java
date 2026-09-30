@@ -150,7 +150,8 @@ public record Setting(String key, String group, String label, String description
     /**
      * Whether a setting is asked when what it configures is created, shown on the settings screens, or folded away
      * there. The wizard of a setting's scope asks its {@link #ESSENTIAL} settings - the deployment's first-boot wizard
-     * the global and tenant ones, the repository wizard the repository ones, the project wizard the project ones - so
+     * the global and tenant ones, and a repository one's deployment-wide default; the repository wizard the
+     * repository ones, the project wizard the project ones - so
      * a module that declares an essential setting adds it to that wizard with nothing else to write. The settings
      * screens show the essential and standard settings and fold the advanced ones behind a disclosure their filter
      * opens on a match; the generated reference names each tier. Nothing else differs: every tier is as editable, as

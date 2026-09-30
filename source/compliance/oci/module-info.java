@@ -23,7 +23,8 @@
 module build.jenesis.repository.compliance.oci {
     requires build.jenesis.repository.compliance;
     requires tools.jackson.databind;
-    exports build.jenesis.repository.compliance.oci to build.jenesis.repository.gateway.test;
+    exports build.jenesis.repository.compliance.oci to build.jenesis.repository.gateway.test,
+            build.jenesis.repository.compliance.maven.test;
     provides build.jenesis.repository.compliance.QualityInspector
             with build.jenesis.repository.compliance.oci.OciQualityInspector;
 }

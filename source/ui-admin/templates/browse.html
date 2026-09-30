@@ -9,9 +9,10 @@
   its immediate children; a folder's children are fetched on demand (the `rows` fragment, served by
   /repositories/{repo}/browse/children and swapped in by htmx on expand, or reached by navigating into the folder), so
   the browse never scans or buffers a whole tree. Folder-vs-artifact and the per-artifact size are supplied by the
-  domain layer (RepositoryBrowse.browseTree). A substring coordinate search (RepositoryBrowse.search, over the
-  precomputed release index) renders its hits through the same generic list/table as the tree - each hit links into
-  the browse at the folder the coordinate occupies - so there is one list component behind both browse and search.
+  domain layer (RepositoryBrowse.browseTree). The repository's search (RepositoryBrowse.search) renders its hits through
+  the same generic list/table as the tree - each hit links into the browse at the folder the coordinate occupies - so
+  there is one list component behind both browse and search. The search bar says which of its two modes the repository
+  answers in: a lookup by the start of a name, or the full-text index where the repository has full-text search on.
 -->
 <html lang="en" xmlns:th="http://www.thymeleaf.org">
 <head th:replace="~{fragments :: head('Browse')}"></head>
@@ -42,12 +43,24 @@
         </hgroup>
     </header>
 
-    <form method="get" th:action="@{/ui/repositories/{repo}/browse(repo=${repo})}">
+    <!--/* Two faces, one form. With the repository's full-text index off - the default - a query is the start of a
+         coordinate's name, and the bar reads as that rather than as a search that finds little; with it on, the bar
+         searches names, descriptions, keywords and authors. */-->
+    <form method="get" role="search" th:action="@{/ui/repositories/{repo}/browse(repo=${repo})}">
         <div class="grid">
-            <input name="q" type="search" th:value="${query}"
-                   placeholder="search coordinates" aria-label="Search coordinates">
-            <button th:replace="~{base :: secondaryButton('Search')}">Search</button>
+            <input th:if="${fullText}" name="q" type="search" th:value="${query}" aria-describedby="search-mode"
+                   placeholder="Search names, descriptions, keywords and authors" aria-label="Search this repository">
+            <input th:unless="${fullText}" name="q" type="search" th:value="${query}" aria-describedby="search-mode"
+                   placeholder="Look up by name, e.g. org.acme:lib" aria-label="Look up by name">
+            <button th:replace="~{base :: secondaryButton(${fullText} ? 'Search' : 'Look up')}">Search</button>
         </div>
+        <p id="search-mode" data-search-mode="name" th:unless="${fullText}"><small>Full-text search is off for this
+            repository, so a query looks a package up by the start of its name. Switch it on in the repository's
+            <a th:href="@{/ui/repositories/{repo}/settings(repo=${repo})}">settings</a> to search descriptions,
+            keywords and authors too.</small></p>
+        <p id="search-mode" data-search-mode="full-text" th:if="${fullText}"><small>Full-text search is on for this
+            repository<th:block th:if="${searching and !indexed}">; its index is not built yet, so these matches are
+            looked up by the start of their name meanwhile</th:block>.</small></p>
     </form>
 
     <article th:if="${searching}">
@@ -83,15 +96,15 @@
                           aria-label="no ecosystem recorded" th:utext="${neutralMark}"></span>
                     <a th:if="${!r.location.isEmpty()}"
                        th:href="@{/ui/repositories/{repo}/browse(repo=${repo},prefix=${r.location})}"
-                       th:text="${r.coordinate} + ':' + ${r.version}">group:artifact:version</a>
+                       th:text="${r.display}">group:artifact:version</a>
                     <!--/* A hit with no folder in the tree is a blobs-namespace format's (npm, PyPI, NuGet ...), or
                          one whose format is gone; either way its coordinate has a screen of its own, which lists
                          every version and the paths each is served at. */-->
                     <a th:if="${r.location.isEmpty() and !r.ecosystem.isEmpty()}"
                        th:href="@{/ui/repositories/{repo}/coordinate(repo=${repo},ecosystem=${r.ecosystem},coordinate=${r.coordinate})}"
-                       th:text="${r.coordinate} + ':' + ${r.version}">name:version</a>
+                       th:text="${r.display}">name:version</a>
                     <code th:if="${r.location.isEmpty() and r.ecosystem.isEmpty()}"
-                          th:text="${r.coordinate} + ':' + ${r.version}">group:artifact:version</code>
+                          th:text="${r.display}">group:artifact:version</code>
                 </td>
                 <td>
                     <span th:text="${r.ecosystem}">ecosystem</span>
@@ -105,14 +118,17 @@
         </table>
         </figure>
 
-        <!--/* The bound is visible: the search index and the no-index substring scan both answer a bounded
-             window, so a clamped hit list says that more matches remain rather than reading as the whole set. */-->
-        <p th:if="${truncated}"><small>Showing the first <span th:text="${results.size()}">1000</span> matches;
-            more remain past this page. Narrow the query, or page the <code>/api/search</code> endpoint with its
-            cursor, to reach the rest.</small></p>
+        <!--/* The bound is visible: every answer is one bounded page, so a clamped hit list says that more remain
+             and links the next page rather than reading as the whole set. */-->
+        <p th:if="${truncated}"><small>Showing <span th:text="${results.size()}">100</span> matches; more remain.
+            <a th:href="@{/ui/repositories/{repo}/browse(repo=${repo},q=${query},cursor=${nextCursor})}">Next
+                page</a></small></p>
 
-        <th:block th:if="${results.isEmpty()}">
-            <div th:replace="~{base :: empty('No coordinates match this search.')}"></div>
+        <th:block th:if="${results.isEmpty() and fullText}">
+            <div th:replace="~{base :: empty('Nothing in this repository matches this search.')}"></div>
+        </th:block>
+        <th:block th:if="${results.isEmpty() and !fullText}">
+            <div th:replace="~{base :: empty('No package name in this repository starts with this.')}"></div>
         </th:block>
     </article>
 

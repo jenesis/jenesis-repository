@@ -330,6 +330,13 @@ class PublicationHookCensusTest {
      * mutation out of reach - the honest edge of the leg's per-fixture coverage, and a shorter list than it looks
      * because the three interceptor archetypes deliberately divide the clauses between them.
      */
+    /** Why the kit's recording clauses cannot move the search index's observer: they publish the kit's
+     *  coordinate-less descriptor, and this hook marks only a publish that names a coordinate. */
+    private static final String SEARCH_SEES_NO_KIT_PUBLISH = "these clauses publish the kit's coordinate-less "
+            + "descriptor, and the search observer deliberately marks nothing for a publish that names no coordinate - a "
+            + "checksum or a generated sidecar - so its surface cannot move here and no mutation can be seen; "
+            + "CoordinateKeyedObserverTest drives it with a coordinate instead.";
+
     private static final Map<String, String> NOT_THIS_HOOKS_TO_FALSIFY = merged(Map.ofEntries(
             Map.entry("kit-recording-screen / A_LATER_VERDICT_RETRACTS_WITHOUT_A_POINTER_REWRITE",
                     "this screen votes at publish time and has no read side, so the check drives the kit's own withholding "
@@ -346,7 +353,16 @@ class PublicationHookCensusTest {
                     + "remembered - there is nothing for a concurrent publish to be confused with. RecordingScreen "
                     + "reaches all three and is falsified on it."),
             Map.entry("kit-auditing-screen / ONE_INSTANCE_SERVES_CONCURRENT_PUBLISHES_AND_READS",
-                    "the same one-verdict shape.")),
+                    "the same one-verdict shape."),
+            Map.entry("search-publication / A_DUPLICATE_DELIVERY_CONVERGES", SEARCH_SEES_NO_KIT_PUBLISH
+                    + " That a second mark of one coordinate upserts rather than doubles is SearchIncrementalTest's: a "
+                    + "re-touched coordinate is replaced by term, never duplicated."),
+            Map.entry("search-publication / A_QUARANTINED_OR_REJECTED_PUBLISH_IS_NEVER_OBSERVED",
+                    SEARCH_SEES_NO_KIT_PUBLISH + " The hook has no withhold leg to confuse with a publish: it keeps "
+                    + "the default no-op onWithheld."),
+            Map.entry("search-publication / THE_OBSERVER_RECORDS_THROUGH_THE_PUBLISHED_SCOPE",
+                    SEARCH_SEES_NO_KIT_PUBLISH + " It marks through the store it is handed and names no other, "
+                    + "which CoordinateKeyedObserverTest reads back from the repository's own scope.")),
             silentPairs(), screenPairs());
 
     /** The recording clauses of every observer that records nothing on a publish, each argued by the fixture's own

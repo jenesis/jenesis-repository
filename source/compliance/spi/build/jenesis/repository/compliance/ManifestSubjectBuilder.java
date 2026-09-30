@@ -27,18 +27,21 @@ public final class ManifestSubjectBuilder {
     private final List<ComplianceGate.DeclaredLicense> licenses;
     private final List<Maintainer> maintainers;
     private final List<ComplianceGate.Dependency> dependencies;
+    private final ComplianceGate.About about;
 
     private ManifestSubjectBuilder(String ecosystem, List<ComplianceGate.DeclaredLicense> licenses,
                                    List<Maintainer> maintainers) {
-        this(ecosystem, licenses, maintainers, null);
+        this(ecosystem, licenses, maintainers, null, null);
     }
 
     private ManifestSubjectBuilder(String ecosystem, List<ComplianceGate.DeclaredLicense> licenses,
-                                   List<Maintainer> maintainers, List<ComplianceGate.Dependency> dependencies) {
+                                   List<Maintainer> maintainers, List<ComplianceGate.Dependency> dependencies,
+                                   ComplianceGate.About about) {
         this.ecosystem = ecosystem;
         this.licenses = licenses;
         this.maintainers = maintainers;
         this.dependencies = dependencies;
+        this.about = about;
     }
 
     /**
@@ -58,7 +61,7 @@ public final class ManifestSubjectBuilder {
         }
         List<Maintainer> named = new ArrayList<>(maintainers);
         named.add(maintainer);
-        return new ManifestSubjectBuilder(ecosystem, licenses, List.copyOf(named), dependencies);
+        return new ManifestSubjectBuilder(ecosystem, licenses, List.copyOf(named), dependencies, about);
     }
 
     public ManifestSubjectBuilder maintainers(Collection<Maintainer> named) {
@@ -75,7 +78,7 @@ public final class ManifestSubjectBuilder {
      */
     public ManifestSubjectBuilder readsDependencies() {
         return dependencies != null ? this
-                : new ManifestSubjectBuilder(ecosystem, licenses, maintainers, List.of());
+                : new ManifestSubjectBuilder(ecosystem, licenses, maintainers, List.of(), about);
     }
 
     /**
@@ -91,7 +94,27 @@ public final class ManifestSubjectBuilder {
         }
         List<ComplianceGate.Dependency> declared = new ArrayList<>(read.dependencies);
         declared.add(new ComplianceGate.Dependency(coordinate.strip(), requirement == null ? "" : requirement.strip()));
-        return new ManifestSubjectBuilder(ecosystem, licenses, maintainers, List.copyOf(declared));
+        return new ManifestSubjectBuilder(ecosystem, licenses, maintainers, List.copyOf(declared), about);
+    }
+
+    /**
+     * What the manifest says the package is for: its description and its keywords, as {@link ComplianceGate.About}
+     * bounds them. A manifest that says neither leaves the subject without one, which reads as "said nothing".
+     */
+    public ManifestSubjectBuilder about(String description, Collection<String> keywords) {
+        return about(description, keywords, List.of());
+    }
+
+    /**
+     * {@link #about(String, Collection)} with the names of the people the manifest credits, where it names them
+     * without the address a {@link Maintainer} is bound by - an author is searched for by name, and naming one here
+     * binds no key to anybody.
+     */
+    public ManifestSubjectBuilder about(String description, Collection<String> keywords, Collection<String> authors) {
+        ComplianceGate.About said = new ComplianceGate.About(description,
+                keywords == null ? List.of() : new ArrayList<>(keywords),
+                authors == null ? List.of() : new ArrayList<>(authors));
+        return new ManifestSubjectBuilder(ecosystem, licenses, maintainers, dependencies, said.empty() ? null : said);
     }
 
     /** The dependencies declared so far, or {@code null} when the manifest was not read for them. */
@@ -126,7 +149,7 @@ public final class ManifestSubjectBuilder {
         }
         List<ComplianceGate.DeclaredLicense> declared = new ArrayList<>(licenses);
         declared.add(new ComplianceGate.DeclaredLicense(name, url));
-        return new ManifestSubjectBuilder(ecosystem, List.copyOf(declared), maintainers, dependencies);
+        return new ManifestSubjectBuilder(ecosystem, List.copyOf(declared), maintainers, dependencies, about);
     }
 
     /**
@@ -154,7 +177,7 @@ public final class ManifestSubjectBuilder {
      */
     public List<ComplianceGate.Subject> subject(String coordinate, String version) {
         return List.of(new ComplianceGate.Subject(ecosystem, coordinate, version, licenses)
-                .withMaintainers(maintainers).withDependencies(dependencies));
+                .withMaintainers(maintainers).withDependencies(dependencies).withAbout(about));
     }
 
     /**
@@ -167,7 +190,7 @@ public final class ManifestSubjectBuilder {
     public List<ComplianceGate.Subject> subject(String coordinate, String version,
                                                 ComplianceGate.Reachability reachability) {
         return List.of(new ComplianceGate.Subject(ecosystem, coordinate, version, licenses, reachability)
-                .withMaintainers(maintainers).withDependencies(dependencies));
+                .withMaintainers(maintainers).withDependencies(dependencies).withAbout(about));
     }
 
     /**

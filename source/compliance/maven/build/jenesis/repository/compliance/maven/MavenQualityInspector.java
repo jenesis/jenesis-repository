@@ -310,7 +310,7 @@ public final class MavenQualityInspector implements QualityInspector {
         ManifestSubjectBuilder declared = ownLicenses(path, archive, content, coordinate, lookup)
                 .maintainers(maintainers(path, archive, content, coordinate, lookup));
         if (path.endsWith(".pom")) {
-            declared = dependenciesFromPom(declared, content);
+            declared = aboutFromPom(dependenciesFromPom(declared, content), content);
         }
         return declared.subject(canonical, coordinate[2],
                 ComplianceGate.Reachability.root(canonical + ":" + coordinate[2]));
@@ -344,6 +344,23 @@ public final class MavenQualityInspector implements QualityInspector {
             return read;
         } catch (SAXException | IOException | RuntimeException unreadable) {
             return declared;         // a POM that does not parse declares nothing this can read
+        }
+    }
+
+    /**
+     * What a published POM says the artifact is for: the project's own {@code <description>}, or its {@code <name>}
+     * where it gives none. Maven has no keywords. Only the POM's own publish reads it, as the dependencies are read.
+     */
+    private static ManifestSubjectBuilder aboutFromPom(ManifestSubjectBuilder declared, byte[] pom) {
+        try {
+            Element project = Xml.parse(pom).getDocumentElement();
+            String description = children(project, "description").stream().map(Node::getTextContent)
+                    .filter(text -> !text.isBlank()).findFirst()
+                    .orElseGet(() -> children(project, "name").stream().map(Node::getTextContent).findFirst()
+                            .orElse(null));
+            return declared.about(description, List.of());
+        } catch (SAXException | IOException | RuntimeException unreadable) {
+            return declared;
         }
     }
 

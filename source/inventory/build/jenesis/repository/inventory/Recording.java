@@ -33,6 +33,7 @@ public final class Recording {
     String signatureSource;
     Map<String, String> signatureDetails;
     List<DependencySection.Declared> dependencies;
+    AboutSection.About about;
 
     Recording(InventoryRecording recording, String ecosystem, String coordinate, String version, boolean prerelease,
               Instant published) {
@@ -64,6 +65,13 @@ public final class Recording {
      *  was. */
     public Recording dependencies(List<DependencySection.Declared> dependencies) {
         this.dependencies = List.copyOf(dependencies);
+        return this;
+    }
+
+    /** What the inspected manifest says the package is for and whom it credits. Recorded only when it says
+     *  something, so a publish whose manifest no inspector read leaves the section as it was. */
+    public Recording about(AboutSection.About about) {
+        this.about = about == null || about.empty() ? null : about;
         return this;
     }
 
