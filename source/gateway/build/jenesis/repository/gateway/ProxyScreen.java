@@ -153,7 +153,8 @@ public final class ProxyScreen {
             public Optional<ProxyFormat.Fetched> fetch(URI url, Map<String, String> headers) throws IOException {
                 Optional<ProxyFormat.Fetched> fetched = delegate.fetch(url, headers);
                 if (fetched.isPresent() && fetched.get().status() == 200
-                        && screen(path, fetched.get().body(), lastModified(fetched.get().header("last-modified")))
+                        && screen(path, fetched.get().body(), lastModified(fetched.get().header("last-modified")),
+                                url.toString())
                                 != Verdict.ALLOW) {
                     return Optional.empty();
                 }
@@ -198,7 +199,7 @@ public final class ProxyScreen {
                     }
                     try (rawResponse) {
                         if (screening.verdict() == Verdict.QUARANTINE) {
-                            quarantine(path, rawResponse.body());
+                            quarantine(path, rawResponse.body(), url.toString());
                         }
                         log(path, screening);
                     }
@@ -234,7 +235,8 @@ public final class ProxyScreen {
                 // way the durable QuarantineLog row is written before the upstream body is closed.
                 try (response) {
                     if (screening.verdict() == Verdict.QUARANTINE) {
-                        quarantine(path, new SequenceInputStream(new ByteArrayInputStream(prefix), continued));
+                        quarantine(path, new SequenceInputStream(new ByteArrayInputStream(prefix), continued),
+                                url.toString());
                     }
                     log(path, screening);
                 }
@@ -254,25 +256,27 @@ public final class ProxyScreen {
         }
     }
 
-    Verdict screen(String path, byte[] body, Instant lastModified) throws IOException {
+    Verdict screen(String path, byte[] body, Instant lastModified, String upstream) throws IOException {
         // The buffered fetch body is the COMPLETE artifact, never a bounded prefix, so it is never truncated.
         Screening screening = assess(path, body, lastModified, false);
         if (screening.verdict() == Verdict.QUARANTINE) {
-            quarantine(path, new ByteArrayInputStream(body));
+            quarantine(path, new ByteArrayInputStream(body), upstream);
         }
         log(path, screening);
         return screening.verdict();
     }
 
-    /** Store a withheld body under {@code /quarantine} for review - the durable hold the {@link QuarantineLog} row
-     *  points at. Shared by the buffered/streaming screen and the hardened proxy leg ({@link HardenedScreen}). */
-    void quarantine(String path, InputStream body) throws IOException {
+    /** Store a withheld body fetched from {@code upstream} under {@code /quarantine} for review - the durable hold the
+     *  {@link QuarantineLog} row points at. Shared by the buffered/streaming screen and the hardened proxy leg
+     *  ({@link HardenedScreen}), which passes {@code null} when it re-screens bytes it already held rather than a
+     *  fetch. */
+    void quarantine(String path, InputStream body, String upstream) throws IOException {
         // The durable path -> coordinate record goes first and the review pointer second, so no hold pointer
         // exists without the record that says what it is a hold on. A proxied hold is placed while the format that
         // claims the path is by construction installed - it is what the fetch was routed through - so the coordinate
         // is resolved now and every later path-keyed question (which kinds hold this, may this name be disclosed,
         // what does discarding it destroy) answers from the record once that module is gone.
-        HeldSubjects.record(store, path);
+        HeldSubjects.recordFetched(store, path, upstream);
         publication.link("/quarantine" + path, publication.storeBlob(body));
     }
 

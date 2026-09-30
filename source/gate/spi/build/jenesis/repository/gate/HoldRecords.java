@@ -188,7 +188,7 @@ public final class HoldRecords {
         if (descriptor.isPresent() && descriptor.get().coordinate() != null
                 && descriptor.get().version() != null) {
             return Optional.of(new HeldSubjects.Subject(path, descriptor.get().ecosystem(),
-                    descriptor.get().coordinate(), descriptor.get().version()));
+                    descriptor.get().coordinate(), descriptor.get().version(), null));
         }
         if (descriptor.isPresent()) {
             return Optional.empty();   // a claiming format placed it and it names no version - an answer, not a gap

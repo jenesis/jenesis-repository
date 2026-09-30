@@ -128,6 +128,43 @@ class HoldLifecycleTest {
     }
 
     @Test
+    void releasing_a_held_pull_through_copy_keeps_it_a_cached_copy() throws IOException {
+        String fetched = "/maven/org/fetched/lib/2.0/lib-2.0.jar";
+        String upstream = "https://repo.example/maven2/org/fetched/lib/2.0/lib-2.0.jar";
+        Publication publication = new Publication(store);
+        // What the proxy's screen does with a body it withholds: the subject, naming where it was fetched from, then
+        // the review pointer - and no release pointer, since nothing was served.
+        HeldSubjects.recordFetched(store, fetched, upstream);
+        publication.link("/quarantine" + fetched, publication.storeBlob(
+                new ByteArrayInputStream("fetched".getBytes(StandardCharsets.UTF_8))));
+
+        HoldLifecycle.release(store, fetched);
+
+        StoreRepositoryInventory inventory = new StoreRepositoryInventory(store);
+        assertThat(publication.blob(fetched)).as("the released copy serves").isPresent();
+        assertThat(inventory.cachedAt(ECOSYSTEM, "org.fetched:lib", "2.0"))
+                .as("held as the copy it was fetched as, from where it was fetched")
+                .hasValueSatisfying(facts -> assertThat(facts.upstream()).isEqualTo(upstream));
+        assertThat(inventory.release(ECOSYSTEM, "org.fetched:lib", "2.0"))
+                .as("not a release: retention and the NOTICE keep to what was published here").isEmpty();
+    }
+
+    @Test
+    void releasing_a_held_publish_makes_it_a_release() throws IOException {
+        String published = "/maven/org/uploaded/lib/3.0/lib-3.0.jar";
+        Publication publication = new Publication(store);
+        HeldSubjects.record(store, published, ECOSYSTEM, "org.uploaded:lib", "3.0");
+        publication.link("/quarantine" + published, publication.storeBlob(
+                new ByteArrayInputStream("uploaded".getBytes(StandardCharsets.UTF_8))));
+
+        HoldLifecycle.release(store, published);
+
+        StoreRepositoryInventory inventory = new StoreRepositoryInventory(store);
+        assertThat(inventory.release(ECOSYSTEM, "org.uploaded:lib", "3.0")).as("a held upload is a release").isPresent();
+        assertThat(inventory.cachedAt(ECOSYSTEM, "org.uploaded:lib", "3.0")).isEmpty();
+    }
+
+    @Test
     void a_held_version_is_withheld_from_serving_until_the_hold_clears() throws IOException {
         // The withhold read side is store truth: a live /quarantine pointer retracts serving even for an already-linked
         // path. Consulted through the screen the Publication applies on every read.

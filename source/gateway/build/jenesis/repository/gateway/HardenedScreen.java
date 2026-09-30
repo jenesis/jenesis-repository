@@ -661,7 +661,7 @@ public final class HardenedScreen {
         // /quarantine for review; a rejected one is discarded. Either way the reason is recorded before we return.
         if (screening.verdict() == Verdict.QUARANTINE) {
             try (InputStream held = body.open()) {
-                screen.quarantine(path, held);
+                screen.quarantine(path, held, LOCAL_SOURCE.equals(source) ? null : source);
             }
         }
         screen.log(path, screening);

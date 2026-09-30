@@ -83,6 +83,11 @@ public final class HoldLifecycle {
         // Both are pure reads of small objects, and no hook may write either key space (contract clause 8).
         Optional<QuarantineDispatch> dispatch = QuarantineDispatch.read(store, path);
         Optional<String> current = publication.blob(path);
+        // A body a pull-through fetched and the screen held is a copy of an upstream's artifact, and a reviewer
+        // releasing it lets the copy serve - it does not publish it here. Read before anything is released, since the
+        // record goes with the hold.
+        Optional<HeldSubjects.Subject> fetched = HeldSubjects.read(store, path)
+                .filter(subject -> subject.upstream() != null && subject.versioned());
         // A release that can neither link a pointer nor prove it must not is refused, and refused here - before
         // anything is mutated. With the owning format's module off the graph describe() answers nothing, the
         // two-valued blobs-namespace question read that silence as "not blobs-namespace", and the release synthesized a
@@ -148,7 +153,15 @@ public final class HoldLifecycle {
             // release mechanism (lift the marker) rather than a second, format-specific replay beside it, and the
             // release stays a pure retraction-lift, which is what makes a retried release converge by construction.
             publication.link(path, held.get());
-            inventory.record(path, Instant.now());
+            if (fetched.isEmpty()) {
+                inventory.record(path, Instant.now());
+            }
+        }
+        if (fetched.isPresent()) {
+            // Recorded as the cached copy it was fetched as: the scans and the overview see it, retention and the
+            // NOTICE, which keep to what was published here, do not. A version already held is left as it is.
+            HeldSubjects.Subject copy = fetched.get();
+            inventory.cache(copy.ecosystem(), copy.coordinate(), copy.version(), copy.upstream(), Instant.now());
         }
         // A present pointer is left alone: equal hash means it is already right; a different hash is a corrected
         // republish that must not be rolled back to the quarantined bytes - lifting the hold is all that remains.

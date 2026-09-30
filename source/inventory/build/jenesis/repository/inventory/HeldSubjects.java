@@ -100,9 +100,11 @@ public final class HeldSubjects {
     /**
      * What a held request path was a path to, as judged when the hold was placed. {@link #coordinate} and
      * {@link #version} are {@code null} for a path an installed format placed but that names no versioned artifact -
-     * a real answer, and not the same as {@link #read} finding no row at all.
+     * a real answer, and not the same as {@link #read} finding no row at all. {@link #upstream} is the address a
+     * pull-through fetched the held body from, and {@code null} for a hold on anything published here: releasing a
+     * held copy makes it the cached copy it was fetched as, never a release.
      */
-    public record Subject(String path, String ecosystem, String coordinate, String version) {
+    public record Subject(String path, String ecosystem, String coordinate, String version, String upstream) {
 
         /** Whether this subject names a versioned artifact - the guard every caller that is about to compose a
          *  coordinate-keyed key or destroy a version's state must pass first. */
@@ -155,6 +157,11 @@ public final class HeldSubjects {
      */
     public static void record(ArtifactStore store, String path, String ecosystem, String coordinate, String version)
             throws IOException {
+        record(store, path, ecosystem, coordinate, version, null);
+    }
+
+    private static void record(ArtifactStore store, String path, String ecosystem, String coordinate, String version,
+                               String upstream) throws IOException {
         StringBuilder body = new StringBuilder();
         // The path is the row's own subject and its key is only a digest of it, so it is carried in the body: the
         // version face reads it back to answer "which paths of this version are held", and an operator reading a raw
@@ -167,6 +174,9 @@ public final class HeldSubjects {
             body.append("coordinate=").append(coordinate).append('\n');
             body.append("version=").append(version).append('\n');
         }
+        if (upstream != null) {
+            body.append("upstream=").append(upstream).append('\n');
+        }
         writeVersioned(store, pathKey(path), body.toString().getBytes(StandardCharsets.UTF_8));
         if (ecosystem != null && coordinate != null && version != null) {
             writeVersioned(store, versionKey(ecosystem, coordinate, version, path),
@@ -174,18 +184,19 @@ public final class HeldSubjects {
         }
     }
 
-    /** Record the subject of a hold being placed at {@code path}, resolved through the installed formats - the form a
-     *  hold site that has only a request path uses (the proxy's withheld body), where {@link #record(ArtifactStore,
-     *  String, String, String, String)}'s callers already hold the triple. Same contract: the resolution happens now,
-     *  while the format that claims the path is still installed, and a path that resolves to no coordinate is recorded
-     *  as carrying none rather than not recorded at all. */
-    public static void record(ArtifactStore store, String path) throws IOException {
+    /** Record the subject of a body a pull-through fetched from {@code upstream} and is holding at {@code path},
+     *  resolved through the installed formats - the form the proxy's withheld body uses, since it has only a request
+     *  path, where {@link #record(ArtifactStore, String, String, String, String)}'s callers already hold the triple.
+     *  Same contract: the resolution happens now, while the format that claims the path is still installed, and a
+     *  path that resolves to no coordinate is recorded as carrying none rather than not recorded at all. A
+     *  {@code null} upstream records a held body whose origin is unknown, which a release treats as published here. */
+    public static void recordFetched(ArtifactStore store, String path, String upstream) throws IOException {
         Optional<build.jenesis.repository.store.ArtifactDescriptor> described =
                 new StoreRepositoryInventory(store).describe(path);
         record(store, path,
                 described.map(build.jenesis.repository.store.ArtifactDescriptor::ecosystem).orElse(null),
                 described.map(build.jenesis.repository.store.ArtifactDescriptor::coordinate).orElse(null),
-                described.map(build.jenesis.repository.store.ArtifactDescriptor::version).orElse(null));
+                described.map(build.jenesis.repository.store.ArtifactDescriptor::version).orElse(null), upstream);
     }
 
     /**
@@ -271,6 +282,7 @@ public final class HeldSubjects {
         String ecosystem = null;
         String coordinate = null;
         String version = null;
+        String upstream = null;
         for (String line : new String(content, StandardCharsets.UTF_8).split("\n")) {
             int split = line.indexOf('=');
             if (split < 0) {
@@ -282,12 +294,13 @@ public final class HeldSubjects {
                 case "ecosystem" -> ecosystem = value;
                 case "coordinate" -> coordinate = value;
                 case "version" -> version = value;
+                case "upstream" -> upstream = value;
                 default -> {
                     // an unknown line from a newer writer: ignored, never fatal to a fail-closed read
                 }
             }
         }
-        return new Subject(path, ecosystem, coordinate, version);
+        return new Subject(path, ecosystem, coordinate, version, upstream);
     }
 
     /** The hex SHA-256 of a request path - the fixed-width name both faces key a held path by. */
