@@ -11,12 +11,10 @@ import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 
 /**
- * Wires the repository-maintenance web adapter into the repository server: the {@link MaintenanceController} over the
- * framework-free {@link Repositories} resolver and the {@link ObservationRegistry} the cleanup sweep is observed
- * through. Imported through {@code ServerModuleProvider} discovery (see {@link MaintenanceWebModule}), never named by
- * the server - so with this module absent the server carries no retention, cleanup or pin endpoints. The bean mirrors
- * the constructor injection the monolith performed, so the resolved dependencies are the same ones the server already
- * exposes.
+ * Wires the repository-maintenance web adapter into the server: {@link MaintenanceController} over {@link Repositories}
+ * and the {@link ObservationRegistry} the sweep is observed through. Imported through {@code ServerModuleProvider}
+ * discovery ({@link MaintenanceWebModule}); without this module the server carries no retention, cleanup or pin
+ * endpoints.
  */
 @Configuration(proxyBeanMethods = false)
 public class MaintenanceWebConfig {

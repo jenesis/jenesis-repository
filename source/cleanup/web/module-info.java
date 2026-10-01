@@ -1,14 +1,11 @@
 /**
- * The repository-maintenance HTTP surface as a removable server feature module: it provides
- * {@link build.jenesis.repository.server.kernel.ServerModuleProvider}, so the repository server imports its configuration
- * through {@code ServiceLoader} discovery and names no retention, cleanup or pin endpoint. A thin Spring {@code web}
- * adapter over the framework-free retention engine ({@link build.jenesis.repository.cleanup.RetentionSweeper}) and the
- * repository inventory ({@link build.jenesis.repository.inventory.StoreRepositoryInventory}), both resolved per
- * tenant-and-repository through {@code Repositories}: the {@code MaintenanceController} sweeps and plans
- * cleanups, reads and sets the retention policy, and pins or unpins a coordinate against garbage collection. With no
- * retention module installed the cleanup and retention endpoints answer {@code 501}; with this module absent the
- * server carries none of the surface and the console hides the panels. Open so Spring can reflect over the controller
- * and its configuration.
+ * The repository-maintenance HTTP surface as a removable server module: a
+ * {@link build.jenesis.repository.server.kernel.ServerModuleProvider} the server imports by {@code ServiceLoader}. A
+ * thin Spring adapter over the retention engine ({@link build.jenesis.repository.cleanup.RetentionSweeper}) and the
+ * repository inventory ({@link build.jenesis.repository.inventory.StoreRepositoryInventory}), resolved per tenant and
+ * repository: sweeping and planning cleanups, reading and setting retention, and pinning versions against retention.
+ * Without a retention module the cleanup and retention endpoints answer {@code 501}. Open so Spring can reflect over
+ * the controller.
  *
  * @jenesis.release 25
  * @jenesis.bom pin-repository.properties
