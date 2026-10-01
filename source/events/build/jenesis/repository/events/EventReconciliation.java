@@ -3,50 +3,32 @@ package build.jenesis.repository.events;
 import module java.base;
 
 /**
- * The durable read a subscriber reconciles one {@link EventType} against - the documented answer to "I cannot miss
- * one".
+ * The durable read a subscriber reconciles one {@link EventType} against: the answer to "I cannot miss one".
  *
- * <h2>Why this exists as a route and not as a stronger delivery guarantee</h2>
+ * <p>Delivery out of the outbox is at-least-once; delivery into it is not, since a producer emits after its own durable
+ * mutation and a crash between loses the event, which nothing records as owed ({@link EventSink} clause 12). Inventing
+ * an intent record would announce artifacts that never became visible. But every event type has a durable counterpart
+ * the emit does not gate, so a subscriber that must be complete polls it and treats the webhook as an accelerator: the
+ * push says when to look, the ledger what is true.
  *
- * <p>Event delivery has two gaps, and only one of them is closable. Delivery <em>out of</em> the outbox is
- * at-least-once and repaired by the drain, so a subscriber sees duplicates rather than losses. Delivery <em>into</em>
- * the outbox is not: every producer emits after its own durable mutation, so a crash between that mutation and the
- * sink's note losing the process loses the event permanently. {@link EventSink}'s clause 12 states why that cannot be
- * healed - an event is a point-in-time observation the store never records as having been owed, so there is nothing to
- * re-derive it from, and inventing an intent record that could not distinguish an orphan from a real publish would
- * announce artifacts that never became visible. That is a worse guarantee, not a stronger one.
+ * <p>{@link #of(EventType)} switches over {@link EventType} with no default, so a new event kind does not compile until
+ * its counterpart is named.
  *
- * <p>So the gap is irreducible, and the honest deliverable is the route around it rather than a mechanism that
- * pretends it is closed. What makes the route possible is that the blast radius is bounded to the <em>push</em> and
- * never to the fact: every event type has a durable, queryable counterpart the emit does not gate. A subscriber that
- * must be complete polls that counterpart and treats the webhook as an accelerator - the push tells it <em>when</em>
- * to look, the ledger tells it <em>what is true</em>. A subscriber that can tolerate a miss needs none of this.
- *
- * <p>The pairing is executable rather than prose because prose is what failed here: the claim "every event type has a
- * durable counterpart" was already written on {@link EventSink} and named none of them, so no operator could act on
- * it. {@link #of(EventType)} switches over {@link EventType} with no default, so a new event kind does not compile
- * until someone has answered what a subscriber reconciles it against - which is the question a new event type is most
- * likely to leave unanswered.
- *
- * @param ledger the durable state that is authoritative for this event kind, in the store's own vocabulary
- * @param route  the read an integrator polls to see it
- * @param caveat what that read cannot tell you, so the route is not itself over-promised
+ * @param ledger the durable state authoritative for this event kind
+ * @param route the read an integrator polls to see it
+ * @param caveat what that read cannot tell, so the route is not over-promised
  */
 public record EventReconciliation(String ledger, String route, String caveat) {
 
-    /** All three parts are required, and {@code null} is never a legal value for any of them: a route with
-     *  no read is not a route, and a route with no caveat is the over-promise this type exists to prevent. */
+    /** All three parts are required: a route with no read is no route, and one with no caveat over-promises. */
     public EventReconciliation {
         Objects.requireNonNull(ledger, "ledger");
         Objects.requireNonNull(route, "route");
         Objects.requireNonNull(caveat, "caveat");
     }
 
-    /**
-     * The reconciliation route for one event type. A total switch with no {@code default}: a new {@link EventType}
-     * constant fails to compile here until its durable counterpart is named, so the contract's "every event type has
-     * one" claim cannot quietly stop being true.
-     */
+    /** The reconciliation route for one event type; a total switch, so a new constant fails to compile until its
+     *  counterpart is named. */
     public static EventReconciliation of(EventType type) {
         return switch (type) {
             case PUBLISH -> new EventReconciliation(
@@ -100,8 +82,7 @@ public record EventReconciliation(String ledger, String route, String caveat) {
         };
     }
 
-    /** Every event type paired with its route, in declaration order - what an operator-facing surface renders so an
-     *  integrator can find the answer without reading this class. */
+    /** Every event type with its route, in declaration order, for an operator-facing surface to render. */
     public static Map<EventType, EventReconciliation> all() {
         Map<EventType, EventReconciliation> routes = new LinkedHashMap<>();
         for (EventType type : EventType.values()) {
@@ -110,8 +91,7 @@ public record EventReconciliation(String ledger, String route, String caveat) {
         return Collections.unmodifiableMap(routes);
     }
 
-    /** The one-line statement of the two gaps, so a surface rendering these routes says what they are a route
-     *  <em>around</em> rather than presenting them as an optional extra. */
+    /** The one-line statement of the two gaps, so a surface says what the routes are a route around. */
     public static String preamble() {
         return "Webhook delivery is at-least-once from the outbox onward, so a receiver must tolerate a duplicate; "
                 + "and it is lossy into the outbox, because a producer emits after its own durable mutation and a "
