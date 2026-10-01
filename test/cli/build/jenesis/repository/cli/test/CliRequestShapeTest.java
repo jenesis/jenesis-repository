@@ -150,7 +150,8 @@ public class CliRequestShapeTest {
             action("health refresh <repo>", "health refresh releases", get("/api/health", "repo", "refresh")),
             action("enforcement-preview <repo> [--unknown]", "enforcement-preview releases --unknown",
                     get("/api/licenses/retro/plan", "repo", "unknown")),
-            action("licenses <repo>", "licenses releases", get("/api/licenses", "repo")),
+            action("licenses <repo> [--count]", "licenses releases --count",
+                    get("/api/licenses", "repo", "refresh")),
             action("hardening <repo> [path]", "hardening releases /a/b.jar",
                     get("/api/hardening/verdict", "repo", "path")),
 

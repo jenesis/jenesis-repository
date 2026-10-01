@@ -1,7 +1,6 @@
 package build.jenesis.repository.search.lucene;
 
 import module java.base;
-import build.jenesis.repository.search.LicenseFacet;
 import build.jenesis.repository.search.SearchQuery;
 import build.jenesis.repository.store.ArtifactStore;
 import org.apache.lucene.analysis.Analyzer;
@@ -99,7 +98,7 @@ final class LuceneSearcher {
         this.ttl = ttl;
     }
 
-    private record Snapshot(int generation, IndexSearcher searcher, Directory directory, List<LicenseFacet> facets) {
+    private record Snapshot(int generation, IndexSearcher searcher, Directory directory) {
     }
 
     /**
@@ -147,16 +146,6 @@ final class LuceneSearcher {
             results.add(SearchIndexTask.hit(document.get("key"), last));
         }
         return Optional.of(SearchQuery.Hits.last(results));
-    }
-
-    /** The license inventory facets over the whole index - a count per distinct category and per distinct SPDX id -
-     *  served from the facets the sweep persisted next to the snapshot (or, for a pre-sidecar snapshot, from a one-time
-     *  walk done when the generation was loaded), cached on the {@link Snapshot} so a request never re-walks the index.
-     *  Empty {@link Optional} when no usable index exists yet, so the caller reports the inventory as unavailable
-     *  rather than empty. */
-    Optional<List<LicenseFacet>> licenses(ArtifactStore store) throws IOException {
-        Snapshot active = current(store);
-        return active == null ? Optional.empty() : Optional.of(active.facets());
     }
 
     private Snapshot current(ArtifactStore store) {
@@ -213,13 +202,7 @@ final class LuceneSearcher {
             }
             Directory directory = index.openSnapshot(manifest.generation());
             IndexSearcher searcher = new IndexSearcher(DirectoryReader.open(directory));
-            // Serve the license facets from the sweep-persisted sidecar; a pre-sidecar snapshot is walked once here,
-            // when the generation is loaded, so /api/licenses is O(1) either way for the life of the generation.
-            Optional<byte[]> persisted = index.readFacets(manifest.generation());
-            List<LicenseFacet> facets = persisted.isPresent()
-                    ? LicenseFacets.parse(persisted.get())
-                    : LicenseFacets.fromIndex(searcher);
-            snapshot = new Snapshot(manifest.generation(), searcher, directory, facets);   // swap whole
+            snapshot = new Snapshot(manifest.generation(), searcher, directory);   // swap whole
             refreshAt = System.currentTimeMillis() + ttl.toMillis();
             return snapshot;
         } catch (IOException | RuntimeException e) {

@@ -6,7 +6,6 @@ import build.jenesis.repository.maintenance.MaintenanceTask;
 import build.jenesis.repository.maintenance.UnitFailures;
 import build.jenesis.repository.maintenance.MaintenanceTaskProvider;
 import build.jenesis.repository.maintenance.RepositoryContext;
-import build.jenesis.repository.search.LicenseFacet;
 import build.jenesis.repository.search.SearchMode;
 import build.jenesis.repository.search.SearchQuery;
 import build.jenesis.repository.search.SearchQueryProvider;
@@ -124,11 +123,10 @@ class SearchIndexTest {
     }
 
     @Test
-    void superseded_snapshots_and_their_facet_sidecars_are_garbage_collected() throws IOException {
-        // The index/search key-space must stop growing: each sweep writes a new generation snapshot plus its
-        // facet sidecar, and keeps only the current generation and the one just replaced (so an in-flight reader
-        // finishes streaming) - everything older is deleted, sidecar included, or the space grows by one snapshot
-        // per sweep forever.
+    void superseded_snapshots_are_garbage_collected() throws IOException {
+        // The index/search key-space must stop growing: each sweep writes a new generation snapshot, and keeps only
+        // the current generation and the one just replaced (so an in-flight reader finishes streaming) - everything
+        // older is deleted, or the space grows by one snapshot per sweep forever.
         ArtifactStore store = store("default", "app");
         publish(store, "maven", "org.example:lib", "1.0");
         for (int pass = 0; pass < 4; pass++) {
@@ -139,12 +137,10 @@ class SearchIndexTest {
         assertThat(store.exists("index/search/3.manifest")).as("the one just replaced, for in-flight readers").isTrue();
         assertThat(store.exists("index/search/2.manifest")).as("superseded snapshot reclaimed").isFalse();
         assertThat(store.exists("index/search/1.manifest")).isFalse();
-        assertThat(store.exists("index/search/2.facets")).as("the facet sidecar goes with its snapshot").isFalse();
-        assertThat(store.exists("index/search/1.facets")).isFalse();
         assertThat(store.list("index/search"))
                 .as("the key-space holds exactly the manifest and the two retained generations - superseded "
                         + "snapshots are GC'd (the space does not grow per sweep)")
-                .containsExactlyInAnyOrder("current", "3.manifest", "3.facets", "4.manifest", "4.facets", "segments");
+                .containsExactlyInAnyOrder("current", "3.manifest", "4.manifest", "segments");
     }
 
     @Test
@@ -444,59 +440,6 @@ class SearchIndexTest {
         SearchQuery query = query(store, "default/app");
         assertThat(hits(query, "category:unknown")).containsExactly("org.example:bare:1.0");
         assertThat(hits(query, "license:MIT")).isEmpty();
-        assertThat(facets(query)).contains(new LicenseFacet(LicenseFacet.CATEGORY, "unknown", 1));
-    }
-
-    @Test
-    void the_inventory_facets_count_per_category_and_spdx_id() throws IOException {
-        ArtifactStore store = store("default", "app");
-        publish(store, "maven", "org.example:mit", "1.0");
-        licenseSidecar(store, "maven", "org.example:mit", "1.0", named("MIT License"));
-        publish(store, "maven", "org.example:gpl", "1.0");
-        licenseSidecar(store, "maven", "org.example:gpl", "1.0", named("GNU General Public License, version 3"));
-        publish(store, "maven", "org.example:bare", "1.0");
-        licenseSidecar(store, "maven", "org.example:bare", "1.0");
-        sweep(store);
-
-        assertThat(facets(query(store, "default/app"))).contains(
-                new LicenseFacet(LicenseFacet.CATEGORY, "permissive", 1),
-                new LicenseFacet(LicenseFacet.CATEGORY, "strong-copyleft", 1),
-                new LicenseFacet(LicenseFacet.CATEGORY, "unknown", 1),
-                new LicenseFacet(LicenseFacet.LICENSE, "MIT", 1),
-                new LicenseFacet(LicenseFacet.LICENSE, "GPL", 1));
-    }
-
-    @Test
-    void the_facets_are_persisted_beside_the_snapshot_and_read_without_a_walk() throws IOException {
-        ArtifactStore store = store("default", "app");
-        publish(store, "maven", "org.example:mit", "1.0");
-        licenseSidecar(store, "maven", "org.example:mit", "1.0", named("MIT License"));
-        sweep(store);
-
-        // The sweep committed a facet sidecar next to the generation-1 snapshot, so /api/licenses reads it directly.
-        assertThat(store.exists("index/search/1.facets"))
-                .as("the sweep persists the license facets next to the snapshot it built").isTrue();
-
-        // A fresh provider (cold heap) serves the facets purely from the persisted sidecar - a round-trip.
-        SearchQuery reloaded = new LuceneSearchQueryProvider(Duration.ZERO).over(store, "default/app");
-        assertThat(facets(reloaded)).contains(
-                new LicenseFacet(LicenseFacet.CATEGORY, "permissive", 1),
-                new LicenseFacet(LicenseFacet.LICENSE, "MIT", 1));
-    }
-
-    @Test
-    void a_snapshot_without_a_facet_sidecar_still_serves_facets_by_walking() throws IOException {
-        ArtifactStore store = store("default", "app");
-        publish(store, "maven", "org.example:mit", "1.0");
-        licenseSidecar(store, "maven", "org.example:mit", "1.0", named("MIT License"));
-        sweep(store);
-        store.delete("index/search/1.facets");                 // a pre-sidecar snapshot, built before this feature
-
-        // A fresh reader falls back to a one-time walk of the loaded index, so the inventory is unchanged.
-        SearchQuery reloaded = new LuceneSearchQueryProvider(Duration.ZERO).over(store, "default/app");
-        assertThat(facets(reloaded)).contains(
-                new LicenseFacet(LicenseFacet.CATEGORY, "permissive", 1),
-                new LicenseFacet(LicenseFacet.LICENSE, "MIT", 1));
     }
 
     @Test
@@ -514,7 +457,7 @@ class SearchIndexTest {
     }
 
     @Test
-    void one_tenants_license_inventory_never_sees_anothers() throws IOException {
+    void one_tenants_licence_filter_never_sees_anothers() throws IOException {
         ArtifactStore alpha = store("alpha", "app");
         ArtifactStore beta = store("beta", "app");
         publish(alpha, "maven", "com.alpha:lib", "1.0");
@@ -527,7 +470,7 @@ class SearchIndexTest {
         assertThat(hits(query(alpha, "alpha/app"), "category:permissive")).containsExactly("com.alpha:lib:1.0");
         assertThat(hits(query(alpha, "alpha/app"), "category:strong-copyleft")).isEmpty();
         assertThat(hits(query(beta, "beta/app"), "license:GPL")).containsExactly("com.beta:lib:1.0");
-        assertThat(facets(query(beta, "beta/app"))).noneMatch(facet -> facet.value().equals("MIT"));
+        assertThat(hits(query(beta, "beta/app"), "license:MIT")).isEmpty();
     }
 
     private RepositoryContext context(ArtifactStore store) {
@@ -554,7 +497,7 @@ class SearchIndexTest {
 
             @Override
             public UnaryOperator<String> config() {
-                // This suite is the full-rebuild / reader-swap / facets / GC machinery (the task keeps it for
+                // This suite is the full-rebuild / reader-swap / GC machinery (the task keeps it for
                 // bootstrap, the format bump and the periodic reconcile). Pin the safety valve so every sweep is a full
                 // rebuild - the behaviour this suite was written against; the O(delta) incremental steady state has its
                 // own suite (SearchIncrementalTest).
@@ -653,10 +596,6 @@ class SearchIndexTest {
                 .map(page -> page.hits().stream().map(SearchQuery.Hit::display).toList()).orElse(null);
     }
 
-    /** The license facets, or {@code null} when this repository has no usable index yet - the same signal. */
-    private static List<LicenseFacet> facets(SearchQuery query) throws IOException {
-        return query.licenses().orElse(null);
-    }
 
     /** The generation a committed manifest names. Read rather than matched, so the assertion can be an ordering. */
     private static int generationOf(String manifest) {

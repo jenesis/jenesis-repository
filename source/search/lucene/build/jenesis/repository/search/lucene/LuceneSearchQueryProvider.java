@@ -1,7 +1,6 @@
 package build.jenesis.repository.search.lucene;
 
 import module java.base;
-import build.jenesis.repository.search.LicenseFacet;
 import build.jenesis.repository.search.SearchQuery;
 import build.jenesis.repository.search.SearchQueryProvider;
 import build.jenesis.repository.store.ArtifactStore;
@@ -88,11 +87,6 @@ public final class LuceneSearchQueryProvider implements SearchQueryProvider {
             @Override
             public Optional<Hits> search(String query, String cursor, int limit) throws IOException {
                 return searcher.search(store, query, cursor, limit);
-            }
-
-            @Override
-            public Optional<List<LicenseFacet>> licenses() throws IOException {
-                return searcher.licenses(store);
             }
         };
     }

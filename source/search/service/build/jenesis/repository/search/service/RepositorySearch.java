@@ -2,7 +2,6 @@ package build.jenesis.repository.search.service;
 
 import module java.base;
 import build.jenesis.repository.inventory.StoreRepositoryInventory;
-import build.jenesis.repository.search.LicenseFacet;
 import build.jenesis.repository.search.SearchMode;
 import build.jenesis.repository.search.SearchQuery;
 import build.jenesis.repository.search.SearchQueryProvider;
@@ -87,18 +86,6 @@ public final class RepositorySearch {
         }
         NameLookup.Page page = NameLookup.lookup(inventory, text, from.name(), rows);
         return new Answer(mode, false, page.hits(), page.next() == null ? null : Cursor.name(page.next()));
-    }
-
-    /**
-     * The licence inventory over a repository, counted by its full-text index; empty when the repository's index is
-     * off, not built yet, or not installed - the inventory is the index's answer, and without one there is none.
-     */
-    public Optional<List<LicenseFacet>> licenses(ArtifactStore store, String scope, UnaryOperator<String> config)
-            throws IOException {
-        if (SearchMode.of(config) != SearchMode.FULL_TEXT || index.isEmpty()) {
-            return Optional.empty();
-        }
-        return index.get().over(store, scope).licenses();
     }
 
     /** A hit the index holds may since have been withheld, or have gone; screened as a listing screens it. */

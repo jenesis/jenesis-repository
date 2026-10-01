@@ -4,7 +4,6 @@ import module java.base;
 import module org.junit.jupiter.api;
 import build.jenesis.repository.maintenance.RepositoryContext;
 import build.jenesis.repository.maintenance.UnitFailures;
-import build.jenesis.repository.search.LicenseFacet;
 import build.jenesis.repository.search.SearchMode;
 import build.jenesis.repository.search.SearchQuery;
 import build.jenesis.repository.search.lucene.LuceneSearchQueryProvider;
@@ -489,9 +488,5 @@ class SearchIncrementalTest {
                 .map(page -> page.hits().stream().map(SearchQuery.Hit::display).toList()).orElse(null);
     }
 
-    /** The license facets, or {@code null} when this repository has no usable index yet - the same signal. */
-    private static List<LicenseFacet> facets(SearchQuery query) throws IOException {
-        return query.licenses().orElse(null);
-    }
 
 }

@@ -124,9 +124,11 @@ public final class Commands {
                     noun("enforcement-preview", "what enabling licence enforcement would newly hold",
                             ComplianceCommands::enforcementPreview,
                             act("enforcement-preview <repo> [--unknown]", "a dry run over what is already published")),
-                    noun("licenses", "declared-license facets", 
+                    noun("licenses", "how many versions declare each license",
                             ComplianceCommands::licenses,
-                            act("licenses <repo>", "the per-category and per-SPDX-id counts")),
+                            act("licenses <repo> [--count]", "the per-category and per-SPDX-id counts of versions as "
+                                    + "the last count left them; --count starts a count in the background, and "
+                                    + "--refresh watches it finish")),
                     noun("hardening", "the proxy-hardening verdict for a path",
                             OperationsCommands::hardening,
                             act("hardening <repo> [path]", "what hardening would do with these bytes")))),

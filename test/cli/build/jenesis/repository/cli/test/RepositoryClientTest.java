@@ -72,9 +72,12 @@ public class RepositoryClientTest {
             + "\"signals\":[{\"name\":\"known-exploited\",\"label\":\"Known exploited\","
             + "\"value\":\"known-exploited\",\"rank\":1.0},"
             + "{\"name\":\"epss\",\"label\":\"EPSS\",\"value\":\"EPSS 94%\",\"rank\":0.94373}]}]}]}";
-    private static final String LICENSES = "{\"indexed\":true,"
-            + "\"categories\":[{\"value\":\"permissive\",\"count\":12},{\"value\":\"strong-copyleft\",\"count\":3}],"
-            + "\"licenses\":[{\"value\":\"apache-2.0\",\"count\":8},{\"value\":\"mit\",\"count\":4}]}";
+    private static final String LICENSES = "{\"state\":\"done\",\"startedAt\":\"2026-01-01T00:00:00Z\","
+            + "\"finishedAt\":\"2026-01-01T00:00:05Z\",\"failure\":null,\"versions\":15,"
+            + "\"categories\":[{\"value\":\"permissive\",\"versions\":12},"
+            + "{\"value\":\"strong-copyleft\",\"versions\":3}],"
+            + "\"licenses\":[{\"value\":\"Apache-2.0\",\"versions\":8},{\"value\":\"MIT\",\"versions\":4}],"
+            + "\"rows\":5,\"truncated\":false}";
     private static final String QUARANTINE = "{\"events\":[{\"when\":\"2026-01-01T00:00:00Z\","
             + "\"path\":\"/maven/org/acme/lib/1.0/lib-1.0.jar\",\"coordinate\":\"org.acme:lib\","
             + "\"verdict\":\"QUARANTINE\",\"reasons\":[\"unsigned\",\"license unknown\"]}]}";
@@ -458,17 +461,25 @@ public class RepositoryClientTest {
     }
 
     @Test
-    void the_license_facets_are_parsed_into_categories_and_spdx_ids() throws IOException, InterruptedException {
+    void the_license_inventory_is_parsed_into_its_state_and_counts_of_versions()
+            throws IOException, InterruptedException {
         RiskClient.LicensesView view = client.risk().licenses("releases");
         assertThat(lastPath).isEqualTo("/api/licenses");
-        assertThat(lastQuery).contains("repo=releases");
-        assertThat(view.indexed()).isTrue();
+        assertThat(lastQuery).contains("repo=releases").doesNotContain("refresh");
+        assertThat(view.state()).isEqualTo("done");
+        assertThat(view.finishedAt()).isEqualTo("2026-01-01T00:00:05Z");
+        assertThat(view.versions()).isEqualTo(15);
         assertThat(view.categories()).extracting(RiskClient.LicenseCount::value)
                 .containsExactly("permissive", "strong-copyleft");
         assertThat(view.licenses()).first().satisfies(count -> {
-            assertThat(count.value()).isEqualTo("apache-2.0");
-            assertThat(count.count()).isEqualTo(8);
+            assertThat(count.value()).isEqualTo("Apache-2.0");
+            assertThat(count.versions()).isEqualTo(8);
         });
+        assertThat(view.truncated()).isFalse();
+
+        RiskClient.LicenseCountStart start = client.risk().countLicenses("releases");
+        assertThat(lastQuery).as("a count is asked for on the read itself").contains("refresh=true");
+        assertThat(start.inventory().state()).isEqualTo("done");
     }
 
     @Test

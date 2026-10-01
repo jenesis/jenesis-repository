@@ -4,9 +4,10 @@
  * configuration through {@code ServiceLoader} discovery and names no browse or search endpoint. A thin Spring
  * {@code web} adapter over the {@code Repositories} resolver, the store-backed {@link build.jenesis.repository.inventory}
  * listing and the one {@link build.jenesis.repository.search.service.RepositorySearch} - a lookup by name, or the
- * full-text index where a repository has it switched on - with the licence inventory counted by that index. With this
- * module absent the server carries no {@code /api/browse}, {@code /api/search} or {@code /api/licenses} route. Open
- * so Spring can reflect over the controller and its configuration.
+ * full-text index where a repository has it switched on - and the licence inventory's stored report, counted on
+ * request by {@link build.jenesis.repository.compliance.inventory.LicenseReport} whether or not the index is on. With
+ * this module absent the server carries no {@code /api/browse}, {@code /api/search} or {@code /api/licenses} route.
+ * Open so Spring can reflect over the controller and its configuration.
  *
  * @jenesis.release 25
  * @jenesis.bom pin-repository.properties
@@ -20,6 +21,7 @@ open module build.jenesis.repository.search.web {
     requires build.jenesis.repository.search;
     requires build.jenesis.repository.search.service;
     requires build.jenesis.repository.inventory;
+    requires build.jenesis.repository.compliance.inventory;
     requires build.jenesis.repository.store;
     requires jakarta.servlet;
     requires spring.beans;

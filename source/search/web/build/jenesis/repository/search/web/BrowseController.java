@@ -5,8 +5,9 @@ import build.jenesis.repository.server.RepositoryRouting;
 import build.jenesis.repository.server.kernel.Repositories;
 import build.jenesis.repository.inventory.StoreRepositoryInventory;
 import build.jenesis.repository.server.kernel.RepositoryRequests;
+import build.jenesis.repository.store.ArtifactStore;
 import build.jenesis.repository.store.ServableNames;
-import build.jenesis.repository.search.LicenseFacet;
+import build.jenesis.repository.compliance.inventory.LicenseReport;
 import build.jenesis.repository.search.SearchQuery;
 import build.jenesis.repository.search.service.RepositorySearch;
 import jakarta.servlet.http.HttpServletRequest;
@@ -19,8 +20,9 @@ import org.springframework.web.bind.annotation.RestController;
 
 /**
  * The browse and search reads over a tenant's named repository, driving the console's tree and search bar and the
- * CLI's {@code browse} and {@code search}. Browse pages one level of the served tree; search is the repository's
- * {@link RepositorySearch}, a lookup by name unless the repository's full-text index is switched on - never an
+ * CLI's {@code browse} and {@code search}, and the repository's licence inventory. Browse pages one level of the
+ * served tree; search is the repository's {@link RepositorySearch}, a lookup by name unless the repository's
+ * full-text index is switched on; the licence inventory is the stored report {@link LicenseReport} keeps - never an
  * artifact blob, and never a walk of the store.
  */
 @RestController
@@ -107,35 +109,36 @@ public class BrowseController {
         return key -> repositories.live().effective(tenant, repo, key, null);
     }
 
+    /** Says, on a {@code refresh=true} read of the licence inventory, whether this request started the count or
+     *  found one already running - the header every stored-report refresh answers with. */
+    public static final String REFRESH_HEADER = "Jenesis-Refresh";
+
     /**
-     * The license inventory over a repository: facet counts per license category and per SPDX id, counted by the
-     * repository's full-text index. Each row drills down through {@code /api/search?q=category:<value>} or
-     * {@code license:<value>} to the coordinates behind it. Available only while the repository's full-text search is
-     * on and its index built ({@code indexed=false} otherwise, with empty facets); without it the view reports itself
-     * unavailable rather than scanning every artifact's metadata on the request path. Whether it is on is read from
-     * the settings documents as {@link #search} reads it.
+     * The licence inventory of a repository: how many of its versions declare each licence category and each SPDX
+     * id, as the last count left it. The answer is the stored report's state - {@code not-counted} before any count
+     * was asked for, {@code running} with when it started, {@code done} with when it finished and the counts, or
+     * {@code failed} with the reason - read by one point read, whether or not the repository's full-text search is on.
+     *
+     * <p>{@code refresh=true} asks for a fresh count: it is started in the background, the {@value #REFRESH_HEADER}
+     * header says whether this request started it or found one already running, and the answer is the state as it
+     * then stands. The count visits every version, so it never runs on the request; a caller polls this read until
+     * the state is no longer {@code running}.
      */
     @GetMapping("/api/licenses")
     @ResponseBody
     public LicensesView licenses(@RequestParam("repo") String repo,
+                                 @RequestParam(value = "refresh", defaultValue = "false") boolean refresh,
                                  HttpServletRequest request,
                                  HttpServletResponse response) throws IOException {
         String tenant = RepositoryRequests.access(routing, repo, request, response);
         if (tenant == null) {
             return null;
         }
-        Optional<List<LicenseFacet>> facets = search.licenses(repositories.store(tenant, repo), tenant + '/' + repo,
-                config(tenant, repo));
-        if (facets.isEmpty()) {
-            return new LicensesView(false, List.of(), List.of());
+        ArtifactStore store = repositories.store(tenant, repo);
+        if (refresh) {
+            response.setHeader(REFRESH_HEADER, LicenseReport.start(store) ? "started" : "running");
         }
-        List<LicenseCount> categories = new ArrayList<>();
-        List<LicenseCount> licenses = new ArrayList<>();
-        for (LicenseFacet facet : facets.get()) {
-            (facet.kind().equals(LicenseFacet.CATEGORY) ? categories : licenses)
-                    .add(new LicenseCount(facet.value(), facet.count()));
-        }
-        return new LicensesView(true, categories, licenses);
+        return LicensesView.of(LicenseReport.read(store));
     }
 
     /** Normalise a query-supplied browse prefix into the leading-slash form the inventory's {@code children} expects,
@@ -183,11 +186,29 @@ public class BrowseController {
     public record Hit(String ecosystem, String coordinate, String version, String path) {
     }
 
-    /** One license-inventory facet row: the category or SPDX id and the number of coordinates carrying it. */
-    public record LicenseCount(String value, long count) {
+    /** One licence-inventory row: the category or SPDX id and the number of versions carrying it. */
+    public record LicenseCount(String value, long versions) {
     }
 
-    /** The license inventory: whether the index backed it, the per-category counts and the per-SPDX-id counts. */
-    public record LicensesView(boolean indexed, List<LicenseCount> categories, List<LicenseCount> licenses) {
+    /**
+     * The licence inventory as stored: its {@code state} ({@code not-counted}, {@code running}, {@code done} or
+     * {@code failed}), when the count started and finished ({@code null} until it has), why it failed, how many
+     * versions it counted, the counts per category and per SPDX id - most versions first - how many rows the count
+     * produced, and whether the rows shown stop short of them.
+     */
+    public record LicensesView(String state, Instant startedAt, Instant finishedAt, String failure, long versions,
+                               List<LicenseCount> categories, List<LicenseCount> licenses, int rows,
+                               boolean truncated) {
+
+        static LicensesView of(LicenseReport.Inventory inventory) {
+            return new LicensesView(inventory.state().name().toLowerCase(Locale.ROOT).replace('_', '-'),
+                    inventory.startedAt(), inventory.finishedAt(), inventory.failure(), inventory.versions(),
+                    counts(inventory.categories()), counts(inventory.licenses()), inventory.rows(),
+                    inventory.truncated());
+        }
+
+        private static List<LicenseCount> counts(List<LicenseReport.Count> counts) {
+            return counts.stream().map(count -> new LicenseCount(count.value(), count.versions())).toList();
+        }
     }
 }

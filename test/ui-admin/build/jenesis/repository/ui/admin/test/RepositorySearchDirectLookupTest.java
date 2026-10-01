@@ -3,7 +3,6 @@ package build.jenesis.repository.ui.admin.test;
 import module java.base;
 import module org.junit.jupiter.api;
 import build.jenesis.repository.inventory.StoreRepositoryInventory;
-import build.jenesis.repository.search.LicenseFacet;
 import build.jenesis.repository.search.SearchMode;
 import build.jenesis.repository.search.SearchQuery;
 import build.jenesis.repository.search.SearchQueryProvider;
@@ -74,11 +73,6 @@ public class RepositorySearchDirectLookupTest {
         @Override
         public Optional<Hits> search(String query, String cursor, int limit) {
             return Optional.of(Hits.last(hits));
-        }
-
-        @Override
-        public Optional<List<LicenseFacet>> licenses() {
-            return Optional.empty();
         }
     }
 

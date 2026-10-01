@@ -40,6 +40,7 @@ open module build.jenesis.repository.web.test {
     requires build.jenesis.repository.metadata.store;
     requires build.jenesis.repository.maintenance;
     requires build.jenesis.repository.compliance;
+    requires build.jenesis.repository.compliance.inventory;
     requires build.jenesis.repository.settings;
     requires build.jenesis.repository.upstream;
     requires build.jenesis.repository.upstream.store;

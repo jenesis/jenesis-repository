@@ -164,7 +164,7 @@ class SearchCostTest {
         assertThat(perRelease.values().stream().mapToDouble(Double::doubleValue).sum())
                 .as("and nothing else grows with the repository").isEqualTo(9.0);
         assertThat(large.entrySet()).filteredOn(entry -> entry.getKey().endsWith("index/search"))
-                .as("the index's own reads and writes - its segments, generation, facets and manifest - do not grow "
+                .as("the index's own reads and writes - its segments, generation and manifest - do not grow "
                         + "with the releases it indexes")
                 .containsExactlyInAnyOrderElementsOf(small.entrySet().stream()
                         .filter(entry -> entry.getKey().endsWith("index/search")).toList());

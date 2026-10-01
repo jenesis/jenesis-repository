@@ -6,7 +6,6 @@ import build.jenesis.repository.inventory.LicenseInventory;
 import build.jenesis.repository.inventory.StoreRepositoryInventory;
 import build.jenesis.repository.maintenance.RepositoryContext;
 import build.jenesis.repository.maintenance.UnitFailures;
-import build.jenesis.repository.search.LicenseFacet;
 import build.jenesis.repository.search.SearchMode;
 import build.jenesis.repository.search.SearchQuery;
 import build.jenesis.repository.search.lucene.LuceneSearchQueryProvider;
@@ -27,7 +26,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
  * is the task's own resumable {@code walks/search} pass instead of a private listing, while the one-zip Lucene
  * snapshot stays a single-writer, <em>restart-on-crash</em> rebuild - the recorded deliberate exception to the
  * walk's mid-pass resume. Verified here: the walk-riding sweep serves exactly what the streaming sweep serves
- * (documents and license facets, across a multi-segment pass); a crash mid-pass commits nothing and the next sweep
+ * (documents and licence filter terms, across a multi-segment pass); a crash mid-pass commits nothing and the next sweep
  * re-enumerates from the start - the pre-crash releases are provably re-read, the restart discipline - and serves
  * the complete index; a second in-process walk instance (the stand-in for another VM sharing the store) takes a
  * dead worker's pass over but never commits the partial view it joined into, rebuilding fresh instead; a live
@@ -60,7 +59,7 @@ class SearchSharedWalkTest {
                 List.of(new LicenseInventory.Declared("MIT License", null)));
         sweep(store, null);                                            // the streaming, walk-less build: generation 1
         List<String> streamed = hits(query(store), "");
-        var licenseFacets = facets(query(store));
+        List<String> licensed = hits(query(store), "license:MIT");
         assertThat(streamed).hasSize(RELEASES);
         assertThat(streamed).as("the streaming rebuild indexes the path-addressed upload, which has no coordinate "
                         + "row to be enumerated from and would otherwise be findable only by walking the store")
@@ -71,7 +70,8 @@ class SearchSharedWalkTest {
 
         assertThat(hits(query(store), "")).as("the walk-riding index serves document for document the same")
                 .containsExactlyElementsOf(streamed);
-        assertThat(facets(query(store))).as("and the same persisted license facets").isEqualTo(licenseFacets);
+        assertThat(hits(query(store), "license:MIT")).as("and the same licence filter terms").isEqualTo(licensed)
+                .containsExactly("org.example:lib1:1.0");
         assertThat(store.readVersioned("walks/search/manifest"))
                 .as("the enumeration rode the task's own shared-walk pass").isPresent();
         assertThat(store.exists("index/search/2.manifest")).isTrue();
@@ -509,9 +509,5 @@ class SearchSharedWalkTest {
                 .map(page -> page.hits().stream().map(SearchQuery.Hit::display).toList()).orElse(null);
     }
 
-    /** The license facets, or {@code null} when this repository has no usable index yet - the same signal. */
-    private static List<LicenseFacet> facets(SearchQuery query) throws IOException {
-        return query.licenses().orElse(null);
-    }
 
 }

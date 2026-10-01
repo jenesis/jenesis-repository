@@ -22,10 +22,9 @@ import build.jenesis.repository.store.Providers;
  *     must all be thread-safe.</li>
  * <li><b>Absence sentinel.</b> {@link #installed()} answers an empty {@link Optional} when no index module is on
  *     the module path, and a search answers by name. {@code null} is
- *     never a legal return from {@link #installed()}, from {@link #over}, or from either leg of the
- *     {@link SearchQuery} it hands back: a repository whose index has not been built - or whose stored index is a
- *     format the reader cannot open - answers an empty {@link Optional} from {@link SearchQuery#search} and
- *     {@link SearchQuery#licenses}, which is the signal to answer by name. That sentinel is
+ *     never a legal return from {@link #installed()}, from {@link #over}, or from the {@link SearchQuery} it hands
+ *     back: a repository whose index has not been built - or whose stored index is a format the reader cannot open -
+ *     answers an empty {@link Optional} from {@link SearchQuery#search}, which is the signal to answer by name. That sentinel is
  *     <em>load-bearing</em> and distinct from an empty answer: a present-but-empty page means the index is usable
  *     and nothing matched, and rendering the two alike would serve a false-empty result (which is where the
  *     {@code null} this clause always forbade was finally removed from the query surface).</li>

@@ -18,7 +18,7 @@ public final class SearchConsoleModule implements ConsoleModuleProvider {
         return SearchConsoleConfig.class;
     }
 
-    /** The licence inventory of every repository, where the search index that answers it is present. */
+    /** The licence inventory of every repository. */
     @Override
     public List<RepositoryPage> repositoryPages() {
         return List.of(new RepositoryPage("Licenses", "/licenses", RepositoryPage.Topic.RISK, "search"));

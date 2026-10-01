@@ -2,6 +2,8 @@ package build.jenesis.repository.web.test;
 
 import module java.base;
 import module org.junit.jupiter.api;
+import build.jenesis.repository.cleanup.StoredReport;
+import build.jenesis.repository.compliance.inventory.LicenseReport;
 import build.jenesis.repository.search.SearchMode;
 import build.jenesis.repository.search.service.RepositorySearch;
 import build.jenesis.repository.search.web.BrowseController;
@@ -159,6 +161,41 @@ public class BrowseControllerTest {
 
         assertThatThrownBy(() -> controller.search(REPO, "widget", "not-a-cursor", 2, request(),
                 Servlets.response().servlet())).isInstanceOf(IllegalArgumentException.class);
+    }
+
+    @Test
+    void the_licence_inventory_answers_its_state_and_a_count_is_started_only_when_asked() throws Exception {
+        Repositories repositories = Web.repositories(root);
+        BrowseController controller = new BrowseController(repositories,
+                Web.routing(repositories, Scopes.DEFAULT_TENANT), new RepositorySearch());
+        var store = repositories.store(Scopes.DEFAULT_TENANT, REPO);
+        new StoreRepositoryInventory(store).record("NuGet", "widget", "1.0.0", Instant.now());
+
+        Servlets.Response read = Servlets.response();
+        var before = controller.licenses(REPO, false, request(), read.servlet());
+        assertThat(before.state()).as("a plain read starts nothing").isEqualTo("not-counted");
+        assertThat(read.header(BrowseController.REFRESH_HEADER)).isNull();
+
+        Servlets.Response started = Servlets.response();
+        var running = controller.licenses(REPO, true, request(), started.servlet());
+        assertThat(started.header(BrowseController.REFRESH_HEADER)).isEqualTo("started");
+        assertThat(running.state()).as("the answer is the state as it then stands, never the finished count")
+                .isIn("running", "done");
+        assertThat(StoredReport.awaitSettled(store, LicenseReport.NAME, Duration.ofMinutes(1))).isPresent();
+
+        var done = controller.licenses(REPO, false, request(), Servlets.response().servlet());
+        assertThat(done.state()).isEqualTo("done");
+        assertThat(done.finishedAt()).isNotNull();
+        assertThat(done.versions()).as("counted with the repository's full-text search off").isEqualTo(1);
+        assertThat(done.categories()).extracting(BrowseController.LicenseCount::value).containsExactly("unknown");
+    }
+
+    @Test
+    void the_licence_inventory_refuses_an_invalid_repository_name() throws Exception {
+        Servlets.Response response = Servlets.response();
+
+        assertThat(controller.licenses("../etc", true, request(), response.servlet())).isNull();
+        assertThat(response.status()).isEqualTo(400);
     }
 
     private static HttpServletRequest request() {

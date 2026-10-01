@@ -1,8 +1,8 @@
 package build.jenesis.repository.search.web;
 
 import java.io.IOException;
-import java.util.List;
 
+import build.jenesis.repository.search.SearchMode;
 import build.jenesis.repository.ui.CurrentTenant;
 import build.jenesis.repository.ui.store.RepositoryBrowse;
 import build.jenesis.repository.ui.store.SettingsAdmin;
@@ -11,20 +11,22 @@ import org.springframework.ui.Model;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
-import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.servlet.mvc.support.RedirectAttributes;
 
 import static build.jenesis.repository.search.web.SearchConsoleConfig.QUALIFIER;
 import build.jenesis.repository.ui.ConsoleScreen;
 
 /**
- * The licence inventory a repository's published coordinates add up to, as its full-text index counted them.
+ * The licence inventory of a repository: how many of its versions declare each licence category and each SPDX id,
+ * as the last count left it - the stored report {@code GET /api/licenses} answers from, read through
+ * {@link RepositoryBrowse#licenses}.
  *
- * <p>It reads the index and nothing else: while the repository's full-text search is off, or its index not built,
- * the inventory reports itself unindexed and empty rather than counting the store on the request path, and the
- * screen says how to switch the index on. Whether it is on is the repository's {@code full-text-search} setting, read
- * from the repository's, the tenant's and the deployment's settings documents - one object per module under a
- * constant prefix.
+ * <p>The screen never counts. It renders what is stored with the time it is as of, offers an editor the button that
+ * starts a count in the background, and while one runs renders the shared running marker, which keeps the page
+ * polling until the count lands. A count needs nothing of the full-text index; only the drill-down from a count to
+ * the versions behind it does, so the rows link into the browse search exactly where the repository's
+ * {@code full-text-search} setting is on - read, as the search bar reads it, from the repository's, the tenant's and
+ * the deployment's settings documents, one object per module under a constant prefix.
  */
 @Controller
 @ConsoleScreen
@@ -43,7 +45,18 @@ public class LicenceInventoryScreenController {
     @GetMapping("/ui/repositories/{repo}/licenses")
     public String licenses(@PathVariable("repo") String repo, Model model) throws IOException {
         model.addAttribute("repo", repo);
-        model.addAttribute("inventory", browse.licenses(repo, settings.repositoryConfig(tenant.name(), repo)));
+        model.addAttribute("inventory", browse.licenses(repo));
+        model.addAttribute("drillDown",
+                SearchMode.of(settings.repositoryConfig(tenant.name(), repo)) == SearchMode.FULL_TEXT);
         return QUALIFIER + "/licenses";
+    }
+
+    /** The count button: starts the count and lands back on the screen, which shows it running. */
+    @PostMapping("/ui/repositories/{repo}/licenses")
+    public String count(@PathVariable("repo") String repo, RedirectAttributes redirect) throws IOException {
+        redirect.addFlashAttribute("message", browse.countLicenses(repo)
+                ? "License count started; this screen shows its result when it finishes."
+                : "A license count is already running; this screen shows its result when it finishes.");
+        return "redirect:/ui/repositories/" + repo + "/licenses";
     }
 }

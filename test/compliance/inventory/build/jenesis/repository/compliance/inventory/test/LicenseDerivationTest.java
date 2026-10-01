@@ -1,11 +1,11 @@
-package build.jenesis.repository.search.lucene.test;
+package build.jenesis.repository.compliance.inventory.test;
 
 import module java.base;
 import module org.junit.jupiter.api;
 import build.jenesis.repository.cleanup.Release;
 import build.jenesis.repository.compliance.License;
 import build.jenesis.repository.compliance.QualityInspector;
-import build.jenesis.repository.search.lucene.LicenseDerivation;
+import build.jenesis.repository.compliance.inventory.LicenseDerivation;
 import build.jenesis.repository.inventory.LicenseInventory;
 import build.jenesis.repository.inventory.StoreRepositoryInventory;
 import build.jenesis.repository.store.ArtifactStore;
@@ -21,8 +21,8 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
  * gate sidecar is preferred and never re-parsed, a release with no sidecar is backfilled from its stored metadata
  * through the discovered {@link build.jenesis.repository.compliance.QualityInspector}s, a release that declares
  * nothing resolves to the single {@link License#UNKNOWN}, and a carrier larger than the metadata guard is skipped
- * (so it too resolves to unknown, never pulling a large body into the heap). The class moved here from the Lucene
- * search module - this pins its behaviour at its new home, independent of the search-index sweep that consumes it.
+ * (so it too resolves to unknown, never pulling a large body into the heap) - pinned here, apart from the licence
+ * count and the search-index sweep that both consume it.
  */
 class LicenseDerivationTest {
 

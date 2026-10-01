@@ -8,8 +8,7 @@ import module java.base;
  * empty query pages everything indexed. The index also carries each coordinate's declared licences as a queryable
  * SPDX id and category, so {@link #search} honours {@code license:<spdx>} and {@code category:<permissive|
  * weak-copyleft|strong-copyleft|network-copyleft|unknown>} filter tokens - the drill-down the licence inventory's
- * rows link to - and {@link #licenses} rolls the whole repository up into per-category and per-SPDX-id facet counts
- * for that inventory.
+ * rows link to where a repository has its index.
  *
  * <h2>Bounded, and the bound is visible</h2>
  * A cap hidden in an implementation would hand a caller past it a short list with <em>nothing to distinguish it from
@@ -49,18 +48,6 @@ public interface SearchQuery {
      *               of a usable index, never the whole set)
      */
     Optional<Hits> search(String query, String cursor, int limit) throws IOException;
-
-    /**
-     * The licence inventory facets over this repository's whole index: one {@link LicenseFacet} per distinct licence
-     * category and per distinct SPDX id, each with the count of coordinates carrying it. Answers an empty
-     * {@link Optional} when this repository has no usable index yet (the same signal {@link #search} gives), so the
-     * caller can report the inventory as unavailable rather than empty.
-     *
-     * <p>The row count is bounded by the number of <em>distinct declared licence strings</em> in the repository -
-     * customer-authored text rather than the SPDX list the name suggests - and by construction it is a roll-up the
-     * sweep persists beside the snapshot, so a request never walks the index to build it.
-     */
-    Optional<List<LicenseFacet>> licenses() throws IOException;
 
     /**
      * One search hit: a published coordinate version, or the served path of an artifact that has no coordinate (a raw

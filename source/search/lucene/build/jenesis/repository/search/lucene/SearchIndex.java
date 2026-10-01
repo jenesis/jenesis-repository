@@ -36,7 +36,6 @@ import build.jenesis.repository.store.Names;
  * <pre>
  * index/search/current                 the manifest pointing at the generation served (compare-and-set)
  * index/search/&lt;generation&gt;.manifest    one line per file: name, digest, length
- * index/search/&lt;generation&gt;.facets      the licence facets counted for that generation
  * index/search/segments/&lt;digest&gt;        a segment file, written once, shared by every generation naming it
  * </pre>
  */
@@ -76,7 +75,7 @@ final class SearchIndex {
 
     /**
      * Remove the whole index: the manifest first, so a reader and the publish observer stop seeing an index at once,
-     * then every generation, facet count, segment and change marker, a bounded page at a time. A removal that stops
+     * then every generation, segment and change marker, a bounded page at a time. A removal that stops
      * part way leaves no manifest, so nothing reads what is left, and the next removal finishes it.
      */
     void remove() throws IOException {
@@ -281,33 +280,12 @@ final class SearchIndex {
         return total;
     }
 
-    void writeFacets(int generation, byte[] facets) throws IOException {
-        store.write(facetsKey(generation), new ByteArrayInputStream(facets));
-    }
-
-    Optional<byte[]> readFacets(int generation) throws IOException {
-        if (!store.exists(facetsKey(generation))) {
-            return Optional.empty();
-        }
-        ByteArrayOutputStream buffer = new ByteArrayOutputStream();
-        store.read(facetsKey(generation), buffer);
-        return Optional.of(buffer.toByteArray());
-    }
-
-    void deleteFacets(int generation) throws IOException {
-        store.delete(facetsKey(generation));
-    }
-
     static String generationKey(int generation) {
         return DIRECTORY + "/" + generation + ".manifest";
     }
 
     static String segmentKey(String digest) {
         return SEGMENTS + "/" + digest;
-    }
-
-    static String facetsKey(int generation) {
-        return DIRECTORY + "/" + generation + ".facets";
     }
 
     // ---- the manifest ----

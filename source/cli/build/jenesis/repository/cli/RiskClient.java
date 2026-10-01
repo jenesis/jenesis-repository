@@ -17,13 +17,21 @@ public final class RiskClient extends ClientCalls {
         super(calls);
     }
 
-    /** The declared-license inventory of a repository rolled into per-category and per-SPDX-id facet counts.
-     *  {@code indexed} is false while the repository's full-text index is off or not built, so empty facets are not a
-     *  clean bill. */
+    /** The license inventory of a repository as its last count left it: the per-category and per-SPDX-id counts of
+     *  its versions, or the state that stands in for them - not counted yet, running, or failed. */
     public LicensesView licenses(String repo) throws IOException, InterruptedException {
         HttpResponse<String> response = send("GET", "/api/licenses?repo=" + enc(repo), null, null);
         require(response, 200, "read the license inventory of " + repo);
         return JSON.readValue(response.body(), LicensesView.class);
+    }
+
+    /** Start a count of a repository's licenses in the background, and answer the inventory as it then stands with
+     *  whether this call started the count or found one already running. */
+    public LicenseCountStart countLicenses(String repo) throws IOException, InterruptedException {
+        HttpResponse<String> response = send("GET", "/api/licenses?repo=" + enc(repo) + "&refresh=true", null, null);
+        require(response, 200, "start a license count of " + repo);
+        return new LicenseCountStart(!"running".equals(response.headers().firstValue("Jenesis-Refresh").orElse("")),
+                JSON.readValue(response.body(), LicensesView.class));
     }
 
     /** The maintainer health stored for a repository's coordinates, one page; {@code refresh} starts a re-score of
@@ -286,12 +294,20 @@ public final class RiskClient extends ClientCalls {
     public record FindingLabel(String source, String name, String value, double confidence, String when) {
     }
 
-    /** The license inventory facets: {@code indexed} says whether the search index answered, then the per-category and
-     *  per-SPDX-id counts. */
-    public record LicensesView(boolean indexed, List<LicenseCount> categories, List<LicenseCount> licenses) {
+    /** The license inventory: its {@code state} ({@code not-counted}, {@code running}, {@code done} or
+     *  {@code failed}), when the count started and finished, why it failed, how many versions it counted, the counts
+     *  per category and per SPDX id, how many rows the count produced, and whether the rows shown stop short. */
+    public record LicensesView(String state, String startedAt, String finishedAt, String failure, long versions,
+                               List<LicenseCount> categories, List<LicenseCount> licenses, int rows,
+                               boolean truncated) {
     }
 
-    public record LicenseCount(String value, long count) {
+    /** One count: a category or an SPDX id, and how many versions carry it. */
+    public record LicenseCount(String value, long versions) {
+    }
+
+    /** What asking for a count answered: whether it started one, and the inventory as it then stood. */
+    public record LicenseCountStart(boolean started, LicensesView inventory) {
     }
 
     /** The retroactive-license dry-run plan for one repository: the mode previewed, how many releases enabling

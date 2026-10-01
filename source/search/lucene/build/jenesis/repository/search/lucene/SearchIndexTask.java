@@ -4,6 +4,7 @@ import module java.base;
 import build.jenesis.repository.cleanup.Release;
 import build.jenesis.repository.cleanup.RepositoryInventory;
 import build.jenesis.repository.compliance.License;
+import build.jenesis.repository.compliance.inventory.LicenseDerivation;
 import build.jenesis.repository.inventory.AboutSection;
 import build.jenesis.repository.inventory.StoreRepositoryInventory;
 import build.jenesis.repository.maintenance.MaintenanceTask;
@@ -66,8 +67,8 @@ import build.jenesis.repository.store.Durations;
  * <p><b>What a document carries.</b> The coordinate and version, for the name a person types; and, from what the
  * publish recorded in the version's document - never by opening the artifact again - the description, keywords and
  * author names its manifest gave, for what a person remembers about a package when the name escapes them, and the
- * declared licences, for the licence inventory's counts and its drill-down. Reading them costs the one read of the
- * version's document the licences already took.
+ * declared licences, for the {@code license:} and {@code category:} filter tokens a search narrows by. Reading them
+ * costs the one read of the version's document the licences already took.
  *
  * <p><b>Correctness.</b> Each marker carries a monotonic {@code version} (the change's time); the applier skips an
  * entry whose version is older than the version already indexed for that coordinate (the out-of-order guard, so a
@@ -226,16 +227,13 @@ public final class SearchIndexTask implements MaintenanceTask {
             if (applied.isEmpty()) {
                 return true;              // every pending marker was skipped by the guard - keep the current generation
             }
-            byte[] facets;
             try (DirectoryReader after = DirectoryReader.open(directory)) {
                 documents = after.numDocs();
-                facets = LicenseFacets.serialize(LicenseFacets.fromIndex(new IndexSearcher(after)));
             }
             Optional<String> checksum = index.writeSnapshot(generation, directory);
             if (checksum.isEmpty()) {
                 return false;   // a concurrent rebuild claimed this generation and cuts over next; ours wrote only segments
             }
-            index.writeFacets(generation, facets);
             SearchManifest manifest = new SearchManifest(generation, SearchIndex.FORMAT, documents, checksum.get(),
                     current.reconciled());
             if (!index.putManifest(manifest, token)) {
@@ -245,7 +243,6 @@ public final class SearchIndexTask implements MaintenanceTask {
                         .map(versioned -> SearchManifest.parse(versioned.content())).orElse(null);
                 if (winner == null || winner.generation() != generation) {
                     index.deleteSnapshot(generation);
-                    index.deleteFacets(generation);
                 }
                 return false;
             }
@@ -345,8 +342,6 @@ public final class SearchIndexTask implements MaintenanceTask {
             if (checksum.isEmpty()) {
                 return;         // a concurrent rebuild claimed this generation and cuts over next; ours wrote only segments
             }
-            index.writeFacets(generation, LicenseFacets.serialize(
-                    LicenseFacets.toFacets(accumulation.categories, accumulation.spdx)));
             SearchManifest manifest = new SearchManifest(generation, SearchIndex.FORMAT, accumulation.documents,
                     checksum.get(), Instant.ofEpochMilli(cutoff));
             if (!index.putManifest(manifest, token)) {
@@ -354,7 +349,6 @@ public final class SearchIndexTask implements MaintenanceTask {
                         .map(versioned -> SearchManifest.parse(versioned.content())).orElse(null);
                 if (winner == null || winner.generation() != generation) {
                     index.deleteSnapshot(generation);
-                    index.deleteFacets(generation);
                 }
                 return;
             }
@@ -436,7 +430,6 @@ public final class SearchIndexTask implements MaintenanceTask {
         for (int superseded : index.generations()) {
             if (superseded != generation && superseded <= generation - KEEP_GENERATIONS) {
                 index.deleteSnapshot(superseded);
-                index.deleteFacets(superseded);
             }
         }
         index.gcSegments();   // a segment file no remaining generation names
@@ -518,13 +511,11 @@ public final class SearchIndexTask implements MaintenanceTask {
 
     /** One build's whole state during a full rebuild: the file-backed scratch directory its writer fills release
      *  by release - never a heap-held index, which a million documents could not fit in a server that sets no
-     *  heap - and the license facet tallies resolved along the way. */
+     *  heap. */
     private static final class Accumulation implements RepositoryInventory.ReleaseVisitor, Closeable {
 
         private final Directory directory = SearchIndex.scratch();
         private final IndexWriter writer;
-        private final Map<String, Long> categories = new TreeMap<>();
-        private final Map<String, Long> spdx = new TreeMap<>();
         private final StoreRepositoryInventory inventory;
         private final LicenseDerivation licenses;
         private long documents;
@@ -541,7 +532,6 @@ public final class SearchIndexTask implements MaintenanceTask {
             long version = release.published() == null ? 0 : release.published().toEpochMilli();
             Document document = document(key, release, inventory, licenses, version);
             writer.addDocument(document);
-            tallyFacets(document, categories, spdx);
             documents++;
         }
 
@@ -582,14 +572,6 @@ public final class SearchIndexTask implements MaintenanceTask {
         }
     }
 
-    /** Merge one document's licences into the running facet tallies: its SPDX ids and its categories, each once. */
-    private static void tallyFacets(Document document, Map<String, Long> categories, Map<String, Long> spdx) {
-        new LinkedHashSet<>(Arrays.asList(document.getValues("license_id")))
-                .forEach(id -> spdx.merge(id, 1L, Long::sum));
-        new LinkedHashSet<>(Arrays.asList(document.getValues("category")))
-                .forEach(category -> categories.merge(category, 1L, Long::sum));
-    }
-
     /**
      * One indexed PATH-ADDRESSED document: its display is the served request path itself, which is what search has
      * always returned for these and what a caller uses to fetch one.
@@ -600,7 +582,7 @@ public final class SearchIndexTask implements MaintenanceTask {
      * {@code disclosableDisplay} is the {@code coordinate:version} face and refuses a bare name outright, saying a
      * name-level surface must go through {@code ServableNames} instead.
      *
-     * <p>No licence facets: a path-addressed artifact has no coordinate, so nothing declares a licence for it, and
+     * <p>No licence fields: a path-addressed artifact has no coordinate, so nothing declares a licence for it, and
      * a {@code license:}/{@code category:} filter is a question about packages that this document cannot answer.
      * It therefore drops out of a filtered query rather than matching it emptily.
      */
@@ -621,7 +603,7 @@ public final class SearchIndexTask implements MaintenanceTask {
      * doc-values twin (so a query pages in display order through the index), the ecosystem and coordinate as the
      * name a person types, the text a person remembers - the version, and what the version's manifest said about the
      * package: its description, its keywords and the names of the people it credits - and the declared licences as
-     * queryable facets.
+     * filter terms.
      *
      * <p>What the manifest said and the licences come from one read of the version's document, where the publish
      * recorded them; nothing here opens the artifact. A version published before that was recorded has no description
@@ -667,10 +649,9 @@ public final class SearchIndexTask implements MaintenanceTask {
         }
         for (String id : spdx) {
             document.add(new StringField("license", id.toLowerCase(Locale.ROOT), Field.Store.NO));   // filter term
-            document.add(new StoredField("license_id", id));                                          // facet display
         }
         for (String category : categories) {
-            document.add(new StringField("category", category, Field.Store.YES));   // category values are lower-case
+            document.add(new StringField("category", category, Field.Store.NO));   // category values are lower-case
         }
         return document;
     }

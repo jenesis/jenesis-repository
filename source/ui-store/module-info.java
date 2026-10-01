@@ -54,6 +54,7 @@ open module build.jenesis.repository.ui.store {
     requires build.jenesis.repository.format;
     requires build.jenesis.repository.importer;
     requires build.jenesis.repository.compliance;
+    requires transitive build.jenesis.repository.compliance.inventory;
     requires build.jenesis.repository.gateway;
     requires build.jenesis.repository.definitions;
     requires build.jenesis.repository.gate.spi;

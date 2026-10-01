@@ -29,6 +29,7 @@ open module build.jenesis.repository.ui.admin.test {
     requires build.jenesis.repository.metadata;
     requires build.jenesis.repository.metadata.store;
     requires build.jenesis.repository.compliance;
+    requires build.jenesis.repository.compliance.inventory;
     requires build.jenesis.repository.findings;
     requires build.jenesis.repository.health;
     requires build.jenesis.repository.gate.spi;

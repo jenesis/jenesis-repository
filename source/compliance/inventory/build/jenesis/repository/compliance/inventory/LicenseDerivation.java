@@ -1,4 +1,4 @@
-package build.jenesis.repository.search.lucene;
+package build.jenesis.repository.compliance.inventory;
 
 import module java.base;
 import module org.slf4j;
@@ -13,29 +13,28 @@ import build.jenesis.repository.store.Publication;
 import build.jenesis.repository.store.PublishInterceptor;
 
 /**
- * Resolves a release's declared licenses for the search-index sweep, section-first: the publishing gate records what it
- * already extracted as the version's {@code licenses} section on the ACCEPT leg, so the common case is one tiny read and no
- * re-parse. Only when a release has <em>no</em> section - an artifact published before the gate recorded one, or by a
+ * Resolves a release's declared licenses for the passes that need them - the licence inventory's count and the
+ * search index's licence fields - section-first: the publishing gate records what it already extracted as the
+ * version's {@code licenses} section on the ACCEPT leg, so the common case is one tiny read and no re-parse. Only when a release has <em>no</em> section - an artifact published before the gate recorded one, or by a
  * path no inspector claims - does it backfill by re-deriving through the same discovered {@link QualityInspector}s the
  * gate uses, over the artifact's own stored metadata (a POM, a {@code .nuspec}, a {@code control} stanza, a packument -
  * the small metadata parse the streaming principle allows, never a large artifact body: a candidate whose blob exceeds
  * {@link #MAX_METADATA_BYTES} is skipped). The backfill derivation stays for those artifacts - it is not written back,
  * so the {@code licenses} section the gate wrote remains the sole authored record and a pre-existing artifact is simply
- * re-derived each sweep (the index is derived data, rebuilt every pass regardless). The declared licenses (name/URL)
- * are resolved to their SPDX id and category through the shared {@link License#identify} table; a release that declares
- * none, or nothing an inspector can read, resolves to the single {@link License#UNKNOWN} so it lands in the
- * unknown-license facet rather than vanishing.
+ * re-derived on each pass (both callers produce derived data, recomputed every time). The declared licenses
+ * (name/URL) are resolved to their SPDX id and category through the shared {@link License#identify} table; a release
+ * that declares none, or nothing an inspector can read, resolves to the single {@link License#UNKNOWN} so it is
+ * counted as unknown rather than vanishing.
  *
- * <p>It lives with the sweep that is its only caller. In the licence policy module, it would make the search index
- * require the policy - and every consumer of the index drag the licence engine - for a class that
- * reads nothing of that module's: it is the inventory's sidecar, the gate's inspectors and the store, all of which
- * the sweep already stands on.
+ * <p>It lives beside the licence inventory rather than in the search index or the licence policy, because both of
+ * its callers reach this module and neither of the others: it reads the inventory's sidecar, the gate's inspectors
+ * and the store, and nothing of the policy's or the index's.
  */
 public final class LicenseDerivation {
 
     private static final Logger LOGGER = LoggerFactory.getLogger(LicenseDerivation.class);
 
-    /** The largest stored object the backfill will materialise to re-read metadata from - a guard so the sweep never
+    /** The largest stored object the backfill will materialise to re-read metadata from - a guard so a pass never
      *  pulls a large artifact body into the heap; real metadata (a POM, a nuspec-bearing nupkg, a control-bearing deb)
      *  sits far below it, and a release whose only carrier exceeds it simply resolves to unknown. It governs the
      *  <em>candidate</em> read only ("is this carrier small enough to parse at all?"); the siblings an inspector then
@@ -105,13 +104,13 @@ public final class LicenseDerivation {
                 try {
                     declared = declaredFrom(inspector.inspectArtifact(path, metadata.get(), siblings));
                 } catch (IOException unreadable) {
-                    // Contained per candidate, never per sweep: this is a DERIVED index rebuilt every pass, and one
-                    // release whose companion is past the sibling seam's whole-document ceiling (or whose body will
-                    // not parse) must not abort the whole index. Contained is not silent - the release still resolves
-                    // to UNKNOWN, which is a visible facet, and the reason is logged with the path that caused it, so
-                    // a bound that bit is attributable rather than a licence that quietly went missing.
+                    // Contained per candidate, never per pass: what the callers build is DERIVED and recomputed every
+                    // pass, and one release whose companion is past the sibling seam's whole-document ceiling (or
+                    // whose body will not parse) must not abort the whole of it. Contained is not silent - the release
+                    // still resolves to UNKNOWN, which is a visible count, and the reason is logged with the path that
+                    // caused it, so a bound that bit is attributable rather than a licence that quietly went missing.
                     LOGGER.warn("Could not re-derive licences for " + path + " through "
-                            + inspector.getClass().getName() + "; this release resolves to the unknown-license facet "
+                            + inspector.getClass().getName() + "; this release resolves to the unknown license "
                             + "until its carrier or companion is readable", unreadable);
                     continue;
                 }
@@ -141,7 +140,7 @@ public final class LicenseDerivation {
     /** The stored bytes a request path serves, materialised only when they are a small metadata object - the
      *  <em>candidate</em> read that decides whether a carrier is worth handing to an inspector at all, never pulling a
      *  large blob. A carrier past {@link #MAX_METADATA_BYTES} is not a companion whose bound was reached, it is a
-     *  candidate this sweep declines to parse, so it is skipped rather than reported. */
+     *  candidate this pass declines to parse, so it is skipped rather than reported. */
     private Optional<byte[]> read(String path) throws IOException {
         Optional<String> blob = publication.located(path);
         if (blob.isEmpty() || store.size(blob.get()) > MAX_METADATA_BYTES) {

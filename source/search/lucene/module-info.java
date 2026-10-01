@@ -23,6 +23,8 @@ module build.jenesis.repository.search.lucene {
     requires build.jenesis.repository.inventory;
     requires build.jenesis.repository.cleanup;
     requires build.jenesis.repository.compliance;
+    // How a version's declared licences resolve, for the licence filter terms each document carries.
+    requires build.jenesis.repository.compliance.inventory;
     requires build.jenesis.repository.server.spi;
     requires build.jenesis.repository.settings;
     requires build.jenesis.repository.store;

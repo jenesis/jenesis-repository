@@ -4,7 +4,7 @@ import module java.base;
 
 /**
  * The compliance and governance verbs: {@code vulnerabilities} and {@code findings} read the advisory and findings
- * ledgers, {@code licenses} the declared-license facets, {@code quarantine} the compliance gate's holds,
+ * ledgers, {@code licenses} the counted license inventory, {@code quarantine} the compliance gate's holds,
  * {@code ai-review} the findings a code audit proposed, {@code provenance} the signed attestations, {@code policy}
  * the credential-lifetime policy, and {@code enforcement-preview} dry-runs what enabling license enforcement would
  * newly hold.
@@ -197,29 +197,81 @@ final class ComplianceCommands {
         return 0;
     }
 
+    /** How long a license count takes to move: one read of each version's document, so seconds on a small
+     *  repository and minutes on a large one - the cadence a bare {@code --refresh} watches it at. */
+    private static final Duration LICENSE_COUNT = Duration.ofSeconds(5);
+
+    /**
+     * The license inventory as the last count left it; {@code --count} starts a count first. A count runs in the
+     * background, so the command answers at once with the state it found, and {@code --refresh} watches it until it
+     * finishes - exit code 0 for a finished count, 1 for a failed one.
+     */
     static int licenses(String[] args, Path home) throws Exception {
-        if (args.length < 2) {
-            throw new IllegalArgumentException("Usage: licenses <repo>");
+        String repo = null;
+        boolean count = false;
+        for (int i = 1; i < args.length; i++) {
+            if (args[i].equals("--count")) {
+                count = true;
+            } else if (repo == null && !args[i].startsWith("--")) {
+                repo = args[i];
+            } else {
+                throw new IllegalArgumentException("Usage: licenses <repo> [--count]");
+            }
         }
-        RiskClient.LicensesView view = CliSupport.client(home).risk().licenses(args[1]);
-        if (!view.indexed()) {
-            System.out.println("The license inventory is counted by the repository's full-text index: switch "
-                    + "full-text-search on for " + args[1] + ", and it appears once the index is built.");
-            return 0;
+        if (repo == null) {
+            throw new IllegalArgumentException("Usage: licenses <repo> [--count]");
         }
-        if (view.categories().isEmpty() && view.licenses().isEmpty()) {
-            System.out.println("No declared licenses recorded.");
-            return 0;
+        String repository = repo;
+        RiskClient risk = CliSupport.client(home).risk();
+        // The first reading starts the count when asked to, so a watched count and a single answer are the same
+        // sequence of requests, and under --json the start call's answer is forgotten like any other poll.
+        AtomicBoolean start = new AtomicBoolean(count);
+        Refresh.Poll poll = () -> {
+            if (start.getAndSet(false)) {
+                RiskClient.LicenseCountStart started = risk.countLicenses(repository);
+                System.out.println(started.started() ? "Started a license count of " + repository + "."
+                        : "A license count of " + repository + " was already running.");
+                return licenseState(repository, started.inventory());
+            }
+            return licenseState(repository, risk.licenses(repository));
+        };
+        return Refresh.on() ? Refresh.until(LICENSE_COUNT, poll) : poll.once().code();
+    }
+
+    /** Print one reading of the license inventory, and say whether there is any point asking again. */
+    private static Refresh.Poll.State licenseState(String repo, RiskClient.LicensesView view) {
+        switch (view.state()) {
+            case "not-counted" -> {
+                System.out.println("The licenses of " + repo + " have not been counted yet; "
+                        + "licenses " + repo + " --count starts a count.");
+                return Refresh.Poll.State.done(0);
+            }
+            case "running" -> {
+                System.out.println("A license count of " + repo + " is running, started " + view.startedAt() + ".");
+                return Refresh.Poll.State.running();
+            }
+            case "done" -> {
+                System.out.println(view.versions() + " version(s) counted, as of " + view.finishedAt() + ".");
+                System.out.println("categories:");
+                for (RiskClient.LicenseCount each : view.categories()) {
+                    System.out.printf(Locale.ROOT, "  %-24s %d%n", each.value(), each.versions());
+                }
+                System.out.println("licenses:");
+                for (RiskClient.LicenseCount each : view.licenses()) {
+                    System.out.printf(Locale.ROOT, "  %-24s %d%n", each.value(), each.versions());
+                }
+                if (view.truncated()) {
+                    System.out.println("More licenses were counted than are kept; showing the "
+                            + view.licenses().size() + " with the most versions.");
+                }
+                return Refresh.Poll.State.done(0);
+            }
+            default -> {
+                System.out.println("The last license count of " + repo + ", started " + view.startedAt()
+                        + ", failed: " + view.failure());
+                return Refresh.Poll.State.done(1);
+            }
         }
-        System.out.println("categories:");
-        for (RiskClient.LicenseCount count : view.categories()) {
-            System.out.printf("  %-24s %d%n", count.value(), count.count());
-        }
-        System.out.println("licenses:");
-        for (RiskClient.LicenseCount count : view.licenses()) {
-            System.out.printf("  %-24s %d%n", count.value(), count.count());
-        }
-        return 0;
     }
 
     static int signers(String[] args, Path home) throws Exception {

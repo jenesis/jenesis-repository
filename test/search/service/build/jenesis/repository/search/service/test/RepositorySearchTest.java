@@ -3,7 +3,6 @@ package build.jenesis.repository.search.service.test;
 import module java.base;
 import module org.junit.jupiter.api;
 import build.jenesis.repository.inventory.StoreRepositoryInventory;
-import build.jenesis.repository.search.LicenseFacet;
 import build.jenesis.repository.search.SearchMode;
 import build.jenesis.repository.search.SearchQuery;
 import build.jenesis.repository.search.SearchQueryProvider;
@@ -214,7 +213,7 @@ class RepositorySearchTest {
     }
 
     @Test
-    void by_name_the_index_is_never_asked_and_the_licence_inventory_is_unavailable() throws IOException {
+    void by_name_the_index_is_never_asked() throws IOException {
         publish(store, "org.acme.lib", "1.0");
         StandInIndex index = new StandInIndex(List.of(), null);
         RepositorySearch search = new RepositorySearch(Optional.of(index));
@@ -222,8 +221,6 @@ class RepositorySearchTest {
         search.search(store, "acme/releases", BY_NAME, "org.acme", null, 10);
 
         assertThat(index.lastQuery).isNull();
-        assertThat(search.licenses(store, "acme/releases", BY_NAME)).isEmpty();
-        assertThat(search.licenses(store, "acme/releases", FULL_TEXT)).contains(List.of());
     }
 
     /** An installed index that answers a fixed page, or has not been built when it holds none. */
@@ -251,11 +248,6 @@ class RepositorySearchTest {
             lastQuery = query;
             lastCursor = cursor;
             return hits == null ? Optional.empty() : Optional.of(new Hits(hits, Optional.ofNullable(next)));
-        }
-
-        @Override
-        public Optional<List<LicenseFacet>> licenses() {
-            return hits == null ? Optional.empty() : Optional.of(List.of());
         }
     }
 }

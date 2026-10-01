@@ -1,10 +1,11 @@
 <!DOCTYPE html>
 <!--
-  licenses.html — the per-repository license inventory: facet counts per license category and per resolved SPDX id,
-  counted by the repository's full-text index (RepositoryBrowse.licenses). Each row drills down through the browse
-  search with a category:/license: filter token, so a count is a live link into the coordinates behind it. The counts
-  are the index's, so the screen reports itself not-indexed (rather than scanning every artifact's metadata on the
-  request path) while the repository's full-text search is off or its index not built - as /api/licenses does.
+  licenses.html — the per-repository licence inventory: how many of the repository's versions declare each licence
+  category and each SPDX id, as the last count left it (RepositoryBrowse.licenses over LicenseReport, the stored
+  report GET /api/licenses answers from). The screen never counts: it shows the report as it stands with the time it
+  is as of, an editor's button starts a count in the background, and while one runs the shared running marker keeps
+  the page polling until it lands. The count needs no full-text index; the rows link into the browse search's
+  category:/license: filter only where the repository's full-text search is on, since only the index answers those.
 -->
 <html lang="en" xmlns:th="http://www.thymeleaf.org">
 <head th:replace="~{fragments :: head('Licenses')}"></head>
@@ -14,34 +15,59 @@
     <div th:replace="~{fragments :: messages}"></div>
     <th:block th:replace="~{base :: repositoryHeader('Licenses', null, null)}"></th:block>
 
-    <p th:unless="${inventory.indexed()}">
-        The license inventory is counted by this repository's full-text index, so it needs full-text search switched
-        on in the repository's <a th:href="@{/ui/repositories/{repo}/settings(repo=${repo})}">settings</a>, and
-        appears once the index is built.
+    <p>
+        How many of this repository's versions declare each license, counted over every version it holds. The count
+        runs in the background; this screen shows the last one.
     </p>
+    <form th:if="${isEditor}" method="post" th:action="@{'/ui/repositories/' + ${repo} + '/licenses'}">
+        <button type="submit" class="secondary outline app-secondary">Count now</button>
+    </form>
 
-    <th:block th:if="${inventory.indexed()}">
-        <th:block th:if="${inventory.categories().isEmpty() and inventory.licenses().isEmpty()}">
-            <div th:replace="~{base :: empty('No declared licenses across this repository&rsquo;s indexed coordinates.')}"></div>
+    <article th:if="${inventory.state().name() == 'NOT_COUNTED'}">
+        <div th:replace="~{base :: empty('This repository&rsquo;s licenses have not been counted yet.')}"></div>
+    </article>
+
+    <article th:if="${inventory.running()}">
+        <p th:replace="~{base :: running(|A count is running, started ${instants.display(inventory.startedAt())}.|)}"></p>
+    </article>
+
+    <article th:if="${inventory.state().name() == 'FAILED'}">
+        <p th:replace="~{base :: alert(|The last count, started ${instants.display(inventory.startedAt())}, failed: ${inventory.failure()}|, 'danger')}"></p>
+    </article>
+
+    <th:block th:if="${inventory.state().name() == 'DONE'}">
+        <h2>
+            <span th:text="|${inventory.versions()} version(s) counted|">0 version(s) counted</span>
+            <small>(as of <span th:text="${instants.display(inventory.asOf())}">time</span>)</small>
+        </h2>
+        <p th:if="${inventory.truncated()}"><small>The count found more distinct licenses than are kept; showing the
+            first <span th:text="${inventory.licenses().size()}">0</span>, most versions first.</small></p>
+        <p th:unless="${drillDown}"><small>Full-text search is off for this repository, so a count does not link to
+            the versions behind it; switch it on in the repository's
+            <a th:href="@{/ui/repositories/{repo}/settings(repo=${repo})}">settings</a> to follow one.</small></p>
+
+        <th:block th:if="${inventory.versions() == 0}">
+            <div th:replace="~{base :: empty('This repository holds no versions to count.')}"></div>
         </th:block>
 
         <article th:unless="${inventory.categories().isEmpty()}">
             <h2>By category</h2>
-            <p><small>The coarse license class an artifact's declared licenses resolve to. Follow a row to the
-                coordinates carrying it.</small></p>
+            <p><small>The coarse license class a version's declared licenses resolve to; a version declaring none, or
+                nothing identifiable, counts as unknown.</small></p>
             <figure>
                 <table class="app-list">
                     <thead>
                     <tr>
                         <th scope="col">Category</th>
-                        <th scope="col" class="app-list__num">Coordinates</th>
+                        <th scope="col" class="app-list__num">Versions</th>
                     </tr>
                     </thead>
                     <tbody>
                     <tr th:each="c : ${inventory.categories()}">
-                        <td><a th:href="@{/ui/repositories/{repo}/browse(repo=${repo},q='category:' + ${c.value()})}"
+                        <td th:if="${drillDown}"><a th:href="@{/ui/repositories/{repo}/browse(repo=${repo},q='category:' + ${c.value()})}"
                                th:text="${c.value()}">permissive</a></td>
-                        <td class="app-list__num" th:text="${c.count()}">0</td>
+                        <td th:unless="${drillDown}" th:text="${c.value()}">permissive</td>
+                        <td class="app-list__num" th:text="${c.versions()}">0</td>
                     </tr>
                     </tbody>
                 </table>
@@ -50,20 +76,21 @@
 
         <article th:unless="${inventory.licenses().isEmpty()}">
             <h2>By license</h2>
-            <p><small>The resolved SPDX id an artifact declares. Follow a row to the coordinates carrying it.</small></p>
+            <p><small>The SPDX id a version's declared license resolves to.</small></p>
             <figure>
                 <table class="app-list">
                     <thead>
                     <tr>
                         <th scope="col">SPDX id</th>
-                        <th scope="col" class="app-list__num">Coordinates</th>
+                        <th scope="col" class="app-list__num">Versions</th>
                     </tr>
                     </thead>
                     <tbody>
                     <tr th:each="l : ${inventory.licenses()}">
-                        <td><a th:href="@{/ui/repositories/{repo}/browse(repo=${repo},q='license:' + ${l.value()})}"
+                        <td th:if="${drillDown}"><a th:href="@{/ui/repositories/{repo}/browse(repo=${repo},q='license:' + ${l.value()})}"
                                th:text="${l.value()}">Apache-2.0</a></td>
-                        <td class="app-list__num" th:text="${l.count()}">0</td>
+                        <td th:unless="${drillDown}" th:text="${l.value()}">Apache-2.0</td>
+                        <td class="app-list__num" th:text="${l.versions()}">0</td>
                     </tr>
                     </tbody>
                 </table>

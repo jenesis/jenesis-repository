@@ -18,7 +18,7 @@ import build.jenesis.repository.inventory.StoreRepositoryInventory;
 import build.jenesis.repository.metadata.MetadataProvider;
 import build.jenesis.repository.metadata.MetadataStore;
 import build.jenesis.repository.metadata.Section;
-import build.jenesis.repository.search.LicenseFacet;
+import build.jenesis.repository.compliance.inventory.LicenseReport;
 import build.jenesis.repository.search.SearchMode;
 import build.jenesis.repository.search.SearchQuery;
 import build.jenesis.repository.search.SearchQueryProvider;
@@ -668,35 +668,17 @@ public class RepositoryBrowse extends TenantScope {
         return new SearchPage(answer.mode(), answer.indexed(), results, answer.nextCursor());
     }
 
-    /** The license inventory over a repository for the console screen: the per-category and per-SPDX-id facet counts
-     *  its full-text index counted (never a scan of artifact metadata on the request path). Reports
-     *  {@code indexed=false} with empty facets when the repository's full-text search is off or its index not built
-     *  yet - the same answer {@code /api/licenses} gives - so the screen states it rather than showing a false clean
-     *  bill. */
-    public LicenseInventory licenses(String repository, UnaryOperator<String> config) throws IOException {
-        Optional<List<LicenseFacet>> facets = search.licenses(scope(repository), tenant() + '/' + repository, config);
-        if (facets.isEmpty()) {
-            return new LicenseInventory(false, List.of(), List.of());
-        }
-        List<LicenseCount> categories = new ArrayList<>();
-        List<LicenseCount> licenses = new ArrayList<>();
-        for (LicenseFacet facet : facets.get()) {
-            (facet.kind().equals(LicenseFacet.CATEGORY) ? categories : licenses)
-                    .add(new LicenseCount(facet.value(), facet.count()));
-        }
-        return new LicenseInventory(true, categories, licenses);
+    /** The licence inventory of a repository as its last count left it - the stored report
+     *  {@code GET /api/licenses} answers from, read by the same {@link LicenseReport}, so the screen and the API
+     *  cannot disagree. One point read; the count itself never runs here. */
+    public LicenseReport.Inventory licenses(String repository) throws IOException {
+        return LicenseReport.read(scope(repository));
     }
 
-    /** One license-inventory facet row for the console: a license category or resolved SPDX id and the number of
-     *  coordinates in the repository carrying it. Each drills down through the browse search
-     *  ({@code ?q=category:<value>} or {@code license:<value>}) to the coordinates behind the count. */
-    public record LicenseCount(String value, long count) {
-    }
-
-    /** The license inventory the console screen renders: whether the full-text index backed it ({@code false} while
-     *  the repository's full-text search is off or its index not built), the per-category counts and the
-     *  per-SPDX-id counts. */
-    public record LicenseInventory(boolean indexed, List<LicenseCount> categories, List<LicenseCount> licenses) {
+    /** Start a count of the repository's licences in the background, as {@code GET /api/licenses?refresh=true}
+     *  does; answers whether this call started it rather than finding one already running. */
+    public boolean countLicenses(String repository) throws IOException {
+        return LicenseReport.start(scope(repository));
     }
 
     /** The read-only summary of a repository's published index for the console card: the current generation, the

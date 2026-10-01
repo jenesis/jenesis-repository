@@ -23,7 +23,8 @@ public final class SearchModeSettingsContributor implements SettingsContributor 
                         + "from what the repository already keeps sorted, and nothing is built or stored. On, a "
                         + "background pass builds the index and keeps it current, which costs its build, its "
                         + "storage and the pass that maintains it - weigh the need against that cost, repository by "
-                        + "repository. The licence inventory is counted by the index, so it needs this on.",
+                        + "repository. The licence inventory is counted without it; only following a count to the "
+                        + "versions behind it needs the index.",
                 Setting.Kind.BOOLEAN, SearchMode.DEFAULT, true, Setting.Scope.REPOSITORY).essential());
     }
 }
