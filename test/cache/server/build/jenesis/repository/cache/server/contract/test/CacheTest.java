@@ -349,6 +349,26 @@ public class CacheTest {
     }
 
     @Test
+    public void a_tenant_named_like_a_product_space_is_reaped_like_any_other() throws Exception {
+        // The product's own spaces live under .system, beside the cache's storage rather than in it, so a tenant
+        // may be called auth and its build cache still expires.
+        String key = Authorization.mint("auth");
+        Path project = project("auth", "reaped", "ttl=PT10S\n");
+        credential("auth", key, "*=cache:read,cache:write");
+        Cache reaped = new Cache(CacheStorages.filesystem(root), authorization(), 1L << 31, 256, Duration.ofMillis(100), 0, 0, "default", false, null, "default", new SimpleMeterRegistry())
+                .policies(policies());
+        reaped.start();
+        try {
+            put(reaped, "reaped", key, "aa", "01", new byte[]{1});
+            Files.setLastModifiedTime(project.resolve("aa").resolve("01"), FileTime.from(Instant.now().minusSeconds(300)));
+            await("the reaper to evict the auth tenant's entry idle longer than the ttl",
+                    () -> !Files.exists(project.resolve("aa").resolve("01")));
+        } finally {
+            reaped.stop();
+        }
+    }
+
+    @Test
     public void reaper_re_applies_a_lowered_size_cap_to_an_idle_project() throws Exception {
         // The cap was generous when the entries were written, so no write evicted them; then it was lowered - the
         // same shape as enabling the cache over a store that already held entries from before it existed. With no

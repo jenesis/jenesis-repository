@@ -426,11 +426,10 @@ public class Cache {
         List<String> result = new ArrayList<>();
         String cursor = null;
         while (true) {
+            // The cache's storage holds tenant folders and nothing else - the product's own spaces are under .system,
+            // beside it rather than in it - so every name of a tenant's shape is a tenant, whatever it is called.
             Traversal.Result page = storage.listDir("", cursor, CacheStorage.PAGE, name -> {
-                // "auth" is the credential tree the single-node deployment roots beside the tenant folders; it matches
-                // the tenant name shape, so exclude it by name or a free-space reclaim would enumerate (and, should
-                // any of its files ever look like entries, evict) the credential store.
-                if (Names.isTenant(name) && !name.equals("auth")) {
+                if (Names.isTenant(name)) {
                     result.add(name);
                 }
             });

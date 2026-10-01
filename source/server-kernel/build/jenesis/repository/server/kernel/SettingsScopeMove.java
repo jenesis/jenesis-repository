@@ -97,7 +97,7 @@ public final class SettingsScopeMove {
         }
         ArtifactStore cache = root.scope(Scopes.SYSTEM).scope(Scopes.CACHE);
         for (String tenant : cache.list("")) {
-            if (Scopes.valid(tenant) && !tenant.equals(Scopes.AUTH)) {
+            if (Scopes.valid(tenant)) {
                 projects(tenant, cache.scope(tenant), written);
             }
         }
