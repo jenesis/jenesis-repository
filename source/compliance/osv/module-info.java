@@ -1,8 +1,6 @@
 /**
- * The OSV (osv.dev) vulnerability feed as a plugin module: it provides
- * {@link build.jenesis.repository.compliance.SignalSourceProvider} (an advisory feed) answering to {@code osv}, so the compliance gate
- * discovers it through {@code ServiceLoader} and never names OSV. A new feed is added the same way - as its own
- * module - with no change to the neutral composition.
+ * The OSV (osv.dev) vulnerability feed: a {@link build.jenesis.repository.compliance.SignalSourceProvider} answering to
+ * {@code osv}, discovered by the compliance gate through {@code ServiceLoader}.
  *
  * @jenesis.release 25
  * @jenesis.bom pin-repository.properties
@@ -10,8 +8,7 @@
  */
 module build.jenesis.repository.compliance.osv {
     requires build.jenesis.repository.compliance;
-    // The bounded feed client: this module fetches through it and never re-rolls an HTTP client, a status
-    // branch, a page cap or a retry schedule. It is a support module, so the requires is deliberately not transitive.
+    // The bounded feed client this module fetches through; a support module, so not transitive.
     requires build.jenesis.repository.feed;
     requires build.jenesis.repository.settings;
     requires tools.jackson.databind;

@@ -4,9 +4,7 @@ import module java.base;
 import build.jenesis.repository.settings.Setting;
 import build.jenesis.repository.settings.SettingsContributor;
 
-/**
- * Describes the OSV feed's settings, so they surface on the settings screens exactly when this module is installed.
- */
+/** Describes the OSV feed's settings, so they appear exactly when this module is installed. */
 public final class OsvSettingsContributor implements SettingsContributor {
 
     @Override

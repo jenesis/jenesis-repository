@@ -7,15 +7,10 @@ import build.jenesis.repository.compliance.SignalSource;
 import build.jenesis.repository.compliance.SignalSourceProvider;
 
 /**
- * Discovers the OSV (osv.dev) feed: enabled by the {@code osv} setting, pointed at {@code osv-endpoint} (default
- * {@code https://api.osv.dev}). Off unless an operator turns it on: a lookup is an outbound call to a public API, and a
- * deployment that configured nothing has not agreed to make one. That deviation from the usual "unset means on"
- * gate is deliberate and is stated once, on {@code FeatureConventionTest}.
- *
- * <p>It was briefly documented as on by default, in this javadoc, in its {@code Setting} and in the generated
- * settings reference, because a defaults map on the plain server's launcher switched it on. The shipped image never
- * ran that launcher, so no deployment ever had it on by default and the documentation described a posture that did
- * not exist. Both now say the same thing: {@code jenrepo.osv=true} turns it on.
+ * Discovers the OSV feed: enabled by {@code osv}, pointed at {@code osv-endpoint} (default
+ * {@code https://api.osv.dev}). Off unless an operator turns it on with {@code jenrepo.osv=true}: a lookup is an
+ * outbound call to a public API, which a deployment that configured nothing has not agreed to - a deliberate exception
+ * to the "unset means on" gate.
  */
 public final class OsvAdvisorySourceProvider implements SignalSourceProvider {
 
