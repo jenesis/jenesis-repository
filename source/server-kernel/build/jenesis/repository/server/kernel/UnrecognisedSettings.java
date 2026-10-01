@@ -40,15 +40,15 @@ import build.jenesis.repository.store.Features;
  * logs what it disabled and how to silence it rather than failing.
  *
  * <p>The comparison errs deliberately towards <b>silence</b>. Keys are flattened to alphanumerics before matching, so
- * every spelling Spring's relaxed binding accepts - {@code s3-allow-insecure-endpoint}, {@code s3AllowInsecureEndpoint},
- * {@code JENREPO_S3_ALLOW_INSECURE_ENDPOINT} - is one key here, and an open prefix swallows anything beneath it. That
- * can accept a key nobody reads; it cannot reject one somebody does. The asymmetry is the point: a false negative is
- * silence, while a false positive is noise, and a warning that cries wolf on a valid deployment gets muted - after
- * which the real one is invisible too, which is the very failure this is here to end.
+ * every spelling Spring's relaxed binding accepts - {@code s3-allow-insecure-endpoint},
+ * {@code s3AllowInsecureEndpoint}, {@code JENREPO_S3_ALLOW_INSECURE_ENDPOINT} - is one key here, and an open prefix
+ * swallows anything beneath it. That can accept a key nobody reads; it cannot reject one somebody does. The asymmetry
+ * is the point: a false negative is silence, while a false positive is noise, and a warning that cries wolf on a valid
+ * deployment gets muted - after which the real one is invisible too, which is the very failure this is here to end.
  */
 public final class UnrecognisedSettings {
 
-    /** The namespace, taken from the one public accessor that composes it rather than spelled a tenth time. */
+    /** The namespace, taken from the one public accessor that composes it rather than spelled again. */
     private static final String NAMESPACE = Features.key("");
 
     /** How deep a nested {@code @ConfigurationProperties} object is walked; also the cycle bound. */
@@ -69,7 +69,8 @@ public final class UnrecognisedSettings {
     /**
      * One bound {@code @ConfigurationProperties} object and the prefix it binds under. A list of these rather than a
      * map keyed by prefix, because two objects may bind one prefix with disjoint keys - the console's shell and its
-     * identity layer both bind {@code jenrepo.ui} - and a map kept one of them, so the other's keys read as unknown.
+     * identity layer both bind {@code jenrepo.ui} - and a map would keep one of them, so the other's keys would read as
+     * unknown.
      */
     public record Bound(String prefix, Object properties) {
     }
@@ -207,7 +208,8 @@ public final class UnrecognisedSettings {
         return previous[right.length()];
     }
 
-    /** Read one bound object's property names, recursing into a nested settings object and opening a prefix at a Map. */
+    /** Read one bound object's property names, recursing into a nested settings object and opening a prefix at a Map.
+     *  */
     private static void walk(Object object, String prefix, Set<String> keys, Set<String> prefixes, int depth) {
         if (object == null || depth >= MAX_DEPTH) {
             return;

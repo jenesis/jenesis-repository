@@ -7,7 +7,7 @@ import build.jenesis.repository.settings.SettingsContributor;
 /**
  * Surfaces the release-version immutability opt-out on the settings screens, API and CLI. The one dial,
  * {@code allow-redeploy}, defaults {@code false}: release-version immutability is <b>on by default</b>, so the
- * the deploy path refuses ({@code 409}) re-pointing an already-published immutable RELEASE coordinate at
+ * deploy path refuses ({@code 409}) re-pointing an already-published immutable RELEASE coordinate at
  * different bytes - a supply-chain / dependency-confusion guard. An operator opts a tenant out by setting it
  * {@code true}, allowing a release coordinate to be overwritten in that tenant's space.
  *

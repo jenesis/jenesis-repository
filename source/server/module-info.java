@@ -49,14 +49,12 @@ open module build.jenesis.repository.server {
     requires tools.jackson.databind;
     requires jakarta.servlet;
     requires micrometer.observation;
-    // The Prometheus registry, here rather than downstream, because scraping metrics is a Spring Boot feature and
-    // not an edition's - pinned only in a downstream module, this core would have no /actuator/prometheus to expose,
-    // which would read as a policy decision and be only a decision about where a dependency happened to sit. The
-    // endpoint it auto-configures is gated like every other actuator
-    // surface: RepositoryAuthorizationManager binds the /actuator subtree to a deployment-wide grant.
+    // The Prometheus registry, in the core because scraping metrics is a Spring Boot feature rather than an edition's,
+    // so every composition exposes /actuator/prometheus. The endpoint it auto-configures is gated like every other
+    // actuator surface: RepositoryAuthorizationManager binds the /actuator subtree to a deployment-wide grant.
     requires micrometer.registry.prometheus;
     // Micrometer's histogram backing, adopted under a name so it reaches the module path: it carries neither a
-    // module descriptor nor an Automatic-Module-Name, which is the only reason it was on the class path.
+    // module descriptor nor an Automatic-Module-Name, which would otherwise leave it on the class path.
     requires hdrhistogram;
     requires org.slf4j;
     requires ch.qos.logback.classic;

@@ -15,16 +15,16 @@ import org.springframework.web.bind.annotation.RestController;
 
 /**
  * The security-posture read - {@code GET /api/posture}, the console / CLI / headless-agent read of the
- * deployment's configuration-warning advisories: every potentially-unsafe setting a discovered {@link
- * build.jenesis.repository.posture.SafetyAdvisor} raises against the effective configuration, collected once through
- * {@link PostureReport#discover} and returned severity-sorted (critical first). Each row names <em>why</em> a setting is
- * unsafe and the exact {@code jenrepo.*} key/value that fixes it - it never repeats a read secret value, so this
- * surface (which enumerates the deployment's weaknesses) cannot itself leak one.
+ * deployment's configuration-warning advisories: every potentially-unsafe setting a discovered
+ * {@link build.jenesis.repository.posture.SafetyAdvisor} raises against the effective configuration, collected once
+ * through {@link PostureReport#discover} and returned severity-sorted (critical first). Each row names <em>why</em> a
+ * setting is unsafe and the exact {@code jenrepo.*} key/value that fixes it - it never repeats a read secret value, so
+ * this surface (which enumerates the deployment's weaknesses) cannot itself leak one.
  *
  * <p>Registered as an explicit {@code @Bean} by {@link RepositoryAutoConfiguration}, reading the deployment
  * configuration off the Spring {@link Environment} (the same lookup {@code Features} installs). Read like every other
- * {@code /api} surface - key-auth'd ({@code repository:read}) by {@link RepositorySecurityAutoConfiguration}, read-only,
- * never an anonymous backdoor; a clean deployment returns an empty list.
+ * {@code /api} surface - key-auth'd ({@code repository:read}) by {@link RepositorySecurityAutoConfiguration},
+ * read-only, never an anonymous backdoor; a clean deployment returns an empty list.
  */
 @RestController
 public final class PostureController {
@@ -42,11 +42,9 @@ public final class PostureController {
         PostureReport report = PostureReport.discover(Configuration.of(environment::getProperty));
         // Deployment-wide rows for everyone; a tenant's rows only for a key that belongs to that tenant. Rendering
         // report.advisories() would hand every TENANT-scoped advisory to any repository:read caller - a cross-tenant
-        // leak, on
-        // the surface whose whole job is to enumerate the deployment's weaknesses. A caller with no key (auth off,
-        // or an anonymous read) resolves to no tenant and sees the deployment rows alone, which is the fail-closed
-        // direction. This is the same composition the downstream console's ScopedPosture performs; the primitives
-        // it uses live here, in the report, and were simply not being called.
+        // leak, on the surface whose whole job is to enumerate the deployment's weaknesses. A caller with no key (auth
+        // off, or an anonymous read) resolves to no tenant and sees the deployment rows alone, which is the fail-closed
+        // direction.
         List<SecurityAdvisory> visible = report.visibleTo(Authorization.tenantOf(PresentedKey.from(request)));
         List<Map<String, Object>> rows = new ArrayList<>();
         for (SecurityAdvisory advisory : visible) {

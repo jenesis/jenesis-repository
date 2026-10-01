@@ -25,9 +25,9 @@ import org.springframework.web.filter.OncePerRequestFilter;
  * {@code Jenesis-Repository-Key} header alone. That distinction is load-bearing under path- and host-tenancy: there the
  * tenant rides in the URL path or the request Host, not the key, so a keyless write to {@code /repository/acme/...}
  * must be screened with {@code acme}'s own gate policy, not the default tenant's. Under multi- and fixed-tenancy the
- * routing derives the tenant from the key (or the fixed default) just as before, so the binding is unchanged there. The
- * scope restores the previous binding on close (a reused request thread never leaks a tenant into the next request), and
- * other paths pass straight through unbound.
+ * routing derives the tenant from the key (or the fixed default), so the binding follows the key there. The
+ * scope restores the previous binding on close (a reused request thread never leaks a tenant into the next request),
+ * and other paths pass straight through unbound.
  */
 public final class PublishTenantFilter extends OncePerRequestFilter {
 
@@ -45,9 +45,9 @@ public final class PublishTenantFilter extends OncePerRequestFilter {
             return;
         }
         // Bind the tenant the ACTIVE routing resolves for this request - the same tenant that scopes the store - so the
-        // free edge's screen and the DeployEdgeHooks bean resolve that tenant's own gate policy. Under path/host tenancy
-        // the tenant comes from the path/host (a keyless CDN write names a non-default tenant), which the key header
-        // alone could not see; the key-must-agree precedence in those routings still confines a keyed request.
+        // free edge's screen and the DeployEdgeHooks bean resolve that tenant's own gate policy. Under path/host
+        // tenancy the tenant comes from the path/host (a keyless CDN write names a non-default tenant), which the key
+        // header alone could not see; the key-must-agree precedence in those routings still confines a keyed request.
         // A routing refusal is the controller's to answer: leave the tenant unbound and let the request proceed.
         Optional<String> tenant;
         if (request.getRequestURI().startsWith(RepositoryRouting.OPERATIONS)) {

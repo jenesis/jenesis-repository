@@ -16,12 +16,9 @@ import org.springframework.web.bind.annotation.RestController;
 /**
  * The person surface: what a signed-in human holds, over the same grants a key and a group hold theirs in.
  *
- * <p>It is the one holder that had no API. A key has had {@code /api/credentials} from the start and a group now
- * has {@code /api/groups}, but a person's rights were reachable only through the console's own membership screen
- * and the SCIM connector an identity provider drives - so the surface a script or an agent would use did not
- * exist, and "manage this on all three surfaces" was true of two of the four holders. That is the standing rule's
- * failure mode seen from the other side: usually the console lags the API, and here it was the API that lagged the
- * console.
+ * <p>It gives a person the API surface a key ({@code /api/credentials}) and a group ({@code /api/groups}) have:
+ * without it a person's rights would be reachable only through the console's own membership screen and the SCIM
+ * connector an identity provider drives, and a script or an agent would have no surface to use.
  *
  * <p><b>The id is never a path segment.</b> A person is named as the sign-in mechanism names them -
  * {@code oidc/<sub>}, {@code github/1024025} - so their id carries a slash. A path variable would have to be

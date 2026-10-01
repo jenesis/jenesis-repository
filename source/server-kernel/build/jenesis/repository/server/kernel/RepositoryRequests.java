@@ -7,10 +7,9 @@ import jakarta.servlet.http.HttpServletResponse;
 import org.springframework.web.util.UriUtils;
 
 /**
- * Request helpers shared by the server's focused core controllers, kept in one place after the
- * {@code RepositoryController} monolith was split into the console shell, the deploy write path, admin import,
- * browse/search, dependents, the format icon and the deployment-info reads. These are the cross-cutting concerns a
- * few of those controllers share - resolving the request's tenant and guarding a query-supplied path against
+ * Request helpers shared by the server's focused core controllers - the console shell, the deploy write path, admin
+ * import, browse/search, dependents, the format icon and the deployment-info reads. These are the cross-cutting
+ * concerns a few of those controllers share - resolving the request's tenant and guarding a query-supplied path against
  * traversal - so each controller stays a thin HTTP layer over the domain without copying the mechanism. Wrapping an
  * important repository event in an observation is the canonical {@code build.jenesis.repository.server.Observations}
  * helper, which the controllers call directly.

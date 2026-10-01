@@ -41,7 +41,7 @@ import org.springframework.web.util.DisconnectedClientHelper;
  * matched format and the format is a {@link ProxyFormat}, a local miss is served through the {@link PullThroughCache}
  * from that upstream and cached, so a later read is a local hit. The single-tenant import edge
  * ({@code POST /api/repository/import} and {@code GET /api/repository/import/<id>}) is served by the separate
- * {@link ImportEdgeController} bean - peeled out so a richer distribution can OWN the import edge through the
+ * {@link ImportEdgeController} bean - a bean of its own so a richer distribution can OWN the import edge through the
  * {@link ImportEdgeProvider} SPI without a cross-layer mapping override. Authorization is not done here:
  * {@link RepositorySecurityAutoConfiguration} gates the wire through the {@link Authorization} credential model.
  */
@@ -58,7 +58,7 @@ public class RepositoryController {
 
     private static final JsonMapper JSON = JsonMapper.builder().build();
 
-    /** A routable repository name, the same traversal-free segment shape the multi-tenant edition validates, so a
+    /** A routable repository name, the traversal-free segment shape every routing validates, so a
      *  {@code repo=} query parameter can never escape its store scope (no {@code /}, {@code \} or {@code ..}). */
     private static final Pattern REPOSITORY = Pattern.compile("[A-Za-z0-9_-]+");
 
@@ -217,9 +217,9 @@ public class RepositoryController {
 
     /**
      * The format catch-all: an artifact request under {@code /repository/**} (its prefix stripped by
-     * {@link RepositoryRouting} before dispatch) or the OCI {@code /v2/**} registry the Docker protocol pins at the host
-     * root, resolved to its artifact space and offered to the {@link RepositoryFormat} plugins over that store by the
-     * {@link FormatDispatcher}. A repository's operations and staged uploads answer outside its URL space
+     * {@link RepositoryRouting} before dispatch) or the OCI {@code /v2/**} registry the Docker protocol pins at the
+     * host root, resolved to its artifact space and offered to the {@link RepositoryFormat} plugins over that store by
+     * the {@link FormatDispatcher}. A repository's operations and staged uploads answer outside its URL space
      * ({@code /api/repository/...}, {@code /staging/...}), so this sees nothing but a format's own paths; an unclaimed
      * one is a {@code 404}. A format with a configured
      * upstream that is a {@link ProxyFormat} serves a local miss through the {@link PullThroughCache}. A write
@@ -452,7 +452,7 @@ public class RepositoryController {
     }
 
     /**
-     * The paged asset enumeration - the product's first {@code /api} surface and the outbound mirror of the
+     * The paged asset enumeration - the outbound mirror of the
      * import connectors, so a jenesis instance can be walked by another tool (or another jenesis) and getting your
      * data out is never an afterthought. {@code GET /api/assets?repo=<name>&cursor=<token>&limit=<n>} returns a
      * flat, stably-ordered slice of the repository's published assets: each entry's {@code path}, {@code size} and
@@ -539,7 +539,7 @@ public class RepositoryController {
     }
 
     /**
-     * Advertises the deployment-wide capabilities a client or console reads to adapt its behaviour - today the
+     * Advertises the deployment-wide capabilities a client or console reads to adapt its behaviour - the
      * read-only flag (so a console shows a banner and hides write affordances, and a mirror client knows writes are
      * refused) and whether the wire is credential-gated. Read like every other {@code /api} surface; a distribution
      * with more capabilities extends the map without a client change - through the {@link CapabilityContributor} SPI
@@ -550,8 +550,8 @@ public class RepositoryController {
      * into it: a richer distribution contributes its formats / import-sources / module-flags
      * onto this one free-served endpoint by shipping a contributor module - the server already {@code uses} the SPI, so
      * no core change is needed. With no contributor installed (the product) the served map is exactly the base map,
-     * byte-for-byte unchanged. On a key conflict the base key wins (see {@link CapabilityContributor}'s merge rule), so a
-     * contributor can only extend the product's own flags, never shadow them.
+     * byte-for-byte unchanged. On a key conflict the base key wins (see {@link CapabilityContributor}'s merge rule), so
+     * a contributor can only extend the product's own flags, never shadow them.
      *
      * <p>What the rule <em>refuses</em> is served too. A contributed key the base already owns, or a contributor that
      * threw building its view, is named in the body under {@code capabilityConflicts} / {@code capabilityFailures} and
@@ -654,10 +654,10 @@ public class RepositoryController {
 
     /**
      * A failure no handler above meant: logged once with a reference ({@link Failures}), and answered with the sentence
-     * and the reference in the claiming format's own error dialect ({@link RepositoryFormat#failed}), so a client prints
-     * something a person can quote and nothing of the failure's insides. Spring's own typed status exceptions keep
-     * their answers, and a route no format claimed is answered by Spring's error page, which references it the same
-     * way; a response already streaming can only be cut short, and the log line is all there is.
+     * and the reference in the claiming format's own error dialect ({@link RepositoryFormat#failed}), so a client
+     * prints something a person can quote and nothing of the failure's insides. Spring's own typed status exceptions
+     * keep their answers, and a route no format claimed is answered by Spring's error page, which references it the
+     * same way; a response already streaming can only be cut short, and the log line is all there is.
      */
     @ExceptionHandler(Exception.class)
     public void failed(Exception failure, HttpServletRequest request, HttpServletResponse response) throws Exception {

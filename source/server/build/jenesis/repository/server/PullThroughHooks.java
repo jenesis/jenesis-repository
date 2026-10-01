@@ -52,7 +52,7 @@ public interface PullThroughHooks {
     /**
      * Verify a locally cached artifact against the current gate BEFORE a pull-through hit serves it, returning how the
      * cache should proceed. The default returns {@link HitDecision#serveThrough()} - the local-first serve runs
-     * exactly as today, and (because the downstream treats "nothing durably local" as serve-through too) a path with no
+     * unchanged, and (because the cache treats "nothing durably local" as serve-through too) a path with no
      * cached blob simply flows on to the miss leg. An implementation reads only pointers/metadata or a re-openable
      * streamed read of the local blob to decide; it must never buffer the whole body.
      *
@@ -67,15 +67,14 @@ public interface PullThroughHooks {
      * Decorate the upstream fetcher for one request {@code path} before the miss-fetch runs - the seam the screening
      * firewall plugs into on the dispatcher-direct paths (the dispatcher loop, demo seeding, fixed-tenancy default
      * upstreams) that do not pass through the routed gateway's own {@code screening()} decoration. The default
-     * returns {@code upstream} unchanged (identity), so the miss leg fetches exactly as today. The decoration is
+     * returns {@code upstream} unchanged (identity), so the miss leg fetches unscreened. The decoration is
      * path-bound, so the cache applies it per request at the point it invokes {@link ProxyFormat#proxy}.
      *
      * <p><b>{@code store} is the store the fetched body will be cached into</b>, handed over per call rather than
      * bound when the hooks were built. A screening decorator has to write somewhere - a quarantine pointer, a review
      * log row - and it must write into the same store the bytes land in. An implementation that captured one at
      * construction could only ever be installed where that store is fixed, which is a seeder or a single repository;
-     * the serving dispatcher is a singleton over every tenant's store, so it could not install a screen at all. That
-     * is why the deployment-wide upstream map's leg ran unscreened.
+     * the serving dispatcher is a singleton over every tenant's store, so it could not install a screen at all.
      */
     default ProxyFormat.Fetcher screenFetch(String path, ProxyFormat.Fetcher upstream, ArtifactStore store) {
         return upstream;
@@ -96,9 +95,9 @@ public interface PullThroughHooks {
 
     /**
      * How a {@link #verifyHit} hook tells the cache to handle a locally cached artifact, decided BEFORE any hit byte is
-     * served. Deliberately <em>not</em> a bare {@code boolean}: a "false" that dumped the request onto the upstream miss
-     * leg would re-fetch cached-but-unverified bytes (wasteful, and closed-for-the-wrong-reason when upstream is down),
-     * so a hit is always decided from the LOCAL bytes. Three outcomes:
+     * served. Deliberately <em>not</em> a bare {@code boolean}: a "false" that dumped the request onto the upstream
+     * miss leg would re-fetch cached-but-unverified bytes (wasteful, and closed-for-the-wrong-reason when upstream is
+     * down), so a hit is always decided from the LOCAL bytes. Three outcomes:
      * <ul>
      *   <li>{@link #serveThrough()} - proceed with the format's local-first serve exactly as the path does (the
      *       {@link #NONE} default, and the "nothing durably local / verdict still valid" answer). If the local-first
@@ -107,7 +106,7 @@ public interface PullThroughHooks {
      *       artifact the current gate refuses. No upstream re-fetch - the withhold is final for this request.</li>
      *   <li>{@link #serveLocal(LocalServe)} - the edition takes over serving the local bytes itself, fail-closed: it
      *       re-screens the LOCAL blob (never the upstream) through a re-openable stream and either streams the verified
-     *       bytes or answers {@code 404}. The downstream {@code HardenedScreen.serveVerified} plugs in here.</li>
+     *       bytes or answers {@code 404}. The gateway's {@code HardenedScreen.serveVerified} plugs in here.</li>
      * </ul>
      */
     sealed interface HitDecision {

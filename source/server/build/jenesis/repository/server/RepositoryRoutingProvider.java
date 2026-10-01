@@ -52,14 +52,6 @@ public interface RepositoryRoutingProvider {
     RepositoryRouting create(RoutingContext context);
 
     /**
-     * The routing this deployment runs on: the installed provider named by {@code selection}, or the
-     * {@link #FIXED} one when it names nothing.
-     *
-     * @throws IllegalStateException when {@code selection} names a routing no installed provider answers to, with
-     *         the installed names - a deployment that asked for host routing and silently got fixed would serve
-     *         every tenant's request out of one space, and find nothing wrong with that.
-     */
-    /**
      * The names of the routings this deployment has installed, empty when none is.
      *
      * <p>Asked by a surface whose shape depends on whether repositories are routed at all - an import edge that
@@ -73,6 +65,14 @@ public interface RepositoryRoutingProvider {
                 provider -> true);
     }
 
+    /**
+     * The routing this deployment runs on: the installed provider named by {@code selection}, or the
+     * {@link #FIXED} one when it names nothing.
+     *
+     * @throws IllegalStateException when {@code selection} names a routing no installed provider answers to, with
+     *         the installed names - a deployment that asked for host routing and silently got fixed would serve
+     *         every tenant's request out of one space, and find nothing wrong with that.
+     */
     static RepositoryRouting resolve(String selection, RoutingContext context) {
         List<RepositoryRoutingProvider> discovered = ServiceLoader.load(RepositoryRoutingProvider.class).stream()
                 .map(ServiceLoader.Provider::get)

@@ -9,8 +9,8 @@ import io.micrometer.observation.ObservationRegistry;
  * The one place the Observation API is opened, so every observed <em>operation</em> in the product wraps the same
  * way: a single instrumentation point that Boot's observation support fans out to a timer, the logging handler and
  * (when a tracing bridge is on the path) a span. It lives beside the serving seams in the core - the module
- * that already {@code requires micrometer.observation} - so the console module, the maintenance module and the
- * downstream controllers all collapse their private copies onto it rather than each re-deriving the choreography.
+ * that already {@code requires micrometer.observation} - so the console module, the maintenance module and an
+ * edition's controllers all use it rather than each re-deriving the choreography.
  *
  * <p>The repository and tenant ride as high-cardinality key-values (kept off the metric tags, so they never explode
  * the meter cardinality) and both are null-guarded to {@code "none"} here - a deployment-wide operation carries no

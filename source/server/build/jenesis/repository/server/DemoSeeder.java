@@ -50,7 +50,7 @@ public final class DemoSeeder {
     /** As {@link #DemoSeeder(List, ProxyFormat.Fetcher)}, binding an edition's {@link PullThroughHooks} into the
      *  {@link FormatDispatcher} {@link #seed} builds - the injection point for the dispatcher-direct demo leg, which
      *  does not pass through the routed gateway's own screening. The other constructor delegates here with
-     *  {@link PullThroughHooks#NONE}, so the demo seed pulls through exactly as before. */
+     *  {@link PullThroughHooks#NONE}, so the demo seed pulls through unscreened by an edition's hooks. */
     public DemoSeeder(List<RepositoryFormat> formats, ProxyFormat.Fetcher fetcher, PullThroughHooks hooks) {
         this.formats = List.copyOf(formats);
         this.fetcher = fetcher;
@@ -73,9 +73,8 @@ public final class DemoSeeder {
      * demo gate config already layered in does not make the space non-empty.
      */
     public static boolean empty(ArtifactStore store) throws IOException {
-        // Two bounded probes, not two listings. This asked its question with list("blobs").isEmpty(), which
-        // materialises one string per blob in the pool to decide whether there are any - on a busy repository,
-        // millions of them, to answer no.
+        // Two bounded probes, not two listings: list("blobs").isEmpty() would materialise one string per blob in the
+        // pool to decide whether there are any - on a busy repository, millions of them, to answer no.
         return store.isEmpty("blobs") && store.isEmpty("publish");
     }
 

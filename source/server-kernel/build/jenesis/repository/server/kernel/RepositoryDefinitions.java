@@ -6,7 +6,7 @@ package build.jenesis.repository.server.kernel;
  * repositories. The definitions themselves - writability, the fallbacks and their
  * screening - are the router's model, and the router is a feature the kernel does not require; the boot module
  * hands the kernel an implementation the router's live definitions answer, and a composition without the router
- * answers {@link #HOSTED}, which is what a repository with no definition has always meant.
+ * answers {@link #HOSTED}, which is what a repository with no definition means.
  *
  * <p>It exists so that {@code Repositories} does not hand out the router's {@code Definition} type directly, which
  * would make the kernel require the router and, through it, the gate, the inventory and the metadata store - so

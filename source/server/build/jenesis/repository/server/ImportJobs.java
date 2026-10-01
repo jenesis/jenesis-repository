@@ -36,8 +36,8 @@ public final class ImportJobs {
     }
 
     /** As above, with two seams an edition binds around the background job. {@code listener} rides every imported,
-     *  held, rejected and skipped asset (the downstream controller records a held asset's replay context here);
-     *  {@code jobScope} decorates the job body before it is started on the virtual thread - the seam the downstream
+     *  held, rejected and skipped asset (an edition's controller records a held asset's replay context here);
+     *  {@code jobScope} decorates the job body before it is started on the virtual thread - the seam an edition's
      *  controller uses to bind its {@code PublishTenant} around the run, since the import job runs on a fresh
      *  {@link Thread#ofVirtual() virtual thread} where no tenant is bound and the screen would otherwise resolve the
      *  deployment-wide policy rather than the tenant's. The default {@link UnaryOperator#identity() identity} leaves
@@ -210,7 +210,7 @@ public final class ImportJobs {
                            String error, Object token) {
 
         /** Every row the source offered that no connector would carry. A completed job with zero imported and a
-         *  non-zero count here is a refused source, not an empty one - the distinction this record could not make. */
+         *  non-zero count here is a refused source, not an empty one. */
         public int droppedTotal() {
             return dropped.values().stream().mapToInt(Integer::intValue).sum();
         }

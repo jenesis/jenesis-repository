@@ -24,11 +24,11 @@ import build.jenesis.repository.store.Durations;
  * without waiting for the artifact to be republished. It runs on its own single daemon scheduler because it is a bean
  * that owns its start/close lifecycle, so it keeps a private timer rather than the composition root's scheduler. The
  * cadence is {@code jenrepo.rebuild.interval} (a week by
- * default, matching {@link #DEFAULT_INTERVAL}; {@code off} or {@code 0} switches the driver off), the first pass runs a minute after boot. The driver is
- * inert - it logs one line and schedules nothing - when there is no walk with a consumer and no listing to repair, so
- * a deployment without either is byte-for-byte unchanged. One pass at a time: a cadence tick that finds the previous
- * pass still running is skipped, never stacked. It is its own {@link ObservabilitySource}: once started, its status is
- * reported from the context that runs it.
+ * default, matching {@link #DEFAULT_INTERVAL}; {@code off} or {@code 0} switches the driver off), the first pass runs a
+ * minute after boot. The driver is inert - it logs one line and schedules nothing - when there is no walk with a
+ * consumer and no listing to repair, so a deployment without either is byte-for-byte unchanged. One pass at a time: a
+ * cadence tick that finds the previous pass still running is skipped, never stacked. It is its own
+ * {@link ObservabilitySource}: once started, its status is reported from the context that runs it.
  */
 public final class RebuildScheduler implements AutoCloseable, ObservabilitySource {
 
@@ -230,9 +230,10 @@ public final class RebuildScheduler implements AutoCloseable, ObservabilitySourc
     }
 
     /**
-     * The driver's cadence, and its only switch: a day when unset; {@code off}, {@code 0} or {@code false} for no
-     * driver at all - which is how a distribution that drives the same pass another way stands this one down - and
-     * otherwise a duration in the deployment's one grammar ({@code PT6H}, {@code 6h}, {@code 30m}, {@code 1d}).
+     * The driver's cadence, and its only switch: {@link #DEFAULT_INTERVAL} when unset; {@code off}, {@code 0} or
+     * {@code false} for no driver at all - which is how a distribution that drives the same pass another way stands
+     * this one down - and otherwise a duration in the deployment's one grammar ({@code PT6H}, {@code 6h}, {@code 30m},
+     * {@code 1d}).
      *
      * <p>Zero disables here where a maintenance pass's cadence dial refuses it, and the difference is deliberate:
      * those dials sit beside a separate on/off toggle per pass, so a zero cadence there would give one dial two

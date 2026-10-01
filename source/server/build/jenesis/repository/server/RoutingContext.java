@@ -12,14 +12,10 @@ import org.springframework.web.server.ResponseStatusException;
  * What a {@link RepositoryRoutingProvider} is handed to build its routing with: the deployment's store, its
  * configuration, and the two questions a routing has to ask about a repository it did not choose.
  *
- * <p><strong>Why this exists rather than the routings taking their collaborators directly.</strong> A routing is
- * selected at boot, and the implementations were reached by naming their constructors in a Spring configuration -
- * which made tenancy a composition choice rather than an extension point, so a new routing could only be added by
- * editing that configuration. Discovering them needs one thing they can all be built from, and the obstacle
- * looked like the {@code Repositories} type all three multi-tenant routings take. It is not: between them they
- * call three of its methods, and the one returning a routing type is consulted only for a boolean.
- * So the whole dependency fits in a seam this module can declare, and tenancy becomes discovered like every
- * other extension point.
+ * <p><strong>Why this exists rather than the routings taking their collaborators directly.</strong> Discovering the
+ * routings needs one thing they can all be built from. Between them the multi-tenant routings call three methods of
+ * {@code Repositories}, and the one returning a routing type is consulted only for a boolean, so the whole dependency
+ * fits in a seam this module declares, and tenancy is discovered like every other extension point.
  *
  * <p>A provider reads whatever else it needs from {@link #config}, which is the deployment's namespaced settings -
  * the same accessor an {@link build.jenesis.repository.store.ArtifactStoreProvider} takes. That keeps a routing's

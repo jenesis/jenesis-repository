@@ -58,8 +58,8 @@ public final class FormatDispatcher {
 
     /**
      * Bind an edition's {@link PullThroughHooks} into the pull-through the loop drives. The other constructors delegate
-     * here with {@link PullThroughHooks#NONE}, so an existing call site is unchanged and its proxy legs serve exactly as
-     * before.
+     * here with {@link PullThroughHooks#NONE}, so a call site that binds none serves its proxy legs with no edition's
+     * hooks.
      */
     public FormatDispatcher(List<RepositoryFormat> formats, Upstreams upstreams, ProxyFormat.Fetcher fetcher,
                             ObservationRegistry observations, PullThroughHooks hooks) {
@@ -94,13 +94,13 @@ public final class FormatDispatcher {
         return false;
     }
 
-    /** The installed format of this name, or empty when this deployment carries none - what a repository's document
-     *  names is looked up here before anything is offered to it. */
     /** The formats this dispatcher offers a request to. */
     public List<RepositoryFormat> formats() {
         return formats;
     }
 
+    /** The installed format of this name, or empty when this deployment carries none - what a repository's document
+     *  names is looked up here before anything is offered to it. */
     public Optional<RepositoryFormat> format(String name) {
         for (RepositoryFormat format : formats) {
             if (format.name().equals(name)) {
@@ -121,11 +121,11 @@ public final class FormatDispatcher {
     /**
      * The format that owns a request path - the first whose {@link RepositoryFormat#handles handles} it - so a
      * read-side concern that only has a stored path can recover its format without re-implementing the matching. The
-     * {@code /api/assets} enumeration uses it to label a publication pointer with its format {@link
-     * RepositoryFormat#name() name} and, when the owner is an {@link build.jenesis.repository.format.ArtifactLayout
-     * ArtifactLayout}, its neutral coordinate through {@link
-     * build.jenesis.repository.format.ArtifactLayout#describe describe} - from the path alone, no blob opened. Empty
-     * when no installed format claims the path.
+     * {@code /api/assets} enumeration uses it to label a publication pointer with its format
+     * {@link RepositoryFormat#name() name} and, when the owner is an
+     * {@link build.jenesis.repository.format.ArtifactLayout ArtifactLayout}, its neutral coordinate through
+     * {@link build.jenesis.repository.format.ArtifactLayout#describe describe} - from the path alone, no blob opened.
+     * Empty when no installed format claims the path.
      */
     public Optional<RepositoryFormat> owner(String path) {
         for (RepositoryFormat format : formats) {

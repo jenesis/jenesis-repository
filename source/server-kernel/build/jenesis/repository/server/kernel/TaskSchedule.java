@@ -27,8 +27,7 @@ import build.jenesis.repository.maintenance.MaintenanceTask;
  *
  * <p>It deliberately owns <em>no</em> lease ({@link LeaseGuard}), no meter ({@link PassMetrics}), no thread, no store
  * and no tenant knowledge: {@link MaintenanceScheduler} remains the one owner of the worker thread and of the
- * tenant/repository iteration. Splitting this out adds no second scheduler - there is still exactly one loop, and it
- * asks this object what to run.
+ * tenant/repository iteration: there is exactly one loop, and it asks this object what to run.
  *
  * <h2>Contract</h2>
  * <ol>
@@ -38,7 +37,8 @@ import build.jenesis.repository.maintenance.MaintenanceTask;
  *       called only from the single worker loop and are <em>not</em> synchronised against each other; they are pure
  *       functions of the arguments plus the due map.</li>
  *   <li><b>Idempotency.</b> {@link #due} re-arms every task it returns, so calling it twice for the same instant
- *       returns the second time only what a re-arm did not cover. That is the point: a pass runs once per interval.</li>
+ *       returns the second time only what a re-arm did not cover. That is the point: a pass runs once per
+ *       interval.</li>
  *   <li><b>Bounded work.</b> {@link #sleep} never returns less than {@link #FLOOR} nor more than {@link #IDLE_POLL},
  *       so a pass configured (or defaulted) to a degenerate cadence cannot spin the worker, and a task toggled on
  *       through the settings is picked up within the idle-poll window rather than only when some other task falls
@@ -110,8 +110,6 @@ public final class TaskSchedule {
         return until.compareTo(FLOOR) < 0 ? FLOOR : until.compareTo(IDLE_POLL) > 0 ? IDLE_POLL : until;
     }
 
-    /** Schedule any task not yet known one interval out, and forget the due time of every task that is no longer
-     *  enabled - so a disabled pass stops holding the worker awake and a re-enabled one does not fire immediately. */
     /**
      * A node that ran an exclusive pass yields: it is not due again before {@code notBefore}, one interval after the
      * pass finished, however long the pass took. Re-arming from the moment a task became due - the rule above, right
@@ -129,6 +127,8 @@ public final class TaskSchedule {
         return Map.copyOf(due);
     }
 
+    /** Schedule any task not yet known one interval out, and forget the due time of every task that is no longer
+     *  enabled - so a disabled pass stops holding the worker awake and a re-enabled one does not fire immediately. */
     private synchronized void arm(List<ScheduledTask> tasks, Instant now) {
         Set<String> names = new LinkedHashSet<>();
         for (ScheduledTask task : tasks) {
@@ -196,7 +196,8 @@ public final class TaskSchedule {
 
     /** Mark {@code task}'s run as finished at {@code now} taking {@code duration}: it records the last-run instant and
      *  duration but <em>preserves</em> any failure counted during the pass (a fanned-out unit that threw, or a lease
-     *  lost mid-pass, set the flag before this runs), so a pass with a failing unit is not miscounted as a clean run. */
+     *  lost mid-pass, set the flag before this runs), so a pass with a failing unit is not miscounted as a clean run.
+     *  */
     void finished(String task, Instant now, Duration duration) {
         Integer outstanding = inFlight.merge(task, -1, (current, delta) -> current + delta == 0 ? null : current + delta);
         long[] before = outstanding == null ? atStart.remove(task) : null;

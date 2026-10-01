@@ -23,11 +23,11 @@ import build.jenesis.repository.store.PublishInterceptor;
  * <ul>
  *   <li>{@link #beforeLayout} runs on {@code ACCEPT}, after the screen chain assigned the blob's {@code hash} but
  *       <em>before</em> the format lays it out. A present {@link Refusal} short-circuits: the edge answers it and lays
- *       nothing out and fires no {@code published()} - the seam the downstream edge fires its release-immutability
+ *       nothing out and fires no {@code published()} - the seam the gateway's hooks fire the release-immutability
  *       {@code 409} from.</li>
- *   <li>{@link #held} runs on the {@code QUARANTINE} branch, around the {@code 202}, so the downstream edge records the
+ *   <li>{@link #held} runs on the {@code QUARANTINE} branch, around the {@code 202}, so the gateway's hooks record the
  *       quarantine-dispatch replay context for the held body.</li>
- *   <li>{@link #verdict} runs once per screened write with the chain's final disposition, for the downstream deploy
+ *   <li>{@link #verdict} runs once per screened write with the chain's final disposition, for the deploy
  *       observation/metric.</li>
  * </ul>
  */
@@ -39,7 +39,7 @@ public interface EdgeHooks {
     };
 
     /** An edge refusal a {@link #beforeLayout} hook returns to short-circuit a write it will not admit: the HTTP
-     *  {@code status} to answer and a human-readable {@code message}. The downstream edge returns a {@code 409} from
+     *  {@code status} to answer and a human-readable {@code message}. The gateway's hooks return a {@code 409} from
      *  here when a write would overwrite an immutable release. A {@code null} message answers with an empty body. */
     record Refusal(int status, String message) {
     }

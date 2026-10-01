@@ -25,16 +25,17 @@ import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.server.ResponseStatusException;
 
 /**
- * The free import edge: the {@code /api/repository/import?repo=<repository>} migration trigger and its status read, peeled out of {@link RepositoryController} into its own controller bean so a richer distribution can OWN the
- * import edge without a cross-layer mapping override. It triggers an asynchronous migration through the first
+ * The free import edge: the {@code /api/repository/import?repo=<repository>} migration trigger and its status read,
+ * in a controller bean of its own so a richer distribution can OWN the import edge without a cross-layer mapping
+ * override. It triggers an asynchronous migration through the first
  * {@link ImportSourceProvider} that handles the requested source - discovered with {@code ServiceLoader} like the
  * formats, so the server knows no incumbent by name - run as a background {@link ImportJobs} writing into the request's
  * routed artifact space (so an import lands exactly where serving reads, and lays out only the formats that repository
  * holds), and {@code GET /api/repository/import/<id>?repo=<repository>} returns its state.
  *
  * <p>This edge is registered <em>only when no {@link ImportEdgeProvider} is installed</em> (see
- * {@link RepositoryAutoConfiguration}). When a distribution ships an {@code ImportEdgeProvider} - the downstream
- * edition's tenant-scoped {@code /api/repository/import} with its audited, SSRF-screened choreography - this
+ * {@link RepositoryAutoConfiguration}). When a distribution ships an {@code ImportEdgeProvider} - a tenant-scoped
+ * {@code /api/repository/import} of its own, with an audited, SSRF-screened choreography - this
  * free controller is simply not created, so its mapping never joins the handler mapping and the distribution's
  * controller is the only import edge, with no {@code WebMvcRegistrations} bean needed to suppress the mapping. With
  * no provider installed (the product) this controller serves the edge.

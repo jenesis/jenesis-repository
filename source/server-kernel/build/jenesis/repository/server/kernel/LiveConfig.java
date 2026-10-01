@@ -192,8 +192,8 @@ public final class LiveConfig implements SettingsEditor.Resolution {
         RetentionPolicy retention = buildRetention(get);
         // Whether the publish-time hold-mapping round-trip check throws on a break (failing the publish)
         // or only alarms. Off by default - production stays alarm-not-abort so one broken blobs-namespace format cannot
-        // DoS publishes - and flipped on in every test config so a broken mapping fails on the first publish in CI. Read
-        // through the same store-over-file/env effective lookup the discovered gate dimensions use.
+        // DoS publishes - and flipped on in every test config so a broken mapping fails on the first publish in CI.
+        // Read through the same store-over-file/env effective lookup the discovered gate dimensions use.
         boolean strictHoldMapping = Boolean.parseBoolean(config.apply("strict-hold-mapping"));
         // Whether a screen that reached ALLOW over a body it could not finish reading WITHHOLDS, or only says
         // so. Off by default, deliberately: the kit's CONTENT_FINDINGS reading is a declared, reviewed fail-open -
@@ -225,24 +225,24 @@ public final class LiveConfig implements SettingsEditor.Resolution {
         return publishGate;
     }
 
-    /** The publish-path compliance gate for a tenant: the deployment-wide gate where the tenant has overridden none of
-     *  its policy keys (the precomputed snapshot, no per-request cost), otherwise a gate resolved from that tenant's
-     *  effective chain (Spring pin &gt; tenant document &gt; global document &gt; packaged default) so a tenant's own
-     *  deny list, CVSS threshold, malware verdict or version floor bites on its uploads while a deployment-wide knob
-     *  stays uniform. Built on demand from cheap in-memory settings reads, as the deployment-wide gate is. */
     /**
      * A tenant's effective settings lookup - the same one this snapshot built its gate dimensions from: a stored
      * value layered over the deployment's file and environment defaults.
      *
      * <p>It is exposed because the gate is not the only thing built from configuration. An inspector that verifies a
-     * publisher's signature needs the keys an operator configured, and reading them anywhere else answers about a
-     * different deployment than the one the gate was built for - which is exactly what happened when that lookup went
-     * to the boot environment instead: keys were accepted, shown back on the settings screen, and not believed.
+     * publisher's signature needs the keys an operator configured, and reading them anywhere else - the boot
+     * environment, say - answers about a different deployment than the one the gate was built for: keys accepted and
+     * shown back on the settings screen would not be believed.
      */
     public UnaryOperator<String> settings(String tenant) {
         return key -> settings.getOrDefault(tenant, key, fileDefaults.apply(key));
     }
 
+    /** The publish-path compliance gate for a tenant: the deployment-wide gate where the tenant has overridden none of
+     *  its policy keys (the precomputed snapshot, no per-request cost), otherwise a gate resolved from that tenant's
+     *  effective chain (Spring pin &gt; tenant document &gt; global document &gt; packaged default) so a tenant's own
+     *  deny list, CVSS threshold, malware verdict or version floor bites on its uploads while a deployment-wide knob
+     *  stays uniform. Built on demand from cheap in-memory settings reads, as the deployment-wide gate is. */
     public ComplianceGate publishGate(String tenant) {
         Snapshot tenantGate = tenantGate(tenant);
         ComplianceGate base = tenantGate == null ? publishGate : tenantGate.publishGate();
@@ -272,7 +272,8 @@ public final class LiveConfig implements SettingsEditor.Resolution {
 
     /** A tenant's resolved live-tunable snapshot, or {@code null} when the tenant has no stored overrides (so the
      *  caller uses the precomputed deployment-wide fields). Resolved on demand - a publish/proxy is not the hot read
-     *  path, and building a few small policy objects from in-memory settings is the same cost {@link #rebuild()} pays. */
+     *  path, and building a few small policy objects from in-memory settings is the same cost {@link #rebuild()} pays.
+     *  */
     private Snapshot tenantGate(String tenant) {
         if (tenant == null || tenant.isBlank() || !settings.tenantConfigured(tenant)) {
             return null;

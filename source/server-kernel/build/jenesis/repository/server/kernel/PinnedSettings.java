@@ -32,10 +32,10 @@ import org.springframework.core.env.SystemEnvironmentPropertySource;
  * file is exactly where {@code jenrepo.vulnerability-threshold=${THRESHOLD:HIGH}} is written, so the raw text is a
  * placeholder that nothing below the environment expands.
  *
- * <p>Reporting that raw text was not merely untidy. {@link #effective} hands a pin's value on as <em>the effective
- * value of the key</em>, so every consumer then parsed the literal: {@code Configuration.flag} read
- * {@code ${JENREPO_AUTH:true}} as {@code false}, {@code Configuration.number} fell through to its default, and the
- * settings screen greyed the knob and offered the placeholder as the thing pinning it. A dial resolving to the
+ * <p>Reporting that raw text would not be merely untidy. {@link #effective} hands a pin's value on as <em>the
+ * effective value of the key</em>, so every consumer would parse the literal: {@code Configuration.flag} would read
+ * {@code ${JENREPO_AUTH:true}} as {@code false}, {@code Configuration.number} would fall through to its default, and
+ * the settings screen would grey the knob and offer the placeholder as the thing pinning it. A dial resolving to the
  * opposite of what the operator wrote is the kind of quiet wrong answer a pin exists to prevent.
  *
  * <h2>The whole chain, not just the probe</h2>

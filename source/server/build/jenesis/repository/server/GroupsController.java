@@ -17,10 +17,9 @@ import org.springframework.web.bind.annotation.RestController;
 /**
  * The group surface: how an operator says "everyone in <em>developers</em> may read <em>acme</em>".
  *
- * <p>Without it the primitive is unreachable. A group holds rights exactly as a person or a key does and a member
- * holds them through it, but nothing could create one - so an estate provisioned five hundred people one at a
- * time, which is the operational pain groups exist to remove and the joiner-mover-leaver story a buyer asks about
- * first.
+ * <p>It makes the primitive reachable: a group holds rights exactly as a person or a key does and a member holds them
+ * through it, so an estate grants a team once rather than five hundred people one at a time - the joiner-mover-leaver
+ * story groups exist for.
  *
  * <p>It is deliberately the same shape as {@link CredentialsController}, because a group is deliberately the same
  * kind of thing: the tenant is the one the routing answers for the request, a grant is a scope

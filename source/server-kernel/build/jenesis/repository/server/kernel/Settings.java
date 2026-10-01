@@ -15,12 +15,12 @@ import build.jenesis.repository.store.Retries;
 
 /**
  * Deployment-wide settings that can be changed at runtime, kept as one JSON document per contributing module in the
- * artifact store ({@code .system/config/settings/<module>.json}, {@link SettingsDocuments}) and layered over the file/env
- * defaults from {@link RepositoryProperties}: a stored value wins, an absent one falls back to the configured default
- * - mirroring how a per-tenant policy or quota overrides its deployment default. So an operator retunes compliance,
- * retention, the cleanup schedule and the defaults through the API, console or CLI without redeploying, and all three
- * surfaces read and write the same documents. Settings that cannot change at runtime (the storage backend, the listen
- * port, whether authorization is enforced) stay file-only and are deliberately not represented here.
+ * artifact store ({@code .system/config/settings/<module>.json}, {@link SettingsDocuments}) and layered over the
+ * file/env defaults from {@link RepositoryProperties}: a stored value wins, an absent one falls back to the configured
+ * default - mirroring how a per-tenant policy or quota overrides its deployment default. So an operator retunes
+ * compliance, retention, the cleanup schedule and the defaults through the API, console or CLI without redeploying, and
+ * all three surfaces read and write the same documents. Settings that cannot change at runtime (the storage backend,
+ * the listen port, whether authorization is enforced) stay file-only and are deliberately not represented here.
  *
  * <p>A write compare-and-sets only the owning module's document, so a concurrent edit to a <em>different</em> module
  * never contends and a lost race on the <em>same</em> document re-reads and retries rather than clobbering another
@@ -271,9 +271,9 @@ public final class Settings {
     }
 
     /** Set or clear one override in a tenant's own scope, layered over the deployment-wide value. Refuses a global-only
-     *  key, which no tenant document may carry - a tenant retunes only a gate policy, deny list or forward target, never
-     *  a deployment knob. The compare-and-set touches only that tenant's owning module document, and the tenant's cached
-     *  snapshot is dropped so the writing node sees the change at once. */
+     *  key, which no tenant document may carry - a tenant retunes only a gate policy, deny list or forward target,
+     *  never a deployment knob. The compare-and-set touches only that tenant's owning module document, and the tenant's
+     *  cached snapshot is dropped so the writing node sees the change at once. */
     public void set(String tenant, String key, String value) throws IOException {
         setTenant(tenant, single(key, value));
     }
@@ -326,7 +326,7 @@ public final class Settings {
     /** A tenant's own stored settings documents, module name to that tenant's overrides - the tenant slice the export
      *  bundle carries and a tenant admin edits, distinct from the deployment-wide {@link #documents()}. Credential-free
      *  by construction: every SECRET-kind key is stripped so a stored secret never travels in a backup (a tenant
-     *  document holds no global secret today, but the guard is uniform). */
+     *  document need not hold a secret for the guard to apply). */
     public SortedMap<String, SortedMap<String, String>> documents(String tenant) throws IOException {
         if (!SettingsDocuments.validTenant(tenant)) {
             throw new IllegalArgumentException("Not a tenant name: " + tenant);
@@ -358,11 +358,10 @@ public final class Settings {
     /** The full export bundle: every deployment-wide (global) document keyed by its module name, plus every tenant's
      *  documents keyed {@code tenant:<tenant>:<module>} ({@link SettingsDocuments#tenantKey}). One flat
      *  {@code string -> document} object the existing serializer emits byte-identically under re-export; with no tenant
-     *  overrides it is exactly the global bundle, so an operator who never used per-tenant config sees the same export
-     *  as before. Credential-free by construction: every SECRET-kind key is excluded (a stored secret - the keyless
-     *  identity token - never travels in a backup), so the export carries no credential even though a SECRET setting
-     *  can live in the store; the write-only upstream credentials live outside {@code config/settings} and were never
-     *  in it. */
+     *  overrides it is exactly the global bundle. Credential-free by construction: every SECRET-kind key is excluded (a
+     *  stored secret - the keyless identity token - never travels in a backup), so the export carries no credential
+     *  even though a SECRET setting can live in the store; the write-only upstream credentials live outside
+     *  {@code config/settings}. */
     public SortedMap<String, SortedMap<String, String>> exportBundle() throws IOException {
         SortedMap<String, SortedMap<String, String>> bundle = new TreeMap<>(documents());
         for (String tenant : configuredTenants()) {
@@ -419,8 +418,9 @@ public final class Settings {
         restoreTenant(tenant, documents);
     }
 
-    /** Split a bundle into its global documents (module-keyed) and its per-tenant documents ({@code tenant:<t>:<module>}
-     *  keyed), refusing an unsafe tenant/module key and a global-only key in a tenant slice up front. */
+    /** Split a bundle into its global documents (module-keyed) and its per-tenant documents
+     *  ({@code tenant:<t>:<module>} keyed), refusing an unsafe tenant/module key and a global-only key in a tenant
+     *  slice up front. */
     private static void partition(Map<String, ? extends Map<String, String>> bundle,
                                   Map<String, Map<String, String>> global,
                                   Map<String, Map<String, Map<String, String>>> perTenant) {
@@ -451,7 +451,8 @@ public final class Settings {
     }
 
     /** Full-restore one tenant's documents into its scope (blanks dropped, omitted documents cleared) and drop its
-     *  cached snapshot. Every key is re-checked tenant-overridable, so a direct slice import is guarded like a write. */
+     *  cached snapshot. Every key is re-checked tenant-overridable, so a direct slice import is guarded like a write.
+     *  */
     private void restoreTenant(String tenant, Map<String, ? extends Map<String, String>> documents) throws IOException {
         if (!SettingsDocuments.validTenant(tenant)) {
             throw new IllegalArgumentException("Not a tenant name: " + tenant);
@@ -483,9 +484,7 @@ public final class Settings {
 
     /** The tenants that hold any settings document, so the export bundle enumerates their slices and a full restore
      *  clears a tenant the bundle omits. A top-level name is a tenant by the shared {@link Scopes#valid} rule, so
-     *  every reserved key space is excluded - not just the two ({@code auth}, {@code config}) this once named by
-     *  hand, which left {@code audit}, {@code locks} and {@code quota} able to reach an export bundle as tenant
-     *  slices. */
+     *  every reserved key space is excluded without a list naming them. */
     public SortedSet<String> configuredTenants() throws IOException {
         SortedSet<String> tenants = new TreeSet<>();
         for (String entry : root.list("")) {

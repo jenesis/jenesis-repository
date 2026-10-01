@@ -116,7 +116,7 @@ public final class SettingsEnvironmentLayer implements ApplicationListener<Appli
      * renamed, matching nothing. Being on the classpath at all <em>is</em> the property that makes a config resource a
      * shipped default, and it is the
      * one an app cannot rename out from under this class; the configuration contract binds the recogniser
-     * to every {@code spring.config.name} the tree actually declares so the pair cannot drift apart again.
+     * to every {@code spring.config.name} the tree actually declares so the pair cannot drift apart.
      */
     public static boolean isPackagedDefault(String source) {
         return source != null && source.contains("class path resource");

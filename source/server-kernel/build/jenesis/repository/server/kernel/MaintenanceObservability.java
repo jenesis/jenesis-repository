@@ -16,10 +16,9 @@ import build.jenesis.repository.observation.TaskStatus;
  * <p>It is the scheduler's own face, built beside it by the context that built the scheduler and reported from that
  * context, so a report always describes the scheduler that is running there.
  *
- * <p>The scheduler always contributes one row for the worker loop itself
- * ({@code jenrepo.maintenance.worker}), even with no pass enabled, which is a deliberate change of that rule:
- * "no maintenance pass is enabled" and "the worker died and every pass stopped" are the two readings this surface
- * exists to separate, and a missing row cannot say either. The per-task rows below it remain exactly as they were -
+ * <p>The scheduler always contributes one row for the worker loop itself ({@code jenrepo.maintenance.worker}), even
+ * with no pass enabled: "no maintenance pass is enabled" and "the worker died and every pass stopped" are the two
+ * readings this surface exists to separate, and a missing row cannot say either. Below it come the per-task rows -
  * one per enabled task, plus the contained-provider failures.
  */
 public final class MaintenanceObservability implements ObservabilitySource {
@@ -125,8 +124,8 @@ public final class MaintenanceObservability implements ObservabilitySource {
      * Compose a well-formed {@code jenrepo.maintenance.<task...>} signal from a task name. A maintenance task name may
      * carry hyphens ({@code build-scan-retention}, {@code kev-enforce}) that are not a legal {@link Signals} segment on
      * their own, so each run of non-{@code [a-z0-9]} characters splits the name into further dot segments (a
-     * {@code kev-enforce} task becomes {@code jenrepo.maintenance.kev.enforce}); a segment that would start with a digit
-     * is prefixed so it stays a legal segment, and an empty result falls back to {@code task}. The final name is
+     * {@code kev-enforce} task becomes {@code jenrepo.maintenance.kev.enforce}); a segment that would start with a
+     * digit is prefixed so it stays a legal segment, and an empty result falls back to {@code task}. The final name is
      * validated by {@link Signals#name} at construction.
      */
     private static String signal(String task) {

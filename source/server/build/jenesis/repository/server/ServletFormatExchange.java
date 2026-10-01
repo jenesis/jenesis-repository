@@ -8,8 +8,8 @@ import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 
 /**
- * Adapts a servlet request and response to the framework-neutral {@link FormatExchange} a {@link
- * build.jenesis.repository.format.RepositoryFormat} speaks, so a Spring MVC controller dispatches to the format
+ * Adapts a servlet request and response to the framework-neutral {@link FormatExchange} a
+ * {@link build.jenesis.repository.format.RepositoryFormat} speaks, so a Spring MVC controller dispatches to the format
  * plugins through the same contract every dispatcher uses. The path a format sees is supplied to the constructor and
  * returned from {@link #path()} unchanged, so a caller passes either the full request path or one with a routing
  * prefix already stripped - and, for a repository that holds one format, with that format's
@@ -162,14 +162,6 @@ public final class ServletFormatExchange implements FormatExchange {
         response.setHeader(name, value);
     }
 
-    /**
-     * Honour a client {@code Range} request over any artifact a format serves, format-agnostically: a served
-     * {@code 200} with a known length advertises {@code Accept-Ranges: bytes}, and a satisfiable {@code Range} is
-     * answered {@code 206 Partial Content} with a {@code Content-Range} and only the requested bytes forwarded (the
-     * format still writes the whole body; this slices it), so a large-artifact download is resumable. A syntactically
-     * valid but out-of-bounds range is a {@code 416}; an unsupported or malformed one is ignored and the full body is
-     * served. The format is oblivious - it calls {@code respond(200, length)} either way.
-     */
     /** The offset the serve said its body starts at, through {@link #from}: the bytes before it never reach the
      *  range stream, so it does not wait for them. */
     private long bodyFrom;
@@ -182,6 +174,14 @@ public final class ServletFormatExchange implements FormatExchange {
         return bodyFrom;
     }
 
+    /**
+     * Honour a client {@code Range} request over any artifact a format serves, format-agnostically: a served
+     * {@code 200} with a known length advertises {@code Accept-Ranges: bytes}, and a satisfiable {@code Range} is
+     * answered {@code 206 Partial Content} with a {@code Content-Range} and only the requested bytes forwarded (the
+     * format still writes the whole body; this slices it), so a large-artifact download is resumable. A syntactically
+     * valid but out-of-bounds range is a {@code 416}; an unsupported or malformed one is ignored and the full body is
+     * served. The format is oblivious - it calls {@code respond(200, length)} either way.
+     */
     @Override
     public OutputStream respond(int status, long contentLength) throws IOException {
         if (status == 200 && contentLength >= 0) {

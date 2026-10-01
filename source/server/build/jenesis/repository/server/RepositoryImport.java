@@ -24,17 +24,18 @@ import build.jenesis.repository.store.Publication;
  * drives a second pass once those formats are on the path.
  *
  * <p>The import walk is an ingress <em>edge</em>: it screens each asset before the demoted, layout-only
- * importer lays it out, so a migration off an incumbent lands the same {@link build.jenesis.repository.store.PublishInterceptor}
- * gate a deploy or batch upload passes - the deploy edge ({@link ScreenedDispatch}) and the import edge run the one
- * shared hosted-publish operation {@link Publication#commit}. For each asset the importer
- * {@link RepositoryImporter#importTarget describes} the target coordinate it will occupy; the edge commits the asset
- * against that descriptor, which screens it once and, on {@code ACCEPT}, restreams the stored
- * {@code blobs/<hash>} into {@link RepositoryImporter#importArtifact} then fires {@link Publication#published}. A
- * {@code QUARANTINE} is held (the screen diverted its blob to {@code /quarantine<target-path>}, never laid out) and a
- * {@code REJECT} is skipped; either way the walk continues to the next asset, so one screened-out artifact never
- * aborts a migration. An importer that {@link RepositoryImporter#importTarget describes} nothing (OCI, which owns its own
- * manifest choke point) has its bytes laid out unscreened here. With the core's empty discovered chain the
- * screen degrades to a store-then-restream and an accepted import is byte-for-byte what the pre-edge importer wrote.
+ * importer lays it out, so a migration off an incumbent lands the same
+ * {@link build.jenesis.repository.store.PublishInterceptor} gate a deploy or batch upload passes - the deploy edge
+ * ({@link ScreenedDispatch}) and the import edge run the one shared hosted-publish operation
+ * {@link Publication#commit}. For each asset the importer {@link RepositoryImporter#importTarget describes} the target
+ * coordinate it will occupy; the edge commits the asset against that descriptor, which screens it once and, on
+ * {@code ACCEPT}, restreams the stored {@code blobs/<hash>} into {@link RepositoryImporter#importArtifact} then fires
+ * {@link Publication#published}. A {@code QUARANTINE} is held (the screen diverted its blob to
+ * {@code /quarantine<target-path>}, never laid out) and a {@code REJECT} is skipped; either way the walk continues to
+ * the next asset, so one screened-out artifact never aborts a migration. An importer that
+ * {@link RepositoryImporter#importTarget describes} nothing (OCI, which owns its own manifest choke point) has its
+ * bytes laid out unscreened here. With the core's empty discovered chain the screen degrades to a store-then-restream,
+ * and an accepted import lays out exactly the source bytes.
  */
 public final class RepositoryImport {
 
@@ -47,9 +48,9 @@ public final class RepositoryImport {
         this(RepositoryFormat.installed());
     }
 
-    /** Filter the discovered (or supplied) formats to those carrying the {@link RepositoryImporter} capability - the
-     *  {@code instanceof} split that replaces the second ServiceLoader pass. A base format without the capability is
-     *  simply absent from the importer set, so its assets are skipped exactly as a missing importer's were. */
+    /** Filter the discovered (or supplied) formats to those carrying the {@link RepositoryImporter} capability. A base
+     *  format without the capability is simply absent from the importer set, so its assets are skipped as a missing
+     *  importer's are. */
     public RepositoryImport(List<RepositoryFormat> formats) {
         this.importers = formats.stream()
                 .filter(format -> format instanceof RepositoryImporter)
@@ -57,7 +58,8 @@ public final class RepositoryImport {
                 .toList();
     }
 
-    /** Import every asset of {@code source} into {@code store}, returning the counts of what was imported and skipped. */
+    /** Import every asset of {@code source} into {@code store}, returning the counts of what was imported and skipped.
+     *  */
     public Result run(ImportSource source, ArtifactStore store) throws IOException {
         return run(source, store, Listener.NONE);
     }
@@ -68,8 +70,8 @@ public final class RepositoryImport {
      *  <p>Runs under a listing batch: every artifact imported puts its entry into the same few repository-wide
      *  listings (a Debian suite's index, an RPM repository's primary, a channel's repodata, the OCI catalog), and
      *  one publish rewrites such a listing whole - a stated property of {@link StoredListing#update}, a second at a
-     *  hundred thousand entries. An import of N packages therefore cost N rewrites of a growing document; under the
-     *  batch each listing is written once per ten thousand collected entries instead. */
+     *  hundred thousand entries. An import of N packages would therefore cost N rewrites of a growing document; under
+     *  the batch each listing is written once per ten thousand collected entries instead. */
     public Result run(ImportSource source, ArtifactStore store, Listener listener) throws IOException {
         return StoredListing.batching(() -> runUnbatched(source, store, listener));
     }
@@ -272,10 +274,11 @@ public final class RepositoryImport {
         }
     }
 
-    /** The outcome of an import: how many assets were imported, how many were held (screened to quarantine) and
-     *  rejected at the import edge, how many were skipped, and the formats skipped for want of an importer (empty on a
-     *  complete import). */
     /**
+     * The outcome of an import: how many assets were imported, how many were held (screened to quarantine) and
+     * rejected at the import edge, how many were skipped, and the formats skipped for want of an importer (empty on a
+     * complete import).
+     *
      * @param dropped rows the connector refused to carry at all, by reason - a laced path, an incomplete listing
      *                entry, an unparseable URL. Empty on a clean source.
      *                <p>It is a component rather than a log line because the number is the whole point: without it a

@@ -44,8 +44,6 @@
  *
  */
 open module build.jenesis.repository.server.kernel {
-    // Deliberately kept through the kernel/boot split: LicenseGraphTest's structural guard
-    // requires EVERY source/* module to carry the licence module, the kernel included.
     requires transitive build.jenesis.repository.server;
     requires build.jenesis.repository.scope;
     requires build.jenesis.repository.store;

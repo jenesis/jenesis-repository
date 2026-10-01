@@ -10,9 +10,6 @@ import module java.base;
  * ({@code null} for a deployment-wide entry - the appender reads the tenant from the MDC when the request threaded one,
  * and leaves it {@code null} otherwise). A value record: the buffer stores exactly what the appender captured, the
  * {@code GET /api/logs} read renders it, and nothing re-reads a file.
- *
- * <p>The core's recent-logs viewer mirrors the downstream implementation independently - a parallel,
- * consistent design in each repo's own modules, not a shared module.
  */
 public record LogEntry(long seq, Instant timestamp, String level, int levelValue, String logger, String message,
                        String tenant) {

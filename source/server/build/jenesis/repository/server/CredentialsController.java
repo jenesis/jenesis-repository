@@ -18,10 +18,9 @@ import org.springframework.web.bind.annotation.RestController;
 /**
  * The credential surface: how an operator issues, scopes and revokes the keys this deployment authorizes with.
  *
- * <p>Without it an enforcing deployment could not be operated as configured. {@code jenrepo.auth} is on by default
- * and a keyless caller is rejected, so every credential had to be created out of band - and the only advice a
- * fresh install could be given was to switch authentication off, which is not a bootstrap but a different
- * deployment. The first key comes from {@code jenrepo.bootstrap-key}; every key after it comes from here.
+ * <p>An enforcing deployment needs it to be operated as configured: {@code jenrepo.auth} is on by default and a
+ * keyless caller is rejected, so without this surface every credential would have to be created out of band. The
+ * first key comes from {@code jenrepo.bootstrap-key}; every key after it comes from here.
  *
  * <p>The tenant administered is the one the deployment's routing answers for the request
  * ({@link RepositoryRouting#tenant}), as for every other {@code /api} call: the served tenant under the fixed routing,
@@ -32,8 +31,8 @@ import org.springframework.web.bind.annotation.RestController;
  * <p>Every route is under {@code /api/} and is therefore gated by {@code manage:read} (the GET) or
  * {@code manage:write} (the mutations) at scope {@code *} by the security chain before it is reached; nothing here
  * re-decides authorization. The managing key is read the way the chain reads it ({@link PresentedKey}), so a caller
- * may present it in the native header or as a bearer token. A minted secret is returned <em>once</em> and never again: only its hash is stored, so
- * a lost key is re-issued rather than recovered.
+ * may present it in the native header or as a bearer token. A minted secret is returned <em>once</em> and never again:
+ * only its hash is stored, so a lost key is re-issued rather than recovered.
  */
 @RestController
 public final class CredentialsController {

@@ -11,11 +11,11 @@ import build.jenesis.repository.store.Publication;
 import build.jenesis.repository.store.ReadMemo;
 
 /**
- * The ingress write edge for the repository: it runs the discovered {@link build.jenesis.repository.store.PublishInterceptor}
- * screen chain over a claimed single-body write <em>before</em> the format lays it out, so screening lives at the edge
- * and a {@link RepositoryFormat} is a pure layout writer. It runs the shared hosted-publish operation
- * {@link Publication#commit} rather than re-assembling the screen/layout/notify sequence, so every composition shares
- * one write choreography and one publish commit point.
+ * The ingress write edge for the repository: it runs the discovered
+ * {@link build.jenesis.repository.store.PublishInterceptor} screen chain over a claimed single-body write
+ * <em>before</em> the format lays it out, so screening lives at the edge and a {@link RepositoryFormat} is a pure
+ * layout writer. It runs the shared hosted-publish operation {@link Publication#commit} rather than re-assembling the
+ * screen/layout/notify sequence, so every composition shares one write choreography and one publish commit point.
  *
  * <p>For a {@code PUT}/{@code POST}/{@code PATCH} claimed by a {@link RepositoryFormat#screened() screened} format the
  * edge hands {@link Publication#commit} the request body, which:
@@ -23,9 +23,10 @@ import build.jenesis.repository.store.ReadMemo;
  *   <li>screens it exactly once: it is stored content-addressed and the interceptor chain
  *       runs over its {@link ArtifactDescriptor} - {@link ArtifactLayout#describe the format's layout descriptor}
  *       when it has one, else a bare {@link ArtifactDescriptor#at coordinate-less descriptor};</li>
- *   <li>on {@code ACCEPT} restreams the stored {@code blobs/<hash>} into {@link RepositoryFormat#handle}, which lays the
- *       bytes out in its namespace and writes the response, then fires {@link Publication#published} with the descriptor
- *       enriched with the blob's hash and size so an after-commit observer gets the accepted artifact's identity;</li>
+ *   <li>on {@code ACCEPT} restreams the stored {@code blobs/<hash>} into {@link RepositoryFormat#handle}, which lays
+ *       the bytes out in its namespace and writes the response, then fires {@link Publication#published} with the
+ *       descriptor enriched with the blob's hash and size so an after-commit observer gets the accepted artifact's
+ *       identity;</li>
  *   <li>on {@code QUARANTINE} answers {@code 202} (stored for review, not laid out);</li>
  *   <li>on {@code REJECT} answers {@code 422} (nothing laid out; the orphan blob is left for garbage collection).</li>
  * </ul>
@@ -39,11 +40,10 @@ import build.jenesis.repository.store.ReadMemo;
  * ({@link RepositoryFormat#administers}) is no artifact either: it is refused {@code 403} to a caller that may not
  * administer the repository, and otherwise dispatched unscreened and unannounced.
  *
- * <p>With the core's empty discovered chain {@code screen} degrades to a plain store-then-restream and an
- * accepted {@code PUT} is byte-for-byte what a direct dispatch produced (the same content-addressed blob, the same
- * pointer the format links, the same response). This edge is nonetheless load-bearing for the downstream fixed-tenancy
- * mode ({@code jenrepo.tenancy=fixed}), where writes fall through this controller with the full
- * {@code ComplianceScreen} chain discovered - so the choreography must be exactly the downstream deploy edge's.
+ * <p>With an empty discovered chain {@code screen} degrades to a plain store-then-restream and an accepted
+ * {@code PUT} is what a direct dispatch produces (the same content-addressed blob, the same pointer the format links,
+ * the same response). With the {@code ComplianceScreen} chain discovered, every write under fixed tenancy
+ * ({@code jenrepo.tenancy=fixed}) falls through this edge, so it is the one deploy choreography.
  */
 public final class ScreenedDispatch {
 
@@ -107,7 +107,7 @@ public final class ScreenedDispatch {
         // The format's answer to an accepted write is held here until commit has returned - that is, until every
         // after-commit observer has run - because the servlet exchange commits a response the moment the format
         // closes its stream, and a client acknowledged before the publish's consequences have happened races them
-        // with its next request (DeferredResponse records what that cost).
+        // with its next request (DeferredResponse says what that would cost).
         DeferredResponse[] answer = new DeferredResponse[1];
         // The one hosted-publish choreography: Publication.commit screens once, hands the accepted blob to the layout
         // below, and fires published() itself once visibility has committed - so this edge does not re-assemble the
@@ -118,8 +118,8 @@ public final class ScreenedDispatch {
                 Publication.Republish.overwrite(),
                 accepted -> {
                     // The edge plug-in seam runs post-hash but pre-layout: a present Refusal short-circuits (the
-                    // downstream edge's release-immutability 409), so nothing is laid out and no published() fires.
-                    // With the no-op hooks this is always empty and the accepted body lays out exactly as before.
+                    // gateway's release-immutability 409), so nothing is laid out and no published() fires. With the
+                    // no-op hooks this is always empty and the accepted body lays out.
                     Optional<EdgeHooks.Refusal> refusal =
                             hooks.beforeLayout(format, store, descriptor, accepted.hash(), exchange);
                     if (refusal.isPresent()) {
@@ -164,7 +164,7 @@ public final class ScreenedDispatch {
             }
             case QUARANTINE -> {
                 // The held branch: the body is stored for review, not laid out. An edition records its replay context
-                // around the 202 (the downstream QuarantineDispatch record); the no-op hook does nothing.
+                // around the 202 (the gateway's QuarantineDispatch record); the no-op hook does nothing.
                 hooks.held(format, store, exchange.path(), commit.hash(), exchange);
                 exchange.respond(202);
             }
@@ -175,8 +175,8 @@ public final class ScreenedDispatch {
     }
 
     /** The claiming format's layout descriptor for the path when it has one (so an observer keys on the neutral
-     *  ecosystem/coordinate/version), else a bare descriptor carrying only the format name and path - the same shape
-     *  the downstream deploy edge builds ({@code ArtifactDescriptor.at(plugin.name(), path)}). */
+     *  ecosystem/coordinate/version), else a bare descriptor carrying only the format name and path
+     *  ({@code ArtifactDescriptor.at(plugin.name(), path)}). */
     private static ArtifactDescriptor describe(RepositoryFormat format, String path, ArtifactStore store) {
         if (format instanceof ArtifactLayout layout) {
             // The repository-scoped overload, because the store IS the repository: a layout whose path-to-coordinate

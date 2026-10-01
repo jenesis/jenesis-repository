@@ -35,9 +35,10 @@ import build.jenesis.repository.store.QuotaArtifactStore;
 public final class Repositories {
 
     /** The tenant-key request header, the stable home shared by the core controllers, the security chain
-     *  (the tenancy module's {@code RepositoryAuthorizationManager} and {@code MultiTenantRouting}, the telemetry download filter) and the
-     *  discovered per-feature {@code web} adapters. Which tenant a request acts on is the routing's answer
-     *  ({@link build.jenesis.repository.server.RepositoryRouting#tenant}), never read off this header alone. */
+     *  (the tenancy module's {@code RepositoryAuthorizationManager} and {@code MultiTenantRouting}, the telemetry
+     *  download filter) and the discovered per-feature {@code web} adapters. Which tenant a request acts on is the
+     *  routing's answer ({@link build.jenesis.repository.server.RepositoryRouting#tenant}), never read off this header
+     *  alone. */
     public static final String KEY = "Jenesis-Repository-Key";
 
     private final ArtifactStore root;
@@ -70,7 +71,6 @@ public final class Repositories {
         return definitions;
     }
 
-    /** Whether a staging module is installed on this deployment. */
     /**
      * The key a request presents, read the way the security chain reads it ({@link PresentedKey}: the native
      * header first, then a well-formed key carried as a bearer token or a Basic password in {@code Authorization})
@@ -81,6 +81,7 @@ public final class Repositories {
         return PresentedKey.fromAnyClient(request);
     }
 
+    /** Whether a staging module is installed on this deployment. */
     public boolean stagingInstalled() {
         return staging.isPresent();
     }
@@ -99,8 +100,7 @@ public final class Repositories {
      * <p>This is the one validity gate every routing, listing, scoping and publish site funnels through, so a request
      * can never read, forge or reset another tenant's credentials, settings, audit history, lease or quota by naming
      * the space they live in. It delegates to {@link Scopes} rather than restating the set, because the
-     * console's tenant lifecycle and the tenants SPI must answer this question identically - and while each kept its
-     * own copy they did not.
+     * console's tenant lifecycle and the tenants SPI must answer this question identically.
      */
     public static boolean valid(String name) {
         return Scopes.valid(name);
@@ -180,7 +180,7 @@ public final class Repositories {
             }
             ArtifactStore repositoryStore = tenantScope.scope(repository);
             // The size each blob's listing entry already carried; only a backend whose listing carries none is asked
-            // again, per blob - over an object store that was one HEAD per blob on every recount.
+            // again, per blob - over an object store that would be one HEAD per blob on every recount.
             Listings blobs = Listings.over(repositoryStore, "blobs");
             for (ArtifactStore.Listed blob = blobs.next(); blob != null; blob = blobs.next()) {
                 long size = blob.size().isPresent() ? blob.size().getAsLong() : repositoryStore.size(blob.key());
@@ -241,15 +241,15 @@ public final class Repositories {
         return root.scope(tenant).scope(repository);
     }
 
-    /** A tenant's plain (unquota'd, unmetered) root scope - the store under which its reserved sub-scopes live, the VEX
-     *  space among them. Kept free of the {@code VexStore} type so the neutral server names no VEX plugin: the VEX web
-     *  surface (which owns the vex module) applies the reserved {@code .vex} sub-scope and wraps it. The tenant is
-     *  validated by the caller as a traversal-safe segment before it scopes the store. */
     /** The store every tenant's scope is taken from - what a node-wide cache over repository documents is keyed on. */
     public ArtifactStore root() {
         return root;
     }
 
+    /** A tenant's plain (unquota'd, unmetered) root scope - the store under which its reserved sub-scopes live, the VEX
+     *  space among them. Kept free of the {@code VexStore} type so the neutral server names no VEX plugin: the VEX web
+     *  surface (which owns the vex module) applies the reserved {@code .vex} sub-scope and wraps it. The tenant is
+     *  validated by the caller as a traversal-safe segment before it scopes the store. */
     public ArtifactStore tenantScope(String tenant) {
         return root.scope(tenant);
     }

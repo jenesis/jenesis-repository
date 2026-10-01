@@ -21,9 +21,8 @@ import org.springframework.scheduling.annotation.Scheduled;
  *       through the modules console starts or drops out on the worker's next iteration without a restart.</li>
  * </ul>
  *
- * <p>This completes the interval re-read: the {@link Settings} snapshot alone already converged pods for live keys,
- * but the environment source was seeded once at boot, so lookup-consumed keys never converged without a restart. With
- * both re-seeded here, a write-anywhere multi-node deployment converges for every runtime-tunable key.
+ * <p>The {@link Settings} snapshot alone converges only the keys read live; with the environment source re-seeded here
+ * too, a write-anywhere multi-node deployment converges for every runtime-tunable key.
  *
  * <p>A malformed stored value (a bad severity, duration or number written on another node) makes the live rebuild
  * throw; this pass logs it and keeps serving the last good configuration rather than propagating out of the scheduler -
@@ -62,7 +61,7 @@ public final class SettingsRefresh {
         try {
             // One point read decides whether anything changed: a store this node or another wrote to bumps the epoch,
             // and a refresh that sees the token it saw last time lists and re-reads nothing. An empty token is a
-            // store nothing has written to since the epoch existed, which is re-read as before.
+            // store nothing has written to since the epoch existed, which is re-read.
             String epoch = settings.epoch();
             if (!epoch.isEmpty() && epoch.equals(epochSeen)) {
                 return;

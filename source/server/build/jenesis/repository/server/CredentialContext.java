@@ -9,11 +9,11 @@ import build.jenesis.repository.scope.Scopes;
  * What a deployment may vary about the credential surface, so that the surface itself exists only once.
  *
  * <p>{@link CredentialsController} owns every credential route - list, mint, grant, revoke, expiry, rotate and the
- * source-IP allowlist - and every one of them is a thin call onto {@link Authorization}, which has always held the
- * logic. The tenant a route acts on is the routing's ({@link RepositoryRouting#tenant}), as for every other
- * {@code /api} call. What a richer distribution does differently is <em>not</em> logic: whether a mutation is
- * recorded, and which tenant a caller naming none falls back to. Both are handed in here, so a distribution
- * overrides the answer rather than restating the routes.
+ * source-IP allowlist - and every one of them is a thin call onto {@link Authorization}, which holds the logic. The
+ * tenant a route acts on is the routing's ({@link RepositoryRouting#tenant}), as for every other {@code /api} call.
+ * What a richer distribution does differently is <em>not</em> logic: whether a mutation is recorded, and which tenant a
+ * caller naming none falls back to. Both are handed in here, so a distribution overrides the answer rather than
+ * restating the routes.
  *
  * <p>Registered as a {@code @ConditionalOnMissingBean}, which is this codebase's established override: the
  * deployment that wants different behaviour publishes its own bean and the default steps aside. Nothing else about

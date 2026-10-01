@@ -30,13 +30,11 @@ import io.micrometer.core.instrument.MeterRegistry;
  * failing pass or unit is logged and counted ({@code jenrepo.maintenance.failures}) rather than swallowed,
  * and the worker stays alive across it.
  *
- * <p>The scheduler is split <strong>in place</strong> into three collaborators inside this module, rather than
- * wrapped or duplicated by a second scheduler: {@link TaskSchedule} owns the due-time
+ * <p>The scheduler has three collaborators inside this module: {@link TaskSchedule} owns the due-time
  * arithmetic and the per-task run bookkeeping, {@link LeaseGuard} owns the single-writer {@link Lease} a
  * {@link MaintenanceTask.Exclusion#LEASE lease-owned} pass locks on (keyed by the task's name, so the retention pass
  * keeps the {@code locks/cleanup} object a mixed-version fleet expects), and {@link PassMetrics} owns the Micrometer
- * sink.
- * The worker thread, the tenant/repository iteration and this public surface stay here: there is still exactly
+ * sink. The worker thread, the tenant/repository iteration and this public surface stay here: there is exactly
  * <em>one</em> scheduler, one lease owner and one iteration owner in the deployment.
  *
  * <p>The enabled task list is re-resolved on {@link #refresh()}, which the settings-convergence pass calls when the
@@ -51,7 +49,7 @@ import io.micrometer.core.instrument.MeterRegistry;
  * because a provider's construction failure means different things in the two phases: at boot it is fatal (the
  * deployment refuses to start half a task list it may never be able to complete), while on a convergence tick over a
  * server that is already serving it is contained per provider. The scheduler itself takes no position on that - it
- * calls what it was handed - but it cannot conflate the two, which is exactly what a single supplier did.
+ * calls what it was handed - but it cannot conflate the two, which a single supplier would.
  *
  * <h2>What this scheduler promises a task, and what it promises the deployment</h2>
  * The {@code MaintenanceTask} contract says what a <em>pass</em> owes; these are the promises the <em>host</em> makes
@@ -106,7 +104,7 @@ public final class MaintenanceScheduler implements AutoCloseable {
      *  {@link PassTenantContext#config()}: the same pin &gt; tenant-override &gt; global &gt; default chain as
      *  {@link #config}, but resolved for the pass's own tenant so a tenant-overridable setting (a webhook endpoint, a
      *  gate policy, a retention age over a tenant's own telemetry space) actually takes effect in the sweep - a
-     *  global-only key resolves deployment-wide exactly as before, so this is a no-op for every deployment knob. Both
+     *  global-only key resolves deployment-wide, so this is a no-op for every deployment knob. Both
      *  hooks resolve through it; the deployment-global {@link #config()} accessor (the on-demand endpoints'
      *  provider lookup) stays tenant-agnostic. */
     private final BiFunction<String, String, String> tenantConfig;
@@ -154,7 +152,8 @@ public final class MaintenanceScheduler implements AutoCloseable {
         String apply(String tenant, String repository, String key);
     }
 
-    /** A fixed task list (a test or a single-shot pass); the list never re-resolves, so {@link #refresh()} is a no-op. */
+    /** A fixed task list (a test or a single-shot pass); the list never re-resolves, so {@link #refresh()} is a no-op.
+     *  */
     public MaintenanceScheduler(Repositories repositories, ArtifactStore root, List<MaintenanceTask> tasks,
                                 UnaryOperator<String> config, Duration leaseTtl, MeterRegistry registry) {
         this(repositories, root, tasks, () -> MaintenanceTaskProvider.Contained.of(tasks), config, (tenant, key) -> config.apply(key),
@@ -195,11 +194,11 @@ public final class MaintenanceScheduler implements AutoCloseable {
     }
 
     /** A live task list whose <em>per-pass</em> reads resolve tenant-scoped: {@code config} stays the deployment-global
-     *  lookup (task enablement, the on-demand endpoints' provider), while {@code tenantConfig} resolves a running pass's
-     *  settings for its own tenant, so a tenant-overridable key (a per-tenant webhook endpoint, gate policy) actually
-     *  takes effect in the sweep. A global-only key resolves deployment-wide through either, so the two agree on every
-     *  deployment knob. This is the wiring the live deployment uses; the plain overloads keep the global-only behavior
-     *  for tests that do not exercise per-tenant overrides. */
+     *  lookup (task enablement, the on-demand endpoints' provider), while {@code tenantConfig} resolves a running
+     *  pass's settings for its own tenant, so a tenant-overridable key (a per-tenant webhook endpoint, gate policy)
+     *  actually takes effect in the sweep. A global-only key resolves deployment-wide through either, so the two agree
+     *  on every deployment knob. This is the wiring the live deployment uses; the plain overloads keep the global-only
+     *  behavior for tests that do not exercise per-tenant overrides. */
     public MaintenanceScheduler(Repositories repositories, ArtifactStore root, List<MaintenanceTask> booted,
                                 Supplier<MaintenanceTaskProvider.Contained> resolver, UnaryOperator<String> config,
                                 BiFunction<String, String, String> tenantConfig,
@@ -304,7 +303,8 @@ public final class MaintenanceScheduler implements AutoCloseable {
     }
 
     /** An immutable snapshot of every task that has started at least one run on this node, keyed by task name - the
-     *  read side the discovered {@code MaintenanceObservability} adapter reports each task's last-run / status through. */
+     *  read side the discovered {@code MaintenanceObservability} adapter reports each task's last-run / status through.
+     *  */
     public Map<String, TaskSchedule.TaskRun> taskRuns() {
         return schedule.runs();
     }
@@ -336,8 +336,9 @@ public final class MaintenanceScheduler implements AutoCloseable {
     }
 
     /** Re-resolve the enabled task list from the live configuration (the settings-convergence pass calls this on a
-     *  stored-settings change), and start the worker if a pass was enabled after boot. A pass disabled here drops out of
-     *  the worker's next iteration; the lease and interval bookkeeping are unchanged. A no-op for a fixed task list. */
+     *  stored-settings change), and start the worker if a pass was enabled after boot. A pass disabled here drops out
+     *  of the worker's next iteration; the lease and interval bookkeeping are unchanged. A no-op for a fixed task list.
+     *  */
     public synchronized void refresh() {
         // The re-read of every task's name and cadence happens here too, and it is deliberately allowed to throw: on
         // a convergence tick SettingsRefresh contains it and keeps the last resolved list whole, so a task that has
@@ -417,7 +418,7 @@ public final class MaintenanceScheduler implements AutoCloseable {
                         Requests.clear(root, request.subject());
                     });
                 }
-                // Neither call reaches a task any more: TaskSchedule works off the name and cadence ScheduledTask
+                // Neither call reaches a task: TaskSchedule works off the name and cadence ScheduledTask
                 // captured at resolution, so a hostile task cannot throw from out here, where there is nothing to
                 // attribute a failure to and no pass to contain it in.
                 Duration sleep = schedule.sleep(tasks, Instant.now());
@@ -522,19 +523,18 @@ public final class MaintenanceScheduler implements AutoCloseable {
     }
 
     /**
-     * Where an {@link Error} raised by a discovered task goes. The question was settled first for {@code EventSink} -
-     * an {@code Error} is the runtime or the module graph giving way rather than a unit of work failing, so it is
-     * attributed and <em>rethrown</em> rather than filed as the subject's answer - and the ruling transfers here with
-     * one deliberate refinement: <b>an {@code Error} is escalated to whoever can act on it, and rethrowing is only an
-     * escalation where there is a caller to receive it.</b>
+     * Where an {@link Error} raised by a discovered task goes. An {@code Error} is the runtime or the module graph
+     * giving way rather than a unit of work failing, so - as in {@code EventSink} - it is attributed and
+     * <em>rethrown</em> rather than filed as the subject's answer, with one refinement: <b>an {@code Error} is
+     * escalated to whoever can act on it, and rethrowing is only an escalation where there is a caller to receive
+     * it.</b>
      */
     private enum Escalation {
 
         /**
-         * To the caller - {@link #runNow(Instant)}. An admin or a test asked for this pass on its own thread, so
-         * the ruling applies verbatim: the {@code Error} propagates, the request fails loudly instead of reporting a
-         * completed pass that did nothing, and the remaining tasks are starved exactly as {@code emit}'s later sinks
-         * are. That trade was accepted there and is accepted here for the same reason.
+         * To the caller - {@link #runNow(Instant)}. An admin or a test asked for this pass on its own thread, so the
+         * {@code Error} propagates: the request fails loudly instead of reporting a completed pass that did nothing,
+         * and the remaining tasks are starved exactly as {@code emit}'s later sinks are.
          */
         CALLER,
 
@@ -543,8 +543,8 @@ public final class MaintenanceScheduler implements AutoCloseable {
          * "rethrow" means letting the {@code Error} out of {@code Thread.run()}, which kills the deployment's
          * <em>only</em> maintenance loop, stops every other sweep, drain and GC until a settings {@code refresh()} or
          * a restart, counts nothing, and reports itself as one stack trace on stderr from the default
-         * uncaught-exception handler. Against what the ruling wants - the failure attributed rather than swallowed,
-         * and visible to whoever can act - that is strictly worse on every axis: <em>less</em>
+         * uncaught-exception handler. Against the aim - the failure attributed rather than swallowed, and visible to
+         * whoever can act - that is strictly worse on every axis: <em>less</em>
          * visible than an ERROR through the configured appenders, uncounted, and with a blast radius thirty passes
          * wide for what is most often one plugin module's {@code NoClassDefFoundError}.
          *
@@ -690,7 +690,8 @@ public final class MaintenanceScheduler implements AutoCloseable {
         T run() throws IOException;
     }
 
-    /** A void body run under the single-writer maintenance lease by {@link #exclusively(String, Instant, ExclusivePass)}. */
+    /** A void body run under the single-writer maintenance lease by {@link #exclusively(String, Instant,
+     *  ExclusivePass)}. */
     public interface ExclusivePass {
 
         void run() throws IOException;
@@ -759,8 +760,7 @@ public final class MaintenanceScheduler implements AutoCloseable {
      * the scope root {@code ""} this pages, and which screens every name the backend hands back before it becomes a
      * key - and drained a batch at a time, so the pass holds only O({@link #FANOUT_BATCH}) units at once. Every unit
      * still runs, and because each batch is awaited before the next is built the tenant-context pass the caller runs
-     * afterwards still runs only after every repository unit has settled. A unit that throws is logged and counted,
-     * exactly as before - the fan-out is a footprint change, not a behaviour change.
+     * afterwards still runs only after every repository unit has settled. A unit that throws is logged and counted.
      *
      * <p>The pass's single-writer status is re-checked between tenants, between batches and once more inside each unit
      * just before it starts: a lease lost mid-pass stops the fan-out there rather than letting the pass keep enlarging

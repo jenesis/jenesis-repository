@@ -47,9 +47,9 @@ import io.micrometer.observation.ObservationRegistry;
  * Publishes the repository as Spring Boot auto-configuration so a downstream distribution can consume it with a plain
  * {@code requires build.jenesis.repository.server} and extend it by overriding beans rather than forking the module.
  * Every bean is {@link ConditionalOnMissingBean conditional}: the storage backend (a name resolved through
- * {@code ArtifactStoreProvider}), the {@link Authorization} (enforcing by default, anonymous only when {@code
- * jenrepo.auth=false}), the {@link RepositoryFormat} plugins discovered with {@link ServiceLoader}, the pull-through
- * {@code upstreams} (format name to upstream URI, from {@code jenrepo.proxy.*}) and upstream
+ * {@code ArtifactStoreProvider}), the {@link Authorization} (enforcing by default, anonymous only when
+ * {@code jenrepo.auth=false}), the {@link RepositoryFormat} plugins discovered with {@link ServiceLoader}, the
+ * pull-through {@code upstreams} (format name to upstream URI, from {@code jenrepo.proxy.*}) and upstream
  * {@link ProxyFormat.Fetcher}, the framework-neutral {@link FormatDispatcher}, the {@link RepositoryRouting} (the
  * {@link FixedTenantRouting} default, resolving every request to a repository of the configured
  * {@code jenrepo.default-tenant}), the {@link Tenants}
@@ -80,9 +80,9 @@ public class RepositoryAutoConfiguration {
     }
 
     /** Log the deployment-wide security-posture advisories at boot, the single source of truth for the
-     *  secure-defaults boot WARNs (auth off, SSRF screen off, dev profile, ...): the same discovered {@link
-     *  build.jenesis.repository.posture.SafetyAdvisor} list the console panel and {@code GET /api/posture} surface, so a
-     *  condition is expressed once and both logged and shown. A clean deployment logs nothing. */
+     *  secure-defaults boot WARNs (auth off, SSRF screen off, dev profile, ...): the same discovered
+     *  {@link build.jenesis.repository.posture.SafetyAdvisor} list the console panel and {@code GET /api/posture}
+     *  surface, so a condition is expressed once and both logged and shown. A clean deployment logs nothing. */
     private static void logSecurityPosture(Environment environment) {
         build.jenesis.repository.posture.PostureReport report = build.jenesis.repository.posture.PostureReport.discover(
                 build.jenesis.repository.posture.Configuration.of(environment::getProperty));
@@ -147,7 +147,7 @@ public class RepositoryAutoConfiguration {
         // Second guardrail: a loud startup WARN naming exactly what a keyless caller may do, escalated for
         // write/admin. This names the exact grant (the posture surface names the risk, never the value); the
         // jenrepo.anonymous.* security-posture advisories carry the governance escalation onto the console and
-        // GET /api/posture. Default (empty) => no anonymous access and no warning, byte-for-byte today's behaviour.
+        // GET /api/posture. Default (empty) => no anonymous access and no warning.
         if (!anonymousRights.isEmpty()) {
             if (AnonymousRights.grantsWriteOrAdmin(anonymousRights)) {
                 LOGGER.warn("SECURITY: anonymous access ENABLED with WRITE/ADMIN rights: {}. A keyless caller may "
@@ -176,8 +176,8 @@ public class RepositoryAutoConfiguration {
      * Provision the configured bootstrap key, so an operator has a way to get their FIRST credential.
      *
      * <p>An enforcing deployment is otherwise unusable as configured: a keyless caller is rejected and every route
-     * that could mint a key requires one already. The only remaining advice was to switch authentication off,
-     * which is not a bootstrap - it is a different deployment. The provisioning itself is
+     * that could mint a key requires one already, and switching authentication off is not a bootstrap - it is a
+     * different deployment. The provisioning itself is
      * {@link Authorization#bootstrap}, shared with every other assembly of the server; it grants everything on its
      * tenant, which is what makes it a bootstrap and also why it is announced loudly and meant to be removed once
      * real credentials exist - the same treatment {@code anonymous-rights} gets, for the same reason.

@@ -85,8 +85,8 @@ public final class PullThroughCache {
 
     /**
      * Bind an edition's {@link PullThroughHooks} into the loop. The other constructors delegate here with
-     * {@link PullThroughHooks#NONE} (the {@link EdgeHooks} convenience-constructor idiom), so an existing call site is
-     * unchanged and serves byte-for-byte as before.
+     * {@link PullThroughHooks#NONE} (the {@link EdgeHooks} convenience-constructor idiom), so a call site that binds
+     * none serves with no edition's hooks.
      */
     public PullThroughCache(ProxyFormat.Fetcher fetcher, ObservationRegistry observations, PullThroughHooks hooks) {
         this.fetcher = fetcher;
@@ -110,11 +110,11 @@ public final class PullThroughCache {
             observation.lowCardinalityKeyValue("upstream", "unasked");
             // Consult the edition BEFORE the local-first serve, so a cached hit is verified against the current gate
             // before any byte is written. The NONE hook returns serveThrough with no store read, so the hit path
-            // below is byte-for-byte as before; the decision is made ahead of serving, never by wrapping the stream.
+            // below costs nothing extra; the decision is made ahead of serving, never by wrapping the stream.
             PullThroughHooks.HitDecision decision = hooks.verifyHit(format, exchange.path(), store);
             if (decision instanceof PullThroughHooks.HitDecision.Withhold) {
                 // A now-retracted/rejected artifact the current gate refuses: 404 without serving the local bytes and
-                // without a miss-leg re-fetch (the caveat's "false must not dump to the miss leg").
+                // without a miss-leg re-fetch.
                 observation.lowCardinalityKeyValue("outcome", "withheld");
                 exchange.respond(404);
                 return null;
@@ -125,7 +125,7 @@ public final class PullThroughCache {
                 serveLocal.serve().serve(format, exchange, store);
                 return null;
             }
-            // serveThrough (the default): the local-first serve runs exactly as today.
+            // serveThrough (the default): the local-first serve runs unchanged.
             Deferred deferred = new Deferred(exchange);
             format.handle(deferred, store);
             if (!deferred.missed()) {
@@ -360,15 +360,6 @@ public final class PullThroughCache {
     }
 
     /**
-     * A {@link FormatExchange} that defers committing to the real exchange until it sees the format's status, so a
-     * local hit streams its body straight to the client with nothing buffered, while a local {@code 404} is swallowed
-     * (its tiny body discarded) and reported through {@link #missed()} so the loop can hand control to the proxy
-     * adapter, which writes the real response itself. This works because a format always sets its status (and any
-     * response headers) before it writes the body. Response headers are held until the commit; reads delegate to the
-     * real exchange unchanged.
-     */
-    /** Waits for the leader's fill; false when the wait ended without one, so the caller fetches for itself. */
-    /**
      * The request a leg is handed when its answer is kept under another path than the one asked for
      * ({@link ProxyFormat#keptAs}): {@link #path()} is the kept path, {@link #requestedPath()} what the client sent,
      * and the request URI carries the kept path behind whatever the routing put in front of the requested one, so a
@@ -456,6 +447,14 @@ public final class PullThroughCache {
         }
     }
 
+    /**
+     * A {@link FormatExchange} that defers committing to the real exchange until it sees the format's status, so a
+     * local hit streams its body straight to the client with nothing buffered, while a local {@code 404} is swallowed
+     * (its tiny body discarded) and reported through {@link Deferred#missed()} so the loop can hand control to the
+     * proxy adapter, which writes the real response itself. This works because a format always sets its status (and any
+     * response headers) before it writes the body. Response headers are held until the commit; reads delegate to the
+     * real exchange unchanged.
+     */
     private static final class Deferred implements FormatExchange {
 
         private final FormatExchange delegate;
@@ -539,7 +538,8 @@ public final class PullThroughCache {
          * revalidation: only the servlet exchange's own buffered override computes the {@code ETag} and answers a
          * matching {@code If-None-Match} with {@code 304}. Every generated index a format serves - a packument, a
          * {@code maven-metadata.xml}, a PyPI index - travels this way, so in a proxy-capable repository each of them
-         * was re-downloaded in full on every resolve while the same index in a hosted-only repository revalidated.
+         * would be re-downloaded in full on every resolve while the same index in a hosted-only repository
+         * revalidated.
          * The 404 probe above still has to see the miss, which is why only the buffered path is forwarded here.
          */
         @Override

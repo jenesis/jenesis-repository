@@ -15,9 +15,9 @@ import tools.jackson.databind.node.ObjectNode;
  * entry's stream - through the shared {@link ScreenedDispatch} ingress edge (or any {@link EntryPublisher} a caller
  * wraps), so it is screened at the edge exactly as a single deploy is: the body streams into the content-addressed
  * store, the discovered publication-screen chain runs <em>per entry</em>, and an accepted entry is restreamed into its
- * format's layout while a held or rejected one lays nothing out - a bad entry never taints its siblings. The contract is "each entry is a publish
- * request", so a raw-body-{@code PUT} format works natively and a protocol format works by carrying its protocol body
- * at its protocol path - no format learns anything about batching.
+ * format's layout while a held or rejected one lays nothing out - a bad entry never taints its siblings. The contract
+ * is "each entry is a publish request", so a raw-body-{@code PUT} format works natively and a protocol format works by
+ * carrying its protocol body at its protocol path - no format learns anything about batching.
  *
  * <p>Nothing is materialized: neither the archive nor an entry is ever read whole into memory - the entry stream is
  * handed to the format, which streams it hash-on-write. The archive is opt-in (a deployment gate, {@code batch-upload},
@@ -33,9 +33,8 @@ import tools.jackson.databind.node.ObjectNode;
 public final class BatchIngestion {
 
     /** The request header naming the archive encoding to explode; only {@code zip} is understood. Bare, like every
-     *  header of this product's: the {@code X-} prefix was deprecated (RFC 6648) because a header that graduates
-     *  from experiment to protocol keeps its name forever, and it was cut over rather than accepted beside the
-     *  new name. */
+     *  header of this product's: RFC 6648 deprecates the {@code X-} prefix, because a header that graduates from
+     *  experiment to protocol keeps its name forever. */
     public static final String EXPLODE_HEADER = "Jenesis-Explode";
 
     private static final JsonMapper JSON = JsonMapper.builder().build();
@@ -99,7 +98,7 @@ public final class BatchIngestion {
      * deploys: the discovered {@link build.jenesis.repository.store.PublishInterceptor} chain (a compliance gate, a
      * quarantine audit, an inventory recorder) reaches a verdict per entry, and a held ({@code 202}) or rejected
      * ({@code 422}) entry lays nothing out while its siblings are untouched. An unscreened format (OCI) entry bypasses
-     * the screen and dispatches as before. A write never proxies (see {@link PullThroughCache}), so an entry whose
+     * the screen and dispatches directly. A write never proxies (see {@link PullThroughCache}), so an entry whose
      * format has an upstream configured still publishes locally.
      */
     public void explode(FormatExchange outer, String tenant, ArtifactStore store, ScreenedDispatch screened)
@@ -270,8 +269,8 @@ public final class BatchIngestion {
 
     /** Screen one entry at the shared ingress edge and read its outcome off the status the edge set: an accepted entry
      *  is restreamed into its format's layout ({@code 2xx} &rarr; stored), a held one answers {@code 202} (quarantined)
-     *  and a rejected one {@code 422} (rejected), all off the same {@link ScreenedDispatch} choreography a single deploy
-     *  runs; a path no format claims is unclaimed. */
+     *  and a rejected one {@code 422} (rejected), all off the same {@link ScreenedDispatch} choreography a single
+     *  deploy runs; a path no format claims is unclaimed. */
     private static Outcome dispatch(ScreenedDispatch screened, String tenant, String path, InputStream body,
                                     ArtifactStore store) throws IOException {
         CapturingExchange exchange = new CapturingExchange(path, body);

@@ -18,14 +18,9 @@ import build.jenesis.repository.scope.Scopes;
  * name ({@code jenrepo.proxy.<format>}), the compliance verdicts {@code LiveConfig} reads as the running gate's
  * fallback, and the cleanup dials.
  *
- * <p><b>It was two classes binding the same prefix</b>, one here and one in the server kernel layered above it,
- * and eleven dials - {@code store}, {@code auth}, {@code rate-limit}, {@code batch-upload},
- * {@code batch-upload-max-entries}, {@code demo}, {@code read-only}, {@code anonymous-rights},
- * {@code bootstrap-key} and the two credential lifetimes - were declared in both, each with its own copy of the
- * default. Both beans were registered in every composed deployment, so each of those keys was bound twice into two
- * objects and the values agreed only for as long as nobody edited one side. {@code rate-limit} had already come
- * apart that way once, which is why its default carries the account above. Holding copies equal is not a fix, so
- * there is one class.
+ * <p><b>One class binds the prefix.</b> Two classes binding it would declare the dials they share twice, each with its
+ * own copy of the default, and bind each key twice into two objects whose values agree only for as long as nobody
+ * edits one side; holding copies equal is not a fix.
  *
  * <p><b>One key names the fixed deployment's tenant</b>: {@link #getDefaultTenant() default-tenant}, which the
  * routing, the browse and the maintenance surfaces resolve against, and which two nodes over one store must agree
@@ -47,8 +42,8 @@ public class RepositoryProperties {
      * credential on an enforcing deployment.
      *
      * <p>Without it a fresh install is unusable as configured: {@code auth} is on, a keyless caller is rejected,
-     * and every route that could mint a key itself requires one. The only remaining advice was to turn
-     * authentication off, which is not a bootstrap, it is a different deployment.
+     * and every route that could mint a key itself requires one - and turning authentication off is not a
+     * bootstrap, it is a different deployment.
      *
      * <p>Empty by default, so nothing changes for a deployment that already has keys. Set it once
      * ({@code JENREPO_BOOTSTRAP_KEY}), use it to issue the credentials you actually want, then unset it: it grants
@@ -63,8 +58,8 @@ public class RepositoryProperties {
     private String bootstrapKey = "";
 
     /** The strictly-opt-in anonymous role: the rights a keyless (no-credential) caller is granted under an
-     *  enforcing deployment ({@code auth=true}). <em>Empty by default</em> - a keyless caller is then rejected exactly
-     *  as enforcing does today. A non-empty value is a comma-list in the existing grant grammar: a bare
+     *  enforcing deployment ({@code auth=true}). <em>Empty by default</em> - a keyless caller is then rejected. A
+     *  non-empty value is a comma-list in the existing grant grammar: a bare
      *  {@code <surface>:<verb>} token ({@code repository:read}, {@code repository:write}, {@code manage:read},
      *  {@code manage:write}, a per-surface {@code <surface>:*}, or the all-privileges {@code *}) is granted on every
      *  repository, and a {@code <repository>=<token>} entry scopes a token to one named repository - the same
@@ -139,20 +134,21 @@ public class RepositoryProperties {
     /** Request routing over the shared {@code <tenant>/<repository>/...} store layout. {@code fixed} (the default,
      *  and the default of every image this product ships) binds <em>every</em> request to the one
      *  {@code default-tenant} through {@code FixedTenantRouting}, the repository named by the path and the key
-     *  routing nowhere - the single-tenant deployment, which is the shape most deployments are and the
-     *  the one a plain composition ships, carrying every installed feature.
+     *  routing nowhere - the single-tenant deployment, which is the shape most deployments are and the one a plain
+     *  composition ships, carrying every installed feature.
      *
      *  <p>Multi-tenancy is opted into rather than inherited. {@code multi} resolves the tenant from the key the
      *  request presents and the repository from the first path segment. {@code host} and {@code path}
      *  let a request name a non-default tenant
      *  <em>without a key</em>, so an anonymous / redirect-served request can reach any tenant - the single-deployment
      *  multi-tenant CDN. Under {@code host} the tenant is the {@link #tenantHosts} mapping of the request Host (an
-     *  unmapped host falls to the {@code default-tenant}) and the repository is the first path segment, as {@code multi};
-     *  under {@code path} the tenant is the first path segment under {@code /repository/}, the repository the second,
-     *  the residual path the rest. Both confine exactly as {@code multi}: the host/path tenant is validated
-     *  traversal-free and, when a key is also present, must name the key's own tenant (else a {@code 403}), so a key
-     *  for tenant A can never be turned against tenant B by forging the Host or path. All four modes address the same
-     *  layout, so a deployment can be flipped between them by a restart and finds its data where it was left. */
+     *  unmapped host falls to the {@code default-tenant}) and the repository is the first path segment, as
+     *  {@code multi}; under {@code path} the tenant is the first path segment under {@code /repository/}, the
+     *  repository the second, the residual path the rest. Both confine exactly as {@code multi}: the host/path tenant
+     *  is validated traversal-free and, when a key is also present, must name the key's own tenant (else a
+     *  {@code 403}), so a key for tenant A can never be turned against tenant B by forging the Host or path. All four
+     *  modes address the same layout, so a deployment can be flipped between them by a restart and finds its data where
+     *  it was left. */
     private String tenancy = RepositoryRoutingProvider.FIXED;
 
     /** The host→tenant mapping consulted under {@code tenancy=host}: a comma-separated list of
@@ -160,14 +156,15 @@ public class RepositoryProperties {
      *  case-insensitively against the request's server name (the Host header with any port stripped). A host with no
      *  mapping resolves to the {@code default-tenant} - the same fall-through a keyless {@code multi} request takes -
      *  so an unlisted CDN edge or a direct-to-origin request still serves the default tenant rather than being refused;
-     *  the mapped tenant is validated as a traversal-free name before it scopes the store. A single plain {@code String}
-     *  (not a {@code Map}) so a hostname's dots never become nested binding keys; the env spelling is
+     *  the mapped tenant is validated as a traversal-free name before it scopes the store. A single plain
+     *  {@code String} (not a {@code Map}) so a hostname's dots never become nested binding keys; the env spelling is
      *  {@code JENREPO_TENANT_HOSTS}. Only consulted under {@code tenancy=host}; ignored otherwise. */
     private String tenantHosts = "";
 
-    /** Tenant whose credentials may drive the deployment-global API routes ({@code /api/settings}, {@code
-     *  /api/repositories}, {@code /api/upstreams}); empty means the {@code default-tenant}. A tenant administering
-     *  only its own credentials cannot reach these shared-configuration routes even with a {@code manage} right. */
+    /** Tenant whose credentials may drive the deployment-global API routes ({@code /api/settings},
+     *  {@code /api/repositories}, {@code /api/upstreams}); empty means the {@code default-tenant}. A tenant
+     *  administering only its own credentials cannot reach these shared-configuration routes even with a {@code manage}
+     *  right. */
     private String operatorTenant = "";
 
     /** Whether to reject a repository-migration URL that resolves to a loopback, link-local or private address - the
@@ -187,22 +184,24 @@ public class RepositoryProperties {
     // environment, so a jenrepo.license-* set in a properties file or as an environment variable works without this
     // bean, and binding it here would only create a second value that had to equal the first - and would drift from
     // it, with the deployment-info surface reporting the copy. A dial the server itself binds (malware-action,
-    // vulnerability-threshold,
-    // proxy-enabled below) still belongs here, because LiveConfig really does read it as the core gate's fallback.
+    // vulnerability-threshold, proxy-enabled below) still belongs here, because LiveConfig really does read it as the
+    // core gate's fallback.
     /** Reject vulnerabilities at or above this CVSS band (NONE disables the vulnerability check). Defaults to
      *  {@code CRITICAL} - the secure floor: a fresh deployment with an advisory feed active gates the most severe
      *  CVEs rather than admitting them silently. An operator loosens it to {@code NONE} (the explicit opt-out) or
      *  tightens it to {@code HIGH}/{@code MEDIUM}/{@code LOW}. */
     private String vulnerabilityThreshold = CoreDefaults.VULNERABILITY_THRESHOLD;
 
-    /** Verdict for a package the feed marks malicious (carries no CVSS score): QUARANTINE, REJECT or ALLOW to disable. */
+    /** Verdict for a package the feed marks malicious (carries no CVSS score): QUARANTINE, REJECT or ALLOW to disable.
+     *  */
     private String malwareAction = CoreDefaults.MALWARE_ACTION;
 
     private String vulnerabilityAction = CoreDefaults.VULNERABILITY_ACTION;
 
     private String denyListAction = CoreDefaults.DENY_LIST_ACTION;
 
-    /** Comma-separated coordinates an operator forbids ({@code group:artifact}, {@code group:artifact:version}, or a {@code group:*} prefix); always refused. */
+    /** Comma-separated coordinates an operator forbids ({@code group:artifact}, {@code group:artifact:version}, or a
+     *  {@code group:*} prefix); always refused. */
     private String denyList = "";
 
     /** Quarantine proxied artifacts the upstream published within this many days (0 disables the immaturity hold).
@@ -411,8 +410,9 @@ public class RepositoryProperties {
 
     /** Whether demo mode seeds a fresh, completely empty repository with real artifacts through the formats' own
      *  pull-through paths so an evaluator has data to look at; off by default, and a no-op against a non-empty store
-     *  (a seeded or in-use repository is never re-seeded), so turning it on in production is harmless. A live {@code demo}
-     *  setting overrides it, though it takes effect on the next restart since the seed runs once at boot. */
+     *  (a seeded or in-use repository is never re-seeded), so turning it on in production is harmless. A live
+     *  {@code demo} setting overrides it, though it takes effect on the next restart since the seed runs once at boot.
+     *  */
     public boolean isDemo() {
         return demo;
     }
@@ -542,8 +542,7 @@ public class RepositoryProperties {
      *  {@code block-private-import-hosts} value, {@code null} when unset) wins, else this deployment's
      *  {@link #blockPrivateImportHosts} env-field when explicitly set, else <em>fail-closed to block for every
      *  edition</em>. This is the only value the import path may consult - a bare {@code getBlockPrivateImportHosts()}
-     *  would read a stock deployment (env-field null) as SSRF-open, and the previous tenancy-derived default left the
-     *  {@code fixed} edition open. */
+     *  would read a stock deployment (env-field null) as SSRF-open. */
     public boolean importHostsGuarded(Boolean storedSetting) {
         return ImportHostGuard.blockPrivateHosts(storedSetting, blockPrivateImportHosts);
     }

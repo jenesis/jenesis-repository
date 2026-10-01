@@ -37,8 +37,8 @@ import org.springframework.security.web.authentication.UsernamePasswordAuthentic
  * denied request answers the status the credential model intends whichever Spring Security failure path it takes:
  * {@code 401} for a caller with no usable credential, and the deployment's {@link AccessDenial} for one refused.
  *
- * <p>The chain is a <em>composition seam</em>, not a fixed chain. The authorization manager, the {@link RateLimitFilter}
- * and the chain itself are {@link ConditionalOnMissingBean conditional}, and every discovered
+ * <p>The chain is a <em>composition seam</em>, not a fixed chain. The authorization manager, the
+ * {@link RateLimitFilter} and the chain itself are {@link ConditionalOnMissingBean conditional}, and every discovered
  * {@link SecurityChainCustomizer} is applied over the baseline before the {@code anyRequest} catch-all is registered.
  * So a deployment that needs a richer authorization manager (multi-tenant scoping, an operator-tenant check, usage
  * recording), extra open routes (a console page, a self-authenticating webhook, an OIDC token endpoint) or an extra
@@ -75,10 +75,11 @@ public class RepositorySecurityAutoConfiguration {
 
     /**
      * The request firewall, admitting an encoded slash ({@code %2F}) and nothing else the strict default refuses. npm
-     * addresses a scoped package that way - {@code PUT} and {@code GET /@scope%2Fname} - so refusing it refused every
-     * scoped package the npm client publishes or installs. It is safe because nothing decides on the encoded form:
-     * {@link RepositoryAuthorizationManager} authorizes the decoded path and refuses one that decodes into an empty or
-     * dot segment, and the routing takes the tenant and repository from segments that cannot carry a {@code %}.
+     * addresses a scoped package that way - {@code PUT} and {@code GET /@scope%2Fname} - so refusing it would refuse
+     * every scoped package the npm client publishes or installs. It is safe because nothing decides on the encoded
+     * form: {@link RepositoryAuthorizationManager} authorizes the decoded path and refuses one that decodes into an
+     * empty or dot segment, and the routing takes the tenant and repository from segments that cannot carry a
+     * {@code %}.
      */
     @Bean
     @ConditionalOnMissingBean(HttpFirewall.class)
@@ -110,14 +111,12 @@ public class RepositorySecurityAutoConfiguration {
      * The repository's chain, backed off only by a bean of THIS NAME.
      *
      * <p>By name, not by type, and the distinction is the whole point. A bare {@code @ConditionalOnMissingBean}
-     * matches the method's return type, so ANY {@link SecurityFilterChain} in the context suppressed this one -
-     * including the ordered, path-matched chains that plainly exist to sit BESIDE it. SCIM's
-     * {@code scimSecurityFilterChain} is {@code @Order(1)} over {@code /scim/**} and the cache's is the same shape
-     * over {@code /build/**}: neither is a replacement for the artifact chain, and both silently were one.
+     * matches the method's return type, so ANY {@link SecurityFilterChain} in the context would suppress this one -
+     * including the ordered, path-matched chains that plainly exist to sit BESIDE it, such as a {@code @Order(1)}
+     * chain over {@code /scim/**} or the cache's over {@code /build/**}, neither of which replaces the artifact chain.
      *
-     * <p>What that cost is a node that maps {@code /repository/**} and answers it from a browser-session chain.
-     * The admin console requires this module, so auto-configuration registers the repository's controller into its
-     * context - and with this chain suppressed by the console's own, an artifact request there was bounced to
+     * <p>The admin console requires this module, so auto-configuration registers the repository's controller into its
+     * context; with this chain suppressed by the console's own, an artifact request there would be bounced to
      * {@code /login} instead of being authenticated by its key.
      *
      * <p>Replacing this chain outright is still available: define a bean named {@code securityFilterChain}.
@@ -150,8 +149,8 @@ public class RepositorySecurityAutoConfiguration {
                 .authorizeHttpRequests(authorize -> authorize
                         // An error page renders the answer a request was already given - its status decided by the
                         // manager, a filter or a controller - so its dispatch is not decided again: deciding it would
-                        // replace that status with the manager's verdict on the error page, which turned the cross-site
-                        // filter's 403 into the refusal a credential without a wildcard read gets.
+                        // replace that status with the manager's verdict on the error page, which would turn the
+                        // cross-site filter's 403 into the refusal a credential without a wildcard read gets.
                         .dispatcherTypeMatchers(DispatcherType.ERROR).permitAll()
                         // The three paths a container platform probes, and nothing else. They answer a
                         // summarized state - UP or DOWN - and are open because a kubelet has no credential to

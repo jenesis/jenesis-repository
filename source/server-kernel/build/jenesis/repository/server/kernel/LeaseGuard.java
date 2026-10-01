@@ -14,7 +14,7 @@ import build.jenesis.repository.store.Lease;
  *
  * <p>It is deliberately <strong>store-light and tenant-blind</strong>: it knows a lease object, a holder id, a ttl and
  * a renewal timer, and nothing about tenants, repositories, tasks or meters. It is <strong>not a second exclusion
- * mechanism</strong> - it is the same one {@link Lease} the scheduler always took, with its lifecycle named. The
+ * mechanism</strong> - it is the one {@link Lease} the scheduler takes, with its lifecycle named. The
  * deployment's other distributed claim (the walk's per-segment claim) operates at a different granularity and
  * composes with this one; nothing here duplicates it.
  *
@@ -26,8 +26,8 @@ import build.jenesis.repository.store.Lease;
  * <ol>
  *   <li><b>It is a pass failure, not a skip.</b> {@link Holding#lost()} flips and stays flipped, and the caller counts
  *       the pass as failed - so {@code jenrepo.maintenance.failures} rises and the task reports FAILED.
- *       A refused <em>acquire</em> stays what it always was (a normal, uncounted skip in a fleet); losing a lease you
- *       already held is not that.</li>
+ *       A refused <em>acquire</em> is a normal, uncounted skip in a fleet; losing a lease you already held is not
+ *       that.</li>
  *   <li><b>The pass stops enlarging the window.</b> The caller polls {@link Holding#lost()} between fan-out batches and
  *       submits no further work, bounding the double-sweep to the units already in flight.</li>
  *   <li><b>It is not cancellation.</b> A {@link build.jenesis.repository.maintenance.MaintenanceTask} has no
@@ -50,7 +50,7 @@ import build.jenesis.repository.store.Lease;
  *       would leave a deployment believing it has a lease it does not have.</li>
  *   <li><b>Error visibility.</b> A failed renewal and a failed release are logged and (for renewal) surfaced through
  *       {@link Holding#lost()}; neither aborts the body. A release that cannot land leaves the lease to lapse on its
- *       own ttl - the pre-release behaviour, no worse.</li>
+ *       own ttl, as it would had it never been released.</li>
  *   <li><b>Lifecycle / ownership.</b> The guard owns one daemon timer thread for renewals and closes it in
  *       {@link #close()}; the caller owns the store. Renewal is scheduled at {@code ttl/2} and cancelled in a
  *       {@code finally}, so a completed pass leaves no timer behind.</li>
@@ -98,7 +98,8 @@ public final class LeaseGuard implements AutoCloseable {
     }
 
     /** The lease object one named pass locks on - {@code locks/<task-name>} at the deployment root. Stable across
-     *  versions on purpose: a renamed task in a mixed-version fleet would lock on a different object and sweep twice. */
+     *  versions on purpose: a renamed task in a mixed-version fleet would lock on a different object and sweep twice.
+     *  */
     public static String object(String name) {
         return Lease.objectKey(name);
     }
