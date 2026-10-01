@@ -13,6 +13,13 @@ import module java.base;
  * bytes had landed. Twelve tries with a short, jittered pause between them spread the writers out; the pause stays
  * under a tenth of a second so the request that waits never waits long.
  *
+ * <p><b>Within a node, writers of one key take turns.</b> Each try - the read, the decision and the write against the
+ * token read - runs holding a lock striped by the key, so two writers of one document in one process queue rather than
+ * race, and what a try can lose to is a writer on another node. Without the turn a slow write - a durable rename on a
+ * busy disk - lets every writer in the process read the same token and all but one lose, round after round, until
+ * the budget is spent. The stripe is the key's alone, never the store's, so keys that share one only wait on each
+ * other; a {@link Mutation} decides from what it is handed and writes nothing, so a try never nests another.
+ *
  * <p>{@link #update} and {@link #tryUpdate} are the policy applied: read the key, let a {@link Mutation} decide the
  * new body from what is there, write it against the token that was read, and on a lost race back off and go round
  * again, rather than a loop written out per site with its own try count, no pause and its own ending for the same
@@ -37,6 +44,10 @@ public final class Retries {
     /** How often a compare-and-set is tried before its conflict is given up. */
     public static final int COMPARE_AND_SET = 12;
 
+    /** The turns a node's writers of one key take, striped by the key. */
+    private static final ReentrantLock[] TURNS = IntStream.range(0, 256).mapToObj(_ -> new ReentrantLock())
+            .toArray(ReentrantLock[]::new);
+
     private static final LongAdder TRIED = new LongAdder();
     private static final LongAdder REPLAYED = new LongAdder();
     private static final LongAdder LOST_TO_PEER = new LongAdder();
@@ -49,8 +60,8 @@ public final class Retries {
      * A compare-and-set that lost every one of its tries: peers on the same key at the same moment, more of them or
      * for longer than {@link #COMPARE_AND_SET} tries outlast. Nothing is wrong with the write or with the store, so an
      * edge answers it as a transient refusal - {@code 503} with a {@code Retry-After}, which clients retry - and never
-     * as a server error. Within a node, writers of one document take turns, so what contends here is one writer per
-     * node; a burst of a version's files through two nodes lands without meeting it.
+     * as a server error. Within a node, writers of one key take turns, so what contends here is one writer per node;
+     * a burst of a version's files through two nodes lands without meeting it.
      */
     public static final class Contended extends IOException {
 
@@ -152,22 +163,34 @@ public final class Retries {
     public static <T> Optional<Verdict<T>> tryDecide(ArtifactStore store, String key, Decision<T> decision)
             throws IOException {
         for (int tries = 0; tries < COMPARE_AND_SET; tries++) {
-            Optional<ArtifactStore.Versioned> current = store.readVersioned(key);
-            Verdict<T> verdict = decision.decide(current);
-            if (verdict.body() == null) {
-                return Optional.of(verdict);
-            }
-            TRIED.increment();
-            if (store.writeVersioned(key, verdict.body(), current.map(ArtifactStore.Versioned::token).orElse(null))) {
-                return Optional.of(verdict);
-            }
-            Optional<Verdict<T>> resolved = settled(store, key, decision, verdict);
-            if (resolved.isPresent()) {
-                return resolved;
+            ReentrantLock turn = turn(key);
+            turn.lock();
+            try {
+                Optional<ArtifactStore.Versioned> current = store.readVersioned(key);
+                Verdict<T> verdict = decision.decide(current);
+                if (verdict.body() == null) {
+                    return Optional.of(verdict);
+                }
+                TRIED.increment();
+                if (store.writeVersioned(key, verdict.body(),
+                        current.map(ArtifactStore.Versioned::token).orElse(null))) {
+                    return Optional.of(verdict);
+                }
+                Optional<Verdict<T>> resolved = settled(store, key, decision, verdict);
+                if (resolved.isPresent()) {
+                    return resolved;
+                }
+            } finally {
+                turn.unlock();
             }
             backoff(tries);
         }
         return Optional.empty();
+    }
+
+    /** The turn a node's writers of {@code key} take. */
+    private static ReentrantLock turn(String key) {
+        return TURNS[Math.floorMod(key.hashCode(), TURNS.length)];
     }
 
     /** {@link #update} for a compare-and-set the caller performs itself: {@code attempt} is tried until it lands,
@@ -190,14 +213,20 @@ public final class Retries {
     }
 
     private static boolean tryOnce(ArtifactStore store, String key, Mutation mutation) throws IOException {
-        Optional<ArtifactStore.Versioned> current = store.readVersioned(key);
-        byte[] body = mutation.apply(current);
-        if (body == null) {
-            return true;
+        ReentrantLock turn = turn(key);
+        turn.lock();
+        try {
+            Optional<ArtifactStore.Versioned> current = store.readVersioned(key);
+            byte[] body = mutation.apply(current);
+            if (body == null) {
+                return true;
+            }
+            TRIED.increment();
+            return store.writeVersioned(key, body, current.map(ArtifactStore.Versioned::token).orElse(null))
+                    || settled(store, key, mutation, body);
+        } finally {
+            turn.unlock();
         }
-        TRIED.increment();
-        return store.writeVersioned(key, body, current.map(ArtifactStore.Versioned::token).orElse(null))
-                || settled(store, key, mutation, body);
     }
 
     /**

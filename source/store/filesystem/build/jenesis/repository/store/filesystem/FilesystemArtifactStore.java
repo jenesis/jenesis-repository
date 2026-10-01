@@ -183,12 +183,22 @@ public final class FilesystemArtifactStore implements ArtifactStore {
      * for syncing (not one this store is deployed on) skips the directory half rather than failing the write.
      */
     private static void durableMove(Path temp, Path target) throws IOException {
-        try (FileChannel channel = FileChannel.open(temp, StandardOpenOption.WRITE)) {
+        force(temp);
+        Files.move(temp, target, StandardCopyOption.REPLACE_EXISTING, StandardCopyOption.ATOMIC_MOVE);
+        forceDirectory(target.getParent());
+    }
+
+    /** Force a spooled file's bytes to the disk. */
+    private static void force(Path file) throws IOException {
+        try (FileChannel channel = FileChannel.open(file, StandardOpenOption.WRITE)) {
             channel.force(true);
         }
-        Files.move(temp, target, StandardCopyOption.REPLACE_EXISTING, StandardCopyOption.ATOMIC_MOVE);
-        try (FileChannel directory = FileChannel.open(target.getParent(), StandardOpenOption.READ)) {
-            directory.force(true);
+    }
+
+    /** Force a directory's entries - a rename into it - to the disk. */
+    private static void forceDirectory(Path directory) throws IOException {
+        try (FileChannel channel = FileChannel.open(directory, StandardOpenOption.READ)) {
+            channel.force(true);
         } catch (UnsupportedOperationException | AccessDeniedException _) {
             // A file system that offers no directory handle to sync; the rename stands as the platform leaves it.
         }
@@ -616,34 +626,51 @@ public final class FilesystemArtifactStore implements ArtifactStore {
 
     @Override
     public boolean writeVersioned(String key, byte[] content, Object expected) throws IOException {
-        Path path = resolve(ArtifactStore.key(key));
-        int stripe = stripe(path);
-        synchronized (LOCKS[stripe]) {
-            try (FileChannel channel = stripeLock(stripe); FileLock _ = acquire(channel)) {
-                return compareAndMove(path, expected, temp -> Files.write(temp, content));
-            }
-        }
+        return compareAndSet(resolve(ArtifactStore.key(key)), expected, temp -> Files.write(temp, content));
     }
 
     /**
-     * The streaming compare-and-set: the same read-compare-then-rename, with the temporary file filled from the
-     * stream rather than from an array.
-     *
-     * <p>The comparison happens before a byte is written and the atomicity comes from the move, so nothing about
-     * the condition depends on holding the content - which is why this backend needs no more than a different way
-     * of filling the file it was already writing. The length is unused here, and is a parameter because the object
-     * stores cannot begin a conditional upload without one.
+     * The streaming compare-and-set: the same spool, compare and rename, with the temporary file filled from the
+     * stream rather than from an array. The length is unused here, and is a parameter because the object stores
+     * cannot begin a conditional upload without one.
      */
     @Override
     public boolean writeVersioned(String key, InputStream content, long length, Object expected)
             throws IOException {
-        Path path = resolve(ArtifactStore.key(key));
-        int stripe = stripe(path);
-        synchronized (LOCKS[stripe]) {
-            try (FileChannel channel = stripeLock(stripe); FileLock _ = acquire(channel)) {
-                return compareAndMove(path, expected, temp -> Files.copy(content, temp, StandardCopyOption.REPLACE_EXISTING));
+        return compareAndSet(resolve(ArtifactStore.key(key)), expected,
+                temp -> Files.copy(content, temp, StandardCopyOption.REPLACE_EXISTING));
+    }
+
+    /**
+     * A compare-and-set on {@code path}: the new content is spooled beside it and forced to the disk first, with no
+     * lock held; the key's stripe is then locked for the comparison and the rename alone; and the directory is forced
+     * once the lock is released. The flushes - the slow part of a durable write - so cost no rival its turn, and a
+     * write that loses the comparison drops what it spooled.
+     */
+    private boolean compareAndSet(Path path, Object expected, Spool spool) throws IOException {
+        // The same .upload*.tmp shape a keyed write spools through, so list()'s in-flight filter hides this temp file
+        // too and an aborted write never leaves it behind; createUploadTemp re-creates the parent if a concurrent
+        // delete tidied it away.
+        Path temp = createUploadTemp(path.getParent());
+        boolean moved = false;
+        try {
+            spool.fill(temp);
+            force(temp);
+            int stripe = stripe(path);
+            synchronized (LOCKS[stripe]) {
+                try (FileChannel channel = stripeLock(stripe); FileLock _ = acquire(channel)) {
+                    moved = compareAndMove(path, expected, temp);
+                }
+            }
+        } finally {
+            if (!moved) {
+                Files.deleteIfExists(temp);
             }
         }
+        if (moved) {
+            forceDirectory(path.getParent());
+        }
+        return moved;
     }
 
     /** The stripe a key's compare-and-set serializes on, chosen from the key relative to the top-level root and never
@@ -661,32 +688,22 @@ public final class FilesystemArtifactStore implements ArtifactStore {
     }
 
     /**
-     * The compare-and-set proper, under both locks: compare the stored incarnation's token with {@code expected},
-     * spool the new content beside it and move it into place atomically. The token must advance on every successful
+     * The compare-and-set proper, under both locks: compare the stored incarnation's token with {@code expected} and,
+     * when it matches, move the spooled content into place atomically. The token must advance on every successful
      * update, including a re-write of byte-identical content (which the digest half of the token cannot distinguish):
      * two writes inside one clock tick would otherwise leave it unchanged, and a third writer holding the pre-update
      * token would still pass the compare - a stale write disguised as a fresh one.
      */
-    private static boolean compareAndMove(Path path, Object expected, Spool spool) throws IOException {
+    private static boolean compareAndMove(Path path, Object expected, Path temp) throws IOException {
         boolean present = Files.isRegularFile(path);
         long modified = present ? Files.getLastModifiedTime(path).toMillis() : -1L;
         Object current = present ? token(modified, path) : null;
         if (!Objects.equals(current, expected)) {
             return false;
         }
-        // The same .upload*.tmp shape a keyed write spools through, so list()'s in-flight filter hides this temp file
-        // too and an aborted write never leaves it behind; createUploadTemp re-creates the parent if a concurrent
-        // delete tidied it away.
-        Path temp = createUploadTemp(path.getParent());
-        try {
-            spool.fill(temp);
-            durableMove(temp, path);
-            if (present && Files.getLastModifiedTime(path).toMillis() <= modified) {
-                Files.setLastModifiedTime(path, FileTime.fromMillis(modified + 1));
-            }
-        } catch (IOException e) {
-            Files.deleteIfExists(temp);
-            throw e;
+        Files.move(temp, path, StandardCopyOption.REPLACE_EXISTING, StandardCopyOption.ATOMIC_MOVE);
+        if (present && Files.getLastModifiedTime(path).toMillis() <= modified) {
+            Files.setLastModifiedTime(path, FileTime.fromMillis(modified + 1));
         }
         return true;
     }
