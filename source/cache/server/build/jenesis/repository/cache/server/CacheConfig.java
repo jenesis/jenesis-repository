@@ -4,17 +4,13 @@ import module java.base;
 import module org.slf4j;
 import build.jenesis.repository.cache.storage.CacheStorageProvider;
 import build.jenesis.repository.settings.StoredSettings;
-import build.jenesis.repository.store.StoreBindings;
 import build.jenesis.repository.store.StoreCache;
 import build.jenesis.repository.server.spi.Authorization;
-import build.jenesis.repository.store.metering.MeteringArtifactStore;
 import build.jenesis.repository.server.spi.KeyUsageTracker;
 import build.jenesis.repository.server.spi.KeyUsageTrackerProvider;
 import build.jenesis.repository.store.ArtifactStore;
 import build.jenesis.repository.store.Durations;
 import io.micrometer.core.instrument.MeterRegistry;
-import build.jenesis.repository.store.ArtifactStoreProvider;
-import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnMissingBean;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
 import org.springframework.context.annotation.Bean;
@@ -28,34 +24,17 @@ import org.springframework.core.env.Environment;
  * delegates into the repository's store, which reads its own configuration (root / bucket / connection
  * string) from the same {@link Environment}, so every app shares one config surface.
  *
- * <p>The same backend also backs the credential store: an {@link ArtifactStore} rooted at the cache's
- * own storage root holds the per-credential grants under {@code auth/<tenant>/<hash>/}, and an enforcing
- * {@link Authorization} over it decides {@code cache:read}/{@code cache:write}. Both beans are
- * {@link ConditionalOnMissingBean conditional}, so when this configuration is combined with another app
- * that already contributes an {@link ArtifactStore} and {@link Authorization} (a single-node deployment
- * that also serves the artifact repository and the admin console), the cache reads and writes the very
- * same credential store as those surfaces and one credential authorizes them all.
+ * <p>The same store also backs the credential store: the per-credential grants under {@code auth/<tenant>/<hash>/},
+ * and an enforcing {@link Authorization} over it decides {@code cache:read}/{@code cache:write}. The authorization is
+ * {@link ConditionalOnMissingBean conditional}, and the store is {@link CacheStoreAutoConfiguration}'s fallback, so
+ * when the cache is combined with a node that serves the artifact repository and the admin console it reads and
+ * writes that node's store - quota, read-only wrapper and all - and one credential authorizes every surface.
  */
 @Configuration(proxyBeanMethods = false)
 @EnableConfigurationProperties(CacheProperties.class)
 public class CacheConfig {
 
     private static final Logger LOGGER = LoggerFactory.getLogger(CacheConfig.class);
-
-    /** The repository's store, selected by {@code jenrepo.store}. There is one store per deployment and the cache
-     *  delegates into a segment of it, so there is no second backend selection to disagree with this one. */
-    @Bean
-    @ConditionalOnMissingBean
-    public ArtifactStore artifactStore(Environment environment, MeterRegistry registry,
-                                       ObjectProvider<StoreBindings> bindings) {
-        // Metered exactly as the repository node meters its store: the cache delegates into a segment of the same
-        // store, and the operation counts are what its soak and the walks screen read. Where this is the
-        // composition's one store, it carries what the composition's parts bind to it, as the repository's would:
-        // every publication through it finds the deployment's values there.
-        String backend = environment.getProperty("jenrepo.store");
-        return new MeteringArtifactStore(StoreBindings.all(bindings.orderedStream())
-                .over(ArtifactStoreProvider.resolve(backend, environment::getProperty)), registry, backend);
-    }
 
     @Bean
     @ConditionalOnMissingBean

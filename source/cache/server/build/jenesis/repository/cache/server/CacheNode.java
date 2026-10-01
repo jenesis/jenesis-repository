@@ -24,10 +24,11 @@ import org.springframework.context.annotation.FilterType;
 @Configuration(proxyBeanMethods = false)
 @ConditionalOnProperty(name = "jenrepo." + CacheNode.GATE, havingValue = "true", matchIfMissing = true)
 @ComponentScan(basePackages = "build.jenesis.repository.cache.server",
-        // The cache's own entry point, which a composing launcher replaces - and the cache node's own report
-        // endpoint, since a composing launcher answers the same path for the whole process over the same store.
+        // The cache's own entry point, which a composing launcher replaces; the cache node's own report endpoint,
+        // since a composing launcher answers the same path for the whole process over the same store; and the
+        // fallback store, an auto-configuration that a scan would read before the repository's store.
         excludeFilters = @ComponentScan.Filter(type = FilterType.REGEX,
-                pattern = "build\\.jenesis\\.repository\\.cache\\.server\\.(CacheServer|CacheObservabilityController)"))
+                pattern = "build\\.jenesis\\.repository\\.cache\\.server\\.(CacheServer|CacheObservabilityController|CacheStoreAutoConfiguration)"))
 public class CacheNode {
 
     /** Whether this application serves the build cache at all. Read before the context starts; applies on restart. */
