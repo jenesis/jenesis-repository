@@ -7,10 +7,9 @@ import build.jenesis.repository.maintenance.MaintenanceTask;
 import build.jenesis.repository.maintenance.MaintenanceTaskProvider;
 
 /**
- * Discovers the staging reap. It rides the retention pass's own enablement and cadence - the
- * {@code scheduled-cleanup} setting turns the storage sweeps on and {@code cleanup-interval} paces them - so an
- * operator who enables scheduled cleanup gets every stop-the-growth reaper with the one switch, and a deployment
- * that never opts in sweeps nothing. The reap's own TTL ({@code staging-ttl}) is read live per pass.
+ * Discovers the staging reap, on the retention pass's enablement and cadence - {@code scheduled-cleanup} turns the
+ * storage sweeps on and {@code cleanup-interval} paces them - so one switch enables every reaper and a deployment that
+ * never opts in sweeps nothing. {@code staging-ttl} is read per pass.
  */
 public final class StagingReapTaskProvider implements MaintenanceTaskProvider {
 

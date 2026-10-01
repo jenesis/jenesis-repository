@@ -5,8 +5,8 @@ import build.jenesis.repository.settings.Setting;
 import build.jenesis.repository.settings.SettingsContributor;
 
 /**
- * Surfaces the staging reap's TTL, so it renders on the settings screens, {@code /api/settings} and the CLI exactly
- * when this module is installed, and applies live (the next reap pass reads the current value).
+ * Surfaces the staging reap's TTL on the settings screens, {@code /api/settings} and the CLI exactly when this module
+ * is installed; the next reap reads the current value.
  */
 public final class StagingSettingsContributor implements SettingsContributor {
 

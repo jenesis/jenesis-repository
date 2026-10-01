@@ -1,11 +1,9 @@
 /**
- * The artifact-store-backed staging lifecycle as a plugin module: it provides
- * {@link build.jenesis.repository.staging.StagingProvider} answering to {@code store}, so the repository discovers
- * staging through {@code ServiceLoader} and a deployment without this module simply runs without staging. A deploy
- * is held under a staging view that does not resolve; promotion re-publishes every held artifact through its own
- * format's layout (discovered like the router's), records it in the inventory, and never copies bytes. The
- * {@link build.jenesis.repository.staging.store.StagingReapTask} (riding the scheduled cleanup pass's enablement)
- * drops abandoned-OPEN stagings and sealed markers past the {@code staging-ttl}, so neither key space grows forever.
+ * The store-backed staging lifecycle: a {@link build.jenesis.repository.staging.StagingProvider} answering to
+ * {@code store}; without this module a deployment runs without staging. A deploy is held under a staging view that does
+ * not resolve; promotion re-publishes each held artifact through its format's layout and records it in the inventory,
+ * copying no bytes. {@link build.jenesis.repository.staging.store.StagingReapTask} drops abandoned stagings and sealed
+ * markers past {@code staging-ttl}.
  *
  * @jenesis.release 25
  * @jenesis.bom pin-repository.properties

@@ -6,11 +6,10 @@ import build.jenesis.repository.maintenance.RetentionSetting;
 import build.jenesis.repository.maintenance.RepositoryContext;
 
 /**
- * The scheduled staging reap: each repository's {@link StoreStaging#reap} pass drops abandoned-OPEN stagings (their
- * blobs then fall to the blob GC) and deletes sealed markers past the {@code staging-ttl}, so neither key space
- * grows forever. It rides the cleanup pass's enablement and cadence (see {@link StagingReapTaskProvider}) and reads
- * its TTL live through the pass configuration, so a changed setting applies on the next pass without a restart.
- * Exclusive by default, like every mutating sweep.
+ * The scheduled staging reap: each repository's {@link StoreStaging#reap} drops abandoned OPEN stagings (their blobs
+ * fall to the collector) and deletes sealed markers past {@code staging-ttl}, so neither key space grows forever. It
+ * rides the cleanup pass's enablement and cadence ({@link StagingReapTaskProvider}) and reads its TTL per pass, so a
+ * changed setting applies without a restart. Exclusive, like every mutating sweep.
  */
 public final class StagingReapTask implements MaintenanceTask {
 

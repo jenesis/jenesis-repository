@@ -4,8 +4,8 @@ import module java.base;
 import build.jenesis.repository.staging.StagingProvider;
 
 /**
- * Discovers the artifact-store-backed staging lifecycle: always available when this module is installed - staging
- * needs no configuration beyond the repository's own store.
+ * Discovers the store-backed staging lifecycle: always available when installed, needing nothing beyond the
+ * repository's own store.
  */
 public final class StoreStagingProvider implements StagingProvider {
 
