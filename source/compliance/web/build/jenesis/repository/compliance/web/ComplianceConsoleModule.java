@@ -6,15 +6,8 @@ import build.jenesis.repository.ui.RepositoryPage;
 import build.jenesis.repository.ui.RepositoryPage.Topic;
 
 /**
- * The screening feature's console surface, contributed through the console's own seam rather than written into it.
- *
- * <p>The screens these modules own - what a scan found, what a maintainer-health sweep recorded, who signed what -
- * read the screening ledgers, and a console that carried them would have to know the screening vocabulary to render
- * them. Contributing them instead means a deployment without this module renders nothing in their place and says
- * so, which is what every absent module already does.
- *
- * <p>It answers to the same name as {@link ComplianceWebModule}, so one setting governs both surfaces of the
- * one concern.
+ * The screening feature's console screens, contributed through the console's module seam. It answers to the same name
+ * as {@link ComplianceWebModule}, so one setting governs both surfaces.
  */
 public final class ComplianceConsoleModule implements ConsoleModuleProvider {
 
@@ -28,8 +21,8 @@ public final class ComplianceConsoleModule implements ConsoleModuleProvider {
         return ComplianceConsoleConfig.class;
     }
 
-    /** The screening pages of every repository. The review queue and the refusals need nothing but this module;
-     *  each of the others renders a ledger another module keeps, and is listed only where that module is present. */
+    /** The screening pages of every repository; a page rendering another module's ledger is listed only where that
+     *  module is present. */
     @Override
     public List<RepositoryPage> repositoryPages() {
         return List.of(

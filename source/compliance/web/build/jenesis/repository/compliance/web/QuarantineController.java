@@ -23,15 +23,10 @@ import org.springframework.web.bind.annotation.ResponseBody;
 import org.springframework.web.bind.annotation.RestController;
 
 /**
- * The quarantine review surface, peeled out of the {@code RepositoryController} monolith into its own thin
- * {@code web} adapter and contributed through the {@code ServerModuleProvider} seam: what the compliance gate held back
- * for a repository - on the publish path or the proxy fetch path - with the verdict and the reasons, so a reviewer can
- * release a held artifact into the layout or discard it - and, beside the queue, what it <em>refused</em> outright,
- * which keeps no bytes and so can never be in a queue at all. Both are recorded by the discovered gate screen into the
- * framework-free {@link QuarantineLog} resolved through {@link Repositories}; this adapter is the only Spring-facing
- * piece, and a release or discard writes an audit event as the privileged mutation it is. Every mapping is the same one
- * it carried in the monolith, gated {@code manage:read} (this GET) or {@code manage:write} (the release and discard) by
- * the security chain before the request is reached; a traversal-unsafe repository or tenant name is a {@code 400}.
+ * The quarantine review API: what the gate held for a repository, on the publish or proxy path, with verdict and
+ * reasons, released into the layout or discarded; and beside it what the gate refused, which keeps no bytes. Both come
+ * from the {@link QuarantineLog} and the gate's review queue; a release or discard is audited. Gated
+ * {@code manage:read} for the GET and {@code manage:write} for the mutations; an unsafe name is a {@code 400}.
  */
 @RestController
 public class QuarantineController {
@@ -49,7 +44,7 @@ public class QuarantineController {
         this.audit = audit;
     }
 
-    /** The first page of the queue - the embedding/test seam. */
+    /** The first page of the queue. */
     public QuarantineView quarantine(String repo, HttpServletRequest request, HttpServletResponse response)
             throws IOException {
         return quarantine(repo, null, MAX_PAGE, request, response);
@@ -67,23 +62,16 @@ public class QuarantineController {
             return null;
         }
         QuarantineLog log = new QuarantineLog(repositories.store(tenant, repo));
-        // One page by cursor: `after` is the previous answer's `next`, absent on the last page. The page is composed
-        // by the gate's ReviewQueue - the same rows the console renders - so the two surfaces cannot drift.
+        // One page of the gate's ReviewQueue by cursor, the rows the console renders.
         ReviewQueue.Page page = ReviewQueue.page(repositories.store(tenant, repo),
                 after == null || after.isBlank() ? null : after, Math.clamp(limit, 1, MAX_PAGE));
         List<ReviewQueue.Row> events = new ArrayList<>();
         for (ReviewQueue.Row row : page.rows()) {
             events.add(served(tenant, repo, row));
         }
-        // A REFUSED artifact keeps no bytes and links no pointer, so it is in the queue above at no point in its life -
-        // the durable QuarantineLog row is its entire record. Surface every recent REJECT row from that same
-        // ledger, a bounded read of the recent page (no re-screen, no fetch): the licence the publish gate denied
-        // pre-commit, the proxy screen's refusal, and the hardened leg's typed structural ones alike. Filtered to the
-        // hardened leg's rows, a publish the gate refused outright would appear in NEITHER list and the only party
-        // who ever learnt of it would be the publisher, from its 422.
+        // Every leg's recent refusals, whose log row is their only record.
         List<ReviewQueue.Row> refusals = new ArrayList<>();
         for (QuarantineLog.Event refusal : log.refusals(REFUSAL_LIMIT)) {
-            // A refusal holds no bytes and therefore no hold record: it carries no kinds by construction.
             refusals.add(served(tenant, repo, new ReviewQueue.Row(refusal.when().toString(), refusal.path(),
                     refusal.coordinate(), refusal.verdict().name(), refusal.reasons(), List.of())));
         }
@@ -102,9 +90,6 @@ public class QuarantineController {
 
     /**
      * Release a held path, or every held file of a version, into the layout.
-     *
-     * <p>The tenant settings it consults come from the tenant's settings documents, read once per tenant into a cached
-     * snapshot: one object per module under a constant prefix, narrow by construction.
      */
     @PostMapping("/api/quarantine/release")
     public void releaseQuarantined(@RequestParam("repo") String repo,
@@ -119,23 +104,15 @@ public class QuarantineController {
         paths.forEach(RepositoryRequests::rejectTraversal);
         GatedRepository gated = new GatedRepository(repositories.writable(tenant, repo));
         for (String path : paths) {
-            // Audit BEFORE the mutation, not after: a crash between the release and a trailing audit write would leave
-            // a privileged mutation unrecorded. The audit trail is best-effort (a failed write never fails the
-            // release), so recording first cannot block the release either - it only guarantees the release is never
-            // silently unaudited.
+            // Audited first, so a crash never leaves it unrecorded; the trail is best-effort and cannot block it.
             audit(tenant, key, AuditActions.QUARANTINE_RELEASE, repo + path);
             gated.release(repositories.formatPath(tenant, repo, path));
         }
         response.setStatus(200);
     }
 
-    /** Discard a held path, or every held file of a version. Answers which were actually held - the same answer the
-     *  console reports - so a reviewer who discarded the wrong row, or raced another reviewer, is told nothing happened
-     *  rather than that the discard happened; a stale discard strips nothing and is not an error.
-     *
-     * <p>The tenant settings it consults come from the tenant's settings documents, read once per tenant into a cached
-     * snapshot: one object per module under a constant prefix, narrow by construction.
-     */
+    /** Discards a held path, or every held file of a version, answering which were still held; a stale discard
+     *  strips nothing and is not an error. */
     @PostMapping("/api/quarantine/discard")
     @ResponseBody
     public Discarded discardQuarantined(@RequestParam("repo") String repo,
@@ -152,8 +129,7 @@ public class QuarantineController {
         List<String> discarded = new ArrayList<>();
         List<String> absent = new ArrayList<>();
         for (String path : paths) {
-            // Audit before the mutation for the same reason as release above: never let a crash end a privileged
-            // discard unrecorded; the best-effort trail cannot block the discard.
+            // Audited first, as the release is.
             audit(tenant, key, AuditActions.QUARANTINE_DISCARD, repo + path);
             (gated.discard(repositories.formatPath(tenant, repo, path)) ? discarded : absent).add(path);
         }
@@ -161,8 +137,7 @@ public class QuarantineController {
         return new Discarded(discarded, absent);
     }
 
-    /** A traversal-unsafe repository, tenant or path name is a {@code 400} - the same mapping the sibling
-     *  {@code ProvenanceController} carries, so a rejected body path never surfaces as a {@code 500}. */
+    /** A traversal-unsafe repository, tenant or path name is a {@code 400}. */
     @ExceptionHandler(IllegalArgumentException.class)
     public void badRequest(HttpServletResponse response) {
         response.setStatus(400);
@@ -174,13 +149,8 @@ public class QuarantineController {
         audit.record(tenant, key == null ? "anonymous" : Authorization.hash(key), action, target);
     }
 
-    /** The review surface's two halves, told apart by whether there is anything left to review: {@code events} are the
-     *  artifacts currently <em>held</em> (the live hold pointers enriched from the log), each releasable or
-     *  discardable; {@code refusals} are the recent {@code REJECT} decisions, which kept no bytes and can only be read.
-     *  A refusal is in {@code refusals} whichever leg reached it - the publish gate's pre-commit denial, the proxy
-     *  screen's, the hardened leg's typed structural refusal - because the durable log row is the only trace a refused
-     *  artifact leaves anywhere. {@code next} resumes the review queue after this page's last hold; null on the
-     *  last page. */
+    /** The review surface: {@code events}, the held artifacts, each releasable or discardable; {@code refusals}, the
+     *  recent refusals of every leg, read-only; {@code next}, the queue's cursor, {@code null} on the last page. */
     public record QuarantineView(List<ReviewQueue.Row> events, List<ReviewQueue.Row> refusals, String next) {
     }
 

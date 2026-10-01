@@ -56,29 +56,21 @@ import io.micrometer.observation.ObservationRegistry;
  */
 public class ComplianceReview extends TenantScope {
 
-    /** How many weakest-scored coordinates one maintainer-health panel page carries - a bound so a repository with a
-     *  very large scored set renders the least-maintained projects first without ever holding the whole set (the rank
-     *  index pages the rest behind a "next" link; a caller past this many follows the page cursor rather than truncating). */
+    /** How many weakest-scored coordinates one maintainer-health page carries; the rank index pages the rest. */
     private static final int HEALTH_PAGE_SIZE = 500;
 
-    /** The most findings rows the console table holds at once. The facet fold still streams the whole ledger, but the
-     *  rendered rows stop here so a repository with a very large finding set does not buffer one row object (and one
-     *  HTML table row) per finding on every console GET; the panel says "showing N of M" and the paged
-     *  {@code /api/findings} serves the full set. */
+    /** The most findings rows the console table shows; the panel says more match, and {@code /api/findings} pages
+     *  them. */
     private static final int MAX_ROWS = 500;
 
-    /** The installed findings ledger, resolved once like the search index; empty when the findings module is
-     *  absent, in which case the vulnerability panel recomputes live and the findings screen says the store is
-     *  not installed. */
+    /** The installed findings ledger; without it the vulnerability panel is assembled live and the findings screen says
+     *  the store is not installed. */
     private final Optional<FindingsProvider> findingsLedger = FindingsProvider.installed();
 
-    /** The installed durable maintainer-health ledger; empty when the health module is absent, in which case the
-     *  health panel says the store is not installed and the rescan is a no-op. */
+    /** The installed maintainer-health ledger; without it the panel says so and a rescan is a no-op. */
     private final Optional<HealthLedgerProvider> healthLedger = HealthLedgerProvider.installed();
 
-    /** The lookup that turns a stored finding's recorded {@code source} into the mark the screen draws for it.
-     *  Resolved once here: discovery is static for the life of the JVM, and the findings table asks it once per
-     *  rendered row. */
+    /** Resolves a finding's recorded {@code source} to the mark the screen draws; discovery is fixed for the JVM. */
     private final FindingMarks marks = installedFindingWriters();
 
     /** The deployment's effective configuration by bare key, or {@code null} to read the stored settings alone. */
@@ -91,10 +83,8 @@ public class ComplianceReview extends TenantScope {
     }
 
     /**
-     * A review that resolves the feeds, signals and policies from {@code configuration}: the node's effective value of
-     * a bare key - an operator's pin over the stored setting over the shipped default - which is what the node's own
-     * gate builds its feeds from. Reading the stored document alone reported a feed an environment variable switched
-     * on as switched off.
+     * A review that resolves the feeds, signals and policies from {@code configuration}, the node's effective value of a
+     * bare key, as the node's own gate does, so a feed switched on by an environment variable reads as on.
      */
     public ComplianceReview(ArtifactStore repositoryStore, CurrentTenant current, ObservationRegistry observations,
                             AuditTrail audit, ConsoleActor actor, UnaryOperator<String> configuration) {
@@ -115,25 +105,10 @@ public class ComplianceReview extends TenantScope {
     }
 
     /**
-     * Everything on this deployment that writes a finding under a name, gathered where all three of them are visible.
-     * The composition is the console's because no single module below it can see all three, and it is deliberately
-     * explicit rather than a discovery pass of its own: a family that starts writing findings must be added here, and
-     * the day it is forgotten its rows render as orphans - loudly wrong - rather than as silently plausible.
-     *
-     * <ul>
-     *   <li>The <b>signal providers</b> come in as contributors: {@code SignalSourceProvider.name()} is literally the
-     *       string an advisory it produced is recorded under, and the provider can also declare a mark, so a feed
-     *       that ships one is drawn with it.</li>
-     *   <li>The <b>maintenance task providers</b> come in as names: the reachability, re-analysis, AI-audit,
-     *       AI-applicability and vulnerability-scan tasks each record findings under their own provider name, but a
-     *       task provider is a scheduler entry rather than a console-facing plug-in family, so it declares no mark
-     *       and its findings draw the generated figure.</li>
-     *   <li>The <b>publish screen's two stage names</b> come in as names too, taken from the module that writes them
-     *       rather than copied: they are installed wherever the gate is, so they must never read as orphaned, and
-     *       they name a stage rather than a plug-in, so no plug-in family would supply them.</li>
-     * </ul>
-     * Anything else a ledger holds - a source from a module this deployment no longer has - is by construction not in
-     * here, which is exactly the orphan the screen shows.
+     * Everything on this deployment that writes findings under a name, composed here, where all three families are
+     * visible: the signal providers as contributors, whose {@code name()} is the recorded source and which may declare a
+     * mark; the maintenance task providers as bare names; and the publish screen's two stage names, taken from the
+     * module that writes them. A family that starts writing findings is added here, or its rows render as orphans.
      */
     private static FindingMarks installedFindingWriters() {
         Set<String> names = new TreeSet<>(MaintenanceTaskProvider.installed());
@@ -142,12 +117,9 @@ public class ComplianceReview extends TenantScope {
         return new FindingMarks(SignalSourceProvider.contributors(), names);
     }
 
-    /** A held artifact as the console reviews it: when it was held, its path and coordinate, the verdict and the
-     *  reasons the gate recorded, and the retroactive hold kinds standing on its coordinate - each drawn with the
-     *  same three-state mark a finding's source gets, so a kind whose module has been uninstalled reads as orphaned
-     *  rather than vanishing. Empty {@code holds} for a gate hold whose findings name no kind (a CVSS threshold, a
-     *  deny-list rule). {@code ecosystem} and {@code bareCoordinate} are what the path's layout describes, the
-     *  coordinate's page is opened by, and {@code null} for a path no installed layout places. */
+    /** A held artifact as the console reviews it: when, path, coordinate, verdict and reasons, and the retroactive hold
+     *  kinds on its coordinate as marks, orphaned for an uninstalled kind. {@code ecosystem} and {@code bareCoordinate}
+     *  open the coordinate's page, {@code null} for a path no installed layout places. */
     public record QuarantineView(String when, String path, String coordinate, String verdict, List<String> reasons,
                                  List<Mark> holds, String ecosystem, String bareCoordinate) {
 
@@ -158,43 +130,25 @@ public class ComplianceReview extends TenantScope {
     }
 
     /**
-     * The mark for a retroactive hold kind: its own generated figure while a provider answers to it, the same figure
-     * in a dashed tile once none does. The rule is {@link FindingMarks}' for a bare installed name, applied to the
-     * other durable string this console renders that outlives the module that wrote it - and it is deliberately the
-     * same three-state vocabulary rather than a second one, because the operator question is the same question
-     * ("which plug-in is this, and is it still here?").
-     *
-     * <p>There is no {@code DECLARED} state here and there should not be: a hold kind is a
-     * {@code HoldReleaseObserver.kind()} token, a store key segment with no mark-bearing seam behind it, exactly like
-     * a maintenance-task provider's name on the findings screen.
-     *
-     * <p>Orphaned never means invalid. The hold still holds - the gate answers from the record, not from
-     * the registry - and this mark is the console saying so out loud, so the operator releasing it knows they are
-     * releasing a hold no installed module can re-evaluate.
+     * The mark for a retroactive hold kind, as {@link FindingMarks} draws a bare installed name: generated while a
+     * provider answers to it, orphaned once none does. An orphaned hold still holds; the mark tells the operator no
+     * installed module can re-evaluate it.
      */
     private static Mark holdMark(ReviewQueue.HeldKind held) {
         return held.installed() ? Marks.generated(held.kind()) : Marks.orphaned(held.kind());
     }
 
-    /** The artifacts the compliance gate is currently holding for a repository, with the verdict and the reasons it
-     *  recorded. Derived from the live {@code /quarantine} store pointers - the hold itself, the truth serving reads
-     *  through {@code withheld()} - and only <em>enriched</em> from the {@link QuarantineLog}: a hold whose log row
-     *  never landed (the row is the un-contained second write of the gate's {@code committed()} leg) still appears,
-     *  with a placeholder verdict, so it is always visible and releasable in the console rather than withheld-but-
-     *  invisible. The log stays the audit trail, never the index. The queue clears itself as each hold is released or
-     *  discarded (the pointer goes), newest first with any log-less holds last. */
+    /** Every artifact the gate holds for a repository, from the live {@code /quarantine} pointers, enriched from the
+     *  {@link QuarantineLog} (see {@link QuarantineLog#reviewQueue()}). */
     public List<QuarantineView> quarantine(String repository) throws IOException {
         return views(repository, ReviewQueue.page(scope(repository), null, Integer.MAX_VALUE - 1));
     }
 
     /**
-     * One bounded page of the review queue: at most {@code limit} holds in path order after the pointer key
-     * {@code after} ({@code null} from the top), and the key to continue from - the gate's {@link ReviewQueue} page,
-     * which the API serves as it is, drawn here with a mark per hold kind.
+     * One page of the gate's {@link ReviewQueue}, as the API serves it, grouped by version and drawn with a mark per
+     * hold kind.
      */
     public QuarantinePage quarantine(String repository, String after, int limit) throws IOException {
-        // The gate composes the page - the same rows the API serves - and this surface only draws each kind as a mark
-        // and reviews a version's files together.
         ReviewQueue.Page page = ReviewQueue.page(scope(repository), after, limit);
         return new QuarantinePage(QuarantineVersion.of(views(repository, page)), page.next());
     }
@@ -219,11 +173,9 @@ public class ComplianceReview extends TenantScope {
     }
 
     /**
-     * The held files of one version, reviewed together: what is released or discarded is the version, since a jar is
-     * no use released without its POM. A file's rows are grouped by the coordinate the gate recorded for it, in the
-     * order the page lists them; one whose log row was lost names only its own path, so it stands alone. The reasons
-     * every file carries are said once, and each file keeps those that are its own - a missing signature names the
-     * file it is missing for.
+     * The held files of one version, released or discarded together, since a jar is no use without its POM: grouped by
+     * the recorded coordinate, the shared reasons said once and each file keeping its own. A file whose log row was lost
+     * stands alone.
      */
     public record QuarantineVersion(String coordinate, List<String> verdicts, List<String> reasons, List<Mark> holds,
                                     List<HeldFile> files, String ecosystem, String bareCoordinate) {
@@ -303,9 +255,8 @@ public class ComplianceReview extends TenantScope {
     }
 
     /**
-     * Who signed this repository's accepted versions, a page at a time - the same {@link SignerIndex} read the
-     * {@code /api/signers} endpoint serves, so the two cannot drift. Bounded: a page of names and one point read
-     * each, never a walk.
+     * Who signed this repository's accepted versions, a page of {@link SignerIndex} at a time, as
+     * {@code /api/signers} serves it.
      */
     public SignersPage signers(String repository, String after, int limit) throws IOException {
         SignerIndex.Page<SignerIndex.Signer> page = SignerIndex.signers(scope(repository), after, limit);
@@ -329,14 +280,9 @@ public class ComplianceReview extends TenantScope {
 
     public void releaseQuarantined(String repository, String path) throws IOException {
         RepositoryRequests.rejectTraversal(path);
-        // Audit before the mutation and with the same action/target the /api QuarantineController emits, so a console
-        // release is never silently unaudited on a crash and reads identically to an API release in the trail.
+        // Audited first, as the API's release is, so a crash leaves it recorded.
         audit(AuditActions.QUARANTINE_RELEASE, repository + path);
-        // The shared HoldLifecycle primitive - the same implementation the HTTP review surface uses, so the two can
-        // never disagree on crash-window ordering: the override markers are made durable BEFORE the hold pointer is
-        // cleared (a crash leaves the hold held-and-overridden; a re-run converges and the enforce sweeps never
-        // re-hold the human's release), and the release pointer is linked only when absent, so a version
-        // re-published with corrected bytes while held is never rolled back to the quarantined blob.
+        // The primitive the API uses, with its crash-window ordering.
         HoldLifecycle.release(scope(repository), path);
     }
 
@@ -345,36 +291,18 @@ public class ComplianceReview extends TenantScope {
      * quarantine log rows, findings document and retroactive {@code holds/} records are reaped, and a retroactive
      * hold's still-held release pointer is evicted so the discarded artifact does not resume serving.
      *
-     * @return whether anything was actually held. The primitive is idempotent - a duplicate or stale discard
-     *         strips no served version's history - but idempotent is not the same as indistinguishable, and the
-     *         answer has to reach the operator. Dropped, the console would report "Discarded {@code <path>}" for a
-     *         path nothing was holding: a reviewer who discarded the wrong row, or raced another reviewer, would be
-     *         told the discard had happened. Returning it is what lets the surface say which of the two occurred.
+     * @return whether anything was held, so a duplicate or stale discard is not reported as one
      */
     public boolean discardQuarantined(String repository, String path) throws IOException {
         RepositoryRequests.rejectTraversal(path);
-        // Audit before the mutation for the same reason as release above: never let a crash end a privileged
-        // discard unrecorded; the best-effort trail cannot block the discard.
+        // Audited first, as the release is.
         audit(AuditActions.QUARANTINE_DISCARD, repository + path);
         return HoldLifecycle.discard(scope(repository), path);
     }
 
     /**
-     * The refused-publish panel beside the {@link #quarantine hold queue}: the recent {@code REJECT} decisions this
-     * repository recorded, newest first, read purely from the durable {@link QuarantineLog} (a bounded page of the
-     * recent ledger, no re-screen and no fetch - a read renders stored state).
-     *
-     * <p>A refusal is the one gate decision with nothing else to see it by: a quarantined artifact is stored
-     * and linked, so it stands in the queue until a reviewer resolves it, while a refused one keeps no bytes and links
-     * no pointer and is therefore never in a queue at all. Until this panel existed the console showed the queue alone,
-     * so a publish the licence gate denied outright - a 422 to the publisher, nothing to anyone else - left the
-     * operator with no record it had happened.
-     *
-     * <p>Every leg's refusal is here, because "what has this repository refused" is one question: the publish gate's
-     * pre-commit denial, the proxy screen's, and the hardened proxy leg's typed structural refusals (oversize, stalled,
-     * drift, unparseable, inspector error), each row's reasons naming which leg answered. The gateway-wide drift alarm
-     * is a live in-JVM signal of the repository <em>server</em> and surfaces on its deployment health/metrics and
-     * verdict API, not from this store-only console read.
+     * The refused-publish panel beside the {@link #quarantine hold queue}: the recent refusals of every leg, newest
+     * first, from {@link QuarantineLog#refusals(int)}.
      */
     public List<Refusal> refusals(String repository, int limit) throws IOException {
         List<Refusal> refusals = new ArrayList<>();
@@ -389,8 +317,7 @@ public class ComplianceReview extends TenantScope {
         return refusals;
     }
 
-    /** The coordinate a held or refused path names, as the layout owning it describes the path - from the path alone,
-     *  with no store read - or empty when no installed layout places it. */
+    /** The coordinate a path names by its owning layout, without a store read, or empty when none places it. */
     private static Optional<ArtifactDescriptor> placed(StoreRepositoryInventory inventory, String path) {
         return inventory.describe(path)
                 .filter(descriptor -> descriptor.ecosystem() != null && descriptor.coordinate() != null);
@@ -407,56 +334,30 @@ public class ComplianceReview extends TenantScope {
         }
     }
 
-    /** A repository's vulnerability scan as the console renders it: whether a live feed answered, the report
-     *  columns the installed signal modules contribute, the vulnerable coordinates ordered by those signals, and the
-     *  instant the ledger was last refreshed against the feeds ({@code null} = never scanned - which the panel must
-     *  render as such, never as "clean"). */
-    /** One page of the scan: {@code next} resumes after it (null on the last page), {@code total} counts the ranked
-     *  lines, {@code partial} says the page was assembled from a bounded window because the ranking has not been
-     *  built yet, {@code scanning} that an explicit rescan is running. */
-
-    /** A repository's vulnerability panel, reporting each vulnerable published coordinate ordered by the installed
-     *  signal columns (the most urgent signal first, then by coordinate) - so a reviewer prioritises what is actually
-     *  being exploited. With the findings module installed this renders purely from the durable ledger (what the
-     *  scans, sweeps and an explicit {@linkplain #rescanVulnerabilities rescan} persisted) - no feed round-trip and no
-     *  write on the read path, so the panel stands when the feeds are unreachable and a render never pays for a scan.
-     *  {@code scanned} is false when no live advisory feed is enabled and nothing served from the store, so an empty
-     *  report reads as "scanning is off", not "nothing is wrong". */
+    /** A repository's vulnerability panel: each vulnerable coordinate ordered by the installed signal columns, from
+     *  the findings ledger alone where it is installed, so the panel stands when the feeds are down. */
     public VulnerabilityReports.VulnerabilityReport vulnerabilities(String repository)
             throws IOException {
         return vulnerabilities(repository, null, null);
     }
 
     /**
-     * A repository's maintainer-health panel as the console renders it: whether the durable health module is
-     * {@code available}, whether a weakest-first {@code ranked} view has been built for this repository at all, each
-     * scored coordinate's OpenSSF Scorecard-style health (weakest first, so a reviewer meets the least-maintained
-     * projects first), and the instant the health was last swept ({@code null} = never scanned, which the panel must
-     * render as such, never as "healthy").
+    /**
+     * A repository's maintainer-health panel: whether the health module is {@code available}, whether a weakest-first
+     * ranking is built, its entries, and when it was last swept ({@code null}: never, shown as such).
      *
-     * <p>{@code entries} is {@code null} - not an empty list - whenever there is no ranking to show, which is both the
-     * not-installed case and the not-yet-built one. The panel therefore cannot fall through to its empty-list branch
-     * and tell a reviewer that no project is unhealthy: it has to render the state it was handed. On a ranked report
-     * {@code lastScanned} is the instant the ranking was built at (never a later sweep it has not folded in); on an
-     * unranked one it is the ledger's own last sweep, which separates "scored, ranking to follow" from "nothing has
-     * ever run here".
+     * <p>{@code entries} is {@code null}, not empty, when there is no ranking, so the panel cannot read as "nothing is
+     * unhealthy". {@code lastScanned} is the ranking's build instant when ranked, the ledger's last sweep otherwise.
+     *
+     * @param scanning whether a rescan is running now
      */
-    /** @param scanning whether a rescan is running right now, so the panel says so instead of showing a stale
-     *                  page with no explanation for why the button did nothing. Mirrors the vulnerability panel. */
     public record MaintainerHealthReport(boolean available, boolean ranked,
                                          List<HealthController.HealthEntryView> entries, String nextCursor, int total,
                                          Instant lastScanned, boolean scanning) {
     }
 
-    /** One weakest-first page of a repository's maintainer-health panel, rendered purely from the durable health ledger
-     *  the sweep (and an explicit {@linkplain #rescanMaintainerHealth rescan}) populated - no deps.dev probe and no write
-     *  on the read path, so the panel stands when deps.dev is unreachable and a render never pays for a scan (Principle
-     *  10). Served from the durable weakest-first rank index the scheduled pass commits, so a repository with a very
-     *  large scored set never buffers and sorts every record in heap on a render; {@code cursor} resumes after a
-     *  previous page (empty for the first). Three states the panel must keep apart, none of which is an empty table:
-     *  {@code available} false is "the health module is not installed"; {@code ranked} false is "no pass has built a
-     *  ranking yet" (with the ledger's last sweep beside it); and a ranked page with no entries is "the ranking is
-     *  built and holds nothing". {@code lastScanned} null means never scanned, rendered as exactly that. */
+    /** One weakest-first page of the maintainer-health panel from the rank index the scheduled pass commits, with no
+     *  probe or write, so it stands when the source is down; {@code cursor} resumes a previous page. */
     public MaintainerHealthReport maintainerHealth(String repository, String cursor) throws IOException {
         if (healthLedger.isEmpty()) {
             return new MaintainerHealthReport(false, false, null, null, 0, null, false);
@@ -464,22 +365,16 @@ public class ComplianceReview extends TenantScope {
         return renderHealth(repository, false, cursor);
     }
 
-    /** Re-scan the repository's published coordinates against the live maintainer-health source - the explicit write
-     *  path behind the panel's rescan action: every held coordinate is probed and what the source scores is upserted
-     *  into the ledger (version-independent, so each coordinate once), then the freshness is stamped, the rank index
-     *  brought current, and the refreshed first page served from the store. The source is built from the same settings
-     *  the repository server reads; with it off the rescan is a no-op that touches no network. */
+    /** Starts the explicit rescan behind the panel's button: each held coordinate is probed once against the
+     *  maintainer-health source and its score upserted, then the freshness stamped. With the source off it touches no
+     *  network. */
     public boolean rescanMaintainerHealth(String repository) throws IOException {
         if (healthLedger.isEmpty()) {
             return false;
         }
         audit("health.rescan", repository);
-        // Off the request thread, for the same reason the vulnerability rescan is. This walks every published
-        // coordinate and asks a live source about each one, so its cost is a network round trip per coordinate -
-        // unbounded in wall-clock terms and answerable only by the source. Run inline it held the request open
-        // until something timed out, and an operator who pressed the button twice started a second full pass over
-        // the first. StoredReport records it running before it starts, so the second press is declined and the
-        // screen can say what is happening.
+        // Off the request: a network round trip per coordinate. StoredReport records it running, so a second press is
+        // declined.
         return StoredReport.compute(scope(repository), HEALTH_SCAN, forThisTenant(() -> {
             MaintainerHealthReport scanned = renderHealth(repository, true, null);
             return StoredReport.Rows.of(List.of(scanned.total() + " coordinates scored"));
@@ -507,8 +402,7 @@ public class ComplianceReview extends TenantScope {
             HealthSource source = HealthSource.resolve(settings()::getProperty);
             if (source != HealthSource.none()) {
                 Set<String> probed = new HashSet<>();
-                // Streamed over the coordinate walk rather than a buffered coordinate list, so re-probing a repository
-                // of millions of versions never materialises the whole fleet in heap just to score project health.
+                // Streamed over the coordinate walk.
                 inventory(repository).coordinates(held -> {
                     if (!probed.add(held.ecosystem() + ' ' + held.coordinate())) {
                         return;                                 // health is version-independent: probe each coordinate once
@@ -529,21 +423,11 @@ public class ComplianceReview extends TenantScope {
                 });
             }
             HealthLedger.scanned(scope(repository)).mark(Instant.now());
-            // The rank index is NOT rebuilt on this request thread: it mutates shared durable state (reclaims a
-            // generation, flips the marker with a plain write) and must stay on the exclusive HealthRankIndexTask's
-            // single-writer lease, never racing a scheduled pass or a sibling rescan. So the rescan's own response
-            // shows whatever ranking currently stands - or, before the first pass, says there is none yet; what it
-            // does NOT do is derive a ranking here to look busy (mirroring /api/health?refresh=true, which likewise
-            // persists and leaves the ranking to the pass).
+            // The rank index is left to its leased pass, which alone may flip its marker.
         }
-        // One weakest-first bounded page of the ranking the exclusive rank-index pass committed - on the rescan render
-        // too, which is why the rescan above deliberately persists and stops. Before that pass has committed one there
-        // is no ranking, and the panel says so rather than deriving one here: a whole-ledger sort on the request
-        // thread would wear a "weakest first" label over whatever the ledger happened to buffer.
+        // A page of the committed ranking; before one exists the panel says so rather than sorting here.
         return switch (ledger.worstFirst(cursor, HEALTH_PAGE_SIZE)) {
-            // No entries at all, not an empty list: the panel has to render this as its own state, so a reviewer can
-            // never read "the ranking has not been computed yet" as "nothing here is unhealthy". The instant is the
-            // ledger's own last sweep, which after a rescan is that rescan - "scored just now, ranking to follow".
+            // No entries, not an empty list; the instant is the ledger's last sweep.
             case HealthLedger.Ranking.NotBuilt notBuilt ->
                     new MaintainerHealthReport(true, false, null, null, 0, notBuilt.scannedAt().orElse(null),
                             scanning(repository));
@@ -552,23 +436,16 @@ public class ComplianceReview extends TenantScope {
                 for (HealthLedger.Located located : ranked.entries()) {
                     entries.add(HealthController.HealthEntryView.of(located));
                 }
-                // The eventually-consistent page carries the ranking's own build-time freshness, so it is never shown
-                // fresher than it is - never a later scan the ranking has not folded in.
+                // The ranking's own build instant, so the page is never shown fresher than it is.
                 yield new MaintainerHealthReport(true, true, entries, ranked.nextCursor(), ranked.total(),
                         ranked.scannedAt().orElse(null), scanning(repository));
             }
         };
     }
 
-    /** The {@link #vulnerabilities(String) vulnerability scan} narrowed by the AI-labelled facets - each a facet
-     *  over the view like the license facets, blank or {@code null} showing everything. {@code reachability} keys
-     *  on the call-graph verdict ({@code reachable} / {@code not-reachable} / {@code unknown}; the {@code ai:} and
-     *  {@code agreed:} spellings key it on the AI classifier's label or the two labels' agreement instead - see
-     *  {@link AiReachabilityLabels#matches}); {@code applicability} keys on the AI applicability opinion
-     *  ({@code applies} / {@code not-applicable} / {@code unknown} - see {@link ApplicabilityLabels#matches}).
-     *  Categorize, never discard: the filters remove nothing from the ledger, and an un-analyzed or un-judged row
-     *  matches the {@code unknown} facet so "everything not proven unreachable (or inapplicable)" never hides what
-     *  no engine has reached yet. */
+    /** The {@link #vulnerabilities(String) vulnerability panel} narrowed by view facets, blank showing everything:
+     *  {@code reachability} as {@link AiReachabilityLabels#matches} and {@code applicability} as
+     *  {@link ApplicabilityLabels#matches} filter. */
     public VulnerabilityReports.VulnerabilityReport vulnerabilities(String repository,
             String reachability, String applicability)
             throws IOException {
@@ -578,9 +455,8 @@ public class ComplianceReview extends TenantScope {
     /** The rows a vulnerability page shows, and the most a page is asked for. */
     public static final int VULNERABLE_PAGE = 200;
 
-    /** How many stored advisory findings per kind the report assembles when the ranking has not been built yet, and
-     *  how many held versions the feed-only report (no findings module) queries - the bound that keeps the screen
-     *  answering before the scheduled index pass has run on a very large repository. */
+    /** How many stored findings per kind the report assembles before the ranking is built, and how many held versions
+     *  a feed-only report queries. */
     static final int LIVE_WINDOW = 500;
 
     /** The name under which the explicit rescan stores its progress and outcome. */
@@ -590,17 +466,8 @@ public class ComplianceReview extends TenantScope {
     public static final String HEALTH_SCAN = "health-scan";
 
     /**
-     * One page of the scan, worst first - assembled by {@link VulnerabilityReports}, which the API's own endpoint
-     * assembles through as well.
-     *
-     * <p>A report this screen built for itself over the same ledger would drift from the API's - down to feed-refresh
-     * loops with opposite failure behaviour over one SPI, so a console reports a clean scan over a feed that never
-     * loaded. With one assembly, a difference between the surfaces cannot be a difference of opinion about what the
-     * repository holds.
-     *
-     * <p>What stays here is what is this console's: its tenant, its settings, and the stored report its own rescan
-     * button runs under - a console button and an API {@code refresh=true} are separate write paths, so each says
-     * which report tracks it.
+     * One page of the panel, worst first, assembled by {@link VulnerabilityReports} as the API's endpoint is; this
+     * surface supplies its tenant, settings and the stored report its rescan button runs under.
      */
     public VulnerabilityReports.VulnerabilityReport vulnerabilities(String repository, String reachability,
                                                                     String applicability, String after, int limit)
@@ -622,10 +489,9 @@ public class ComplianceReview extends TenantScope {
     }
 
     /**
-     * Start the explicit rescan in the background: every held version is queried against the enabled feeds, the
-     * answers are persisted to the findings ledger, the scan stamp moves and the ranking is rebuilt, so the next page
-     * read shows the outcome. Answers whether a run was started - a rescan already running is not started twice. A
-     * deployment without the findings module has nothing to persist; its report is assembled live on every read.
+     * Starts the explicit rescan in the background: every held version is queried against the enabled feeds, the answers
+     * persisted, the scan stamp moved and the ranking rebuilt. Answers whether it started. Without a findings module
+     * there is nothing to persist.
      */
     public boolean rescanVulnerabilities(String repository) throws IOException {
         ArtifactStore store = scope(repository);
@@ -662,17 +528,15 @@ public class ComplianceReview extends TenantScope {
         Findings.scanned(store).mark(Instant.now());
         VulnerabilityRankIndexTask.reindex(store, ledger.get(), signals,
                 DependentsQueryProvider.installed().map(provider -> provider.over(store)));
-        // The feed warnings lead, because Rows.of keeps a bounded sample and a warning truncated away is a warning
-        // nobody sees.
+        // The feed warnings lead, since Rows.of keeps a bounded sample.
         List<String> rows = new ArrayList<>(unrefreshed);
         rows.add(scanned[0] + " versions scanned");
         rows.add(flagged[0] + " with advisories");
         return StoredReport.Rows.of(rows);
     }
 
-    /** The rescan primitive for one held coordinate: query each enabled feed, persist every advisory attributed to
-     *  its feed (best-effort - the panel must not fail on a write; an upsert by feed and advisory id, so labels and
-     *  history survive a refresh), and answer the de-duplicated union exactly as the combined source would. */
+    /** Queries each enabled feed for one coordinate, persists every advisory under its feed (best-effort upserts, so
+     *  labels survive), and answers the de-duplicated union. */
     private static List<AdvisorySource.Advisory> queryAndPersist(Findings ledger,
                                                                  SequencedMap<String, AdvisorySource> feeds,
                                                                  StoreRepositoryInventory.Coordinate held) {
@@ -716,27 +580,15 @@ public class ComplianceReview extends TenantScope {
         return merged;
     }
 
-    /** The findings screen as the console renders it: whether a persistence module is installed, the filtered
-     *  rows (a bounded window of the {@code matched} total), the distinct kind/source/category facets recorded in
-     *  the repository for the filter form, the instant the ledger was last refreshed against the advisory feeds
-     *  ({@code null} = never scanned - rendered as such, never as clean), whether the
-     *  shown rows were {@code truncated} below the match count, and the full {@code matched} total so the view can say
-     *  "showing N of M" and point at the paged {@code /api/findings} for the rest. */
+    /** The findings screen: whether a persistence module is installed, a bounded window of rows, the filter's facets,
+     *  the last feed refresh ({@code null}: never), and whether more match than are shown. */
     public record FindingsPanel(boolean available, List<FindingRow> rows, List<String> kinds, List<String> sources,
                                 List<String> categories, Instant lastScanned, boolean truncated) {
     }
 
-    /** One persisted finding as the console renders it: its coordinate, identity and attribution, its
-     *  categorization, the persisted description and references, the fixed version where one was recorded, its
-     *  first/last sighting, the supersession mark ({@code null} while the finding stands) and any attached labels
-     *  rendered {@code source/name: value}. The review trio drives the AI review queue: {@code reviewable} says
-     *  the row is AI-produced (an {@code ai-candidate} or an {@code applicability} judgement) and so takes a
-     *  confirm/dismiss decision; {@code review} is the recorded decision ({@code confirmed} / {@code dismissed},
-     *  empty while pending); {@code ecosystem} and {@code version} carry the ledger address a decision posts
-     *  back to. {@code mark} is {@code source} resolved against what is installed <em>now</em> - the plug-in's own
-     *  mark, its generated figure, or the dashed orphan figure when nothing answers to that name any more - so a row
-     *  says who reported it and whether that reporter is still here, without the operator cross-checking a module
-     *  list. */
+    /** One persisted finding as the console renders it, its labels as {@code source/name: value}. {@code reviewable}
+     *  marks an AI-produced row that takes a review decision and {@code review} the recorded one; {@code ecosystem} and
+     *  {@code version} address a decision; {@code mark} is the source resolved against what is installed now. */
     public record FindingRow(String coordinate, String ecosystem, String bareCoordinate, String version, String id,
                              String source, Mark mark, String kind, String category, String severity,
                              String description, String references, String fixed, String firstSeen, String lastSeen,
@@ -744,17 +596,10 @@ public class ComplianceReview extends TenantScope {
     }
 
     /**
-     * The findings screen's read: the persisted findings in a repository, filterable by coordinate (bare or
-     * {@code coordinate:version} - the per-artifact view), kind (wire spelling), source, category and severity.
-     * Superseded findings are returned with their mark, never hidden, beside their labels. {@code available} is
-     * false when no findings module is installed, so the screen says so rather than reading as "no findings"; the
-     * facet lists carry the distinct kinds, sources and categories actually recorded, for the filter form.
-     */
-    /**
-     * The findings console: one bounded window of the findings a filter matches, and the filter's choices. The rows
-     * come from the ledger's paged read - the filter index when it stands, else a bounded walk - never a fold over
-     * the whole ledger; the choices come from the index's facet buckets, or from one unfiltered window while no
-     * index has been built. {@code truncated} says more findings match than the window shows.
+     * The findings screen: one bounded window of the findings a filter matches (coordinate bare or
+     * {@code coordinate:version}, kind, source, category, severity), superseded ones included with their mark, from the
+     * ledger's paged read; the choices come from the filter index's facets, or one unfiltered window before it is
+     * built.
      */
     public FindingsPanel findings(String repository, String coordinate, String kind, String source, String category,
                                   String severity) throws IOException {
@@ -801,8 +646,7 @@ public class ComplianceReview extends TenantScope {
             categories.addAll(facets.get().categories());
         } else if (filter.kind() != null || filter.source() != null || filter.category() != null
                 || filter.severity() != null || filter.coordinate() != null) {
-            // No index yet: the choices fold over one unfiltered window, so a narrowed view keeps offering the
-            // other values - bounded exactly as the rows are, never the whole ledger.
+            // No index yet: the choices come from one unfiltered window.
             for (Findings.Located located : ledger.all(Findings.Filter.none(), 0, MAX_ROWS).located()) {
                 kinds.add(located.finding().kind().wire());
                 sources.add(located.finding().source());
@@ -824,24 +668,15 @@ public class ComplianceReview extends TenantScope {
                 source, id, decision, note, Instant.now());
     }
 
-    /** The retroactive-license-enforcement dry-run for a repository - the console blast-radius panel over the discovered
-     *  {@link RetroLicensePlanner} (provided by the {@code compliance/licenses} module): what a fresh enabling pass
-     *  <em>would</em> newly hold under the current license policy, so a reviewer sees the blast radius before turning
-     *  enforcement on. {@code includeUnknown} widens the preview to the riskier {@code denied+unknown} mode (holding
-     *  the coordinates whose license could not be identified) versus the high-confidence {@code denied}-only set. The
-     *  plan is read-only (it reads the declared licenses and hold/override markers, never an artifact blob and never a
-     *  write) and, like the {@code /api/licenses/retro/plan} surface it mirrors, lists only what an enabling pass would
-     *  newly hold. Reports {@code installed=false} (empty held list) when no license-policy module contributes a
-     *  planner - the same graceful degrade the endpoint answers {@code 501} on - so the panel states it is not
-     *  installed. */
+    /** The retroactive licence enforcement dry run ({@link RetroLicensePlanner}) as the blast-radius panel shows it;
+     *  {@code includeUnknown} selects the {@code denied+unknown} mode. {@code installed=false} without a planner. */
     public BlastRadiusView blastRadius(String repository, boolean includeUnknown) throws IOException {
         return blastRadius(repository, includeUnknown, RetroLicensePlanner.installed());
     }
 
     /**
-     * The stored blast-radius report for the mode, or the not-installed / not-computed degrade: the screen reads
-     * what the last pass found and never runs the pass itself - the pass assesses every release in the repository.
-     * The explicit-planner overload is the embedding/test seam for the not-installed degrade.
+     * The stored blast-radius report for the mode, or the not-installed or not-computed state; the screen never runs the
+     * pass, which assesses every release.
      */
     public BlastRadiusView blastRadius(String repository, boolean includeUnknown,
                                        Optional<RetroLicensePlanner> planner) throws IOException {

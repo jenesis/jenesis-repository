@@ -5,8 +5,7 @@ import build.jenesis.repository.settings.Setting;
 import build.jenesis.repository.settings.SettingsContributor;
 
 /**
- * Describes the provenance-attestation sweep's settings, so they surface on the settings screens and in the
- * generated reference exactly when this module is installed - which is what tells an operator the pass exists.
+ * Describes the provenance-attestation sweep's settings.
  */
 public final class ProvenanceSweepSettingsContributor implements SettingsContributor {
 

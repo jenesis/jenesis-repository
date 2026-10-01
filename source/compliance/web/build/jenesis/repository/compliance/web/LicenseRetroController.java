@@ -16,14 +16,9 @@ import org.springframework.web.bind.annotation.ResponseBody;
 import org.springframework.web.bind.annotation.RestController;
 
 /**
- * The retroactive-license-enforcement dry-run surface: a read-only preview of what turning enforcement on would hold in
- * a repository under the current license policy, so an operator reviews the blast radius before flipping the switch.
- * Peeled into the compliance {@code web} adapter beside the quarantine review it feeds, and gated {@code manage:read}
- * (a GET under {@code /api/}) by the security chain before the request is reached; the tenant is the one carried by the
- * managing key, so two tenants never preview each other's space. The plan itself is computed by the discovered
- * {@link RetroLicensePlanner} the {@code compliance/licenses} module provides - with no license-policy module installed
- * the endpoint answers {@code 501}, after the auth check so {@code 401}/{@code 403} still precede - and lists exactly
- * what a fresh enabling pass would newly hold, so the preview and the sweep never disagree.
+ * The retroactive licence enforcement dry run: what enabling enforcement would newly hold in a repository, computed by
+ * the discovered {@link RetroLicensePlanner}, so the preview and the sweep agree. Gated {@code manage:read}, the tenant
+ * the managing key's; without a planner the answer is {@code 501}, after the authorization check.
  */
 @RestController
 public class LicenseRetroController {
@@ -61,9 +56,7 @@ public class LicenseRetroController {
             response.getWriter().write("license policy is not installed on this deployment");
             return null;
         }
-        // The planner reads the licence policy dials through the same chain the running gate resolves them through -
-        // an operator's pin over the stored value over the deployment environment - so a plan is a plan against
-        // the policy in force, not against a stored value a pin above it makes inert.
+        // The dials resolved as the running gate resolves them, pins included.
         RetroLicensePlanner.Plan plan = planner.get().plan(pins.effective(settings, environment),
                 repositories.store(tenant, repo), unknown);
         List<HeldView> held = new ArrayList<>();
@@ -73,8 +66,7 @@ public class LicenseRetroController {
         return new PlanView(unknown ? "denied+unknown" : "denied", plan.count(), held);
     }
 
-    /** The planner, resolved once: whether the licence-policy module is installed cannot change within a JVM,
-     *  and this route answered that question with a module-graph walk on every call. */
+    /** The planner, resolved once, since what is installed is fixed for the JVM. */
     private final Optional<RetroLicensePlanner> planner = RetroLicensePlanner.installed();
 
     /** The dry-run plan for one repository: the mode previewed, how many releases a fresh enabling pass would newly

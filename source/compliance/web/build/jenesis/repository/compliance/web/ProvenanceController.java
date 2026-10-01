@@ -19,21 +19,12 @@ import org.springframework.web.bind.annotation.ResponseBody;
 import org.springframework.web.bind.annotation.RestController;
 
 /**
- * The provenance surface - the signed attestation of an artifact's identity and the verification material bound to it -
- * peeled out of the {@code RepositoryController} monolith into the compliance {@code web} adapter and
- * contributed through the {@code ServerModuleProvider} seam. An attestation is an in-toto Statement over the artifact's
- * SHA-256 (taken from the content-addressed {@code blobs/<sha256>} key, never re-read or re-hashed off the store),
- * signed by the configured {@link ProvenanceSigner}; a transparency-logged signer publishes it to the log before it
- * is served. The signed attestation is cached content-addressed by the artifact's SHA-256 (a
- * {@link ProvenanceAttestationCache} over the same store), so an artifact is signed - and transparency-log-appended -
- * exactly once and every later read serves that one attestation, rather than re-signing and re-appending on every
- * {@code GET} (an append-only log grown without bound, and a signature paid per read); generating it is a
- * security-relevant event, so the first generation is recorded on the {@link AuditTrail}. With no signer
- * configured the endpoints answer {@code 404}, exactly as they did in the monolith. Every route is under {@code /api/}
- * and is gated {@code manage:read} by the security chain before the request is reached; the tenant is the one the
- * routing answers for the request, so two tenants never read each other's attestations, and a traversal-unsafe
- * repository, tenant or path name is a {@code 400}. Provenance is a compliance surface, so it rides the compliance module's discovery rather than a module
- * of its own.
+ * The provenance API: the signed attestation of an artifact's identity and the material bound to it. An attestation is
+ * an in-toto Statement over the artifact's SHA-256, taken from its {@code blobs/<sha256>} key, signed by the configured
+ * {@link ProvenanceSigner} and, for a transparency-logged signer, appended to the log before it is served. It is cached
+ * by that SHA-256 ({@link ProvenanceAttestationCache}), so an artifact is signed and appended once, and the first
+ * generation is audited. With no signer the endpoints answer {@code 404}. Gated {@code manage:read}; the tenant is the
+ * routing's, and an unsafe name is a {@code 400}.
  */
 @RestController
 public class ProvenanceController {
@@ -62,14 +53,11 @@ public class ProvenanceController {
     }
 
     /**
-     * With {@code material}, the attestation together with the verification material bound to it at signing time:
-     * the certificate chain that certified the signing key and the transparency-log entry recording the envelope,
-     * each {@code null} where the signer has none (a bare-key deployment's material is {@link #provenanceKey}).
-     * The material has to travel with the envelope rather than be re-read from {@link #provenanceCertificate} - a
-     * keyless signer's certificate rotates every few minutes, so the currently published chain may no longer be
-     * the one that signed. This is the keyless verify path's input: the chain validates to the pinned Fulcio root,
-     * the log entry's inclusion proof recomputes the log's signed root, and the envelope verifies against the
-     * certified leaf key.
+     * With {@code material}, the attestation with the material bound at signing: the certificate chain and the
+     * transparency-log entry, each {@code null} where the signer has none (a bare key publishes {@link #provenanceKey}).
+     * It travels with the envelope because a keyless signer's certificate rotates every few minutes; the keyless verify
+     * path checks the chain to the pinned Fulcio root, the inclusion proof to the signed root, and the envelope to the
+     * leaf key.
      */
     @GetMapping(value = "/api/provenance", produces = "application/json", params = "material")
     @ResponseBody
@@ -91,12 +79,8 @@ public class ProvenanceController {
                                 entry.inclusionProof().checkpoint())));
     }
 
-    /** The signed attestation of an artifact's identity: an in-toto Statement over the artifact's SHA-256 (taken from
-     *  the content-addressed {@code blobs/<sha256>} key the path resolves to, never re-read or re-hashed off the
-     *  store), signed by the configured signer; a transparency-logged signer publishes it to the log before it is
-     *  served. Signed and appended once and then cached content-addressed - a later read serves the cached attestation
-     *  rather than re-signing and re-appending - and the first generation is audited. {@code null} after setting the
-     *  response status when access is refused, no signer is configured or the artifact is absent. */
+    /** The cached or freshly signed attestation of an artifact, or {@code null} after setting the status when access is
+     *  refused, no signer is configured or the artifact is absent. */
     private ProvenanceSigner.Attestation attested(String repo, String path, String key, HttpServletRequest request,
                                                   HttpServletResponse response) throws IOException {
         String tenant = RepositoryRequests.access(routing, repo, request, response);
@@ -109,21 +93,15 @@ public class ProvenanceController {
         }
         RepositoryRequests.rejectTraversal(path);
         ArtifactStore store = repositories.store(tenant, repo);
-        // The path is the one a client names within the repository; the publication records it as the format lays it
-        // out. The attestation names the artifact by the former, which is how anybody holding it refers to it.
+        // The attestation names the artifact by the path a client uses; the publication by the format's layout.
         Optional<String> located = new Publication(store).located(repositories.formatPath(tenant, repo, path));
         if (located.isEmpty()) {
             response.setStatus(404);
             return null;
         }
-        // The blob is content-addressed: {@code located} is {@code blobs/<sha256>}, so the artifact's SHA-256 is its
-        // own storage key. Take it from the key rather than streaming the whole blob back through a digest just to
-        // recompute a hash the store already holds.
+        // located is blobs/<sha256>, so the hash is read off the key rather than recomputed.
         String sha256 = located.get().substring(located.get().indexOf('/') + 1);
-        // Serve the attestation minted on first generation rather than re-signing on every read: a re-sign per GET
-        // grows the append-only transparency log without bound and pays a signature (and a Rekor round trip) for a
-        // read. The cache is keyed by the artifact's SHA-256, so a path re-pointed to different bytes misses and a
-        // fresh attestation for the new bytes is generated - a changed artifact never serves its predecessor's.
+        // Keyed by the SHA-256, so a path re-pointed to other bytes misses and is attested afresh.
         ProvenanceAttestationCache cache = new ProvenanceAttestationCache(store);
         Optional<ProvenanceSigner.Attestation> cached = cache.read(sha256, path);
         if (cached.isPresent()) {
@@ -145,9 +123,7 @@ public class ProvenanceController {
         } catch (GeneralSecurityException e) {
             throw new IOException("Could not sign the provenance attestation", e);
         }
-        // Cache the signed attestation before serving it and audit the generation: this endpoint is manage:read, but
-        // this branch mints and transparency-log-appends a fresh attestation - a security-relevant event the trail
-        // must record - and every later read serves the cached one without re-signing.
+        // Minting and appending is security-relevant, so the generation is audited.
         cache.write(sha256, path, attestation);
         audit.record(tenant, key == null ? "anonymous" : Authorization.hash(key), "provenance.generate", repo + path);
         return attestation;
@@ -176,8 +152,7 @@ public class ProvenanceController {
         return chain;
     }
 
-    /** A traversal-unsafe repository, tenant or path name is a {@code 400}; the guard came with the endpoints from the
-     *  monolith, where it was a shared controller-level exception handler. */
+    /** A traversal-unsafe repository, tenant or path name is a {@code 400}. */
     @ExceptionHandler(IllegalArgumentException.class)
     public void badRequest(HttpServletResponse response) {
         response.setStatus(400);

@@ -7,20 +7,10 @@ import build.jenesis.repository.store.ArtifactStore;
 import build.jenesis.repository.store.PublicationObserver;
 
 /**
- * Reclaims a cached provenance attestation when the served pointer it describes is unpublished - the content-keyed
- * counterpart of the per-version sidecar deletes {@code StoreRepositoryInventory.evict} performs on the coordinate-keyed
- * spaces. The {@link ProvenanceAttestationCache} keys each attestation by {@code (blob SHA-256, served path)}, so it
- * cannot be reached from a coordinate version; the one lifecycle its key aligns with is the pointer's own. A discovered
- * {@code PublicationObserver} therefore rebuilds the exact cache key from every {@code onDeleted} descriptor - whose
- * blob identity the eviction primitive completes from the pointer - and deletes it, so an evicted (or otherwise
- * unpublished) artifact leaves no attestation behind. The reaper lives in the same module that writes the cache, so
- * the space is reaped exactly where it is populated (the provenance endpoint), and stays declared-and-purge-visible
- * everywhere else through {@link ProvenanceAttestationStorageNamespace}.
- *
- * <p>Best-effort by design: the attestation is derived data, so a delete that races a concurrent read (or fails on a
- * transient store error) costs at most one re-sign on the next request, never correctness - the reaper logs and moves
- * on rather than failing the eviction that notified it. A descriptor with no completed blob hash (a pointer whose blob
- * identity could not be resolved) is skipped: without the content half of the key there is nothing to reclaim here.
+ * Reclaims a cached provenance attestation when its served pointer is unpublished: keyed by blob and path, it follows
+ * the pointer's lifecycle rather than a version's, so this observer rebuilds the key from each {@code onDeleted}
+ * descriptor and deletes it. Best-effort, since a lost delete costs one re-sign; a descriptor without a blob hash is
+ * skipped, and {@link ProvenanceAttestationSweep} clears what this misses.
  */
 public final class ProvenanceAttestationReaper implements PublicationObserver {
 
@@ -28,7 +18,7 @@ public final class ProvenanceAttestationReaper implements PublicationObserver {
 
     @Override
     public void onPublished(ArtifactDescriptor artifact, ArtifactStore store) {
-        // Publishing mints no attestation - the ProvenanceController does that lazily on first read - so nothing to do.
+        // Attestations are minted lazily on first read.
     }
 
     @Override

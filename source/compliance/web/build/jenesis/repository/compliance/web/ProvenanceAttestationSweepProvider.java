@@ -7,11 +7,8 @@ import build.jenesis.repository.maintenance.MaintenanceTask;
 import build.jenesis.repository.maintenance.MaintenanceTaskProvider;
 
 /**
- * Discovers the provenance-attestation reclamation sweep.
- *
- * <p>Daily by default. The residue it clears is derived data that costs storage rather than correctness - nothing
- * serves wrongly while an orphaned attestation sits there - so a slow cadence is the right one: the event-driven
- * reaper handles the ordinary deletion promptly and this pass exists for what the notification could not carry.
+ * Discovers the provenance-attestation reclamation sweep: daily by default, since its residue costs storage rather than
+ * correctness and the reaper handles the ordinary deletion.
  */
 public final class ProvenanceAttestationSweepProvider implements MaintenanceTaskProvider {
 
@@ -25,8 +22,7 @@ public final class ProvenanceAttestationSweepProvider implements MaintenanceTask
 
     @Override
     public Optional<MaintenanceTask> create(UnaryOperator<String> config) {
-        // Off unless turned on, like every other pass. There is no producer to latch here - attestations are written
-        // by the signing path as legitimate data rather than as queue notes - so the flag governs the sweep alone.
+        // Off unless turned on.
         if (!Boolean.parseBoolean(config.apply("provenance-attestation-sweep"))) {
             return Optional.empty();
         }

@@ -14,17 +14,10 @@ import org.springframework.web.servlet.mvc.support.RedirectAttributes;
 import build.jenesis.repository.ui.ConsoleScreen;
 
 /**
- * Every console screen that reads a screening ledger: what a scan found and what a maintainer-health sweep
- * recorded, the findings queue and its review, the review queue for what the gate held, who signed what, and the
- * blast radius a licence policy would have.
- *
- * <p>It sits here rather than in the console because the ledger it reads is this feature's: a deployment that
- * installs no screening has nothing to render, and a console carrying the screen would have to know the vocabulary
- * to say so. Contributed through {@code ConsoleModuleProvider}, the screen simply is not there - which is what a
- * caller already sees from every other absent module.
- *
- * <p>The read is bounded and takes no scan of its own ({@code ComplianceReview.VULNERABLE_PAGE} rows by cursor);
- * the rescan is the write path the render deliberately does not take.
+ * Every console screen that reads a screening ledger - scan findings, maintainer health, the findings and AI review
+ * queues, the gate's review queue and refusals, signers, the licence blast radius - contributed through
+ * {@code ConsoleModuleProvider}, so a deployment without screening has none. Reads are bounded pages; a rescan is a
+ * separate write started in the background.
  */
 @Controller
 @ConsoleScreen
@@ -53,9 +46,7 @@ public class ComplianceScreenController {
         return QUALIFIER + "/vulnerabilities";
     }
 
-    /** The panel's explicit rescan action - the write path the read-only render deliberately does not take: query
-     *  every enabled advisory feed for every published coordinate and persist the findings to the ledger. The scan
-     *  runs in the background; the panel reports it as running until it lands. */
+    /** Starts the explicit vulnerability rescan in the background; the panel reports it running. */
     @PostMapping("/ui/repositories/{repo}/vulnerabilities/rescan")
     public String rescanVulnerabilities(@PathVariable("repo") String repo, RedirectAttributes redirect)
             throws IOException {
@@ -66,10 +57,8 @@ public class ComplianceScreenController {
         return "redirect:/ui/repositories/" + repo + "/vulnerabilities";
     }
 
-    /** The enforcement preview: a read-only dry run of what turning retroactive licence enforcement on
-     *  would newly hold in this repository under the current license policy (the console face of
-     *  {@code GET /api/licenses/retro/plan}). {@code unknown} widens the preview to the riskier {@code denied+unknown}
-     *  mode. The panel degrades to a "not installed" note when no license-policy module contributes a planner. */
+    /** The enforcement preview: what retroactive licence enforcement would newly hold, as
+     *  {@code GET /api/licenses/retro/plan} answers; {@code unknown} selects the {@code denied+unknown} mode. */
     @GetMapping("/ui/repositories/{repo}/enforcement-preview")
     public String enforcementPreview(@PathVariable("repo") String repo,
                                      @RequestParam(name = "unknown", defaultValue = "false") boolean unknown,
@@ -84,16 +73,13 @@ public class ComplianceScreenController {
     public String recomputeEnforcementPreview(@PathVariable("repo") String repo,
                                               @RequestParam(name = "unknown", defaultValue = "false") boolean unknown,
                                               RedirectAttributes redirect) throws IOException {
-        // The pass assesses every release, so the request starts it and the screen shows it running.
         redirect.addFlashAttribute("message", compliance.computeBlastRadius(repo, unknown)
                 ? "Enforcement preview started; this screen shows its result when it finishes."
                 : "An enforcement preview is already running, or no license policy is installed.");
         return "redirect:/ui/repositories/" + repo + "/enforcement-preview?unknown=" + unknown;
     }
 
-    /** The maintainer-health panel: the durable OpenSSF Scorecard-style health the sweep persisted for a repository's
-     *  coordinates, read from the store with no deps.dev probe on the render path. The staleness stamp is
-     *  always shown; the rescan button is offered only to a caller who may take the write path (below). */
+    /** The maintainer-health panel from the persisted ledger, with its staleness stamp. */
     @GetMapping("/ui/repositories/{repo}/health")
     public String health(@PathVariable("repo") String repo,
                          @RequestParam(name = "after", defaultValue = "") String after, Model model)
@@ -103,13 +89,9 @@ public class ComplianceScreenController {
         return QUALIFIER + "/health";
     }
 
-    /** The health panel's explicit rescan action - the write path the read-only render deliberately does not take:
-     *  probe the live maintainer-health source for every published coordinate, upsert what it scores into the ledger,
-     *  stamp the freshness, then land back on the freshly-served panel. */
+    /** Starts the explicit maintainer-health rescan in the background. */
     @PostMapping("/ui/repositories/{repo}/health/rescan")
     public String rescanHealth(@PathVariable("repo") String repo, RedirectAttributes redirect) throws IOException {
-        // Started, not awaited: the pass asks a live source about every published coordinate. The screen shows it
-        // running and the result when it lands, the same way the vulnerability pass and the enforcement preview report.
         redirect.addFlashAttribute("message", compliance.rescanMaintainerHealth(repo)
                 ? "Maintainer-health rescan started; this panel shows its result when it finishes."
                 : "A rescan is already running, or no maintainer-health module is installed.");
@@ -119,8 +101,7 @@ public class ComplianceScreenController {
     /** The finding kind a code audit records its candidates under, which is what the AI review queue lists. */
     private static final String AI_CANDIDATE = "ai-candidate";
 
-    /** The findings screen: the persisted findings ledger for a repository, filterable by coordinate (the
-     *  per-artifact view), kind, source, category and severity - read from the store, no feed queried. */
+    /** The findings screen, filterable by coordinate, kind, source, category and severity. */
     @GetMapping("/ui/repositories/{repo}/findings")
     public String findings(@PathVariable("repo") String repo,
                            @RequestParam(name = "coordinate", defaultValue = "") String coordinate,
@@ -140,9 +121,8 @@ public class ComplianceScreenController {
         return QUALIFIER + "/findings";
     }
 
-    /** The AI review queue: the findings a code audit proposed, waiting for a person to confirm or dismiss them. It is
-     *  the findings ledger filtered to those candidates, served as a page of its own so the queue is listed with the
-     *  quarantine - the other work waiting on a decision - rather than reachable only from a sentence. */
+    /** The AI review queue: the findings ledger filtered to a code audit's candidates, listed beside the other review
+     *  queues. */
     @GetMapping("/ui/repositories/{repo}/ai-review")
     public String aiReview(@PathVariable("repo") String repo, Model model) throws IOException {
         findings(repo, "", AI_CANDIDATE, "", "", "", model);
@@ -150,8 +130,7 @@ public class ComplianceScreenController {
         return QUALIFIER + "/findings";
     }
 
-    /** The AI review queue's confirm/dismiss on an AI-produced finding - a label on the still-present row through
-     *  the shared review contract, never a deletion, and reversible. */
+    /** Confirms or dismisses an AI-produced finding through the review contract. */
     @PostMapping("/ui/repositories/{repo}/findings/review")
     public String reviewFinding(@PathVariable("repo") String repo,
                                 @RequestParam("ecosystem") String ecosystem,
@@ -167,7 +146,6 @@ public class ComplianceScreenController {
                 note.isBlank() ? null : note);
         redirect.addFlashAttribute("message", ("confirmed".equalsIgnoreCase(decision) ? "Confirmed " : "Dismissed ")
                 + id + " on " + coordinate + ":" + version + ".");
-        // A decision made in the AI review queue returns to the queue, where the next candidate waits.
         return "redirect:/ui/repositories/" + repo + ("ai-review".equals(queue) ? "/ai-review" : "/findings");
     }
 
@@ -175,7 +153,6 @@ public class ComplianceScreenController {
     public String quarantine(@PathVariable("repo") String repo,
                              @RequestParam(name = "after", required = false) String after,
                              Model model) throws IOException {
-        // The review queue, one page at a time, paged by pointer key.
         ComplianceReview.QuarantinePage page = compliance.quarantine(repo, after, QUARANTINE_PAGE);
         model.addAttribute("repo", repo);
         model.addAttribute("quarantine", page.versions());
@@ -188,7 +165,6 @@ public class ComplianceScreenController {
     public String signers(@PathVariable("repo") String repo,
                           @RequestParam(name = "after", required = false) String after,
                           Model model) throws IOException {
-        // Who signed the accepted versions, a page at a time; each opens what that signer signed.
         ComplianceReview.SignersPage page = compliance.signers(repo, after, QUARANTINE_PAGE);
         model.addAttribute("repo", repo);
         model.addAttribute("signers", page.signers());
@@ -202,14 +178,11 @@ public class ComplianceScreenController {
                            @RequestParam("signer") String signer,
                            @RequestParam(name = "after", required = false) String after,
                            Model model) throws IOException {
-        // Everything one signer signed here - the blast radius of the key when it is revoked.
         ComplianceReview.SignedPage page = compliance.signedBy(repo, signer, after, QUARANTINE_PAGE);
         model.addAttribute("repo", repo);
         model.addAttribute("signer", page.signer());
         model.addAttribute("abbreviated", page.abbreviated());
-        // The three a keyless identity comes apart into: the template renders them behind an issuer != null test,
-        // so without them the screen shows the escaped wire token and nothing an operator can read - the issuer that
-        // certified the workflow, and the link to the workflow itself.
+        // A keyless identity's parts, which the template renders apart.
         model.addAttribute("issuer", page.issuer());
         model.addAttribute("subject", page.subject());
         model.addAttribute("link", page.link());
@@ -232,8 +205,7 @@ public class ComplianceScreenController {
         return "redirect:/ui/repositories/" + repo + "/quarantine";
     }
 
-    /** Discard the held files of one version, saying which were still held - a reviewer who raced another, or
-     *  discarded the wrong row, is told nothing happened rather than that the discard did. */
+    /** Discards the held files of one version, saying which were still held. */
     @PostMapping("/ui/repositories/{repo}/quarantine/discard")
     public String discardQuarantined(@PathVariable("repo") String repo,
                                      @RequestParam("path") List<String> paths,
@@ -264,10 +236,7 @@ public class ComplianceScreenController {
     private static final int REFUSALS = 200;
 
     /**
-     * What the gate refused outright, most recent first.
-     *
-     * <p>A refused body keeps no bytes and links no pointer, so it is never in the review queue and the durable log
-     * row is its only record - which makes this page an operator's only sight of a denied publish.
+     * What the gate refused outright, most recent first: a refusal's log row is its only record.
      */
     @GetMapping("/ui/repositories/{repo}/refusals")
     public String refusals(@PathVariable("repo") String repo, Model model) throws IOException {

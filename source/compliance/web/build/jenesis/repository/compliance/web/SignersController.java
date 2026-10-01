@@ -14,14 +14,9 @@ import org.springframework.web.bind.annotation.ResponseBody;
 import org.springframework.web.bind.annotation.RestController;
 
 /**
- * Who signed a repository's accepted versions, and everything one signer signed: the read side of the continuity
- * the gate learns as it admits signed versions, so a signer-changed finding's two identities can each be opened,
- * and a key an operator is about to revoke shows what it vouched for before the pin goes. Both answers are pages by
- * cursor over the {@link SignerIndex} the signatures module writes beside its continuity record - the same read
- * the console screen renders, so the two surfaces cannot drift - and nothing here walks the repository.
- *
- * <p>Read-only, gated {@code manage:read} by the security chain; a traversal-unsafe repository or tenant name is a
- * {@code 400}, and so is a signer that is not one (the wire form is {@code <scheme>:<value>}).
+ * Who signed a repository's accepted versions, and everything one signer signed - what a key vouched for before it is
+ * revoked - as pages of the {@link SignerIndex} the console renders too. Read-only, gated {@code manage:read}; an unsafe
+ * name or a signer not of the form {@code <scheme>:<value>} is a {@code 400}.
  */
 @RestController
 public class SignersController {
@@ -34,8 +29,7 @@ public class SignersController {
         this.routing = routing;
     }
 
-    /** A signer the index knows: the wire identity, the hash it is filed under, and - for a keyless identity - the
-     *  issuer and the subject it joins, so a client shows them apart without taking the identity to pieces. */
+    /** A signer: the wire identity, the hash it is filed under, and a keyless identity's issuer and subject apart. */
     public record SignerRow(String signer, String id, String issuer, String subject) {
 
         static SignerRow of(SignerIdentity identity, String id) {

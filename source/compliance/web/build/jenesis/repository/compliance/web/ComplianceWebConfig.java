@@ -20,16 +20,11 @@ import org.springframework.context.annotation.Configuration;
 import org.springframework.core.env.Environment;
 
 /**
- * Wires the compliance-review web adapter into the repository server: the {@link QuarantineController} over the
- * framework-free {@link Repositories} resolver and {@link AuditTrail}, the {@link VulnerabilityController} over the
- * inventory, the discovered {@link AdvisorySource} feed and its {@link AdvisorySignal} report columns, the
- * {@link ProvenanceController} over the resolver and the configured {@link ProvenanceSigner}. Imported through
- * {@code ServerModuleProvider} discovery (see {@link ComplianceWebModule}), never named by the server - so with
- * this module absent the server carries no quarantine, vulnerability or provenance endpoints. The VEX API is
- * <em>not</em> here: it is the VEX store's own web module ({@code build.jenesis.repository.compliance.vex.web}),
- * discovered the same way under the store's own toggle, so this adapter does not require that store. The beans take
- * their dependencies by constructor injection, so the resolved dependencies are the same ones the server already
- * exposes.
+ * Wires the compliance-review API into the repository server - quarantine, vulnerabilities, findings, health,
+ * provenance, signatures, signers, hardening, licence retro - over {@link Repositories}, {@link AuditTrail}, the
+ * discovered {@link AdvisorySource} and {@link AdvisorySignal}s and the configured {@link ProvenanceSigner}. Imported
+ * through {@link ComplianceWebModule}; every controller is registered explicitly. The VEX API is the VEX store's own
+ * web module.
  */
 @Configuration(proxyBeanMethods = false)
 public class ComplianceWebConfig {
@@ -42,23 +37,17 @@ public class ComplianceWebConfig {
 
     @Bean
     public SignatureController signatureController(Repositories repositories, RepositoryRouting routing) {
-        // What the gate made of a publisher's signature, read back from durable state. Registered here rather than
-        // found by a component scan because this module registers every controller explicitly - a scan would make the
-        // surface depend on package layout, and a controller nobody names is one nobody notices is missing.
         return new SignatureController(repositories, routing);
     }
 
     @Bean
     public SignersController signersController(Repositories repositories, RepositoryRouting routing) {
-        // What one signer signed, and who has signed at all - the read side of the continuity the gate learns.
         return new SignersController(repositories, routing);
     }
 
     @Bean
     public HardeningVerdictController hardeningVerdictController(Repositories repositories,
                                                                  RepositoryRouting routing) {
-        // The read-only hardened-leg surface: the recorded verdict, recent typed refusals and the drift alarm,
-        // assembled from durable state only (no re-screen, no fetch). Present exactly when this module is.
         return new HardeningVerdictController(repositories, routing);
     }
 
@@ -67,8 +56,7 @@ public class ComplianceWebConfig {
                                                            AdvisorySource advisories,
                                                            List<AdvisorySignal> advisorySignals,
                                                            Environment environment) {
-        // The attributed per-feed view of the same feeds the merged AdvisorySource bean carries, resolved from the
-        // same configuration lookup, so the findings ledger records which feed reported an advisory.
+        // The same feeds per name, so the ledger records which feed reported an advisory.
         return new VulnerabilityController(repositories, routing, advisories,
                 AdvisorySource.named(Features.namespaced(environment::getProperty)),
                 advisorySignals);
@@ -77,8 +65,7 @@ public class ComplianceWebConfig {
     @Bean
     public FindingsController findingsController(Repositories repositories, RepositoryRouting routing, AuditTrail audit,
                                                  LiveConfig liveConfig) {
-        // A reported finding is decided by the gate a publish into the same tenant meets, read live, so a threshold or
-        // action changed at runtime applies to the next report exactly as it does to the next publish.
+        // The gate a publish into the tenant meets, read live.
         return new FindingsController(repositories, routing, audit, liveConfig::publishGate);
     }
 
@@ -86,15 +73,8 @@ public class ComplianceWebConfig {
     public HealthController healthController(Repositories repositories, RepositoryRouting routing,
                                              HealthSource healthSource,
                                              ObjectProvider<MaintenanceScheduler> maintenance) {
-        // The durable health read renders the ledger the sweep populates; the live source is consulted only on an
-        // explicit refresh=true. The same shared source instance the publish screen and sweep probe, injected by type.
-        //
-        // The scheduler rides in so refresh=true can build the ranking under the health-rank-index lease rather than
-        // leaving a deployment with scheduled-scan off reading "not yet ranked" forever. ObjectProvider, not a
-        // hard dependency: a read-only or embedding deployment runs no scheduler, and the refresh must still persist
-        // there - it simply leaves the ranking to whatever does run one. Passed as a SUPPLIER, not resolved here:
-        // the scheduler bean is initMethod="start", so pulling it while this bean is built would start its workers
-        // earlier in context startup than the deployment intends, for no reason - nothing needs it until a refresh.
+        // The scheduler is optional (absent on a read-only node) and supplied lazily, so its workers do not start
+        // early.
         return new HealthController(repositories, routing, healthSource, maintenance::getIfAvailable);
     }
 

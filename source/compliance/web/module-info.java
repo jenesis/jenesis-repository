@@ -1,14 +1,8 @@
 /**
- * The compliance-review HTTP surface as a removable server feature module: it provides
- * {@link build.jenesis.repository.server.kernel.ServerModuleProvider}, so the repository server imports its configuration
- * through {@code ServiceLoader} discovery and names no quarantine, vulnerability or provenance endpoint. A thin Spring
- * {@code web} adapter over the framework-free gate and advisory SPIs (resolved per tenant-and-repository through
- * {@code Repositories}): the {@code QuarantineController} reviews and releases what the discovered compliance
- * screen held back, the {@code VulnerabilityController} re-scans stored inventory against the discovered advisory feed,
- * and the {@code ProvenanceController} signs and serves the attestation of a stored artifact's identity over the
- * discovered {@code ProvenanceSigner} (never re-read or re-hashed off the store; {@code 404} when no signer is
- * configured). With this module absent the server carries none of the surface and the console hides the panels. Open so
- * Spring can reflect over the controllers and their configuration.
+ * The compliance-review HTTP surface and console screens as a removable module: a
+ * {@link build.jenesis.repository.server.kernel.ServerModuleProvider} and a console module over the gate, advisory and
+ * findings SPIs - quarantine review, vulnerabilities, findings, health, provenance, signatures. Without it the server
+ * carries none of the surface. Open for Spring's reflection.
  *
  * @jenesis.release 25
  * @jenesis.bom pin-repository.properties
@@ -35,8 +29,7 @@ open module build.jenesis.repository.compliance.web {
     requires build.jenesis.repository.audit;
     requires build.jenesis.repository.maintenance;
     requires build.jenesis.repository.settings;
-    // The console seam this module contributes its screens through, and the read services they render. The
-    // console never learns the screening vocabulary: a deployment without this module simply has no such screen.
+    // The console seam this module's screens are contributed through.
     requires build.jenesis.repository.ui;
     requires build.jenesis.repository.ui.store;
     requires thymeleaf.spring6;

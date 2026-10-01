@@ -28,46 +28,22 @@ import org.springframework.web.bind.annotation.ResponseBody;
 import org.springframework.web.bind.annotation.RestController;
 
 /**
- * The findings-ledger query surface: {@code GET /api/findings?repo=} lists every persisted finding in a repository,
- * filterable by coordinate (bare or {@code coordinate:version}), kind, source, category and severity - the durable
- * "what was found, by whom, and how is it categorized" view beside the recomputing {@code /api/vulnerabilities}
- * report. Superseded findings are returned with their mark, never hidden, and every row carries its labels - the
- * categorize-never-discard ledger read raw. Gated {@code manage:read} by the security chain before the request is
- * reached; a traversal-unsafe repository or tenant name is a {@code 400}, an unknown kind or severity spelling a
- * {@code 400}, and a deployment without the findings module answers {@code 501} so absence never reads as "no
- * findings". This is a raw read of the durable ledger, not a derived surface that rebuilds itself: findings accrue as
- * the gate holds an artifact and as the vulnerability sweep scans, so an <em>empty</em> ledger means "nothing has been
- * recorded yet" (a module enabled late over pre-existing artifacts has none until a scan runs), not "definitively
- * clean". The self-healing that back-fills findings over a store that predates the module is owned by the
- * {@code /api/vulnerabilities} report, which walks the live inventory and re-derives into this same ledger; a client
- * that needs the converged view reads there, and treats this endpoint as the persisted record beside it.
+ * The findings ledger's HTTP surface.
  *
- * <p>{@code POST /api/findings/review} is the review-queue mutation: an operator confirms or dismisses an
- * AI-produced finding (an {@code ai-candidate} the code audit emitted, an {@code applicability} judgement), written
- * through the {@link ReviewLabels} contract as an attributed label on the still-present row - a decision, never a
- * deletion, and reversible. Held to AI-produced kinds by that contract: an advisory feed's row or a gate decision
- * is authoritative data no review label may editorialize, and asking answers {@code 400}. Gated
- * {@code manage:write} by the security chain, and each decision writes an audit event as the privileged mutation
- * it is.
+ * <p>{@code GET /api/findings?repo=} lists the persisted findings of a repository, filterable by coordinate (bare or
+ * {@code coordinate:version}), kind, source, category and severity, superseded rows included with their mark and
+ * every row with its labels. An empty ledger means nothing was recorded yet, not clean; {@code /api/vulnerabilities}
+ * back-fills it. Gated {@code manage:read}; an unsafe name or unknown spelling is a {@code 400}, and without the
+ * findings module the answer is {@code 501}.
  *
- * <p>{@code POST /api/findings/waiver} and {@code POST /api/findings/waiver/revoke} are the accept-risk waiver
- * workflow: an operator records (or withdraws) a time-boxed decision to accept a known vulnerability on a coordinate,
- * written through the {@link WaiverLabels} contract as an {@code accept-risk} label on the still-present advisory
- * finding - the same operator-confirmed-candidate model as a review, so the gate and the {@code /api/vulnerabilities}
- * ranking read a durable annotation rather than a side store. Held to advisory-derived kinds by that contract (a
- * licence fact or a gate decision is not a risk a waiver defers, answered {@code 400}), the expiry must be in the
- * future ({@code 400}), and a revoke relabels rather than deletes so the acceptance stops being honoured at once while
- * the finding stays fully present. Gated {@code manage:write} and audited exactly as a review is; the acceptance
- * auto-lapses at its expiry with no sweep having to retract it.
+ * <p>{@code POST /api/findings/review} confirms or dismisses an AI-produced finding through {@link ReviewLabels}, and
+ * {@code POST /api/findings/waiver} and {@code /waiver/revoke} record or withdraw a time-boxed accept-risk waiver
+ * through {@link WaiverLabels}; each is a label on the still-present row, gated {@code manage:write} and audited.
  *
- * <p>{@code POST /api/findings/report} takes findings about a version this repository serves from outside - a
- * scanner a CI job ran over an image or an archive - attributed to the scanner the report names, and treats them as
- * the gate's own through {@link ReportedFindings}: recorded in the ledger under that source, decided by the
- * deployment's gate with its threshold, action, VEX and waivers, and a verdict other than allow withholds the
- * version onto the review queue, where the ordinary release clears it. It answers what it recorded, the verdict and
- * whether the version is now withheld; a version the repository does not serve is a {@code 404}, a malformed report
- * a {@code 400}. It needs a key that may write to the repository - a report can withdraw an artifact from serving,
- * so one anyone could post would be a way to withhold someone else's - and it is audited as the mutation it is.
+ * <p>{@code POST /api/findings/report} takes an outside scanner's findings about a version the repository serves,
+ * through {@link ReportedFindings}: recorded under the scanner's name and decided by the deployment's gate, so a verdict
+ * other than allow withholds the version for review. It needs a key that may write to the repository, since a report
+ * can withdraw an artifact; an unserved version is a {@code 404}, a malformed report a {@code 400}.
  */
 @RestController
 public class FindingsController {
@@ -83,8 +59,7 @@ public class FindingsController {
         this(repositories, routing, audit, FindingsProvider.installed(), gates);
     }
 
-    /** Embedding/test seam: bind an explicit findings provider rather than discovering one. {@code gates} answers
-     *  the publish gate a tenant's reports are decided by. */
+    /** With an explicit findings provider; {@code gates} answers the gate a tenant's reports are decided by. */
     public FindingsController(Repositories repositories, RepositoryRouting routing, AuditTrail audit,
                               Optional<FindingsProvider> findings, Function<String, ComplianceGate> gates) {
         this.repositories = repositories;
@@ -94,17 +69,13 @@ public class FindingsController {
         this.gates = gates;
     }
 
-    /** The most findings one report may carry: a scan of a large image reports a few hundred, and the bound keeps
-     *  one request from writing an unbounded ledger mutation. */
+    /** The most findings one report may carry, bounding one request's ledger write. */
     static final int MAX_REPORTED = 10_000;
 
     /** A scanner's name as a report gives it and the ledger records it: short, lower-case, and safe as a label. */
     private static final Pattern SOURCE = Pattern.compile("[a-z0-9][a-z0-9._-]{0,63}");
 
-    /**
-     * The tenant settings it consults come from the tenant's settings documents, read once per tenant into a cached
-     * snapshot: one object per module under a constant prefix, narrow by construction.
-     */
+    /** Records an outside scanner's report and decides it through the tenant's gate. */
     @PostMapping("/api/findings/report")
     @ResponseBody
     public ReportAnswer report(@RequestParam("repo") String repo,
@@ -190,8 +161,7 @@ public class FindingsController {
         }
         ArtifactStore store = repositories.store(tenant, repo);
         Findings ledger = findings.get().over(store);
-        // A bounded slice, never the whole ledger per GET: the paged overload stops the key-tree
-        // walk one row past the requested window, and `more` tells the client whether another page remains.
+        // A bounded slice; `more` says whether another page remains.
         Findings.Page page = ledger.all(new Findings.Filter(
                 blankToNull(coordinate), kindFilter, blankToNull(source), blankToNull(category), severityFilter,
                 blankToNull(ecosystem)), Math.max(0, offset), Math.clamp(limit, 1, 1000));
@@ -199,13 +169,8 @@ public class FindingsController {
         for (Findings.Located located : page.located()) {
             views.add(FindingView.of(located));
         }
-        // The instant the served list is honestly as-of. A selective query served from the
-        // eventually-consistent findings-filter index carries the index's own build-time scan freshness, so the view is
-        // never labelled fresher than the built index it came from - render that stamp (blank means never scanned, so
-        // null). Only on the live-walk path (a coordinate/bare filter, or a not-yet-built index falling back to the
-        // walk) does the page carry no built stamp; there the live scan stamp is the honest as-of, exactly as the
-        // health/vulnerability rank controllers split it. {@code null} means never scanned, a client renders as such
-        // rather than as "clean". No write on this read path.
+        // An index-served page is as of the index's build, a live-walk page as of the live scan stamp; null is never
+        // scanned.
         Instant lastScanned = page.builtScanStamp() != null
                 ? (page.builtScanStamp().isBlank() ? null : Instant.parse(page.builtScanStamp()))
                 : Findings.scanned(store).read().orElse(null);
@@ -213,11 +178,8 @@ public class FindingsController {
     }
 
     /**
-     * Record an operator's review decision on an AI-produced finding: {@code decision} is {@code confirmed} or
-     * {@code dismissed}, {@code note} an optional reviewer comment; both land as attributed labels through
-     * {@link ReviewLabels#apply}, which refuses a non-AI-produced row - answered as {@code 400}, exactly like an
-     * unknown finding or decision spelling. The row itself is untouched: a dismissal is a mark on a still-present,
-     * still-served finding, never a removal.
+     * Records a review decision ({@code confirmed} or {@code dismissed}, with an optional note) through
+     * {@link ReviewLabels#apply}; a refusal is a {@code 400}.
      */
     @PostMapping("/api/findings/review")
     public void review(@RequestParam("repo") String repo,
@@ -245,10 +207,7 @@ public class FindingsController {
         }
         Findings ledger = findings.get().over(repositories.store(tenant, repo));
         try {
-            // The ledger key concatenates ecosystem and version raw (only the coordinate is URL-encoded), and the
-            // security chain normalizes only the URL path, never these request parameters - so a parent-directory
-            // segment here would aim the label read/write at a store key outside the findings/ subtree within the
-            // repository scope. Reject it, as the sibling quarantine/provenance mutations already do their paths.
+            // These parameters reach the ledger key raw, and the chain normalises only the URL path.
             RepositoryRequests.rejectTraversal(ecosystem);
             RepositoryRequests.rejectTraversal(coordinate);
             RepositoryRequests.rejectTraversal(version);
@@ -264,11 +223,8 @@ public class FindingsController {
     }
 
     /**
-     * Record an operator's accept-risk waiver on an advisory-derived finding: {@code expires} is the ISO-8601 instant
-     * the acceptance stands until (which must be in the future), {@code note} an optional justification; both land as
-     * attributed labels through {@link WaiverLabels#apply}, which refuses a non-advisory row, a missing finding or a
-     * past expiry - answered {@code 400}. The finding itself is untouched: the waiver is a mark on a still-present,
-     * still-served row that the gate and the vulnerability ranking honour only while it is active.
+     * Records an accept-risk waiver until {@code expires}, with an optional note, through {@link WaiverLabels#apply}; a
+     * refusal is a {@code 400}.
      */
     @PostMapping("/api/findings/waiver")
     public void waiver(@RequestParam("repo") String repo,
@@ -318,9 +274,7 @@ public class FindingsController {
     }
 
     /**
-     * Withdraw an operator's accept-risk waiver: relabel it to revoked through {@link WaiverLabels#revoke} so it stops
-     * being honoured at once, leaving the still-present finding to record that the risk was once accepted. A missing
-     * finding is a {@code 400}, exactly as the apply is.
+     * Withdraws an accept-risk waiver through {@link WaiverLabels#revoke}; a missing finding is a {@code 400}.
      */
     @PostMapping("/api/findings/waiver/revoke")
     public void revokeWaiver(@RequestParam("repo") String repo,
@@ -363,10 +317,7 @@ public class FindingsController {
         return value == null || value.isBlank() ? null : value;
     }
 
-    /** The ledger's answer; {@code available} distinguishes an installed-but-empty ledger from the {@code 501} an
-     *  uninstalled module answers. {@code lastScanned} is the instant the advisory sweep or an explicit rescan last
-     *  refreshed this repository's findings against the feeds (the staleness signal), {@code null} when the
-     *  repository was never scanned - rendered as such, never as "clean". */
+    /** The ledger's answer, with the last feed refresh as {@code lastScanned}, {@code null} for never scanned. */
     public record FindingsView(boolean available, List<FindingView> findings, boolean more, Instant lastScanned) {
     }
 

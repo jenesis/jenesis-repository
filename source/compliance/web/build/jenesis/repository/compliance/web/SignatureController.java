@@ -13,25 +13,10 @@ import org.springframework.web.bind.annotation.ResponseBody;
 import org.springframework.web.bind.annotation.RestController;
 
 /**
- * What this deployment made of the publisher's signature on a published artifact: the outcome, who signed it, how
- * much the signature is worth, where the material sat, where the signer's trust came from - and that in the
- * operator's words - and what else the material stated: a keyless signer's issuer and subject, its
- * transparency-log entry. Everything the console's panel shows, since a capability the console renders and the
- * API does not is one a headless tool cannot reach.
- *
- * <p>It lives here, beside the other compliance reads, rather than with the console's own APIs, because the console
- * is not in every composition this product ships - the format and lifecycle harnesses boot the repository without it
- * deliberately - and a capability reachable only through the console is one a headless operator tool, an audit export
- * and the CLI cannot reach at all. The console panel and this answer come from the same
- * {@link SignatureSummaries} read, so neither can drift from the other about what a path's signature is.
- *
- * <p>It re-verifies nothing: the answer is the durable summary recorded when the artifact was published (reads
- * render only stored state). Re-running the cryptography here would cost more the more the page is looked at,
- * and would disagree with the verdict the gate actually reached the moment a key changed.
- *
- * <p>A path naming no coordinate, or one for which nothing was recorded, answers {@code 204}. A version published
- * before signatures were checked here is a different thing from one checked and found wanting, and inventing an
- * outcome for the first would make the two indistinguishable.
+ * What this deployment made of the publisher's signature on an artifact - outcome, signer, grade, where the material
+ * sat, the trust source, and a keyless signer's issuer, subject and log entry - from the same
+ * {@link SignatureSummaries} read the console panel renders, recorded at publish and never re-verified. A path with no
+ * coordinate or no record answers {@code 204}, distinct from a signature found wanting.
  */
 @RestController
 public class SignatureController {
@@ -44,10 +29,8 @@ public class SignatureController {
         this.routing = routing;
     }
 
-    /** The signature as a surface reports it: the section's summary, whole. {@code source} is the trust source's
-     *  name and {@code admittedBy} the same in the operator's words; {@code details} is what else the material
-     *  stated, keyed as the gate's {@code Signature} names them. Each {@code null} or empty on a record from
-     *  before it was kept. */
+    /** The signature summary, whole: {@code source} the trust source's name, {@code admittedBy} it in the operator's
+     *  words, {@code details} what else the material stated; each {@code null} or empty where not recorded. */
     public record SignatureView(String outcome, String signer, String grade, String location, String source,
                                 String admittedBy, Map<String, String> details) {
     }

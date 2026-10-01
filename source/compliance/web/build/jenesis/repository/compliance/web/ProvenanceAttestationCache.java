@@ -8,17 +8,10 @@ import build.jenesis.repository.compliance.ProvenanceSigner;
 import build.jenesis.repository.store.ArtifactStore;
 
 /**
- * A store-backed cache of signed provenance attestations, so the {@link ProvenanceController} signs and
- * transparency-log-appends an artifact's attestation exactly once rather than on every read. A re-sign per {@code GET}
- * grows the append-only transparency log without bound and pays a signature - and a Rekor round trip - for a read; the
- * cache serves the attestation minted on first generation instead.
- *
- * <p>The cache is content-addressed: the key carries the artifact's SHA-256, so a path re-pointed to different bytes
- * never serves the old bytes' attestation. The full attestation is persisted - the envelope <em>and</em>
- * the verification material bound to it at signing time (the certificate chain and the transparency-log entry) - so the
- * material endpoint serves the same signing-time material a re-sign would have rotated, from the one certificate that
- * signed. It is stored as the log's own JSON shapes (hex hashes, base64 body and receipt), read back the way
- * {@code RekorTransparencyLog} reads Rekor's answer, so the round trip needs no reflective record binding.
+ * A store-backed cache of signed provenance attestations, so {@link ProvenanceController} signs and appends an
+ * artifact's attestation once rather than per read, which would grow the transparency log without bound. Keyed by the
+ * artifact's SHA-256, so re-pointed bytes miss. The whole attestation is kept, envelope and signing-time material, in
+ * the log's own JSON shapes.
  */
 final class ProvenanceAttestationCache {
 
@@ -30,27 +23,21 @@ final class ProvenanceAttestationCache {
         this.store = store;
     }
 
-    /** The stored attestation for this artifact ({@code sha256}) and coordinate ({@code path}), or empty when none
-     *  has been generated yet - the miss that drives the one-time sign-and-append. */
+    /** The stored attestation for {@code sha256} and {@code path}, or empty before the first generation. */
     Optional<ProvenanceSigner.Attestation> read(String sha256, String path) throws IOException {
         return store.readVersioned(key(sha256, path)).map(versioned -> deserialize(versioned.content()));
     }
 
-    /** Persist a freshly signed attestation under its content-and-coordinate key. Compare-and-set create: a reader
-     *  that raced the first generation and already stored one wins, and its equivalent attestation is what later reads
-     *  serve - neither racer loses correctness, and the store is never written twice for the same content. */
+    /** Stores a freshly signed attestation create-if-absent, so of two racing generations the first stored wins. */
     void write(String sha256, String path, ProvenanceSigner.Attestation attestation) throws IOException {
         store.writeVersioned(key(sha256, path), serialize(attestation), null);
     }
 
-    /** The store prefix this cache owns - declared by {@link ProvenanceAttestationStorageNamespace} and reaped by
-     *  {@link ProvenanceAttestationReaper} when a served pointer is unpublished. */
+    /** The store prefix this cache owns, declared by {@link ProvenanceAttestationStorageNamespace}. */
     static final String PREFIX = "provenance-attestation";
 
-    /** The content-addressed cache key: the artifact's SHA-256 first (so changed bytes miss and regenerate), then the
-     *  hashed coordinate (so two paths sharing content keep their own per-path statements distinct). Package-private
-     *  so the pointer-deletion reaper rebuilds the identical key from an {@code onDeleted} descriptor's blob hash and
-     *  served path, reclaiming this content-keyed sidecar the one way its (blob, path) identity allows. */
+    /** The cache key: the artifact's SHA-256, then the hashed path, so two paths sharing content keep their own
+     *  statements. The reaper rebuilds it from an {@code onDeleted} descriptor. */
     static String key(String sha256, String path) {
         return PREFIX + "/" + sha256 + "/" + Checksums.sha256(path.getBytes(StandardCharsets.UTF_8));
     }

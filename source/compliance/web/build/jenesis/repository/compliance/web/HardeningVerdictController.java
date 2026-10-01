@@ -14,20 +14,10 @@ import org.springframework.web.bind.annotation.ResponseBody;
 import org.springframework.web.bind.annotation.RestController;
 
 /**
- * The read-only hardening console API: what the now-invisible hardened proxy leg has durably decided for
- * a hardened repository, so an operator can see the full-body screening it enforces. For a coordinate it surfaces the
- * digest-pinned {@code verdict} record, the repository's recent typed {@code refusals} (oversize/stalled/drift/
- * unparseable/inspector-error) and the gateway-wide {@code drift} alarm - all assembled by {@link HardeningVerdicts}
- * from the durable metadata document and {@code QuarantineLog}, <b>never re-screening or re-fetching a byte</b> (a
- * read renders only durable state, and the reader pays for nothing a screen already did). The recorded
- * {@code screenedAt}
- * instant rides along so a caller sees how stale the rendered verdict is - a caller lacking the write role sees no
- * refresh control yet still sees the staleness.
- *
- * <p>Contributed through the same {@code ServerModuleProvider} seam as the sibling {@link QuarantineController}: with
- * this module off the path the endpoint does not exist and the console hides the panel. Every {@code /api/} GET is a
- * deployment-management read the security chain already gates {@code manage:read} before the request is reached, so this
- * controller makes no authorization decision of its own; a traversal-unsafe repository or tenant name is a {@code 400}.
+ * The read-only hardening API: what the hardened proxy leg recorded for a repository - a coordinate's digest-pinned
+ * {@code verdict} with its {@code screenedAt}, the recent typed {@code refusals}, the gateway-wide {@code drift} alarm -
+ * assembled by {@link HardeningVerdicts} from durable state, never re-screening a byte. Gated {@code manage:read}; an
+ * unsafe name is a {@code 400}.
  */
 @RestController
 public class HardeningVerdictController {
@@ -54,8 +44,6 @@ public class HardeningVerdictController {
             return null;
         }
         boolean hardened = repositories.hardened(tenant, repo);
-        // Reuse the durable read paths only: the consolidated metadata document (the recorded verdict) and the
-        // QuarantineLog (the recorded refusals), plus the gateway-wide drift counter. No screen, no fetch.
         HardeningVerdicts verdicts = HardeningVerdicts.over(repositories.store(tenant, repo));
         HardeningVerdicts.View view = (path == null || path.isBlank())
                 ? new HardeningVerdicts.View(null, null, verdicts.refusals(REFUSAL_LIMIT),
@@ -66,16 +54,14 @@ public class HardeningVerdictController {
                 view.refusals(), view.drift());
     }
 
-    /** A traversal-unsafe repository or tenant name is a {@code 400}, mirroring the sibling controllers so a rejected
-     *  name never surfaces as a {@code 500}. */
+    /** A traversal-unsafe repository or tenant name is a {@code 400}. */
     @ExceptionHandler(IllegalArgumentException.class)
     public void badRequest(HttpServletResponse response) {
         response.setStatus(400);
     }
 
-    /** The hardening read as the console renders it: the repository and whether it is a hardened proxy (drives the
-     *  badge/panel gate), the coordinate read, whether it has ever been screened and when (the staleness line), the
-     *  digest-pinned verdict (null when never screened), the recent typed refusals and the drift alarm. */
+    /** The hardening read: whether the repository hardens, the coordinate, when it was screened, its verdict
+     *  ({@code null} if never), the recent refusals and the drift alarm. */
     public record HardeningView(String repo, boolean hardened, String path, boolean screened, String screenedAt,
                                 HardeningVerdicts.RecordedVerdict verdict, List<HardeningVerdicts.Refusal> refusals,
                                 HardeningVerdicts.Drift drift) {

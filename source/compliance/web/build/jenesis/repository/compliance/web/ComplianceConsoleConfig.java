@@ -30,10 +30,7 @@ public class ComplianceConsoleConfig {
         return ConsoleTemplates.resolver(context, QUALIFIER);
     }
     /**
-     * This feature's console read service over its own ledgers.
-     *
-     * <p>The console does not declare it: the screens that read it are contributed from here, so the service is
-     * too, and a deployment without this module has neither.
+     * This feature's console read service over its ledgers, contributed with the screens that read it.
      */
     @Bean
     public ComplianceReview complianceReview(ArtifactStore repositoryStore, CurrentTenant currentTenant,
