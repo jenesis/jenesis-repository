@@ -44,6 +44,12 @@ public final class FilesystemArtifactStoreProvider implements ArtifactStoreProvi
         return Set.of("jenrepo.filesystem.root");
     }
 
+    /** The root and the durability: everything this backend reads. */
+    @Override
+    public Set<String> config() {
+        return Set.of("jenrepo.filesystem.root", DURABILITY_KEY);
+    }
+
     @Override
     public ArtifactStore create(UnaryOperator<String> config) {
         // Never null or blank: requiredConfig() above is validated before this is called.
@@ -56,7 +62,12 @@ public final class FilesystemArtifactStoreProvider implements ArtifactStoreProvi
         } catch (IOException e) {
             throw new UncheckedIOException("Cannot create filesystem store root " + path, e);
         }
-        return new FilesystemArtifactStore(path, durable(config.apply(DURABILITY_KEY)));
+        // The lookup a deployment hands over carries the JVM's system properties already; a caller that hands a
+        // lookup of its own - a tool, a test seeding a store - gets the process's own choice where it names none, so a
+        // JVM started relaxed opens every store it opens relaxed.
+        String durability = config.apply(DURABILITY_KEY);
+        return new FilesystemArtifactStore(path,
+                durable(durability != null ? durability : System.getProperty(DURABILITY_KEY)));
     }
 
     private static boolean durable(String value) {

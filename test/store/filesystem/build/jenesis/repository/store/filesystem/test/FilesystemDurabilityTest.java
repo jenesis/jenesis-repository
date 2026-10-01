@@ -11,8 +11,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 /**
  * The filesystem store forces every write to the disk before it answers unless a deployment says otherwise: the test
- * lanes boot their servers relaxed, so this is where the shipped default is held, read off the provider with
- * nothing set.
+ * lanes run relaxed, so this is where the shipped default is held, read off the provider with nothing set.
  */
 class FilesystemDurabilityTest {
 
@@ -29,9 +28,33 @@ class FilesystemDurabilityTest {
 
     @Test
     void a_deployment_that_sets_nothing_writes_durably() {
-        assertThat(FilesystemArtifactStoreProvider.DURABILITY_DEFAULT).isEqualTo("strict");
-        assertThat(store(null).durable()).as("nothing set").isTrue();
-        assertThat(store("strict").durable()).isTrue();
+        // The test JVM runs relaxed; nothing set means nothing set, so the process's own choice is lifted for this
+        // assertion and put back.
+        String process = System.clearProperty(FilesystemArtifactStoreProvider.DURABILITY_KEY);
+        try {
+            assertThat(FilesystemArtifactStoreProvider.DURABILITY_DEFAULT).isEqualTo("strict");
+            assertThat(store(null).durable()).as("nothing set").isTrue();
+            assertThat(store("strict").durable()).isTrue();
+        } finally {
+            if (process != null) {
+                System.setProperty(FilesystemArtifactStoreProvider.DURABILITY_KEY, process);
+            }
+        }
+    }
+
+    @Test
+    void a_lookup_that_names_nothing_takes_the_processs_own_choice() {
+        String process = System.setProperty(FilesystemArtifactStoreProvider.DURABILITY_KEY, "relaxed");
+        try {
+            assertThat(store(null).durable()).as("the JVM was started relaxed").isFalse();
+            assertThat(store("strict").durable()).as("a lookup that names one wins").isTrue();
+        } finally {
+            if (process == null) {
+                System.clearProperty(FilesystemArtifactStoreProvider.DURABILITY_KEY);
+            } else {
+                System.setProperty(FilesystemArtifactStoreProvider.DURABILITY_KEY, process);
+            }
+        }
     }
 
     @Test
