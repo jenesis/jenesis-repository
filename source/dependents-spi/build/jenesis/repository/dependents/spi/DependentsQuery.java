@@ -5,60 +5,47 @@ import build.jenesis.repository.bounds.InheritedBound;
 import build.jenesis.repository.store.ArtifactStore;
 
 /**
- * The read model of one repository's reverse-dependency index, bound to that repository's scoped store by a
- * {@link DependentsQueryProvider}. It answers the two blast-radius questions the console, the CLI and the
- * {@code /api/dependents} endpoint pose - "who depends on X" and "what coordinates does the index hold" - each a
- * single small-object fetch, never a scan of the tree (the read-first bias the product holds to). The dependents a
- * query reports are the transitive tree the index recorded on its last sweep, so a coordinate below a freshly
- * vulnerable one is included: querying a CVE's coordinate yields every artifact it can reach.
+ * The read model of one repository's reverse-dependency index, bound to its scoped store by a
+ * {@link DependentsQueryProvider}. It answers the blast-radius questions of the console, the CLI and
+ * {@code /api/dependents} - "who depends on X" and "which coordinates does the index hold" - each a small-object fetch,
+ * never a scan. The dependents reported are the transitive tree the last sweep recorded, so querying a CVE's coordinate
+ * yields every artifact that can reach it.
  */
 public interface DependentsQuery {
 
-    /** The coordinates that depend on {@code coordinate} - every artifact whose recorded dependency tree names it -
-     *  sorted, or empty when nothing recorded depends on it. */
+    /** The coordinates whose recorded dependency tree names {@code coordinate}, sorted; empty when none. */
     List<String> dependents(String coordinate) throws IOException;
 
-    /** Every coordinate the index holds a dependent for, sorted - the key set a blast-radius view iterates. Materialises
-     *  the whole key set in heap and so scales with the reverse-dependency graph; a request path pages through
-     *  {@link #coordinates(String, int)} instead, and this whole-set form is for internal folds that genuinely need it. */
+    /** Every coordinate the index holds a dependent for, sorted. Materialises the whole key set, so a request path
+     *  pages through {@link #coordinates(String, int)}; this form is for internal folds that need it. */
     List<String> coordinates() throws IOException;
 
     /**
-     * One bounded page of the coordinates the index holds a dependent for, resumable by {@code cursor} - the paged form
-     * of {@link #coordinates()} so a request (the {@code /api/dependents} enumerate-all and the console picker) never
-     * buffers and sorts the whole reverse-dependency key set in heap on a very large index. The order is a stable,
-     * complete enumeration (the concrete sharded index pages shard-then-coordinate; this default pages the sorted whole
-     * set), and the {@code cursor} is an <em>opaque</em> token each implementation mints and interprets - a caller only
-     * passes back the previous page's {@link CoordinatePage#nextCursor()} until it is {@code null}, never parses it.
+     * One bounded page of the coordinates the index holds a dependent for, resumable by {@code cursor}, so a request
+     * never sorts the whole key set in heap. The order is a stable, complete enumeration, and {@code cursor} is an
+     * opaque token each implementation mints: a caller passes back {@link CoordinatePage#nextCursor()} until it is
+     * {@code null}.
      *
-     * <p><strong>An index pages its own shards; the inherited body is a small-index fallback and says so out loud.</strong>
-     * The {@code default} delegates to {@link #pageByListing}, which slices the whole sorted {@link #coordinates()}
-     * set: it answers the right page, but it materialises the entire reverse-dependency key set to do it - once per
-     * page, so a caller paging N pages buffers the graph N times. So it refuses rather than pretending: past
-     * {@link ArtifactStore#MAX_INHERITED_CHILDREN} coordinates it throws an {@link IllegalStateException} naming the
-     * inheriting class and the remedy. The store-backed reader overrides it to walk the shards one at a time, holding
-     * no more than a single shard plus the page rather than the whole graph; an implementation whose key set genuinely
-     * <em>is</em> in memory calls {@link #pageByListing} by name.
+     * <p><strong>An index pages its own shards.</strong> The inherited default slices the whole sorted
+     * {@link #coordinates()} set through {@link #pageByListing} - materialising the key set once per page - so past
+     * {@link ArtifactStore#MAX_INHERITED_CHILDREN} coordinates it throws, naming the inheriting class and the remedy. A
+     * store-backed reader walks its shards one at a time; an in-memory index calls {@link #pageByListing} by name.
      *
      * @param cursor a previous page's {@link CoordinatePage#nextCursor()}, or {@code null}/empty for the first page
-     * @param limit  the maximum coordinates to return in this page (a non-positive limit yields an empty page)
+     * @param limit the maximum coordinates to return in this page (a non-positive limit yields an empty page)
      * @throws IllegalStateException when the inherited fallback holds more than
-     *                               {@link ArtifactStore#MAX_INHERITED_CHILDREN} coordinates
+     *     {@link ArtifactStore#MAX_INHERITED_CHILDREN} coordinates
      */
     default CoordinatePage coordinates(String cursor, int limit) throws IOException {
         return pageByListing(this, cursor, limit);
     }
 
     /**
-     * Page {@code query} by slicing its whole sorted {@link #coordinates()} set - the explicit, named form of the
-     * fallback {@link #coordinates(String, int)} inherits, for an implementation whose key set is already in memory
-     * (an in-process index, a fixture) and for which a "native" paging would be this code anyway.
-     *
-     * <p>It is bounded, and the bound throws: see {@link InheritedBound}, which holds the ceiling and the refusal for
-     * every SPI that ships this shape.
+     * Page {@code query} by slicing its sorted {@link #coordinates()} set - the named form of the inherited fallback,
+     * for an in-memory key set. Bounded by {@link InheritedBound}.
      *
      * @throws IllegalStateException when the index holds more than {@link ArtifactStore#MAX_INHERITED_CHILDREN}
-     *                               coordinates
+     *     coordinates
      */
     static CoordinatePage pageByListing(DependentsQuery query, String cursor, int limit) throws IOException {
         if (limit <= 0) {
@@ -78,8 +65,8 @@ public interface DependentsQuery {
         return new CoordinatePage(page, null);                  // the whole set is exhausted
     }
 
-    /** One bounded page of a blast-radius enumeration: the coordinates in this page (in the index's stable order) and
-     *  the opaque {@code nextCursor} to resume after, or {@code null} when this is the last page. */
+    /** One bounded page of a blast-radius enumeration: the coordinates in the index's stable order and the opaque
+     *  {@code nextCursor}, or {@code null} on the last page. */
     record CoordinatePage(List<String> coordinates, String nextCursor) {
         public CoordinatePage {
             coordinates = List.copyOf(coordinates);
@@ -87,95 +74,70 @@ public interface DependentsQuery {
     }
 
     /**
-     * Whether the reverse-dependency index has been built at least once for this repository - a {@code Lease}-guarded
-     * sweep has run and committed its result, <em>even to an empty index</em>. It is {@code false} only before the
-     * first sweep: the module is installed but its pass has never run, or has not yet run over a store whose
-     * artifacts predate the plugin. The distinction matters because an empty {@link #coordinates()} is ambiguous - it
-     * reads identically whether nothing depends on anything (an authoritative, swept-empty answer) or the index was
-     * simply never built (a not-yet-derived one). A query surface consults this so it can answer "index not yet
-     * built" instead of serving that false-complete empty result as if it were whole.
+     * Whether a lease-guarded sweep has built the index for this repository at least once, even to an empty index:
+     * {@code false} only before the first sweep. An empty {@link #coordinates()} reads the same whether nothing depends
+     * on anything or the index was never built, so a query surface consults this to answer "not yet built" rather than
+     * serve a false-complete empty result.
      *
-     * <p><strong>It reads the sweep's completion marker, and nothing else.</strong> "Has a sweep committed" is a fact
-     * only a sweep can record, so this asks {@link #builtAt()} - one small object, the same marker whose instant the
-     * staleness surface renders - and reports whether a sweep left a stamp there. It is therefore a single
-     * small-object existence probe, never a scan, on every implementation and not merely on the store-backed one: the
-     * data cannot answer it, and reading the whole coordinate set to ask whether it is empty answers a different
-     * question (it cannot tell a swept-empty index from a never-built one, which is the very ambiguity this method
-     * exists to resolve) at the cost of the entire graph. An implementation that keeps no completion marker inherits
-     * {@link #builtAt()}'s empty and so reports <em>not built</em> - the conservative half: its surface says "not yet
-     * built" rather than presenting an underived view as an authoritative one.
+     * <p>It reads the sweep's completion marker through {@link #builtAt()} - one small object, on every implementation
+     * - because only a sweep can record that it committed; the data cannot tell swept-empty from never-built. An
+     * implementation keeping no marker inherits an empty {@link #builtAt()} and reports not built, the conservative
+     * half.
      */
     default boolean built() throws IOException {
         return builtAt().isPresent();
     }
 
-    /**
-     * The instant the reverse-dependency index was last rebuilt for this repository - the completion stamp a sweep
-     * writes when it commits, so a query surface shows how fresh its rendered blast radius is (staleness is
-     * visible; the reverse-dependency analogue of the findings ledger's scan stamp). This is the
-     * primitive behind {@link #built()}: a present stamp <em>is</em> the built signal, so the two can never disagree.
-     * Empty means no sweep has committed here (rendered "not yet built", never as freshly built); it is also what an
-     * implementation that keeps no such marker inherits, so such an implementation reads as never-built until it
-     * records one. A single small-object read on the read-first path, never a scan; writing it is the scheduled
-     * sweep's job.
-     */
+    /** When the index was last rebuilt for this repository - the stamp a committing sweep writes, so a surface shows
+     *  how fresh its blast radius is. A present stamp is {@link #built()}, so the two never disagree; empty renders
+     *  "not yet built", and is what an implementation keeping no marker inherits. One small-object read; writing it is
+     *  the sweep's job. */
     default Optional<Instant> builtAt() throws IOException {
         return Optional.empty();
     }
 
     /**
-     * The subset of {@code coordinates} - each an ecosystem-neutral {@code group:name:version} a vulnerability report
-     * keys a line on - the reverse-dependency index holds a dependent for, so a caller ranks exactly those lines
-     * reachable: the coordinate is <em>on a build graph</em> (some stored artifact resolves it) rather than only
-     * scored in the abstract. The returned set is bounded by the query set, never by the graph, and an index-absent
-     * or empty answer degrades to "none reachable" - the same graceful degrade the rest of the query surface holds to.
+     * The subset of {@code coordinates} - neutral {@code group:name:version}s a vulnerability report keys lines on -
+     * that the index holds a dependent for, so a caller ranks exactly those lines as on a build graph. Bounded by the
+     * query set, never the graph; an absent or empty index answers "none reachable".
      *
-     * <p><strong>There is deliberately no {@code default}, and that is the contract.</strong> A default could
-     * only be written over {@link #coordinates()} - the whole reverse-dependency key set, neutralised and filtered -
-     * so an implementation that said nothing would inherit a whole-graph materialisation on a <em>request-path
-     * render</em> - a default that is itself the defect. An implementation
-     * must therefore say how it answers a bounded question boundedly; the store-backed reader shards on the neutral
-     * spelling and reads only the {@code min(k, 256)} shards the query set addresses, and an in-memory index answers
-     * from its own map.
-     *
-     * <p>The caller's coordinates are neutral by construction, but an implementation must still put each through
-     * {@link #neutralise} rather than trusting the spelling: it is total and idempotent, so a caller that hands in a
-     * package URL is answered rather than silently missed.
+     * <p><strong>There is deliberately no default.</strong> One could only be written over the whole key set, a
+     * whole-graph materialisation on a request-path render, so an implementation must answer boundedly - a sharded
+     * reader reads only the shards the query set addresses, an in-memory index its own map. Each coordinate goes
+     * through {@link #neutralise}, total and idempotent, so a caller handing in a package URL is answered rather than
+     * missed.
      */
     Set<String> reachable(Collection<String> coordinates) throws IOException;
 
     /**
-     * One bounded page of the versions whose manifest <em>declares</em> a dependency on the package
-     * {@code dependency} - spelled as its ecosystem spells a coordinate, with no version - each with the requirement
-     * the manifest states, resumable by the opaque {@code cursor} a previous page returned.
+     * One bounded page of the versions whose manifest <em>declares</em> a dependency on the package {@code dependency}
+     * - spelled as its ecosystem spells a coordinate, without a version - each with the requirement the manifest
+     * states, resumable by the opaque {@code cursor}.
      *
-     * <p><strong>A second tier, not a wider blast radius.</strong> {@link #dependents} answers from resolved trees:
-     * an artifact that embeds a bill of materials names the exact version it was built against, so "depends on X at
-     * this version" is a fact. A manifest states a requirement - a range, a floor, a tag - and which version a client
-     * installs for it is the client's decision, made later and elsewhere. So a declaration is reported as what it is,
-     * with its requirement beside it, and never joins {@link #reachable}: a vulnerability's count of affected
-     * artifacts stays a count of facts.
+     * <p><strong>A second tier, not a wider blast radius.</strong> {@link #dependents} answers from resolved trees,
+     * where a bill of materials names the exact version built against; a manifest states a requirement (a range, a
+     * floor, a tag) whose resolution is a client's later decision. So a declaration is reported with its requirement
+     * and never joins {@link #reachable}: a vulnerability's count of affected artifacts stays a count of facts.
      *
-     * <p>Answers what the index recorded. A version since deleted or withheld may still be listed until the index
-     * next passes over it, so a surface that discloses names screens each row, exactly as it screens a dependent.
-     * An index that keeps no declared tier inherits an empty page and {@link #declarationsBuiltAt()}'s empty, and so
-     * reads as not yet built rather than as "nothing declares it".
+     * <p>It answers what the index recorded, so a version since deleted or withheld may be listed until the next pass;
+     * a surface that discloses names screens each row. An index keeping no declared tier inherits an empty page and an
+     * empty {@link #declarationsBuiltAt()}, so it reads as not yet built rather than "nothing declares it".
      *
      * @param cursor a previous page's {@link DeclarationPage#nextCursor()}, or {@code null}/empty for the first page
-     * @param limit  the maximum declarations to return (a non-positive limit yields an empty page)
+     * @param limit the maximum declarations to return (a non-positive limit yields an empty page)
      */
     default DeclarationPage declarations(String dependency, String cursor, int limit) throws IOException {
         return new DeclarationPage(List.of(), null);
     }
 
-    /** When the declared tier last completed a pass over every published version, or empty when none has - the
-     *  tier's own staleness stamp beside {@link #builtAt()}, since the two tiers are fed by different passes. */
+    /** When the declared tier last completed a pass over every published version, or empty - its own staleness stamp,
+     *  since the two tiers are fed by different passes. */
     default Optional<Instant> declarationsBuiltAt() throws IOException {
         return Optional.empty();
     }
 
     /** One version's declaration of a dependency: the declaring version's ecosystem, coordinate and version, and the
-     *  requirement its manifest states - empty where it states none. */
+     *  stated requirement - empty where there is none. */
     record Declaration(String ecosystem, String coordinate, String version, String requirement) {
         public Declaration {
             Objects.requireNonNull(ecosystem, "ecosystem");
@@ -185,20 +147,17 @@ public interface DependentsQuery {
         }
     }
 
-    /** One bounded page of {@link #declarations}: the rows and the opaque cursor to resume after, or {@code null}
-     *  when this page is the last. */
+    /** One bounded page of {@link #declarations} and the opaque cursor to resume after, or {@code null} on the last
+     *  page. */
     record DeclarationPage(List<Declaration> declarations, String nextCursor) {
         public DeclarationPage {
             declarations = List.copyOf(declarations);
         }
     }
 
-    /** Best-effort neutralisation of one coordinate, so a single malformed purl from a hostile or bit-rotted SBOM
-     *  never throws out of {@link #reachable(Collection)} and takes the whole vulnerability / blast-radius report with
-     *  it - an un-neutralisable coordinate falls back to its raw form (it simply will not match a report line, which
-     *  is the correct degrade, not a 500). It is the join between the spelling an SBOM used and the spelling a report
-     *  line keys on, so both the shard function and every {@code reachable} implementation map through this one copy
-     *  rather than a drift-prone second. */
+    /** Best-effort neutralisation of one coordinate: a malformed purl from a hostile or bit-rotted SBOM falls back to
+     *  its raw form - matching no report line - rather than failing the whole report. It is the one join between an
+     *  SBOM's spelling and a report line's, shared by the shard function and every {@code reachable}. */
     static String neutralise(String coordinate) {
         try {
             return toNeutralCoordinate(coordinate);
@@ -207,9 +166,9 @@ public interface DependentsQuery {
         }
     }
 
-    /** Map a package URL back onto the {@code group:name:version} a release carries, or return an already-neutral
-     *  coordinate unchanged. Purl form: {@code pkg:<type>/<namespace...>/<name>@<version>} with optional
-     *  {@code ?qualifiers}/{@code #subpath} and percent-encoded segments. */
+    /** Map a package URL ({@code pkg:<type>/<namespace...>/<name>@<version>}, optional
+     *  {@code ?qualifiers}/{@code #subpath}, percent-encoded segments) back onto {@code group:name:version}, or return
+     *  an already-neutral coordinate unchanged. */
     private static String toNeutralCoordinate(String coordinate) {
         if (coordinate == null || !coordinate.startsWith("pkg:")) {
             return coordinate;                                  // already a neutral group:name:version (or blank)
@@ -252,10 +211,9 @@ public interface DependentsQuery {
         return neutral.toString();
     }
 
-    /** Percent-decode one purl segment per RFC 3986: {@code %XX} becomes its byte, everything else (a literal
-     *  {@code +}, which is <em>not</em> a space in a purl - unlike {@code application/x-www-form-urlencoded} that
-     *  {@code URLDecoder} assumes) is copied verbatim, and a malformed escape ({@code %zz}, a trailing {@code %})
-     *  is left literal rather than thrown - a hostile SBOM coordinate must not crash the reachable-set walk. */
+    /** Percent-decode one purl segment per RFC 3986: {@code %XX} becomes its byte; everything else is copied - a
+     *  {@code +} is not a space in a purl, unlike the form encoding {@code URLDecoder} assumes - and a malformed escape
+     *  stays literal. */
     private static String decode(String segment) {
         if (segment.indexOf('%') < 0) {
             return segment;                                     // the common case: nothing to decode, keep '+' literal
