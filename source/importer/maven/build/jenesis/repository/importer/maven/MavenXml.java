@@ -8,18 +8,17 @@ import org.w3c.dom.NodeList;
 import org.xml.sax.SAXException;
 
 /**
- * The two Maven documents the metadata refresh reads, parsed through the shared hardened reader - no document type
- * declaration and no external entity, since the documents come from the (semi-trusted) migration source and an
- * entity expansion must not become a fetch. Both readers navigate direct children only, so a {@code packaging}
- * buried in a plugin configuration or a {@code version} outside the versions block is never mistaken for the value.
+ * The two Maven documents the metadata refresh reads, through the shared hardened reader - no doctype, no external
+ * entity, since they come from the migration source. Both navigate direct children only, so a {@code packaging} in a
+ * plugin configuration or a {@code version} outside the versions block is never mistaken for the value.
  */
 final class MavenXml {
 
     private MavenXml() {
     }
 
-    /** The versions a {@code maven-metadata.xml} lists ({@code metadata > versioning > versions > version}), empty
-     *  when the document does not parse - a broken metadata skips the refresh, it does not fail the walk. */
+    /** The versions a {@code maven-metadata.xml} lists ({@code metadata > versioning > versions > version}), empty when
+     *  it does not parse - a broken metadata skips the refresh. */
     static List<String> versions(byte[] metadata) {
         Element root = parse(metadata);
         Element versions = child(child(root, "versioning"), "versions");
@@ -38,8 +37,8 @@ final class MavenXml {
         return parsed;
     }
 
-    /** A pom's project-level packaging, {@code jar} when it declares none, or {@code null} when the document does
-     *  not parse (the caller then imports the pom as it is but derives no primary artifact from it). */
+    /** A pom's project-level packaging, {@code jar} when it declares none, or {@code null} when it does not parse (the
+     *  pom is then imported without a derived primary artifact). */
     static String packaging(byte[] pom) {
         Element root = parse(pom);
         if (root == null) {

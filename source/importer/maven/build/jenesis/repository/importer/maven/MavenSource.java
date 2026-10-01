@@ -6,25 +6,23 @@ import build.jenesis.repository.importer.ImportFailure;
 import build.jenesis.repository.importer.ImportSource;
 
 /**
- * An {@link ImportSource} over <em>any</em> repository serving the Maven layout on plain HTTP - the vendor-neutral
- * read half of a Maven migration, covering Nexus, Artifactory, a plain httpd/nginx autoindex, a static bucket, or
- * another jenesis, without a vendor API. Three enumeration strategies stack by availability. Where the server exposes
- * a directory listing (an autoindex page), the tree is walked recursively in deterministic depth-first order, every
- * artifact file reported with format {@code maven} at its layout-relative path; {@code maven-metadata.xml} and
- * checksum sidecars are not imported (the target regenerates or derives them). A root that answers a landing page
- * instead of a listing (a Nexus repository root) is followed one hop to the HTML index the page itself advertises,
- * and an index row that links its file at a canonical download URL under another root (Nexus again) is walked as
- * that file - both read off the pages, so the walk stays vendor-neutral. Where listing is disabled, the walk
- * falls back to the repository index Nexus-style servers publish ({@code .index/nexus-maven-repository-index.gz}),
- * streaming its records for coordinates - and refreshes each coordinate through its {@code maven-metadata.xml},
- * importing versions the index lags behind as their pom plus the primary artifact the pom's packaging names. With
- * neither a listing nor an index the walk fails with a clear message. Each artifact streams lazily through the same
- * {@link ProxyFormat.Fetcher} the proxy uses, so an import is tested without the network.
+ * An {@link ImportSource} over any repository serving the Maven layout on plain HTTP - Nexus, Artifactory, an httpd or
+ * nginx autoindex, a static bucket, another jenesis - without a vendor API. Three strategies stack:
+ * <ul>
+ *   <li>a directory listing is walked depth-first in deterministic order, every artifact reported as {@code maven} at
+ *       its layout path; {@code maven-metadata.xml} and checksums are not imported (the target derives them). A root
+ *       that answers a landing page is followed one hop to the index it advertises, and an index row linking its file
+ *       under another root is walked as that file;</li>
+ *   <li>without a listing, the published repository index ({@code .index/nexus-maven-repository-index.gz}) is streamed
+ *       for coordinates, and each coordinate is refreshed through its {@code maven-metadata.xml}, importing versions
+ *       the index lags as their pom plus the primary artifact the pom's packaging names;</li>
+ *   <li>with neither, the walk fails with a clear message.</li>
+ * </ul>
+ * Each artifact streams lazily through the proxy's {@link ProxyFormat.Fetcher}, so an import is testable offline.
  *
- * <p>The walk checkpoints an opaque cursor after each fully-consumed batch: {@code tree:<directory>} after each
- * completed subtree of the listing walk, {@code index:<records>} periodically through the index stream and
- * {@code meta:<coordinate>} after each refreshed coordinate - so an interrupted migration resumes without re-importing
- * what a prior run completed (and the content-addressed store dedupes anything a resumed run repeats).
+ * <p>The walk checkpoints an opaque cursor after each consumed batch - {@code tree:<directory>} per completed subtree,
+ * {@code index:<records>} periodically through the index, {@code meta:<coordinate>} per refreshed coordinate - so an
+ * interrupted migration resumes without re-importing (and the store dedupes any repeat).
  */
 public final class MavenSource implements ImportSource {
 
@@ -33,11 +31,9 @@ public final class MavenSource implements ImportSource {
     private static final int MAX_DEPTH = 64;
     private static final int INDEX_CHECKPOINT_INTERVAL = 512;
 
-    /** The default ceiling on the coordinates the listing-less index walk retains for its {@code maven-metadata.xml}
-     *  refresh pass. A very large source (a full Maven Central mirror is hundreds of thousands of coordinates) would
-     *  otherwise accumulate every coordinate and its version set on the heap for the whole import; past this bound the
-     *  authoritative index records are still imported and only the supplementary metadata refresh of the overflow
-     *  coordinates is skipped. Overridable per source through {@link #withRefreshLimit}. */
+    /** The default ceiling on coordinates the index walk retains for its metadata refresh: a Maven Central mirror holds
+     *  hundreds of thousands. Past it every index record is still imported and only the overflow's metadata refresh is
+     *  skipped. Overridable through {@link #withRefreshLimit}. */
     static final int MAX_REFRESH_COORDINATES = 250_000;
 
     private final URI base;
@@ -73,19 +69,12 @@ public final class MavenSource implements ImportSource {
     }
 
     /**
-     * Cap the coordinates the listing-less index walk retains for its metadata-refresh pass (default
-     * {@link #MAX_REFRESH_COORDINATES}), so a very large source imports with bounded heap. The limit must be stable
-     * across a resumed run, since the retained set is rebuilt by replaying the index stream deterministically.
+     * Cap the coordinates the index walk retains for its metadata refresh (default {@link #MAX_REFRESH_COORDINATES}).
+     * The limit must be stable across a resumed run, since the retained set is rebuilt by replaying the index.
      *
-     * <p><b>A test seam, and the only wither here with no production caller.</b> The bound it moves is a heap
-     * guard whose default is a quarter of a million coordinates, and the overflow behaviour - index records still
-     * imported, only the supplementary metadata refresh skipped - cannot be asserted by building a source that
-     * large. A suite sets it to 2 and drives the same code path in three coordinates.
-     *
-     * <p>It is not an operator dial. {@code ImportRequest} carries a fixed field set shared by every importer, so
-     * a Maven-specific heap knob has no place on it, and there is no configuration path that would fit this without
-     * distorting that SPI. Said here because "public, honoured, and called by nothing" is otherwise the signature
-     * of a knob that was built and never wired up.
+     * <p>A test seam with no production caller: the overflow behaviour cannot be asserted at a quarter of a million
+     * coordinates, so a suite sets it to 2. It is not an operator dial, because {@code ImportRequest} carries one field
+     * set shared by every importer.
      */
     public MavenSource withRefreshLimit(int refreshLimit) {
         if (refreshLimit <= 0) {
@@ -94,9 +83,8 @@ public final class MavenSource implements ImportSource {
         return new MavenSource(base, repository, fetcher, authorization, cursor, refreshLimit);
     }
 
-    /** Whether the repository root answers HTTP at all - any status counts, only a transport failure (an unknown
-     *  host, a refused connection) does not - so a submission naming a bad URL is rejected up front as a bad request
-     *  rather than failing asynchronously. */
+    /** Whether the root answers HTTP at all - any status counts, only a transport failure does not - so a submission
+     *  naming a bad URL is rejected up front. */
     public boolean reachable() {
         try {
             return fetcher.fetch(root(), headers()).isPresent();
@@ -117,8 +105,7 @@ public final class MavenSource implements ImportSource {
                 ? HtmlListing.parse(root, "", new String(listing.body(), StandardCharsets.UTF_8))
                 : List.of();
         if (entries.isEmpty() && listing.status() == 200) {
-            // A Nexus repository root answers a landing page, not a listing - but the page links its actual HTML
-            // index (a same-authority link named like the root itself), so follow that one advertised hop.
+            // A Nexus root answers a landing page linking its HTML index: follow that one advertised hop.
             URI pointer = HtmlListing.listingPointer(root, new String(listing.body(), StandardCharsets.UTF_8));
             if (pointer != null) {
                 ProxyFormat.Fetched hopped = get(pointer);
@@ -139,11 +126,9 @@ public final class MavenSource implements ImportSource {
             walkIndex(consumer, checkpoint, root);
             return;
         }
-        // Neither surface answered - but WHY decides what the operator should do, so not every reason collapses
-        // into "enable directory listing". A root and an index probe that both come back 401/403 is a refused
-        // credential, and a 5xx or a throttle is "not now"; telling either of those to switch autoindex on sends the
-        // operator after the wrong thing. Only an honest absence (a 404/410 - nothing published at either surface)
-        // keeps the actionable no-listing-no-index message.
+        // Neither surface answered; the reason decides what the operator should do. 401/403 on both is a refused
+        // credential, a 5xx or throttle is "not now"; only an honest absence (404/410) keeps the
+        // enable-listing-or-index message.
         ImportFailure.Kind kind = ImportFailure.classify(index.status());
         if (kind != ImportFailure.Kind.MISSING) {
             throw ImportFailure.status(index.status(), properties, "Repository index probe");
@@ -154,12 +139,9 @@ public final class MavenSource implements ImportSource {
                 + ") - enable directory listing on the source or have it publish a Maven repository index");
     }
 
-    /**
-     * The directory-listing walk: each directory's entries are visited in sorted order (files and subdirectories
-     * interleaved), so the depth-first emission order is deterministic and a resume cursor - the last fully-consumed
-     * directory - prunes exactly the subtrees a prior run completed. Server-internal dot entries ({@code .index/},
-     * {@code .meta/}) are not repository content and are not descended into.
-     */
+    /** The listing walk: each directory's entries in sorted order, files and subdirectories interleaved, so the
+     *  depth-first order is deterministic and the resume cursor - the last fully consumed directory - prunes exactly
+     *  the completed subtrees. Server-internal dot entries ({@code .index/}, {@code .meta/}) are not descended into. */
     private void walkTree(Asset consumer, Checkpoint checkpoint, String path, String rawPath,
                           List<HtmlListing.Entry> entries, String resume, int depth) throws IOException {
         for (HtmlListing.Entry entry : entries) {
@@ -193,9 +175,8 @@ public final class MavenSource implements ImportSource {
         }
     }
 
-    /** Whether {@code path} precedes {@code cursor} in the walk's depth-first order. Plain string order would place
-     *  {@code foo-bar} before {@code foo/x} although the walk descends into {@code foo/} first, so the separator
-     *  ranks below every other character. */
+    /** Whether {@code path} precedes {@code cursor} in the walk's depth-first order. String order would put
+     *  {@code foo-bar} before {@code foo/x}, so the separator ranks below every other character. */
     private static boolean walkedBefore(String path, String cursor) {
         for (int index = 0; index < Math.min(path.length(), cursor.length()); index++) {
             char left = path.charAt(index), right = cursor.charAt(index);
@@ -206,8 +187,8 @@ public final class MavenSource implements ImportSource {
         return path.length() < cursor.length();
     }
 
-    /** Repository content worth importing: not the {@code maven-metadata.xml} the target regenerates from the
-     *  imported version folders, and not a checksum sidecar (the store derives checksums from the blob itself). */
+    /** Content worth importing: neither the {@code maven-metadata.xml} the target regenerates nor a checksum the store
+     *  derives. */
     private static boolean imported(String name) {
         return !name.startsWith("maven-metadata.xml")
                 && !name.endsWith(".sha1") && !name.endsWith(".md5")
@@ -215,16 +196,13 @@ public final class MavenSource implements ImportSource {
     }
 
     /**
-     * The listing-less fallback: stream the published repository index once, importing each record's file (a
-     * classifier-less record also implies its pom, emitted alongside), then refresh every seen coordinate through its
-     * {@code maven-metadata.xml} - the index is published in batches and lags what the repository actually holds, so
-     * the metadata is the authority on versions once a coordinate is known. A resume replays the index stream without
-     * re-importing (rebuilding the coordinate set costs no downloads) and continues where the cursor points.
+     * The listing-less fallback: stream the index once, importing each record's file (a classifier-less record implies
+     * its pom too), then refresh every coordinate through its {@code maven-metadata.xml}, which is authoritative on
+     * versions since the index is published in lagging batches. A resume replays the index without re-importing and
+     * continues at the cursor.
      *
-     * <p>The retained coordinate set is bounded by the {@link #withRefreshLimit refresh limit} ({@link
-     * #MAX_REFRESH_COORDINATES} by default), so a very large source cannot grow it (or the pom-dedup set) without
-     * bound: every index record is still emitted, but the {@code maven-metadata.xml} refresh of coordinates beyond
-     * the limit is skipped - best-effort by design, keeping the import's heap bounded while the authoritative index
+     * <p>The retained coordinates are bounded by the {@link #withRefreshLimit refresh limit}: every record is still
+     * emitted, but coordinates past the limit are not refreshed - best effort, keeping heap bounded while the index
      * content stays complete.
      */
     private void walkIndex(Asset consumer, Checkpoint checkpoint, URI root) throws IOException {
@@ -249,10 +227,8 @@ public final class MavenSource implements ImportSource {
                 consumed++;
                 RepositoryIndex.Gav gav = RepositoryIndex.coordinate(record);
                 if (gav != null) {
-                    // Track this coordinate's versions for the refresh pass, but admit a *new* coordinate only while
-                    // under the refresh limit; a coordinate already tracked keeps accumulating its versions. Past the
-                    // limit the record below is still emitted - only the metadata refresh of the overflow coordinate is
-                    // skipped - so the authoritative index import stays complete under a bounded heap.
+                    // A new coordinate is tracked only under the limit; a tracked one keeps accumulating versions. The
+                    // record below is emitted either way.
                     Set<String> versions = indexed.get(gav.artifactPath());
                     if (versions == null && indexed.size() < refreshLimit) {
                         versions = new HashSet<>();
@@ -286,9 +262,8 @@ public final class MavenSource implements ImportSource {
         checkpoint.reached(null);
     }
 
-    /** The {@code maven-metadata.xml} refresh of one coordinate ({@code <group-path>/<artifact>}): a version the
-     *  metadata lists beyond the index's records is imported as its pom plus the primary artifact the pom's
-     *  packaging names (classifier sidecars are unknowable without a listing - honestly scoped). */
+    /** The {@code maven-metadata.xml} refresh of one coordinate: a version beyond the index's records is imported as
+     *  its pom plus the primary artifact its packaging names; classifier sidecars cannot be known without a listing. */
     private void refresh(Asset consumer, URI root, String coordinate, Set<String> indexed) throws IOException {
         ProxyFormat.Fetched metadata = get(URI.create(root + coordinate + "/maven-metadata.xml"));
         if (metadata.status() != 200) {
@@ -318,28 +293,16 @@ public final class MavenSource implements ImportSource {
     }
 
     /**
-     * The coordinate's Gradle Module Metadata descriptor, when it publishes one.
+     * The coordinate's Gradle Module Metadata descriptor, when it publishes one. Unlike a classifier sidecar, it sits
+     * at a path derivable from the coordinate, and missing it would silently change resolution - Gradle falls back to
+     * the POM and picks another variant - rather than fail a build.
      *
-     * <p>This walk is the listing-less fallback, and it imports what it can derive from the coordinate: the POM, and
-     * the one artifact the POM's {@code packaging} names. Classifier sidecars are genuinely unknowable without a
-     * listing and the walk says so. <b>The descriptor is not in that category</b>, and the difference matters: a
-     * missing classifier produces a missing artifact, which a build reports. A missing {@code .module} produces a
-     * <em>different resolution</em> - Gradle falls back to the POM and silently picks another variant - for every
-     * Gradle consumer of the migrated coordinate, with the build going green either way. It also sits at a path
-     * derivable from the coordinate, exactly like the POM this loop already fetches.
+     * <p>Fetched eagerly, since most coordinates publish none and a miss is the ordinary answer: one conditional
+     * {@code GET} per version on this path.
      *
-     * <p>Fetched eagerly rather than emitted lazily like the packaging artifact, because most coordinates publish no
-     * descriptor at all: a miss here is the ordinary answer, not a failure, and a lazy supplier would turn it into one
-     * at open time. The cost is one conditional {@code GET} per version on this path, which is the price of not
-     * silently changing what a migrated coordinate resolves to.
-     *
-     * <p><b>Only an upstream that answered a miss may be read as "publishes none."</b> Anything else - a transport
-     * failure, a {@code 500}, a {@code 429} under a shared egress - is this walk having failed to read what the
-     * upstream has, and treating that as the absence would reintroduce the very loss this method exists to close, one
-     * flaky response at a time and with nothing in the migration report to say so. So it fails the walk instead, which
-     * an import can afford: the pass is resumable from its own checkpoint and idempotent on replay, so a failure
-     * delays a migration where a silent skip would quietly change what every Gradle consumer of the coordinate
-     * resolves.
+     * <p><b>Only an upstream that answered a miss means "publishes none."</b> A transport failure, a {@code 500} or a
+     * {@code 429} fails the walk instead - the pass is resumable and idempotent, so a failure delays a migration where
+     * a silent skip would change what every Gradle consumer resolves.
      */
     private void module(Asset consumer, URI root, String prefix) throws IOException {
         String path = prefix + ".module";
@@ -358,9 +321,8 @@ public final class MavenSource implements ImportSource {
         consumer.accept(FORMAT, path, () -> new ByteArrayInputStream(descriptor.body()));
     }
 
-    /** Whether a shared pom path should be emitted now, deduplicating across the index records that reference it while
-     *  the tracking set is under the refresh limit; past the limit an untracked pom re-emits (the content-addressed
-     *  store dedupes the redundant download) rather than growing the set without bound. */
+    /** Whether a shared pom is emitted now: deduplicated while the tracking set is under the refresh limit; past it an
+     *  untracked pom re-emits (the store dedupes the download) rather than growing the set. */
     private boolean emitPom(Set<String> pomEmitted, String pom) {
         if (pomEmitted.contains(pom)) {
             return false;
@@ -380,8 +342,8 @@ public final class MavenSource implements ImportSource {
         consumer.accept(FORMAT, path, () -> open(URI.create(root + path)));
     }
 
-    /** An {@code index:} cursor's record count; a garbled cursor replays the stream from the start rather than
-     *  throwing out of the walk - an import is idempotent, so re-importing is safe where failing is not. */
+    /** An {@code index:} cursor's record count; a garbled cursor replays from the start rather than failing, since an
+     *  import is idempotent. */
     private static long records(String cursor) {
         try {
             return Long.parseLong(cursor);
@@ -390,8 +352,8 @@ public final class MavenSource implements ImportSource {
         }
     }
 
-    /** The walk's root: the base URL with the repository appended as a path ({@code .} or blank when the URL already
-     *  points at the tree), always with a trailing slash so relative listing links resolve against it. */
+    /** The walk's root: the base URL plus the repository as a path ({@code .} or blank when the URL is the tree),
+     *  always with a trailing slash so relative links resolve against it. */
     private URI root() {
         StringBuilder url = new StringBuilder(base.toString());
         while (!url.isEmpty() && url.charAt(url.length() - 1) == '/') {

@@ -6,13 +6,10 @@ import build.jenesis.repository.importer.ImportSource;
 import build.jenesis.repository.importer.ImportSourceProvider;
 
 /**
- * Builds a {@link MavenSource} for a {@code "maven"} migration - any server exposing the Maven layout over plain
- * HTTP, no vendor API. Discovered by the server through {@code ServiceLoader} over {@link ImportSourceProvider}.
- * Every asset of a Maven tree is a {@code maven} artifact, so no ecosystem format is required up front; the
- * repository is the path of the tree under the base URL ({@code .} when the URL already points at the tree root).
- * The root is probed once at creation: a URL whose host does not answer at all builds no source, so the submission
- * is rejected as a bad request instead of failing asynchronously - while an answering host with listing disabled
- * (a 403 or 404 on the root) is fine, since the walk falls back to the repository index.
+ * Builds a {@link MavenSource} for a {@code "maven"} migration - any server exposing the Maven layout over plain HTTP.
+ * The repository is the tree's path under the base URL ({@code .} when the URL is the tree root). The root is probed
+ * once: a host that does not answer at all builds no source, so the submission is rejected as a bad request; an
+ * answering host with listing disabled is fine, since the walk falls back to the index.
  */
 public final class MavenSourceProvider implements ImportSourceProvider {
 

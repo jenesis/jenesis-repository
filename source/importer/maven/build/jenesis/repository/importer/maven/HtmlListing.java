@@ -3,30 +3,26 @@ package build.jenesis.repository.importer.maven;
 import module java.base;
 
 /**
- * Extracts a directory listing from an autoindex page the way every generator serves one - nginx, Apache httpd,
- * Nexus, Artifactory - without pinning any of their markups. Every {@code href} on the page is resolved against the
- * listing's own URL and an entry survives two ways: a <em>direct child</em> of the listing (one more path segment, a
- * trailing slash marking a subdirectory), or a <em>canonical file link</em> - same scheme and authority, no query or
- * fragment, whose path ends with the walked directory's own relative path plus one file name, the way Nexus's index
- * rows link each file at its download URL under a different root. Everything else - parent links, Apache's
- * {@code ?C=N;O=D} sort links, static assets with cache-busting queries, links to other hosts, fragments - is
- * navigation chrome to ignore. Entries are deduplicated by name and sorted, so a walk over them is deterministic and
- * its resume cursor stable.
+ * Extracts a directory listing from an autoindex page as any generator serves one - nginx, Apache httpd, Nexus,
+ * Artifactory - without pinning a markup. Every {@code href} is resolved against the listing's URL and kept if it is a
+ * <em>direct child</em> (one more segment, a trailing slash marking a subdirectory) or a <em>canonical file link</em> -
+ * same scheme and authority, no query or fragment, a path ending with the walked directory's relative path plus one
+ * file name, as Nexus's index rows link their files. Parent links, sort links, assets, other hosts and fragments are
+ * ignored. Entries are deduplicated by name and sorted, so the walk and its resume cursor are deterministic.
  */
 final class HtmlListing {
 
     private HtmlListing() {
     }
 
-    /** One listing entry: the percent-decoded {@code name} and its still-encoded {@code raw} form (a single path
-     *  segment - a decoded separator or traversal is rejected at parse), whether it is a subdirectory, and the
-     *  resolved URL to fetch it from. */
+    /** One entry: the percent-decoded {@code name} and its still-encoded {@code raw} single segment (a decoded
+     *  separator or traversal is rejected at parse), whether it is a subdirectory, and the URL to fetch it from. */
     record Entry(String name, String raw, boolean directory, URI target) {
     }
 
-    /** Parse the page a directory answered with into its entries, sorted by name; {@code rawPath} is the directory's
-     *  still-encoded path relative to the walk's root (empty at the root), the suffix a canonical file link must
-     *  carry. An empty result means the server exposes no listing here. */
+    /** Parse a directory's page into its entries, sorted by name; {@code rawPath} is the directory's encoded path
+     *  relative to the root (empty at the root), the suffix a canonical file link must carry. Empty means no listing
+     *  here. */
     static List<Entry> parse(URI directory, String rawPath, String page) {
         Map<String, Entry> entries = new LinkedHashMap<>();
         for (String href : hrefs(page)) {
@@ -40,12 +36,9 @@ final class HtmlListing {
         return sorted;
     }
 
-    /**
-     * The listing a non-listing root page advertises, or {@code null}. A Nexus repository root answers a landing
-     * page ("this repository is not directly browseable at this URL") that links its actual HTML index - a
-     * same-authority, query-less link whose path ends with the root's own last segment - so a walk follows that one
-     * hop and stays vendor-neutral: the pointer is read off the page, not assumed at a vendor path.
-     */
+    /** The listing a non-listing root page advertises, or {@code null}. A Nexus repository root answers a landing page
+     *  that links its HTML index - a same-authority, query-less link whose path ends with the root's last segment - so
+     *  the walk follows that one hop, read off the page rather than assumed at a vendor path. */
     static URI listingPointer(URI root, String page) {
         String path = root.getRawPath();
         int slash = path.lastIndexOf('/', path.length() - 2);
@@ -134,8 +127,7 @@ final class HtmlListing {
             String segment = subdirectory ? rest.substring(0, rest.length() - 1) : rest;
             return segment.isEmpty() || segment.indexOf('/') >= 0 ? null : entry(segment, subdirectory, target);
         }
-        // The canonical file link: same authority, the walked directory's relative path plus one name - how a
-        // Nexus index row links each file at its download URL under a different root.
+        // The canonical file link: same authority, the walked directory's relative path plus one name.
         if (!sameAuthority(directory, target) || target.getRawPath() == null || target.getRawPath().endsWith("/")) {
             return null;
         }
@@ -167,8 +159,8 @@ final class HtmlListing {
                 .replace("&#39;", "'");
     }
 
-    /** Percent-decode a path segment (UTF-8); a plus stays literal - this is path, not form, encoding - and a
-     *  malformed escape stays as it was. */
+    /** Percent-decode a path segment as UTF-8; a plus stays literal (path, not form, encoding) and a malformed escape
+     *  stays. */
     private static String decode(String segment) {
         if (segment.indexOf('%') < 0) {
             return segment;

@@ -5,21 +5,20 @@ import module java.base;
 import build.jenesis.repository.store.ArchiveInflation;
 
 /**
- * A streaming reader for the legacy Nexus / Maven-Indexer repository index that Nexus-style servers publish under
- * {@code .index/} - a pure-JDK port of the jenesis-modules crawler's chunk reader, so no indexer library (none has a
- * stable module name) and nothing buffered: the file is a GZIP stream of a one-byte format version, an eight-byte
- * timestamp, then records of an {@code int} field count followed per field by a flag byte, a modified-UTF-8 name, an
- * {@code int} length and the value bytes (themselves GZIP-compressed when flag {@code 0x08} is set). A record's
- * {@code u} (uinfo) field carries the pipe-delimited coordinate {@code group|artifact|version|classifier|extension}
- * ({@code NA} for absent), its {@code i} (info) field the packaging and, at position six, a fallback extension;
- * {@code del} marks a tombstone. Field caps guard against a corrupted or hostile stream.
+ * A streaming, pure-JDK reader for the Nexus/Maven-Indexer repository index published under {@code .index/}, buffering
+ * nothing: a GZIP stream of a one-byte format version, an eight-byte timestamp, then records of an {@code int} field
+ * count followed, per field, by a flag byte, a modified-UTF-8 name, an {@code int} length and the value
+ * (GZIP-compressed when flag {@code 0x08} is set). A record's {@code u} field carries
+ * {@code group|artifact|version|classifier|extension} ({@code NA} for absent), its {@code i} field the packaging and,
+ * at position six, a fallback extension; {@code del} marks a tombstone. Field caps guard against a corrupt or hostile
+ * stream.
  */
 final class RepositoryIndex implements Closeable {
 
     /** The index descriptor whose presence advertises a published index. */
     static final String PROPERTIES = ".index/nexus-maven-repository-index.properties";
 
-    /** The full index chunk (the incremental chunks only matter to a mirror staying fresh, not to a one-shot import). */
+    /** The full index chunk; the incremental chunks matter only to a mirror keeping fresh. */
     static final String FULL = ".index/nexus-maven-repository-index.gz";
 
     private static final int FLAG_COMPRESSED = 0x08;
@@ -71,13 +70,10 @@ final class RepositoryIndex implements Closeable {
         return record;
     }
 
-    /** Inflate a per-field GZIP value through the product's shared archive-inflation bound, at the same length a
-     *  stored field may carry - the length prefix bounds only the compressed bytes, so without the ceiling a
-     *  decompression-bomb field would balloon into the heap. The index field is the record's own identity (a
-     *  coordinate or description that exists nowhere else in the stream), so a bound-stopped read takes
-     *  {@link ArchiveInflation.Entry#required} and fails the import rather than importing a record with a silently
-     *  missing field. The ceiling is this reader's own, larger than the shared default because an index field is a
-     *  record rather than a manifest, and stated here at the call site that chose it. */
+    /** Inflate a per-field GZIP value through the shared archive-inflation bound: the length prefix bounds only the
+     *  compressed bytes. A field is the record's identity, so a bound-stopped read takes
+     *  {@link ArchiveInflation.Entry#required} and fails the import rather than drop a field. The ceiling is larger
+     *  than the shared default because a field is a record, not a manifest. */
     private static String decompress(String name, byte[] value) throws IOException {
         try (InputStream inflated = new GZIPInputStream(new ByteArrayInputStream(value))) {
             return new String(ArchiveInflation.entry(inflated, MAX_FIELD_LENGTH)
@@ -91,10 +87,10 @@ final class RepositoryIndex implements Closeable {
         input.close();
     }
 
-    /** The coordinate a record describes, or {@code null} for a tombstone, a descriptor record, or a record whose
-     *  fields would not form a safe URL path. The extension resolves as uinfo's, then info's position six, then the
-     *  packaging - and a classifier-less record whose resolved extension is no real packaging is rewritten to
-     *  {@code jar}, since the indexer stamps that record with whatever sidecar it processed last. */
+    /** The coordinate a record describes, or {@code null} for a tombstone, a descriptor record or fields that would not
+     *  form a safe URL path. The extension resolves from uinfo, then info's position six, then the packaging; a
+     *  classifier-less record whose extension is no real packaging becomes {@code jar}, since the indexer stamps it
+     *  with whatever sidecar it processed last. */
     static Gav coordinate(Map<String, String> record) {
         String uinfo = record.get("u");
         if (uinfo == null || record.containsKey("del")) {
@@ -129,8 +125,8 @@ final class RepositoryIndex implements Closeable {
         return new Gav(u[0], u[1], u[2], classifier, extension);
     }
 
-    /** Whether a coordinate part is safe to splice into a URL path: printable ASCII with no separator, traversal,
-     *  escape or query character - anything else is skipped rather than fetched. */
+    /** Whether a coordinate part is safe in a URL path: printable ASCII with no separator, traversal, escape or query
+     *  character; anything else is skipped. */
     static boolean safe(String part) {
         if (part.isEmpty() || part.equals(".") || part.equals("..")) {
             return false;
@@ -144,8 +140,8 @@ final class RepositoryIndex implements Closeable {
         return true;
     }
 
-    /** A group turns its dots into path separators (and an extension may be dotted, {@code tar.gz}), so every
-     *  dot-separated piece must itself be safe - no empty or traversal segments reach the URL. */
+    /** A group's dots become separators and an extension may be dotted ({@code tar.gz}), so every dot-separated piece
+     *  must be safe too. */
     private static boolean safeDotted(String value) {
         for (String part : value.split("\\.", -1)) {
             if (!safe(part)) {
@@ -174,8 +170,8 @@ final class RepositoryIndex implements Closeable {
                     + (classifier == null ? "" : "-" + classifier) + "." + extension;
         }
 
-        /** The pom a classifier-less record implies (the index carries no separate pom record for a jar), or
-         *  {@code null} for a classifier sidecar, whose pom belongs to its primary. */
+        /** The pom a classifier-less record implies (the index has no separate pom record for a jar), or {@code null}
+         *  for a classifier sidecar, whose pom is its primary's. */
         String pomPath() {
             return classifier == null ? artifactPath() + "/" + version + "/" + artifact + "-" + version + ".pom" : null;
         }
