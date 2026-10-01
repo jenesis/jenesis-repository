@@ -41,7 +41,8 @@ public final class StoreContract {
      * never grow a clause that is asserted nowhere.
      */
     public enum Property {
-        /** A keyed blob round-trips through {@code write}/{@code read}/{@code open}; absence is {@code false},
+        /** A keyed blob round-trips through {@code write}/{@code read}/{@code open}, and a ranged {@code open} yields
+         *  the bytes from its offset; absence is {@code false},
          *  {@code -1} and an {@code IOException}, never a silent empty stream; {@code delete} is idempotent. */
         KEYED_BLOB_ROUND_TRIP,
         /** {@code writeBlob} content-addresses by SHA-256, lands at {@code blobs/<hash>}, and an identical body
@@ -263,6 +264,7 @@ public final class StoreContract {
         // into a clean 404, so a backend that answered a stream failing on its first read would have it write a
         // truncated 200, and one that answered a generic failure would have it report an outage for an absence.
         throwsNoSuchFile(() -> store.open(key), "opening an absent key, before any byte is read");
+        throwsNoSuchFile(() -> store.open(key, 3), "a ranged open of an absent key, before any byte is read");
 
         store.write(key, new ByteArrayInputStream(body));
         isTrue(store.exists(key), "a written key exists");
@@ -271,6 +273,9 @@ public final class StoreContract {
         store.read(key, read);
         equal(read.toByteArray(), body, "read streams the stored bytes back");
         equal(drain(store.open(key)), body, "open streams the same bytes back");
+        equal(drain(store.open(key, 3)), Arrays.copyOfRange(body, 3, body.length),
+                "a ranged open streams the bytes from its offset");
+        equal(drain(store.open(key, 0)), body, "a ranged open from the start is the whole content");
 
         store.delete(key);
         isFalse(store.exists(key), "a deleted key no longer exists");

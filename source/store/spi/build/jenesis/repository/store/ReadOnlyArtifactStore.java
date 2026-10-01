@@ -72,6 +72,11 @@ public final class ReadOnlyArtifactStore implements ArtifactStore, Observability
     }
 
     @Override
+    public InputStream open(String key, long offset) throws IOException {
+        return delegate.open(key, offset);
+    }
+
+    @Override
     public long size(String key) throws IOException {
         return delegate.size(key);
     }

@@ -216,7 +216,10 @@ class MavenFormatTest {
         assertThat(get.calls(FaultInjectingStore.Op.READ_VERSIONED)).as("the pointer and the withheld marker").isEqualTo(2);
         assertThat(get.calls(FaultInjectingStore.Op.SIZE)).as("no stat: the length rides the pointer").isZero();
         assertThat(get.calls(FaultInjectingStore.Op.EXISTS)).as("no existence probe: the open proves the blob present").isZero();
-        assertThat(get.calls(FaultInjectingStore.Op.OPEN)).as("the bytes, opened before the status is committed").isEqualTo(1);
+        assertThat(get.calls(FaultInjectingStore.Op.OPEN_FROM)).as("the bytes, opened before the status is committed")
+                .isEqualTo(1);
+        assertThat(get.calls(FaultInjectingStore.Op.OPEN)).as("from where the response starts, never whole and skipped")
+                .isZero();
         assertThat(get.calls(FaultInjectingStore.Op.READ)).as("never a second read of the same blob").isZero();
 
         FaultInjectingStore head = FaultInjectingStore.wrap(store);

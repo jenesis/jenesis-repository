@@ -136,6 +136,13 @@ public final class FilesystemArtifactStore implements ArtifactStore {
         return Files.newInputStream(resolve(key));
     }
 
+    @Override
+    public InputStream open(String key, long offset) throws IOException {
+        FileChannel channel = FileChannel.open(resolve(key), StandardOpenOption.READ);
+        channel.position(offset);
+        return Channels.newInputStream(channel);
+    }
+
     /** Create an upload temp file in {@code dir}, (re-)creating the directory first and retrying if a concurrent
      *  {@link #delete} tidied the now-empty container away between the create-directory and the create-file. Without
      *  the retry a publish into a directory another thread is emptying fails with a spurious {@code NoSuchFileException}

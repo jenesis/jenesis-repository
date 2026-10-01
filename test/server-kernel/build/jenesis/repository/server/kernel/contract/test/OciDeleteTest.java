@@ -281,6 +281,7 @@ class OciDeleteTest {
         assertThat(send("GET", "/v2/solo/manifests/1.0").status()).isEqualTo(404);
         int reads = 0;
         for (FaultInjectingStore.Op op : List.of(FaultInjectingStore.Op.READ, FaultInjectingStore.Op.OPEN,
+                FaultInjectingStore.Op.OPEN_FROM,
                 FaultInjectingStore.Op.READ_VERSIONED, FaultInjectingStore.Op.EXISTS, FaultInjectingStore.Op.LIST,
                 FaultInjectingStore.Op.PAGE, FaultInjectingStore.Op.SIZE)) {
             reads += counted.calls(op);

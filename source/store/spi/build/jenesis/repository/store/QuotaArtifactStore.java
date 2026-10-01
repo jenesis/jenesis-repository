@@ -305,6 +305,11 @@ public final class QuotaArtifactStore implements ArtifactStore, ObservabilitySou
     }
 
     @Override
+    public InputStream open(String key, long offset) throws IOException {
+        return delegate.open(key, offset);
+    }
+
+    @Override
     public List<String> list(String prefix) {
         return delegate.list(prefix);
     }

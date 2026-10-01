@@ -398,7 +398,7 @@ public final class Blobs {
     public void serve(Located located, FormatExchange exchange) throws IOException {
         InputStream in;
         try {
-            in = store.open("blobs/" + located.hash());
+            in = store.open("blobs/" + located.hash(), exchange.from(located.size()));
         } catch (NoSuchFileException gone) {
             exchange.respond(404);
             return;

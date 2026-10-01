@@ -305,7 +305,7 @@ public final class MavenFormat implements RepositoryFormat, ProxyFormat, Artifac
         // clean 404 here rather than a 200 whose body ends after the headers.
         InputStream in;
         try {
-            in = store.open(key);
+            in = store.open(key, exchange.from(size));
         } catch (NoSuchFileException gone) {
             exchange.respond(404);
             return;

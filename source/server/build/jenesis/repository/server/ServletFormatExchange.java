@@ -161,6 +161,18 @@ public final class ServletFormatExchange implements FormatExchange {
      * valid but out-of-bounds range is a {@code 416}; an unsupported or malformed one is ignored and the full body is
      * served. The format is oblivious - it calls {@code respond(200, length)} either way.
      */
+    /** The offset the serve said its body starts at, through {@link #from}: the bytes before it never reach the
+     *  range stream, so it does not wait for them. */
+    private long bodyFrom;
+
+    @Override
+    public long from(long contentLength) {
+        String header = request.getHeader("Range");
+        long[] range = header == null || contentLength < 0 ? null : satisfiableRange(header, contentLength);
+        bodyFrom = range == null || range == UNSATISFIABLE ? 0L : range[0];
+        return bodyFrom;
+    }
+
     @Override
     public OutputStream respond(int status, long contentLength) throws IOException {
         if (status == 200 && contentLength >= 0) {
@@ -176,7 +188,8 @@ public final class ServletFormatExchange implements FormatExchange {
                 response.setStatus(206);
                 response.setHeader("Content-Range", "bytes " + range[0] + "-" + range[1] + "/" + contentLength);
                 response.setContentLengthLong(range[1] - range[0] + 1);
-                return new RangeOutputStream(response.getOutputStream(), range[0], range[1] - range[0] + 1);
+                return new RangeOutputStream(response.getOutputStream(), range[0], range[1] - range[0] + 1,
+                        range[0] - Math.min(bodyFrom, range[0]));
             }
         }
         response.setStatus(status);
@@ -295,11 +308,13 @@ public final class ServletFormatExchange implements FormatExchange {
         private long skip;
         private long remaining;
 
-        private RangeOutputStream(OutputStream out, long start, long length) {
+        /** {@code skip} is how much of what is written precedes the window - all of {@code start} for a serve that
+         *  writes from the beginning, none for one that opened its content at the window. */
+        private RangeOutputStream(OutputStream out, long start, long length, long skip) {
             this.out = out;
             this.start = start;
             this.length = length;
-            this.skip = start;
+            this.skip = skip;
             this.remaining = length;
         }
 

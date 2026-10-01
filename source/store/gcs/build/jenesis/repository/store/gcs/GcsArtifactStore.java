@@ -99,8 +99,18 @@ public final class GcsArtifactStore implements ArtifactStore {
 
     @Override
     public InputStream open(String key) throws IOException {
+        return open(key, 0L);
+    }
+
+    /** The object from {@code offset} on, asked of the bucket as a range rather than read and skipped. */
+    @Override
+    public InputStream open(String key, long offset) throws IOException {
         try {
-            return storage.objects().get(bucket, keyPrefix + key).executeMediaAsInputStream();
+            Storage.Objects.Get get = storage.objects().get(bucket, keyPrefix + key);
+            if (offset > 0) {
+                get.getRequestHeaders().setRange("bytes=" + offset + "-");
+            }
+            return get.executeMediaAsInputStream();
         } catch (GoogleJsonResponseException e) {
             // The SPI's typed absence: a serve opens the blob before it commits and turns this into a clean 404.
             if (e.getStatusCode() == 404) {

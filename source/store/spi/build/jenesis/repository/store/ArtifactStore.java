@@ -379,6 +379,27 @@ public interface ArtifactStore {
     InputStream open(String key) throws IOException;
 
     /**
+     * {@link #open(String)} from byte {@code offset} on: the stream yields the content after the first {@code offset}
+     * bytes, which the store does not read - the object stores ask for the range, the filesystem seeks - so a client
+     * resuming the tail of a large artifact costs the tail. Absence throws as {@link #open(String)} does. An offset at
+     * or past the end is the caller's to rule out; a serve asks only for a range it has found satisfiable.
+     *
+     * <p>The default opens the whole content and skips the offset, which is correct for any store and is what a
+     * decorator gets if it forgets to forward this - so every decorator forwards it, and the store contract kit holds
+     * every backend to the bytes it yields.
+     */
+    default InputStream open(String key, long offset) throws IOException {
+        InputStream in = open(key);
+        try {
+            in.skipNBytes(offset);
+            return in;
+        } catch (IOException | RuntimeException e) {
+            in.close();
+            throw e;
+        }
+    }
+
+    /**
      * A short-lived URL a client can fetch this key from directly (a presigned object-store GET), or empty when
      * this backend cannot mint one (the filesystem default) - the caller then streams as today. The object-store
      * backends sign a {@code GET} for the fully-qualified object (the scope's {@link #scope key prefix} plus

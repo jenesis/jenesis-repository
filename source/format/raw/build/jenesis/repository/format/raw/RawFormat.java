@@ -107,7 +107,7 @@ public final class RawFormat implements RepositoryFormat, ProxyFormat, Repositor
                 // blob is gone answers a clean 404 rather than a truncated 200 (the same shape MavenFormat serves).
                 InputStream in;
                 try {
-                    in = store.open(located.get().key());
+                    in = store.open(located.get().key(), exchange.from(located.get().size()));
                 } catch (NoSuchFileException gone) {
                     exchange.respond(404);
                     return;

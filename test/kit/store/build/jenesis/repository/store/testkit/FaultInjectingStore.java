@@ -29,7 +29,7 @@ public final class FaultInjectingStore implements ArtifactStore {
     /** The store operations a fault can be armed against. {@code WRITE_BLOB} carries no key, so it matches only a
      *  fault armed with {@link #anyKey}. */
     public enum Op {
-        READ, OPEN, WRITE, WRITE_BLOB, WRITE_VERSIONED, DELETE, LIST, PAGE, SIZE, EXISTS, READ_VERSIONED
+        READ, OPEN, OPEN_FROM, WRITE, WRITE_BLOB, WRITE_VERSIONED, DELETE, LIST, PAGE, SIZE, EXISTS, READ_VERSIONED
     }
 
     private enum Mode {
@@ -279,6 +279,20 @@ public final class FaultInjectingStore implements ArtifactStore {
     }
 
     @Override
+    public InputStream open(String key, long offset) throws IOException {
+        Mode mode = intercept(Op.OPEN_FROM, key);
+        if (mode == Mode.THROW_BEFORE) {
+            throw fault(Op.OPEN_FROM, key);
+        }
+        InputStream stream = delegate.open(key, offset);
+        if (mode == Mode.THROW_AFTER) {
+            stream.close();
+            throw fault(Op.OPEN_FROM, key);
+        }
+        return stream;
+    }
+
+    @Override
     public void write(String key, InputStream in) throws IOException {
         Mode mode = intercept(Op.WRITE, key);
         if (mode == Mode.THROW_BEFORE) {
@@ -444,6 +458,20 @@ public final class FaultInjectingStore implements ArtifactStore {
             if (mode == Mode.THROW_AFTER) {
                 stream.close();
                 throw fault(Op.OPEN, key);
+            }
+            return stream;
+        }
+
+        @Override
+        public InputStream open(String key, long offset) throws IOException {
+            Mode mode = intercept(Op.OPEN_FROM, key);
+            if (mode == Mode.THROW_BEFORE) {
+                throw fault(Op.OPEN_FROM, key);
+            }
+            InputStream stream = scoped.open(key, offset);
+            if (mode == Mode.THROW_AFTER) {
+                stream.close();
+                throw fault(Op.OPEN_FROM, key);
             }
             return stream;
         }

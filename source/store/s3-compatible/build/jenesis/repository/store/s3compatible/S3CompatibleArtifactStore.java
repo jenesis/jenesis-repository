@@ -42,8 +42,19 @@ public abstract class S3CompatibleArtifactStore implements ArtifactStore {
     }
 
     public InputStream open(String key) throws IOException {
+        return open(key, 0L);
+    }
+
+    /** The object from {@code offset} on, asked of the bucket as a range rather than read and skipped. */
+    @Override
+    public InputStream open(String key, long offset) throws IOException {
         try {
-            return s3.getObject(b -> b.bucket(bucket).key(keyPrefix + key));
+            return s3.getObject(b -> {
+                b.bucket(bucket).key(keyPrefix + key);
+                if (offset > 0) {
+                    b.range("bytes=" + offset + "-");
+                }
+            });
         } catch (S3Exception e) {
             // The SPI's typed absence: a serve opens the blob before it commits and turns this into a clean 404,
             // where any other failure is the store being unreachable and stays the error it is.

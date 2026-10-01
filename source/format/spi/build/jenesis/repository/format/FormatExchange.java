@@ -99,6 +99,17 @@ public interface FormatExchange {
 
     OutputStream respond(int status, long contentLength) throws IOException;
 
+    /**
+     * Where the body a {@code respond(200, contentLength)} will carry starts: {@code 0}, or - for a request asking for
+     * a range of it - the first byte of that range, so a serve that opens its content can open it there
+     * ({@code ArtifactStore.open(key, offset)}) and write only from it, rather than read the whole artifact for the
+     * response to throw the prefix away. A serve that asks writes its content from this offset; one that never asks
+     * writes it from the start, as before. Exchanges that slice no range answer {@code 0}.
+     */
+    default long from(long contentLength) {
+        return 0L;
+    }
+
     default void respond(int status, byte[] content) throws IOException {
         try (OutputStream out = respond(status, content.length == 0 ? -1 : content.length)) {
             if (content.length > 0) {

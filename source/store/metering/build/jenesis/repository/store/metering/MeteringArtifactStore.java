@@ -74,6 +74,11 @@ public final class MeteringArtifactStore implements ArtifactStore {
     }
 
     @Override
+    public InputStream open(String key, long offset) throws IOException {
+        return timed("open", key, () -> delegate.open(key, offset));
+    }
+
+    @Override
     public void write(String key, InputStream in) throws IOException {
         timed("write", key, () -> {
             delegate.write(key, in);

@@ -180,6 +180,22 @@ public final class NodeMemoStore implements ArtifactStore {
         return new SequenceInputStream(new ByteArrayInputStream(head), in);
     }
 
+    /** A remembered document is sliced where it is held; anything else is asked of the store from the offset. */
+    @Override
+    public InputStream open(String key, long offset) throws IOException {
+        if (offset == 0) {
+            return open(key);
+        }
+        Optional<byte[]> remembered = DocumentMemory.covers(key) && !documents.ttl().isZero()
+                ? documents.get(this, key) : Optional.empty();
+        if (remembered.isPresent()) {
+            byte[] bytes = remembered.get();
+            int from = (int) Math.min(offset, bytes.length);
+            return new ByteArrayInputStream(bytes, from, bytes.length - from);
+        }
+        return delegate.open(key, offset);
+    }
+
     @Override
     public long size(String key) throws IOException {
         Optional<byte[]> remembered = documents.get(this, key);

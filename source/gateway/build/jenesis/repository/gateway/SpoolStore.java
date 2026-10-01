@@ -388,6 +388,19 @@ public final class SpoolStore implements ObservabilitySource {
         }
 
         @Override
+        public InputStream open(String key, long offset) throws IOException {
+            Path spool = lease.blobs.get(prefix + key);
+            if (spool != null) {
+                FileChannel channel = FileChannel.open(spool, StandardOpenOption.READ);
+                channel.position(offset);
+                return Channels.newInputStream(channel);
+            }
+            InputStream in = open(key);
+            in.skipNBytes(offset);
+            return in;
+        }
+
+        @Override
         public void write(String key, InputStream in) throws IOException {
             Spooled spooled = lease.spool(in, null);
             Path previous = lease.blobs.put(prefix + key, spooled.file());

@@ -101,6 +101,23 @@ public class S3GetRequestTest {
     }
 
     @Test
+    public void a_ranged_open_asks_the_bucket_for_the_tail_rather_than_the_whole_object() throws IOException {
+        byte[] body = new byte[64];
+        for (int i = 0; i < body.length; i++) {
+            body[i] = (byte) i;
+        }
+        server.stubFor(get(urlPathEqualTo("/repo/acme/blobs/tail")).atPriority(1)
+                .withHeader("Range", equalTo("bytes=60-"))
+                .willReturn(aResponse().withStatus(206).withHeader("ETag", "\"stub\"")
+                        .withBody(Arrays.copyOfRange(body, 60, 64))));
+
+        try (InputStream in = store.open("blobs/tail", 60)) {
+            assertThat(in.readAllBytes()).isEqualTo(Arrays.copyOfRange(body, 60, 64));
+        }
+        assertThat(lastRange()).as("an open-ended range to the wire, not a whole-object GET").isEqualTo("bytes=60-");
+    }
+
+    @Test
     public void open_streams_a_stored_blob_back_and_a_missing_key_throws() throws IOException {
         byte[] body = {9, 8, 7, 6, 5, 4, 3, 2, 1, 0};
         server.stubFor(get(urlPathEqualTo("/repo/acme/blobs/opened")).atPriority(1)

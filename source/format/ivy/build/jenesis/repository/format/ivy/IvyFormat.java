@@ -223,7 +223,7 @@ public final class IvyFormat implements RepositoryFormat, ArtifactLayout, Artifa
         // 404 from the open, never a 200 with no body - the format contract's GONE_BLOB_IS_A_CLEAN_404.
         InputStream in;
         try {
-            in = store.open(located.get().key());
+            in = store.open(located.get().key(), exchange.from(size));
         } catch (NoSuchFileException gone) {
             exchange.respond(404);
             return;

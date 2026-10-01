@@ -158,7 +158,7 @@ public final class JenesisFormat implements RepositoryFormat, ArtifactLayout, Re
         // gone answers a clean 404 rather than a truncated 200 (the shape MavenFormat and RawFormat serve).
         InputStream in;
         try {
-            in = store.open(key);
+            in = store.open(key, exchange.from(size));
         } catch (NoSuchFileException gone) {
             exchange.respond(404);
             return;

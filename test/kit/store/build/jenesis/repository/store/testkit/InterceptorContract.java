@@ -530,6 +530,7 @@ final class InterceptorContract {
             Predicate<String> keys = FaultInjectingStore.keyPrefix(prefix);
             store.failEveryOn(FaultInjectingStore.Op.READ_VERSIONED, keys);
             store.failEveryOn(FaultInjectingStore.Op.OPEN, keys);
+            store.failEveryOn(FaultInjectingStore.Op.OPEN_FROM, keys);
             store.failEveryOn(FaultInjectingStore.Op.READ, keys);
             store.failEveryOn(FaultInjectingStore.Op.SIZE, keys);
         }

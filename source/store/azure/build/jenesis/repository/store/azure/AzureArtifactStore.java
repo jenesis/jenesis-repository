@@ -11,8 +11,8 @@ import com.azure.storage.blob.models.BlobDownloadContentResponse;
 import com.azure.storage.blob.models.BlobErrorCode;
 import com.azure.storage.blob.models.BlobItem;
 import com.azure.storage.blob.models.BlobItemProperties;
-import com.azure.storage.blob.models.BlobListDetails;
 import com.azure.storage.blob.models.BlobRange;
+import com.azure.storage.blob.models.BlobListDetails;
 import com.azure.storage.blob.models.BlobRequestConditions;
 import com.azure.storage.blob.models.BlobStorageException;
 import com.azure.storage.blob.models.ListBlobsOptions;
@@ -146,8 +146,15 @@ public final class AzureArtifactStore implements ArtifactStore {
 
     @Override
     public InputStream open(String key) throws IOException {
+        return open(key, 0L);
+    }
+
+    /** The blob from {@code offset} on, asked of the container as a range rather than read and skipped. */
+    @Override
+    public InputStream open(String key, long offset) throws IOException {
         try {
-            return container.getBlobClient(keyPrefix + key).openInputStream();
+            BlobClient blob = container.getBlobClient(keyPrefix + key);
+            return offset > 0 ? blob.openInputStream(new BlobRange(offset), null) : blob.openInputStream();
         } catch (BlobStorageException e) {
             // The SPI's typed absence: a serve opens the blob before it commits and turns this into a clean 404.
             if (e.getStatusCode() == 404) {
