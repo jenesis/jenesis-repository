@@ -10,21 +10,18 @@ import build.jenesis.repository.metadata.SectionMutation;
 import build.jenesis.repository.metadata.Signal;
 
 /**
- * The {@code findings} section codec of the consolidated metadata document: a coordinate version's
- * findings rows, keyed {@code (source, id)}, unioned across every writer. This is the section-scoped form of {@link StoreFindings}' row model - the same
- * categorize-never-discard merge (a re-record refreshes a row's facts and {@code lastSeen} while keeping its
- * {@code firstSeen}, labels and any supersession mark; a sibling writer only ever ADDS or refreshes a row, never
- * drops one) and the same row-carry: a row this node cannot parse (a {@link Finding.Kind} or {@link Severity}
- * a newer node wrote, and its labels) is held as its raw {@link JsonNode} and re-serialised verbatim on the next CAS,
- * so an older node never eats a newer node's rows.
+ * The {@code findings} section codec of the consolidated metadata document: a coordinate version's rows, keyed
+ * {@code (source, id)}, unioned across every writer. The merge is categorize-never-discard - a re-record refreshes a
+ * row's facts and {@code lastSeen} while keeping its {@code firstSeen}, labels and supersession mark, and a writer only
+ * adds or refreshes rows - and a row this node cannot parse (a newer {@link Finding.Kind} or {@link Severity}) is held
+ * as raw {@link JsonNode} and re-serialised verbatim, so an older node never eats a newer node's rows.
  *
- * <p>The {@code data} payload is {@code {"findings":[...]}}. The envelope's {@code signal} summarises the section for the gate and the
- * generic renderer: the highest active vulnerability/malware severity, or neutral. All methods are pure; a
- * mutation returns a fresh {@link Section} and never touches its argument.
+ * <p>The payload is {@code {"findings":[...]}}; the envelope's {@code signal} is the highest active vulnerability or
+ * malware severity, or neutral. All methods are pure; a mutation returns a fresh {@link Section}.
  */
 public final class FindingsSection {
 
-    /** The section tag - the short built-in name the findings ledger owns in the document. */
+    /** The section tag the findings ledger owns in the document. */
     public static final String TAG = "findings";
 
     /** The contributor-owned section schema version. */
@@ -39,24 +36,20 @@ public final class FindingsSection {
     private FindingsSection() {
     }
 
-    /** The findings rows carried by a section, in stored order; empty for an absent section. Only rows this node
-     *  recognises are surfaced - a carried (forward-incompatible) row rides a mutate untouched but is never returned
-     *  to a reader, so a read is total. */
+    /** The recognised rows of a section, in stored order; empty for an absent section. Carried rows are never returned,
+     *  so a read is total. */
     public static List<Finding> rows(Optional<Section> section) {
         return document(section).recognised();
     }
 
-    /** The section split into the rows this node understands and the raw rows it does not (the carried set), parsed
-     *  tolerantly from the section's {@code data}; both empty for an absent or payload-less section. */
+    /** The section split into recognised and carried rows; both empty for an absent or payload-less section. */
     static Document document(Optional<Section> section) {
         return section.flatMap(Section::payload).map(FindingsSection::parse).orElseGet(Document::empty);
     }
 
-    /**
-     * A section-scoped row mutation: apply {@code rowTransform} to the rows this node recognises, carry every row it
-     * does not verbatim, and rebuild the section at {@code updated}. Pure and re-derivable each CAS attempt, as
-     * {@link SectionMutation} requires - the transform sees only the recognised rows and must be a function of them.
-     */
+    /** A section-scoped row mutation: apply {@code rowTransform} to the recognised rows, carry the rest verbatim, and
+     *  rebuild the section at {@code updated}. Re-derivable on every CAS attempt, as {@link SectionMutation}
+     *  requires. */
     static SectionMutation transform(UnaryOperator<List<Finding>> rowTransform, Instant updated) {
         return current -> {
             Document document = document(current);
@@ -65,12 +58,9 @@ public final class FindingsSection {
         };
     }
 
-    /**
-     * Merge one finding into a mutable row list under categorize-never-discard, in place: an existing row with the same
-     * {@code (source, id)} keeps its {@code firstSeen}, labels and supersession mark while its mutable facts and
-     * {@code lastSeen} refresh; a new one is appended beside its siblings. Returns whether the row was appended (a
-     * genuinely new finding, the event-worthy case), so a caller emits the new-finding event only for a real addition.
-     */
+    /** Merge one finding into a mutable row list, in place: a row with the same {@code (source, id)} keeps its
+     *  {@code firstSeen}, labels and supersession mark while its facts and {@code lastSeen} refresh; otherwise it is
+     *  appended. Returns whether it was appended, so the new-finding event fires only for a real addition. */
     static boolean merge(List<Finding> rows, Finding finding) {
         for (int index = 0; index < rows.size(); index++) {
             Finding existing = rows.get(index);
@@ -87,9 +77,8 @@ public final class FindingsSection {
         return true;
     }
 
-    /** The section for a full row set at {@code updated}: a {@link build.jenesis.repository.metadata.State#EMPTY}
-     *  section when there is nothing at all to record (no recognised and no carried row), a derived one carrying the
-     *  {@code {"findings":[...]}} payload otherwise. The signal is the highest active vulnerability/malware severity. */
+    /** The section for a full row set: {@link build.jenesis.repository.metadata.State#EMPTY} when there is no row at
+     *  all, otherwise a derived section with the payload and the {@link #signal}. */
     static Section section(List<Finding> rows, List<JsonNode> carried, Instant updated) {
         if (rows.isEmpty() && carried.isEmpty()) {
             return Section.empty(TAG, SCHEMA, updated);
@@ -97,9 +86,8 @@ public final class FindingsSection {
         return Section.derived(TAG, SCHEMA, updated, signal(rows), serialize(rows, carried));
     }
 
-    /** The gate-and-GUI signal of a row set: the highest severity among active (not superseded) vulnerability and
-     *  malware rows, or neutral when none contributes a band - the "adds to a score or is neutral" summary the gate
-     *  and the generic renderer read without parsing {@code data}. */
+    /** The signal of a row set: the highest severity among active vulnerability and malware rows, or neutral - the
+     *  summary the gate and the generic renderer read without parsing {@code data}. */
     static Signal signal(List<Finding> rows) {
         Severity highest = null;
         for (Finding row : rows) {
@@ -113,7 +101,7 @@ public final class FindingsSection {
         return Signal.of(highest);
     }
 
-    /** Serialise a row set plus its carried raw rows to the {@code {"findings":[...]}} data node. Carried rows ride after the recognised ones, verbatim, so a mutate by a node that cannot parse them stays lossless. */
+    /** Serialise recognised rows followed by the carried raw rows, verbatim, so a mutate stays lossless. */
     static JsonNode serialize(List<Finding> rows, List<JsonNode> carried) {
         ObjectNode data = JSON.createObjectNode();
         ArrayNode findings = data.putArray(FINDINGS_FIELD);
@@ -152,9 +140,8 @@ public final class FindingsSection {
         return data;
     }
 
-    /** Parse a {@code {"findings":[...]}} data node into what this node understands and what it carries. Total: a row
-     *  it cannot parse (a newer node's kind/severity and labels, an absent field, an unparseable instant) is carried,
-     *  not dropped, while its siblings parse - one garbled row never blanks the coordinate's whole trail. */
+    /** Parse a payload into recognised and carried rows. Total: a row that cannot be parsed is carried, not dropped, so
+     *  one garbled row never blanks the coordinate's trail. */
     static Document parse(JsonNode data) {
         Document parsed = Document.empty();
         for (JsonNode row : data.path(FINDINGS_FIELD)) {
@@ -195,8 +182,7 @@ public final class FindingsSection {
         return left.isAfter(right) ? left : right;
     }
 
-    /** A findings payload split into the rows this node understands and the raw rows it does not - the section-level
-     *  form of {@code StoreFindings.Document}, so the carried-row fidelity survives the move into the document. */
+    /** A findings payload split into the rows this node understands and the raw rows it carries. */
     record Document(List<Finding> recognised, List<JsonNode> carried) {
 
         static Document empty() {

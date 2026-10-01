@@ -7,10 +7,9 @@ import build.jenesis.repository.maintenance.MaintenanceTask;
 import build.jenesis.repository.maintenance.MaintenanceTaskProvider;
 
 /**
- * Discovers the scheduled findings-filter-index pass: it rides the same {@code scheduled-scan} enablement and
- * {@code scan-interval-millis} cadence as the compliance scan whose findings it keeps the index current with. Unlike the
- * scan it needs no live source - it indexes the findings already durably stored, so it runs for a records-only
- * deployment whose live scan is off, and is a cheap no-op when the findings have not moved since the last build.
+ * Discovers the findings-filter-index pass, on the same {@code scheduled-scan} enablement and
+ * {@code scan-interval-millis} cadence as the compliance scan. It needs no live source - it indexes stored findings -
+ * so it runs for a records-only deployment too.
  */
 public final class FindingsFilterIndexTaskProvider implements MaintenanceTaskProvider {
 

@@ -13,23 +13,19 @@ import build.jenesis.repository.store.ArtifactStore;
 import build.jenesis.repository.gate.HeldElsewhere;
 
 /**
- * Reclaims a discarded quarantine hold's findings: the reviewer threw the artifact away, so the gate findings
- * recorded beside the hold go with it - exactly as the {@code QuarantineLog}'s rows do - or they would dangle
- * forever, since a discarded version was never published and so no eviction or reconcile sweep would ever reach its
- * document. A <em>released</em> path keeps its findings: the artifact now serves, its gate history is part of the
- * ledger, and its rows are reclaimed with the artifact when it is eventually evicted. A path the layout cannot map
- * back to a coordinate is left alone - better a bounded stray document than a delete against a guessed key.
+ * Reclaims a discarded quarantine hold's findings: the reviewer threw the artifact away, so the gate findings recorded
+ * beside the hold go with it, as the {@code QuarantineLog}'s rows do - a discarded version was never published, so no
+ * eviction or sweep would reach its document. A released path keeps its findings, reclaimed with the artifact on
+ * eviction. A path the layout cannot map to a coordinate is left alone rather than deleted against a guessed key.
  *
- * <p>The findings live in the {@code findings} section of the consolidated metadata document, so a
- * discard drops just that section - surgically, so a coordinate whose document also carries other sections (declared
- * licenses read at inspection) keeps them; when the findings section was the document's only content the whole
- * document goes.
+ * <p>Only the {@code findings} section of the metadata document is dropped, so other sections (declared licences) stay;
+ * when it was the only content, the whole document goes.
  */
 public final class DiscardedHoldFindingsObserver implements HoldReleaseObserver {
 
     @Override
     public void onReleased(ArtifactStore store, String path) {
-        // A released artifact serves; its findings are living history, reclaimed with the artifact on eviction.
+        // A released artifact serves; its findings are reclaimed with it on eviction.
     }
 
     @Override
@@ -40,8 +36,7 @@ public final class DiscardedHoldFindingsObserver implements HoldReleaseObserver 
         }
         if (HeldElsewhere.othersStillHeld(store, described.get(), path)) {
             return;   // the findings document is per VERSION (it carries the operator's waivers and review labels):
-                      // discarding one path of a multi-path hold must not strip what the remaining held paths are
-                      // reviewed against - the last discard reaps it
+                      // the remaining held paths are still reviewed against it - the last discard reaps it
         }
         String ecosystem = described.get().ecosystem();
         String coordinate = described.get().coordinate();
@@ -51,19 +46,16 @@ public final class DiscardedHoldFindingsObserver implements HoldReleaseObserver 
         boolean droppedFindings = document.isPresent() && document.get().has(FindingsSection.TAG);
         if (droppedFindings) {
             if (document.get().tags().size() == 1) {
-                // The findings section is the document's only content - the whole discarded-and-never-published
-                // document goes, so no empty envelope is left to dangle.
+                // The findings section is the only content, so the whole never-published document goes.
                 store.delete(MetadataKey.version(ecosystem, coordinate, version));
             } else {
-                // Other sections (declared licenses) stay; only the findings section is removed.
+                // Other sections stay; only the findings section is removed.
                 metadata.mutate(ecosystem, coordinate, version, FindingsSection.TAG, current -> null);
             }
         }
         if (droppedFindings) {
-            // A discarded hold's findings never rode an artifact eviction (the version was never published), so this is
-            // their only reclamation - and the vulnerability rank index would keep paging the discarded coordinate's
-            // line until the next scan. Bump the findings eviction epoch (the dirty signal the rank index folds into its
-            // rebuild stamp, never the scan stamp) so the line drops on the next rank-index pass instead.
+            // No eviction reclaims a discarded hold's findings, so bump the eviction epoch the rank index folds into
+            // its rebuild stamp: the discarded line drops on the next rank-index pass rather than the next scan.
             Findings.evictions(store).bump();
         }
     }

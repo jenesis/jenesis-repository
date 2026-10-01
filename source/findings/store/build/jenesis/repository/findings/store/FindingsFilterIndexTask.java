@@ -7,28 +7,19 @@ import build.jenesis.repository.maintenance.MaintenanceTask;
 import build.jenesis.repository.maintenance.RepositoryContext;
 
 /**
- * The scheduled findings-filter-index pass: it keeps each repository's durable inverted index over the selective filter
- * facets (severity, kind, category, source) current with the findings the scan sweep, the gate and on-demand reports
- * persist, so a selective {@code /api/findings} query seeks a facet bucket rather than scanning the whole findings plane
- * and reading every coordinate's metadata document. It is the index sibling of the health and vulnerability rank-index
- * passes - a derived view rebuilt from durable truth on the maintenance cadence, off the request path.
+ * The scheduled findings-filter-index pass: it keeps each repository's facet index current with the findings the scan
+ * sweep, the gate and on-demand reports persist - a derived view rebuilt from durable state off the request path, like
+ * the health and vulnerability rank indexes.
  *
- * <p>Cheap in the steady state: the rebuild is a no-op whenever the findings have not moved since the last build (it
- * compares the composite freshness stamp - scan freshness plus eviction epoch - the index carries against the live one),
- * so a pass that finds nothing changed writes nothing. When they have moved, the findings are streamed - never buffered
- * whole - into a fresh index generation and published with one atomic marker flip; a failed rebuild <em>throws</em>, so
- * the scheduler logs it, counts it on {@code jenrepo.maintenance.failures} and reports the pass FAILED
- * ({@link MaintenanceTask} clause 4). That is a visibility decision, not a serving one: a rebuild that failed never
- * reached the marker flip, so the previous generation still stands and a selective query keeps paging it (or falls back
- * to the live walk before the first build) - always correct, never stale. The read path degrading gracefully is exactly
- * why the failure has to be counted: an index that has not rebuilt for a week is otherwise indistinguishable from a
- * healthy one. With no findings-persistence module installed there is nothing to index and the pass is a no-op.
+ * <p>The rebuild is a no-op when the composite stamp has not moved. When it has, the findings stream into a fresh
+ * generation published by one marker flip; a failed rebuild throws, so the scheduler logs and counts it and reports the
+ * pass FAILED ({@link MaintenanceTask} clause 4). The previous generation still serves, so the failure must be counted:
+ * an index that has not rebuilt for a week otherwise looks healthy. Without a findings-persistence module the pass is a
+ * no-op.
  *
- * <p><strong>Exclusive.</strong> The rebuild mutates shared durable state - it reclaims a superseded generation and
- * flips the marker with a plain write, neither guarded by a compare-and-set - so it must be the <em>single writer</em>
- * across the fleet (the {@link MaintenanceTask.Exclusion#LEASE lease-owned} contract for a durable-state mutator): two
- * concurrent rebuilds could otherwise target the same generation and interleave their writes, or one reclaim the
- * generation the other just published while a reader pages it.
+ * <p><strong>Exclusive</strong> ({@link MaintenanceTask.Exclusion#LEASE}): the rebuild reclaims a generation and flips
+ * the marker with plain writes, so two concurrent rebuilds could interleave on one generation or reclaim the one the
+ * other just published.
  */
 public final class FindingsFilterIndexTask implements MaintenanceTask {
 
@@ -39,8 +30,8 @@ public final class FindingsFilterIndexTask implements MaintenanceTask {
         this(interval, FindingsProvider.installed());
     }
 
-    /** Embedding/test seam: bind an explicit findings provider (empty to disable indexing) rather than discovering one
-     *  through {@link FindingsProvider#installed()}. */
+    /** Bind an explicit findings provider (empty disables indexing) rather than discovering one through
+     *  {@link FindingsProvider#installed()}. */
     public FindingsFilterIndexTask(Duration interval, Optional<FindingsProvider> ledgerProvider) {
         this.interval = interval;
         this.ledgerProvider = ledgerProvider;
@@ -58,14 +49,12 @@ public final class FindingsFilterIndexTask implements MaintenanceTask {
 
     @Override
     public Exclusion exclusion() {
-        // A durable-state mutator (reclaims a generation, flips the marker with a plain write) must be the fleet's
-        // single writer, so two rebuilds never target the same generation or one reclaim the other's live generation.
+        // Plain writes on shared state: the fleet's single writer.
         return Exclusion.LEASE;
     }
 
-    /** Rebuild this repository's filter index. A failure propagates: the scheduler logs it, counts it and reports the
-     *  pass FAILED (clause 4), while the un-flipped marker leaves the previous generation serving - a failed rebuild is
-     *  a visible <em>write</em> failure, never a read outage. */
+    /** Rebuild this repository's filter index. A failure propagates and the pass reports FAILED (clause 4), while the
+     *  unflipped marker leaves the previous generation serving. */
     @Override
     public void repository(RepositoryContext context) throws IOException {
         Optional<Findings> ledger = ledgerProvider.map(provider -> provider.over(context.store()));

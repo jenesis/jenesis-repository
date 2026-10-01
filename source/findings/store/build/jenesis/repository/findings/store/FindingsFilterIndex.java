@@ -11,57 +11,45 @@ import build.jenesis.repository.walk.BoundedChildren;
 import build.jenesis.repository.walk.TraversalException;
 
 /**
- * A durable inverted index over one repository's stored findings, keyed by the selective filter facets - severity,
- * kind, category and source - so a selective {@code /api/findings} query serves a bounded page by seeking the matching
- * facet bucket rather than scanning the whole findings plane and reading every coordinate's metadata document to fill
- * one page.
+ * A durable inverted index over one repository's findings, keyed by severity, kind, category and source, so a selective
+ * {@code /api/findings} query reads a bounded page from one facet bucket instead of reading every coordinate's metadata
+ * document. The live {@link StoreFindings} walk can push down only a {@code coordinate} (a key prefix) or an
+ * {@code ecosystem} (a subtree); the other facets have no key representation.
  *
- * <p><strong>Why.</strong> The live {@link StoreFindings} walk pushes down only a {@code coordinate} (a direct key
- * prefix) or an {@code ecosystem} (a subtree); a filter on any other facet - severity, kind, category, source - has no
- * key representation, so the walk visits every coordinate version and reads its findings section, applying the facet
- * match in memory. On a large repository a sparse selective query (say "every {@code CRITICAL} finding") reads the whole
- * plane to return a small page. This index gives those facets a key push-down.
+ * <p><strong>Shape.</strong> {@code findingsfilter/g<gen>/<facet>/<value>/<ordinal>}, where {@code facet} is
+ * {@code sev}/{@code kind}/{@code cat}/{@code src}, {@code value} is URL-encoded (category lower-cased, as the filter
+ * matches it case-insensitively) and each entry is a whole {@link Findings.Located} through the shared
+ * {@link FindingsSection} row codec. A finding is written into one bucket per facet it has a value for, so a seek to
+ * {@code findingsfilter/g<gen>/sev/CRITICAL} pages exactly the critical findings in one
+ * {@link ArtifactStore#page ordered, bounded read}, and the remaining facets are post-filtered over that page.
  *
- * <p><strong>Shape.</strong> A generation directory holds one flat bucket per facet value:
- * {@code findingsfilter/g<gen>/<facet>/<value>/<ordinal>}, where {@code facet} is one of {@code sev}/{@code kind}/
- * {@code cat}/{@code src}, {@code value} is the URL-encoded facet value (category lower-cased, since the filter matches
- * it case-insensitively) and each child body is the whole {@link Findings.Located} (the finding serialized through the
- * shared {@link FindingsSection} row codec). A finding is written into one bucket per facet it carries a value for, so a
- * seek to {@code findingsfilter/g<gen>/sev/CRITICAL} pages exactly the critical findings - {@link ArtifactStore#page a
- * single ordered, seekable, bounded read} - and the read post-filters the remaining facets over that bounded page.
+ * <p><strong>Generations.</strong> The lifecycle - fresh generation, atomic flip, reclaiming the superseded one and a
+ * crashed orphan - is {@link GenerationIndex}'s; this index nests facet then value, so it passes its own
+ * {@link #reclaimGeneration reclaimer}.
  *
- * <p><strong>Generations.</strong> The generation lifecycle - the fresh generation, the atomic flip, the reclaim of
- * the superseded one and of a crashed orphan - is {@link GenerationIndex}, shared with the health and vulnerability
- * rank
- * indexes. This index is the one that nests (facet then value under a generation), so it passes its own
- * {@link #reclaimGeneration reclaimer} rather than the shared flat one; everything else about generations is the
- * primitive's.
- *
- * <p><strong>Freshness.</strong> The marker records the composite build stamp - the findings scan freshness followed by
- * the {@linkplain Findings#evictions eviction epoch}, so an eviction that did not move the scan stamp still moves the
- * composite and triggers a rebuild. The stamp drives the <em>rebuild</em> decision only (a rebuild whose stamp already
- * matches is a no-op); the <em>read</em> is eventually consistent - it serves the last built generation regardless of the
- * stamp and only ever falls back (to the live {@link StoreFindings} walk) before the very first build.
+ * <p><strong>Freshness.</strong> The marker records the composite stamp - scan freshness followed by the
+ * {@linkplain Findings#evictions eviction epoch} - so an eviction alone still triggers a rebuild. The stamp decides
+ * only whether to rebuild; the read serves the last built generation, falling back to the live walk only before the
+ * first build.
  */
 final class FindingsFilterIndex {
 
-    /** The repository-scope key root the filter index owns - declared in the storage manifest by the persistence module. */
+    /** The repository-scope key root the filter index owns. */
     static final String PREFIX = "findingsfilter";
 
 
-    /** The four facets a selective filter targets that have no key push-down in the live walk, so the index gives each
-     *  one: the {@link Finding} severity, kind, category and source. Category is bucketed lower-cased, since the filter
-     *  matches it case-insensitively; the others match exactly. */
+    /** The four facet bucket names. Category is bucketed lower-cased, since the filter matches it case-insensitively;
+     *  the others match exactly. */
     private static final String SEVERITY = "sev";
     private static final String KIND = "kind";
     private static final String CATEGORY = "cat";
     private static final String SOURCE = "src";
 
-    /** Fixed width of a bucket entry's ordinal, so lexicographic order over a bucket's flat child set is insertion (walk)
-     *  order and a page resumes strictly after the previous page's last child. */
+    /** Fixed width of a bucket entry's ordinal, so lexicographic order is insertion order and a page resumes strictly
+     *  after the previous page's last entry. */
     private static final int ORDINAL_WIDTH = 9;
 
-    /** The page size the read's bucket scan pulls a bounded window of child names in. */
+    /** The page size of the bucket scan. */
     private static final int SCAN_PAGE = 1024;
 
     private static final JsonMapper JSON = JsonMapper.builder().build();
@@ -76,10 +64,9 @@ final class FindingsFilterIndex {
         this.index = new GenerationIndex(store, PREFIX);
     }
 
-    /** Whether a filter is one the index can seek: a selective facet (severity, kind, category or source) is set and no
-     *  {@code coordinate} is (a coordinate filter already resolves by a direct key-prefix lookup in the live walk, so the
-     *  index would not improve it). An ecosystem-only or bare filter is left to the live walk too - it is dense and stops
-     *  at the requested window rather than scanning sparsely. */
+    /** Whether the index can serve a filter: a facet (severity, kind, category or source) is set and no
+     *  {@code coordinate} is, since a coordinate resolves by direct key in the live walk. An ecosystem-only or bare
+     *  filter is dense, so the live walk stops at its window anyway. */
     static boolean indexable(Findings.Filter filter) {
         return filter.coordinate() == null
                 && (filter.severity() != null || filter.kind() != null
@@ -87,14 +74,12 @@ final class FindingsFilterIndex {
     }
 
     /**
-     * Rebuild the index from the ledger's current findings if they have moved since the last build, else do nothing. The
-     * findings are streamed (never buffered whole) into a fresh generation, each written into one bucket per facet value
-     * it carries; the previous generation and any crashed-rebuild orphan are reclaimed first; the {@code built} marker
-     * flip publishes the new generation atomically.
+     * Rebuild the index if the findings have moved since the last build, else do nothing. The findings stream into a
+     * fresh generation, one bucket per facet value; the previous generation and any crashed orphan are reclaimed first;
+     * the {@code built} marker flip publishes the new generation atomically.
      *
-     * @param ledger       the findings to index, streamed through {@link Findings#all(Findings.Filter, Findings.Visitor)}
-     * @param currentStamp the composite build stamp - the findings scan freshness followed by the eviction epoch, so an
-     *                     eviction that did not move the scan stamp still moves this composite and so triggers a rebuild
+     * @param ledger the findings to index, streamed through {@link Findings#all(Findings.Filter, Findings.Visitor)}
+     * @param currentStamp the composite build stamp - scan freshness followed by the eviction epoch
      */
     void rebuild(Findings ledger, String currentStamp) throws IOException {
         index.rebuild(currentStamp, generationPrefix -> {
@@ -115,9 +100,7 @@ final class FindingsFilterIndex {
         }, this::reclaimGeneration);
     }
 
-    /** Write one located finding into a facet bucket, keyed by the bucket's next ordinal (so entries never collide and a
-     *  bucket reads back in insertion order). A blank/absent facet value indexes nothing - the finding is simply not
-     *  matchable on that facet. */
+    /** Write one finding into a facet bucket at the bucket's next ordinal. A blank facet value indexes nothing. */
     private void index(String generationPrefix, String facet, String value, Findings.Located located,
                        Map<String, Long> ordinals) throws IOException {
         if (value == null || value.isBlank()) {
@@ -129,13 +112,9 @@ final class FindingsFilterIndex {
                 new ByteArrayInputStream(serialize(located)));
     }
 
-    /**
-     * One bounded page of the findings a selective filter matches, served from the built index, or {@code null} only when
-     * no index has ever been built - the caller then serves the live-walk fallback for that first, pre-build read. The
-     * read seeks the bucket for the filter's most selective facet (a single ordered, seekable, bounded read of that
-     * bucket's flat child set) and post-filters the remaining facets over it, so it never scans the whole findings plane.
-     * Eventually consistent: it serves the last built generation whenever one stands, never falling back on a moved stamp.
-     */
+    /** One bounded page of the findings a selective filter matches, or {@code null} only when no index has been built,
+     *  so the caller serves the live walk. The read seeks the bucket of the filter's most selective facet and
+     *  post-filters the rest; it serves the last built generation whenever one stands. */
     Findings.Page read(Findings.Filter filter, int offset, int limit) throws IOException {
         Optional<GenerationIndex.Marker> marker = index.marker();
         if (marker.isEmpty()) {
@@ -155,8 +134,8 @@ final class FindingsFilterIndex {
                     throw FILLED;
                 }
                 Optional<Findings.Located> located = located(bucketPrefix + "/" + name);
-                // Post-filter the remaining facets (and ecosystem) the seek bucket did not push down; a torn index row is
-                // skipped rather than blanking the page.
+                // Post-filter what the bucket did not push down; a torn index row is skipped rather than blanking the
+                // page.
                 if (located.isEmpty() || !filter.matches(located.get())) {
                     return;
                 }
@@ -171,31 +150,25 @@ final class FindingsFilterIndex {
                 window.add(located.get());
             });
         } catch (Filled _) {
-            // The window filled and one further match proved more remain - the ordinary end of a satisfied page.
+            // The window filled and one further match proved more remain.
         }
-        // The page carries the index's own build-time ledger freshness, not the live scan stamp, so a selective query
-        // served from this eventually-consistent index is never shown fresher than the index it came from (the same
-        // builtScanStamp split the health/vulnerability rank indexes carry).
+        // The page carries the index's build-time freshness, not the live scan stamp, so it never claims to be fresher
+        // than the index it came from.
         return new Findings.Page(window, more[0], builtScanStamp(marker.get().stamp()));
     }
 
-    /** The bucket scan's bounds. This is a SEARCH WINDOW, not an enumeration: the window is bounded by the caller's
-     *  {@code limit}, but the SCAN behind it is not, because a row only counts once the post-filter has accepted it -
-     *  so a query whose remaining facets match nothing would walk the whole bucket to prove it. That is what the
-     *  {@link #EXAMINED_CAP} examined budget bounds, so the entry cap is off (the window caps the output) and the
-     *  examined budget is the binding bound. Reaching it answers the window assembled so far with {@code more=true}
-     *  rather than a page assembled from a prefix of the bucket with {@code more=false} - which would tell a caller the
-     *  matches were exhausted when they were not. */
-    /** The most bucket entries one read examines to fill a window: the facet bucket is seeked, but the remaining
-     *  facets are post-filtered, and a sparse combination must not drain a very large bucket for one request. */
+    /** The most bucket entries one read examines. The window bounds the output, but a row counts only once the
+     *  post-filter accepts it, so a sparse facet combination would otherwise walk the whole bucket; this is the binding
+     *  bound, and reaching it answers the window so far with {@code more=true}, never a {@code more=false} that claims
+     *  exhaustion. */
     static final int EXAMINED_CAP = 20_000;
 
     private static final BoundedChildren BUCKET =
             BoundedChildren.bounded().entries(Integer.MAX_VALUE).page(SCAN_PAGE);
 
-    /** The scan-cancellation signal: the window is full and one further match has proved more remain, so no further
-     *  round-trip is worth issuing. Thrown from the scan consumer - the cancellation hook {@link BoundedChildren}
-     *  documents - and caught immediately at the call site. Stackless and shared: it is control flow, not a failure. */
+    /** The scan's cancellation signal: the window is full and one further match proved more remain. Thrown from the
+     *  scan consumer, the hook {@link BoundedChildren} documents, and caught at the call site; stackless control
+     *  flow. */
     private static final class Filled extends IOException {
         private static final long serialVersionUID = 1L;
 
@@ -207,20 +180,15 @@ final class FindingsFilterIndex {
 
     private static final Filled FILLED = new Filled();
 
-    /** The ledger scan freshness the index was built at - the leading token of the composite build stamp (the findings
-     *  scan freshness {@code Instant} string, or blank for a never-scanned repository), the honest as-of instant a
-     *  surface renders for the eventually-consistent index rather than the live scan stamp the ledger may have moved
-     *  past. The composite is the scan stamp followed by the eviction epoch (see {@link #rebuild}), so the leading
-     *  space-delimited token is the scan stamp. */
+    /** The scan freshness the index was built at - the leading token of the composite stamp, blank for a never-scanned
+     *  repository - which a surface renders as the index's as-of instant. */
     private static String builtScanStamp(String stamp) {
         return stamp.isBlank() ? "" : stamp.split(" ", 2)[0];
     }
 
-    /** The bucket to seek for a filter, most-selective facet first: an arbitrary {@code source} or {@code category} value
-     *  is typically far more selective than a small-enum {@code kind} or {@code severity}, so seeking it over a combined
-     *  filter reads the fewest rows. Any choice is bounded (a bucket is a subset of the plane), so a wrong guess is only
-     *  ever slower than the best bucket, never worse than the whole-plane scan this replaces. {@link #indexable} has
-     *  already established at least one facet is present. Category is lower-cased to match its case-insensitive filter. */
+    /** The bucket to seek, most selective facet first: a {@code source} or {@code category} value is usually far more
+     *  selective than a small-enum {@code kind} or {@code severity}. Any choice is a subset of the plane, so a wrong
+     *  guess is only slower. {@link #indexable} has established at least one facet is present. */
     private static String seekBucket(Findings.Filter filter) {
         if (filter.source() != null) {
             return SOURCE + "/" + URLEncoder.encode(filter.source(), StandardCharsets.UTF_8);
@@ -234,8 +202,8 @@ final class FindingsFilterIndex {
         return SEVERITY + "/" + URLEncoder.encode(filter.severity().name(), StandardCharsets.UTF_8);
     }
 
-    /** Empty one generation, torn down value-bucket by value-bucket in bounded pages: this index nests facet then
-     *  value under a generation, so it hands {@link GenerationIndex} its own reclaimer rather than the flat one. */
+    /** Empty one generation, value bucket by value bucket in bounded pages - the nested reclaimer
+     *  {@link GenerationIndex} is handed. */
     private void reclaimGeneration(String generationPrefix) throws IOException {
         for (String facet : store.list(generationPrefix)) {
             String facetPrefix = generationPrefix + "/" + facet;
@@ -268,9 +236,8 @@ final class FindingsFilterIndex {
         }
     }
 
-    /** Serialize a located finding as an index entry: its coordinate plus the finding through the shared
-     *  {@link FindingsSection} row codec, so the read reconstructs the exact {@link Findings.Located} without a
-     *  re-implementation of the finding's own JSON shape. */
+    /** An index entry: the coordinate plus the finding through the shared {@link FindingsSection} row codec, so the
+     *  read reconstructs the exact {@link Findings.Located}. */
     private static byte[] serialize(Findings.Located located) {
         ObjectNode document = JSON.createObjectNode();
         document.put("ecosystem", located.ecosystem());
@@ -280,12 +247,12 @@ final class FindingsFilterIndex {
         return JSON.writeValueAsBytes(document);
     }
 
-    /** The most distinct values one facet listing answers - a facet is a small set (kinds, sources, categories), and
-     *  a listing that reached the cap is answered as-is rather than enumerated further. */
+    /** The most distinct values one facet listing answers; a facet is a small set, so a listing at the cap is answered
+     *  as is. */
     static final int FACET_CAP = 256;
 
     /** The distinct values of the built generation's facet buckets - the filter choices a console offers - or empty
-     *  when no generation has been built. Reads the bucket names only, never an entry. */
+     *  before the first build. Reads bucket names only. */
     Optional<Findings.Facets> facets() throws IOException {
         Optional<GenerationIndex.Marker> marker = index.marker();
         if (marker.isEmpty()) {
