@@ -1,11 +1,8 @@
 /**
- * The dependency-graph primitive: it parses the CycloneDX SBOM a Jenesis build embeds in a stored artifact into a
- * format-neutral {@link build.jenesis.repository.dependency.DependencyGraph} of components and edges - the model a
- * {@code Lease}-guarded sweep folds into a sharded reverse-dependency index and a "who depends on X" / CVE
- * blast-radius query reads back. Deliberately a thin, store-agnostic library: it operates on streams (the caller
- * opens the blob through the store SPI and hands the bytes over), holds no persistence, and depends only on the
- * JDK's XML reader and the Jackson databind already on the server path - a library for each serialisation rather
- * than a hand-rolled parser. Reused across the inventory and analysis modules, so it lives on its own.
+ * The dependency-graph primitive: it parses the SBOM embedded in a stored artifact (CycloneDX or SPDX) into a
+ * format-neutral {@link build.jenesis.repository.dependency.DependencyGraph} of components and edges, which a
+ * lease-guarded sweep folds into the reverse-dependency index. A store-agnostic library over streams, holding no
+ * persistence, reused by the inventory and analysis modules.
  *
  * @jenesis.release 25
  * @jenesis.bom pin-repository.properties

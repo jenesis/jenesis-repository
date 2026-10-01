@@ -3,20 +3,15 @@ package build.jenesis.repository.dependency;
 import module java.base;
 
 /**
- * A single node in a parsed dependency graph: a component the CycloneDX SBOM names, either the artifact the SBOM
- * describes (the {@code metadata.component}) or one of the dependencies it resolved. {@code ref} is the
- * document-local {@code bom-ref} the edges point at; {@code purl} is the ecosystem-neutral <em>package URL</em>
- * (e.g. {@code pkg:maven/org.apache.logging.log4j/log4j-core@2.14.1}) that identifies the same coordinate across
- * every repository, which is why {@link #coordinate()} prefers it - it is what a "who depends on X" / CVE
- * blast-radius query keys on. {@code group}/{@code name}/{@code version} carry the same coordinate in its parts, and
- * {@code sha256} is the component's content hash when the SBOM records one. Every field but {@code name} may be
- * {@code null} when the SBOM omits it.
+ * One node of a parsed dependency graph: the artifact the SBOM describes, or a dependency it resolved. {@code ref} is
+ * the document-local {@code bom-ref} edges point at; {@code purl} is the ecosystem-neutral package URL
+ * ({@code pkg:maven/org.apache.logging.log4j/log4j-core@2.14.1}), which {@link #coordinate()} prefers because a "who
+ * depends on X" or blast-radius query keys on it. {@code group}/{@code name}/{@code version} are the same coordinate in
+ * parts, and {@code sha256} the content hash when recorded. Every field but {@code name} may be {@code null}.
  *
- * <p>{@code licenses} are the licences <em>this component</em> declares. CycloneDX records them per component, which
- * is what makes an SBOM a strictly richer declaration source than a jar's single-string OSGi {@code Bundle-License}
- * header: the document names not only what the artifact is licensed under but what every resolved dependency in its
- * closure is, and it names them with SPDX identifiers where the emitter could match one. Empty when the SBOM
- * declares none - which is a genuine "declares nothing", never an error.
+ * <p>{@code licenses} are what this component declares - CycloneDX records them per component, so an SBOM names the
+ * licence of every dependency in the closure, with SPDX identifiers where the emitter matched one. Empty means declares
+ * nothing, never an error.
  */
 public record DependencyComponent(String ref, String group, String name, String version, String purl, String sha256,
                                   List<DependencyLicense> licenses) {
@@ -26,18 +21,14 @@ public record DependencyComponent(String ref, String group, String name, String 
         licenses = List.copyOf(licenses);
     }
 
-    /** A component whose SBOM declared no licences - the shape every consumer that reads a BOM for its graph alone
-     *  builds, so an SBOM model gaining licences costs a coordinate-only caller nothing. */
+    /** A component whose SBOM declared no licences, for consumers that read a BOM for its graph alone. */
     public DependencyComponent(String ref, String group, String name, String version, String purl, String sha256) {
         this(ref, group, name, version, purl, sha256, List.of());
     }
 
-    /**
-     * A stable, comparable coordinate for this component: the {@code purl} when the SBOM records one (the canonical,
-     * cross-ecosystem identifier), otherwise {@code group:name:version} assembled from the parts (a {@code group}less
-     * or {@code version}less component drops that segment). This is the key a reverse-dependency index groups on, so
-     * two SBOMs that name the same dependency by the same purl collapse onto one node.
-     */
+    /** A stable coordinate for this component: the {@code purl} when recorded, else {@code group:name:version} from the
+     *  parts (a missing group or version drops its segment). A reverse-dependency index groups on it, so two SBOMs
+     *  naming one dependency by the same purl collapse onto one node. */
     public String coordinate() {
         if (purl != null && !purl.isBlank()) {
             return purl.trim();

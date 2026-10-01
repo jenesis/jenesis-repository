@@ -6,36 +6,28 @@ import module tools.jackson.databind;
 import build.jenesis.repository.xml.Xml;
 
 /**
- * Parses a CycloneDX 1.x BOM - the SBOM standard a Jenesis build embeds in every jar - into the format-neutral
- * {@link DependencyGraph}. Both serialisations are read: JSON with the Jackson databind already on the server path
- * and XML with the JDK's {@code java.xml} (a library each, not a hand-rolled reader), the same two the free
- * {@code CycloneDx} emitter writes. The {@code metadata.component} becomes the graph root, each {@code components}
- * entry a node keyed by its {@code bom-ref} (falling back to its {@code purl}), and each {@code dependencies}
- * relationship an edge.
+ * Parses a CycloneDX 1.x BOM into the format-neutral {@link DependencyGraph}. JSON is read with Jackson and XML with
+ * the JDK's {@code java.xml} - the two serialisations the free {@code CycloneDx} emitter writes.
+ * {@code metadata.component} becomes the root, each {@code components} entry a node keyed by its {@code bom-ref} (else
+ * its {@code purl}), and each {@code dependencies} relationship an edge.
  *
- * <p>A BOM is a small metadata document, so it is materialised whole (the streaming principle expressly allows an
- * index/metadata parse) - but only up to {@link #MAX_DOCUMENT}, the XML reader is hardened against DOCTYPE and
- * external-entity (XXE) attacks, and the recursive XML dependency walk is bounded at {@link #MAX_NESTING} so a
- * pathologically deep nesting cannot overflow the stack - all because the document rides inside an untrusted
- * uploaded or proxied artifact. Any document that is neither JSON nor XML, is truncated, is malformed, or nests
- * beyond the cap yields {@link DependencyGraph#EMPTY} rather than throwing, so a broken SBOM never fails the read
- * path that scans it.
+ * <p>A BOM is materialised whole, up to {@link #MAX_DOCUMENT}; the XML reader refuses DOCTYPE and external entities,
+ * and the recursive XML dependency walk is bounded at {@link #MAX_NESTING} - the document rides inside an untrusted
+ * artifact. A document that is neither JSON nor XML, is truncated or malformed, or nests too deep yields
+ * {@link DependencyGraph#EMPTY} rather than throwing.
  */
 public final class CycloneDxParser {
 
     private CycloneDxParser() {
     }
 
-    /** A CycloneDX document is small; a larger blob is not a BOM we will hold whole in heap. */
+    /** The largest BOM held whole in heap. */
     public static final int MAX_DOCUMENT = 32 * 1024 * 1024;
 
-    /** The deepest {@code <dependency>} nesting the XML dependency walk descends before a document is refused as
-     *  pathological. A real resolved dependency tree nests tens of levels; a document nesting a few thousand
-     *  {@code <dependency>} deep is not a BOM but a crafted stack-overflow vector - the recursion would otherwise
-     *  throw a {@link StackOverflowError} that, unlike a parse error, escapes the caller's {@code IOException}
-     *  handling and wedges the whole reverse-dependency sweep on that one blob forever. Bounding the walk here (the
-     *  sibling depth-cap idiom - {@code Lifecycle.walk}, {@code RepositoryRouter.route} - rather than an unbounded
-     *  recursion) turns that overflow into the ordinary {@link DependencyGraph#EMPTY} any malformed BOM yields. */
+    /** The deepest {@code <dependency>} nesting the XML walk descends. A real tree nests tens of levels; thousands is a
+     *  crafted stack-overflow vector whose {@link StackOverflowError} would escape the caller's {@code IOException}
+     *  handling and wedge the sweep on that blob. Past the cap the document yields {@link DependencyGraph#EMPTY} like
+     *  any malformed BOM. */
     public static final int MAX_NESTING = 1000;
 
     private static final ObjectMapper MAPPER = new ObjectMapper();
@@ -51,9 +43,9 @@ public final class CycloneDxParser {
         return parse(document);
     }
 
-    /** Parse a BOM held in {@code document}, auto-detecting JSON (<code>&#123;</code>) vs XML ({@code <}) from its first token.
-     *  Fail-soft: a document that is truncated, malformed, or nests beyond the cap yields {@link DependencyGraph#EMPTY}
-     *  rather than throwing, so the reverse-dependency sweep that scans every blob is never derailed by one bad BOM. */
+    /** Parse a BOM held in {@code document}, detecting JSON (<code>&#123;</code>) or XML ({@code <}) from its first
+     *  token. Fail-soft: a truncated, malformed or too deeply nested document yields {@link DependencyGraph#EMPTY}, so
+     *  one bad BOM never derails the sweep. */
     public static DependencyGraph parse(byte[] document) {
         try {
             return parse(document, false);
@@ -62,13 +54,10 @@ public final class CycloneDxParser {
         }
     }
 
-    /** Like {@link #parse(byte[])} but reports a present-but-unparseable BOM distinctly: it throws {@link
-     *  MalformedSbomException} when the document announces JSON or XML (its first token is <code>&#123;</code>, {@code [} or
-     *  {@code <}) but does not decode, or its XML dependency graph nests past {@link #MAX_NESTING} - so a served view
-     *  can render a scoped "could not derive this SBOM" error rather than the empty graph a genuinely absent SBOM
-     *  yields. A document that is not a BOM at all (neither JSON nor XML, or valid JSON/XML that carries no components)
-     *  still returns a (possibly empty) graph: that is a genuine negative, not a failure. The fail-soft {@link
-     *  #parse(byte[])} the sweep relies on is unchanged. */
+    /** Like {@link #parse(byte[])}, but throws {@link MalformedSbomException} when the document announces JSON or XML
+     *  (first token <code>&#123;</code>, {@code [} or {@code <}) and does not decode, or nests past
+     *  {@link #MAX_NESTING} - so a served view can render "could not derive this SBOM". A document that is not a BOM at
+     *  all still returns a (possibly empty) graph: a genuine negative. */
     public static DependencyGraph parseStrict(byte[] document) throws MalformedSbomException {
         return parse(document, true);
     }
@@ -162,13 +151,10 @@ public final class CycloneDxParser {
                 jsonLicenses(node));
     }
 
-    /**
-     * The component's declared licences. CycloneDX wraps each entry in a {@code licenses} array as either
-     * {@code {"license":{"id":...}}}, {@code {"license":{"name":...,"url":...}}} or {@code {"expression":"..."}}; all
-     * three are read, an entry carrying none of them is dropped, and an absent or malformed {@code licenses} node is
-     * simply no licences - a BOM never fails to parse over its licence block, since the graph is what the
-     * reverse-dependency sweep needs and the licences ride along for the gate.
-     */
+    /** The component's declared licences. CycloneDX wraps each in a {@code licenses} array as
+     *  {@code {"license":{"id":...}}}, {@code {"license":{"name":...,"url":...}}} or {@code {"expression":"..."}}; all
+     *  three are read, an entry with none is dropped, and an absent or malformed {@code licenses} node is no licences -
+     *  a BOM never fails over its licence block. */
     private static List<DependencyLicense> jsonLicenses(JsonNode node) {
         JsonNode licenses = node.get("licenses");
         if (licenses == null || !licenses.isArray()) {
@@ -272,19 +258,11 @@ public final class CycloneDxParser {
         return new DependencyGraph(rootRef, new ArrayList<>(byRef.values()), edges);
     }
 
-    /** Collect the edges of one {@code <dependency>} subtree. CycloneDX's XML dependency graph nests recursively - a
-     *  {@code <dependency ref="A">} may contain {@code <dependency ref="B">} which itself contains
-     *  {@code <dependency ref="C">} - and each nested element is both an edge from its parent AND, in turn, a parent
-     *  of its own children. Reading only one level (parent -> direct children) silently drops every grandchild edge a
-     *  third-party emitter that nests the full resolved tree produces, so the whole nesting is walked: an edge is
-     *  recorded from each node to each of its immediate {@code <dependency>} children, then each child is recursed
-     *  into. (The flat form - a leaf {@code <dependency ref>} with no children, mirroring the JSON {@code dependsOn}
-     *  shape - is just the base case with no grandchildren.)
-     *
-     *  <p>The recursion is bounded at {@link #MAX_NESTING}: the document rides inside an untrusted artifact, so a
-     *  pathological nesting a few thousand deep would otherwise overflow the stack. Past the cap the walk throws a
-     *  bounded {@code IOException} that {@link #parseXml} turns into {@link DependencyGraph#EMPTY} - the same
-     *  outcome any malformed BOM yields - rather than a {@link StackOverflowError} that escapes the read path. */
+    /** Collect the edges of one {@code <dependency>} subtree. CycloneDX XML nests recursively, each nested element both
+     *  an edge from its parent and the parent of its own children, so the whole nesting is walked: an edge from each
+     *  node to each immediate child, then each child recursed into. The flat form, a leaf {@code <dependency ref>}, is
+     *  the base case. Past {@link #MAX_NESTING} the walk throws an {@code IOException} that {@link #parseXml} turns
+     *  into {@link DependencyGraph#EMPTY}. */
     private static void collectXmlEdges(Element dependency, List<DependencyEdge> edges, int depth) throws IOException {
         if (depth > MAX_NESTING) {
             throw new IOException("CycloneDX dependency nesting exceeds " + MAX_NESTING + " levels");

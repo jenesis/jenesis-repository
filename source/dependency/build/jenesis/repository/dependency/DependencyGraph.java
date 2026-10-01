@@ -3,16 +3,12 @@ package build.jenesis.repository.dependency;
 import module java.base;
 
 /**
- * The dependency graph parsed from one artifact's embedded CycloneDX SBOM: the {@code rootRef} the SBOM is
- * <em>about</em> (its {@code metadata.component}, the published artifact itself), every {@link DependencyComponent}
- * it names, and the {@link DependencyEdge} relationships between them. This is the format-neutral, in-memory model
- * a {@code Lease}-guarded sweep folds into a sharded reverse-dependency index and a "who depends on X" / CVE
- * blast-radius query reads back - deliberately a plain value, holding no store handle and touching no persistence,
- * so it is the same object whether the SBOM came off a filesystem blob, an object-store key or a test fixture.
+ * The dependency graph parsed from one artifact's SBOM: the {@code rootRef} it is about (its
+ * {@code metadata.component}), every {@link DependencyComponent} it names and the {@link DependencyEdge}s between them
+ * - a plain value, holding no store handle, that a sweep folds into the reverse-dependency index.
  *
- * <p>{@link #dependencies()} is the transitive set the SBOM already resolved (every node but the root), the coarse
- * "is X anywhere in this artifact's tree" a blast-radius query needs; {@link #directDependencies()} is the root's
- * immediate edges, the finer "why" behind it.
+ * <p>{@link #dependencies()} is the resolved transitive set (every node but the root), the "is X anywhere in this tree"
+ * a blast-radius query needs; {@link #directDependencies()} is the root's immediate edges.
  */
 public record DependencyGraph(String rootRef, List<DependencyComponent> components, List<DependencyEdge> edges) {
 
@@ -24,7 +20,6 @@ public record DependencyGraph(String rootRef, List<DependencyComponent> componen
         edges = List.copyOf(edges);
     }
 
-    /** Whether the SBOM named no components (an absent or empty graph carries nothing for an index to record). */
     /** The graph a manifest declares: {@code root} and one edge from it to each of {@code dependencies} - one level,
      *  since a manifest declares what it depends on directly and nothing of what those depend on in turn. */
     public static DependencyGraph declared(DependencyComponent root, List<DependencyComponent> dependencies) {
@@ -37,6 +32,7 @@ public record DependencyGraph(String rootRef, List<DependencyComponent> componen
         return new DependencyGraph(root.ref(), components, edges);
     }
 
+    /** Whether the SBOM named no components. */
     public boolean isEmpty() {
         return components.isEmpty();
     }
@@ -55,11 +51,8 @@ public record DependencyGraph(String rootRef, List<DependencyComponent> componen
         return rootRef == null ? Optional.empty() : Optional.ofNullable(componentsByRef().get(rootRef));
     }
 
-    /**
-     * The transitive dependency set: every component the SBOM names except the root artifact itself. CycloneDX
-     * records the fully resolved closure, so this is the coarse "everything this artifact pulls in" a CVE
-     * blast-radius index groups on - if a vulnerable coordinate appears here, this artifact is in the blast radius.
-     */
+    /** The transitive dependency set: every component the SBOM names except the root. CycloneDX records the resolved
+     *  closure, so a vulnerable coordinate appearing here puts this artifact in the blast radius. */
     public List<DependencyComponent> dependencies() {
         List<DependencyComponent> result = new ArrayList<>();
         for (DependencyComponent component : components) {
