@@ -5,13 +5,10 @@ import module java.base;
 import build.jenesis.repository.format.Checksums;
 
 /**
- * The two coordinate shapes Terraform's registry protocols address, and the store keys this format gives them.
- *
- * <p>They are genuinely two, which is why this exists rather than one parser with a flag. A <b>module</b> is
- * {@code <namespace>/<name>/<system>} - three segments, the last naming the target system ({@code aws},
- * {@code google}) rather than a platform - and a <b>provider</b> is {@code <namespace>/<type>}, two segments, whose
- * releases are per-platform binaries. A client writes the first in a {@code module} block's {@code source} and the
- * second in {@code required_providers}, and neither address can be read as the other.
+ * The two coordinate shapes Terraform's registry protocols address, and the store keys this format gives them: a
+ * <b>module</b> is {@code <namespace>/<name>/<system>}, the last naming the target system ({@code aws}), and a
+ * <b>provider</b> {@code <namespace>/<type>}, whose releases are per-platform binaries. Neither address can be read as
+ * the other.
  */
 final class TerraformCoordinates {
 
@@ -21,19 +18,15 @@ final class TerraformCoordinates {
     private TerraformCoordinates() {
     }
 
-    /**
-     * A module version's archive, the object {@code X-Terraform-Get} points a client at.
-     *
-     * <p>Outside the {@code v1/} namespace deliberately: {@code v1} is Terraform's <em>protocol</em> space, and the
-     * protocol says a download URL is whatever the registry chooses. Storing artifacts under a foreign
-     * specification's version prefix would tie a stored key to a protocol revision it has nothing to do with.
-     */
+    /** A module version's archive, the object {@code X-Terraform-Get} points a client at. Stored outside {@code v1/},
+     *  Terraform's protocol space, since the protocol leaves a download URL to the registry and a stored key should not
+     *  be tied to a protocol revision. */
     static String moduleArchive(String repo, String namespace, String name, String system, String version) {
         return ROOT + repo + "/modules/" + namespace + "/" + name + "/" + system + "/" + version + ".tar.gz";
     }
 
     /** The digest a git source's archive was recorded with on its first fetch, keyed on the digest of its host,
-     *  repository and ref - which may run longer than a key segment, and hold characters none may. */
+     *  repository and ref, which may be longer than a key segment and hold characters none may. */
     static String gitDigest(String repo, String identity) {
         return ROOT + repo + "/git/" + Checksums.sha256(identity.getBytes(StandardCharsets.UTF_8));
     }

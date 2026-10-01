@@ -3,36 +3,31 @@ package build.jenesis.repository.format.terraform;
 import module java.base;
 
 /**
- * A module source Terraform would clone with git, read instead as the archive of one ref that a git host serves over
- * HTTP - which is what lets a proxied module whose registry names a git repository download through this repository.
+ * A module source Terraform would clone with git, read instead as one ref's archive served over HTTP, so a proxied
+ * module whose registry names a git repository downloads through this repository.
  *
- * <p>Most public modules are git sources: registry.terraform.io answers a module's download with
- * {@code git::https://github.com/<owner>/<repo>?ref=<tag>}, and a client given that clones it, reaching the git host
- * directly and around this repository. The three hosts that carry nearly all of them each serve any ref as a
- * {@code .tar.gz} with one top-level directory, so a ref is fetched, cached and served as that archive, and the
- * client is told to take the directory inside it, followed by the source's own {@code //subdir}. The directory is
- * named as the archive's first entry names it, since the host chooses it and Terraform does not expand a glob in a
- * registry module's subdirectory:
- *
+ * <p>Most public modules are git sources ({@code git::https://github.com/<owner>/<repo>?ref=<tag>}), which a client
+ * clones around this repository. The three hosts carrying nearly all of them serve any ref as a {@code .tar.gz} with
+ * one top-level directory, so a ref is fetched, cached and served as that archive, and the client told to take the
+ * directory inside, then the source's own {@code //subdir}; the directory is named from the archive's first entry:
  * <ul>
- *   <li>{@code github}: {@code <host>/<owner>/<repo>/archive/<ref>.tar.gz}, which GitHub Enterprise Server shares;</li>
+ *   <li>{@code github}: {@code <host>/<owner>/<repo>/archive/<ref>.tar.gz}, as GitHub Enterprise Server too;</li>
  *   <li>{@code gitlab}: {@code <host>/<group>/.../<project>/-/archive/<ref>/<project>-<ref>.tar.gz};</li>
  *   <li>{@code bitbucket}: {@code <host>/<owner>/<repo>/get/<ref>.tar.gz}.</li>
  * </ul>
  *
- * <p><b>Only hosts the operator lists</b> ({@value #HOSTS}): a source on any other host - and every source this
- * cannot read as one ref of one repository, an SSH URL, a {@code git@} address, a source with no {@code ref} or with
- * options beyond {@code depth} - is relayed as the upstream wrote it, or refused when {@value #REFUSE} is on. The list
- * ships empty, since fetching from a git host is reaching a third party. An entry is a host as the source writes it,
- * port included, and names its kind after an {@code =} unless the host is {@code github.com}, {@code gitlab.com} or
- * {@code bitbucket.org}, whose kinds are known.
+ * <p><b>Only hosts the operator lists</b> ({@value #HOSTS}), shipped empty since fetching from a git host reaches a
+ * third party. Any other source - another host, SSH, a {@code git@} address, no {@code ref}, options beyond
+ * {@code depth} - is relayed as written, or refused when {@value #REFUSE} is on. An entry is a host as the source
+ * writes it, port included, followed by {@code =} and its kind unless it is {@code github.com}, {@code gitlab.com} or
+ * {@code bitbucket.org}.
  *
- * <p>A ref is a tag, a branch or a commit, so the same source can name different bytes over time and no upstream
- * declares a checksum for any of them. {@link #identity} is what the digest recorded on the first fetch is keyed on.
+ * <p>A ref may name different bytes over time and nothing declares its checksum; {@link #identity} keys the digest the
+ * first fetch records.
  *
- * @param archive      where the ref's archive is fetched
+ * @param archive where the ref's archive is fetched
  * @param subdirectory the source's {@code //subdir}, or empty
- * @param identity     the host, repository and ref, which is what one recorded digest answers for
+ * @param identity the host, repository and ref one recorded digest answers for
  */
 record TerraformGitSource(URI archive, String subdirectory, String identity) {
 

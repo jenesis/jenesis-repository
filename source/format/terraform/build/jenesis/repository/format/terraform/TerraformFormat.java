@@ -33,34 +33,24 @@ import tools.jackson.databind.node.ObjectNode;
 import build.jenesis.repository.format.Listings;
 
 /**
- * The Terraform / OpenTofu registry: both of its protocols, hosted.
+ * The Terraform / OpenTofu registry, both protocols, hosted. The <b>module registry</b> answers a version list, then a
+ * {@code download} carrying the archive's URL in {@code X-Terraform-Get} on a {@code 204} with an empty body. The
+ * <b>provider registry</b> answers a version list naming the platforms held, then a per-platform document naming the
+ * zip, its {@code SHA256SUMS}, that file's signature and the public key. OpenTofu speaks both.
  *
- * <p>It is two protocols and not one, which is most of the shape of this format. The <b>module registry</b> answers
- * a version list and then a {@code download} that carries the archive's URL in an {@code X-Terraform-Get} header on
- * a {@code 204} - the body is empty by specification. The <b>provider registry</b> answers a version list whose
- * entries name the platforms held, and then a per-platform document naming the zip, its {@code SHA256SUMS}, that
- * file's <em>signature</em>, and the public key the signature verifies against. OpenTofu speaks both, so one format
- * serves both clients.
+ * <p><b>It brings signing material with it.</b> A provider release installs only if its {@code SHA256SUMS} verifies, so
+ * the first provider publish generates the repository's OpenPGP key, every {@code SHA256SUMS} write derives a detached
+ * signature, binary as {@code registry.terraform.io} serves it, and the package document declares the public half
+ * inline.
  *
- * <p><b>This is the format that brings signing material with it.</b> A provider release is only installable if the
- * client can verify the {@code SHA256SUMS} that names its zip's digest, so the first provider publish generates the
- * repository's OpenPGP key, every {@code SHA256SUMS} write derives a fresh detached signature, and the package
- * document declares the public half inline as the protocol requires. The signature is <b>binary</b> rather than
- * armoured, which is what {@code registry.terraform.io} serves.
+ * <p><b>{@code /v1/} is Terraform's</b>, fixed by the protocol; the artifacts are stored outside it.
  *
- * <p><b>{@code /v1/} is Terraform's, not ours.</b> The protocol fixes those paths, the way the OCI, NuGet and
- * crates prefixes are fixed by their specifications. The artifacts themselves are stored outside it, because the
- * protocol says a download URL is whatever the registry chooses and tying a stored key to a foreign protocol
- * revision would outlive the revision.
+ * <p><b>Publishing is a {@code PUT} of the artifact</b>, since Terraform registries are populated out of band - a
+ * module is a git tag upstream, a provider a GitHub release.
  *
- * <p><b>There is no publish protocol to implement.</b> Terraform registries are populated out of band - upstream a
- * module is a git tag and a provider release is a GitHub release - so publishing here is a {@code PUT} of the
- * artifact, exactly as the Debian, RPM, Helm and apk formats publish what their clients can only read.
- *
- * <p><b>What a client cannot reach is discovery.</b> Terraform finds a registry by fetching
- * {@code /.well-known/terraform.json} from the <em>host root</em>, which is not under any format's prefix - so that
- * document is contributed by a separate module rather than served here. A deployment that does not install it can
- * still be read by anything addressing these paths directly, but not by {@code terraform init}.
+ * <p><b>Discovery is not served here:</b> {@code /.well-known/terraform.json} is fetched from the host root, outside
+ * every format's prefix, so another module contributes it, and without it {@code terraform init} cannot find the
+ * registry.
  */
 public final class TerraformFormat implements RepositoryFormat, ArtifactLayout, BlobLayout, RepositoryExporter,
         RepositoryImporter, ProxyLeg {
@@ -154,8 +144,6 @@ public final class TerraformFormat implements RepositoryFormat, ArtifactLayout, 
         }
     }
 
-    // ---- the protocol surface ----
-
     private void protocol(FormatExchange exchange, Blobs blobs, String repo, String[] path) throws IOException {
         TerraformListings listings = listings(blobs);
         if (path.length == 5 && path[0].equals("modules") && path[4].equals("versions")) {
@@ -173,13 +161,9 @@ public final class TerraformFormat implements RepositoryFormat, ArtifactLayout, 
         }
     }
 
-    /**
-     * {@code GET .../download} for a module: a {@code 204} whose {@code X-Terraform-Get} names the archive.
-     *
-     * <p>The empty body is the protocol, not an omission - the client reads the header and fetches the URL itself.
-     * A version this repository does not serve is a {@code 404} rather than a header pointing at nothing, because a
-     * client that followed such a header would report a download failure instead of an absent version.
-     */
+    /** {@code GET .../download} for a module: a {@code 204} whose {@code X-Terraform-Get} names the archive, the client
+     *  reading the header and fetching the URL itself. A version not served is a {@code 404}, since a header pointing
+     *  at nothing would read as a download failure rather than an absent version. */
     private void moduleDownload(FormatExchange exchange, Blobs blobs, String repo, String namespace, String name,
                                 String system, String version) throws IOException {
         String key = TerraformCoordinates.moduleArchive(repo, namespace, name, system, version);
@@ -192,14 +176,9 @@ public final class TerraformFormat implements RepositoryFormat, ArtifactLayout, 
         exchange.respond(204);
     }
 
-    /**
-     * The per-platform provider package document: where the zip is, where its checksums are, where their signature
-     * is, and the key that signature verifies against.
-     *
-     * <p>The public key is declared inline because the protocol says so - a client verifies the signature before it
-     * has any other way to learn which key signed it, so a document that only linked to the key would be trusting
-     * the same channel it is verifying.
-     */
+    /** The per-platform provider package document: where the zip, its checksums and their signature are, and the key
+     *  the signature verifies against. The key is inline because the protocol says so: a document linking to it would
+     *  be trusting the channel it is verifying. */
     private void providerPackage(FormatExchange exchange, Blobs blobs, String repo, String namespace, String type,
                                  String version, String os, String arch) throws IOException {
         String file = TerraformCoordinates.providerFile(type, version, os, arch);
@@ -228,8 +207,6 @@ public final class TerraformFormat implements RepositoryFormat, ArtifactLayout, 
         document.append("]}}");
         respondJson(exchange, document.toString().getBytes(StandardCharsets.UTF_8));
     }
-
-    // ---- artifacts ----
 
     private void artifact(FormatExchange exchange, Blobs blobs, String repo, String[] path) throws IOException {
         TerraformListings listings = listings(blobs);
@@ -267,15 +244,8 @@ public final class TerraformFormat implements RepositoryFormat, ArtifactLayout, 
         blobs.serve(located.get(), exchange);
     }
 
-    // ---- the write path ----
-
-    /**
-     * Publish one artifact.
-     *
-     * <p>The bytes stream into the content-addressed store, and the store's own SHA-256 becomes the digest the
-     * {@code SHA256SUMS} line declares - so what a client verifies is a fact about the bytes this repository will
-     * serve rather than anything a publisher asserted alongside them.
-     */
+    /** Publish one artifact: the bytes stream into the content-addressed store, whose SHA-256 becomes the digest the
+     *  {@code SHA256SUMS} line declares, so what a client verifies is a fact about the bytes served. */
     private void push(FormatExchange exchange, Blobs blobs, String repo, String[] path) throws IOException {
         for (String segment : path) {
             if (Keys.unsafe(segment)) {
@@ -298,9 +268,8 @@ public final class TerraformFormat implements RepositoryFormat, ArtifactLayout, 
             exchange.respond(201);
         } else if (path.length == 5 && path[0].equals("providers") && path[4].endsWith(PROVIDER_ARCHIVE)) {
             if (TerraformCoordinates.platformOf(path[2], path[3], path[4]).isEmpty()) {
-                // The file name IS the platform declaration - it is what the SHA256SUMS line names and what the
-                // package document reports - so a name that does not carry one would publish a release no version
-                // entry could describe.
+                // The file name is the platform declaration the SHA256SUMS line and the package document report, so a
+                // name without one would publish a release no version entry could describe.
                 exchange.respond(400);
                 return;
             }
@@ -329,8 +298,6 @@ public final class TerraformFormat implements RepositoryFormat, ArtifactLayout, 
         }
     }
 
-    // ---- the signing key ----
-
     TerraformListings listings(Blobs blobs) {
         return new TerraformListings(blobs, this::signerOrNull);
     }
@@ -343,14 +310,9 @@ public final class TerraformFormat implements RepositoryFormat, ArtifactLayout, 
         }
     }
 
-    /**
-     * The repository's signer, generating a key when there is none, and rotating a near-expiry one in the one write
-     * that also publishes its successor's public half beside the retiring one.
-     *
-     * <p>Generated on the write path (a {@code SHA256SUMS} derivation follows a publish), never on a read: a
-     * provider release that cannot be verified cannot be installed, so a repository with providers and no key is
-     * not a state worth being able to reach.
-     */
+    /** The repository's signer, generating a key when there is none and rotating a near-expiry one in the write that
+     *  publishes its successor's public half. Only on the write path, after a publish, since a provider that cannot be
+     *  verified cannot be installed. */
     private OpenPgpSigner signer(Blobs blobs) throws IOException {
         return keys(blobs).provision();
     }
@@ -393,18 +355,9 @@ public final class TerraformFormat implements RepositoryFormat, ArtifactLayout, 
         exchange.respond(200, key.get());
     }
 
-    // ---- shared response shapes ----
-
-    /**
-     * Serve a stored listing, with the {@code 404} keyed on the <b>raw</b> container rather than on the servable
-     * subset.
-     *
-     * <p>That distinction is the whole of this method. A coordinate this repository has never held is absent and
-     * says so; a coordinate whose every version is withheld is <em>present with nothing to offer</em>, and answers
-     * an empty document. Collapsing the two into a {@code 404} would assert "no such module" about something the
-     * repository does hold - a different fact, and one a client caches - which is the same reasoning the PyPI and
-     * Debian surfaces here already carry.
-     */
+    /** Serve a stored listing, with the {@code 404} keyed on the raw container rather than the servable subset: a
+     *  coordinate never held is absent, while one whose every version is withheld answers an empty document, since a
+     *  {@code 404} would claim "no such module" about something held, which a client caches. */
     private void serveListing(FormatExchange exchange, Blobs blobs, StoredListing.Spec spec, String container)
             throws IOException {
         if (blobs.isEmpty(container)) {
@@ -422,9 +375,8 @@ public final class TerraformFormat implements RepositoryFormat, ArtifactLayout, 
         }
     }
 
-    /** The {@code SHA256SUMS.sig}, derived off the write and brought up to its source when a read arrives inside
-     *  that window - a client verifies the signature against the list, so serving one older than the other is a
-     *  failed install rather than a stale page. */
+    /** The {@code SHA256SUMS.sig}, derived off the write and brought up to its source when read inside that window,
+     *  since a client verifies the signature against the list. */
     private void serveDerived(FormatExchange exchange, Blobs blobs, TerraformListings listings, String repo,
                               String namespace, String type, String version) throws IOException {
         String derived = TerraformListings.shaSumsSignature(repo, namespace, type, version);
@@ -462,37 +414,28 @@ public final class TerraformFormat implements RepositoryFormat, ArtifactLayout, 
         exchange.respond(200, body);
     }
 
-    // ---- proxy ----
-
     /** Where an upstream registry serves each protocol, as its discovery document names them. */
     private record Services(URI providers, URI modules) {
     }
 
     /**
-     * Proxy a miss to an upstream Terraform registry. The registry is found the way a client finds one: its
-     * {@code /.well-known/terraform.json} names where each protocol is served, and a registry that publishes none is
-     * read at {@code v1/providers/} and {@code v1/modules/} under the configured root. A location the discovery
-     * document names, and every URL a package document names, is chosen by the upstream, so each is screened
+     * Proxy a miss to an upstream Terraform registry, found as a client finds one: its
+     * {@code /.well-known/terraform.json} names each protocol's location, else {@code v1/providers/} and
+     * {@code v1/modules/} under the root. Every location and URL the upstream names is screened
      * ({@link OutboundTargets}) before it is fetched.
      *
-     * <p>The version lists of a provider and of a module are ENUMERATIONS, fetched fresh on each read; only an upstream
-     * that answered 404/410 reaches the client as a 404. They name no URLs and are relayed as they are.
+     * <p>Version lists are ENUMERATIONS, fetched fresh; only an upstream 404/410 reaches the client as a 404.
      *
-     * <p>A provider's package document is PINNED and rewritten on the way out. Its {@code download_url} names this
-     * repository's own path for the zip, and its {@code shasums_url} and {@code shasums_signature_url} name this
-     * repository's paths for the sums and their signature, each carrying the platform the document was read for. The
-     * sums and the signature are the upstream's, relayed fresh, and the {@code signing_keys} are left as they are,
-     * so a client verifies the upstream's signature over the upstream's sums, and the zip against them. The zip
-     * itself is held to the {@code shasum} of the same package document that locates it, so an unreadable document
-     * leaves nothing to fetch.
+     * <p>A provider's package document is PINNED and rewritten so its {@code download_url}, {@code shasums_url} and
+     * {@code shasums_signature_url} name this repository's paths. The sums, the signature and the {@code signing_keys}
+     * are the upstream's, so a client verifies the upstream's signature, and the zip is held to the {@code shasum} of
+     * the same document that locates it.
      *
-     * <p>A module's download names a source in {@code X-Terraform-Get}. When that source is a {@code .tar.gz} archive
-     * over HTTPS, the answer names this repository's own path for it, and the archive is cached as fetched - the
-     * protocol declares no checksum for a module. A git source on a host the operator lists
-     * ({@link TerraformGitSource}) is fetched as its ref's archive and served the same way, with the directory inside
-     * the archive named for the client; its digest is recorded on the first fetch, and a later fetch of different
-     * bytes - a moved tag - is refused. Any other source is relayed as it is, or, for a git source, refused when the
-     * operator has switched that on.
+     * <p>A module's download names a source in {@code X-Terraform-Get}. An HTTPS {@code .tar.gz} is answered with this
+     * repository's path and cached as fetched, the protocol declaring no module checksum. A git source on a host the
+     * operator lists ({@link TerraformGitSource}) is fetched as its ref's archive and served likewise, the directory
+     * inside named for the client, its first fetch's digest recorded so a moved tag is refused. Any other source is
+     * relayed, or for git refused when the operator has switched that on.
      */
     @Override
     public boolean pullThrough(FormatExchange exchange, ArtifactStore store, URI upstream,
@@ -588,7 +531,7 @@ public final class TerraformFormat implements RepositoryFormat, ArtifactLayout, 
                 providers = service(document, "providers.v1", root, upstream, allowInternal, providers);
                 modules = service(document, "modules.v1", root, upstream, allowInternal, modules);
             } catch (RuntimeException unreadable) {
-                // not a discovery document: the default locations stand
+                // Not a discovery document: the default locations stand.
             }
         }
         return new Services(providers, modules);
@@ -686,9 +629,9 @@ public final class TerraformFormat implements RepositoryFormat, ArtifactLayout, 
         if (archiveSource(url, source, allowInternal, upstream) == null) {
             Optional<TerraformGitSource> git = gitSource(exchange, source, allowInternal, upstream);
             if (git.isPresent()) {
-                // The archive holds one top-level directory whose name the host chooses, and Terraform does not
-                // expand a glob in a registry module's subdirectory - so the archive is fetched now, which the client
-                // is about to ask for anyway, and the directory it holds is named.
+                // The archive holds one top-level directory the host names, and Terraform expands no glob in a module's
+                // subdirectory, so the archive is fetched now - the client asks for it next anyway - and its directory
+                // named.
                 String key = TerraformCoordinates.moduleArchive(repo, namespace, name, system, version);
                 Blobs blobs = new Blobs(store);
                 Optional<String> directory = blobs.exists(key) || pinned(blobs, fetcher, git.get(), key, repo)
@@ -730,12 +673,9 @@ public final class TerraformFormat implements RepositoryFormat, ArtifactLayout, 
         return source == null || source.isBlank() ? null : source;
     }
 
-    /**
-     * Fetch a git ref's archive into the store under {@code key}, held to the digest its first fetch recorded, and
-     * serve it. Nothing upstream declares a digest for a ref, and a tag can be moved, so the first fetch's is kept -
-     * established once, so two nodes fetching at once cannot record two - and every later fetch of the same host,
-     * repository and ref must produce the same bytes. One that does not is refused and said to be a moved ref.
-     */
+    /** Fetch a git ref's archive into {@code key}, held to the digest its first fetch recorded, and serve it. No
+     *  upstream declares a digest for a ref and a tag can move, so the first fetch's is kept - established once, so two
+     *  nodes cannot record two - and a later fetch of other bytes is refused as a moved ref. */
     private boolean fillPinned(FormatExchange exchange, ArtifactStore store, ProxyFormat.Fetcher fetcher,
                                TerraformGitSource git, String key, String repo) throws IOException {
         Blobs blobs = new Blobs(store);
@@ -801,8 +741,8 @@ public final class TerraformFormat implements RepositoryFormat, ArtifactLayout, 
         }
     }
 
-    /** {@code source} resolved against the download it came from, when it is an HTTPS {@code .tar.gz} with no getter
-     *  prefix, subdirectory or query - the one shape that is simply a file to fetch - and passes the screen. */
+    /** {@code source} resolved against its download, when it is an HTTPS {@code .tar.gz} with no getter prefix,
+     *  subdirectory or query and passes the screen. */
     private static URI archiveSource(URI download, String source, boolean allowInternal, URI upstream) {
         int scheme = source.indexOf("://");
         if (scheme < 0 || source.contains("::") || source.indexOf("//", scheme + 3) >= 0 || source.contains("?")) {
@@ -849,8 +789,6 @@ public final class TerraformFormat implements RepositoryFormat, ArtifactLayout, 
         return RequestBase.of(exchange) + exchange.external(PREFIX + repo);
     }
 
-    // ---- layout ----
-
     @Override
     public Optional<ArtifactDescriptor> describe(String path) {
         if (!path.startsWith(PREFIX)) {
@@ -873,8 +811,7 @@ public final class TerraformFormat implements RepositoryFormat, ArtifactLayout, 
 
     @Override
     public List<String> paths(String coordinate, String version, ArtifactStore store) {
-        // A Terraform artifact's pointer lives in the blobs namespace rather than under publish/, so the coordinate
-        // seam this format really has is BlobLayout's - see blobKeys below.
+        // A pointer lives in the blobs namespace, so the coordinate seam is BlobLayout's (blobKeys).
         return List.of();
     }
 
@@ -912,20 +849,9 @@ public final class TerraformFormat implements RepositoryFormat, ArtifactLayout, 
     /**
      * {@inheritDoc}
      *
-     * <p>This layout's pointer key <em>is</em> its served path without the leading slash - {@link #servedPaths}
-     * composes one from the other - so the request-path describer is already the parse, and writing a second one
-     * here would be two spellings of one grammar with nothing holding them together. The description is re-keyed to
-     * the pointer, because what a repair rebuilding the inventory row holds is the key, not the request path.
-     *
-     * <p><b>Only when the description actually names a version.</b> The two describers have different contracts:
-     * {@code describe} answers about any path this format serves and falls back to a coordinate-less descriptor for
-     * the indexes and checksums beside the artifacts, while this one must answer <em>empty</em> for those - a
-     * repair walking the blob root asks about every key it meets, and a present descriptor with no coordinate is
-     * an absence dressed as a claim. The filter is what keeps the delegation honest.
-     *
-     * <p>{@code BlobLayoutCoordinateSeamTest} drives this over keys this layout really wrote and over the folders
-     * above them, so both halves are checked rather than asserted: if the two shapes ever stop coinciding the round
-     * trip names the wrong coordinate, and if the filter goes the parent of a pointer is claimed as one.
+     * <p>The pointer key is the served path without its leading slash, so the request-path parse is reused and the
+     * description re-keyed to the pointer. Only when it names a version: {@code describe} falls back to a
+     * coordinate-less descriptor for indexes and checksums, which a repair walking the blob root must read as empty.
      */
     @Override
     public Optional<ArtifactDescriptor> describePointer(String key) {

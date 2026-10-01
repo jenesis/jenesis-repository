@@ -9,23 +9,18 @@ import org.apache.commons.compress.archivers.tar.TarArchiveEntry;
 import org.apache.commons.compress.archivers.tar.TarArchiveOutputStream;
 
 /**
- * Imports a Terraform registry laid out as Artifactory lays out a Terraform repository, replaying each artifact
- * through {@link TerraformFormat}'s own {@code PUT}:
+ * Imports a Terraform registry laid out as Artifactory lays one out, replaying each artifact through
+ * {@link TerraformFormat}'s own {@code PUT}:
  * <ul>
- *   <li>a provider release's per-platform zip, {@code <namespace>/<type>/<version>/terraform-provider-<type>_<version>_<os>_<arch>.zip},
- *       as it is - its bytes are what the {@code SHA256SUMS} this repository derives and signs will vouch for;</li>
+ *   <li>a provider's per-platform zip,
+ *       {@code <namespace>/<type>/<version>/terraform-provider-<type>_<version>_<os>_<arch>.zip}, as it is;</li>
  *   <li>a module version, {@code <namespace>/<name>/<system>/<version>.zip}, re-packed as the {@code .tar.gz} this
- *       registry serves every module as. A client unpacks what {@code X-Terraform-Get} names by its extension and
- *       verifies no checksum of a module, so the files arrive as they were; only the envelope changes.</li>
+ *       registry serves: a client unpacks by extension and verifies no module checksum, so only the envelope
+ *       changes.</li>
  * </ul>
- *
- * <p>Only those migrate. {@code SHA256SUMS} and its signature are derived and signed with this repository's own key,
- * so an incumbent's - signed with the publisher's key, which a client of this repository is not handed - are skipped,
- * with every other asset. A provider's file name must name the type and version of the folders it sits in, as the
- * protocol's {@code filename} does.
- *
- * <p>All of it migrates into a single {@code /terraform/terraform/...} registry, the flat migration the other
- * importers use.
+ * {@code SHA256SUMS} and its signature are derived and signed with this repository's key, so an incumbent's are skipped
+ * with every other asset. A provider's file name must name the type and version of its folders. Everything lands in one
+ * {@code /terraform/terraform/...} registry.
  */
 public final class TerraformImporter implements RepositoryImporter {
 
@@ -35,8 +30,8 @@ public final class TerraformImporter implements RepositoryImporter {
 
     private static final String PROVIDER = "terraform-provider-";
 
-    /** The most a module may hold once unpacked. The zip's own directory declares each entry's size and the tar
-     *  refuses a byte past a declared one, so summing the declarations bounds what the re-pack writes. */
+    /** The most a module may hold unpacked: the zip's directory declares each entry's size and the tar refuses a byte
+     *  past it, so summing the declarations bounds the re-pack. */
     private static final long LARGEST_MODULE = 1L << 30;
 
     /** Where a source path goes, and whether its archive is a module's, which is re-packed on the way. */
@@ -100,11 +95,8 @@ public final class TerraformImporter implements RepositoryImporter {
                 true));
     }
 
-    /**
-     * The module's files, in a gzipped tar. An entry naming a place outside the archive - absolute, or climbing out
-     * through {@code ..} - refuses the module rather than carrying the name into an archive a client would unpack,
-     * and so does one declaring more than {@link #LARGEST_MODULE} unpacked.
-     */
+    /** The module's files in a gzipped tar. An entry naming a place outside the archive - absolute, or climbing with
+     *  {@code ..} - refuses the module, as does one declaring more than {@link #LARGEST_MODULE} unpacked. */
     private static void repack(Path zip, Path archive) throws IOException {
         try (ZipFile source = new ZipFile(zip.toFile(), StandardCharsets.UTF_8);
              TarArchiveOutputStream tar = new TarArchiveOutputStream(

@@ -10,13 +10,11 @@ import build.jenesis.repository.store.ListingObserver;
 import build.jenesis.repository.store.StoredListing;
 
 /**
- * Keeps the {@linkplain TerraformListings stored version documents} in step with the transitions that happen off
- * the publish path - a hold on a published artifact and its release, a yank and its reversal, a removal.
- *
- * <p>A provider transition re-decides two documents rather than one: the release's {@code SHA256SUMS}, because a
- * held platform's digest must stop being declared, and the version's entry, because a version whose every platform
- * is held is no longer a version this repository offers. Doing only the first would leave a version list naming a
- * release whose checksums file is empty, which a client reads as a corrupt registry rather than an absent version.
+ * Keeps the {@linkplain TerraformListings stored version documents} in step with transitions off the publish path - a
+ * hold and its release, a yank and its reversal, a removal. A provider transition re-decides two documents: the
+ * release's {@code SHA256SUMS}, so a held platform's digest stops being declared, and the version's entry, since a
+ * version whose every platform is held is no longer offered and an empty checksums file would read as a corrupt
+ * registry.
  */
 public final class TerraformListingObserver implements ListingObserver {
 

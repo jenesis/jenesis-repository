@@ -15,26 +15,22 @@ import tools.jackson.databind.node.ArrayNode;
 import tools.jackson.databind.node.ObjectNode;
 
 /**
- * The three documents a Terraform client reads, each a stored listing the publish maintains: a module's version
- * list, a provider's version list, and a provider release's {@code SHA256SUMS} with the detached signature derived
- * beside it.
+ * The three documents a Terraform client reads, each a stored listing the publish maintains: a module's version list, a
+ * provider's version list, and a provider release's {@code SHA256SUMS} with its detached signature derived beside it.
  *
- * <p><b>The version documents are JSON arrays, and are stored in the shape they are served in.</b> Terraform reads
- * {@code {"modules":[{"versions":[...]}]}} and {@code {"id":..,"versions":[...]}}, so the entries are the array's
- * elements, keyed by each element's own {@code version} member. Storing them keyed some other way and rendering the
- * array on read would make the served bytes a render rather than a document - and a render cannot be streamed, has
- * no stable validator, and re-parses the whole list to answer one request.
+ * <p><b>Version documents are stored as served:</b> {@code {"modules":[{"versions":[...]}]}} and
+ * {@code {"id":..,"versions":[...]}}, entries keyed by each element's {@code version}, so the served bytes are a
+ * document with a stable validator rather than a render.
  *
- * <p><b>{@code SHA256SUMS} is the same shape as every other line-oriented index here</b>: one line per platform,
- * keyed by the file it names, so a publish of one platform's zip rewrites one line rather than folding over the
- * release. Its signature is a derived twin ordered by the document's sequence, which is what stops a client from
- * ever verifying a signature against a list it does not describe.
+ * <p><b>{@code SHA256SUMS}</b> is one line per platform keyed by its file, so a publish rewrites one line. Its
+ * signature is a derived twin ordered by the document's sequence, so a client never verifies a signature against a list
+ * it does not describe.
  */
 final class TerraformListings {
 
     private static final ObjectMapper MAPPER = new ObjectMapper();
 
-    /** Each {@code SHA256SUMS} line is {@code <sha256>  <file>} - two spaces, as {@code sha256sum} writes it. */
+    /** Each {@code SHA256SUMS} line is {@code <sha256>  <file>}, two spaces, as {@code sha256sum} writes it. */
     static final StoredListing.Codec SHA256SUMS =
             StoredListing.Codec.delimited("\n", TerraformListings::fileOf);
 
@@ -49,8 +45,6 @@ final class TerraformListings {
         this.store = blobs.store();
         this.signer = signer;
     }
-
-    // ---- names ----
 
     static String moduleVersions(String repo, String namespace, String name, String system) {
         return TerraformCoordinates.ROOT + repo + "/v1/modules/" + namespace + "/" + name + "/" + system
@@ -76,8 +70,6 @@ final class TerraformListings {
         return at < 0 ? "" : line.substring(at + 2).strip();
     }
 
-    // ---- specs ----
-
     StoredListing.Spec moduleVersionsSpec(String repo, String namespace, String name, String system) {
         String source = TerraformCoordinates.moduleCoordinate(namespace, name, system);
         return StoredListing.Spec.materialising(moduleVersions(repo, namespace, name, system),
@@ -92,12 +84,8 @@ final class TerraformListings {
                 () -> generateProviderVersions(repo, namespace, type));
     }
 
-    /**
-     * The {@code SHA256SUMS} of one provider release, with its detached signature derived after every write.
-     *
-     * <p>The signature is <b>binary</b>, not armoured - {@code registry.terraform.io}'s own {@code .sig} is a raw
-     * OpenPGP packet stream.
-     */
+    /** The {@code SHA256SUMS} of one provider release, its detached signature - binary, as
+     *  {@code registry.terraform.io}'s {@code .sig} - derived after every write. */
     StoredListing.Spec shaSumsSpec(String repo, String namespace, String type, String version) {
         return StoredListing.Spec.materialising(shaSums(repo, namespace, type, version), SHA256SUMS,
                         () -> generateShaSums(repo, namespace, type, version))
@@ -111,14 +99,9 @@ final class TerraformListings {
                 });
     }
 
-    /**
-     * A codec over a JSON array of version objects wrapped in a fixed header and footer, each element keyed by its
-     * own {@code version} member.
-     *
-     * <p>It scans rather than parses, the way every other stored-listing codec here does: an element's text is kept
-     * verbatim as its fragment, so replacing one version's entry never re-serialises the rest of the list and a
-     * field this format does not model is passed through untouched rather than dropped.
-     */
+    /** A codec over a JSON array of version objects in a fixed header and footer, each element keyed by its
+     *  {@code version} and kept verbatim, so replacing one entry never re-serialises the rest and an unmodelled field
+     *  passes through. */
     private static StoredListing.Codec versions(String header, String footer) {
         return new StoredListing.Codec() {
 
@@ -137,8 +120,8 @@ final class TerraformListings {
                 return entries;
             }
 
-            /** The versions one element at a time through a streaming parser, from the one {@code versions} array
-             *  either document shape carries, so a publish into a module never holds every version of it in heap. */
+            /** The versions one element at a time through a streaming parser, from the {@code versions} array either
+             *  shape carries. */
             @Override
             public Reader read(InputStream in, long ignored) throws IOException {
                 JsonParser parser = MAPPER.createParser(in);
@@ -194,13 +177,8 @@ final class TerraformListings {
                 return elements.toString().getBytes(StandardCharsets.UTF_8);
             }
 
-            /**
-             * The same document, written as the versions arrive.
-             *
-             * <p>Deliberately not {@code StoredListing.framed(header, footer, delimited(","))}, which this looks
-             * like: an element here is a JSON object and may contain a comma, so a delimited inner codec would
-             * split one element into two. The frame is right and the delimiter is not.
-             */
+            /** The same document, written as the versions arrive. Not {@code StoredListing.framed} over a
+             *  comma-delimited codec: an element is a JSON object that may contain a comma. */
             @Override
             public Appender append(OutputStream out) {
                 return new Appender() {
@@ -233,8 +211,6 @@ final class TerraformListings {
             }
         };
     }
-
-    // ---- the write path ----
 
     /** A module version was published: list it if it is servable, drop it otherwise. */
     void moduleRefresh(String repo, String namespace, String name, String system, String version) throws IOException {
@@ -307,7 +283,7 @@ final class TerraformListings {
                 .isPresent();
     }
 
-    /** A module version element. The protocol's own minimum: a version, and the empty root the client expects. */
+    /** A module version element: a version and the empty root the client expects. */
     private static String moduleEntry(String version) {
         ObjectNode entry = MAPPER.createObjectNode();
         entry.put("version", version);
@@ -318,13 +294,9 @@ final class TerraformListings {
         return MAPPER.writeValueAsString(entry);
     }
 
-    /**
-     * A provider version element: the version, the plugin protocols it speaks and the platforms this repository
-     * actually holds a zip for.
-     *
-     * <p>The protocols are declared rather than read, because they live inside the provider binary's handshake and
-     * not in any file the registry sees; {@code 5.0} is what every provider built since Terraform 0.12 speaks.
-     */
+    /** A provider version element: the version, the plugin protocols it speaks and the platforms held. The protocols
+     *  are declared, since they live in the binary's handshake; {@code 5.0} is what every provider since Terraform 0.12
+     *  speaks. */
     private static String providerEntry(String version, List<String[]> platforms) {
         ObjectNode entry = MAPPER.createObjectNode();
         entry.put("version", version);
@@ -337,8 +309,6 @@ final class TerraformListings {
         }
         return MAPPER.writeValueAsString(entry);
     }
-
-    // ---- generation (first materialisation and repair) ----
 
     private SortedMap<String, byte[]> generateModuleVersions(String repo, String namespace, String name,
                                                              String system) throws IOException {
@@ -386,8 +356,7 @@ final class TerraformListings {
         return entries;
     }
 
-    /** Regenerate the listing at this key if it is a Terraform one; a derived signature comes back with its
-     *  source. */
+    /** Regenerate the listing at this key if it is a Terraform one; a derived signature comes back with its source. */
     boolean rebuild(String listing) throws IOException {
         String[] segments = listing.split("/");
         if (segments.length < 4 || !segments[0].equals("terraform")) {
