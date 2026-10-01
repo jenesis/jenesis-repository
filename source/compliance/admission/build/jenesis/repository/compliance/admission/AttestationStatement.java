@@ -5,21 +5,15 @@ import module tools.jackson.databind;
 import build.jenesis.repository.compliance.Dsse;
 
 /**
- * A parsed inbound attestation: a DSSE (Dead Simple Signing Envelope) wrapping an in-toto Statement, the shape cosign,
- * in-toto and the SLSA generators emit - on its own, one per line of a {@code .jsonl} bundle, or inside a Sigstore
- * bundle, which carries the same envelope under {@code dsseEnvelope} beside its verification material. It reads the
- * envelope and its statement, verifies the signature the way a consumer does - over the DSSE pre-authentication
- * encoding, against the tenant's configured trust-anchor keys, so a tampered payload or an untrusted signer does not
- * verify - and extracts the statement-subject digests and the provenance predicate's builder identity and source
- * URIs so the admission policy can bind and match them. The envelope is {@link Dsse}'s, the same one the
- * repository's own signers produce, so an attestation this repository signs round-trips through this verifier. Only
- * an {@code application/vnd.in-toto+json} envelope is understood - anything else is not an in-toto attestation and
- * does not parse.
+ * A parsed inbound attestation: a DSSE envelope wrapping an in-toto Statement, as cosign, in-toto and the SLSA
+ * generators emit it - alone, one per line of a {@code .jsonl} bundle, or under {@code dsseEnvelope} in a Sigstore
+ * bundle. It verifies the signature as a consumer does - over the DSSE pre-authentication encoding, against the
+ * tenant's trust anchors - and extracts the subject digests and the provenance builder and source URIs. The envelope is
+ * {@link Dsse}'s, the one the repository's own signers produce, so an attestation this repository signs round-trips.
+ * Only an {@code application/vnd.in-toto+json} envelope parses.
  *
- * <p>A Sigstore bundle's material - a certificate and a transparency-log entry - names an identity this policy has
- * no anchor for, so it is not what admits the file here: the configured keys are, exactly as for a bare envelope.
- * Before the bundle shape was read, a {@code .sigstore} referrer parsed as no attestation at all and its artifact
- * published ungated.
+ * <p>A Sigstore bundle's certificate and transparency-log entry name an identity this policy has no anchor for, so the
+ * configured keys admit it, as for a bare envelope; the bundle shape is read so a {@code .sigstore} referrer is gated.
  */
 final class AttestationStatement {
 
@@ -33,29 +27,22 @@ final class AttestationStatement {
         this.statement = statement;
     }
 
-    /** Parse the first in-toto DSSE envelope in the text - a single JSON object, or the first parsable line of a
-     *  {@code .jsonl} attestation bundle - or empty when the text is not an in-toto attestation envelope. The
-     *  claims-a-subject question the inspector asks ("is this an attestation at all?") needs only the first; the
-     *  admission policy verifies every envelope through {@link #parseAll}. */
+    /** The first in-toto DSSE envelope in the text - a single object, or the first parsable line of a {@code .jsonl}
+     *  bundle - or empty when it is not one. The inspector needs only the first; the policy verifies all through
+     *  {@link #parseAll}. */
     static Optional<AttestationStatement> parse(String text) {
         return parseAll(text).stream().findFirst();
     }
 
-    /**
-     * Every in-toto DSSE envelope the text carries - the one object of a single-envelope referrer (compact on one
-     * line or pretty-printed across several), or <em>every</em> line of a {@code .jsonl} attestation bundle - so
-     * admission verifies each envelope rather than only the first: a trusted first line must never launder an
-     * untrusted, replayed or wrong-builder envelope appended after it (Principles 5, 9). Empty when the text is not
-     * an in-toto attestation envelope at all.
-     */
+    /** Every in-toto DSSE envelope the text carries - the one object of a single referrer, compact or pretty-printed,
+     *  or every line of a {@code .jsonl} bundle - so admission verifies each and a trusted first line cannot launder
+     *  what follows. Empty when the text is not an in-toto envelope at all. */
     static List<AttestationStatement> parseAll(String text) {
         if (text == null || text.isBlank()) {
             return List.of();
         }
-        // A .jsonl bundle is one complete envelope per line: when every non-blank line parses as its own envelope it
-        // is a multi-entry bundle and each is returned. A single envelope (compact, or pretty-printed across lines
-        // whose individual lines are not complete JSON) is not line-per-envelope, so it falls through to the
-        // whole-text parse below and is returned as the one envelope it is - never split.
+        // A .jsonl bundle is one complete envelope per line; when every non-blank line parses alone, each is returned.
+        // A pretty-printed single envelope's lines do not, so it falls through to the whole-text parse, never split.
         List<String> lines = text.lines().filter(line -> !line.isBlank()).toList();
         if (lines.size() > 1) {
             List<AttestationStatement> bundle = new ArrayList<>(lines.size());
@@ -97,14 +84,14 @@ final class AttestationStatement {
         return Optional.of(new AttestationStatement(envelope.get(), statement));
     }
 
-    /** Whether at least one signature verifies over the DSSE pre-authentication encoding against at least one of the
-     *  configured trust-anchor keys - the check that the attestation was signed by a builder the tenant trusts. */
+    /** Whether a signature verifies over the DSSE pre-authentication encoding against a configured trust anchor - that
+     *  a builder the tenant trusts signed it. */
     boolean verifiedBy(Collection<PublicKey> keys) {
         return envelope.verifiedBy(keys);
     }
 
-    /** The SHA-256 digests the statement's subjects declare, lower-cased - what the artifact's own digest is bound
-     *  against, so a valid attestation for one artifact cannot be replayed onto another. */
+    /** The SHA-256 digests the statement's subjects declare, lower-cased - what the artifact's digest is bound
+     *  against. */
     Set<String> subjectDigests() {
         Set<String> digests = new LinkedHashSet<>();
         for (JsonNode subject : statement.path("subject")) {
@@ -129,8 +116,8 @@ final class AttestationStatement {
         return Optional.empty();
     }
 
-    /** The source locations the provenance predicate names, across the SLSA v0.2 and v1 shapes - the config-source
-     *  and material / resolved-dependency URIs a build ran from - so an expected-source policy can match any of them. */
+    /** The source locations the provenance predicate names across the SLSA v0.2 and v1 shapes - config source,
+     *  materials, resolved dependencies - so an expected-source policy can match any of them. */
     List<String> sourceUris() {
         JsonNode predicate = statement.path("predicate");
         SequencedSet<String> uris = new LinkedHashSet<>();

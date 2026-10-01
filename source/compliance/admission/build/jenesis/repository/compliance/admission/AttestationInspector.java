@@ -7,44 +7,36 @@ import build.jenesis.repository.compliance.ManifestSubjectBuilder;
 import build.jenesis.repository.compliance.QualityInspector;
 
 /**
- * The inbound-attestation inspector: a format-agnostic content inspector that finds the provenance referrer a
- * publisher uploads beside an artifact - the in-toto / DSSE / cosign / SLSA envelope at {@code <artifact>.intoto.jsonl}
- * / {@code .att} / ... - and hands it, together with the artifact's own digest, to the discovered
- * {@link AttestationPolicy} to verify and gate on. It claims two shapes so admission holds whichever order the client
- * pushes the pair in: the <em>artifact</em> itself (it looks for a co-located attestation referrer), and the
- * <em>attestation referrer</em> as it publishes (it binds it back to the artifact it names). When it finds a parsable
- * in-toto envelope it returns a single content-scan subject carrying the raw envelope and the artifact digest; when
- * there is no attestation, or the referrer is not an in-toto envelope, it claims no subject at all - so an ordinary
- * artifact without an attestation adds no gate work. It screens both legs identically ({@link #inspect} on publish,
- * {@link #inspectArtifact} on proxy fetch), because a mis-attested upstream pull-through is the same risk as a
- * first-party one.
+ * The inbound-attestation inspector: a format-agnostic inspector that finds the provenance referrer a publisher uploads
+ * beside an artifact - an in-toto, DSSE, cosign or SLSA envelope at {@code <artifact>.intoto.jsonl}, {@code .att} and
+ * the like - and hands it with the artifact's digest to {@link AttestationPolicy}. It claims both the artifact (looking
+ * for a co-located referrer) and the referrer as it publishes (binding it back to its artifact), so admission holds
+ * whichever order the client pushes them in. Without a parsable in-toto envelope it claims no subject, so an artifact
+ * without an attestation adds no gate work. Both legs are screened alike ({@link #inspect}, {@link #inspectArtifact}).
  *
- * <p>It never buffers a blob: it reads only the bounded attestation referrer and hashes the artifact bytes the screen
- * already materialised for its inspectors - leaving the statement-subject binding unconfirmed (rather than asserting a
- * mismatch against a partial hash) when the artifact was larger than that inspection window.
+ * <p>It buffers no blob: it reads only the bounded referrer and hashes the artifact bytes the screen already
+ * materialised, leaving the binding unconfirmed when the artifact exceeds that window rather than asserting a mismatch
+ * against a partial hash.
  */
 public final class AttestationInspector implements QualityInspector {
 
-    /** The ecosystem tag a content-scan subject carries - not a package ecosystem, so no advisory feed keys on it; it
-     *  marks the subject as content-derived for the admission policy and the license dimension's skip. */
+    /** The ecosystem tag of a content-scan subject - not a package ecosystem, so no advisory feed keys on it; it marks
+     *  the subject as content-derived for the admission policy and the licence dimension's skip. */
     static final String ECOSYSTEM = "attestation";
 
-    /** The referrer suffixes an inbound attestation is uploaded under, beside its artifact - the in-toto / DSSE /
-     *  cosign conventions. A GPG {@code .asc} / {@code .sig} is deliberately absent: those are detached OpenPGP
-     *  signatures, not in-toto attestation envelopes. */
+    /** The suffixes an inbound attestation is uploaded under (in-toto, DSSE, cosign conventions). {@code .asc} and
+     *  {@code .sig} are detached OpenPGP signatures, not in-toto envelopes. */
     private static final List<String> ATTESTATION_SUFFIXES = List.of(
             ".intoto.jsonl", ".intoto.json", ".att", ".attestation", ".dsse", ".sigstore");
 
-    /** The distributable artifact extensions worth binding an attestation to - the primary package archives, not the
-     *  metadata / checksum / signature siblings that travel with them. */
+    /** The distributable artifact extensions an attestation binds to - primary archives, not their metadata, checksum
+     *  or signature siblings. */
     private static final Set<String> ARTIFACT_EXTENSIONS = Set.of(
             ".jar", ".war", ".ear", ".aar", ".whl", ".gem", ".nupkg", ".snupkg", ".crate", ".conda",
             ".tgz", ".zip", ".nar", ".apk", ".vsix");
 
-    // Whether the artifact was read whole is the SHARED prefix tier (QualityInspector.PREFIX_INSPECTION_LIMIT), not a
-    // limit of this inspector's own: at or above it the artifact was not read whole - it exceeds the gate's publish-leg
-    // inspection window - so its statement-subject binding is left unconfirmed rather than asserted against a partial
-    // hash. BoundedBodyReader.completeArtifact is the one place that arithmetic lives.
+    // Whether the artifact was read whole is the shared prefix tier (QualityInspector.PREFIX_INSPECTION_LIMIT): at or
+    // above it the binding is left unconfirmed. BoundedBodyReader.completeArtifact holds that arithmetic.
 
     @Override
     public boolean handles(String path) {
@@ -58,8 +50,7 @@ public final class AttestationInspector implements QualityInspector {
 
     @Override
     public List<ComplianceGate.Subject> inspectArtifact(String path, byte[] content, Lookup lookup) throws IOException {
-        // Screened identically on the proxy leg: a co-located attestation is verified the same way whichever leg the
-        // artifact arrives on.
+        // A co-located attestation is verified the same way on the proxy leg.
         return subjects(path, content, lookup);
     }
 
@@ -69,43 +60,42 @@ public final class AttestationInspector implements QualityInspector {
         String artifactDigest;
         boolean artifactPresent;
         if (suffix != null) {
-            // The attestation referrer itself is publishing: verify it against the artifact it names (its sibling
-            // without the suffix), so a tampered or wrong-builder attestation is gated at its own upload.
+            // The referrer itself is publishing: verify it against the artifact it names (its sibling without the
+            // suffix), so a tampered or wrong-builder attestation is gated at its own upload.
             envelope = new String(content, StandardCharsets.UTF_8);
             String artifactPath = path.substring(0, path.length() - suffix.length());
-            // Bind the artifact digest off a BOUNDED read of the sibling: a tiny referrer must never pull a
-            // multi-gigabyte artifact whole into heap on the publish thread (a >=32 MiB discard AFTER materialisation
-            // is still an OOM). When the sibling exceeds the inspection window we leave the statement-subject binding
-            // unconfirmed - exactly as an over-window artifact already is on the publish leg - rather than buffering it.
+            // A bounded read of the sibling: a tiny referrer must never pull a huge artifact into heap on the publish
+            // thread. Over the window, the binding stays unconfirmed, as for an over-window artifact on the publish
+            // leg.
             Optional<QualityInspector.Lookup.Bounded> sibling =
                     lookup.fetchBounded(artifactPath, QualityInspector.prefixInspectionLimit());
-            // The sibling artifact IS present when the store answered the bounded read at all - even when it came back
-            // truncated (over the window). Present-but-unhashable is a can't-confirm binding the policy must hold on;
-            // an absent sibling is a sidecar published before its artifact lands, whose binding is deferred.
+            // The sibling is present whenever the store answered the bounded read, truncated or not: present but
+            // unhashable is a binding the policy holds on, while an absent sibling defers the binding until the
+            // artifact lands.
             artifactPresent = sibling.isPresent();
             artifactDigest = sibling.filter(bounded -> !bounded.truncated())
                     .map(bounded -> completeDigest(bounded.content()))
                     .orElse(null);
         } else {
-            // A distributable artifact is publishing: gate it on a co-located attestation referrer when one is present.
+            // A distributable artifact is publishing: gate it on a co-located referrer when one is present.
             Optional<byte[]> referrer = referrer(path, lookup);
             if (referrer.isEmpty()) {
                 return List.of();
             }
             envelope = new String(referrer.get(), StandardCharsets.UTF_8);
-            // The artifact is the very thing publishing on this leg, so it is present; its digest is null only when it
-            // is at or above the inspection window (>=32 MiB) - present but unhashable, a binding the policy holds on.
+            // The artifact is publishing, so present; its digest is null only at or above the inspection window -
+            // present but unhashable, which the policy holds on.
             artifactPresent = true;
             artifactDigest = completeDigest(content);
         }
         if (AttestationStatement.parse(envelope).isEmpty()) {
-            // Not an in-toto attestation envelope - nothing this dimension admits on; the file publishes untouched.
+            // Not an in-toto envelope: nothing this dimension admits on, and the file publishes untouched.
             return List.of();
         }
         ComplianceGate.Attestation attestation =
                 new ComplianceGate.Attestation(envelope, artifactDigest, artifactPresent, path);
-        // The shared content-scan subject shape: no licensable coordinate, the artifact's location standing in for one,
-        // with the finding stamped on - exactly as the secret inspector stamps its detections.
+        // The shared content-scan subject: no licensable coordinate, the location standing in for one, the attestation
+        // stamped on, as the secret inspector stamps its detections.
         return List.of(ManifestSubjectBuilder.contentScan(ECOSYSTEM, path).withAttestation(attestation));
     }
 
@@ -119,9 +109,8 @@ public final class AttestationInspector implements QualityInspector {
         return Optional.empty();
     }
 
-    /** The hex SHA-256 of the artifact bytes when they were read whole, or {@code null} when they were absent or at
-     *  least as large as the inspection window - in which case the statement-subject binding is left unconfirmed
-     *  rather than asserted against a partial hash. */
+    /** The hex SHA-256 of the artifact when read whole, or {@code null} when absent or at least as large as the
+     *  inspection window, leaving the binding unconfirmed. */
     private static String completeDigest(byte[] artifact) {
         if (!BoundedBodyReader.completeArtifact(artifact)) {
             return null;

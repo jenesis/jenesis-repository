@@ -7,16 +7,13 @@ import build.jenesis.repository.compliance.GatePolicyProvider;
 import build.jenesis.repository.compliance.Verdict;
 
 /**
- * Discovers the inbound-provenance admission dimension of the gate: it reads the trust anchor from
- * {@code provenance-admission-key} (one or more PEM public keys), the expected builders and sources from
- * {@code provenance-admission-builder} / {@code provenance-admission-source}, and the verdict from
- * {@code provenance-admission-action} (default {@link Verdict#QUARANTINE}), and builds an {@link AttestationPolicy}
- * applied identically on both legs - a mis-attested upstream pull-through is the same risk as a first-party upload, so
- * it is not softened for the proxy. The dimension is named {@code provenance-admission}, so
- * {@code jenrepo.provenance-admission=false} turns it off; it also self-disables when no trust anchor is
- * configured ({@link #requiredConfig()}), because without a key there is nothing to verify a signature against and an
- * attestation's builder / source claims would be self-asserted. A key or verdict that does not parse throws, so a
- * live settings rebuild can reject and roll back.
+ * Discovers the inbound-provenance admission dimension: trust anchors from {@code provenance-admission-key} (one or
+ * more PEM public keys), expected builders and sources from {@code provenance-admission-builder} /
+ * {@code provenance-admission-source}, and the verdict from {@code provenance-admission-action} (default
+ * {@link Verdict#QUARANTINE}), building an {@link AttestationPolicy} applied identically to uploads and pull-through
+ * fetches. {@code jenrepo.provenance-admission=false} turns it off, and it self-disables with no trust anchor
+ * ({@link #requiredConfig()}), since builder and source claims would then be self-asserted. A key or verdict that does
+ * not parse throws, so a live settings rebuild rolls back.
  */
 public final class AttestationGatePolicyProvider implements GatePolicyProvider {
 
@@ -29,8 +26,7 @@ public final class AttestationGatePolicyProvider implements GatePolicyProvider {
 
     @Override
     public Set<String> requiredConfig() {
-        // Without a trust anchor there is nothing to verify a signature against, so the dimension self-disables (one
-        // log line) rather than admitting on unsigned, self-asserted builder / source claims.
+        // No trust anchor, nothing to verify against: self-disable rather than admit on self-asserted claims.
         return Set.of(KEY);
     }
 
@@ -40,10 +36,8 @@ public final class AttestationGatePolicyProvider implements GatePolicyProvider {
             List<PublicKey> keys = dimension.text(KEY)
                     .map(AttestationGatePolicyProvider::keys)
                     .orElseGet(List::of);
-            // The trust anchor is the whole "is there anything to gate on" question here: without a key there is
-            // nothing to verify a signature against, so the dimension is absent (the requiredConfig() self-disable,
-            // restated for a create() called outside resolve()). The action verdict is deliberately not part of it -
-            // ALLOW means this dimension evaluates and permits, exactly as it does for every peer.
+            // The trust anchor decides whether there is anything to gate on (the requiredConfig() rule, for a create()
+            // called outside resolve()). The action does not: ALLOW evaluates and permits, as for every peer dimension.
             return dimension.enforcing(keys, () -> new AttestationPolicy(keys,
                     dimension.entries("provenance-admission-builder"),
                     dimension.entries("provenance-admission-source"),
@@ -51,8 +45,8 @@ public final class AttestationGatePolicyProvider implements GatePolicyProvider {
         });
     }
 
-    /** Parse one or more PEM {@code SubjectPublicKeyInfo} blocks (the trust anchors) - an RSA or EC public key each; a
-     *  non-blank value that carries no readable key throws, so a bad settings save rolls back. */
+    /** Parse one or more PEM {@code SubjectPublicKeyInfo} blocks, an RSA or EC key each; a non-blank value with no
+     *  readable key throws, so a bad save rolls back. */
     static List<PublicKey> keys(String pem) {
         List<PublicKey> keys = new ArrayList<>();
         java.util.regex.Matcher block = Pattern.compile(

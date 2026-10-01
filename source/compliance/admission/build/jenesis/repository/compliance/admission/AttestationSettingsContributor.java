@@ -5,11 +5,9 @@ import build.jenesis.repository.settings.Setting;
 import build.jenesis.repository.settings.SettingsContributor;
 
 /**
- * Describes the inbound-provenance admission dimension's settings, so they surface on the settings screens exactly
- * when this module is installed - without it, these dials would guard nothing. All are gate-policy knobs marked
- * {@link Setting.Scope#TENANT}: each tenant configures its own trust anchor and expected builder / source
- * independently of the deployment default (the per-tenant effective chain), a plugin declaring its own scope rather
- * than the neutral core classifying it.
+ * Describes the admission dimension's settings, so they surface exactly when this module is installed. All are
+ * {@link Setting.Scope#TENANT} gate-policy dials: each tenant configures its own trust anchor and expected builder and
+ * source over the deployment default.
  */
 public final class AttestationSettingsContributor implements SettingsContributor {
 
