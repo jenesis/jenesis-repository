@@ -12,11 +12,11 @@ import org.slf4j.LoggerFactory;
  * protocol's terms - {@code If-None-Match: *} and {@code If-Match} on S3, a generation on GCS, an ETag on Azure - and
  * the whole multi-node story (leases, listings, counters, the identity fold) assumes the endpoint refuses a write
  * whose precondition fails. Not every S3-compatible endpoint does, and not every one that honours the first honours
- * the second: OVHcloud Object Storage accepts both headers and ignores them (its roadmap issue #671 has been open
- * since December 2024), and Exoscale's SOS honours {@code If-None-Match: *} but takes no ETag on {@code If-Match}.
- * Over either, two nodes would each believe they won every compare-and-set and overwrite one another without a
- * trace. Nothing at request time can tell a precondition that was honoured from one that was dropped - the write
- * succeeds either way - which is why this is asked once, at boot, and answered by refusing to start.
+ * the second: OVHcloud Object Storage accepts both headers and ignores them, and Exoscale's SOS honours
+ * {@code If-None-Match: *} but takes no ETag on {@code If-Match}. Over either, two nodes would each believe they won
+ * every compare-and-set and overwrite one another without a trace. Nothing at request time can tell a precondition that
+ * was honoured from one that was dropped - the write succeeds either way - which is why this is asked once, at boot,
+ * and answered by refusing to start.
  *
  * <p>The probe is four writes of one fresh key under {@link Scopes#SYSTEM}: a create that must land, the same
  * create again that must be refused, a replace under the token the create left that must land, and the same replace

@@ -8,9 +8,8 @@ import build.jenesis.repository.store.ArtifactStore.Listed;
  * {@link Names} with what the backend's listing already said about each child: a level's {@link Listed} entries
  * pulled one at a time over the store's {@link ArtifactStore#pageListed pages}, holding one page, at the same drain
  * width. A pass that needs each child's size or age reads it here rather than asking the store once per child - over
- * an object store that is one HEAD per object, and the quota recompute paid it for every blob it summed although the
- * listing that named the blob had carried its size. A pass that needs only names keeps {@link Names}; the two are one
- * shape, and neither is the other's default.
+ * an object store that is one HEAD per object, for a size the listing that named the child already carried. A pass that
+ * needs only names keeps {@link Names}; the two are one shape, and neither is the other's default.
  */
 @FunctionalInterface
 public interface Listings {

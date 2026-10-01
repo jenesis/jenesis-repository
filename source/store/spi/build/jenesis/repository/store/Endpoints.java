@@ -9,16 +9,12 @@ import module java.base;
  * HMAC secret, an Azure account key - and every artifact byte over a plaintext transport a MITM can read and tamper
  * with, and nothing anywhere says so, because a plaintext exchange succeeds.
  *
- * <p><strong>One mechanism, three key spellings.</strong> The rule was written out three times - once in
- * {@code S3ArtifactStoreProvider}, once in {@code GcsArtifactStoreProvider}, once in
- * {@code AzureArtifactStoreProvider} - each parsing the {@link URI}, testing the scheme, reading the opt-out through
- * {@link Boolean#parseBoolean} and composing its own refusal message, so the three refusals read differently for the
- * same defect and a fourth backend would have arrived with a fourth wording. What genuinely differs between
- * the backends is only <em>which config keys</em> carry the endpoint and the opt-out, so that is what a caller passes
- * and everything else lives here. A backend module cannot reach a sibling backend's copy - each exports its package
- * only to its own test module, and a store backend must not depend on another store backend for a five-line predicate
- * - so the home is the SPI module all three already require. The cache backends share the same
- * mechanism, under the same rule and the same opt-out spellings, through their own SPI module's {@code Endpoints}.
+ * <p><strong>One mechanism, one key spelling per backend.</strong> What differs between the backends - S3, GCS,
+ * Azure - is only <em>which config keys</em> carry the endpoint and the opt-out, so that is what a caller passes, and
+ * the parse, the scheme test and the refusal message live here, so every backend refuses in the same words. A store
+ * backend must not depend on another store backend, so the home is the SPI module they all require. The cache backends
+ * share the same mechanism, under the same rule and the same opt-out spellings, through their own SPI module's
+ * {@code Endpoints}.
  *
  * <p>The screen is deliberately about the <em>scheme</em> only. Whether the endpoint is reachable, whether its
  * certificate validates and whether the bucket or container exists are the client's business and surface as its own

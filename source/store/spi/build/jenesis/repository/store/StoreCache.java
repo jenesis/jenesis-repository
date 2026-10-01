@@ -35,8 +35,8 @@ public final class StoreCache {
     /** The setting: an ISO-8601 or suffixed duration ({@code PT5M}, {@code 30s}); {@code 0} switches caching off. */
     public static final String TTL_SETTING = "cache.ttl";
 
-    /** Five minutes: what another node's write may lag by, and the bound a deployment turns down when it must. */
-    /** The default ttl as an operator writes it. A compile-time constant beside the parsed one, so a settings
+    /** The default ttl as an operator writes it - five minutes, what another node's write may lag by, and the bound
+     *  a deployment turns down when it must. A compile-time constant beside the parsed one, so a settings
      *  contributor naming it renders a value the reference can print rather than {@code (computed)} - see
      *  {@code Reference.declared}. One spelling: {@link #DEFAULT_TTL} parses this. */
     public static final String DEFAULT_TTL_TEXT = "PT5M";

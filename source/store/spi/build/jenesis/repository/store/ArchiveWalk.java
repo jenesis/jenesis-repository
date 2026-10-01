@@ -14,16 +14,14 @@ import module java.base;
  * gigabytes of payload. The bound here is the bytes fed <em>into</em> the walk, which is the archive's own footprint:
  * for a zip walked entry by entry that is the stored body, and - through {@link #zip} - what its entries inflate
  * to as well, and for a tar read through a decompressor it is the decompressed stream - deliberately the same ceiling
- * in every role, because it is the "how much of this artifact may
- * one read chew through to find one member" budget rather than a claim about compression ratios. A format whose
+ * in every role, because it is the "how much of this artifact may one read chew through to find one member" budget
+ * rather than a claim about compression ratios. A format whose
  * member legitimately sits behind a large payload derives a body-relative ceiling with
  * {@link #largestWalk(long, long)} and states its ratio at its own call site.
  *
- * <p><strong>Why this is shared rather than per format.</strong> Exactly the argument {@link ArchiveInflation}
- * records, one dimension over: a private byte-counting {@link FilterInputStream} and a private ceiling per format
- * would be parallel by convention, keyed to nothing an operator can set, and inherited by nothing. A new format
- * would then arrive not with a different bound but with <em>none</em>, because there would be nothing to inherit it
- * from.
+ * <p><strong>Why this is shared rather than per format.</strong> As for {@link ArchiveInflation}, one dimension
+ * over: held here, the bound is keyed to something an operator can set and a new format inherits it rather than
+ * arriving with none.
  *
  * <p><strong>Reaching the bound is a fact, not a silence.</strong> A walk answers in the same two words a bounded
  * member read and a bounded store traversal answer in - {@link ArchiveInflation.Outcome#EXHAUSTED} (the archive

@@ -17,11 +17,9 @@ import module java.base;
  * A dirty-set records only <em>which</em> coordinates changed, never an order, so there is nothing to sequence and
  * re-marking the same coordinate simply coalesces onto one marker (its key is a stable hash of the coordinate). That
  * is exactly enough for an <em>upsert-by-coordinate</em> index: applying "coordinate X changed" re-derives X's current
- * document from truth, so a duplicate or out-of-order mark is harmless. The richer form - a segmented, compactable
- * <b>append-only journal with a durable cursor</b> (the same shape as the forwarding / webhooks outbox: append events,
- * advance a cursor past the applied prefix, compact old segments) - is the documented next step for a consumer that
- * needs the actual event stream (deltas it cannot re-derive, strict per-coordinate ordering, or fan-out to several
- * cursors). It is deliberately <em>not</em> built here; ship the dirty-set first.
+ * document from truth, so a duplicate or out-of-order mark is harmless. A consumer that needs the actual event
+ * stream (deltas it cannot re-derive, strict per-coordinate ordering, or fan-out to several cursors) needs the richer
+ * form instead - an append-only journal with a durable cursor, the shape of the forwarding / webhooks outbox.
  *
  * <h2>The correctness discipline (the caller's half)</h2>
  * The primitive carries a monotonic {@code version} on every marker - the artifact's publish time, already stamped -
@@ -102,10 +100,9 @@ public final class DirtyIndexFeed {
                         : marker);
     }
 
-    /** The coordinates currently marked dirty, each with its version, op and marker token. This is the O(&Delta;)
-     *  read a sweep does instead of enumerating the whole coordinate set: it lists only the {@code dirty/} prefix, so
-     *  its cost is the number of pending changes, independent of the index size. */
-    /** Every pending entry, gathered page by page - for a feed known to be small, and for tests; a pass
+    /** Every coordinate currently marked dirty, each with its version, op and marker token, gathered page by page.
+     *  It lists only the {@code dirty/} prefix, so its cost is the number of pending changes, independent of the
+     *  index size - but not bounded: it is for a feed known to be small, and for tests; a pass
      *  {@linkplain #drain drains} instead, so the feed's length never reaches its heap. */
     public List<Entry> pending() throws IOException {
         List<Entry> entries = new ArrayList<>();
@@ -195,11 +192,11 @@ public final class DirtyIndexFeed {
         }
     }
 
-    /** The reconcile backstop's feed garbage-collection: drop every marker recorded no later than {@code throughVersion}
-     *  - the cutoff the reconcile captured before it rebuilt the index from truth, so a change marked <em>after</em>
-     *  the rebuild started (and possibly not reflected in that rebuild) is kept for the next incremental sweep. A
-     *  reconcile that rebuilds from durable truth heals whatever the feed missed, then calls this to bound the feed.
-     *  Pass {@link Long#MAX_VALUE} to clear the whole feed. */
+    /** The reconcile backstop's feed garbage-collection: drop every marker recorded no later than
+     *  {@code throughVersion} - the cutoff the reconcile captured before it rebuilt the index from truth, so a change
+     *  marked <em>after</em> the rebuild started (and possibly not reflected in that rebuild) is kept for the next
+     *  incremental sweep. A reconcile that rebuilds from durable truth heals whatever the feed missed, then calls this
+     *  to bound the feed. Pass {@link Long#MAX_VALUE} to clear the whole feed. */
     public void compactThrough(long throughVersion) throws IOException {
         String after = "";
         while (true) {

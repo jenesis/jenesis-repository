@@ -9,9 +9,8 @@ import module java.base;
  * {@linkplain ArtifactStore#DRAIN_PAGE drain width}, hands out one name at a time, and is exhausted when a page comes
  * back short. What a caller keeps is one page of names, whatever the level holds.
  *
- * <p>Every drain takes this one iterator and one width - the VEX store, the staging reap, the torn-write repair, the
- * lease reaper, the outbox's parked pruning, the search index's generations and segments, the quota's recompute -
- * rather than a copy each or a level listed whole, and a drain at a thousand a page is a pass that never finishes.
+ * <p>Every drain takes this one iterator and one width rather than a copy each or a level listed whole; a drain at a
+ * thousand a page is a pass that never finishes.
  * {@link #select} serves the drains that keep some names and rename others.
  *
  * <p>A name is a snapshot of a page: a peer deleting behind the cursor moves nothing under it, and a name deleted

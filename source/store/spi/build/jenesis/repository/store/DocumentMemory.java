@@ -15,7 +15,7 @@ import com.github.benmanes.caffeine.cache.Caffeine;
  * <h2>What it holds</h2>
  * Only the {@linkplain StoredListing#ROOT listing} family, and only documents up to {@value #ENTRY_CAP} bytes: a
  * listing is written whole by the write path and read whole by a client, so a copy is exact, while an artifact's
- * bytes are never a candidate and a listing past the cap streams from the store as it always did. Never a pointer,
+ * bytes are never a candidate and a listing past the cap streams from the store. Never a pointer,
  * deliberately: a pointer carries the hold flag a release or a quarantine flips, and a hold must land on every
  * node at once, not once a copy expires. A listing entry a hold removes shows on another node for at most the
  * ttl, which is what the default trades for the reads it spares.

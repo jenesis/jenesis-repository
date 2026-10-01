@@ -11,7 +11,7 @@ import module java.base;
  * store remembers with the same memories, keyed by the scope's own identity.
  *
  * <p>The memories are reached through the store rather than as a process-wide default so that a store nobody
- * decorated - every raw store a suite opens, a store the kernel did not build - reads exactly as before. Only a
+ * decorated - every raw store a suite opens, a store the kernel did not build - reads straight from its backend. Only a
  * composition that opted in pays the windows the two ttls bound, and it opts in at the one place it opens its
  * store.
  *

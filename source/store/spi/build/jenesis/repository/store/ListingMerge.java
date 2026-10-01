@@ -335,7 +335,8 @@ final class ListingMerge {
         }
     }
 
-    /** One id on one side of a merge: its entry, or empty for a tombstone, and its source or {@link StoredListing#NO_SOURCE}. */
+    /** One id on one side of a merge: its entry, or empty for a tombstone, and its source or
+     *  {@link StoredListing#NO_SOURCE}. */
     record Item(String id, Optional<byte[]> entry, long source) {
     }
 
@@ -421,9 +422,9 @@ final class ListingMerge {
 
     /**
      * The source trailer read as a stream, digested as it goes so an unchanged trailer is recognised without
-     * being held: a blank line, the {@value StoredListing#SOURCES} line, then one {@code id<TAB>seq[<TAB>absent]} line per
-     * id in ascending order. Bytes that do not open so are no trailer, which is what every document written
-     * before sources existed has after its body: nothing.
+     * being held: a blank line, the {@value StoredListing#SOURCES} line, then one {@code id<TAB>seq[<TAB>absent]} line
+     * per id in ascending order. Bytes that do not open so are no trailer, which is what a document with no sources has
+     * after its body: nothing.
      */
     static final class SourceReader implements Closeable {
 

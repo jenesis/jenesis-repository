@@ -7,22 +7,13 @@ import module java.base;
  * rather than as artifacts.
  *
  * <h2>Why this type exists</h2>
- * Because the admin console reached for the <em>cache</em> SPI's general-purpose file API -
- * {@code readFile}/{@code writeFileVersioned}/{@code listDir} - to store its tenants, its members, its membership
- * index and its SCIM token. It was never a cache: {@code rootStorage} was already
- * {@code new DelegatingCacheStorage(repositoryStore)}, so those documents were in the repository's store all
- * along and the cache interface was borrowed for its shape. Borrowing an interface for its shape is how a type
- * nobody owns acquires two meanings - it is why a fixture storing console state had to be told which of two
- * constructors to call, and why a SCIM provisioning module had a compile-time dependency on the build cache.
+ * The console's own state - its tenants, its members, its membership index and its SCIM token - is documents in the
+ * repository's store. This names that shape for what it is, so no such document borrows another interface (the
+ * cache SPI's file API, say) for its shape and gives that interface a second meaning.
  *
- * <p>So this is the shape, named for what it is, over the store the documents were always in. Nothing moves: the
- * keys are the same keys.
- *
- * <p><b>{@code Authorization} keeps its own pair of helpers of this shape, and the reason is not neglect.</b> It
- * reads through {@link StoreCache}, which is a final class rather than an {@link ArtifactStore}, so sharing this
- * type would mean a seam over both - a change to the caching path rather than to the document shape, and a
- * different change from this one. Two implementations of one idea is a thing to fix, and it is written down here
- * rather than left to be rediscovered.
+ * <p><b>{@code Authorization} keeps its own pair of helpers of this shape.</b> It reads through {@link StoreCache},
+ * which is a final class rather than an {@link ArtifactStore}, so sharing this type would need a seam over both - a
+ * change to the caching path rather than to the document shape. The two are one idea implemented twice.
  *
  * <h2>What a document is</h2>
  * A {@link Properties} object at one key. Reads answer an empty document rather than null for an absent or
@@ -125,14 +116,11 @@ public final class Documents {
      * whether or not a comment was asked for - passing {@code null} suppresses the caller's comment and not that one
      * - so a document written twice a second apart differs in its first line.
      *
-     * <p>What is <em>not</em> a hazard, having been checked rather than assumed: the key order. Since the
-     * internal map stopped being a bucket-ordered {@code Hashtable} the rendering is independent of the order the
-     * keys were set in - 120 keys in three different insertion orders render identically - so nothing here needs
-     * to sort, and a sequenced variant would only put the order back in play.
+     * <p>The key order is not a hazard: the rendering is independent of the order the keys were set in, so nothing
+     * here needs to sort, and a sequenced variant would only put the order back in play.
      *
      * <p>The comment is dropped from the rendered bytes rather than by handing {@code store} a filtering
-     * {@link java.io.Writer}, which is how the build tool's own house-brand properties type does it. The writer
-     * form would be the same idea, but {@code store(Writer, ..)} does not escape non-Latin-1 while
+     * {@link java.io.Writer}: {@code store(Writer, ..)} does not escape non-Latin-1 while
      * {@code store(OutputStream, ..)} does, and one of these documents holds artifact paths - so the filter
      * belongs after the escaping, not instead of it. Line endings are normalised for the same reason a fleet is
      * not required to be one platform: {@code store} ends its lines with the local separator.

@@ -22,11 +22,9 @@ import module java.base;
  *
  * <p>{@link #update} and {@link #tryUpdate} are the policy applied: read the key, let a {@link Mutation} decide the
  * new body from what is there, write it against the token that was read, and on a lost race back off and go round
- * again, rather than a loop written out per site with its own try count, no pause and its own ending for the same
- * exhaustion. There are two endings and a caller picks one by name: {@link #update} throws, because a writer that gives
- * up a compare-and-set has usually
- * lost something the caller must know about; {@link #tryUpdate} returns {@code false}, for the few writes whose loss
- * a later pass repairs - and a caller choosing it says in its javadoc which pass that is.
+ * again. There are two endings and a caller picks one by name: {@link #update} throws, because a writer that gives up
+ * a compare-and-set has usually lost something the caller must know about; {@link #tryUpdate} returns {@code false},
+ * for the few writes whose loss a later pass repairs - and a caller choosing it says in its javadoc which pass that is.
  *
  * <p>{@link #decide} and {@link #tryDecide} are the same policy for a write that has more to say than a body: the
  * {@link Decision} hands back a {@link Verdict} - write this body, or keep the key as it is - together with a value
@@ -240,23 +238,23 @@ public final class Retries {
      * against its own bytes and writes again - once per retry, one read and one write each - which is why the
      * symptom is a publish whose read and write counts rise by <em>exactly the same</em> amount.
      *
-     * <p>{@code StoreOperationsE2ETest}'s two-size claim shows it: a serial publish - no peer, nothing it could
-     * honestly lose to - can pay a dozen extra read-write pairs on an object store and none on the filesystem. An SDK
-     * is the one thing an object store has in that path and the filesystem does not.
+     * <p>A serial publish - no peer, nothing it could honestly lose to - can pay a dozen extra read-write pairs on an
+     * object store and none on the filesystem: an SDK is the one thing an object store has in that path and the
+     * filesystem does not.
      *
      * <p>So a refusal is re-read once before it is believed - and the question asked of the re-read is not "are
      * these my bytes" but "does this mutation still have anything to do". The mutation is applied to what the key
      * holds now: if it answers nothing to write, or bytes the key already holds, then the key is in the state the
      * mutation asks for and the caller's work is done however it got there. If it answers something else, the loss
-     * is real - or is a replay this test cannot recognise - and the loop backs off as before. The check costs one
+     * is real - or is a replay this test cannot recognise - and the loop backs off. The check costs one
      * read and one further application on the losing path, against a whole read-write cycle for the retry it
      * replaces. The re-application is reached only where the key turned out to hold the bytes this try wrote,
      * because that is the only state a replay of this try could have left: a refusal over anything else is an
      * honest loss with no replay to recognise, and is retried without asking the mutation anything. So a mutation
      * that counts its own invocations sees one extra only on the path where its write may already have landed.
      *
-     * <p><b>Why a fixed point rather than a comparison against the bytes this try wrote.</b> That was the first
-     * cut, and it is wrong for two shapes of mutation, because for them "someone wrote these bytes" and "I wrote
+     * <p><b>Why a fixed point rather than a comparison against the bytes this try wrote.</b> The comparison is wrong
+     * for two shapes of mutation, because for them "someone wrote these bytes" and "I wrote
      * these bytes" are different facts. An <em>accumulation</em> - {@link StoredCounter#add}'s
      * {@code current + delta} - gives two writers reading one base and flushing one delta byte-identical bodies,
      * so the loser reads its own arithmetic back and reports a success that dropped a delta, silently, where that
@@ -271,14 +269,14 @@ public final class Retries {
      * cannot be rescued from an SDK replay by reading the store, because the evidence that separates "my PUT
      * landed" from "a peer wrote the same bytes" is not in the store: both leave one key holding one body. Such a
      * mutation retries, and double-applies on a replay. The paths the replay cost falls on - a publish's pointers,
-     * its blobs, its inventory sections, its listings - are
-     * every one of them fixed points, which is why the repair reaches the cost without reaching the correctness.
-     * A mutation whose rendering is not deterministic is not one either, and that is a trap worth naming because
-     * it is invisible at the call site: {@link Properties#store(java.io.OutputStream, String)} writes a
-     * {@code #<date>} line unasked, so a document rendered straight through it differs from itself every second
-     * and can never settle. The product's own property documents do not have that problem - they render through
-     * {@link Documents#bytes}, which exists to strip it - but anything reaching for {@code store} directly
-     * reintroduces it, and pays a full retry on every phantom loss without anything saying so.
+     * its blobs, its inventory sections, its listings - are every one of them fixed points, which is why the repair
+     * reaches the cost without reaching the correctness. A mutation whose rendering is not deterministic is not one
+     * either, and that is a trap worth naming because it is invisible at the call site:
+     * {@link Properties#store(java.io.OutputStream, String)} writes a {@code #<date>} line unasked, so a document
+     * rendered straight through it differs from itself every second and can never settle. The product's own property
+     * documents do not have that problem - they render through {@link Documents#bytes}, which exists to strip it - but
+     * anything reaching for {@code store} directly reintroduces it, and pays a full retry on every phantom loss without
+     * anything saying so.
      *
      * <p>It is deliberately a comparison of content and not of tokens: a token says who wrote last, and the
      * question here is what the key holds.
@@ -297,8 +295,8 @@ public final class Retries {
     }
 
     /**
-     * {@link #settled(ArtifactStore, String, Mutation, byte[])} for a {@link Decision}, which answers a value as well as a
-     * body and so has one more case to get right.
+     * {@link #settled(ArtifactStore, String, Mutation, byte[])} for a {@link Decision}, which answers a value as well
+     * as a body and so has one more case to get right.
      *
      * <p>A re-application that <em>keeps</em> - no body - is the decision saying that, given what the key holds,
      * there is nothing to write; its verdict is answered, because that is what the next try would have concluded

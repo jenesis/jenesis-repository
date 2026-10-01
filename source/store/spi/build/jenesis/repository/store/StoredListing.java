@@ -19,23 +19,23 @@ import static build.jenesis.repository.store.ListingMerge.*;
  * <h2>Shape</h2>
  *
  * A listing is a sorted set of <em>entries</em>, each an id and a fragment of bytes - a stanza, a JSON member, a line -
- * and the document is their {@link Codec#join}. The codec also {@link Codec#split splits} a stored document back into its
- * entries, so a write is one read of the document, one change of the affected entries, one compare-and-set write: the
- * cost of a write is one rewrite of the listings the artifact belongs to, whatever else the repository holds. That is
- * the ceiling, and it is the same ceiling a client pays to download the listing once.
+ * and the document is their {@link Codec#join}. The codec also {@link Codec#split splits} a stored document back into
+ * its entries, so a write is one read of the document, one change of the affected entries, one compare-and-set write:
+ * the cost of a write is one rewrite of the listings the artifact belongs to, whatever else the repository holds. That
+ * is the ceiling, and it is the same ceiling a client pays to download the listing once.
  *
  * <p>The document is stored under {@link #ROOT} as a short header - a sequence, the body's length and digests - a blank
- * line, and the body. The header is what a derived document (a {@code .gz} twin, a {@code Release} or {@code repomd.xml}
- * that names the body's digest) is built from without reading the body again, and what {@link #derive} orders derived
- * writes by, so a slow writer can never put an older derived document over a newer one.
+ * line, and the body. The header is what a derived document (a {@code .gz} twin, a {@code Release} or
+ * {@code repomd.xml} that names the body's digest) is built from without reading the body again, and what
+ * {@link #derive} orders derived writes by, so a slow writer can never put an older derived document over a newer one.
  *
  * <h2>Absent documents</h2>
  *
- * A listing that was never materialised - a repository that predates this document, or one {@link #forget forgotten}
- * for repair - is generated from the store by the format's {@link Generator} on first use, by the reader or the writer
- * that finds it absent, and stored with an atomic create. Generation is the format's former on-read enumeration, so an
- * existing repository serves exactly what it served before, once; every read after that is the stored document, and
- * every write after that is incremental. The daily rebuild pass regenerates listings the same way, so a change a
+ * A listing that was never materialised - a repository that holds artifacts but no document yet, or one
+ * {@link #forget forgotten} for repair - is generated from the store by the format's {@link Generator} on first use,
+ * by the reader or the writer that finds it absent, and stored with an atomic create. Generation is the format's
+ * enumeration of the store, paid once; every read after that is the stored document, and every write after that is
+ * incremental. The daily rebuild pass regenerates listings the same way, so a change a
  * writer could not apply (see below) is repaired without anyone noticing more than one slow read.
  *
  * <h2>Contention</h2>
@@ -49,8 +49,8 @@ import static build.jenesis.repository.store.ListingMerge.*;
  * <p>A {@linkplain #rebuild regeneration} rides the same lane as a change, and the reason is the derivation. A
  * document's twin is written from the document the writer just produced, so two writers of one document produce
  * two twins, and only the lane orders them: a rebuild outside it would write a twin from an older snapshot after the
- * publish's twin had landed - under load a CocoaPods shard line falls behind its pod document by several publishes,
- * every time the listing-rebuild pass regenerates the pod document beside a publish.
+ * publish's twin had landed - under load a CocoaPods shard line would fall behind its pod document by several
+ * publishes, every time the listing-rebuild pass regenerated the pod document beside a publish.
  *
  * <h2>Entries derived from another document carry its sequence</h2>
  *
@@ -66,8 +66,8 @@ import static build.jenesis.repository.store.ListingMerge.*;
  * what is served - and a write of an entry lands only at or above the source the stored entry carries: a stale
  * put is dropped and counted ({@code jenrepo.listing.superseded}), a stale regeneration keeps the fresher entry,
  * and a removal leaves a tombstone at its source so an older put cannot resurrect what a newer source removed.
- * An entry written without a source, by a writer that derives it from nothing, behaves exactly as before: the
- * last writer wins, and a regeneration replaces it whole.
+ * An entry written without a source, by a writer that derives it from nothing, keeps the plain rule: the last
+ * writer wins, and a regeneration replaces it whole.
  *
  * <p>Every method is thread-safe; the lanes are keyed by the store's {@link ArtifactStore#identity identity} and the
  * document key, so two scopes with same-named listings never share a queue.
@@ -76,7 +76,8 @@ public final class StoredListing {
 
     private static final Logger LOGGER = LoggerFactory.getLogger(StoredListing.class);
 
-    /** The store root every listing document lives under; the key below it is the format's own, served-path-like key. */
+    /** The store root every listing document lives under; the key below it is the format's own, served-path-like key.
+     *  */
     public static final String ROOT = "listing/";
 
     /** The compare-and-set attempts a writer makes before it {@link #rebuild regenerates} the document. */
@@ -118,7 +119,7 @@ public final class StoredListing {
          *
          * <p>The counterpart of {@link #join}: same document, without holding the entries that produced it. The
          * default buffers into a map and joins at close, which is correct for any codec that has not implemented
-         * streaming and no worse than what it did before - so a codec is never wrong for lacking this, only slower.
+         * streaming - so a codec is never wrong for lacking this, only slower.
          */
         default Appender append(OutputStream out) {
             SortedMap<String, byte[]> entries = new TreeMap<>();
@@ -228,11 +229,10 @@ public final class StoredListing {
                 public Reader read(InputStream in, long ignored) {
                     // Searches a filled window for the delimiter rather than testing the stream a byte at a time,
                     // and the difference is not a nicety: the byte-at-a-time form is a virtual call and a bounds
-                    // check per byte, and the suite that measures a put against a growing document turned it into
-                    // minutes. Only the tail that could still be the start of a delimiter is carried across a
-                    // refill, so a delimiter straddling the window boundary is found exactly as split finds it.
-                    // Empty fragments are skipped as split skips them, so a conventionally terminated document
-                    // yields the same entries either way.
+                    // check per byte, which turns a put against a large document into minutes. Only the tail that could
+                    // still be the start of a delimiter is carried across a refill, so a delimiter straddling the
+                    // window boundary is found exactly as split finds it. Empty fragments are skipped as split skips
+                    // them, so a conventionally terminated document yields the same entries either way.
                     return new Reader() {
 
                         private final byte[] window = new byte[8192];
@@ -485,8 +485,8 @@ public final class StoredListing {
         /**
          * Adapts a generator that builds the whole listing before returning it.
          *
-         * <p>This is the shape being migrated away from, and it is a named adapter rather than an overload of
-         * {@code generate} so that every site still paying the full peak says so in its own source. A per-package
+         * <p>A named adapter rather than an overload of {@code generate}, so that every site paying the full peak
+         * says so in its own source. A per-package
          * listing is legitimately this shape - its map is one package's versions - and is not debt; a
          * repository-wide one is.
          */
@@ -593,21 +593,22 @@ public final class StoredListing {
         }
     }
 
-    /** The stored header: the document's sequence (monotone per document), its body's length, its SHA-256 (the
-     *  validator every read serves) and, for a listing that {@linkplain Spec#withMd5 asks for it}, its MD5 - empty
-     *  otherwise. */
     /**
+     * The stored header: the document's sequence (monotone per document), its body's length, its SHA-256 (the
+     * validator every read serves) and, for a listing that {@linkplain Spec#withMd5 asks for it}, its MD5 - empty
+     * otherwise.
+     *
      * @param entries how many entries the document holds, or {@link #UNKNOWN} when nothing counted them.
-     *                <p>It is recorded because emptiness is a question the read path has to answer and could not:
-     *                a format whose listing is <em>present with zero entries</em> is a repository that holds nothing,
-     *                which several clients must be told about, and the alternative was splitting the document to
-     *                count it - materialising exactly the thing that is allowed to be large. A derived twin
+     *                <p>It is recorded because emptiness is a question the read path has to answer: a format whose
+     *                listing is <em>present with zero entries</em> is a repository that holds nothing, which several
+     *                clients must be told about, and the alternative is splitting the document to count it -
+     *                materialising exactly the thing that is allowed to be large. A derived twin
      *                carries {@link #UNKNOWN}: it is computed from bytes alone, and inventing a count for it would be
      *                worse than admitting there is none.
      */
     public record Header(long seq, long size, String md5, String sha256, long entries) {
 
-        /** No count was recorded - a derived twin, or a document written before the count existed. */
+        /** No count was recorded - a derived twin, or a document whose writer recorded none. */
         public static final long UNKNOWN = -1L;
 
         /** The header a body is stored with at this sequence, SHA-256 only - what a derivation computes for a twin. */
@@ -625,7 +626,6 @@ public final class StoredListing {
             return new Header(seq, body.length, md5 ? digest("MD5", body) : "", digest("SHA-256", body), entries);
         }
 
-        /** The same, for a body that was rendered somewhere other than heap and digested as it went. */
         /**
          * The header of a body that was never held: the caller digested it as it wrote it.
          *
@@ -735,9 +735,8 @@ public final class StoredListing {
          * This document as the {@link Derived} a derivation reads - the header, and the body opened once, streaming.
          * A rebuild-path re-derivation that took {@link #read} and handed its {@link Document} over would hold the
          * whole body in heap; for a repository-wide index that is every package in the suite, and the twin's
-         * derivation fails at three hundred thousand stanzas under 512 MiB. A derivation streams from
-         * {@link Derived#open}, so it reads this exactly as it reads a document written a
-         * moment ago, and holds a buffer.
+         * derivation fails under a bounded heap. A derivation streams from {@link Derived#open}, so it reads this
+         * exactly as it reads a document written a moment ago, and holds a buffer.
          */
         public Derived derived() {
             Served served = this;
@@ -826,11 +825,6 @@ public final class StoredListing {
     // ---- reading ----
 
     /**
-     * Open the listing for streaming, materialising it first when it is absent. Empty only when the generator itself
-     * answers no entries and the listing is still absent after the create - which the caller reads as "nothing to
-     * list", as it would an empty document.
-     */
-    /**
      * The stored document alone, opened for streaming, without generating one that is absent.
      *
      * <p>The counterpart of {@link #open} for a reader that must not walk. A repository-wide listing's generator
@@ -842,6 +836,11 @@ public final class StoredListing {
         return openStored(store, key(listing));
     }
 
+    /**
+     * Open the listing for streaming, materialising it first when it is absent. Empty only when the generator itself
+     * answers no entries and the listing is still absent after the create - which the caller reads as "nothing to
+     * list", as it would an empty document.
+     */
     public static Optional<Served> open(ArtifactStore store, Spec spec) throws IOException {
         String key = spec.key();
         for (int attempt = 0; attempt < 3; attempt++) {
@@ -861,8 +860,8 @@ public final class StoredListing {
      * most likely, because whatever made the repository interesting just happened. Ten of them arriving together
      * would otherwise run ten generations of the same document: each probing, finding nothing, and walking the
      * store, with one write winning the compare-and-set and the other nine thrown away, having cost the same as the
-     * winner. On a
-     * document that takes tens of seconds to generate, that is the difference between one slow request and ten.
+     * winner. On a document that takes tens of seconds to generate, that is the difference between one slow request
+     * and ten.
      *
      * <p>So the first caller builds and the rest wait on it. They are not given the result - they return to the
      * loop above and probe the store again, which is what they would have done anyway and keeps this function's
@@ -1006,8 +1005,7 @@ public final class StoredListing {
      * {@link #update} with a change set, which may also remove every entry under an id prefix.
      *
      * <p><b>A stated property, not an accident:</b> one update rewrites the whole document, streamed, so its cost is
-     * the document's size - about one second for a Debian index of a hundred thousand stanzas, eleven for a million.
-     * That is inherent to a listing a client fetches as one document whose
+     * the document's size. That is inherent to a listing a client fetches as one document whose
      * entry must be visible before the publish answers; the lane above coalesces writers that arrive at once, and
      * a caller that writes many entries at once - a rebuild, a migration - collects them under {@link #batching}
      * so the document is written once per batch rather than once per entry.
@@ -1022,16 +1020,15 @@ public final class StoredListing {
                 new CompletableFuture<>())).landed();
     }
 
-    /** {@link #update} with one entry put. */
     /**
      * Updates made while a batch is open on the thread are collected per listing and applied once each, when the
      * batch closes or a listing's collected entries reach {@link #BATCH_FLUSH}.
      *
      * <p>This exists for the rebuild pass. Rebuilding a per-package listing fires its derivation, and a derivation
      * that keeps a repository-wide index (the OCI catalog, RubyGems' compact {@code versions}, NuGet's search
-     * document, winget's index) puts that package's one entry into it - so a pass over P packages rewrote a P-entry
-     * document P times. Batched, the pass rewrites the index once per batch of entries; the listing-rebuild canary
-     * counts those rewrites through {@code jenrepo.listing.updates}.
+     * document, winget's index) puts that package's one entry into it - so a pass over P packages would rewrite a
+     * P-entry document P times. Batched, the pass rewrites the index once per batch of entries;
+     * {@code jenrepo.listing.updates} counts those rewrites.
      *
      * <p>Only single-entry changes are batched; a change carrying a prefix removal is applied at once, since a
      * prefix's effect depends on its order against the puts around it and a merged batch has no order. A thread
@@ -1125,6 +1122,7 @@ public final class StoredListing {
         }
     }
 
+    /** {@link #update} with one entry put. */
     public static boolean put(ArtifactStore store, Spec spec, String id, byte[] fragment) throws IOException {
         return update(store, spec, new Changes().put(id, fragment));
     }
@@ -1244,9 +1242,8 @@ public final class StoredListing {
         String key = key(derived);
         byte[] head = head(header);
         for (int attempt = 0; attempt < ATTEMPTS; attempt++) {
-            // The token and the stored SEQUENCE, not the stored document. This used to read the existing twin
-            // whole to compare one number in its header - so writing a compressed index re-read the previous
-            // compressed index in full, every time, on a document sized by the repository.
+            // The token and the stored SEQUENCE, not the stored document: reading the existing twin whole to compare
+            // one number in its header would re-read a compressed index sized by the repository on every write.
             Object token = store.version(key).orElse(null);
             if (token != null) {
                 Optional<Served> current = openStored(store, key);
@@ -1280,14 +1277,6 @@ public final class StoredListing {
     }
 
     /**
-     * Run a costly derivation off the write's own thread - a compression that takes longer than the write it
-     * follows, as bzip2 of a large document does - on the node's single derivation thread, coalesced per derived key:
-     * a derivation queued while an older one for the same key still waits replaces it, since {@link #derive} keeps
-     * the newest sequence anyway. The twin lags its source by the time the thread takes to reach it; a read of it
-     * meanwhile serves the previous one. The work itself runs {@code derivation} and is expected to call
-     * {@link #derive}.
-     */
-    /**
      * Deferred work that holds something until it runs - and must be told when it will not.
      *
      * <p>Named for the mechanism rather than the timing, because {@code Deferred} beside it is the container's
@@ -1305,6 +1294,14 @@ public final class StoredListing {
         void superseded();
     }
 
+    /**
+     * Run a costly derivation off the write's own thread - a compression that takes longer than the write it
+     * follows, as bzip2 of a large document does - on the node's single derivation thread, coalesced per derived key:
+     * a derivation queued while an older one for the same key still waits replaces it, since {@link #derive} keeps
+     * the newest sequence anyway. The twin lags its source by the time the thread takes to reach it; a read of it
+     * meanwhile serves the previous one. The work itself runs {@code derivation} and is expected to call
+     * {@link #derive}.
+     */
     public static void later(String derived, Runnable derivation) {
         Runnable superseded;
         synchronized (LATER) {
@@ -1313,8 +1310,7 @@ public final class StoredListing {
         // A replaced derivation never runs, so anything it was holding on the queue's behalf is released here.
         // This is not housekeeping: a deferred derivation may hold a COPY of the document, because the body it was
         // handed is only readable for the length of the call that queued it (Derived, clause 1) - so discarding
-        // the runnable silently without this leaks that copy, once per coalesced write. Conda's twin does exactly
-        // that, and four such files were found on a machine after an evening of test runs.
+        // the runnable silently without this leaks that copy, once per coalesced write.
         if (superseded instanceof Coalesced coalesced) {
             coalesced.superseded();
         }
@@ -1401,19 +1397,17 @@ public final class StoredListing {
      * the result replaces the stored document under its token, continuing its sequence.
      *
      * <p>The token is read before the header, for the reason {@link #apply} gives: a document that moves between
-     * the two reads fails the compare-and-set below against the older token and this attempt retries. Streamed,
-     * like the first materialisation: this is the daily repair pass, and it regenerates a repository-wide listing
-     * whole. Rebuilt per attempt rather than hoisted, because a lost compare-and-set below means the store moved
-     * and the document has to be produced against it again. Rendered outside heap - this is the DAILY pass's path
-     * for every listing in the deployment, so it is the one that meets the largest documents most often. Buffered, a
-     * repository-wide rebuild would simply run out of memory on its own thread, where the only symptom a reader sees
-     * is a document that never appears.
+     * the two reads fails the compare-and-set below against the older token and this attempt retries. Rebuilt per
+     * attempt rather than hoisted, because a lost compare-and-set below means the store moved and the document has
+     * to be produced against it again. Rendered outside heap: this is the daily pass's path for every listing in the
+     * deployment, so it meets the largest documents most often, and buffered, a repository-wide rebuild would run out
+     * of memory on its own thread, where the only symptom a reader sees is a document that never appears.
      *
      * <p><b>A generator that states its sources does not replace the stored document; it is merged into it.</b>
      * The class comment says why: the walk it ran over the sources is a snapshot, and an entry a source's own
      * derivation put from a later write of that source is fresher than what the snapshot read. So every stored
      * entry that carries a source is kept unless the generator read that source at the same sequence or a later
-     * one; a stored entry without a source is replaced whole, as a regeneration always did; and a source the
+     * one; a stored entry without a source is replaced whole; and a source the
      * generator read that yields nothing removes the entry only under the same rule, leaving its tombstone. The
      * stored document is copied to a temporary file first - the merge needs its trailer beside its body, and a
      * stream has one end - which on the repair pass costs a file rather than the heap.
@@ -1554,8 +1548,8 @@ public final class StoredListing {
                     return new Applied(true, null);
                 }
                 // Generated and changed in ONE write. Materialising first and merging on the next attempt would
-                // be tidier to read and wrong to watch: it publishes two documents where a first publish always
-                // published one, so every derivation downstream fires twice and the sequence advances twice. So
+                // be tidier to read and wrong to watch: it publishes two documents where a first publish publishes
+                // one, so every derivation downstream fires twice and the sequence advances twice. So
                 // the generator is rendered to a temporary file and the batch merged over that - the same merge
                 // the stored path runs, against the document that is about to exist rather than one that does.
                 // A lost create is a peer that materialised first: the next attempt reads its document and merges.
@@ -1598,11 +1592,10 @@ public final class StoredListing {
                     derived(store, spec, updated, rendered);
                     return new Applied(true, updated);
                 }
-                // A refused write is not proof the write did not happen - see Retries.settled for the mechanism
-                // and the measurement. Here the check is a digest rather than a comparison of bytes, because the
-                // header already carries one and the body may be sized by the whole repository: if the stored
-                // document's sha256 is the one this attempt rendered, the write landed and the derivations still
-                // owe their run.
+                // A refused write is not proof the write did not happen - see Retries.settled for the mechanism. Here
+                // the check is a digest rather than a comparison of bytes, because the header already carries one and
+                // the body may be sized by the whole repository: if the stored document's sha256 is the one this
+                // attempt rendered, the write landed and the derivations still owe their run.
                 //
                 // Comparing against THIS attempt's own bytes is sound here where the general loop has to re-apply
                 // the mutation to find out. The mutation is fixed and it is a set insertion or removal, so a peer
@@ -1622,11 +1615,9 @@ public final class StoredListing {
         }
         LOGGER.warn("listing {} could not be updated after {} version conflicts; regenerating it in place", key,
                 ATTEMPTS);
-        // A stated bound: two nodes over one bucket publishing four hundred packages from sixteen writers into one
-        // suite lose dozens of races between them and exhaust none - the lanes absorb a fleet's races within the
-        // retries above - and a regeneration here costs one rewrite of the document, the same order
-        // as the publish that lost it. It stays on the publishing thread for the reason update() states: the entry
-        // must be visible when the publish answers.
+        // Rare by construction - the lanes absorb a fleet's races within the retries above - and a regeneration
+        // here costs one rewrite of the document, the same order as the publish that lost it. It stays on the
+        // publishing thread for the reason update() states: the entry must be visible when the publish answers.
         FORGOTTEN.increment();
         return new Applied(false, regenerate(store, spec, List.of()).header());
     }
@@ -1730,15 +1721,13 @@ public final class StoredListing {
         }, spec.derivation());
     }
 
-    /** The first offset in {@code buffer[from, to)} where {@code pattern} occurs whole, or {@code -1}. Leftmost,
-     *  like the scan {@code split} performs, so a delimiter whose prefix repeats matches at the same place. */
     /**
-     * The first occurrence of {@code pattern} in {@code buffer} between {@code from} and {@code to}, or {@code -1}.
+     * The first offset in {@code buffer[from, to)} where {@code pattern} occurs whole, or {@code -1}. Leftmost, like
+     * the scan {@code split} performs, so a delimiter whose prefix repeats matches at the same place.
      *
      * <p>Public because every codec that reads a listing document in windows needs it - scanning a buffer for the
-     * delimiter that ends an entry is what a windowed read <em>is</em> - and it had been written out a second time,
-     * identically, in the RPM codec. {@link Arrays#mismatch} does the comparison rather than a nested loop with a
-     * labelled continue: it is an intrinsic, so this is faster as well as shorter.
+     * delimiter that ends an entry is what a windowed read <em>is</em>. {@link Arrays#mismatch} does the comparison
+     * rather than a nested loop with a labelled continue: it is an intrinsic, so this is faster as well as shorter.
      */
     public static int indexOf(byte[] buffer, int from, int to, byte[] pattern) {
         for (int at = from; at <= to - pattern.length; at++) {
@@ -1788,8 +1777,8 @@ public final class StoredListing {
          * sufficient, even though a format's listing is created by a publish through that format: a
          * <em>migration</em> lays content out directly. After an import from an incumbent manager the tag pointers
          * are all there and the tag list is not, so the daily pass has nothing to claim and the first client request
-         * would generate it inline - at 200,000 tags, on the order of <b>35 seconds</b> on a request thread against a
-         * fraction of a second once the document exists.
+         * would generate it inline - for a large registry, tens of seconds on a request thread against a fraction of a
+         * second once the document exists.
          *
          * <p>So this is self-healing said for stored listings - derived state converges from the durable store
          * rather than being paid for by whoever asks first. It runs on the maintenance pass, which is where a walk

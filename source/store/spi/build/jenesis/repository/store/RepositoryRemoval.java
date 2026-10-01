@@ -92,8 +92,8 @@ public final class RepositoryRemoval {
      * marker last - so a removal that stops part way still reads as one and can be begun again.
      *
      * <p>From the tenant's scope rather than the repository's own, because a backend tidies the containers a delete
-     * empties only inside the scope it deletes through: deleting through the repository's scope left its own directory
-     * standing on the filesystem store, empty, and listed as a repository still.
+     * empties only inside the scope it deletes through: deleting through the repository's scope would leave its own
+     * directory standing on the filesystem store, empty, and listed as a repository still.
      */
     public static void purge(ArtifactStore tenant, String repository) throws IOException {
         String prefix = repository + "/";

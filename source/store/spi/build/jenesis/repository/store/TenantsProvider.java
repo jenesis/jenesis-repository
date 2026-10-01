@@ -4,7 +4,7 @@ import module java.base;
 
 /**
  * A named factory for the {@link Tenants} directory, discovered at runtime with {@link ServiceLoader} - so how a
- * deployment keeps its tenant directory (a multi-tenant edition's store-backed one) is a drop-in module and the
+ * deployment keeps its tenant directory (a store-backed multi-tenant one) is a drop-in module and the
  * composition names no implementation. Each provider reads its own configuration through the {@code config} lookup
  * (a property accessor returning {@code null} when unset); the deployment's root store is passed for a store-backed
  * directory, whose tenants are the top-level scopes of the shared {@code <tenant>/<repository>/...} layout. With no
@@ -39,12 +39,11 @@ import module java.base;
  *     {@code default-tenant} does not move it: until the deployment restarts, the directory keeps listing the
  *     previous default. This is a genuine asymmetry with the routing legs, which re-read the same dial and move on
  *     the next request - so an operator who changes it sees keyless traffic move immediately while the console's
- *     instance list, the orphan diagnostic's tenant set and the purge's still name the old one.
- *     <p>It is stated rather than fixed because the alternative is worse. Making a store-backed directory live
- *     beside a {@link Tenants#fixed fixed} one that cannot be would make <em>installing the tenants module</em>
- *     change when an edit takes effect - one provider answering live and another at boot, for the same dial, is
- *     the divergence this contract exists to prevent. Both legs are boot-bound, they agree, and the settings
- *     catalogue badges {@code default-tenant} as applying on restart so the surface says what the code does.
+ *     instance list, the orphan diagnostic's tenant set and the purge's still name the previous one.
+ *     <p>A store-backed directory live beside a {@link Tenants#fixed fixed} one that cannot be would make
+ *     <em>installing the tenants module</em> change when an edit takes effect - one provider answering live and
+ *     another at boot, for the same dial. So both are boot-bound, they agree, and the settings catalogue badges
+ *     {@code default-tenant} as applying on restart so the surface says what the code does.
  *     <p>A provider must therefore <em>not</em> resolve this value per call in an attempt to be helpful: a
  *     directory that tracked the dial while its sibling did not would reintroduce exactly the divergence above.</li>
  * <li><b>Tenant scoping.</b> The directory is deployment-global by construction - it is the thing that
@@ -54,10 +53,10 @@ import module java.base;
  *     <p>That root-level position is an <em>exception</em> this SPI holds by necessity, and it defines the rule for
  *     everything downstream of it: all plugin state is per-tenant, written under the tenant scope a caller derives
  *     from this directory. The only other deployment-global data is authorization and user management under
- *     {@code auth/} (and superadmin configuration under {@code config/}), because a credential must be resolvable
- *     before a tenant is known; a plugin that finds itself wanting the root store is almost always a plugin that has
- *     not scoped itself yet. A console or API view is likewise always a <em>tenant</em> view - implicitly so when
- *     {@link #installed()} is {@code false} and the fixed directory names the single tenant, which is why a
+ *     {@code .system/auth} (and superadmin configuration under {@code .system/config}), because a credential must be
+ *     resolvable before a tenant is known; a plugin that finds itself wanting the root store is almost always a plugin
+ *     that has not scoped itself yet. A console or API view is likewise always a <em>tenant</em> view - implicitly so
+ *     when {@link #installed()} is {@code false} and the fixed directory names the single tenant, which is why a
  *     single-tenant deployment shows no tenancy chrome rather than a different data model.</li>
  * <li><b>Error visibility.</b> Nothing is swallowed. Two providers answering to one name, one provider
  *     registered twice, and more than one enabled directory with no selection to disambiguate them are all
@@ -90,8 +89,7 @@ public interface TenantsProvider {
     /**
      * Whether a tenants module is installed and not switched off.
      *
-     * <p><b>No production surface reads this</b>, and this javadoc asserted that a console gated its tenant management
-     * on it for as long as none did. The tenant kernel resolves a directory through
+     * <p><b>No production surface reads this.</b> The tenant kernel resolves a directory through
      * {@link #resolve(ArtifactStore, UnaryOperator, String) resolve}, and the console's tenancy chrome follows the
      * resolved directory: with none resolved the directory is the fixed single tenant and the chrome is hidden,
      * which is the same decision taken one layer lower and against the stronger question.

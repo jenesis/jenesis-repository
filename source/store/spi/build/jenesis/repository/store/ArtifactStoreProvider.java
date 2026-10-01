@@ -12,8 +12,8 @@ import build.jenesis.repository.icon.IconContributor;
  * Blob - is added to the module graph by the distribution and bound here through {@code provides}: no consumer, the
  * server included, {@code requires} an implementation, so which backends a deployment can select is a packaging
  * decision (see the {@code bundle} module) and not an edge that rebuilds every consumer whenever a backend changes.
- * A selected backend whose {@link #requiredConfig() required configuration} is unset fails loudly rather than self-disabling:
- * silently falling back to another store would serve and persist against the wrong backend.
+ * A selected backend whose {@link #requiredConfig() required configuration} is unset fails loudly rather than
+ * self-disabling: silently falling back to another store would serve and persist against the wrong backend.
  *
  * <h2>Contract</h2>
  * <ol>
@@ -56,18 +56,20 @@ import build.jenesis.repository.icon.IconContributor;
  *     reached. The rule binds however the endpoint reaches the provider - as its own setting for {@code s3} and
  *     {@code gcs}, or buried inside a connection string that also carries the account key for {@code azure-blob},
  *     where the scheme is easiest to mistype and most costly to get wrong. A backend with no endpoint at all (the
- *     bundled {@code filesystem}) has no transport to screen. Stating the rule at the SPI rather than three times over
- *     is what makes the next endpoint-configured backend arrive with it; {@code StoreContract}'s
+ *     bundled {@code filesystem}) has no transport to screen. Stated at the SPI, the rule binds the next
+ *     endpoint-configured backend too; {@code StoreContract}'s
  *     {@code PLAINTEXT_ENDPOINT_REFUSED} property drives it through {@link #resolve} with each fixture's own
  *     config.</li>
  * </ol>
  */
 public interface ArtifactStoreProvider extends IconContributor {
 
-    /** The backend name this provider answers to, e.g. {@code filesystem}, {@code s3}, {@code gcs}, {@code azure-blob}. */
+    /** The backend name this provider answers to, e.g. {@code filesystem}, {@code s3}, {@code gcs}, {@code azure-blob}.
+     *  */
     String name();
 
-    /** Build the backend, reading configuration through {@code config} (a property/env lookup returning null if unset). */
+    /** Build the backend, reading configuration through {@code config} (a property/env lookup returning null if unset).
+     *  */
     ArtifactStore create(UnaryOperator<String> config);
 
     /** The config keys this backend cannot run without (a bucket, a connection string) - empty (the default) for a

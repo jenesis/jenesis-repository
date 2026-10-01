@@ -153,22 +153,21 @@ public interface PublicationObserver {
 
     /**
      * After-commit notice that a withhold transitioned <em>on</em> for a served identity - the transition-ON leg of the
-     * withhold-change feed a durable, name-bearing derived artifact (a published index, a future catalogue) subscribes
+     * withhold-change feed a durable, name-bearing derived artifact (a published index, say) subscribes
      * to so a <em>retroactive</em> hold retracts it, not only the emit-time screen. Fired at exactly the two durable
-     * withhold choke points, and only on an actual state transition (never on the sweeps' idempotent converge re-marks),
-     * after the durable write, with the failure logged and contained like every other notification here:
+     * withhold choke points, and only on an actual state transition (never on the sweeps' idempotent converge
+     * re-marks), after the durable write, with the failure logged and contained like every other notification here:
      * <ul>
      *   <li><b>marker route</b> - a {@link Withheld withheld/&lt;hash&gt;} marker was freshly written: the descriptor
-     *       carries the content hash ({@code subject.hash()}) and a {@code null} path, because one marker retracts every
-     *       alias of the bytes;</li>
+     *       carries the content hash ({@code subject.hash()}) and a {@code null} path, because one marker retracts
+     *       every alias of the bytes;</li>
      *   <li><b>pointer route</b> - a fresh {@code /quarantine<servedPath>} review pointer was linked: the descriptor
      *       carries the served path (the {@code /quarantine} prefix stripped) and the pointer's hash.</li>
      * </ul>
      * Because the write commits before this fires and a failure is contained, a crash or observer failure between the
      * two can lose a single signal; a durable consumer therefore keeps its own periodic rebuild-from-truth (the full
-     * walk of the two-route contract) as the crash/miss heal-all backstop - worst case identical to today's exposure,
-     * normally healed by the next rebuild. The default is a no-op, so an existing observer opts into the feed without
-     * every provider changing.
+     * walk of the two-route contract) as the crash/miss heal-all backstop, which heals the lost signal on the next
+     * rebuild. The default is a no-op, so an observer opts into the feed without every provider changing.
      */
     default void onWithheld(ArtifactDescriptor subject, ArtifactStore store) throws IOException {
     }

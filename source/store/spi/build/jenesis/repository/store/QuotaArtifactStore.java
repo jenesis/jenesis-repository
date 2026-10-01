@@ -20,12 +20,12 @@ import build.jenesis.repository.observation.ObservabilitySource;
  * store, maintained with its compare-and-set so concurrent writers converge, and seedable from the live blobs with
  * {@link #recompute} (which a periodic reconcile corrects any drift against).
  *
- * The meter is the wrapped store itself by default, so wrapping a scope caps that scope. {@link #scope} keeps the
+ * <p>The meter is the wrapped store itself by default, so wrapping a scope caps that scope. {@link #scope} keeps the
  * meter while descending the delegate, so wrapping a tenant root and then scoping to a repository meters every
  * repository's blobs against one tenant-wide counter and one tenant-wide limit - which is how a per-tenant quota
  * holds across a tenant's repositories even though storage is scoped per {@code <tenant>/<repository>}.
  *
- * The cap is soft at the edge: a new blob is refused only once the meter is already at or over the limit (a write
+ * <p>The cap is soft at the edge: a new blob is refused only once the meter is already at or over the limit (a write
  * begun while under it completes, even if it crosses the line), so an in-flight upload is never torn in half and
  * the check stays a single counter read rather than a pre-sized one. A limit of zero or less means unlimited, in
  * which case this is a transparent pass-through.
@@ -251,7 +251,8 @@ public final class QuotaArtifactStore implements ArtifactStore, ObservabilitySou
      *  before the periodic {@link #recompute reconcile} corrects it, not a silent surprise. */
     private void adjust(long delta) throws IOException {
         // Deferred: this node's used() already counts it, so the limit check is exact here, and the store sees one
-        // compare-and-set per flush rather than one per write; a delta that never lands is the drift the recompute heals.
+        // compare-and-set per flush rather than one per write; a delta that never lands is the drift the recompute
+        // heals.
         new StoredCounter(meter, USED).addLater(delta);
     }
 
@@ -320,18 +321,14 @@ public final class QuotaArtifactStore implements ArtifactStore, ObservabilitySou
     }
 
     /**
-     * Delegate the scan, for the same reason {@link #page} is delegated and with the same consequence for getting it
-     * wrong.
+     * Delegate the scan, for the same reason {@link #page} is delegated.
      *
      * <p>The SPI's inherited {@code scan} is {@code scanByListing}, which walks {@code list} recursively into heap
      * and then refuses past ten thousand keys - a deliberate bound, because a fallback that buffered a namespace to
-     * answer one page would be worse than one that says it cannot. A decorator that forgets this method does not
-     * merely lose performance: it *replaces* the backend's native, genuinely bounded prefix listing with that
-     * fallback, so a bounded question asked through the decorator becomes an unbounded one.
-     *
-     * <p>Without it, a tenant existence probe - written as a point read with a page limit of one - reaches this
-     * fallback through the decorator and materialises 10,001 keys to answer it, and the image does not boot over a
-     * store holding more than ten thousand keys.
+     * answer one page would be worse than one that says it cannot. A decorator that inherits it <em>replaces</em> the
+     * backend's native, bounded prefix listing with that fallback, so a bounded question asked through the decorator -
+     * a tenant existence probe with a page limit of one - becomes an unbounded one, and fails over a store holding
+     * more than ten thousand keys.
      */
     @Override
     public Scan scan(String prefix, String startAfter, int limit, Consumer<Listed> consumer) throws IOException {

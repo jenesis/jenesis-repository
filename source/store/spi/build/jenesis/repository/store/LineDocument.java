@@ -11,12 +11,12 @@ import module java.base;
  *
  * <p>The magic line is what makes a torn, older or foreign object read as absent rather than as garbage:
  * {@link #parse} answers empty for anything that does not open with the magic asked for, and a caller treats that as
- * "nothing stored" - the honest direction, and the rule the generation index stated for its marker. A version lets a
+ * "nothing stored" - the honest direction. A version lets a
  * reader refuse a document newer than it understands. Field values are read back as text; a caller that wants a
  * number parses it and decides what a garbled one means for its document, as the search manifest does.
  *
- * <p>Written byte-for-byte as the search manifest already was ({@code jenesis-search 1}, then {@code name value}
- * lines), so a document that adopts this codec need not migrate what it stored.
+ * <p>The encoding is a {@code <magic> <version>} line (the search manifest's {@code jenesis-search 1}), then
+ * {@code name value} lines.
  *
  * <p>A value here may not carry a newline - the builder replaces one with a space - because a line is a field. A
  * document whose values must survive byte for byte (the outbox's queued notes) uses a key-value codec with URL

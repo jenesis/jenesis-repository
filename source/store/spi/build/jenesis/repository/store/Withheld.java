@@ -4,19 +4,17 @@ import module java.base;
 
 /**
  * The blobs-namespace withhold marker - the store-layout convention ({@code withheld/<sha256>}) that gives the
- * shared {@code blobs/} namespace the retraction read-side the {@code publish/} namespace has always had through
+ * shared {@code blobs/} namespace the retraction read-side the {@code publish/} namespace has through
  * {@link Publication#located}'s withheld screen. A {@code publish/}-namespace format serves through a pointer the
- * compliance gate can overlay with a {@code /quarantine} hold; a blobs-namespace format (npm, PyPI, NuGet, RubyGems,
- * Go, Debian, OCI, and the dual-layout seven) serves straight from {@code blobs/<hash>}, which no hold pointer ever
- * reached - so a retroactive KEV or license hold retracted nothing there. A marker under this convention is written
+ * compliance gate can overlay with a {@code /quarantine} hold; a blobs-namespace format (npm, PyPI, OCI, ...) serves
+ * straight from {@code blobs/<hash>}, which no hold pointer reaches, so without the marker a retroactive hold would
+ * retract nothing there. A marker under this convention is written
  * by the retroactive enforcement sweeps beside their {@code /quarantine} pointers and {@code holds/} records,
  * consulted by the blobs-namespace serve read (a withheld blob serves as absent) and by {@link ServableNames} for the
  * enumeration read-side, and cleared by a release - one withhold truth, two entry points.
  *
- * <p>This is the core home of a convention the core already <em>reads</em> inline (OCI serving probes
- * {@code store.exists("withheld/" + hex)} on its resolved digest): naming it once in the store SPI lets
- * {@link ServableNames#withheldHash}, free OCI, and the downstream {@code Blobs}/hold sweeps share one class rather
- * than each hand-rolling the same {@code withheld/<hash>} probe.
+ * <p>Naming the convention once in the store SPI lets {@link ServableNames#withheldHash}, OCI serving, {@code Blobs}
+ * and the hold sweeps share one class rather than each hand-rolling the same {@code withheld/<hash>} probe.
  *
  * <p>Both operations are idempotent (a mark of a marked hash and a clear of an unmarked one are no-ops), so the
  * sweeps' converge passes and the release/discard primitives re-run cleanly after a crash. The marker carries no
@@ -34,16 +32,15 @@ public final class Withheld {
 
     /** Mark the blob with this hash as withheld from blobs-namespace serving. Idempotent. On an actual transition
      *  (the marker was absent) the withhold-change feed's transition-ON leg fires after the durable write, keyed by the
-     *  content hash (path null - one marker retracts every alias of the bytes); the converge passes' idempotent re-marks
-     *  are no-ops and raise no event.
+     *  content hash (path null - one marker retracts every alias of the bytes); the converge passes' idempotent
+     *  re-marks are no-ops and raise no event.
      *
      *  <p>The transition is gated on the store's atomic-create CAS - {@code writeVersioned} with an expected-absent
      *  token - not a read-then-write, under which two concurrent marks of one hash would both observe "absent" and
-     *  both fire the transition-ON leg (violating the documented exactly-once). Exactly the observer whose conditional
-     *  write
-     *  lands (the store serialises the create) fires the notify; the loser's write returns {@code false} - the marker is
-     *  already present - and it stays silent, the same transition-only CAS the pointer face {@link Publication#link}
-     *  uses ({@code prior.isEmpty()} on a versioned write). */
+     *  both fire the transition-ON leg (violating the documented exactly-once). Exactly the observer whose
+     *  conditional write lands (the store serialises the create) fires the notify; the loser's write returns
+     *  {@code false} - the marker is already present - and it stays silent, the same transition-only CAS the pointer
+     *  face {@link Publication#link} uses ({@code prior.isEmpty()} on a versioned write). */
     public static void mark(ArtifactStore store, String hash) throws IOException {
         mark(store, hash, ArtifactDescriptor.at(null, null));
     }
@@ -79,7 +76,7 @@ public final class Withheld {
      * mechanism; there is deliberately no overload taking a bare {@code boolean} or no proof at all, because a guard
      * left to each caller is one a caller can forget, and a caller that forgets it discloses held bytes.
      *
-     * <p>Deliberately NOT gated on the marker body: a marker may carry a non-empty disposition body (an OCI/older hold
+     * <p>Deliberately NOT gated on the marker body: a marker may carry a non-empty disposition body (an OCI hold
      * writes {@code REJECT} or similar), and any present marker - whatever its body - clears. The clear is a present
      * read-then-delete rather than a CAS on the transition edge, so under a rare concurrent double-clear both observers
      * could fire {@code onWithholdCleared}; that is bounded and idempotent (the feed consumer re-derives from truth),
@@ -88,7 +85,7 @@ public final class Withheld {
      *
      * <p>The clear is still a read-then-write against a concurrent enforcement sweep, so a caller that must close
      * that race re-runs its guard against fresh truth afterwards and {@link #mark re-marks} - see the OCI
-     * accept-clear and the downstream hold-clear sites, which both do.
+     * accept-clear and a gate's hold-clear sites, which both do.
      */
     public static boolean clear(ArtifactStore store, String hash, Known.Determined<String> otherHolder)
             throws IOException {
@@ -118,10 +115,8 @@ public final class Withheld {
      *  so one hash backs many paths and a hold on it would have to fan out over every alias, including the ones no
      *  hold writer enumerated - which is the disclosure the marker exists to close. Nor can it be cached on a node:
      *  a hold placed on one node would then not be honoured on a peer until the entry lapsed, which is not a trade
-     *  to make on a security control. A tiny versioned holds epoch, cached, with the markers consulted only when it
-     *  moves, does not pay for itself either: the epoch either is
-     *  read on every serve, which is this read under another key, or is cached, which is the same staleness under
-     *  another name. Three reads is where a download stops. */
+     *  to make on a security control. A cached holds epoch consulted in its place would be either read on every
+     *  serve - this read under another key - or cached, the same staleness under another name. */
     public static boolean is(ArtifactStore store, String hash) throws IOException {
         return store.readVersioned(ROOT + hash).isPresent();
     }

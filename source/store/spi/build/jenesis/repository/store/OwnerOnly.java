@@ -3,24 +3,18 @@ package build.jenesis.repository.store;
 import module java.base;
 
 /**
- * Files and directories created readable and writable by their owner alone, from the moment they exist - one statement
- * of an intent that was argued seven times over. Everything the product spools through the shared temporary directory
- * is somebody's plaintext: an artifact body waiting for its length or its digest before an upload, an import's
- * downloaded package, a rendered listing on its way into the store, an index segment on its way into the node's cache.
+ * Files and directories created readable and writable by their owner alone, from the moment they exist. Everything
+ * the product spools through the shared temporary directory is somebody's plaintext: an artifact body waiting for its
+ * length or its digest before an upload, an import's downloaded package, a rendered listing on its way into the store,
+ * an index segment on its way into the node's cache.
  *
- * <p>What is true, and what the copies believed. On a POSIX filesystem the JDK already creates a temporary
- * <em>file</em> {@code rw-------} and a temporary <em>directory</em> {@code rwx------}, so a plain
- * {@code Files.createTempFile} was never the world-readable spool the quota decorator's, the three object stores', the
- * gateway's and the two importers' paragraphs each said it would be - the listings, which spooled through the plain
- * call, were owner-only all along, and the test that pins it was green before any of this. What the platform does
- * <em>not</em> do is tighten {@code Files.createDirectories}, which follows the umask ({@code 755} under the usual
- * one): that is where the filesystem store's roots and upload directories needed the mode on the creation call, and
- * where this helper earns its keep. On a filesystem that cannot express modes at creation, files and directories alike
+ * <p>On a POSIX filesystem the JDK already creates a temporary <em>file</em> {@code rw-------} and a temporary
+ * <em>directory</em> {@code rwx------}. What the platform does <em>not</em> tighten is {@code Files.createDirectories},
+ * which follows the umask ({@code 755} under the usual one): the filesystem store's roots and upload directories need
+ * the mode on the creation call. On a filesystem that cannot express modes at creation, files and directories alike
  * get a best-effort tightening through the {@link File} API afterwards, which is the most such a filesystem offers.
- *
- * <p>So the helper is here for legibility and for the two cases the platform leaves open, not because the copies had
- * found an exposure: a reader meets the intent once, under one name, and a sweep that finds a plain
- * {@code Files.createTempFile} in shipped code is finding a spool that has not said what it is.
+ * Spooling through here states the intent under one name, so a plain {@code Files.createTempFile} in shipped code is
+ * a spool that has not said what it is.
  *
  * <p>A rename preserves the inode's mode, so a spool moved into place with {@code ATOMIC_MOVE} keeps its owner-only
  * mode at its destination; an in-place write ({@code newOutputStream}, truncating) preserves it too, where a

@@ -24,15 +24,6 @@ final class ListingFrame {
         return Math.max(priorSeq + 1, System.currentTimeMillis());
     }
 
-    /**
-     * The header and body as one array.
-     *
-     * <p><b>This holds the document twice for the length of the copy</b>, and there is no way around it while
-     * {@link ArtifactStore#writeVersioned} takes a {@code byte[]}: a listing needs compare-and-set, and the
-     * streaming {@link ArtifactStore#write(String, InputStream)} has none. The copy is therefore the floor rather
-     * than an oversight, and it is worth knowing which of the two is the peak - for a repository-wide index the
-     * body dominates, so a deployment sizing its heap against the largest listing should budget twice it.
-     */
     /** The header bytes a document is stored behind - the half of {@link #frame} a streamed write needs on its own. */
     static byte[] head(Header header) {
         return (MAGIC + "\nseq=" + header.seq() + "\nsize=" + header.size() + "\nmd5=" + header.md5()
@@ -40,6 +31,14 @@ final class ListingFrame {
                 + "\n\n").getBytes(StandardCharsets.US_ASCII);
     }
 
+    /**
+     * The header and body as one array.
+     *
+     * <p><b>This holds the document twice for the length of the copy</b>, which is the floor while
+     * {@link ArtifactStore#writeVersioned} takes a {@code byte[]}: a listing needs compare-and-set, and the
+     * streaming {@link ArtifactStore#write(String, InputStream)} has none. For a repository-wide index the body
+     * dominates, so a deployment sizing its heap against the largest listing budgets twice it.
+     */
     static byte[] frame(Header header, byte[] body) {
         byte[] head = head(header);
         byte[] framed = new byte[head.length + body.length];
@@ -95,15 +94,14 @@ final class ListingFrame {
             }
             fields.put(lines[i].substring(0, equals), lines[i].substring(equals + 1));
         }
-        // A document from before the header dropped its SHA-1 carries one more line; it is read and ignored.
+        // A header line this reader does not use (an sha1=) is read and ignored.
         if (!fields.containsKey("seq") || !fields.containsKey("size") || !fields.containsKey("sha256")) {
             throw new IOException("not a listing document: " + key);
         }
         try {
-            // An absent entries= is a document written before the count was recorded, and reads as UNKNOWN rather
-            // than as zero: "nobody counted" and "counted, and there were none" are the two answers this whole field
-            // exists to separate, and defaulting to zero would assert the second from the absence of evidence. The
-            // listing-rebuild repair pass regenerates such a document with a count.
+            // An absent entries= reads as UNKNOWN rather than as zero: "nobody counted" and "counted, and there
+            // were none" are the two answers this field separates. The listing-rebuild repair pass regenerates such
+            // a document with a count.
             return new Header(Long.parseLong(fields.get("seq")), Long.parseLong(fields.get("size")),
                     fields.getOrDefault("md5", ""), fields.get("sha256"),
                     Long.parseLong(fields.getOrDefault("entries", String.valueOf(Header.UNKNOWN))));

@@ -6,7 +6,7 @@ import module java.base;
  * The tenant directory of a deployment: which top-level tenants exist in the shared
  * {@code <tenant>/<repository>/...} store layout, and the lifecycle to add one. How the directory is kept is the
  * implementation's part, supplied by a {@link TenantsProvider} module discovered with
- * {@link java.util.ServiceLoader} (a multi-tenant edition backs it with the store, its tenants the top-level
+ * {@link java.util.ServiceLoader} (a multi-tenant directory module backs it with the store, its tenants the top-level
  * scopes); with none installed the {@link #fixed} directory stands in - the deployment's one configured
  * tenant - so listing and existence always answer, and a console or API offers tenant management only when
  * {@link TenantsProvider#installed()} says the capability is there.

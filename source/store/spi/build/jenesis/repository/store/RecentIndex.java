@@ -17,11 +17,9 @@ import module java.base;
  * is descending time; zero-padded so <em>lexicographic</em> order - the only order a key-value store promises -
  * agrees with numeric order, since {@code 9} would otherwise sort after {@code 10}.
  *
- * <p>The padding is insurance rather than a live fix, and saying so is the honest form: every instant between the
- * epoch and the year 3000 inverts to a 19-digit number anyway, so the widths already agree and dropping the padding
- * would not break anything today. It is kept because the property then holds <em>by construction</em> rather than by
- * an accident of where the epoch sits, and because the failure it guards against is silent - a wrong page, not an
- * error.
+ * <p>Every instant between the epoch and the year 3000 inverts to a 19-digit number anyway; the padding makes the
+ * property hold <em>by construction</em> rather than by where the epoch sits, because the failure it guards against
+ * is silent - a wrong page, not an error.
  *
  * <p><b>Instants before the epoch are clamped to it.</b> A negative epoch-milli inverts to a number above
  * {@code Long.MAX_VALUE}, which overflows to a negative value, renders with a minus sign, and sorts before every

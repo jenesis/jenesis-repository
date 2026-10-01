@@ -14,8 +14,7 @@ import build.jenesis.repository.scope.Scopes;
  * <p>One implementation serves the maintenance scheduler's lease at {@code .system/locks/<name>} and the staging
  * store's per-id lock at {@code staging-lock/<id>}, which a plugin could not otherwise share because a plugin may not
  * depend on the server. The mechanism is the store's compare-and-set, so it lives beside {@link Retries}, the policy it
- * retries
- * under; a caller names the space its locks live in and the ttl, and nothing else differs.
+ * retries under; a caller names the space its locks live in and the ttl, and nothing else differs.
  *
  * <p>The protocol. {@link #acquire} takes a free or lapsed lease with a conditional write - an absent-create when
  * there is no object, a steal against the read token when the stored expiry has passed - and refuses while another
@@ -24,8 +23,8 @@ import build.jenesis.repository.scope.Scopes;
  * lapse and handing a rival a second, concurrent pass; it never steals, and a {@code false} tells the holder it has
  * already lost and must stop. {@link #release} expires the object back to {@code now} by compare-and-set so the next
  * acquirer takes it at once instead of waiting out the ttl; it never releases a rival's lease, and a release that
- * cannot land is abandoned - the lease then lapses on its own ttl, which is what happened before there was a
- * release. A crashed holder's lease lapses the same way, and {@link #reapExpired} clears the objects it leaves.
+ * cannot land is abandoned - the lease then lapses on its own ttl. A crashed holder's lease lapses the same way, and
+ * {@link #reapExpired} clears the objects it leaves.
  *
  * <p>The stored body is two lines, holder then expiry, and a body whose expiry does not parse reads as lapsed: a
  * corrupt lock object is stealable rather than a wedge nothing can clear.
@@ -91,8 +90,7 @@ public final class Lease {
      * unpublish, a delete another node could race - gates on a fresh renew, because the lease may have lapsed
      * mid-pass and been legitimately taken over by a rival that has already redone and sealed the same work. Prefer
      * {@link #guarded}, which runs the mutation only when this answers {@code true}; call this directly only to
-     * branch on ownership for more than one action. (A {@code stillHeld} alias for this fence existed and was this
-     * method under another name.)
+     * branch on ownership for more than one action.
      */
     public boolean renew(String name, String holder, Instant now) throws IOException {
         String key = key(name);

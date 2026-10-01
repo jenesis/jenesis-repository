@@ -5,14 +5,14 @@ import build.jenesis.repository.scope.Scopes;
 
 /**
  * A repository's own document, {@link Scopes#REPOSITORY} at the root of its scope: the one format the repository
- * holds, when it was created, and an optional description an operator gave it (empty when none). A repository exists when it has one - a request to a name that has none is not
- * answered, and neither is a request to a repository whose format this deployment does not carry - and only its
- * format is offered in it.
+ * holds, when it was created, and an optional description an operator gave it (empty when none). A repository
+ * exists when it has one - a request to a name that has none is not answered, and neither is a request to a
+ * repository whose format this deployment does not carry - and only its format is offered in it.
  *
  * <p>It is written when the repository is created ({@link #create}) and rewritten only to give the repository a type
- * that holds everything its old one did ({@link #retype}) - which of those are compatible is the formats' to say, so
- * the decision lives with them; nothing stored ever stops answering - or to change its description ({@link #describe}),
- * which every rewrite keeps.
+ * that holds everything its current one does ({@link #retype}), so nothing stored ever stops answering - which types
+ * are compatible is the formats' to say - or to change its description ({@link #describe}), which every rewrite
+ * keeps.
  */
 public record RepositoryDocument(String format, Instant created, String description) {
 
@@ -94,8 +94,8 @@ public record RepositoryDocument(String format, Instant created, String descript
 
     /**
      * Rewrite the document of the repository whose scope this is to record {@code format}, keeping when it was
-     * created. Only for a type that holds every format the old one did, which the caller has decided; compare-and-set,
-     * so a concurrent rewrite loses rather than interleaves.
+     * created. Only for a type that holds every format the current one does, which the caller has decided;
+     * compare-and-set, so a concurrent rewrite loses rather than interleaves.
      *
      * @return {@code false} when the repository has no document, or another write moved it since it was read.
      */

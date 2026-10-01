@@ -11,9 +11,7 @@ import module java.base;
  * changed its token, and survives for the next pass. A crash between the walk and the clear leaves the flag standing,
  * and the next pass rebuilds again: idempotent, and never a lost change.
  *
- * <p>The body is the instant of the latest change, kept for diagnostics and never read for a decision. The published
- * index's retraction flag was this exact shape, written out on the index with a javadoc that cited the feed's clear
- * discipline twice; the discipline lives here now.
+ * <p>The body is the instant of the latest change, kept for diagnostics and never read for a decision.
  */
 public final class DirtyFlag {
 

@@ -18,7 +18,7 @@ import module java.base;
  *
  * <p><strong>These are primitives, not one algorithm.</strong> The SPIs do <em>not</em> share a resolution policy, so
  * this class exposes one primitive per policy rather than one {@code resolve} with flags. The policy names match the
- * SPI inventory's {@code selection policy} metadata:
+ * selection policies an SPI declares:
  * <ul>
  * <li>{@code ALL} - {@link #all}: additive SPIs where every enabled implementation contributes (formats, observers,
  *     settings contributors, panels, maintenance tasks, signal sources).</li>
@@ -31,7 +31,7 @@ import module java.base;
  *     by caller-supplied policy before it is built (the {@code ArtifactStoreProvider} shape).</li>
  * </ul>
  * plus {@link #installedNames}, the shared enumeration every SPI's {@code installed()} static is built from (which
- * of them a surface actually reads is per-SPI, and is censused rather than assumed -).
+ * of them a surface actually reads is per SPI).
  *
  * <p><strong>Discovery stays with the SPI.</strong> No method here calls {@link ServiceLoader#load}: the {@code uses}
  * clause belongs in the module that owns the service interface, so the SPI's own {@code resolve}/{@code installed}
@@ -48,7 +48,8 @@ import module java.base;
  * <li><b>Thread-safety.</b> {@code Providers} is stateless: every method is a pure function of its arguments,
  *     holds no static mutable state, caches nothing, and may be called concurrently from any thread. It is only as
  *     thread-safe as the arguments handed in - a {@link ServiceLoader} instance is <em>not</em> thread-safe, so a
- *     caller must hand in a loader it does not share, which {@code ServiceLoader.load(X.class)} per call satisfies.</li>
+ *     caller must hand in a loader it does not share, which {@code ServiceLoader.load(X.class)} per call
+ *     satisfies.</li>
  * <li><b>Idempotency / replay.</b> Calling a primitive twice over equal inputs produces an equal outcome - the same
  *     provider chosen, the same exception thrown. It performs no I/O and mutates nothing; repeating a resolve is
  *     always safe. Whether the <em>products</em> are equal is the {@code create} function's business.</li>
@@ -133,6 +134,34 @@ public final class Providers {
     }
 
     /**
+     * The {@code OPTIONAL_UNIQUE} policy for an SPI that reads <b>no</b> selection key - the shape where the family
+     * is chosen by which implementation is installed and enabled, never by name.
+     *
+     * <p>It exists so the ambiguity diagnostic tells the truth. The selection-taking form advises an operator to
+     * "select it with {@code jenrepo.<spi>=<name>}"; for an SPI that reads no selection key that advice does nothing,
+     * and where the key is another module's own off-switch ({@code jenrepo.search}, {@code jenrepo.staging}) following
+     * it switches that module off instead of selecting an implementation.
+     *
+     * <p>Choosing this overload is therefore a statement, checked by the compiler: this SPI has no selection, so
+     * the diagnostic offers only the remedy that works. An SPI that grows one moves to the other form.
+     */
+    public static <P, T> Optional<T> optionalUnique(String spi,
+                                                    Iterable<? extends P> discovered,
+                                                    Function<? super P, String> name,
+                                                    Predicate<? super P> enabled,
+                                                    Function<? super P, Optional<T>> create) {
+        return optionalUnique(spi, discovered, name, Optional.empty(), enabled, create, false);
+    }
+
+    /** The one optional implementation of a facade SPI - a service whose only provider is the module that ships
+     *  it, keyed by its class name because it has no name to select or switch off by: empty when none is on the
+     *  module path, the provider when one is, and two is a packaging error that throws rather than letting
+     *  module-path order choose. */
+    public static <P> Optional<P> singleton(String spi, Iterable<? extends P> discovered) {
+        return optionalUnique(spi, discovered, provider -> provider.getClass().getName(), _ -> true, Optional::of);
+    }
+
+    /**
      * The {@code OPTIONAL_UNIQUE} policy: a singleton capability that may legitimately be absent, whose absence the
      * SPI maps onto its own declared sentinel.
      *
@@ -150,38 +179,6 @@ public final class Providers {
      * @param create     builds the implementation, empty when the provider declines.
      * @return the single resolved implementation, or empty when the capability is not installed or not switched on.
      */
-    /**
-     * The {@code OPTIONAL_UNIQUE} policy for an SPI that reads <b>no</b> selection key - the shape where the family
-     * is chosen by which implementation is installed and enabled, never by name.
-     *
-     * <p>It exists so the ambiguity diagnostic can tell the truth. The selection-taking form advises an operator to
-     * "select it with {@code jenrepo.<spi>=<name>}", and eleven call sites passed {@code Optional.empty()} for the
-     * selection - hard-wired, not merely unset - so that key was never read for any of them. Following the advice
-     * therefore did nothing, and for {@code search} and {@code staging} it did something worse than nothing:
-     * {@code jenrepo.search} and {@code jenrepo.staging} are those server modules' own documented off-switches, so an
-     * operator resolving an ambiguity by the message's instruction switched the console module off instead of
-     * selecting an implementation. A key answered by someone else is the sharper half of the namespace this SPI
-     * family shares.
-     *
-     * <p>Choosing this overload is therefore a statement, checked by the compiler: this SPI has no selection, so
-     * the diagnostic offers only the remedy that works. An SPI that grows one moves back to the other form.
-     */
-    public static <P, T> Optional<T> optionalUnique(String spi,
-                                                    Iterable<? extends P> discovered,
-                                                    Function<? super P, String> name,
-                                                    Predicate<? super P> enabled,
-                                                    Function<? super P, Optional<T>> create) {
-        return optionalUnique(spi, discovered, name, Optional.empty(), enabled, create, false);
-    }
-
-    /** The one optional implementation of a facade SPI - a service whose only provider is the module that ships
-     *  it, keyed by its class name because it has no name to select or switch off by: empty when none is on the
-     *  module path, the provider when one is, and two is a packaging error that throws rather than letting
-     *  module-path order choose. Seven SPIs spelled this out with the same five arguments before it existed. */
-    public static <P> Optional<P> singleton(String spi, Iterable<? extends P> discovered) {
-        return optionalUnique(spi, discovered, provider -> provider.getClass().getName(), _ -> true, Optional::of);
-    }
-
     public static <P, T> Optional<T> optionalUnique(String spi,
                                                     Iterable<? extends P> discovered,
                                                     Function<? super P, String> name,
@@ -331,9 +328,8 @@ public final class Providers {
      * <p><b>Which predicate a caller passes decides whether its answer is a capability signal at all</b>, and the
      * weaker two are not: only {@code Features.active} agrees with what {@code resolve} will do, so a surface gated on
      * an {@code enabled}-predicated {@code installed()} opens for an implementation that self-disabled on a missing
-     * required key, and opens just before an ambiguous or unanswered selection throws. That divergence is why the
-     * capability-signal census asks per SPI who reads {@code installed()}, rather than treating the shape as
-     * self-evidently a capability.
+     * required key, and opens just before an ambiguous or unanswered selection throws. Whether an {@code installed()}
+     * is a capability signal is therefore a question about who reads it, per SPI, not about its shape.
      *
      * @return the matching names in a stable sorted order; never {@code null}, never modifiable.
      */

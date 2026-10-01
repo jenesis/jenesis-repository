@@ -16,11 +16,9 @@ import module java.base;
  * a jar's {@code MANIFEST.MF} and {@code module-info.class}, a {@code .nuspec}, a gemspec, a {@code control} member, an
  * embedded index - reads it on the publish thread of a shared JVM, and the compression ratio is the attacker's to
  * choose: a kilobyte of stored blob can inflate to gigabytes. Every format that reads one therefore needs the same
- * bound, which is exactly the shape a shared mechanism belongs in (a guard one format applies to a shared concern is
- * applied by every format with that concern). A private constant per reading module would keep the numbers parallel
- * by convention only, and a new format would arrive not with a different bound but with <em>none</em>: there would
- * be nothing to inherit. The bound has a name, a home, an operator key and a build guard
- * - a format that ignores it is wrong against this clause rather than silently unbounded.
+ * bound (a guard one format applies to a shared concern is applied by every format with that concern). Held here,
+ * a new format inherits the bound rather than arriving with none: it has a name, a home and an operator key, and a
+ * format that ignores it is wrong against this clause rather than silently unbounded.
  *
  * <p><strong>Reaching the bound is a fact, not a silence.</strong> {@link Entry} answers in the same two words the
  * bounded store traversals answer in - {@link Outcome#EXHAUSTED} (the member ended) and {@link Outcome#TRUNCATED} (the

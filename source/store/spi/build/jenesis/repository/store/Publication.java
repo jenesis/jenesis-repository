@@ -29,18 +29,17 @@ import module org.slf4j;
  * how a second commit sequence enters a codebase. An embedder that needs different behaviour injects a different
  * {@link PublishInterceptor} chain or a different {@link AcceptedLayout}; it does not get to reorder store, screen,
  * gate, lay out, link and notify. Those two constructor seams are the sanctioned variation, and they are enough for
- * every caller in either edition.
+ * every caller.
  *
- * <p>The cost is paid by the tests, and it is worth naming rather than leaving to be rediscovered. The publication-hook
- * contract kit ({@code build.jenesis.repository.store.testkit}) can substitute a hook but not this class, so twenty of
- * its forty-six clauses - the chain's ordering and short-circuiting, where a review pointer lands relative to
- * {@link PublishInterceptor#committed}, what escapes the containment, the three crash windows above - are claims about
- * this choreography that no substitution for a <em>provider</em> could ever falsify. The kit closes nineteen of them by
- * arranging the hooks it does control so the choreography produces the same observable a mutated {@code Publication}
- * would produce (its {@code ChoreographyMutant}), which proves the checks discriminate; it is a faithful simulation of
- * the defect rather than the defect itself, and the twentieth - a crash before the chain runs at all - is out of reach
- * even so. <b>So a change to the sequence below is not covered by a mutation of the product, and the checks that guard
- * it are only as good as the probes they read.</b> Edit the ordering here with that in mind.
+ * <p>The cost is paid by the tests. The publication-hook contract kit ({@code build.jenesis.repository.store.testkit})
+ * can substitute a hook but not this class, so many of its clauses - the chain's ordering and short-circuiting, where a
+ * review pointer lands relative to {@link PublishInterceptor#committed}, what escapes the containment, the three crash
+ * windows below - are claims about this choreography that no substitution for a <em>provider</em> could falsify. The
+ * kit closes most of them by arranging the hooks it does control so the choreography produces the same observable a
+ * mutated {@code Publication} would produce (its {@code ChoreographyMutant}), which proves the checks discriminate; it
+ * is a faithful simulation of the defect rather than the defect itself, and a crash before the chain runs at all is out
+ * of reach even so. <b>So a change to the sequence below is not covered by a mutation of the product, and the checks
+ * that guard it are only as good as the probes they read.</b> Edit the ordering here with that in mind.
  *
  * <h2>Contract</h2>
  * <ol>
@@ -129,9 +128,7 @@ public final class Publication {
      * <p>Public, and the one place it is spelled - the gate, the inventory browse, the maintenance sweeps, the
      * contract kits and this module's own {@code ServableNames} all read it rather than composing it, because callers
      * agreeing is not the same as a space having an owner. It lives here because this module owns {@code publish/} and
-     * every
-     * caller sits above this module, which is what "a shared thing goes below everything that needs it" means when
-     * a suitable module already exists.
+     * every caller sits above it.
      */
     public static final String QUARANTINE_ROOT = "publish" + QUARANTINE_PATH;
 
@@ -148,10 +145,12 @@ public final class Publication {
 
     /** Whether a request path is a {@code /quarantine} review pointer - the pointer face of the withhold-change feed -
      *  matched on the exact {@code /}-subtree boundary the enumeration seam ({@link ServableNames#reviewSubtree}) uses:
-     *  the path is a hold pointer iff it equals {@value #QUARANTINE_PATH} or lies under {@value #QUARANTINE_PATH}{@code /}.
-     *  A bare {@code startsWith("/quarantine")} would misclassify a sibling like {@code /quarantined/foo} or
-     *  {@code /quarantine-cache/x} as a hold and fire a spurious withhold-feed signal with a mangled served path (the
-     *  substring below would eat the leading slash and one more char), so the two seams would disagree on the boundary. */
+     *  the path is a hold pointer iff it equals {@value #QUARANTINE_PATH} or lies under
+     *  {@value #QUARANTINE_PATH}{@code /}. A bare {@code startsWith("/quarantine")} would misclassify a sibling like
+     *  {@code /quarantined/foo} or {@code /quarantine-cache/x} as a hold and fire a spurious withhold-feed signal with
+     *  a mangled served path (the substring below would eat the leading slash and one more char), so the two seams
+     *  would disagree on the boundary.
+     *  */
     public static boolean isQuarantinePath(String requestPath) {
         return requestPath != null
                 && (requestPath.equals(QUARANTINE_PATH) || requestPath.startsWith(QUARANTINE_PATH + "/"));
@@ -392,7 +391,7 @@ public final class Publication {
      *
      * <p>It is what makes an ingress edge's immutability check hold under concurrency. The edge reads the pointer
      * before the layout runs and refuses a re-point it can see; two first publishes of one release both see nothing
-     * there, both pass, and without this the second pointer write silently replaced the first while both answered
+     * there, both pass, and without this the second pointer write would silently replace the first while both answered
      * {@code 201}. With it the loser meets the winner's pointer at its own write and is refused, the winner's bytes
      * are what serves, and a re-publish of identical bytes still converges. A link of any other path, and a
      * {@code /quarantine} review link, is not guarded.
@@ -423,7 +422,7 @@ public final class Publication {
      * caller that has it - the commit point, a layout handed an {@link Acceptance}, a fill that counted the bytes
      * it stored - passes it, and a caller that has not ({@code -1}) lets this method read it once: one stat at the
      * one moment a pointer is written, against the stat a download would otherwise pay on every read. A blob the
-     * stat cannot find is linked without a length, as a torn link always was, for the reconcile pass to repair.
+     * stat cannot find is linked without a length, for the reconcile pass to repair.
      *
      * <p><b>The hold rides the serving pointer.</b> A {@code /quarantine<path>} link is a hold on {@code <path>},
      * and this is where the serving pointer learns of it: after the review pointer lands, the serving pointer at
@@ -556,11 +555,11 @@ public final class Publication {
      * Which live {@code /quarantine} review pointer OUTSIDE {@code excludedPaths} currently holds {@code hash} - the
      * cross-alias proof an automated content-addressed marker clear must run before lifting the marker. The withhold
      * marker is content-addressed (one {@code withheld/<hash>} marker withholds the bytes wherever served) and the
-     * blobs-namespace serve gate keys withheld on the MARKER, not the per-path {@code /quarantine} pointer - so clearing
-     * {@code hash} while a byte-identical sibling coordinate is still held would un-withhold that sibling. This is the
-     * free-store owner of the {@code publish/quarantine} pointer convention (the {@link #isQuarantinePath} face)
-     * answering the same question the downstream release paths' cross-alias guard asks before a release-time clear, so a
-     * free-only clear (the OCI manifest ACCEPT-clear) can prove no-other-alias without reaching into downstream gate code.
+     * blobs-namespace serve gate keys withheld on the MARKER, not the per-path {@code /quarantine} pointer - so
+     * clearing {@code hash} while a byte-identical sibling coordinate is still held would un-withhold that sibling.
+     * This is the owner of the {@code publish/quarantine} pointer convention (the {@link #isQuarantinePath} face)
+     * answering the question a release path's cross-alias guard asks before a release-time clear, so a clear made
+     * outside any gate (the OCI manifest ACCEPT-clear) can prove no other alias holds the bytes.
      *
      * <p><strong>Three answers, because the scan has three outcomes.</strong> {@link Known.Present} carries the served
      * path whose review pointer still holds the hash - a live holder, named, so a refusal to clear can say which
@@ -572,11 +571,11 @@ public final class Publication {
      * {@code false} it would be indistinguishable from a clean negative, and a {@code false} here lifts a hold.
      *
      * <p>The scan is a bounded depth-first walk of the {@code publish/quarantine} pointer subtree only - the review
-     * queue, bounded by the number of currently held paths, never the whole repository - with an early exit on the first
-     * live alias found. {@code excludedPaths} is in served-path form (the {@code /quarantine} prefix stripped), the
-     * caller's own served path(s), so a pointer that maps back to the caller's own coordinate does not keep the marker
-     * on its own account. A genuine store {@link IOException} propagates, so the caller does NOT clear - fail-closed,
-     * since leaving a marker is always safe and clearing wrongly is the disclosure.
+     * queue, bounded by the number of currently held paths, never the whole repository - with an early exit on the
+     * first live alias found. {@code excludedPaths} is in served-path form (the {@code /quarantine} prefix stripped),
+     * the caller's own served path(s), so a pointer that maps back to the caller's own coordinate does not keep the
+     * marker on its own account. A genuine store {@link IOException} propagates, so the caller does NOT clear -
+     * fail-closed, since leaving a marker is always safe and clearing wrongly is the disclosure.
      */
     public Known<String> quarantineAlias(String hash, Set<String> excludedPaths) throws IOException {
         String root = "publish" + QUARANTINE_PATH;
@@ -595,14 +594,14 @@ public final class Publication {
     /** Depth-first search of the {@code publish/quarantine} pointer subtree for a live review pointer, outside
      *  {@code excludedPaths}, whose body is {@code hash} - the served path of the first one found, or {@code null}.
      *  {@code prefix} is the current key, its immediate children are
-     *  enumerated with {@link ArtifactStore#list}, and a leaf is a key with no children. Each non-root node is probed as
-     *  a pointer (a directory node reads empty and is skipped), so a pointer that also has descendants is not missed, and
-     *  the walk short-circuits on the first alias. A body is compared through {@link ServableNames#hash(byte[])}, so a
-     *  pointer linked in the qualified {@code sha256:<hex>} dialect still counts as the alias it is rather than
-     *  silently clearing a live hold. A node that cannot be read is recorded in {@code unreadable} rather than skipped:
-     *  it is contained (one bad entry never throws out of the guard) but never forgotten, because a skipped node is
-     *  exactly where the alias that should have kept the marker would have been. Mirror of the downstream
-     *  {@code HoldLifecycle.aliasHeld}. */
+     *  enumerated with {@link ArtifactStore#list}, and a leaf is a key with no children. Each non-root node is probed
+     *  as a pointer (a directory node reads empty and is skipped), so a pointer that also has descendants is not
+     *  missed, and the walk short-circuits on the first alias. A body is compared through
+     *  {@link ServableNames#hash(byte[])}, so a pointer linked in the qualified {@code sha256:<hex>} dialect still
+     *  counts as the alias it is rather than silently clearing a live hold. A node that cannot be read is recorded in
+     *  {@code unreadable} rather than skipped: it is contained (one bad entry never throws out of the guard) but never
+     *  forgotten, because a skipped node is exactly where the alias that should have kept the marker would have been.
+     *  */
     private String aliasHeld(String root, String prefix, String hash, Set<String> excludedPaths,
                              List<String> unreadable) throws IOException {
         if (!prefix.equals(root)) {
@@ -610,12 +609,11 @@ public final class Publication {
             if (!excludedPaths.contains(servedPath)) {
                 try {
                     // The body is read through the one seam that owns a stored pointer's dialect rather than compared
-                    // raw: a review pointer's body is the bare content hash every hold writer links today, but the
-                    // comparison target is the bare hash the withheld/<hash> marker is keyed by, so a body ever linked
-                    // in the algorithm-qualified sha256:<hex> dialect would compare unequal, the scan would report NO
-                    // other alias and the clear would lift a marker a sibling coordinate still holds - a fail-OPEN
-                    // disclosure, the exact class ServableNames.hash was introduced for. Normalising can only ever
-                    // find MORE aliases, so it only ever narrows the clear, which is this guard's declared direction.
+                    // raw: the comparison target is the bare hash the withheld/<hash> marker is keyed by, so a body
+                    // linked in the algorithm-qualified sha256:<hex> dialect would otherwise compare unequal, the scan
+                    // would report NO other alias and the clear would lift a marker a sibling coordinate still holds -
+                    // a fail-OPEN disclosure. Normalising can only find MORE aliases, so it only narrows the clear,
+                    // which is this guard's declared direction.
                     Optional<String> pointer = store.readVersioned(prefix)
                             .map(versioned -> ServableNames.hash(versioned.content()));
                     if (pointer.isPresent() && pointer.get().equals(hash)) {
@@ -672,9 +670,9 @@ public final class Publication {
         ArtifactDescriptor removed = ArtifactDescriptor.at(null, requestPath);
         notifyDeleted(hash(named) ? removed.withBlob(named, parsed.size()) : removed);
         // The pointer face of the withhold-change feed's transition-OFF leg: removing a /quarantine<servedPath> review
-        // pointer clears that hold, so fire onWithholdCleared with the served path (the /quarantine prefix stripped) and
-        // the pointer's hash - IN ADDITION TO the onDeleted above, which for a quarantine path carries no coordinate the
-        // coordinate-keyed observers act on. A non-quarantine unpublish pays only one startsWith.
+        // pointer clears that hold, so fire onWithholdCleared with the served path (the /quarantine prefix stripped)
+        // and the pointer's hash - IN ADDITION TO the onDeleted above, which for a quarantine path carries no
+        // coordinate the coordinate-keyed observers act on. A non-quarantine unpublish pays only one startsWith.
         if (isQuarantinePath(requestPath)) {
             ArtifactDescriptor cleared = ArtifactDescriptor.at(null, requestPath.substring(QUARANTINE_PATH.length()));
             notifyWithholdCleared(hash(named) ? cleared.withBlob(named, -1L) : cleared);
@@ -727,7 +725,8 @@ public final class Publication {
      *  {@link #deleted}: the caller already stored and linked the artifact and describes it, so nothing is read or
      *  written here. Failures are logged and contained like every observer notification, never failing the caller's
      *  already-completed publish. This is the sole seam that carries {@link PublicationObserver#onPublished}: with the
-     *  screen+layout choreography living at the ingress edges, a blobs-namespace deploy fires its observer through here. */
+     *  screen+layout choreography living at the ingress edges, a blobs-namespace deploy fires its observer through
+     *  here. */
     public void published(ArtifactDescriptor published) {
         notifyPublished(published);
     }
@@ -741,8 +740,6 @@ public final class Publication {
         notify(observers, "cache of " + cached.path(), observer -> observer.onCached(cached, upstream, store));
     }
 
-    /** Whether a pointer's content is the lower-case SHA-256 hex a {@link #link} writes - the only shape carried
-     *  into a removal descriptor's blob identity, so a corrupt pointer never masquerades as a hash. */
     /** Counts the bytes a store reads through it. {@link #transferTo} is spelled out over this class's own reads
      *  rather than inherited, so a store that drains the body with it counts too. */
     private static final class Counting extends FilterInputStream {
@@ -795,6 +792,8 @@ public final class Publication {
         }
     }
 
+    /** Whether a pointer's content is the lower-case SHA-256 hex a {@link #link} writes - the only shape carried
+     *  into a removal descriptor's blob identity, so a corrupt pointer never masquerades as a hash. */
     private static boolean hash(String value) {
         if (value.length() != 64) {
             return false;
@@ -808,18 +807,17 @@ public final class Publication {
         return true;
     }
 
-    /** One notification, so the seven after-commit faces reach their observers through one containment rather than six
-     *  copies of it. Declares {@code Exception} because the SPI's methods declare {@code IOException} and containing
-     *  it is the point. */
+    /** One notification, so every after-commit face reaches its observers through one containment. Declares
+     *  {@code Exception} because the SPI's methods declare {@code IOException} and containing it is the point. */
     @FunctionalInterface
     private interface Notification {
         void to(PublicationObserver observer) throws Exception;
     }
 
     /**
-     * <b>The one containment behind every after-commit observer notify.</b> Six faces - published, deleted,
-     * and the two withhold transitions in their instance and static forms - share this loop rather than a copy each,
-     * and a copy is a place where one of them quietly stops matching the others; this is the same
+     * <b>The one containment behind every after-commit observer notify.</b> Every face - published, deleted, cached,
+     * marked, and the two withhold transitions in their instance and static forms - shares this loop rather than a copy
+     * each, and a copy is a place where one of them quietly stops matching the others; this is the same
      * one-choke-point move {@code EventSink.emit} makes for its own fan-out.
      *
      * <p>Three properties, and the middle one is the easiest to lose.
@@ -833,9 +831,8 @@ public final class Publication {
      *       leave a deployment serving artifacts on a broken runtime with a WARNING to show for it. Propagating with
      *       <em>no</em> line at all would half-apply the product's rule for an Error - attributed and escalated: an
      *       operator would learn that the publish 500ed and nothing about which of N installed observers had given
-     *       way. The propagation direction is deliberate - it is arguable, because the publish HAS committed and the
-     *       client
-     *       is told it failed, and that argument is a separate decision from this diagnosis.</li>
+     *       way. Propagating means a client is told a publish failed that HAS committed; that is the accepted cost,
+     *       and a separate decision from this diagnosis.</li>
      *   <li><b>The identity is the observer's class, read before the call.</b> This SPI carries no {@code name()},
      *       so there is nothing to re-enter - but reading it up front is what keeps it that way, and it is the same
      *       rule the event sink and the maintenance scheduler follow, one host each.</li>
@@ -887,11 +884,11 @@ public final class Publication {
                 observer -> observer.onWithholdCleared(subject, store));
     }
 
-    /** The withhold-change feed's transition-ON notify over the {@link PublicationObserver#installed() installed observers} - the
-     *  package-private static seam the same-package {@link Withheld#mark} (a static primitive with no {@code Publication}
-     *  instance) fires the marker face through, reusing the one discovered observer list rather than a second discovery.
-     *  Failures are logged and contained exactly as on the instance notify paths, so a hold's marker write never fails
-     *  open because a downstream consumer is down. */
+    /** The withhold-change feed's transition-ON notify over the {@link PublicationObserver#installed() installed
+     *  observers} - the package-private static seam the same-package {@link Withheld#mark} (a static primitive with no
+     *  {@code Publication} instance) fires the marker face through, reusing the one discovered observer list rather
+     *  than a second discovery. Failures are logged and contained exactly as on the instance notify paths, so a hold's
+     *  marker write never fails open because a downstream consumer is down. */
     public static void notifyWithheld(ArtifactDescriptor subject, ArtifactStore store) {
         notify(PublicationObserver.installed(), "withhold of hash " + subject.hash(), observer -> observer.onWithheld(subject, store));
     }
@@ -923,9 +920,9 @@ public final class Publication {
      * while a quarantined one is still diverted to the {@code /quarantine} view for review - unless the path already
      * serves exactly these bytes unheld, in which case the hold is superseded by the admission that serves them and
      * the upload is accepted as the identical artifact (the reasoning is at the check itself) - and a rejected one
-     * leaves only the unreferenced blob for garbage collection. The blob is inert until a pointer references it, so the chain
-     * gates before any link - nothing is buffered and there is no published-then-retracted window. With the default
-     * empty chain this is exactly a {@link #storeBlob} that always {@code ACCEPT}s.
+     * leaves only the unreferenced blob for garbage collection. The blob is inert until a pointer references it, so the
+     * chain gates before any link - nothing is buffered and there is no published-then-retracted window. With the
+     * default empty chain this is exactly a {@link #storeBlob} that always {@code ACCEPT}s.
      *
      * <p>This is the single sanctioned screen seam, and {@link #commit} is its only caller: an ingress edge does not
      * screen by hand, it commits, and the operation screens once on its behalf, gates the republish, drives the
@@ -968,9 +965,9 @@ public final class Publication {
             // them with their signature is not undone by a verdict reached over the same bytes while the signature
             // was in flight - so the upload is accepted as the identical artifact already admitted, its layout lands
             // the same state again, and the interceptors hear ACCEPT with their own verdict still in hand, which is
-            // how an edition records the hold as superseded. Other bytes than the path serves are held as before: a
-            // corrected republish under review is exactly what the hold is for. A path held already serves nothing,
-            // so a hold for its bytes converges the hold as before, too.
+            // how a gate records the hold as superseded. Other bytes than the path serves are held: a corrected
+            // republish under review is exactly what the hold is for. A path held already serves nothing, so a hold
+            // for its bytes converges the hold.
             LOGGER.info("Hold of {} superseded: the path already serves these bytes ({}), admitted before this "
                     + "upload's verdict landed", artifact.path(), hash);
             disposition = PublishInterceptor.Disposition.ACCEPT;
@@ -1017,8 +1014,8 @@ public final class Publication {
         /** What an already-published coordinate means for the incoming upload. */
         public enum Mode {
             /** No probe before the layout. The pointer moves unless the layout links it through a guard of its own -
-             *  {@link #guarded}, or {@code Blobs.linkOnce} for a format whose pointer is in its own namespace - which is
-             *  where a format whose collision key is only known inside the layout refuses a republish. */
+             *  {@link #guarded}, or {@code Blobs.linkOnce} for a format whose pointer is in its own namespace - which
+             *  is where a format whose collision key is only known inside the layout refuses a republish. */
             OVERWRITE,
             /** A re-publish of <em>identical</em> bytes converges (the layout re-runs and lands the same state, so a
              *  half-written first attempt is repaired); different bytes at a taken coordinate raise
@@ -1299,7 +1296,7 @@ public final class Publication {
 
     /**
      * The one hosted-publish choreography: screen once, gate the republish, lay the accepted blob out sidecars-first,
-     * link the serving pointer last, and only then notify the after-commit observers. Every free ingress edge - the
+     * link the serving pointer last, and only then notify the after-commit observers. Every ingress edge - the
      * deploy edge, the import walk, the OCI manifest choke point - runs a hosted publish through here, so there is one
      * publish commit point in the product rather than one per format.
      *
@@ -1307,7 +1304,8 @@ public final class Publication {
      * <ol>
      *   <li>{@link #screen} stores the body content-addressed as it is read (hash-on-write, never buffered) and runs
      *       the discovered {@link PublishInterceptor} chain <b>exactly once</b>. A {@code QUARANTINE} is diverted to
-     *       the review view and a {@code REJECT} leaves an unreferenced blob; neither lays out and neither observes.</li>
+     *       the review view and a {@code REJECT} leaves an unreferenced blob; neither lays out and neither
+     *       observes.</li>
      *   <li>The {@link Republish} policy is evaluated against the already-known content hash, before any layout write:
      *       a refusal raises {@link RepublishConflict} with nothing half-written.</li>
      *   <li>The {@link AcceptedLayout} writes its parse results and sidecars and <em>declares</em> its
@@ -1366,8 +1364,8 @@ public final class Publication {
     }
 
     /** Evaluate the republish policy before the layout writes anything: {@code OVERWRITE} does not even read, so the
-     *  hot path pays nothing for a policy no free format uses; the probing modes read the named pointer once and raise
-     *  {@link RepublishConflict} rather than letting a layout discover the collision mid-write. */
+     *  hot path pays nothing for a format that probes no republish; the probing modes read the named pointer once and
+     *  raise {@link RepublishConflict} rather than letting a layout discover the collision mid-write. */
     private void admit(Republish republish, ArtifactDescriptor artifact, String hash) throws IOException {
         if (republish.mode() == Republish.Mode.OVERWRITE) {
             return;
@@ -1454,7 +1452,7 @@ public final class Publication {
      * As {@link #contentOf}, for bytes that are <em>currently held</em>: the sibling reads resolve the stored pointer
      * rather than the serving one, so a companion that exists is visible even while nothing would serve it.
      *
-     * <p>The distinction is not a nicety, and the case that forced it cannot be fixed anywhere else. A sidecar is
+     * <p>The distinction is not a nicety. A sidecar is
      * withheld by its subject's hold ({@link ServableNames}) - deliberately, so a hold does not leak the artifact's
      * checksums and signature to a client. An artifact held <em>for the want of</em> a sidecar therefore cannot be
      * released by the sidecar arriving: the moment it lands it inherits the subject's hold, the re-assessment asks

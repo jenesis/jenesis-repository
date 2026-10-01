@@ -5,8 +5,8 @@ import module org.slf4j;
 
 /**
  * The config-driven enable/disable convention for every discovered SPI implementation, defined once here in the
- * base SPI module and reused verbatim by every distribution - a feature keeps the same key whether it ships in the
- * free image or a commercial one, and relocating a component between them never changes its configuration.
+ * base SPI module and reused verbatim by every distribution - a feature keeps the same key in every image that
+ * carries it.
  *
  * <p>The convention, over the shared {@code jenrepo.*} namespace:
  * <ul>
@@ -26,8 +26,7 @@ import module org.slf4j;
  *     collide silently in the benign direction and destructively in the other: an implementation called
  *     {@code store} would make its off-switch {@code jenrepo.store=false} also the artifact store's selection key,
  *     selecting a storage backend named {@code false} and refusing to boot - while every deployment's ordinary
- *     {@code jenrepo.store=filesystem} silently doubled as its toggle. A build guard scans for the collision rather
- *     than trusting the convention.</li>
+ *     {@code jenrepo.store=filesystem} would silently double as its toggle.</li>
  * <li>An implementation's own settings live under {@code jenrepo.<feature>.<property>=<value>} or its documented
  *     settings keys; they are never consulted here.</li>
  * <li><em>Required-config self-disable:</em> a provider declares the config keys it cannot run without (a
@@ -181,11 +180,10 @@ public final class Features {
      * A bare-name view of a namespaced property source - {@code Features.namespaced(environment::getProperty)}.
      *
      * <p><b>This is the one place {@code jenrepo.} is spelled.</b> Every seam that takes a config lookup
-     * in this product reads it with BARE names ({@code socket-token}, {@code scheduled-scan}, {@code read-only}) -
-     * some hundred and thirty call sites do - while a deployment configures those under the shared namespace. The
-     * adapter between the two, written out as a lambda at each entry point, would be a spelling of the product's own
-     * namespace that a typo makes silently unfindable. It is written once here.
-     *
+     * in this product reads it with BARE names ({@code socket-token}, {@code scheduled-scan}, {@code read-only}),
+     * while a deployment configures those under the shared namespace. The adapter between the two, written out as a
+     * lambda at each entry point, would be a spelling of the product's own namespace that a typo makes silently
+     * unfindable. It is written once here.
      */
     public static UnaryOperator<String> namespaced(UnaryOperator<String> properties) {
         Objects.requireNonNull(properties, "properties");
@@ -198,8 +196,7 @@ public final class Features {
      * <p>What sits behind it is {@link #configure}'s business and no caller's: the application shell hands in the
      * Spring {@code Environment} at boot, a test hands in a map, and outside a shell it is system properties and the
      * environment. A caller that wants to ask the deployment something asks for this, rather than reaching for the
-     * {@code Environment} and re-deriving the namespace on the way - which is how the same prefix came to be spelled
-     * in thirty-five places.
+     * {@code Environment} and re-deriving the namespace on the way.
      *
      * <p>Read live, like {@link #lookup()}: a later {@code configure}/{@code reset} is honoured by a view handed out
      * before it.

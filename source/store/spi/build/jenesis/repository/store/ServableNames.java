@@ -20,15 +20,13 @@ import build.jenesis.repository.store.Publication;
  * things: a {@code /quarantine<path>} pointer holds ONE alias - and the serving pointer at that alias carries a copy
  * of it (the {@code held} token {@link Publication#link} writes onto the body when the review pointer is linked and
  * lifts when it is unpublished), so the serve reads the path half off the one pointer it reads anyway rather than
- * probing a second key - and the marker holds the BYTES wherever they are served. A {@code publish/} face that read only the chain therefore let a content-addressed hold be escaped by any
- * alias the hold writer's path enumeration did not name - the Maven cross-publish's {@code /module/<name>/<name>.jar}
- * "latest" view being the driven case: it belongs to no single version, so neither {@code paths} overload of
- * the Maven layout that placed the jar reports it - both are version-addressed - and so no hold writer ever links a
- * review pointer at it, yet it points straight at the held blob. (The Jenesis layout does name that pointer, for every
- * version of a module <em>it</em> published first-hand; a jar cross-published from a Maven coordinate is recorded
- * under the Maven ecosystem and is never placed through it.) Reading the marker here retracts the view for exactly as
- * long as it names those bytes, and re-serves it the moment a republish re-aims it at an unheld version - which is
- * what "latest" means and what a path-keyed hold could not express.
+ * probing a second key - and the marker holds the BYTES wherever they are served. A {@code publish/} face that read
+ * only the chain would let a content-addressed hold be escaped by any alias the hold writer's path enumeration did
+ * not name - the Maven cross-publish's {@code /module/<name>/<name>.jar} "latest" view is the case: it belongs to no
+ * single version, so neither version-addressed {@code paths} overload of the Maven layout reports it and no hold
+ * writer links a review pointer at it, yet it points straight at the held blob. Reading the marker here retracts the
+ * view for exactly as long as it names those bytes, and re-serves it the moment a republish re-aims it at an unheld
+ * version - which is what "latest" means and what a path-keyed hold cannot express.
  *
  * <p><b>Fail-closed by construction.</b> Every store probe this type makes is wrapped so that a name whose probe
  * throws a {@link RuntimeException} - a hostile / non-ASCII key a store backend cannot even
@@ -36,7 +34,7 @@ import build.jenesis.repository.store.Publication;
  * {@link java.nio.file.InvalidPathException} on an encoding-hostile name) - is treated as NOT disclosable and logged,
  * never rethrown. One hostile name in a page can therefore never 500 a whole listing, and it is never disclosed
  * either. Checked {@link IOException}s (an interceptor that fails closed on the publish path, a store I/O failure)
- * propagate exactly as they do through {@link Publication#located} today.
+ * propagate exactly as they do through {@link Publication#located}.
  *
  * <p>The {@link Policy} split is what keeps a membership surface (search, generated version indexes) from paying - or
  * being broken by - a blob stat: {@link Policy#HIDE_WITHHELD} runs the withhold reads and stats no blob, so a
@@ -95,9 +93,8 @@ public final class ServableNames {
 
     private static final Logger LOGGER = LoggerFactory.getLogger(ServableNames.class);
 
-    /** The reserved review subtree name under {@code publish/} - owned here once (today duplicated as an inline
-     *  {@code "quarantine"} constant in {@code PublishedAssets}, {@code BrowsePanel} and the console browse).
-     *  A held upload's pointer is diverted to {@code publish/quarantine<path>}. */
+    /** The reserved review subtree name under {@code publish/}, owned here once. A held upload's pointer is diverted to
+     *  {@code publish/quarantine<path>}. */
     public static final String QUARANTINE = "quarantine";
 
     /** The store root of the served pointer namespace ({@code publish/<request-path> -> <sha256>}) - owned here once
@@ -112,11 +109,11 @@ public final class ServableNames {
      *  the two are the same kind of fact: a convention about served paths that every surface must read the same way.
      *
      *  <p>They exist because a hold has to cover them. A gate quarantines the artifact it can screen - a jar, a POM -
-     *  and the checksum a publisher uploaded beside it is unclaimed content no inspector has an opinion about, so it
-     *  was accepted, pointed at, and served while its subject 404s. That is a disclosure the hold was meant to
-     *  prevent, and a specific one: {@code jenesisdemo-2.0.jar.sha1} publishes the exact digest of bytes the operator
-     *  withheld, which is enough to confirm a suspected build or to find the artifact somewhere else. It also
-     *  publishes the version's existence to any client that lists the folder.
+     *  and the checksum a publisher uploaded beside it is unclaimed content no inspector has an opinion about, so
+     *  without this it would be accepted, pointed at, and served while its subject 404s. That is a disclosure the hold
+     *  was meant to prevent, and a specific one: {@code jenesisdemo-2.0.jar.sha1} publishes the exact digest of bytes
+     *  the operator withheld, which is enough to confirm a suspected build or to find the artifact somewhere else. It
+     *  also publishes the version's existence to any client that lists the folder.
      *
      *  <p>Deliberately not a format question. Every path-addressed ecosystem spells its sidecars this way, the rule
      *  is the same for all of them, and a format that had to remember to hold its own checksums is a format that will
@@ -160,7 +157,7 @@ public final class ServableNames {
      *  decision into an unbounded chain fan-out. The quarantine-pointer probe (a) is a single listing and is not
      *  capped; this caps only the chain leg (b).
      *
-     *  <p>Raised well above any legitimate single-version folder: a real Maven version folder holds a handful of
+     *  <p>Set well above any legitimate single-version folder: a real Maven version folder holds a handful of
      *  artifacts (main jar + pom + sources + javadoc + classifiers) each with up to five checksum/signature sidecars,
      *  a few dozen leaves at the extreme - so the exact fast path below (probe every leaf when the folder fits the cap)
      *  still covers every genuine release. Only a pathologically wide folder exceeds it, and past the cap
@@ -213,8 +210,9 @@ public final class ServableNames {
      *  {@link Publication#link} writes onto the serving pointer - -&gt; {@link State#WITHHELD}; (4) a
      *  {@link Withheld withheld/<hash>} marker on the hash the pointer names -&gt; {@link State#WITHHELD}; (5) the
      *  path is a checksum/signature {@linkplain #subject sidecar} of a held path -&gt; {@link State#WITHHELD}; (6)
-     *  {@code blobs/<hash>} stat -&gt; {@link State#SERVABLE} : {@link State#BLOB_GONE}. A probe that throws a {@link RuntimeException} (a hostile
-     *  name) fails closed to {@link State#WITHHELD} - never disclosed, never thrown.
+     *  {@code blobs/<hash>} stat -&gt; {@link State#SERVABLE} : {@link State#BLOB_GONE}. A probe that throws a
+     *  {@link RuntimeException} (a hostile name) fails closed to {@link State#WITHHELD} - never disclosed, never
+     *  thrown.
      *
      *  <p>Step (4) is the same probe {@link #keyState} makes in the same position, and it is what makes
      *  {@link State#WITHHELD}'s own definition true of this face: a hold has a path half (the
@@ -223,7 +221,7 @@ public final class ServableNames {
      *  withheld and whose blob a collector has since reclaimed must read {@code WITHHELD}, not {@code BLOB_GONE},
      *  or a reconcile consumer repairs a torn pointer back into a served one. The cost is one extra existence probe
      *  on a path that already reads its pointer, and it can only ever hide more: a pointer naming a hash no marker
-     *  covers answers exactly as before. */
+     *  covers answers as it would without the probe. */
     public State state(String requestPath) throws IOException {
         Location location = located(requestPath);
         if (location.state() != State.SERVABLE) {
@@ -242,9 +240,8 @@ public final class ServableNames {
 
     /** Where a request path stands, and for a {@link State#SERVABLE} one the hash its pointer names and the length
      *  the pointer records - so a serve sets its {@code Content-Length} without a stat and opens the blob for the
-     *  bytes, the open being what proves the blob present. {@code -1} where the pointer records no length (one
-     *  written before the length rode the pointer, until the rebuild walk backfills it), which a serve answers
-     *  without a {@code Content-Length}. */
+     *  bytes, the open being what proves the blob present. {@code -1} where the pointer records no length (until the
+     *  rebuild walk backfills it), which a serve answers without a {@code Content-Length}. */
     public record Location(State state, String hash, long size) {
     }
 
@@ -287,7 +284,7 @@ public final class ServableNames {
             }
             // The blob's length comes off the pointer, never off the blob: a serve sets its Content-Length from it
             // and opens the blob for the bytes, and that open is what proves the blob present (a pointer whose blob
-            // is gone answers a clean 404 from the open, never a truncated 200). Step (5) of the javadoc above - the
+            // is gone answers a clean 404 from the open, never a truncated 200). Step (6) of state()'s javadoc - the
             // stat - is therefore the enumeration faces' alone, in state(); this location does not pay it.
             return new Location(State.SERVABLE, hash, pointer.get().size());
         } catch (RuntimeException hostile) {
@@ -333,19 +330,16 @@ public final class ServableNames {
      *  folder's leaves, up to the {@value #PROBE_CAP}-leaf bound past which it fails CLOSED (a folder wider than the
      *  bound is screened, since its unprobed leaves cannot be proven un-held). The bound holds over the <em>read</em>
      *  as well as the probing: the leaf names are paged one past the cap, so a pathologically wide folder is rejected
-     *  without ever being materialised. It never stats a blob, so a fake-hash /
-     *  no-blob / non-jar version keeps listing; with the free (empty) chain and no quarantine pointer a folder within
-     *  the bound always lists. Fail-closed on a hostile folder name.
+     *  without ever being materialised. It never stats a blob, so a fake-hash / no-blob / non-jar version keeps
+     *  listing; with an empty chain and no quarantine pointer an unheld folder within the bound always lists.
+     *  Fail-closed on a hostile folder name.
      *
-     *  <p><b>The one place this seam does not read the marker.</b> Leg (b) probes the chain per leaf and deliberately
-     *  does NOT add the per-leaf pointer read plus {@link Withheld withheld/&lt;hash&gt;} probe {@link #state} and
-     *  {@link #disclosable} make, because this is the only fan-out face: it would turn one generated
-     *  {@code maven-metadata.xml} into two extra store round-trips per leaf per version, on a read path. It
-     *  is not a gap for any hold a writer places today - every retroactive sweep links a {@code /quarantine<path>}
-     *  pointer beside the marker for a path that carries a {@code publish/} pointer, so leg (a) already screens the
-     *  folder - but it is a genuine residual disagreement for a byte-identical SIBLING coordinate, whose version name
-     *  keeps listing while its download 404s on the marker. Left open, with the cost that decides it, rather
-     *  than paid here unmeasured. */
+     *  <p>Leg (b) asks both halves of a hold per leaf - the chain, the pointer's hold flag and the
+     *  {@link Withheld withheld/&lt;hash&gt;} marker - exactly as {@link #state} and {@link #disclosable} do. Leg (a)
+     *  already screens every version a retroactive sweep holds, since each sweep links a {@code /quarantine<path>}
+     *  pointer beside the marker; the marker is what screens a byte-identical SIBLING coordinate, which carries no
+     *  review pointer of its own yet 404s on download. The cost is a pointer read and a marker probe per leaf,
+     *  bounded by {@value #PROBE_CAP}. */
     public boolean disclosableVersionFolder(String folder) throws IOException {
         try {
             // (a) The review-pointer convention: a held version has >=1 /quarantine<servedPath> pointer under it, so
@@ -354,28 +348,20 @@ public final class ServableNames {
                 return false;
             }
             // (b) A leaf of the version is held - by the interceptor chain, or by a withheld/<hash> marker on the
-            // hash its pointer names. Bounded, and stats no blob. A folder
-            // wider than the bound fails CLOSED: it cannot be probed exhaustively without unbounding the chain
-            // fan-out, and a fail-OPEN past the bound would leak the version name of an interceptor-only-withheld leaf
-            // sitting beyond the probed prefix. The bound is well above any legitimate version folder, so this screens
-            // only pathologically wide folders; every real release is probed in full by the exact loop below.
-            // Read one more than the cap rather than the folder: the bound below is a decision about how many
-            // leaves may be probed, and taking the whole listing first to count it defeats the bound on exactly the
-            // pathological folder it exists for - a million-leaf folder was materialised into a million strings and
-            // only then rejected.
+            // hash its pointer names. Bounded, and stats no blob. A folder wider than the bound fails CLOSED: it
+            // cannot be probed exhaustively without unbounding the fan-out, and a fail-OPEN past the bound would leak
+            // the version name of a held leaf beyond the probed prefix. One more than the cap is read rather than the
+            // folder, so a pathologically wide folder is rejected without being materialised.
             List<String> leaves = new ArrayList<>();
             store.page("publish" + folder, "", ArtifactStore.oneMoreThan(PROBE_CAP), leaves::add);
             if (leaves.size() > PROBE_CAP) {
                 return false;
             }
             for (String leaf : leaves) {
-                // held(), not publication.withheld(): both halves of a hold, which is what state() and
-                // disclosable() do. The chain alone screens every hold a writer places
-                // today, because each retroactive sweep links a /quarantine<path> review pointer beside the marker -
-                // so leg (a) above already catches those. What it misses is a byte-identical SIBLING coordinate:
-                // g:b:1.0 publishing the same bytes as a held g:a:1.0 carries no review pointer of its own and no
-                // chain withhold, yet 404s on download because the marker is keyed by content. Its version name would
-                // keep listing in maven-metadata.xml - the listing/download disagreement this class exists to prevent.
+                // held(), not publication.withheld(): both halves of a hold, as state() and disclosable() read them.
+                // A byte-identical SIBLING coordinate - g:b:1.0 publishing the same bytes as a held g:a:1.0 - carries
+                // no review pointer and no chain withhold, yet 404s on download because the marker is keyed by
+                // content; only the marker keeps its version name out of maven-metadata.xml.
                 if (held(folder + "/" + leaf)) {
                     return false;
                 }
@@ -413,7 +399,7 @@ public final class ServableNames {
     }
 
     /** The policy check for a blobs-namespace key: {@link Policy#HIDE_WITHHELD} reads the pointer and the marker only
-     *  (no blob stat - identical cost to the downstream {@code Blobs.withheld} it replaces) and an absent pointer
+     *  (no blob stat) and an absent pointer
      *  discloses nothing to hide (matching {@code Blobs.withheld == false}); {@link Policy#HIDE_WITHHELD_AND_GONE} is
      *  {@code keyState() == SERVABLE}. Fail-closed on a hostile key. */
     public boolean disclosableKey(String pointerKey, Policy policy) throws IOException {
@@ -440,11 +426,11 @@ public final class ServableNames {
      * an algorithm-qualified digest reference ({@code sha256:<hex>} - the OCI tag-pointer dialect, and the wire form of
      * every Distribution digest); both denote the same blob, so the qualifier is stripped.
      *
-     * <p>This is a <b>disclosure fix, not a convenience</b>: the marker convention is keyed by the bare hex, so a
-     * screen that probed {@code withheld/sha256:<hex>} would never match a real marker and would fail <em>open</em> -
-     * a held image disclosing its tag through every enumeration surface that screens through {@link #disclosableKey}.
-     * Normalising here can only ever hide more, never disclose more: a body that is neither dialect (a torn or
-     * hand-edited pointer) still matches no marker, exactly as before.
+     * <p>This normalisation is a <b>disclosure guard, not a convenience</b>: the marker convention is keyed by the bare
+     * hex, so a screen that probed {@code withheld/sha256:<hex>} would never match a real marker and would fail
+     * <em>open</em> - a held image disclosing its tag through every enumeration surface that screens through
+     * {@link #disclosableKey}. Normalising here can only ever hide more, never disclose more: a body that is neither
+     * dialect (a torn or hand-edited pointer) still matches no marker.
      */
     public static String hash(byte[] pointerBody) {
         return parse(pointerBody).hash();
@@ -486,8 +472,7 @@ public final class ServableNames {
         public static final String HELD = "held";
 
         /** The body {@link Publication#link} and its blobs-namespace twin write for this hash and length, not held:
-         *  the hash alone where the length is unknown, so a torn link a reconcile repairs is written as it always
-         *  was. */
+         *  the hash alone where the length is unknown. */
         public static byte[] render(String hash, long size) {
             return render(hash, size, false);
         }
@@ -564,8 +549,7 @@ public final class ServableNames {
     // the bounded traversal primitives (BoundedChildren, Trees) live and this module must not depend on them; the
     // disclosure decision stays here, so there is still exactly one screen.
 
-    /** Whether a root child name is the reserved review subtree - the one home of the {@code "quarantine"} test that
-     *  today lives inline in four free/downstream enumeration surfaces. */
+    /** Whether a root child name is the reserved review subtree - the one home of the {@code "quarantine"} test. */
     public static boolean reviewSubtree(String rootChildName) {
         return QUARANTINE.equals(rootChildName);
     }

@@ -8,12 +8,12 @@ import module java.base;
  * plain decimal string, floored at zero, and a value that does not parse reads as zero - a truncated write or a hand
  * edit never throws through the fold that maintains it.
  *
- * <p>{@link #add} is best-effort by design: a delta that loses every retry is dropped and {@code false} says so, and the
- * caller logs the drop naming the pass that recomputes the total - the quota's {@code recompute}, the browse's
+ * <p>{@link #add} is best-effort by design: a delta that loses every retry is dropped and {@code false} says so, and
+ * the caller logs the drop naming the pass that recomputes the total - the quota's {@code recompute}, the browse's
  * {@code rollUpSizes} - so a counter drifting under sustained contention is visible before the pass corrects it, not a
  * silent surprise. It fails toward the last landed total, never toward a wrong one, which is what makes the drift
  * acceptable where an identity rollup's is not: a stale byte count is a stale number on a screen, a stale identity is
- * a wrong {@code 304}. That difference in failure model is why this is not the rollup's class and never will be.
+ * a wrong {@code 304}. That difference in failure model is why the identity rollup does not count this way.
  *
  * <p>The quota decorator and the subtree-size observer both count this way - the same parse, the same floor, the same
  * {@link Retries#tryUpdate}, the same warning shape. One class, one test.
@@ -25,10 +25,10 @@ import module java.base;
  * <p><b>A delta may be deferred.</b> {@link #addLater} keeps the delta in this process and a flusher folds every
  * pending delta of a key into one compare-and-set per {@code jenrepo.counters.flush} (a minute by default) and on
  * shutdown; {@link #read} answers the stored value plus what this node still holds, so the node that wrote sees
- * its own deltas at once and the check a write makes against its limit is exact here. The folder-size roll-ups
- * paid five or six compare-and-sets per publish through this counter, each a round trip and a write-class call on
- * an object store, for a total the recompute recomputes anyway; a lost buffer is the drift the counter's own
- * documentation already accepts and the reconcile already heals.
+ * its own deltas at once and the check a write makes against its limit is exact here. Deferring spares a publish
+ * the five or six compare-and-sets the folder-size roll-ups would otherwise make, each a round trip and a
+ * write-class call on an object store, for a total the recompute recomputes anyway; a lost buffer is the drift
+ * this counter already accepts and the reconcile heals.
  */
 public final class StoredCounter {
 
@@ -71,8 +71,6 @@ public final class StoredCounter {
         store.delete(key);
     }
 
-    /** Move the total by {@code delta}, floored at zero, retrying a lost compare-and-set through {@link Retries};
-     *  {@code false} when every try lost and the delta was dropped for the recomputing pass to heal. */
     /** The flush cadence setting: an ISO-8601 or suffixed duration; {@code 0} flushes every deferred delta at once,
      *  which is {@link #add}. */
     public static final String FLUSH_SETTING = "counters.flush";
@@ -143,11 +141,8 @@ public final class StoredCounter {
      * through the {@link Settling} bean its composition root declares.
      *
      * <p>The flusher is one per process and keeps a closed node's deltas beside a live node's, keyed by store, so
-     * without this a delta pending when a node stopped would be written at the next tick into a store that was gone.
-     * In a test JVM that boots servers over temporary directories that is a directory recreated under one JUnit has
-     * just deleted, reported as {@code Failed to close extension context} with a {@code DirectoryNotEmptyException}
-     * naming a repository nobody wrote to after the suite ended - in a suite that never mentions a counter.
-     * Forgetting every entry rather than the
+     * without this a delta pending when a node stopped would be written at the next tick into a store that was gone
+     * - in a test JVM, a directory recreated under one JUnit has just deleted. Forgetting every entry rather than the
      * closing store's alone is deliberate: an early flush of a live node's delta is always correct, and matching a
      * scoped view's identity to its root's is a per-backend question this class should not have to answer.
      */
@@ -206,6 +201,8 @@ public final class StoredCounter {
         }
     }
 
+    /** Move the total by {@code delta}, floored at zero, retrying a lost compare-and-set through {@link Retries};
+     *  {@code false} when every try lost and the delta was dropped for the recomputing pass to heal. */
     public boolean add(long delta) throws IOException {
         return Retries.tryUpdate(store, key, stored -> {
             long current = stored.isEmpty() ? 0L : parse(stored.get().content());
@@ -214,7 +211,7 @@ public final class StoredCounter {
     }
 
     /** Store a total recomputed from truth, whatever the counter held - the pass's authoritative correction. A lost
-     *  race is left to the next pass, as the caller's own last-writer-wins write always was. */
+     *  race is left to the next pass. */
     public void set(long total) throws IOException {
         Deferred deferred = DEFERRED.get(deferredKey());
         if (deferred != null) {

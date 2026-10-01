@@ -10,9 +10,8 @@ import module java.base;
  *
  * <p>{@link #mark} is a single compare-and-set attempt against the token it read, deliberately not retried: two
  * completions racing to the same key settle on whichever wrote last, and a lost write leaves the <em>older</em> stamp
- * standing - never a wrong one - which the next completion moves. That is the whole of the mechanism. A ledger hands
- * out its stamp through a factory naming the key ({@code Findings.scanned(store)}), so the mechanism has one home and
- * one test rather than a copy per ledger.
+ * standing - never a wrong one - which the next completion moves. A ledger hands out its stamp through a factory
+ * naming the key ({@code Findings.scanned(store)}).
  *
  * <p>Not every small marker is a stamp. A <em>built</em> marker that a consumer gates its behaviour on carries a
  * format version ahead of the instant and is that consumer's; an {@link Epoch} is a token that changes without

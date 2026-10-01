@@ -21,13 +21,12 @@ import java.util.TreeSet;
  * hash nor coordinate version identifies an alias:
  *
  * <ul>
- *   <li><b>Same hash is not the same file.</b> Several distinct files of one version routinely share a hash - the
- *       conan and HuggingFace hold-contract fixtures publish a handful of empty files, all hashing to the SHA-1 of
- *       the empty string. Lifting "every sibling pointer whose body equals the released hash" therefore lifts holds
- *       nobody released.</li>
+ *   <li><b>Same hash is not the same file.</b> Several distinct files of one version routinely share a hash - a
+ *       version's empty files all hash alike. Lifting "every sibling pointer whose body equals the released hash"
+ *       therefore lifts holds nobody released.</li>
  *   <li><b>Same coordinate version is not the same file either.</b> Widening a release's exclusion set to every held
  *       path of the version clears a marker that a still-held sibling <em>file</em> of that version needs, which is
- *       the fail-open disclosure direction this whole class of guard is written against - and no test goes red.</li>
+ *       the fail-open disclosure direction this whole class of guard is written against.</li>
  * </ul>
  *
  * <p>So the relation is written where it is <em>created</em>, by the cross-publish that knows both names, and read
@@ -35,8 +34,8 @@ import java.util.TreeSet;
  *
  * <p><b>Both directions are stored,</b> because both are asked: a release of the origin needs its aliases, and a
  * release of an alias needs the group it belongs to. Each is a point read of one key ({@code alias/of<path>} and
- * {@code alias/group<origin>}), never an enumeration - a release is on the request path, and clause 1 does not
- * exempt it.
+ * {@code alias/group<origin>}), never an enumeration - a release is on the request path, where every read is
+ * bounded.
  *
  * <p><b>The group is a set, appended under compare-and-set.</b> Two versions of one module publishing at once, or a
  * rebuild pass meeting a publish, are peers on the same key at the same moment, which is exactly the case
@@ -44,7 +43,7 @@ import java.util.TreeSet;
  * the same bytes, so a byte-identical republish and a repeated rebuild pass are both free.
  *
  * <p><b>Recording is best-effort and never fails the publish.</b> A missing alias record costs a reviewer a
- * second release - the state this class was written to improve on - while a failed publish costs the upload. The
+ * second release, while a failed publish costs the upload. The
  * caller therefore contains an {@link IOException} out of {@link #record} rather than propagating it, and a later
  * rebuild pass re-records what a crash lost.
  */

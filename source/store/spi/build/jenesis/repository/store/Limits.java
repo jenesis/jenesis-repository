@@ -18,7 +18,8 @@ import module java.base;
  *       time is how they come to disagree about what a whole document is.</li>
  *   <li>A key set to something that is not a positive number of bytes RAISES rather than silently falling back. This
  *       is the rule with teeth: an operator who raised a cap and mistyped the value must not be left believing they
- *       raised it, because the symptom - artifacts refused at the old ceiling - looks nothing like a typo.</li>
+ *       raised it, because the symptom - artifacts still refused at the default ceiling - looks nothing like a
+ *       typo.</li>
  * </ul>
  *
  * <p>Keys live in the shared {@code jenrepo.} namespace, so every one of them is also settable as an environment

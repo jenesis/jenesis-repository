@@ -33,18 +33,12 @@ import module java.base;
  *       throttle/authorization leg, clause 7, clause 9's {@link #list} rule and resident-memory claim, and clause
  *       10's write-atomicity claim.
  *       Each needs a concurrent or fault-injecting driver the kit does not have; every one of them is stated below in
- *       a form such a driver could assert.
- *
- *       <p>Clause 4 and clause 9's listing rule were once approximated by scans over the tree's call sites.
- *       They are not any more, and the reason is worth stating: such a scan sees a call site, never a backend, so it
- *       reported a store that read a whole blob into memory internally as compliant while failing a caller that
- *       named a method it disliked. It answered a question about this repository's text rather than about an
- *       implementation of this interface, which is what the clause is about. An implementer owes the clause; the
- *       driver that could hold them to it is a memory-bounded fixture, not a regular expression.</li>
+ *       a form such a driver could assert. Clause 4 and clause 9's listing rule are about an implementation, not about
+ *       its callers' text: the driver that could hold an implementer to them is a memory-bounded fixture.</li>
  * </ul>
- * Two of the kit's properties are deliberately <em>not</em> clauses of this interface, and the mismatch is recorded
- * rather than papered over: {@code PLAINTEXT_ENDPOINT_REFUSED} is a resolution-time rule and belongs to
- * {@link ArtifactStoreProvider}'s contract (where it is now stated), and {@code STORE_INVARIANTS} asserts the
+ * Two of the kit's properties are deliberately <em>not</em> clauses of this interface:
+ * {@code PLAINTEXT_ENDPOINT_REFUSED} is a resolution-time rule and belongs to {@link ArtifactStoreProvider}'s
+ * contract, and {@code STORE_INVARIANTS} asserts the
  * {@code publish/}-pointer-and-{@code blobs/} layout convention that {@link Publication} owns, not a property of this
  * interface - a store is free to hold an unreferenced blob, which is exactly what a rejected upload leaves behind.
  * <ol>
@@ -96,10 +90,9 @@ import module java.base;
  *     children. Nothing else is. A degraded answer here is not a degraded read: an empty listing is how a bounded
  *     traversal learns a container is drained and how a reference scan learns a blob is unreferenced, a {@code false}
  *     from {@link #exists} is how a serve screen learns nothing is withheld and how a re-publish learns its blob was
- *     never condemned - so a swallowed failure on any of them deletes artifact bytes or serves held ones. This is
- *     stated per-read rather than as a platitude because the default backend once read every one of these failures as
- *     an absence, through {@code Files.isRegularFile} and a {@code catch (IOException) -> empty}, and every
- *     fail-closed screen above it was therefore fiction on a filesystem deployment.</li>
+ *     never condemned - so a swallowed failure on any of them deletes artifact bytes or serves held ones. A backend
+ *     that reads such a failure as an absence (a {@code Files.isRegularFile}, a {@code catch (IOException) -> empty})
+ *     turns every fail-closed screen above it into fiction.</li>
  * <li><b>Lifecycle / ownership.</b> The composition builds one store through {@link ArtifactStoreProvider} and keeps
  *     it for the life of the process; a store may own the client, pool or threads its backend needs. A
  *     {@link #scope}d view is a cheap derived value, not a resource: callers create them freely and close nothing.
@@ -151,18 +144,17 @@ public interface ArtifactStore {
      * A stable identity of this store's subspace: equal for two instances that address the same root directory or
      * bucket prefix, unequal across scopes, and stable across restarts of the process.
      *
-     * <p>Fifteen consumers key on it. {@link StoredListing} keys its per-document writer queues, so the concurrent
+     * <p>Many consumers key on it. {@link StoredListing} keys its per-document writer queues, so the concurrent
      * writers of one listing - and only they - coalesce into one rewrite; {@link StoreCache} and
      * {@link StoredCounter} key their entries; every walk consumer keys the per-repository state it carries across a
      * pass; and the search index <em>hashes it into the name of a durable index</em>.
      *
-     * <p><b>There is no default, and that is the whole of the design here.</b> Falling back to the instance itself
-     * would stay correct only for a consumer that merely coalesces, and most consumers do more. An instance identity
-     * makes every new store
-     * object a new key: a long-lived map grows without bound, a gauge that sums its values counts stale entries, and
-     * an index name changes when nothing about the repository did. Whether a future consumer merely coalesces or
-     * durably names cannot be known from here, and the failure is silent in both directions - nothing throws, a
-     * number is quietly wrong - so the answer is required rather than assumed.
+     * <p><b>There is no default.</b> Falling back to the instance itself would stay correct only for a consumer that
+     * merely coalesces, and most consumers do more. An instance identity makes every new store object a new key: a
+     * long-lived map grows without bound, a gauge that sums its values counts stale entries, and an index name changes
+     * when nothing about the repository did. Whether a future consumer merely coalesces or durably names cannot be
+     * known from here, and the failure is silent in both directions - nothing throws, a number is quietly wrong - so
+     * the answer is required rather than assumed.
      *
      * <p>Answering is never hard, which is why requiring it costs nothing: every implementation in this build is its
      * scheme and its location ({@code "s3:" + bucket + "/" + keyPrefix}), and <b>a decorator answers its delegate's</b>
@@ -292,7 +284,7 @@ public interface ArtifactStore {
      * predicate is the single definition and {@link #key(String)} is stated in terms of it.
      *
      * <p>{@code .} and {@code ..} segments are refused, and so is a {@code \} anywhere - the separator half
-     * {@link #segment(String)} has always applied to a scope name, applied here to a key. It is not a stylistic
+     * {@link #segment(String)} applies to a scope name, applied here to a key. It is not a stylistic
      * restriction: {@code \} <em>is</em> a path separator on a Windows-hosted filesystem backend and a literal
      * character on the three object stores, so {@code a\..\b} walks a level up on one backend and names a single
      * literal object on the others, and {@code a\b} is a nested key on one and a flat one on the others. Judging that
@@ -308,12 +300,11 @@ public interface ArtifactStore {
      * the server's own. Neither is part of a legitimate coordinate in any ecosystem this product serves, so the cost
      * of refusing them is nothing. Two layers disagreeing about which shapes are legal is the divergence this
      * predicate exists to prevent, so the rule is stated here - for {@link #key(String)} and
-     * {@link #segment(String)} alike - and the downstream request guard delegates to it.
-     * The boundary is the C0 range: {@code 0x7F} and the C1 range are left out deliberately, because widening beyond
-     * the rule being lifted would be a second, unproven change riding a first.
+     * {@link #segment(String)} alike - and the downstream request guard delegates to it. The boundary is the C0
+     * range; {@code 0x7F} and the C1 range are not refused.
      *
-     * <p>The name is now narrower than the question. A backslash was already not a traversal, and a control character
-     * plainly is not; what every caller actually asks here is "may this path be stored and routed".
+     * <p>The name is narrower than the question: neither a backslash nor a control character is a traversal, and
+     * what every caller actually asks here is "may this path be stored and routed".
      *
      * <p>An empty segment is not a traversal (a trailing slash on a directory listing request, a doubled separator)
      * and a percent-encoded {@code %2e%2e} is not one either: it is a literal name until something decodes it, and
@@ -345,16 +336,14 @@ public interface ArtifactStore {
      * One more than {@code limit}, saturating: the probe size a paged read asks for so that receiving the extra
      * record proves more remains, without a second request asking.
      *
-     * <p>Every paged backend in this product computes that, and every one of them computed it as {@code limit + 1}.
-     * At {@link Integer#MAX_VALUE} - a positive, legal bound, and the obvious way for a caller to ask for
-     * everything - that wraps to {@link Integer#MIN_VALUE}, the underlying page comes back empty, and the read dies
-     * somewhere unrelated: a bare {@code NoSuchElementException} out of a {@code getLast()} on the empty batch. The
-     * {@code Math.min(limit + 1, 1000)} guards that look like they cover it do not, because they clamp <em>after</em>
-     * the wrap and {@code MIN_VALUE} is smaller than every ceiling.
+     * <p>The naive {@code limit + 1} wraps at {@link Integer#MAX_VALUE} - a positive, legal bound, and the obvious
+     * way for a caller to ask for everything - to {@link Integer#MIN_VALUE}: the underlying page comes back empty, and
+     * the read dies somewhere unrelated, a bare {@code NoSuchElementException} out of a {@code getLast()} on the empty
+     * batch. A {@code Math.min(limit + 1, 1000)} guard does not cover it, because it clamps <em>after</em> the wrap.
      *
      * <p>Saturating is the right answer rather than throwing: a caller asking for {@code MAX_VALUE} is asking for
-     * everything, and everything is what {@code MAX_VALUE} records already means. It is stated here, once, because
-     * six backends were each spelling it and each getting it wrong the same way.
+     * everything, and everything is what {@code MAX_VALUE} records already means. Every paged backend computes the
+     * probe through here.
      */
     static int oneMoreThan(int limit) {
         return limit == Integer.MAX_VALUE ? limit : limit + 1;
@@ -417,7 +406,7 @@ public interface ArtifactStore {
 
     /**
      * A short-lived URL a client can fetch this key from directly (a presigned object-store GET), or empty when
-     * this backend cannot mint one (the filesystem default) - the caller then streams as today. The object-store
+     * this backend cannot mint one (the filesystem default) - the caller then streams. The object-store
      * backends sign a {@code GET} for the fully-qualified object (the scope's {@link #scope key prefix} plus
      * {@code key}) valid for {@code ttl}, so a serve plane can 307 the client at the bucket instead of moving the
      * bytes through the JVM; every other store (and every decorator that does not delegate) answers empty, and the
@@ -490,14 +479,12 @@ public interface ArtifactStore {
      * Whether nothing at all is stored under {@code prefix} - <b>one child answers it</b>, and the probe stops
      * there.
      *
-     * <p>It exists because the obvious spelling is a trap that this repository has now paid for three times:
-     * {@code list(prefix).isEmpty()} materialises a container's whole child set to answer a yes/no question, so
-     * asking whether the blob pool is empty costs one string per blob. A console browse once listed a namespace
-     * per row to draw a folder icon; a tenant existence probe reached the scan fallback and stopped the bundled
-     * image booting over ten thousand keys.
+     * <p>It exists because the obvious spelling is a trap: {@code list(prefix).isEmpty()} materialises a
+     * container's whole child set to answer a yes/no question, so asking whether the blob pool is empty costs one
+     * string per blob, and a browse that draws a folder icon per row lists a namespace per row.
      *
-     * <p>So the point of this method is not that it is faster. It is that <em>the correct form is now shorter than
-     * the incorrect one</em>, which is the only version of this rule that survives contact with people. A reviewer
+     * <p>So the point of this method is not that it is faster. It is that <em>the correct form is shorter than the
+     * incorrect one</em>, which is the only version of this rule that survives contact with people. A reviewer
      * spotting {@code list(..).isEmpty()} is a rule; a method that reads better and cannot be unbounded is a
      * mechanism.
      */
@@ -554,9 +541,9 @@ public interface ArtifactStore {
      * {@code pageListed} - the filesystem scans a directory in bounded strides, the three object stores use their own
      * start-after pagination - and this form derives from it losslessly, the child's name being the last segment of
      * its key - the shape a default exists for, rather than an identical override and {@code name} helper in every
-     * backend. The contract kit's {@code NATIVE_PAGING} property still proves a backend pages
-     * natively, and a backend that overrides neither inherits {@code pageListed}'s bounded listing fallback, which
-     * refuses past {@link #MAX_INHERITED_CHILDREN} children rather than pretending to page.
+     * backend. The contract kit's {@code NATIVE_PAGING} property proves a backend pages natively, and a backend that
+     * overrides neither inherits {@code pageListed}'s bounded listing fallback, which refuses past
+     * {@link #MAX_INHERITED_CHILDREN} children rather than pretending to page.
      */
     default void page(String prefix, String startAfter, int limit, Consumer<String> consumer) {
         pageListed(prefix, startAfter, limit, listed -> consumer.accept(name(listed.key())));
@@ -596,8 +583,7 @@ public interface ArtifactStore {
      */
     default void pageListed(String prefix, String startAfter, int limit, Consumer<Listed> consumer) {
         // The container name normalised as every backend normalises it, so a trailing-slash prefix keys its children
-        // exactly as the bare one does; the decorator legs of the store contract found an earlier default keying them
-        // kit/listing//alpha.
+        // exactly as the bare one does (never kit/listing//alpha).
         String container = container(prefix);
         pageByListing(this, prefix, startAfter, limit, name -> consumer.accept(Listed.of(child(container, name))));
     }
@@ -850,7 +836,7 @@ public interface ArtifactStore {
      *
      * <p>The store kit checks that this token is the one {@link #readVersioned} pairs with the body and that a write
      * moves it on. It cannot check that no body was transferred - that is invisible from the SPI - so the claim above
-     * is a review question, and the thing that presses it is a canary publishing into a listing too large to hold.
+     * is a review question.
      */
     default Optional<Object> version(String key) throws IOException {
         return readVersioned(key).map(Versioned::token);
@@ -892,11 +878,10 @@ public interface ArtifactStore {
      * <p>The inherited body buffers, which is correct for a <em>backend</em> without a streaming upload: it is
      * exactly the call it replaces, so such a backend is no worse for not overriding this.
      *
-     * <p><b>It is not correct for a decorator, and this is a trap that has already been sprung.</b> A store that
-     * wraps another one and inherits this body silently converts a streaming backend into a buffering one - the
-     * whole document into heap, on the delegate's behalf, defeating the override the backend does have. Four
-     * decorators inherited it and a folder page of a hundred thousand entries died of it under a bounded heap,
-     * naming this method in the stack. So a decorator overrides this and delegates; if it genuinely holds content
+     * <p><b>It is not correct for a decorator.</b> A store that wraps another one and inherits this body silently
+     * converts a streaming backend into a buffering one - the whole document into heap, on the delegate's behalf,
+     * defeating the override the backend does have, so a large listing dies of it under a bounded heap. So a
+     * decorator overrides this and delegates; if it genuinely holds content
      * by design, it overrides it anyway and says so, because otherwise nothing distinguishes the deliberate case
      * from the accident.
      */
