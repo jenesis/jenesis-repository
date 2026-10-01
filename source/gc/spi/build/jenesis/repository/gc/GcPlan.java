@@ -5,33 +5,24 @@ import module java.base;
 import build.jenesis.repository.store.Known;
 
 /**
- * The outcome of a garbage-collection pass or dry run - computed before anything is deleted, so it can be
- * previewed and reported, matching the retention sweeper's plan shape. From {@link GarbageCollector#plan} the
- * counters describe what a collection would do right now (nothing was written); from
- * {@link GarbageCollector#collect} they describe what the pass actually did.
+ * The outcome of a collection pass or dry run, matching the retention sweeper's plan shape. From
+ * {@link GarbageCollector#plan} the counters say what a collection would do now; from {@link GarbageCollector#collect},
+ * what it did.
  *
- * <p><b>Three outcomes, not two.</b> {@code complete} alone would fuse the two ways a pass can do nothing: one is
- * transient and self-healing (no earlier judgment to act on yet, or another node still holds walk segments - wait
- * for the next interval), the other is an operator action item (some ecosystem's roots cannot be named, so the pass
- * <em>refused</em> and will refuse again until a module is installed or the data is purged). {@link #refusal()}
- * separates them, and the constructor makes the separation structural rather than conventional: a refused plan
- * cannot claim completeness and cannot carry a non-zero counter, so a refusal can never be reported as a converged
- * store.
+ * <p><b>Three outcomes, not two.</b> A pass can do nothing transiently (no earlier judgment yet, or another node holds
+ * walk segments) or because it refused (some ecosystem's roots cannot be named, which needs an operator).
+ * {@link #refusal()} separates them, and the constructor makes it structural: a refused plan cannot claim completeness
+ * or carry a non-zero counter.
  *
- * @param complete   whether the judgment rests on a completed enumeration: a plan with no completed pass to judge
- *                   by, or a collection whose shared walk still had segments held by another node, reports
- *                   {@code false} - it is a partial answer, not an empty store
- * @param condemned  blobs newly judged unreferenced this pass and marked for the <em>next</em> one - never deleted
- *                   by the pass that first judged them (always {@code 0} from a dry run)
- * @param spared     condemned markers cleared because the blob turned out to be referenced again - the dedup
- *                   re-publish that re-linked content an earlier pass judged orphaned (always {@code 0} from a
- *                   dry run)
- * @param collected  blobs due for deletion: reclaimed by {@code collect}, previewed by {@code plan}
- * @param sample     the first {@link #SAMPLE} collected hashes, for a console preview - the count above is the
- *                   whole truth where a mass eviction condemns more than fits a report
- * @param refusal    why the pass declined to judge anything at all, when it did: the unanswerable pointer-root set
- *                   it was handed, carried through verbatim so a console and a log report the cause and the remedy
- *                   rather than an empty plan
+ * @param complete whether the judgment rests on a completed enumeration; {@code false} for a plan with no completed
+ *     pass to judge by, or a collection whose walk still had segments held elsewhere
+ * @param condemned blobs newly judged unreferenced and marked for the next pass - never deleted by the pass that first
+ *     judged them ({@code 0} from a dry run)
+ * @param spared condemned markers cleared because the blob is referenced again ({@code 0} from a dry run)
+ * @param collected blobs due for deletion: reclaimed by {@code collect}, previewed by {@code plan}
+ * @param sample the first {@link #SAMPLE} collected hashes for a console preview; the count above is the whole truth
+ * @param refusal why the pass declined to judge anything, when it did: the unanswerable root set it was handed, carried
+ *     through so a console and a log report the cause and the remedy
  */
 public record GcPlan(boolean complete, long condemned, long spared, long collected, List<String> sample,
                      Optional<Known.Unknown<List<String>>> refusal) {
@@ -49,8 +40,8 @@ public record GcPlan(boolean complete, long condemned, long spared, long collect
         }
     }
 
-    /** A pass that judged nothing because it was handed a root set it could not act on - the one outcome an operator
-     *  must act on rather than wait out. Nothing was walked, condemned or deleted. */
+    /** A pass that judged nothing because its root set could not be acted on - the outcome an operator must act on
+     *  rather than wait out. */
     public static GcPlan refused(Known.Unknown<List<String>> reason) {
         return new GcPlan(false, 0, 0, 0, List.of(), Optional.of(Objects.requireNonNull(reason, "reason")));
     }
@@ -60,9 +51,8 @@ public record GcPlan(boolean complete, long condemned, long spared, long collect
         return new GcPlan(complete, condemned, spared, collected, sample, Optional.empty());
     }
 
-    /** Whether the pass changed or would change nothing - the quiet steady state of a converged store. A refused
-     *  pass also changed nothing, which is exactly why it must be told apart by {@link #refusal()} rather than by
-     *  this. */
+    /** Whether the pass changed or would change nothing - a converged store's steady state. A refused pass also changed
+     *  nothing, so it is told apart by {@link #refusal()}. */
     public boolean isEmpty() {
         return condemned == 0 && spared == 0 && collected == 0;
     }

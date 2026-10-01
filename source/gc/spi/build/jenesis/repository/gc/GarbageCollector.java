@@ -6,133 +6,107 @@ import build.jenesis.repository.store.ArtifactStore;
 import build.jenesis.repository.store.Known;
 
 /**
- * Reclaims content blobs ({@code blobs/<hash>}) that no live pointer references any more - the residue of a
- * republish, an eviction, a rejected upload or an abandoned staging deploy. Deletion is the one unrecoverable act
- * in the product, so the contract is safety-first: an implementation must never delete a blob that is referenced,
- * that was re-linked at any point up to its final pre-delete check (the dedup re-publish race - identical content
- * is stored once, so a "new" publish may link a blob the collector already judged unreferenced), or that is
- * younger than one collection interval (an in-flight publish stores the blob before its pointer links). Sparing an
- * orphan for another pass is always acceptable; the reverse never is.
+ * Reclaims content blobs ({@code blobs/<hash>}) no live pointer references - the residue of a republish, an eviction, a
+ * rejected upload or an abandoned staging deploy. Deletion is the one unrecoverable act in the product, so the contract
+ * is safety-first: an implementation never deletes a blob that is referenced, that a publish relies on up to the moment
+ * of deletion (identical content is stored once, so a new publish may link a blob already judged unreferenced), or that
+ * is younger than one collection interval (an in-flight publish stores the blob before linking it). Sparing an orphan
+ * for another pass is always acceptable; the reverse never is.
  *
- * <p><b>What counts as referenced</b> is layout knowledge the caller owns: the pointer roots name the
- * top-level key prefixes whose small leaf objects hold a referenced blob's hash - always {@code publish} (the
- * content-addressed publication namespace), plus every root a blobs-namespace format declares for its own
- * pointers. A root missing from the list makes its blobs invisible to the reference scan and eligible for
- * reclamation, so the caller must name every one.
+ * <p><b>What counts as referenced</b> is layout knowledge the caller owns: the pointer roots are the top-level prefixes
+ * whose small leaf objects name a referenced blob's hash - always {@code publish}, plus every root a blobs-namespace
+ * format declares. A root missing from the list makes its blobs reclaimable, so the caller names every one.
  *
- * <p><b>And it must be able to say when it cannot.</b> The roots arrive as a {@link Known}{@code <List<String>>},
- * not as a bare {@code List<String>}, because "these are the roots" and "I cannot name all the roots" are different
- * facts and a list can only state the first. The set is unnameable exactly when a format module that owns an
- * ecosystem's layout is not installed: its pointers are then invisible to the mark, every blob it serves reads as
- * unreferenced, and the confirming pass deletes artifact bytes that are serving. There is no partial repair
- * available here - blobs are content-addressed and flat, so a collector cannot infer which of them belong to an
- * unenumerable root and spare just those, and naming the absent format's roots anyway would still miss the blobs a
- * stored document lends (an OCI config or layer digest lives inside the manifest and no pointer body names it). So
- * the only correct behaviour is refusal, and this seam takes it: an unanswerable root set is not a degraded scan,
- * it is a licence to delete, and the refusal is placed <em>at the deletion</em> rather than left to every caller to
- * remember.
+ * <p><b>And it says when it cannot.</b> The roots arrive as a {@link Known}{@code <List<String>>} because "these are
+ * the roots" and "I cannot name all the roots" are different facts. The set is unnameable exactly when a format module
+ * owning an ecosystem's layout is not installed: its pointers are invisible to the mark and its serving blobs would
+ * read as unreferenced. Blobs are content-addressed and flat, so no partial repair can spare just those - so an
+ * unanswerable root set is refused, at the deletion rather than by every caller.
  *
- * <p>Naming the roots is <em>necessary</em> and, for some formats, not <em>sufficient</em>: one leaf naming one blob
- * holds only where every served blob has a pointer, and a format may serve blobs reachable solely through a stored
- * document (OCI's config and layer digests live inside the manifest JSON, and a manifest pulled by digest carries no
- * tag pointer at all). Such a format declares the rest through
- * {@code build.jenesis.repository.format.BlobReferences.references}, which an implementation consults for the keys it
- * visits beneath that format's roots. The knowledge stays where it belongs - a collector still parses no format's
- * documents - and an implementation handed no lenders is the pointer-body-only scan described above.
+ * <p>Naming the roots is necessary and, for some formats, not sufficient: a format may serve blobs reachable only
+ * through a stored document (OCI's config and layer digests live inside the manifest, and a manifest pulled by digest
+ * has no tag pointer). Such a format declares the rest through
+ * {@code build.jenesis.repository.format.BlobReferences.references}, which an implementation consults for keys under
+ * that format's roots; the collector itself parses no format's documents.
  *
- * <p>Mirrors the retention sweeper's shape: {@link #plan} computes what would be reclaimed right now without
- * writing anything - the dry run a maintenance console previews - and {@link #collect} computes and applies. Both
- * run over arbitrarily large stores, so an implementation enumerates through the shared artifact walk (resumable,
- * segmented, multi-node-safe), never a private full listing.
+ * <p>{@link #plan} computes what would be reclaimed without writing anything - the dry run a console previews - and
+ * {@link #collect} computes and applies. Both run over arbitrarily large stores through the shared artifact walk, never
+ * a private full listing.
  *
  * <h2>Contract</h2>
  * <ol>
- * <li><b>Thread-safety.</b> A collector is resolved once and shared by every maintenance surface that drives it, so
- *     both methods must be safe to call concurrently. Concurrency <em>between nodes</em> is not this interface's to
- *     police by locking: an implementation rides the shared artifact walk, whose segment claims are the single-writer
- *     mechanism, and a pass that cannot claim every segment reports an incomplete result rather than blocking.</li>
- * <li><b>Idempotency / replay.</b> {@link #plan} writes nothing at all - not a marker, not a checkpoint - so a
- *     preview is always safe to repeat. {@link #collect} converges: a repeated or crash-resumed pass never deletes a
- *     blob a previous pass would have spared, because deletion requires an <em>earlier</em> pass's condemnation that
- *     this pass re-confirms, and the write path clears a condemnation whenever a pointer links the blob.</li>
- * <li><b>Absence sentinel.</b> {@code null} is never returned; an empty store, a store with no collection history
- *     and a refused pass all answer a {@link GcPlan}. The three are distinguishable and deliberately so: an
- *     unremarkable pass is {@link GcPlan#complete()} with zero counters, a pass that could not finish is
- *     {@code complete() == false} with an empty {@link GcPlan#refusal()}, and a refused pass carries the
- *     {@link Known.Unknown} that caused it. An empty answer is never evidence that a store is clean.</li>
- * <li><b>Selection failure.</b> Which collector runs is {@link GarbageCollectorProvider}'s business, not
- *     this interface's; a deployment with no collector installed reclaims nothing rather than falling back to a
- *     default sweeper.</li>
- * <li><b>Streaming.</b> No artifact body is ever read. A collector reads pointer leaves and its own
- *     bookkeeping objects - small objects - and judges blobs by key, never by content.</li>
- * <li><b>Tenant scoping.</b> The {@link ArtifactStore} handed in is the scope the pass runs over, and the
- *     pointer roots are keys within it. A collector composes no key outside that scope, so a tenant-scoped store
- *     collects exactly one tenant's blobs and a root store collects the deployment-global layout.</li>
- * <li><b>Error visibility.</b> A store failure propagates as {@link IOException}; nothing on the judging
- *     path is caught and turned into an empty or complete-looking answer, because a pass that saw nothing because
- *     the backend was down must never read as a pass that found nothing to do. The one failure that is <em>not</em>
- *     an exception is the unanswerable root set, which is reported as a refusal rather than thrown because it is a
- *     legitimate deployment state (an uninstalled module) and not a fault.</li>
- * <li><b>Read purity.</b> {@link #plan} is a pure read. {@link #collect} writes only the collector's own bookkeeping
- *     and deletes only blobs it is entitled to delete; it never edits a pointer, a document or a format's layout.</li>
- * <li><b>Staleness.</b> A judgment is always against durable state read during the pass, never a cached census, and
- *     the pass is deliberately conservative about what has changed under it: the condemn-then-confirm protocol plus
- *     the pre-delete re-read means content re-linked at any point up to the final check is spared.</li>
- * <li><b>Ordering / concurrency.</b> The mark precedes the sweep within one {@link #collect}; beyond that a caller
- *     may not assume any order over blobs, and two concurrent passes on different nodes divide the work through the
- *     walk's segment claims rather than duplicating deletions.</li>
- * <li><b>Bounded work / cancellation.</b> Both methods run over arbitrarily large stores through the shared bounded
- *     walk - resumable, segmented, checkpointed - never a private full listing, and a pass that reaches a bound
- *     leaves a safely-incomplete, resumable state reported as {@code complete() == false} rather than a partial
- *     sweep presented as a whole one.</li>
- * <li><b>Durability / delivery.</b> A deletion is durable when the blob's key is gone; the condemnation marker that
- *     entitled it is the durable record that survives a crash between passes. A crash mid-sweep leaves some blobs
- *     deleted and the rest still condemned, which the next pass resumes - there is no all-or-nothing pass, and a
- *     caller must read the returned {@link GcPlan} rather than assume the pass ran to the end.</li>
+ *   <li><b>Thread-safety.</b> A collector is resolved once and shared, so both methods are safe to call concurrently.
+ *       Between nodes the shared walk's segment claims are the single-writer mechanism, and a pass that cannot claim
+ *       every segment reports an incomplete result rather than blocking.</li>
+ *   <li><b>Idempotency / replay.</b> {@link #plan} writes nothing, so a preview is always safe to repeat.
+ *       {@link #collect} converges: a repeated or resumed pass never deletes a blob a previous pass would have spared,
+ *       because deletion needs an earlier pass's condemnation that this pass re-confirms, and a publish relying on the
+ *       bytes spares them by compare-and-set on the same marker.</li>
+ *   <li><b>Absence sentinel.</b> {@code null} is never returned; an empty store, one with no collection history and a
+ *       refused pass all answer a {@link GcPlan}, distinguishably: an unremarkable pass is {@link GcPlan#complete()}
+ *       with zero counters, an unfinished one {@code complete() == false} with an empty {@link GcPlan#refusal()}, and a
+ *       refused one carries the {@link Known.Unknown} that caused it. An empty answer is never evidence that a store is
+ *       clean.</li>
+ *   <li><b>Selection failure.</b> Which collector runs is {@link GarbageCollectorProvider}'s business; a deployment
+ *       with none reclaims nothing.</li>
+ *   <li><b>Streaming.</b> No artifact body is read: a collector reads pointer leaves and its own small bookkeeping and
+ *       judges blobs by key.</li>
+ *   <li><b>Tenant scoping.</b> The {@link ArtifactStore} handed in is the scope, and the roots are keys within it; no
+ *       key outside it is composed.</li>
+ *   <li><b>Error visibility.</b> A store failure propagates as {@link IOException}; nothing on the judging path becomes
+ *       an empty or complete-looking answer, because a pass that saw nothing because the backend was down must never
+ *       read as one that found nothing to do. The unanswerable root set is reported as a refusal rather than thrown: an
+ *       uninstalled module is a deployment state, not a fault.</li>
+ *   <li><b>Read purity.</b> {@link #plan} is a pure read. {@link #collect} writes only its own bookkeeping and deletes
+ *       only blobs it is entitled to; it never edits a pointer, a document or a layout.</li>
+ *   <li><b>Staleness.</b> A judgment is against durable state read during the pass, never a cached census, and the
+ *       condemn-then-confirm protocol with its claim on the marker spares content a publish relies on up to the
+ *       delete.</li>
+ *   <li><b>Ordering / concurrency.</b> The mark precedes the sweep within one {@link #collect}; beyond that no order
+ *       over blobs is promised, and concurrent passes on different nodes divide the work through the walk's segment
+ *       claims.</li>
+ *   <li><b>Bounded work / cancellation.</b> Both methods run through the shared bounded walk - resumable, segmented,
+ *       checkpointed - and a pass that reaches a bound leaves a resumable state reported as
+ *       {@code complete() == false}, never a partial sweep presented as whole.</li>
+ *   <li><b>Durability / delivery.</b> A deletion is durable when the blob's key is gone; the condemnation marker is the
+ *       record that survives a crash between passes. A crash mid-sweep leaves some blobs deleted and the rest
+ *       condemned, which the next pass resumes, so a caller reads the returned {@link GcPlan} rather than assume the
+ *       pass ran to the end.</li>
  * </ol>
  */
 public interface GarbageCollector {
 
     /**
-     * The dry run: what {@link #collect} would reclaim right now, judged from the durable bookkeeping of earlier
-     * passes. Writes nothing - not a marker, not a checkpoint - so it is always safe to preview. On a store where
-     * no collection ever ran there is no earlier judgment and the plan is empty (with
-     * {@link GcPlan#complete()} {@code false}): a first {@code collect} only condemns, it never deletes.
+     * The dry run: what {@link #collect} would reclaim now, judged from earlier passes' bookkeeping. Writes nothing. On
+     * a store where no collection ran there is no earlier judgment, so the plan is empty with {@link GcPlan#complete()}
+     * {@code false}: a first {@code collect} only condemns.
      *
-     * <p>The dry run of a refusal is a refusal: an unanswerable {@code pointerRoots} previews the same
-     * {@link GcPlan#refusal()} {@link #collect} would answer, so an operator's preview shows the reason nothing will
-     * be reclaimed instead of an empty plan that reads as a converged store.
+     * <p>An unanswerable {@code pointerRoots} previews the same {@link GcPlan#refusal()} {@link #collect} would answer,
+     * so a preview shows why nothing will be reclaimed rather than an empty plan that reads as converged.
      */
     GcPlan plan(ArtifactStore store, Known<List<String>> pointerRoots, Instant now) throws IOException;
 
     /**
-     * Run one collection pass and apply it: judge every blob against the live pointers under
-     * {@code pointerRoots}, remember the unreferenced ones, and delete only what an <em>earlier</em> pass already
-     * judged unreferenced and this pass confirms still is - at least one full collection interval of grace for
-     * every crash-torn or in-flight publish. Returns what happened; a pass that could not finish (another node
-     * still holds part of the shared enumeration) reports {@link GcPlan#complete()} {@code false} and has deleted
-     * nothing it was not entitled to.
+     * Run one collection pass: judge every blob against the live pointers under {@code pointerRoots}, condemn the
+     * unreferenced, and delete only what an earlier pass condemned and this pass confirms - at least one collection
+     * interval of grace for every in-flight or crash-torn publish. A pass that could not finish (another node holds
+     * part of the walk) reports {@link GcPlan#complete()} {@code false} and has deleted nothing it was not entitled to.
      *
-     * <p><b>An unanswerable root set collects nothing.</b> When {@code pointerRoots} is a {@link Known.Unknown} - no
-     * installed format can name some ecosystem's roots - the pass is refused before the mark begins: nothing is
-     * walked, nothing is condemned, nothing is deleted, and the returned plan carries the reason in
-     * {@link GcPlan#refusal()}. This is a contract clause, not an implementation courtesy: an implementation that
-     * swept on an unanswerable root set would delete serving bytes it could not see.
+     * <p><b>An unanswerable root set collects nothing.</b> For a {@link Known.Unknown} {@code pointerRoots} the pass is
+     * refused before the mark - nothing walked, condemned or deleted - and the plan carries the reason in
+     * {@link GcPlan#refusal()}. This is a contract clause: sweeping on such a set deletes serving bytes it cannot see.
      */
     GcPlan collect(ArtifactStore store, Known<List<String>> pointerRoots, Instant now) throws IOException;
 
-    /**
-     * The wall-clock floor between condemning a blob and deleting it when {@code jenrepo.gc.grace} names none: two
-     * hours. An upload in several steps leaves its pieces unreferenced for a while - a {@code docker push} sends its
-     * layers before the manifest naming them - and where an operator schedules collection often, two passes could
-     * otherwise fall inside that while and take the pieces. Harbor spares blobs uploaded within the last two hours
-     * for the same reason. It only ever delays a deletion.
-     */
+    /** The wall-clock floor between condemning a blob and deleting it when {@code jenrepo.gc.grace} names none: two
+     *  hours. A multi-step upload leaves its pieces unreferenced for a while - {@code docker push} sends layers before
+     *  the manifest naming them - and frequent collection could otherwise take them; Harbor spares blobs uploaded
+     *  within two hours for the same reason. It only ever delays a deletion. */
     static Duration defaultGrace() {
         return Duration.parse(DEFAULT_GRACE);
     }
 
-    /** {@link #defaultGrace()} as the text the setting catalogue declares - one definition, kept as a compile-time
-     *  constant because the generated settings reference reads a default out of the class file. */
+    /** {@link #defaultGrace()} as the text the setting catalogue declares - a compile-time constant, because the
+     *  generated settings reference reads a default out of the class file. */
     String DEFAULT_GRACE = "PT2H";
 }

@@ -1,22 +1,14 @@
 /**
- * The garbage-collection SPI: reclaiming the content blobs no live pointer references any more is a discovered,
- * optional-unique capability ({@code jenrepo.gc=<name>} selects among installed collectors), kept separate
- * from its implementation so the reclamation strategy can change without breaking a caller - and <em>no-op by
- * absence</em>: with no module installed, {@code GarbageCollectorProvider.resolve} is empty, nothing is ever
- * reclaimed, and the capability surfaces say garbage collection is off. No blob is deleted by a deployment that did
- * not opt into a collector. A collector that <em>was</em> explicitly selected but cannot be honoured fails at
- * resolution instead, because a silent no-op reads as a healthy idle system while storage grows without bound.
- * A {@code GarbageCollector} matches the retention sweeper's shape - {@code plan} is the dry run a
- * maintenance console previews, {@code collect} computes and applies - and is handed the pointer roots by its
- * caller (always {@code publish}; a blobs-namespace format's declared roots are added by the caller that knows
- * them), because which namespaces hold serving pointers is layout knowledge this primitive deliberately does
- * not have. Where naming a root is not enough - a format whose served blobs are reachable only through a stored
- * document, so no pointer body names them - that format lends the rest through
- * {@code build.jenesis.repository.format.BlobReferences}, and an implementation unions what it is told with the
- * hashes it read: the derivation stays with the format, never in the collector.
- * Deletion is the one unrecoverable act in the product, so an implementation is held to the invariant
- * that a referenced, re-linked or in-flight blob is never deleted; the write path cooperates by clearing the
- * collector's {@code gc/condemned/<hash>} marker whenever a pointer links a blob ({@code Publication.link}).
+ * The garbage-collection SPI: reclaiming blobs no live pointer references is a discovered, optional-unique capability
+ * ({@code jenrepo.gc=<name>}), and no-op by absence - with no module installed nothing is reclaimed and the capability
+ * surfaces say so. An explicitly selected collector that cannot be honoured fails at resolution instead.
+ *
+ * <p>{@code plan} is the dry run a console previews, {@code collect} computes and applies. The caller hands in the
+ * pointer roots ({@code publish}, plus the roots blobs-namespace formats declare), since which namespaces hold serving
+ * pointers is layout knowledge; a format whose blobs are reachable only through a stored document lends the rest
+ * through {@code build.jenesis.repository.format.BlobReferences}. A referenced, relied-on or in-flight blob is never
+ * deleted: the sweep and a publish relying on condemned bytes contend for the {@code gc/condemned/<hash>} marker by
+ * compare-and-set.
  *
  * @jenesis.release 25
  * @jenesis.bom pin-repository.properties
