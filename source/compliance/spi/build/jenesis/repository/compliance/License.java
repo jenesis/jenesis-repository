@@ -51,12 +51,31 @@ public record License(String spdxId, String category) {
         }
         for (Rule rule : TABLE) {
             for (String token : rule.tokens()) {
-                if (text.contains(token)) {
+                if (containsWord(text, token)) {
                     return rule.license();
                 }
             }
         }
         return UNKNOWN;
+    }
+
+    /**
+     * Whether {@code text} carries {@code token} as a word of its own: where the token begins or ends with a letter,
+     * the character beside it in the text must not be one. A token is a short name - {@code mpl}, {@code isc},
+     * {@code bsd} - and inside another word it is no licence at all: "The Example Corporation Licence" names no
+     * Mozilla licence, and a disclaimer is not ISC. A digit may still follow, so {@code MPL2} and {@code gpl3} match.
+     */
+    static boolean containsWord(String text, String token) {
+        for (int at = text.indexOf(token); at >= 0; at = text.indexOf(token, at + 1)) {
+            int end = at + token.length();
+            boolean startOk = !Character.isLetter(token.charAt(0)) || at == 0 || !Character.isLetter(text.charAt(at - 1));
+            boolean endOk = !Character.isLetter(token.charAt(token.length() - 1)) || end == text.length()
+                    || !Character.isLetter(text.charAt(end));
+            if (startOk && endOk) {
+                return true;
+            }
+        }
+        return false;
     }
 
     /** Resolve a bare SPDX identifier (a {@code name} with no whitespace - {@code "MIT"}, {@code "GPL-3.0"}) against the

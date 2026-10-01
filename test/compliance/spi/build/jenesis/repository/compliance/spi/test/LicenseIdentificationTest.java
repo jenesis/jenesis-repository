@@ -108,4 +108,22 @@ class LicenseIdentificationTest {
         assertThat(License.identify("", "  ")).isEqualTo(License.UNKNOWN);
         assertThat(License.UNKNOWN.identified()).isFalse();
     }
+
+    @Test
+    void a_short_name_inside_another_word_is_no_licence() {
+        assertThat(License.identify("The Example Corporation Licence", null))
+                .as("'mpl' inside 'example' names no Mozilla licence").isEqualTo(License.UNKNOWN);
+        assertThat(License.identify("Proprietary - see the disclaimer", null))
+                .as("'isc' inside 'disclaimer' is not ISC").isEqualTo(License.UNKNOWN);
+        assertThat(License.identify("Unpublished; all rights reserved (abcbsdx)", null)).isEqualTo(License.UNKNOWN);
+    }
+
+    @Test
+    void a_short_name_standing_on_its_own_still_identifies() {
+        assertThat(License.identify("Licensed under the MPL 2.0", null).spdxId()).isEqualTo("MPL-2.0");
+        assertThat(License.identify("MPL2", null).spdxId()).as("a digit may follow").isEqualTo("MPL-2.0");
+        assertThat(License.identify("ISC License", null).spdxId()).isEqualTo("ISC");
+        assertThat(License.identify("New BSD License", null).spdxId()).isEqualTo("BSD");
+        assertThat(License.identify(null, "https://opensource.org/licenses/MIT").spdxId()).isEqualTo("MIT");
+    }
 }
