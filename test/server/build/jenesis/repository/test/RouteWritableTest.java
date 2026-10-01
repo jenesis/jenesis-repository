@@ -142,6 +142,39 @@ public class RouteWritableTest {
     }
 
     @Test
+    void a_repository_with_content_but_no_format_says_so_to_a_read_and_what_to_create() throws Exception {
+        ArtifactStore legacy = tenant.scope("legacy");
+        legacy.write("publish/maven/org/acme/lib/1.0/lib-1.0.jar", new ByteArrayInputStream(new byte[]{1}));
+        assertThat(answer(legacy, "GET")).as("a read is told why, since the repository exists")
+                .contains("holds content but no format").contains("PUT /repository/default/default");
+        assertThat(answer(legacy, "PUT")).contains("holds content but no format");
+    }
+
+    @Test
+    void a_repository_whose_format_is_not_installed_names_it() throws Exception {
+        ArtifactStore orphaned = tenant.scope("orphaned");
+        new RepositoryDocument("cobol", Instant.parse("2026-01-01T00:00:00Z")).create(orphaned);
+        assertThat(answer(orphaned, "GET")).contains("holds the format 'cobol'")
+                .contains("no module installed in this deployment serves");
+    }
+
+    @Test
+    void a_repository_that_does_not_exist_says_nothing_to_a_read() throws Exception {
+        assertThat(answer(tenant.scope("absent"), "GET")).isEmpty();
+    }
+
+    /** The body the controller answers a {@code method} on a repository whose scope is {@code repository} with. */
+    private static String answer(ArtifactStore repository, String method) throws Exception {
+        Status status = new Status();
+        StringWriter body = new StringWriter();
+        HttpServletResponse response = response(status);
+        when(response.getWriter()).thenReturn(new PrintWriter(body));
+        controller(repository, true).handle(request(method), response);
+        assertThat(status.value).isEqualTo(404);
+        return body.toString();
+    }
+
+    @Test
     void a_refused_write_is_answered_in_the_claiming_format_s_own_dialect() throws Exception {
         // A format that claims the path and speaks an error dialect of its own: the refusal is handed to it rather
         // than answered bare, which is how a registry's DELETE on a proxy repository answers UNSUPPORTED.

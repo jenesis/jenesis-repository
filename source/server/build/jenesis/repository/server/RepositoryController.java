@@ -220,9 +220,10 @@ public class RepositoryController {
                 : HeldFormat.of(routing, route, dispatcher.formats());
         if (held.isEmpty()) {
             response.setStatus(404);
-            if (write && !route.repository().isEmpty()) {
+            Optional<String> unserved = route.repository().isEmpty() ? Optional.empty() : unserved(route);
+            if (unserved.isPresent() || write && !route.repository().isEmpty()) {
                 response.setContentType("text/plain;charset=UTF-8");
-                response.getWriter().write(absent(route.repository()));
+                response.getWriter().write(unserved.orElseGet(() -> absent(route.repository())));
             }
             return;
         }
@@ -381,6 +382,35 @@ public class RepositoryController {
     }
 
     /** What a publish into a repository that holds no format is told. */
+    /** The repositories this node has already said, in its log, cannot serve - each is named once, not per request. */
+    private static final Set<String> UNSERVED = ConcurrentHashMap.newKeySet();
+
+    /**
+     * Why a repository that exists answers nothing, when it does: its type names a format no installed module serves,
+     * or it holds content but no type at all - created before repositories held a format. Both answer {@code 404}, as a
+     * repository that does not exist does, and both say what to do; nothing converts one, since the format it should
+     * hold is the operator's to name. Empty for a repository that does not exist, which keeps saying nothing on a read.
+     */
+    private Optional<String> unserved(RepositoryRouting.Route route) throws IOException {
+        Optional<RepositoryDocument> document = routing.document(route);
+        String reason;
+        if (document.isPresent()) {
+            reason = "Repository '" + route.repository() + "' holds the format '" + document.get().format()
+                    + "', which no module installed in this deployment serves. Install the module that serves it.";
+        } else if (!route.store().isEmpty("")) {
+            reason = "Repository '" + route.repository() + "' holds content but no format: it was made before "
+                    + "repositories held one. Give it the format it holds - PUT /repository/" + route.tenant() + "/"
+                    + route.repository() + " with the type, or create it in the console under Repositories - and its "
+                    + "content is served as that format.";
+        } else {
+            return Optional.empty();
+        }
+        if (UNSERVED.add(route.tenant() + "/" + route.repository())) {
+            LOGGER.warn(reason);
+        }
+        return Optional.of(reason);
+    }
+
     static String absent(String repository) {
         return "Repository '" + repository + "' does not exist or holds no format this deployment serves. Create it "
                 + "in the console under Repositories, choosing the format it holds.";
