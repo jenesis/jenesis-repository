@@ -17,16 +17,13 @@ import static build.jenesis.repository.search.web.SearchConsoleConfig.QUALIFIER;
 import build.jenesis.repository.ui.ConsoleScreen;
 
 /**
- * The licence inventory of a repository: how many of its versions declare each licence category and each SPDX id,
- * as the last count left it - the stored report {@code GET /api/licenses} answers from, read through
- * {@link RepositoryBrowse#licenses}.
+ * The licence inventory of a repository as the last count left it - the stored report {@code GET /api/licenses} answers
+ * from, read through {@link RepositoryBrowse#licenses}.
  *
- * <p>The screen never counts. It renders what is stored with the time it is as of, offers an editor the button that
- * starts a count in the background, and while one runs renders the shared running marker, which keeps the page
- * polling until the count lands. A count needs nothing of the full-text index; only the drill-down from a count to
- * the versions behind it does, so the rows link into the browse search exactly where the repository's
- * {@code full-text-search} setting is on - read, as the search bar reads it, from the repository's, the tenant's and
- * the deployment's settings documents, one object per module under a constant prefix.
+ * <p>The screen never counts: it renders what is stored with its as-of time, offers an editor the button that starts a
+ * count in the background, and while one runs renders the shared running marker, which keeps the page polling. Rows
+ * link into the browse search where the repository's {@code full-text-search} setting is on, since only that drill-down
+ * needs the index.
  */
 @Controller
 @ConsoleScreen

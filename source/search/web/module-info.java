@@ -1,13 +1,10 @@
 /**
- * The browse / search / licence-inventory read surface as a removable server feature module: it provides
- * {@link build.jenesis.repository.server.kernel.ServerModuleProvider}, so the repository server imports its
- * configuration through {@code ServiceLoader} discovery and names no browse or search endpoint. A thin Spring
- * {@code web} adapter over the {@code Repositories} resolver, the store-backed {@link build.jenesis.repository.inventory}
- * listing and the one {@link build.jenesis.repository.search.service.RepositorySearch} - a lookup by name, or the
- * full-text index where a repository has it switched on - and the licence inventory's stored report, counted on
- * request by {@link build.jenesis.repository.compliance.inventory.LicenseReport} whether or not the index is on. With
- * this module absent the server carries no {@code /api/browse}, {@code /api/search} or {@code /api/licenses} route.
- * Open so Spring can reflect over the controller and its configuration.
+ * The browse, search and licence-inventory read surface as a removable server module: a
+ * {@link build.jenesis.repository.server.kernel.ServerModuleProvider} the server imports by {@code ServiceLoader}. A
+ * thin Spring adapter over {@code Repositories}, the store-backed {@link build.jenesis.repository.inventory} listing,
+ * the one {@link build.jenesis.repository.search.service.RepositorySearch} and the licence inventory's stored report
+ * ({@link build.jenesis.repository.compliance.inventory.LicenseReport}), plus the inventory's console screen. Open so
+ * Spring can reflect over the controllers.
  *
  * @jenesis.release 25
  * @jenesis.bom pin-repository.properties

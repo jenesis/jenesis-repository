@@ -4,8 +4,9 @@ import module java.base;
 import build.jenesis.repository.ui.RepositoryPage;
 import build.jenesis.repository.ui.ConsoleModuleProvider;
 
-/** This feature's console surface, contributed through the console's seam so the console learns none of its
- *  vocabulary: without this module the screen is simply not there. */
+/**
+ * This feature's console surface, contributed through the console's seam; without this module the screen is not there.
+ */
 public final class SearchConsoleModule implements ConsoleModuleProvider {
 
     @Override
