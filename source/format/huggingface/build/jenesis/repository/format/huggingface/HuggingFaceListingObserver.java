@@ -10,10 +10,9 @@ import build.jenesis.repository.store.ListingObserver;
 import build.jenesis.repository.store.StoredListing;
 
 /**
- * Keeps the Hugging Face {@linkplain HuggingFaceListings stored revision lists} in step with the transitions that
- * happen off the upload path - a hold on an uploaded file and its release, a removal - by re-deciding the one file's
- * entry. A transition that names a file path is mapped exactly; one that names only a repository and revision
- * re-decides every stored file of that revision; one that names neither rebuilds every list in place.
+ * Keeps the Hugging Face {@linkplain HuggingFaceListings stored revision lists} in step with transitions off the upload
+ * path - a hold and its release, a removal - by re-deciding the one file's entry. A file path maps exactly; a
+ * repository and revision re-decides that revision's files; anything else rebuilds every list in place.
  */
 public final class HuggingFaceListingObserver implements ListingObserver {
 
@@ -27,7 +26,7 @@ public final class HuggingFaceListingObserver implements ListingObserver {
 
     @Override
     public void onMarked(ArtifactDescriptor subject, ArtifactStore store) {
-        // This format does not carry the lifecycle module: a mark changes nothing the Hub API answers.
+        // No lifecycle module: a mark changes nothing the Hub API answers.
     }
 
     @Override

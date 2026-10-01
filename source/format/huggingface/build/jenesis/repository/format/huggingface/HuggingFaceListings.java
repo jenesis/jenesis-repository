@@ -9,14 +9,10 @@ import tools.jackson.databind.node.ArrayNode;
 import tools.jackson.databind.node.ObjectNode;
 
 /**
- * A Hugging Face revision's file set as a stored listing - one line per stored file naming its content hash, its
- * size and whether it is served - from which the revision's commit id, its file tree and its repository-info
- * document are derived on every write. An upload therefore costs one rewrite of the revision's list and its three
- * derived documents, never a walk of the revision's other files.
- *
- * <p>The commit id is the SHA-1 over every stored file and its hash, held or not - a hold must not silently change a
- * commit id - while the tree and the info's {@code siblings} list only the served files, as the on-read generation
- * screened them.
+ * A revision's file set as a stored listing - one line per file naming its content hash, size and whether it is served
+ * - from which the revision's commit id, file tree and info document are derived on every write, so an upload rewrites
+ * four documents and walks no other file. The commit id covers every stored file, held or not, so a hold never changes
+ * it; the tree and {@code siblings} list only served files.
  */
 final class HuggingFaceListings {
 
@@ -134,8 +130,8 @@ final class HuggingFaceListings {
         }
     }
 
-    /** Regenerate the listing at this key if it is a revision's file list (its commit, tree and info regenerate
-     *  with it). */
+    /** Regenerate the listing at this key if it is a revision's file list; its commit, tree and info regenerate with
+     *  it. */
     boolean rebuild(String listing) throws IOException {
         int revs = listing.indexOf("/revs/");
         if (!listing.startsWith("hf/") || revs < 0) {
@@ -156,7 +152,7 @@ final class HuggingFaceListings {
         return rest[1].equals("commit") || rest[1].equals("tree") || rest[1].equals("info");
     }
 
-    /** Re-decide one file's entry from the store's current state - after an upload, a hold or a release. */
+    /** Re-decide one file's entry from the store's current state. */
     void refresh(String base, String revision, String type, String repoId, String path) throws IOException {
         Entry entry = entry(base, revision, path);
         StoredListing.Spec spec = spec(base, revision, type, repoId);
@@ -167,7 +163,7 @@ final class HuggingFaceListings {
         }
     }
 
-    /** A derived document of the revision, materialising the revision's list (and so the document) when absent. */
+    /** A derived document of the revision, materialising the revision's list when absent. */
     Optional<StoredListing.Served> derived(String base, String revision, String type, String repoId, String name)
             throws IOException {
         Optional<StoredListing.Served> served = StoredListing.openDerived(store, name);

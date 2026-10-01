@@ -27,73 +27,51 @@ import build.jenesis.repository.walk.BoundedChildren;
 import build.jenesis.repository.walk.TraversalException;
 
 /**
- * The Hugging Face Hub registry format (the HF Hub resolve / repo-info HTTP protocol), so {@code huggingface_hub} -
- * {@code hf_hub_download}, {@code snapshot_download}, {@code AutoModel.from_pretrained} - resolves models, datasets and
- * spaces over the shared store. It owns {@code /huggingface/...}, where the first path segment is a registry (a
- * deployment alias) and the rest mirrors the HF Hub layout:
- *
+ * The Hugging Face Hub registry format (the Hub's resolve and repo-info HTTP protocol), so {@code huggingface_hub} -
+ * {@code hf_hub_download}, {@code snapshot_download}, {@code from_pretrained} - resolves models, datasets and spaces
+ * over the shared store. It owns {@code /huggingface/...}, the first segment a registry alias and the rest the Hub
+ * layout:
  * <ul>
- *   <li>a repository file is served from {@code GET /huggingface/<repo>/<repo_id>/resolve/<revision>/<path>} (a dataset's
- *       under {@code .../datasets/<repo_id>/resolve/...}, a space's under {@code .../spaces/<repo_id>/resolve/...}); the
- *       {@code <path>} may be nested (a {@code onnx/model.onnx} subfolder file);</li>
- *   <li>a {@code PUT} to that same resolve path pushes the file into the registry - the HF Hub upload is a git-LFS commit
- *       API, but, as the Go format does for {@code GOPROXY}, a {@code PUT} to the download path is how a build gets a file
- *       into this hosted registry, so the wire protocol a client reads stays byte-identical;</li>
- *   <li>the repository index a client reads is served from stored documents - {@code GET /huggingface/<repo>/api/models/<repo_id>}
- *       (or {@code /api/datasets/...}, {@code /api/spaces/...}) answers the repo info with its {@code siblings} file list,
- *       and {@code .../api/models/<repo_id>/tree/<revision>} the file tree with each file's {@code oid} and {@code size} -
- *       both derived from the revision's stored file list on every upload. A repository with nothing
- *       stored answers {@code 404}, so a proxy registry can later fill it from upstream.</li>
+ *   <li>a file is served from {@code GET /huggingface/<repo>/<repo_id>/resolve/<revision>/<path>} (a dataset's under
+ *       {@code datasets/<repo_id>/...}, a space's under {@code spaces/<repo_id>/...}), {@code <path>} possibly
+ *       nested;</li>
+ *   <li>a {@code PUT} to that path pushes the file - the Hub's own upload is a git-LFS commit API, but as for
+ *       {@code GOPROXY}, a {@code PUT} to the download path gets a file into a hosted registry and leaves the read
+ *       protocol unchanged;</li>
+ *   <li>the index is served from stored documents: {@code GET /huggingface/<repo>/api/models/<repo_id>} (or
+ *       {@code datasets}, {@code spaces}) with its {@code siblings}, and {@code .../tree/<revision>} with each file's
+ *       {@code oid} and {@code size}, both derived from the revision's stored file list on every upload. A repository
+ *       with nothing stored answers {@code 404}, so a proxy registry can fill it.</li>
  * </ul>
  *
- * <p><b>Revision-addressed.</b> A file is addressed by its repository revision (a git branch like
- * {@code main} or an immutable commit sha) exactly as the client requests it, so this format is a streaming,
- * revision-addressed file store: it stores whatever the client pushes at the client's revision and never opens an archive
- * (the coordinate is in the request path, not inside the bytes). A file at a commit keeps the bytes it was first
- * uploaded with, and a push of other bytes there is refused; a file on a branch is replaced by the next push.
- * {@code /api/.../<repo_id>} with no explicit revision resolves the default branch {@code main} (falling back to the
- * most recently uploaded revision), each file upload stamping its revision's time as a small compare-and-set pointer
- * through the store.
+ * <p><b>Revision-addressed.</b> A file is addressed by the revision the client names - a branch like {@code main} or a
+ * commit sha - and stored as pushed, no archive opened. A file at a commit keeps its first bytes, other bytes refused;
+ * a file on a branch is replaced by the next push. {@code /api/.../<repo_id>} without a revision resolves {@code main},
+ * else the most recently uploaded revision, each upload stamping its revision's time by compare-and-set.
  *
- * <p><b>Streaming publish.</b> An uploaded file streams straight through {@link Blobs#write(String, InputStream)} into
- * the content-addressed store, hashed on the way and never buffered, so an arbitrarily large {@code model.safetensors}
- * (tens of gigabytes) never lands in heap; a download streams the blob back out and a {@code HEAD} answers the size and
- * the content hash ({@code ETag}) from stored metadata without a body. Files dedupe in the shared {@code blobs/}
- * namespace like every other language format.
+ * <p><b>Streaming publish.</b> An upload streams through {@link Blobs#write(String, InputStream)} into the
+ * content-addressed store, so a weights file of tens of gigabytes never lands in heap; a {@code HEAD} answers size and
+ * {@code ETag} from stored metadata.
  *
- * <p>The layout declares its ecosystem ({@code "Hugging Face"}) so the console and download tracking key on it, and
- * {@link #describe} resolves a resolve download path to its {@code <repo_id>} coordinate and {@code <revision>} version.
- * OSV carries no dedicated Hugging Face advisory feed, so vulnerability screening is a graceful no-op while a coordinate
- * still drives license and malicious-package screening (the sibling {@code compliance/huggingface} inspector, a
- * follow-on). File pointers live in the shared {@code Blobs} namespace, so coordinate-only eviction ({@link #paths}) is
- * not wired here (a file is unpublished by its request path).
+ * <p>The ecosystem is {@code "Hugging Face"}, and {@link #describe} maps a resolve path to its {@code <repo_id>}
+ * coordinate and {@code <revision>} version. OSV carries no Hugging Face feed, so vulnerability screening finds nothing
+ * while the coordinate still drives licence and malicious-package screening. File pointers live in the shared
+ * {@code Blobs} namespace, so {@link #paths} is empty.
  *
- * <p><b>Pull-through proxy.</b> The same layout is also a {@link ProxyFormat}: a local miss on a proxy registry is
- * served from an upstream Hugging Face Hub (the canonical {@code https://huggingface.co/}, so
- * {@link #defaultUpstream()} names it - a deployment can still point a repository at a private or mirrored hub). The
- * request path maps onto the upstream one for one after the registry alias is stripped - the {@code datasets/} /
- * {@code spaces/} / {@code api/} / {@code resolve/} layout is the real Hub layout, so {@code /huggingface/<repo>/<sub>}
- * fetches {@code <upstream>/<sub>} with no rewrite. A {@code resolve} file's bytes are immutable once addressed by a
- * commit, but a mutable branch like {@code main} is first resolved to its upstream commit sha (a real HEAD) and cached
- * under that immutable commit, so a branch read revalidates and re-resolves rather than serving a stale weight forever; a
- * {@code GET} streams from upstream straight into the content-addressed store ({@link Blobs#write(String, InputStream)},
- * never buffered) and is served through the same hosted read path, so a later read is a local hit that never touches the
- * upstream, while a {@code HEAD} on an uncached file answers the size from the upstream headers without pulling the
- * body; the mutable repo-info / tree API ({@code /api/...}) is streamed through fresh on every
- * read, never cached - the API carries no absolute download URLs (a client builds {@code resolve} URLs against this
- * endpoint from the {@code siblings}/tree names), so it needs no rewrite. The sibling {@code compliance/huggingface}
- * inspector screens the coordinate on both legs, and a {@code HuggingFaceImporter} migrates a Nexus/Artifactory
- * {@code huggingfaceml} registry by replaying each revision file through the streaming publish path.
+ * <p><b>Pull-through proxy.</b> A local miss is served from an upstream Hub (the canonical
+ * {@code https://huggingface.co/} by default), the path mapping one for one after the alias. A branch is resolved to
+ * its upstream commit by a HEAD and cached under that commit, so a moved branch re-resolves instead of serving a stale
+ * weight; a {@code GET} streams into the store and serves through the hosted read path, and a {@code HEAD} on an
+ * uncached file answers from the upstream's headers without pulling the body. The {@code /api/...} index is streamed
+ * fresh and needs no rewrite.
  */
 public final class HuggingFaceFormat implements RepositoryFormat, ArtifactLayout, ProxyLeg, BlobLayout, RepositoryImporter,
         RepositoryExporter {
 
-    /** The package-ecosystem name this format's artifacts report (distinct from {@link #name()}, the routing id). OSV
-     *  has no dedicated Hugging Face feed, so vulnerability lookups on it simply find nothing; the coordinate still
-     *  drives license and malicious-package screening. */
+    /** The ecosystem name this format's artifacts report, distinct from {@link #name()}, the routing id. */
     public static final String ECOSYSTEM = "Hugging Face";
 
-    /** Package-private like its peers: the listings beside this build their derived documents with it. */
+    /** Shared with the listings beside this, which build the derived documents with it. */
     static final ObjectMapper MAPPER = new ObjectMapper();
 
     private static final String PREFIX = "/huggingface/";
@@ -102,8 +80,8 @@ public final class HuggingFaceFormat implements RepositoryFormat, ArtifactLayout
     /** The default git branch a Hugging Face repository serves when a client names no revision. */
     private static final String DEFAULT_REVISION = "main";
 
-    /** The three Hugging Face repository types, each with its own {@code api/<type>/} and (for datasets/spaces) resolve
-     *  URL prefix. A model has no URL prefix; a dataset and a space carry {@code datasets/} / {@code spaces/}. */
+    /** The three repository types, each with its {@code api/<type>/} prefix; a dataset's and a space's resolve URLs
+     *  also carry {@code datasets/} / {@code spaces/}, a model's none. */
     private static final String MODELS = "models", DATASETS = "datasets", SPACES = "spaces";
 
     @Override
@@ -118,32 +96,22 @@ public final class HuggingFaceFormat implements RepositoryFormat, ArtifactLayout
 
     @Override
     public List<String> blobRoots() {
-        // The store root is hf/ (the /huggingface/ prefix is only the request path).
+        // The store root is hf/; /huggingface/ is only the request path.
         return List.of("hf");
     }
 
     @Override
     public List<String> blobKeys(String coordinate, String version, ArtifactStore store) throws IOException {
         if (!BlobLayout.addressable(coordinate, version)) {
-            // A traversal-shaped coordinate or version maps nowhere: these keys are what an eviction DELETES, and
-            // ArtifactStore.delete is not screened. The shared per-part screen, so a legitimately
-            // multi-segment coordinate still resolves.
+            // A traversal-shaped coordinate or version maps nowhere, since an eviction deletes these keys; judged part
+            // by part, so a multi-segment coordinate resolves.
             return List.of();
         }
-        // A repository's files are addressed under a git revision and a percent-encoded filepath, discovered by listing
-        // rather than derivable from the <repoId,revision> coordinate alone. Walk the version's own file tree per
-        // registry and per repository type (models/datasets/spaces - the descriptor carries no type): base
-        // hf/<repo>/<type>/<repoId>, then PAGE base/revs/<R>/files for R = the requested revision AND, when a hosted
-        // branch synthesised a commit for it, the immutable commit that revision maps to - a hosted upload stores files
-        // under the branch name while a pull-through proxy caches the identical content under the immutable commit, so
-        // the UNION covers a hosted-branch hold that also has a proxy-cached commit alias (content-addressing shares one
-        // withheld/<hash> marker for identical bytes, so the common case converges anyway). Each file pointer's body is a
-        // bare-hex blob hash, so the BlobLayout.blobHashes default resolves the withhold set from them (the time/commit
-        // markers live OUTSIDE files/ and are never collected). A retroactive hold marks those hashes - the resolve
-        // serve, the repo-info siblings list and the file tree all gate on the marker - and an eviction deletes these
-        // exact keys; an empty return would make a hold a silent no-op and a KEV-listed model/dataset would keep
-        // serving. The files listing is attacker-publishable, so it is PAGED, never list()ed whole (a whole
-        // listing there is a denial-of-service lever).
+        // Files live under a revision and a percent-encoded path, found by listing: per registry and type, the
+        // version's revs/<R>/files for R the requested revision and, when a hosted branch has one, the commit it maps
+        // to - a hosted upload stores under the branch while a proxy caches identical content under the commit. Each
+        // pointer's body is the blob hash, from which the withhold set derives; a hold marks those hashes and eviction
+        // deletes these keys. The files listing is publisher-grown, so it is paged.
         List<HuggingFaceFile> files = huggingFaceFiles(coordinate, version, store);
         List<String> keys = new ArrayList<>(files.size());
         for (HuggingFaceFile file : files) {
@@ -152,13 +120,12 @@ public final class HuggingFaceFormat implements RepositoryFormat, ArtifactLayout
         return keys;
     }
 
-    /** The resolve request paths this coordinate version's files serve at
-     *  ({@code /huggingface/<repo>/[datasets/|spaces/]<repo_id>/resolve/<revision>/<path>}, the inverse of
-     *  {@link #describe}), so a retroactive hold links a {@code /quarantine} review handle per served path exactly as
-     *  {@code ArtifactLayout.paths} does for a publish/ layout. A commit-alias file (a proxy-cached commit of a hosted
-     *  branch) still maps to the branch resolve path the coordinate version names, so its review handle round-trips
-     *  through {@link #describe} back to this same version; identical paths across the union are de-duplicated. Reads
-     *  only the tiny pointers, never a blob body. */
+    /**
+     * The resolve paths this version's files serve at
+     * ({@code /huggingface/<repo>/[datasets/|spaces/]<repo_id>/resolve/<revision>/<path>}), where a retroactive hold
+     * links its {@code /quarantine} handles. A commit-alias file maps to the branch path the version names, so its
+     * handle describes back to this version; duplicates are dropped. Only pointers are read.
+     */
     @Override
     public List<String> servedPaths(String coordinate, String version, ArtifactStore store) throws IOException {
         if (!BlobLayout.addressable(coordinate, version)) {
@@ -171,17 +138,14 @@ public final class HuggingFaceFormat implements RepositoryFormat, ArtifactLayout
         return new ArrayList<>(paths);
     }
 
-    /** One stored Hugging Face file located by the retroactive-hold discovery walk: its store pointer key and the
-     *  resolve request path it serves at. */
+    /** One stored file found by the hold discovery walk: its pointer key and the resolve path it serves at. */
     private record HuggingFaceFile(String key, String path) {
     }
 
-    /** Every file stored for {@code (repoId, revision)}, across every registry and repository type, over the union of
-     *  the requested revision and the immutable commit a hosted branch synthesised for it. The registry set is
-     *  operator-configured (bounded), so a bare {@code store.list("hf")} is right for it; the per-revision files listing
-     *  is attacker-publishable, so it is enumerated through the shared bounded {@link #FILES} scan, never
-     *  {@code list()}ed whole. The revision/alias union above is a two-element set of POINT lookups (the requested
-     *  revision plus the commit a hosted branch cached for it), not a traversal - only the listing beneath it is. */
+    /** Every file stored for {@code (repoId, revision)} across every registry and type, over the requested revision and
+     *  the commit a hosted branch synthesised for it - two point lookups. The registry set is operator-configured, so a
+     *  plain list suits it; each revision's files listing is publisher-grown and scanned through the bounded
+     *  {@link #FILES}. */
     private static List<HuggingFaceFile> huggingFaceFiles(String repoId, String revision, ArtifactStore store)
             throws IOException {
         if (Keys.unsafe(revision)) {
@@ -194,10 +158,8 @@ public final class HuggingFaceFormat implements RepositoryFormat, ArtifactLayout
                 if (base == null) {
                     continue;
                 }
-                // The union of storage revisions: the requested revision (a hosted branch stores files under its own
-                // name), plus the immutable commit that revision maps to when a hosted branch cached one (a proxy caches
-                // identical content under that commit). A commit-pinned revision has no commit pointer, so the union is
-                // just the revision itself.
+                // The requested revision, plus the commit a hosted branch maps to when one was cached; a commit-pinned
+                // revision has none.
                 LinkedHashSet<String> revisions = new LinkedHashSet<>();
                 revisions.add(revision);
                 String commit = commitAlias(base, revision, store);
@@ -215,16 +177,10 @@ public final class HuggingFaceFormat implements RepositoryFormat, ArtifactLayout
         return files;
     }
 
-    /**
-     * The immutable commit a hosted branch synthesised for {@code revision} (its stored commit document), or
-     * {@code null} when there is none (a commit-pinned revision synthesises no commit), the stored commit is the
-     * revision itself, or the stored value is unsafe as a key segment - so the union only ever adds a distinct, safe
-     * commit alias.
-     *
-     * <p>The alias is a read-time union only. What a revision's files are recorded under is the revision they are
-     * stored under - a hosted branch under its own name, a proxied fetch under the commit it resolved to
-     * ({@link #keptAs}) - which is what lets {@link #describePointer} name a pointer's version from its key.
-     */
+    /** The immutable commit a hosted branch synthesised for {@code revision}, or {@code null} when there is none, it is
+     *  the revision itself, or it is unsafe as a key segment. A read-time union only: files are recorded under the
+     *  revision they are stored under - a branch's own name, or the commit a proxied fetch resolved to
+     *  ({@link #keptAs}) - which is what lets {@link #describePointer} name a pointer's version from its key. */
     private static String commitAlias(String base, String revision, ArtifactStore store) throws IOException {
         String commit = storedCommit(base, revision, store);
         if (commit == null || commit.isEmpty() || commit.equals(revision) || Keys.unsafe(commit)) {
@@ -233,9 +189,7 @@ public final class HuggingFaceFormat implements RepositoryFormat, ArtifactLayout
         return commit;
     }
 
-    /** The resolve request path a file serves at - the mirror of the {@code PUT}/{@code GET}
-     *  {@code /huggingface/<repo>/[datasets/|spaces/]<repo_id>/resolve/<revision>/<path>} route, keyed on the coordinate
-     *  revision (the branch name a client requests) so it round-trips through {@link #describe} back to this version. */
+    /** The resolve path a file serves at, keyed on the coordinate's revision, so it describes back to this version. */
     private static String resolvePath(String repo, String type, String repoId, String revision, String filepath) {
         return PREFIX + repo + "/" + typePrefix(type) + repoId + RESOLVE + revision + "/" + filepath;
     }
@@ -293,15 +247,12 @@ public final class HuggingFaceFormat implements RepositoryFormat, ArtifactLayout
         };
     }
 
-    /** The bounded page size the retroactive-hold discovery walk streams the per-revision files listing through. */
+    /** The page size the hold discovery walk lists a revision's files in. */
     private static final int WALK_PAGE = 1000;
 
-    /** The per-revision files listing: a flat container enumerated through the shared bounded primitive - a
-     *  revision's file set, not a subtree, so the flat scan is the right shape and a tree walk would buy an
-     *  {@code exists} probe per name it does not need. This feeds {@code blobKeys}/{@code servedPaths}, so a listing
-     *  that answered short would be a KEV-listed file that keeps serving after its hold: the entry cap is therefore
-     *  OFF, and the binding bound is the primitive's step budget (1000 page round-trips, ~10^6 names), which raises a
-     *  named {@link TraversalException} rather than dropping keys. */
+    /** A revision's files listing, a flat container. It feeds {@code blobKeys} and {@code servedPaths}, where a short
+     *  listing would leave a held file serving, so the entry cap is off and the step budget (1000 pages) raises a
+     *  {@link TraversalException} rather than dropping keys. */
     private static final BoundedChildren FILES =
             BoundedChildren.bounded().entries(Integer.MAX_VALUE).page(WALK_PAGE);
 
@@ -324,7 +275,8 @@ public final class HuggingFaceFormat implements RepositoryFormat, ArtifactLayout
             exchange.respond(404);
             return;
         }
-        // The repo-info / tree API, served from stored documents: api/{models,datasets,spaces}/<repo_id>[/tree|revision/<rev>...].
+        // The repo-info and tree API, from stored documents:
+        // api/{models,datasets,spaces}/<repo_id>[/tree|revision/<rev>...].
         for (String type : new String[] {MODELS, DATASETS, SPACES}) {
             String apiPrefix = "api/" + type + "/";
             if (sub.startsWith(apiPrefix)) {
@@ -332,7 +284,7 @@ public final class HuggingFaceFormat implements RepositoryFormat, ArtifactLayout
                 return;
             }
         }
-        // A file resolve/download (or a PUT publish): [datasets/|spaces/]<repo_id>/resolve/<revision>/<path>.
+        // A file download, or a PUT: [datasets/|spaces/]<repo_id>/resolve/<revision>/<path>.
         Resolve resolve = parseResolve(sub);
         if (resolve != null) {
             file(repo, resolve, exchange, store);
@@ -341,11 +293,8 @@ public final class HuggingFaceFormat implements RepositoryFormat, ArtifactLayout
         exchange.respond(404);
     }
 
-    /**
-     * Parse a resolve/download path {@code [datasets/|spaces/]<repo_id>/resolve/<revision>/<path>} into its repository
-     * type, {@code repo_id}, {@code revision} and (possibly nested) file path, or {@code null} when {@code sub} is not a
-     * resolve path. The type prefix is stripped first so a model (no prefix), a dataset and a space are all recognised.
-     */
+    /** Parse a resolve path {@code [datasets/|spaces/]<repo_id>/resolve/<revision>/<path>} into type, {@code repo_id},
+     *  revision and file path, or {@code null} when it is none; the type prefix is stripped first. */
     private static Resolve parseResolve(String sub) {
         String type = MODELS;
         String s = sub;
@@ -379,14 +328,13 @@ public final class HuggingFaceFormat implements RepositoryFormat, ArtifactLayout
     }
 
     /**
-     * Serve a stored file ({@code GET}/{@code HEAD}) or stream an upload into the CAS ({@code PUT}). The upload is
-     * content-addressed while it streams, so a large model weight never lands in heap; the upload also stamps its
-     * revision's time so the generated {@code siblings} / {@code tree} index and the default-revision resolution order
-     * correctly. A {@code HEAD} answers the size and the content hash ({@code ETag}) from stored metadata without a body.
+     * Serve a stored file ({@code GET}/{@code HEAD}) or stream an upload into the store ({@code PUT}), the upload
+     * stamping its revision's time for the index and the default-revision order. A {@code HEAD} answers size and
+     * {@code ETag} from stored metadata.
      *
-     * <p>An upload to a commit revision links through {@link Blobs#linkRelease}: a file at a commit is what a pinned
-     * download names, so other bytes there are refused with {@code 409} inside the pointer's compare-and-set, and the
-     * same bytes again converge. An upload to a branch replaces the file, as a push moves a branch on the Hub.
+     * <p>An upload to a commit links through {@link Blobs#linkRelease}, so other bytes there are refused with
+     * {@code 409} inside the pointer's compare-and-set and the same bytes converge; an upload to a branch replaces the
+     * file.
      */
     private void file(String repo, Resolve resolve, FormatExchange exchange, ArtifactStore store) throws IOException {
         String base = base(repo, resolve.type(), resolve.repoId());
@@ -411,14 +359,12 @@ public final class HuggingFaceFormat implements RepositoryFormat, ArtifactLayout
                 blobs.write(fileKey, exchange.requestStream());
             }
             stampTime(store, revBase + "/time");
-            // The revision's commit id, file tree and info document are derived from its stored file list, which
-            // the upload updates with this one file - never a walk of the revision's other files.
+            // The revision's commit id, tree and info document derive from its stored file list, updated with this one
+            // file.
             new HuggingFaceListings(blobs).refresh(base, resolve.revision(), resolve.type(), resolve.repoId(),
                     resolve.filepath());
-            // Stamp the per-registry hosted-publish marker, so a later repo-info / tree API read serves the local
-            // files. A pull-through proxy registry (whose files are cached by proxy() under their immutable commit,
-            // which stamps only the revision time, never this marker) never writes it, so its API reads miss locally
-            // and reproxy the authoritative upstream index fresh (the RPM hosted gate).
+            // The per-registry hosted marker switches on the local API; a proxy registry never writes it, so its API
+            // reads fall through to the upstream's.
             markHosted(store, hostedKey(repo));
             exchange.respond(201);
             return;
@@ -427,10 +373,9 @@ public final class HuggingFaceFormat implements RepositoryFormat, ArtifactLayout
             exchange.respond(405);
             return;
         }
-        // Serve only from a revision whose bytes are stored directly: a hosted branch under its own name, or an
-        // immutable commit sha (a proxy-cached branch lives under its commit, never under the branch, so a branch
-        // resolve on a proxy repo 404s here and is revalidated by the proxy). The reported X-Repo-Commit is always the
-        // real commit, never the branch name.
+        // Served only from a revision stored directly: a hosted branch under its name, or a commit sha. A proxy-cached
+        // branch lives under its commit, so a branch read on a proxy registry 404s here and the proxy revalidates it.
+        // X-Repo-Commit is always the real commit.
         String storageRev = resolveRevision(base, resolve.revision(), store);
         if (storageRev == null) {
             exchange.respond(404);
@@ -458,13 +403,10 @@ public final class HuggingFaceFormat implements RepositoryFormat, ArtifactLayout
         blobs.serve(located.get(), exchange);
     }
 
-    /**
-     * Route a repo-info / tree API request {@code <repo_id>[/revision/<rev>][/tree/<rev>[/<subpath>]]} for a repository
-     * type, served from stored documents. Everything before a {@code revision} or {@code tree} keyword segment is the {@code repo_id}
-     * (which may be a two-segment {@code namespace/name}); a {@code tree} request answers the file tree, anything else the
-     * repository info with its {@code siblings} file list. The API is read-only ({@code GET}/{@code HEAD}); an upload goes
-     * through the resolve {@code PUT} path.
-     */
+    /** Route an API request {@code <repo_id>[/revision/<rev>][/tree/<rev>[/<subpath>]]} for a type, served from stored
+     *  documents: everything before a {@code revision} or {@code tree} segment is the {@code repo_id} (possibly
+     *  {@code namespace/name}); {@code tree} answers the file tree, anything else the info with its {@code siblings}.
+     *  Read-only; an upload takes the resolve {@code PUT}. */
     private void api(String repo, String type, String remainder, FormatExchange exchange, ArtifactStore store)
             throws IOException {
         if (!exchange.method().equals("GET") && !exchange.method().equals("HEAD")) {
@@ -472,11 +414,8 @@ public final class HuggingFaceFormat implements RepositoryFormat, ArtifactLayout
             return;
         }
         if (!hosted(repo, store)) {
-            // A proxy registry needs this local miss so the pull-through streams the authoritative upstream repo-info /
-            // tree index fresh on every read. In particular a default-revision repo-info (no explicit revision) is
-            // served fresh from upstream and never resolved to a proxy-cached commit - restoring the round-1
-            // "streamed fresh, never cached" contract, which the local index otherwise regresses once any
-            // file has been cached under its commit. Mirrors the RPM hosted-revision gate.
+            // A proxy registry misses locally, so the upstream's index streams fresh on every read and a
+            // default-revision info is never answered from a proxy-cached commit.
             exchange.respond(404);
             return;
         }
@@ -504,16 +443,14 @@ public final class HuggingFaceFormat implements RepositoryFormat, ArtifactLayout
             exchange.respond(404);
             return;
         }
-        // A structural emptiness probe over the revision's raw file container: a revision with nothing stored is the
-        // local miss a proxy registry needs. The rendered listings below re-read it through the screened enumeration,
-        // which is what decides which names may be disclosed.
+        // A structural emptiness probe of the raw files container: an empty revision is the miss a proxy registry
+        // needs. The rendered listings decide which names may be disclosed.
         if (!StoredListing.present(store, HuggingFaceListings.files(base, resolved))
                 && store.isEmpty(base + "/revs/" + resolved + "/files")) {
             exchange.respond(404);
             return;
         }
-        // Both documents are derived from the revision's stored file list on every upload; a revision read before
-        // its list was materialised derives them now, once.
+        // Both documents derive from the revision's stored file list; a revision read before it exists derives it once.
         HuggingFaceListings listings = new HuggingFaceListings(new Blobs(store));
         Optional<StoredListing.Served> served = listings.derived(base, resolved, type, repoId,
                 tree ? HuggingFaceListings.tree(base, resolved) : HuggingFaceListings.info(base, resolved));
@@ -524,7 +461,7 @@ public final class HuggingFaceFormat implements RepositoryFormat, ArtifactLayout
         try (StoredListing.Served document = served.get()) {
             exchange.setResponseHeader("Content-Type", "application/json");
             if (tree && subpath != null && !subpath.isEmpty()) {
-                // A subtree: the stored tree filtered to the file at the subpath or the files beneath it.
+                // A subtree: the stored tree filtered to the subpath's file or the files beneath it.
                 ByteArrayOutputStream buffer = new ByteArrayOutputStream();
                 document.copyTo(buffer);
                 ArrayNode root = MAPPER.createArrayNode();
@@ -537,21 +474,15 @@ public final class HuggingFaceFormat implements RepositoryFormat, ArtifactLayout
                 respondJson(exchange, root);
                 return;
             }
-            // The validator: streaming means the dispatcher never holds the bytes to derive one from, so the format
-            // attaches its own - the document's stored sha256, which costs no
-            // materialisation to read. Every other format's listing already does this.
+            // The document's stored sha256 is the validator, read without materialising the body.
             Listings.serve(exchange, document, null);
         }
     }
 
-    /**
-     * The storage revision a read resolves to: the one requested when a client named it and its bytes are stored
-     * directly (a hosted branch under its own name, or an immutable commit sha), otherwise the default branch
-     * {@code main} when it holds files, falling back to the most recently uploaded revision. A proxy-cached branch lives
-     * under its commit sha (never under the branch), so a branch resolve on a proxy repo returns {@code null} here and
-     * is revalidated by the proxy. {@code null} when nothing is published, so the caller answers {@code 404} (and a
-     * proxy registry can fill it from upstream).
-     */
+    /** The storage revision a read resolves to: the requested one when stored directly (a hosted branch, or a commit
+     *  sha), else {@code main} when it holds files, else the most recently uploaded revision. A proxy-cached branch
+     *  lives under its commit, so a branch read on a proxy registry answers {@code null} and the proxy revalidates it;
+     *  {@code null} too when nothing is published, so the caller answers {@code 404}. */
     private static String resolveRevision(String base, String requested, ArtifactStore store) throws IOException {
         if (requested != null) {
             return hasStoredFiles(store, base + "/revs/" + requested + "/files") ? requested : null;
@@ -577,18 +508,12 @@ public final class HuggingFaceFormat implements RepositoryFormat, ArtifactLayout
         return newest;
     }
 
-    /** Whether any file is stored under a revision - a bounded ONE-child probe of the revision's {@code files} prefix,
-     *  never a whole-directory {@code list()}. {@link #resolveRevision} is called from the hot single-file download
-     *  ({@link #file}) on EVERY read, and its only question of a revision is "does it hold any file?"; materialising
-     *  the revision's ENTIRE (attacker-publishable) file listing just to test emptiness would heap-blow a revision
-     *  with many thousands of files on each download. This answers the question in O(1) by paging at most one child,
-     *  the paged existence idiom the store walks use against that denial of service (empty revision -&gt; null -&gt;
-     *  404). */
+    /** Whether any file is stored under a revision, by a one-child probe of its {@code files} prefix:
+     *  {@link #resolveRevision} runs on every download, and the listing is publisher-grown. */
     private static boolean hasStoredFiles(ArtifactStore store, String filesPrefix) {
         if (!Blobs.nameable(filesPrefix)) {
-            // A prefix composed from a client-shaped model/revision name can exceed the store's key cap, and nothing
-            // can be stored beneath one - see Blobs.nameable. Answered here rather than by paging a container the
-            // backend cannot even name (the filesystem raises ENAMETOOLONG rather than paging empty).
+            // A prefix composed from a client-shaped name can exceed the store's key cap, and nothing can be stored
+            // beneath it (Blobs.nameable); the filesystem would raise rather than page empty.
             return false;
         }
         List<String> probe = new ArrayList<>(1);
@@ -596,8 +521,8 @@ public final class HuggingFaceFormat implements RepositoryFormat, ArtifactLayout
         return !probe.isEmpty();
     }
 
-    /** The commit id a read reports for a storage revision: the revision itself when it is a commit sha, else the
-     *  id derived from the revision's stored file list (materialising the list, once, when it never was). */
+    /** The commit id a read reports for a storage revision: the revision when it is a commit sha, else the id derived
+     *  from its stored file list, materialised once when it never was. */
     private static String reportedCommit(String base, String storageRev, String type, String repoId,
                                          ArtifactStore store) throws IOException {
         if (isCommit(storageRev)) {
@@ -615,9 +540,7 @@ public final class HuggingFaceFormat implements RepositoryFormat, ArtifactLayout
         }
     }
 
-    /** The stored commit id of a revision, or {@code null} when none was derived yet; derives nothing. The stored
-     *  listing is the one place a commit lives - a revision whose listing is not materialised yet answers null and
-     *  {@link #reportedCommit} derives it. */
+    /** The stored commit id of a revision, or {@code null} when none was derived yet; derives nothing. */
     private static String storedCommit(String base, String revision, ArtifactStore store) throws IOException {
         Optional<StoredListing.Served> served = StoredListing.openDerived(store,
                 HuggingFaceListings.commit(base, revision));
@@ -634,40 +557,15 @@ public final class HuggingFaceFormat implements RepositoryFormat, ArtifactLayout
 
     @Override
     public Optional<URI> defaultUpstream() {
-        // Hugging Face has one canonical public hub; a deployment can still override it per repository (a private or
-        // mirrored hub), unlike RPM/Conda where no single upstream exists and the default stays empty.
+        // One canonical public hub; a repository can still name a private or mirrored one.
         return Optional.of(URI.create("https://huggingface.co/"));
     }
 
-    /**
-     * Proxy a Hugging Face miss to an upstream Hub. The request {@code /huggingface/<repo>/<sub>} maps to
-     * {@code <upstream>/<sub>} one for one - the registry name is a deployment alias, and everything after it
-     * ({@code datasets/} / {@code spaces/} / {@code api/} / {@code resolve/} ...) is the real Hub layout, so no path is
-     * rewritten. A {@code resolve} file's bytes are immutable once addressed by a commit, but the requested revision may
-     * be a mutable branch ({@code main}): a branch is resolved to its current upstream commit via a real HEAD (the
-     * fetcher's {@link ProxyFormat.Fetcher#head}) on every read, so the cache is keyed under the immutable commit sha
-     * and a moved branch re-resolves and re-fetches instead of serving a stale weight; a 40-hex sha is already
-     * immutable and cached directly. A {@code GET} streams the body from upstream straight into the content-addressed
-     * store ({@link Blobs#write(String, InputStream)}, never buffered) under that commit key and serves it through the
-     * hosted read path ({@link #file}), so a later read is a local hit; a {@code HEAD} on an uncached file answers
-     * {@code Content-Length} from the upstream HEAD's headers WITHOUT pulling the tens-of-GB body, so a client's initial
-     * size probe never downloads the artifact. The mutable repo-info / tree API is streamed through fresh on every read
-     * and never cached; it carries no absolute download URLs, so it needs no rewrite (the client builds {@code resolve}
-     * URLs against this endpoint from the {@code siblings}/tree names, which the local {@code config.json}-less protocol
-     * points back through us). Returns {@code false} to let the local {@code 404} stand on an unproxyable path or an
-     * upstream miss.
-     */
-    /**
-     * A {@code GET} of a file at a branch is kept under the commit the upstream resolves the branch to: the bytes are
-     * cached under that commit already, and recording them under it too makes one content one version - the commit,
-     * which a client can resolve at and which never changes under its name - rather than a {@code main} whose bytes
-     * move while its version stays. It is how Artifactory's and Nexus's Hugging Face proxies keep a model, and it is
-     * what lets {@link #describePointer} name a proxied pointer's version from its key.
-     *
-     * <p>The resolution is one HEAD; the leg reads the commit off the kept path and asks nothing again. A {@code HEAD}
-     * records nothing, so it keeps its path and its single upstream probe, and a branch the upstream cannot resolve to
-     * a commit keeps its path and is declined by the leg.
-     */
+    /** A {@code GET} of a file at a branch is kept under the commit the upstream resolves the branch to, so one content
+     *  is one version - a commit, which never changes under its name - rather than a {@code main} whose bytes move. It
+     *  is how other Hugging Face proxies keep a model, and what lets {@link #describePointer} name a proxied pointer's
+     *  version from its key. The resolution is one HEAD; a {@code HEAD} request records nothing and keeps its path, as
+     *  does a branch the upstream cannot resolve, which the leg then declines. */
     @Override
     public Optional<String> keptAs(FormatExchange exchange, URI upstream, ProxyFormat.Fetcher fetcher)
             throws IOException {
@@ -696,12 +594,20 @@ public final class HuggingFaceFormat implements RepositoryFormat, ArtifactLayout
         return Optional.of(resolvePath(repo, resolve.type(), resolve.repoId(), commit, resolve.filepath()));
     }
 
+    /**
+     * Proxy a Hugging Face miss to an upstream Hub: {@code /huggingface/<repo>/<sub>} maps to {@code <upstream>/<sub>},
+     * no path rewritten. A {@code resolve} file at a branch is resolved to its upstream commit by a HEAD on every read
+     * and cached under that commit, so a moved branch re-fetches; a commit sha is cached directly. A {@code GET}
+     * streams into the store and serves through {@link #file}; a {@code HEAD} on an uncached file answers
+     * {@code Content-Length} from the upstream's headers without pulling the body. The {@code /api/...} index is
+     * streamed fresh and carries no absolute URLs. {@code false} lets the local {@code 404} stand.
+     */
     @Override
     public boolean pullThrough(FormatExchange exchange, ArtifactStore store, URI upstream,
                                ProxyFormat.Fetcher fetcher) throws IOException {
         String path = exchange.path();
-        // What the client asked for, which is what is fetched upstream; path() is the name it is kept under, which
-        // differs where keptAs resolved a branch to its commit.
+        // The client's request is fetched upstream; path() is the name it is kept under, a commit where keptAs resolved
+        // one.
         String requested = exchange.requestedPath();
         String rest = path.substring(PREFIX.length());
         int slash = rest.indexOf('/');
@@ -713,14 +619,13 @@ public final class HuggingFaceFormat implements RepositoryFormat, ArtifactLayout
         if (repo.isEmpty() || Keys.unsafe(repo)) {
             return false;
         }
-        // The repo-info / tree API is a mutable index: stream it through fresh, never cached (no rewrite needed).
+        // The API is a mutable index, streamed fresh and never cached.
         for (String type : new String[] {MODELS, DATASETS, SPACES}) {
             if (sub.startsWith("api/" + type + "/")) {
                 return proxyIndex(target(upstream, sub), exchange, fetcher);
             }
         }
-        // A resolve/download file's bytes are immutable once addressed by a commit, but the requested revision may be a
-        // mutable branch: resolve it to the upstream commit, cache under that immutable commit, and serve as a local hit.
+        // A file: a branch is resolved to its upstream commit and cached under it.
         Resolve resolve = parseResolve(sub);
         if (resolve == null) {
             return false;
@@ -731,13 +636,9 @@ public final class HuggingFaceFormat implements RepositoryFormat, ArtifactLayout
         }
         URI fileUrl = target(upstream, requested.startsWith(PREFIX + repo + "/")
                 ? requested.substring((PREFIX + repo + "/").length()) : sub);
-        // Resolve the requested revision to the immutable commit sha the cache is keyed under. A 40-hex sha is already
-        // immutable and cached directly; a branch/tag (main) must never be a cache key - it is resolved to its current
-        // upstream commit via a HEAD on every read. The bytes are keyed under the resolved commit and never under the
-        // branch, so a moved branch re-resolves to the new commit and re-fetches (a cache miss) rather than serving a
-        // stale weight forever - the "re-point" is implicit in keying by the freshly-resolved commit. A branch read is
-        // therefore always routed here (the hosted read path never serves a branch resolve from a cached commit, so it
-        // 404s and hands control to this revalidating proxy), while the immutable commit path is a local hit.
+        // A 40-hex sha is cached directly; a branch is never a cache key, but resolved to its current commit by a HEAD
+        // on every read, so a moved branch re-fetches. The hosted read path never serves a branch from a cached commit,
+        // so a branch read always lands here, while a commit read is a local hit.
         ProxyFormat.Head upstreamHead = null;
         String commit;
         if (isCommit(resolve.revision())) {
@@ -756,8 +657,7 @@ public final class HuggingFaceFormat implements RepositoryFormat, ArtifactLayout
         String fileKey = base + "/revs/" + commit + "/files/" + enc(resolve.filepath());
         if (blobs.size(fileKey) < 0) {
             if (exchange.method().equals("HEAD")) {
-                // A HEAD on an uncached file answers Content-Length from the upstream response headers WITHOUT pulling
-                // the whole (tens-of-GB) body into the cache; only a GET streams and caches the body.
+                // A HEAD on an uncached file answers from the upstream's headers without pulling the body.
                 if (upstreamHead == null) {
                     upstreamHead = fetcher.head(fileUrl, Map.of()).orElse(null);
                     if (upstreamHead == null || upstreamHead.status() != 200) {
@@ -771,15 +671,10 @@ public final class HuggingFaceFormat implements RepositoryFormat, ArtifactLayout
                 if (download == null || download.status() != 200) {
                     return false;
                 }
-                // Point-integrity: an LFS-backed file's resolve response carries its content sha256 as the git-lfs oid
-                // in X-Linked-Etag (or ETag), so verify the streamed body against it and refuse a mismatch - the
-                // checksum parity the Maven proxy leg has. A non-LFS file's ETag is a git-blob sha1 (not a raw-content
-                // digest), so it is not a verifiable point checksum and the file falls back to plain caching.
-                //
-                // This is the one leg with no declaring DOCUMENT at all, so the unreadable-versus-undeclared split
-                // cannot arise here: the digest rides on the artifact's own response headers, and a response this
-                // repository could not read is already the `download == null || status != 200` decline two lines above.
-                // There is no second fetch to drop.
+                // An LFS-backed file's response carries its content sha256 as the git-lfs oid in X-Linked-Etag (or
+                // ETag), and the streamed body is held to it. A non-LFS ETag is a git-blob sha1, not a content digest,
+                // so such a file caches plainly. The digest rides on the artifact's own response, so there is no
+                // separate declaring document to fail to read.
                 byte[] expected = lfsSha256(download);
                 if (!ProxyRelay.fill(blobs, fileKey, fileUrl, download.body(),
                         expected == null ? ProxyRelay.Declared.NONE : ProxyRelay.Declared.of("SHA-256", expected))) {
@@ -788,15 +683,13 @@ public final class HuggingFaceFormat implements RepositoryFormat, ArtifactLayout
                 stampTime(store, base + "/revs/" + commit + "/time");
             }
         }
-        // Serve the cached file (GET body or HEAD metadata) through the hosted read path, keyed by the immutable commit
-        // so X-Repo-Commit reports the real commit rather than the requested branch name.
+        // Served through the hosted read path under the commit, so X-Repo-Commit reports the real commit.
         file(repo, new Resolve(resolve.type(), resolve.repoId(), commit, resolve.filepath()), exchange, store);
         return true;
     }
 
-    /** The commit sha an upstream resolve HEAD reports: the Hub's {@code X-Repo-Commit} header, falling back to the
-     *  {@code ETag} (dequoted, weak-validator prefix stripped) when that is absent. {@code null} when neither is
-     *  present, so the caller declines to cache under a non-commit key. */
+    /** The commit an upstream resolve HEAD reports: {@code X-Repo-Commit}, else the dequoted {@code ETag}; {@code null}
+     *  when neither is present, and the caller declines rather than cache under a non-commit key. */
     private static String commitOf(ProxyFormat.Head head) {
         String commit = firstHeader(head.headers(), "X-Repo-Commit");
         if (commit != null && !commit.isBlank()) {
@@ -816,11 +709,9 @@ public final class HuggingFaceFormat implements RepositoryFormat, ArtifactLayout
         return etag.isBlank() ? null : etag;
     }
 
-    /** The content sha256 an LFS-backed resolve download declares as its git-lfs oid: the Hub sends it as
-     *  {@code X-Linked-Etag} (preferred - it is the LFS object's own validator) or, absent that, {@code ETag}, in each
-     *  case a quoted 64-hex string. {@code null} when neither is a 64-hex digest - a non-LFS file's {@code ETag} is a
-     *  git-blob sha1 (a digest of {@code "blob <len>\0" + content}, not of the raw bytes), so it is not a point checksum
-     *  this can verify the streamed body against, and the caller falls back to plain caching. */
+    /** The content sha256 an LFS-backed download declares as its git-lfs oid: {@code X-Linked-Etag}, else {@code ETag},
+     *  a quoted 64-hex string. {@code null} otherwise: a non-LFS {@code ETag} is a git-blob sha1, a digest of
+     *  {@code "blob <len>\0" + content}, which cannot verify the raw bytes. */
     private static byte[] lfsSha256(ProxyFormat.Download download) {
         byte[] linked = hex64(download.header("X-Linked-Etag"));
         if (linked != null) {
@@ -829,8 +720,7 @@ public final class HuggingFaceFormat implements RepositoryFormat, ArtifactLayout
         return hex64(download.header("ETag"));
     }
 
-    /** Decode a (possibly quoted / weak) validator to its raw bytes when it is exactly a 64-hex SHA-256, else
-     *  {@code null}. */
+    /** Decode a possibly quoted or weak validator to bytes when it is exactly a 64-hex SHA-256, else {@code null}. */
     private static byte[] hex64(String value) {
         if (value == null) {
             return null;
@@ -852,9 +742,8 @@ public final class HuggingFaceFormat implements RepositoryFormat, ArtifactLayout
         }
     }
 
-    /** Answer a proxied {@code HEAD} on an uncached file from the upstream response headers alone - the content type
-     *  from the filepath, the resolved commit, the upstream {@code ETag}, and the {@code Content-Length} the Hub
-     *  reports ({@code X-Linked-Size} for an LFS object) - so a client's initial size probe never pulls the body. */
+    /** Answer a proxied {@code HEAD} on an uncached file from the upstream's headers alone: the content type from the
+     *  path, the commit, the {@code ETag}, and the length ({@code X-Linked-Size} for an LFS object). */
     private static void headFromUpstream(ProxyFormat.Head head, String commit, String filepath,
                                          FormatExchange exchange) throws IOException {
         exchange.setResponseHeader("Content-Type", contentType(filepath));
@@ -874,8 +763,7 @@ public final class HuggingFaceFormat implements RepositoryFormat, ArtifactLayout
         exchange.respond(200, -1L).close();
     }
 
-    /** The first value of a response header, case-insensitively, or {@code null} - the accessor {@link ProxyFormat.Head}
-     *  (status + headers only) does not carry, unlike {@link ProxyFormat.Download}. */
+    /** The first value of a response header, case-insensitively, or {@code null}. */
     private static String firstHeader(Map<String, String> headers, String name) {
         for (Map.Entry<String, String> entry : headers.entrySet()) {
             if (entry.getKey().equalsIgnoreCase(name)) {
@@ -885,24 +773,20 @@ public final class HuggingFaceFormat implements RepositoryFormat, ArtifactLayout
         return null;
     }
 
-    /** Stream a mutable index (the repo-info / tree API) through fresh from upstream, never cached; returns
-     *  {@code false} only on an upstream {@code 404}/{@code 410}, so the local {@code 404} stands when - and only
-     *  when - an origin said there is no such thing. */
+    /** Stream the API index fresh from upstream, never cached; {@code false} only on an upstream
+     *  {@code 404}/{@code 410}. */
     private static boolean proxyIndex(URI target, FormatExchange exchange, ProxyFormat.Fetcher fetcher)
             throws IOException {
-        // ENUMERATION: the repo-info / tree API is what a client reads to learn which files a revision carries and
-        // which revisions exist, so an absent answer is the fact "no such model / an empty tree" that a download plan
-        // is then built from - never "not cached here, re-pull". Only an upstream that ANSWERED 404/410 may reach the
-        // client as a 404; anything else refuses visibly. The loop stays this leg's own for the X-Repo-Commit
-        // relay and the HEAD short-circuit, but the verdict is the shared one.
+        // ENUMERATION: the API tells a client which files and revisions exist, so only an upstream that answered
+        // 404/410 reaches the client as a 404. The loop is this leg's own for the X-Repo-Commit relay and the HEAD
+        // short-circuit.
         try (ProxyFormat.Download download = fetcher.download(target, ProxyRelay.conditionalHeaders(exchange)).orElse(null)) {
             if (download == null) {
                 return ProxyRelay.unanswered(target, exchange, ProxyRelay.Document.ENUMERATION,
                         "the upstream could not be reached");
             }
             if (download.status() == 304) {
-                // The client's validators still match upstream: relay the 304 (and the validators) so a 304-capable
-                // client is not forced to re-download the whole repo-info / tree index.
+                // The client's validators still match: the 304 and validators are relayed.
                 ProxyRelay.relayValidators(download, exchange);
                 String commit = download.header("X-Repo-Commit");
                 if (commit != null) {
@@ -940,8 +824,7 @@ public final class HuggingFaceFormat implements RepositoryFormat, ArtifactLayout
         return true;
     }
 
-    /** The upstream URL a request path maps to: {@code <upstream>/<sub>}, the registry alias already stripped so the
-     *  Hub layout in {@code sub} lands on the upstream one for one. */
+    /** The upstream URL a request path maps to: {@code <upstream>/<sub>}, the alias already stripped. */
     private static URI target(URI upstream, String sub) {
         String root = upstream.toString();
         if (!root.endsWith("/")) {
@@ -950,15 +833,9 @@ public final class HuggingFaceFormat implements RepositoryFormat, ArtifactLayout
         return URI.create(root + sub);
     }
 
-    /**
-     * The store key that serves a resolve path - the same {@code revs/<commit>/files/<file>} key {@link #handle}
-     * resolves, so a reader outside this format sees exactly what a client would be served.
-     *
-     * <p>What needs it is the compliance screen's sibling read: an inspector holding a config.json or a weights
-     * shard asks for the model card beside it, and until this existed that read resolved only through the free
-     * core's generic {@code publish/<path>} pointer - which Hugging Face does not use, so the card was invisible
-     * from beside the file it describes and a repository could not be gated on its own declared licence.
-     */
+    /** The store key that serves a resolve path, resolved as {@link #handle} resolves it. The compliance screen's
+     *  sibling read needs it: an inspector holding a config or a weights shard asks for the model card beside it, which
+     *  no generic {@code publish/} pointer would find. */
     @Override
     public Optional<String> servingKey(String requestPath, ArtifactStore store) throws IOException {
         if (!requestPath.startsWith(PREFIX)) {
@@ -977,9 +854,7 @@ public final class HuggingFaceFormat implements RepositoryFormat, ArtifactLayout
         if (base == null || Keys.unsafe(resolve.revision())) {
             return Optional.empty();
         }
-        // Through the same revision resolution the serve does: a branch name only answers where its bytes are stored
-        // under that name, and a proxy-cached branch lives under its commit. A reader must not see what a client
-        // would not be served.
+        // Through the serve's own revision resolution, so a reader sees only what a client would be served.
         String storageRev = resolveRevision(base, resolve.revision(), store);
         if (storageRev == null) {
             return Optional.empty();
@@ -988,11 +863,9 @@ public final class HuggingFaceFormat implements RepositoryFormat, ArtifactLayout
         return new Blobs(store).size(fileKey) < 0 ? Optional.empty() : Optional.of(fileKey);
     }
 
-    /**
-     * The version a pointer serves, from its key alone: the revision its files are stored under, which is the
-     * revision they are recorded under - a hosted branch's own name, or the commit a proxied fetch resolved to
-     * ({@link #keptAs}). A key that is not a file pointer names nothing.
-     */
+    /** The version a pointer serves, from its key: the revision its files are stored and recorded under, a hosted
+     *  branch's name or the commit a proxied fetch resolved to ({@link #keptAs}). A key that is no file pointer names
+     *  nothing. */
     @Override
     public Optional<ArtifactDescriptor> describePointer(String key) {
         Located located = locateKey(key);
@@ -1019,11 +892,8 @@ public final class HuggingFaceFormat implements RepositoryFormat, ArtifactLayout
         if (resolve == null) {
             return Optional.empty();
         }
-        // The repo_id is legitimately multi-segment (a namespaced repository, {@code namespace/name}), stored as nested
-        // key directories, so it is validated segment by segment exactly as base() does - NOT as one Keys.unsafe(...)
-        // that would reject every '/' and strip the coordinate from a namespaced repo's descriptor. Without this a
-        // namespaced Hugging Face upload (the common case) resolved to a coordinate-less descriptor, so the retroactive
-        // enforcement sweeps never enumerated it and a release could not re-derive its coordinate to lift the hold.
+        // The repo_id may be namespace/name, stored as nested directories, so it is validated segment by segment as
+        // base() does; a whole-string check would strip the coordinate from every namespaced repository.
         if (unsafeRepoId(resolve.repoId()) || Keys.unsafe(resolve.revision())) {
             return Optional.of(ArtifactDescriptor.at(ECOSYSTEM, path));
         }
@@ -1033,8 +903,7 @@ public final class HuggingFaceFormat implements RepositoryFormat, ArtifactLayout
 
     @Override
     public List<String> paths(String coordinate, String version, ArtifactStore store) {
-        // Hugging Face file pointers live in the shared Blobs namespace (like npm/pypi/go/conan), not the Publication
-        // namespace coordinate-based eviction walks, so nothing is enumerable from the coordinate alone.
+        // File pointers live in the shared Blobs namespace, so the coordinate enumerates nothing in publish/.
         return List.of();
     }
 
@@ -1049,10 +918,8 @@ public final class HuggingFaceFormat implements RepositoryFormat, ArtifactLayout
         return "hf/" + repo + "/" + type + "/" + repoId;
     }
 
-    /** Whether a {@code repo_id} is unsafe as a coordinate: it may legitimately be multi-segment ({@code namespace/name},
-     *  stored as nested key directories), so each segment is validated with {@link Keys#unsafe} rather than the whole
-     *  string - the same segment-wise guard {@link #base} applies - so a namespaced repository is not wrongly rejected
-     *  by the single '/' it contains. */
+    /** Whether a {@code repo_id} is unsafe as a coordinate, judged segment by segment with {@link Keys#unsafe} as
+     *  {@link #base} does, so a {@code namespace/name} is not rejected for its slash. */
     private static boolean unsafeRepoId(String repoId) {
         if (repoId.isEmpty()) {
             return true;
@@ -1065,32 +932,26 @@ public final class HuggingFaceFormat implements RepositoryFormat, ArtifactLayout
         return false;
     }
 
-    /** Stamp a revision's upload time to now, a small compare-and-set pointer through the store (never a raw file). The
-     *  stamp is load-bearing - it drives default-revision resolution and the {@code lastModified} ordering - so a lost
-     *  compare-and-set re-reads the token and retries (the shared {@link Retries} policy) rather than
-     *  discarding the returned boolean, which would leave a concurrently-uploaded revision unstamped and mis-ordered. */
+    /** Stamp a revision's upload time by compare-and-set through {@link Retries}: the stamp drives default-revision
+     *  resolution and {@code lastModified}, so a lost race is retried rather than leaving a revision unstamped. */
     private static void stampTime(ArtifactStore store, String key) throws IOException {
         Retries.update(store, key, _ -> Long.toString(System.currentTimeMillis()).getBytes(StandardCharsets.UTF_8));
     }
 
     private static final byte[] HOSTED = "1".getBytes(StandardCharsets.UTF_8);
 
-    /** The reserved store key of a registry's hosted-publish marker - a child of {@code hf/<repo>}, a sibling of the
-     *  {@code models}/{@code datasets}/{@code spaces} type trees, so it is never surfaced by any revision/file listing. */
+    /** A registry's hosted marker, beside the type trees, so no revision or file listing surfaces it. */
     private static String hostedKey(String repo) {
         return "hf/" + repo + "/hosted";
     }
 
-    /** Whether this registry has ever taken a hosted upload - it then carries {@link #hostedKey}, which a pull-through
-     *  proxy never writes (its file cache stamps only the revision time). The repo-info / tree API gate keys on it so a
-     *  proxy registry's API reads always miss locally and reproxy the upstream index fresh, so a default-revision
-     *  repo-info is never served from a proxy-cached commit. */
+    /** Whether this registry has taken a hosted upload. The API gate keys on it, so a proxy registry's API reads relay
+     *  the upstream index and never answer from a proxy-cached commit. */
     private static boolean hosted(String repo, ArtifactStore store) throws IOException {
         return store.readVersioned(hostedKey(repo)).isPresent();
     }
 
-    /** Stamp the hosted-publish marker once, idempotently - a compare-and-set against an absent pointer, so a
-     *  concurrent upload's lost race simply means a peer already set it. */
+    /** Stamp the hosted marker once, by compare-and-set against absence; a lost race means a peer set it. */
     private static void markHosted(ArtifactStore store, String key) throws IOException {
         if (store.readVersioned(key).isEmpty()) {
             store.writeVersioned(key, HOSTED, null);
@@ -1110,8 +971,8 @@ public final class HuggingFaceFormat implements RepositoryFormat, ArtifactLayout
         }
     }
 
-    /** The content hash (the SHA-256 the blob is stored under) of the file pointer at {@code key}, for the {@code ETag}
-     *  and the {@code tree} {@code oid}, or {@code null} when nothing is published there. */
+    /** The content hash of the file pointer at {@code key}, for the {@code ETag} and the tree {@code oid}, or
+     *  {@code null}. */
     private static String hashOf(ArtifactStore store, String key) throws IOException {
         return store.readVersioned(key)
                 .map(versioned -> ServableNames.hash(versioned.content()))
@@ -1141,8 +1002,8 @@ public final class HuggingFaceFormat implements RepositoryFormat, ArtifactLayout
         return "application/octet-stream";
     }
 
-    /** Whether a revision denotes a prerelease - a Hugging Face revision is a branch or commit, never a release, so a
-     *  branch other than {@code main} is treated as a non-final revision. */
+    /** Whether a revision is a prerelease: a revision is a branch or a commit, never a release, so a branch other than
+     *  {@code main} is non-final. */
     private static boolean prerelease(String revision) {
         return !revision.equals(DEFAULT_REVISION) && !isCommit(revision);
     }
@@ -1161,28 +1022,19 @@ public final class HuggingFaceFormat implements RepositoryFormat, ArtifactLayout
         return true;
     }
 
-    /** Percent-encode a (possibly nested) file path into a single store-key segment, so a revision's files enumerate
-     *  flat under one prefix; {@link #dec} reverses it. Only {@code %} and {@code /} are escaped, the two characters that
-     *  would otherwise split the segment. */
+    /** Percent-encode a nested file path into one key segment, so a revision's files enumerate flat; {@link #dec}
+     *  reverses it. Only {@code %} and {@code /} are escaped. */
     static String enc(String path) {
         return path.replace("%", "%25").replace("/", "%2F");
     }
 
-    /** Reverse {@link #enc}: {@code %2F} back to a path separator and {@code %25} back to a literal {@code %} (in that
-     *  order, since a {@code %25} never contains a {@code %2F}). */
+    /** Reverse {@link #enc}: {@code %2F} to a separator, then {@code %25} to {@code %}. */
     static String dec(String encoded) {
         return encoded.replace("%2F", "/").replace("%25", "%");
     }
 
-    /**
-     * A single path segment ({@code repo}, a {@code repo_id} segment, a {@code revision}) becomes store-key segments, so a
-     * value that is empty, carries a path separator or control character, or is a {@code .}/{@code ..} traversal segment
-     * could steer a write or read outside the repository's key space and is refused. Real repository ids and revisions
-     * are identifiers or hex shas, so no legitimate value is rejected.
-     */
-
     /** A file path may be nested ({@code onnx/model.onnx}), so it is validated segment by segment: no empty, {@code .},
-     *  {@code ..}, backslash or control-character segment reaches {@link #enc} and the store key. */
+     *  {@code ..}, backslash or control-character segment reaches the store key. */
     private static boolean unsafeFilepath(String path) {
         if (path.isEmpty()) {
             return true;
@@ -1212,8 +1064,7 @@ public final class HuggingFaceFormat implements RepositoryFormat, ArtifactLayout
         }
     }
 
-    /** The migration-import capability, delegated to the layout-only {@link HuggingFaceImporter} - the format IS the
-     *  discovered importer now (an {@code instanceof} capability), and the importer class stays as its delegate. */
+    /** The migration-import capability, delegated to {@link HuggingFaceImporter}. */
     private final HuggingFaceImporter importer = new HuggingFaceImporter();
 
     @Override
@@ -1231,11 +1082,9 @@ public final class HuggingFaceFormat implements RepositoryFormat, ArtifactLayout
         importer.importArtifact(path, content, store);
     }
 
-    /**
-     * Each file of the revision is put at its {@code resolve/<revision>/<path>}, one request a file, as the upload is
-     * made; the target synthesises a commit of its own for it. A file stored under both the revision and the commit a
-     * hosted branch cached is one file, put once.
-     */
+    /** Each file of the revision is put at its {@code resolve/<revision>/<path>}, one request a file; the target
+     *  synthesises a commit of its own. A file stored under both the revision and a hosted branch's cached commit is
+     *  put once. */
     @Override
     public Exported export(ArtifactStore repository, String coordinate, String version, ExportTarget target)
             throws IOException {
