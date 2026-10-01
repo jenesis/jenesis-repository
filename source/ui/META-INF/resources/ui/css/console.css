@@ -1357,6 +1357,16 @@ main .app-switch {
         padding-block: var(--app-space-2);
         row-gap: var(--app-space-2);
     }
+    /* On its own line the session may shrink and wrap rather than run a pixel past the page: it keeps its place at
+       the end of the bar, but no fixed width of its controls widens the page. */
+    .app-header__session,
+    .app-groups ~ .app-header__session {
+        flex: 0 1 auto;
+        flex-wrap: wrap;
+        justify-content: flex-end;
+        min-width: 0;
+        margin-left: auto;
+    }
     .app-signout__button > span:first-child {
         max-width: 9rem;
         overflow: hidden;
