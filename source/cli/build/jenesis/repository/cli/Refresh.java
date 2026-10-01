@@ -5,39 +5,22 @@ import module java.base;
 /**
  * {@code --refresh}: reprint a status on an interval until the work it describes reaches a terminal state.
  *
- * <p><b>Why the CLI has this at all.</b> No operator surface in this product blocks or times out - a screen
- * renders what is known at once and refreshes itself, and an API answers with a status document rather than a held
- * connection. The CLI is the third surface and follows the same rule from the other side: a command that starts
- * long work returns immediately, and a caller who wants to watch it asks to watch it. The alternative - a command
- * that holds a socket open until a walk of ten million objects finishes - fails on exactly the deployment where
- * the watching matters, and gives a caller nothing to look at in the meantime.
+ * <p>No surface of this product blocks on long work: a command that starts it returns at once, and a caller who wants
+ * to watch asks to. A bare {@code --refresh} polls at the cadence of what is watched - a single number would be wrong
+ * for both the fast case and the slow one - and {@code --refresh=10s} names one.
  *
- * <p><b>The interval is taken from what is being watched, never from one constant.</b> A bare {@code --refresh}
- * uses the cadence the thing itself moves at - the half minute a requested walk takes to be picked up, the few
- * seconds an import job's counters advance in - because a single number is wrong at both ends: it wastes requests
- * on something that changes hourly and misses everything that changes in a second. {@code --refresh=10s} says it
- * outright when the caller knows better.
- *
- * <p><b>It does not break {@code --json}, which promises exactly one JSON value.</b> A refreshing command polls
- * internally and prints the final state once: {@link Output#forget} drops each intermediate response as the next
- * is taken, so a hundred polls still leave one document to flush. That is what a script wants anyway - the
- * intermediate states are for a person watching, and a person is who the text mode is for.
- *
- * <p><b>Not every command grows the flag.</b> A point read has nothing to watch and a setting write is finished
- * when it returns; offering to refresh those would be an interface promising something it cannot mean. The
- * commands that take it are the ones with work that outlives the request, and each names its own cadence.
+ * <p>Under {@code --json} it polls internally and prints the final state once: {@link Output#forget} drops each
+ * intermediate response, so stdout stays one value. Only commands whose work outlives the request take the flag.
  */
 final class Refresh {
 
     /** How long a poll waits when the caller named no interval and the command named no cadence of its own. */
     private static final Duration FALLBACK = Duration.ofSeconds(5);
 
-    /** The floor: below this the tool is asking faster than any of these states can change, so it is asking the
-     *  server to say "no" more often rather than learning anything sooner. */
+    /** The floor: no watched state changes faster. */
     private static final Duration FLOOR = Duration.ofSeconds(1);
 
-    /** How long a watch runs before it gives up and prints what it last saw. Work that outlives this is work a
-     *  person should stop watching and come back to; the command says so rather than hanging for ever. */
+    /** How long a watch runs before it gives up and prints what it last saw, rather than hanging for ever. */
     private static final Duration PATIENCE = Duration.ofHours(2);
 
     private static Duration asked;
@@ -61,9 +44,7 @@ final class Refresh {
         watched = false;
     }
 
-    /** Whether the command that ran actually watched anything. A caller who asked to watch a command that has
-     *  nothing to watch is told so, rather than left believing a flag did something: the flag is global, so it is
-     *  accepted everywhere and meaningful only where work outlives the request. */
+    /** Whether {@code --refresh} was asked for and the command that ran had nothing to watch. */
     static boolean unwatched() {
         return requested && !watched;
     }

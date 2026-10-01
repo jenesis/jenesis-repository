@@ -17,12 +17,8 @@ public final class BuildCacheClient extends ClientCalls {
     }
 
     /**
-     * The build-cache projects on this deployment's volume.
-     *
-     * <p>These reach the same {@code CacheService} the console's project screens do, which is what makes them one
-     * capability rather than two implementations - the surface-parity rule measures exactly that, and reported the
-     * console's project and eviction routes as sharing no implementation with any API route until the API twin
-     * existed for them to share one with.
+     * The build-cache projects on this deployment's volume, through the same {@code CacheService} the console's
+     * project screens use.
      */
     public String cacheProjects() throws IOException, InterruptedException {
         HttpResponse<String> response = send("GET", "/api/cache/projects", null, null);
@@ -58,8 +54,7 @@ public final class BuildCacheClient extends ClientCalls {
      * being false means one was already running rather than that anything failed.
      */
     public String evictCache(String name, String pass) throws IOException, InterruptedException {
-        // Each pass's path written whole rather than assembled from the pass's name, so the route it reaches is a
-        // constant this client carries - which is what anything reading the compiled client can see it send.
+        // Each path written whole, so a reader of the compiled client sees the route it sends.
         String route = switch (pass) {
             case "size" -> "/evict/size";
             case "ttl" -> "/evict/ttl";
@@ -119,9 +114,7 @@ public final class BuildCacheClient extends ClientCalls {
 
     /** The aggregate view across scan runs. */
     public String scanAnalytics(boolean asReport) throws IOException, InterruptedException {
-        // Both paths written out whole rather than assembled from a common stem: a path built by concatenation
-        // exists nowhere in the class file, so nothing that reads the compiled artifact - the surface-parity
-        // census included - can see that this endpoint is reached at all.
+        // Each path written whole, so a reader of the compiled client sees the route it sends.
         HttpResponse<String> response = send("GET",
                 asReport ? "/api/scans/analytics/report" : "/api/scans/analytics", null, null);
         require(response, 200, "read the scan analytics");

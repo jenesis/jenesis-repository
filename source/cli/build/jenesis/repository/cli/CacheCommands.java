@@ -6,15 +6,8 @@ import module java.base;
  * The build-cache project verbs: list and inspect the projects on the volume, create one, edit its well-known cache
  * values, and start a sweep.
  *
- * <p><b>Why these exist at all.</b> They were the console's alone. Creating a project, pointing a build at it and
- * forcing an eviction could be done by clicking and by nothing else, so a CI job could not provision its own cache
- * and an operator could not script a reclaim - which is what "one capability, three surfaces" is there to prevent.
- * The API twin these call is itself a thin layer over the same {@code CacheService} the console screens use, so all
- * three surfaces reach one implementation rather than three that agree for now.
- *
- * <p><b>An eviction starts a pass; it does not finish one.</b> The sweep walks the project's entries off the
- * request path, so the answer is whether this call started it - {@code started:false} means one was already
- * running, not that anything failed - and the counts that follow are read back from the project's stored stats.
+ * <p>An eviction starts a pass off the request path; the answer is whether this call started it -
+ * {@code started:false} means one was already running - and the counts are read back from the project's stats.
  */
 final class CacheCommands {
 

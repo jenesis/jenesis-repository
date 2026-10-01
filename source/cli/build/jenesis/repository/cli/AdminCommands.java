@@ -336,8 +336,7 @@ final class AdminCommands {
                     + "what a client appends to the repository's URL - a Maven repository's /maven/..., an npm "
                     + "repository's /<package>/-/<file>.");
         }
-        // Stream the file straight from disk into the request body (never Files.readAllBytes it into heap - the
-        // artifact may be large, and the streaming principle forbids buffering a whole artifact on an upload path).
+        // Streamed from disk, never read into heap: an artifact may be large.
         Path source = Path.of(file);
         if (explode != null) {
             if (!explode.equalsIgnoreCase("zip")) {
@@ -415,8 +414,7 @@ final class AdminCommands {
     /**
      * Print one import job's state, and say whether there is any point asking again.
      *
-     * <p>One rendering for the one-shot read and the watched one, so the two cannot describe the same job
-     * differently - which is the whole reason {@code --json} is not a second renderer either.
+     * <p>One rendering for the one-shot read and the watched one, so the two cannot describe a job differently.
      */
     private static Refresh.Poll.State importState(RepositoryClient client, String repo, String job)
             throws Exception {
@@ -431,9 +429,7 @@ final class AdminCommands {
             if (status.skippedFormats() != null && !status.skippedFormats().isEmpty()) {
                 System.out.println("no importer for: " + String.join(", ", status.skippedFormats()));
             }
-            // Printed even when zero rows were imported - especially then. A completed job reading
-            // "imported: 0, skipped: 0" with no further line would make a wholly refused source look identical to an
-            // empty one.
+            // Printed even when nothing was imported, so a wholly refused source does not read as an empty one.
             if (status.droppedTotal() > 0) {
                 System.out.println("dropped:  " + status.droppedTotal() + " row(s) the source offered were refused");
                 status.dropped().forEach((reason, count) ->
@@ -467,9 +463,7 @@ final class AdminCommands {
                 throw new IllegalArgumentException("Usage: import status <repo> <job>");
             }
             if (Refresh.on()) {
-                // An import advances its counters as it goes, so this is the surface where watching pays: the
-                // cadence is the job's own, and the loop ends when the job does, with the exit code that state
-                // deserves rather than a zero for "I looked".
+                // Watched at the job's own cadence until it ends, with the exit code its final state deserves.
                 return Refresh.until(IMPORT_PROGRESS,
                         () -> importState(client, args[2], args[3]));
             }
@@ -629,11 +623,10 @@ final class AdminCommands {
     }
 
     /**
-     * The console's deletion dialog on a terminal: what is lost and that it cannot be undone, then the name typed out.
-     * With no terminal to confirm on the caller is told to pass {@code --yes}, which is how a script says it means it.
+     * The console's deletion dialog on a terminal: whether the reader typed {@code delete <name>} after the warning
+     * of what is lost. Refuses outright with no terminal, where a script passes {@code --yes} instead. Every deleting
+     * verb asks through this one.
      */
-    /** Whether the reader typed {@code delete <name>} after the warning; refuses outright with no terminal, which is
-     *  where a script passes {@code --yes} instead. Every deleting verb asks through this one. */
     static boolean confirmed(String name, String warning) {
         Console console = System.console();
         if (console == null) {

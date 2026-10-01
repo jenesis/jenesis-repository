@@ -45,9 +45,7 @@ public final class Cli {
         try {
             int code = dispatch(strip(args));
             if (Refresh.unwatched()) {
-                // Said rather than swallowed: --refresh is global, so it is accepted on every command and means
-                // something only where work outlives the request. A caller who asked to watch a point read has
-                // been given a one-shot answer, and should hear that rather than assume the loop is running.
+                // --refresh is accepted everywhere but means something only where work outlives the request.
                 System.err.println("--refresh: this command has nothing to watch; it answered once.");
             }
             return code;
@@ -61,9 +59,7 @@ public final class Cli {
     /**
      * Take {@code --json} off the line before any handler sees it.
      *
-     * <p>It is a mode rather than an argument - it changes how everything is reported, not what one command does -
-     * and every handler rejects flags it does not know, which is the behaviour that catches a typo. Removing it
-     * here keeps both of those true at once.
+     * <p>A mode rather than an argument, taken out here so every handler can still refuse flags it does not know.
      */
     private static String[] strip(String[] args) {
         List<String> kept = new ArrayList<>(args.length);
@@ -71,8 +67,7 @@ public final class Cli {
             if (arg.equals("--json")) {
                 Output.json();
             } else if (arg.equals("--refresh") || arg.startsWith("--refresh=")) {
-                // Global, like --json, and for the same reason: a command's own argument parsing should never
-                // have to know about a mode that is not about what it does.
+                // Global, like --json.
                 Refresh.requested(arg);
             } else {
                 kept.add(arg);
@@ -228,9 +223,8 @@ public final class Cli {
     /**
      * The briefing for a program.
      *
-     * <p>An agent driving a CLI it has not seen fails in a small number of predictable ways: it invents flags, it
-     * cannot tell a refusal from a breakage, and it does not know what it is allowed to do. This says those things
-     * outright rather than making them inferable from the help.
+     * <p>It says outright what an agent new to the tool otherwise gets wrong: which flags exist, how a refusal differs
+     * from a breakage, and what it is allowed to do.
      */
     private static void skill() {
         System.out.println("""

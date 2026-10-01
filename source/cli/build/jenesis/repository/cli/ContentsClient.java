@@ -17,8 +17,8 @@ public final class ContentsClient extends ClientCalls {
         super(calls);
     }
 
-    /** The request header that turns a publish into a batch explode; only {@code zip} is understood. Mirrors the free
-     *  core's {@code BatchIngestion.EXPLODE_HEADER}, named here because the CLI module does not depend on the server. */
+    /** The request header that turns a publish into a batch explode; only {@code zip} is understood. The server's
+     *  {@code BatchIngestion.EXPLODE_HEADER}, spelled here because this module does not depend on the server. */
     private static final String EXPLODE_HEADER = "Jenesis-Explode";
 
     /** The staging ids of a repository with their state and item count, or {@code null} when staging is not installed
@@ -102,16 +102,14 @@ public final class ContentsClient extends ClientCalls {
                 HttpRequest.BodyPublishers.ofByteArray(bytes), "application/octet-stream").statusCode();
     }
 
-    /** Deploy a file on disk at the given path within the repository, streaming it straight from the filesystem rather than buffering
-     *  the whole artifact into heap - the streaming twin of {@link #deploy(String, String, byte[])} for the CLI's
-     *  upload path, where the file may be artifact-sized (stream, never buffer). */
+    /** {@link #deploy(String, String, byte[])}, streaming a file from disk rather than buffering it. */
     public int deploy(String repo, String path, Path file) throws IOException, InterruptedException {
         return send("PUT", repository(repo) + path,
                 HttpRequest.BodyPublishers.ofFile(file), "application/octet-stream").statusCode();
     }
 
-    /** Deploy an archive at a path within the repository with the batch-explode header set, so the server walks the archive and
-     *  publishes each entry through the compliance gate on the entry's own format path; returns the HTTP status and,
+    /** Deploy an archive with the batch-explode header set, so the server publishes each entry through the gate on
+     *  the entry's own format path; returns the HTTP status and,
      *  on a batch response (200 or a 400 malformed archive), the per-entry manifest ({@code path -> stored |
      *  quarantined | rejected | unclaimed}). When batch upload is off on the deployment the header is inert and the
      *  archive is stored verbatim as one artifact, so the manifest is {@code null} and the status is the plain deploy
@@ -138,11 +136,7 @@ public final class ContentsClient extends ClientCalls {
         if (body != null && body.stripLeading().startsWith("{")) {
             try {
                 ExplodeManifest parsed = JSON.readValue(body, ExplodeManifest.class);
-                // A real batch manifest always carries an entries array (empty when nothing was published). A foreign
-                // JSON object that merely starts with '{' - a server error body like {"status":403,...} rendered by
-                // the framework's default error handler - parses (Jackson ignores its unknown fields) into a manifest
-                // with a null entries, and must not be mistaken for one, or the caller NPEs walking a null entry list
-                // instead of degrading to the "explode failed (HTTP <status>)" branch on the status alone.
+                // A batch manifest always carries entries; an error body also parses, with none, and is not one.
                 if (parsed != null && parsed.entries() != null) {
                     manifest = parsed;
                 }
@@ -195,7 +189,7 @@ public final class ContentsClient extends ClientCalls {
     }
 
     /** One page of a repository's published-asset enumeration - the {@code GET /api/assets} walk, the outbound
-     *  mirror of the import connectors so getting your data out is never the paid feature. {@code cursor} is the opaque
+     *  mirror of the import connectors. {@code cursor} is the opaque
      *  token that fetches the next page (pass it back as {@code after}); it is {@code null} once the walk is exhausted.
      *  {@code limit} caps the page (the server clamps it to its own maximum); a {@code null} limit takes the default. */
     public AssetPage assets(String repo, String after, Integer limit) throws IOException, InterruptedException {

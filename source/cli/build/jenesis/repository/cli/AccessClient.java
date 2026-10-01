@@ -285,11 +285,7 @@ public final class AccessClient extends ClientCalls {
     }
 
     /**
-     * Revoke one issued login key.
-     *
-     * <p>Answered {@code 204}, so there is no body to return - which is the whole answer: the key is gone.
-     * Revoking mattered most of the three, because a credential a script can mint and only a browser can withdraw
-     * is one that outlives the incident that should have ended it.
+     * Revoke one issued login key; answered {@code 204}, so there is no body to return.
      */
     public void revokeKeyLogin(String id) throws IOException, InterruptedException {
         require(send("POST", "/api/keylogin/" + enc(id) + "/delete",

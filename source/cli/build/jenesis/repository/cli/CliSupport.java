@@ -7,8 +7,7 @@ import module java.net.http;
 
 /**
  * The plumbing the dispatcher and every command group reuse: constructing the authenticated {@link RepositoryClient}
- * from the stored {@link Session}, reading the value that follows a flag, and the small shared renderings. Factored
- * here so the split groups share one implementation of the login-then-call handshake rather than each copying it.
+ * from the stored {@link Session}, reading the value that follows a flag, and the small shared renderings.
  */
 final class CliSupport {
 

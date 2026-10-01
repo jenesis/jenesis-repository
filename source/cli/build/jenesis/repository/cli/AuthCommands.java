@@ -80,20 +80,10 @@ final class AuthCommands {
     }
 
     /**
-     * Say once, at the one moment it is information rather than noise, that the deployment just logged into is not
-     * licensed.
-     *
-     * <p><b>Why here and nowhere else.</b> {@code login} is where a session is established, so it is the only
-     * command whose subject is the deployment itself; warning on every command would train people to ignore it,
-     * which is worse than not warning at all.
-     *
-     * <p><b>On stderr, always.</b> {@code --json} guarantees stdout is exactly one JSON value, and a warning
-     * printed there corrupts every caller that parses it. That guarantee is the reason this cannot be a println.
-     *
-     * <p><b>Silence on failure, and silence on absence.</b> Login stores a session; it must still succeed against
-     * a server that is unreachable, so a probe that throws is swallowed. And a deployment sending no header is a
-     * free one or an older one, not an unlicensed one - so no header means no warning, which is the difference
-     * between reporting a state and inventing one.
+     * Says once, at login, that the deployment just logged into is not licensed - the one command whose subject is the
+     * deployment, where a warning on every command would train people to ignore it. On stderr, so {@code --json}
+     * stdout stays one value. A probe that fails is swallowed, since login must succeed against an unreachable
+     * server, and no header means no warning: absence is not a state to report.
      */
     private static void warnUnlicensed(Session session) {
         String state;
@@ -126,9 +116,7 @@ final class AuthCommands {
 
     static int whoami(String[] args, Path home) throws Exception {
         Session session = Session.load(home);
-        // The session is read from disk, so unlike every other command there is no server answer for --json to
-        // hand back. This is the one place a document is composed locally; the key is masked in both shapes,
-        // because a stored credential must not be recoverable from something a caller might log.
+        // The one document composed locally, since no server answers; the key is masked in both shapes.
         if (session == null) {
             Output.record("application/json", Output.document(new LinkedHashMap<>(Map.of("loggedIn", false))));
             System.out.println("Not logged in.");
@@ -148,10 +136,8 @@ final class AuthCommands {
      * {@code members}: what a signed-in person holds, over the same grants a key and a group hold theirs in - the
      * people the console's Members page lists.
      *
-     * <p>The one holder that had no client surface: a key has had {@code credentials} from the start and a group
-     * now has {@code groups}, while a person's rights were reachable only through the console and the SCIM
-     * connector an identity provider drives. What a person holds through a group is the group's and is not edited
-     * here - editing it on the member would be editing a copy.
+     * <p>What a person holds through a group is the group's and is not edited here; editing it on the member would be
+     * editing a copy.
      */
     static int members(String[] args, Path home) throws Exception {
         RepositoryClient client = CliSupport.client(home);
@@ -195,9 +181,7 @@ final class AuthCommands {
     /**
      * {@code groups}: a named collection of principals holding rights exactly as a person or a key does.
      *
-     * <p>This is the instrument that was missing, and its absence had a shape - "everyone in developers may read
-     * acme" was inexpressible, so an estate changed access one person at a time. A member holds what the group
-     * holds from the next request; the grant re-derives them before it returns.
+     * <p>A member holds what the group holds from the next request; the grant re-derives them before it returns.
      */
     static int groups(String[] args, Path home) throws Exception {
         RepositoryClient client = CliSupport.client(home);
@@ -433,12 +417,9 @@ final class AuthCommands {
         return key.length() <= 6 ? "***" : key.substring(0, 6) + "...";
     }
 
-/**
-     * The SCIM bearer token an identity provider presents when it provisions this tenant's members.
-     *
-     * <p>It sits under this group rather than its own because minting it is the one setup step that was reachable
-     * only by clicking; the provisioning protocol itself is driven by the identity provider and is no business of
-     * a command line.
+    /**
+     * The SCIM bearer token an identity provider presents when it provisions this tenant's members. The protocol
+     * itself is the identity provider's to drive; minting the token is the setup step a command line takes.
      */
     static int scim(String[] args, Path home) throws Exception {
         if (args.length < 2 || !args[1].equals("token")) {
@@ -453,12 +434,7 @@ final class AuthCommands {
         return print(CliSupport.client(home).access().mintScimToken());
     }
 
-/**
-     * The deployment's issued login keys - list, issue, revoke.
-     *
-     * <p>Revoking is the one that had to exist. Issuing a deployment-wide credential was already scriptable through
-     * the console's own API; withdrawing one was not, so the tool that can create a credential could not end it.
-     */
+    /** The deployment's issued login keys - list, issue, revoke. */
     static int keylogin(String[] args, Path home) throws Exception {
         if (args.length < 2) {
             throw new IllegalArgumentException("Usage: keylogin <list|issue|revoke> [...]");

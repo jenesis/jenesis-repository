@@ -18,8 +18,7 @@ final class DiscoveryCommands {
             if (args.length < 3) {
                 throw new IllegalArgumentException(usage);
             }
-            // The folder probe rather than a listing: one bounded window of what sits under a prefix, which is what a
-            // caller walking a deep layout wants instead of every entry beneath it; the answer's next is the cursor.
+            // The folder probe: one bounded window under a prefix; the answer's next is the cursor.
             String prefix = "";
             String cursor = null;
             Integer limit = null;
@@ -70,8 +69,8 @@ final class DiscoveryCommands {
     }
 
     /** The published-asset enumeration - the {@code /api/assets} walk (path, size, SHA-256 and, where the format
-     *  describes one, the coordinate), the outbound mirror of the import connectors so getting your data out is never
-     *  the paid feature. Prints one page and its resume cursor, or with {@code --all} follows the cursor to the end. */
+     *  describes one, the coordinate), the outbound mirror of the import connectors. Prints one page and its resume
+     *  cursor, or with {@code --all} follows the cursor to the end. */
     static int assets(String[] args, Path home) throws Exception {
         if (args.length < 2) {
             throw new IllegalArgumentException(

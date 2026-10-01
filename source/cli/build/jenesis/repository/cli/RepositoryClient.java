@@ -117,9 +117,7 @@ public final class RepositoryClient extends ClientCalls {
      * The deployment's licence state, read from the {@code Jenesis-License} header any {@code /api/**} answer
      * carries - empty when the deployment sends none.
      *
-     * <p>Empty is the ordinary case and never a warning: a deployment that sends no such header simply
-     * does not send it, and inventing "unlicensed" out of an absence would be wrong in exactly the direction that
-     * annoys people. This is the whole of the CLI's licence knowledge; there is no second endpoint to ask.
+     * <p>Empty is the ordinary case and never a warning. This is the whole of the CLI's licence knowledge.
      */
     public Optional<String> licenseState() throws IOException, InterruptedException {
         return send("GET", "/api/capabilities", null, null).headers().firstValue("Jenesis-License");
@@ -128,10 +126,8 @@ public final class RepositoryClient extends ClientCalls {
     /**
      * The server has no route for the call: the module that would serve it is not part of this deployment.
      *
-     * <p>Told apart from every other {@code 404} by the server itself - a node answers a request no route matched with
-     * {@code Jenesis-Installed: false} - because the same status for "you asked for something absent" and "this
-     * deployment does not offer that at all" leaves a caller retrying what can never work. The dispatcher turns it
-     * into its own exit code.
+     * <p>The server marks a request no route matched with {@code Jenesis-Installed: false}, telling it apart from a
+     * {@code 404} for something absent; the dispatcher turns it into its own exit code.
      */
     public static final class NotInstalled extends IOException {
 
@@ -142,11 +138,9 @@ public final class RepositoryClient extends ClientCalls {
         }
     }
 
-    /** The served {@code /api/capabilities} document. The optional modules' feature flags sit at the <b>top level</b>
-     *  ({@code scan}, {@code provenance}, {@code audit}, {@code dependents}, {@code search}, {@code walk},
-     *  {@code gc}), because each is contributed by the module that owns it rather than lifted into a fixed view by
-     *  the server; {@link Features} carries only the postures the server itself resolves. A flag a deployment does
-     *  not carry is simply absent and reads as {@code false} - the SPI's no-op-by-absence contract. */
+    /** The served {@code /api/capabilities} document. Each optional module's feature flag sits at the top level,
+     *  contributed by that module, and reads {@code false} when absent; {@link Features} carries only the postures the
+     *  server itself resolves. */
     public record Capabilities(int version, List<Format> formats, List<ImportSource> importSources,
                                List<RiskClient.Signal> signals, List<Module> modules, Features features,
                                boolean scan, boolean provenance, boolean audit, boolean dependents,
