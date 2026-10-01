@@ -352,12 +352,17 @@ public class ConfigController {
      * then stored before the document that makes the repository exist ({@link RepositoryType#create(ArtifactStore,
      * String, String, RepositoryType.Configuration)}), so it answers its first request as configured. Such a creation
      * only creates: a repository that exists already is answered {@code 409} and left as it was.
+     *
+     * <p>The routing is asked first, before the body is read or judged: a request naming a tenant it may not address
+     * is refused as every surface refuses a caller without access, whatever it carries. The body is therefore not
+     * required by the binding - an empty one is judged here, after the refusal, as naming no format.
      */
     @PutMapping("/repository/{tenant}/{name}")
     public void createRepository(@PathVariable("name") String name,
                                  @RequestHeader(value = Repositories.KEY, required = false) String key,
-                                 @RequestBody RepositoryRequest request,
+                                 @RequestBody(required = false) RepositoryRequest request,
                                  HttpServletRequest servlet, HttpServletResponse response) throws IOException {
+        RepositoryRouting.Route described = routing.route(servlet);
         String format = request == null ? null : request.value();
         String description = request == null ? null : request.description();
         Map<String, String> configured = request == null || request.settings() == null ? Map.of()
@@ -370,7 +375,6 @@ public class ConfigController {
                 return;
             }
         }
-        RepositoryRouting.Route described = routing.route(servlet);
         if (format == null && !configured.isEmpty()) {
             text(response, 400, "Settings are given when a repository is created, beside its format; an existing "
                     + "repository's are set through PUT /api/repository/settings/<key>?repo=<name>.");

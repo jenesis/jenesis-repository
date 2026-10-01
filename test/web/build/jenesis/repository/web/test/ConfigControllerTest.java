@@ -24,6 +24,7 @@ import build.jenesis.repository.upstream.store.StoreUpstreamCredentials;
 import build.jenesis.repository.servlet.testkit.Servlets;
 import build.jenesis.repository.web.testkit.Web;
 import jakarta.servlet.http.HttpServletRequest;
+import org.springframework.web.server.ResponseStatusException;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -526,6 +527,21 @@ class ConfigControllerTest {
                 Servlets.request("PUT", "/repository/default/gone"), removing.servlet());
         assertThat(removing.status()).isEqualTo(409);
         assertThat(removing.body()).contains("is still being deleted");
+    }
+
+    @Test
+    void a_creation_naming_a_tenant_the_routing_refuses_is_refused_before_its_body_is_judged() {
+        // A description past the limit is a 400 once the request may be answered at all; naming another tenant, it
+        // must meet the routing's refusal first, as an empty body does.
+        String tooLong = "x".repeat(RepositoryDocument.DESCRIPTION_LIMIT + 1);
+        for (ConfigController.RepositoryRequest body : Arrays.asList(
+                new ConfigController.RepositoryRequest("raw", tooLong, null), null)) {
+            Servlets.Response answered = Servlets.response();
+            assertThatThrownBy(() -> controller.createRepository("files", null, body,
+                    Servlets.request("PUT", "/repository/elsewhere/files"), answered.servlet()))
+                    .isInstanceOf(ResponseStatusException.class);
+        }
+        assertThat(audit.rows()).isEmpty();
     }
 
     @Test
