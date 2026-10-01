@@ -6,13 +6,11 @@ import build.jenesis.repository.server.spi.CapabilityContributor;
 import build.jenesis.repository.walk.WalkProvider;
 
 /**
- * Contributes the reclamation engine's capability flags to {@code /api/capabilities}: {@code walk} (an artifact-walk
- * implementation resolves - without one no walk-riding pass enumerates anything) and {@code gc} (a garbage collector
- * resolves - {@code false} means nothing is ever reclaimed, the GC SPI's no-op-by-absence default). Both are
- * exclusive discovered capabilities resolved against the live configuration - a selection or a required setting can
- * turn either off without a module change - so each is re-resolved per read from the effective config rather than
- * pinned. This is the reclamation module's own report; the neutral server does not reach into the {@code gc} and
- * {@code walk} SPIs to build these flags.
+ * Contributes the reclamation capability flags to {@code /api/capabilities}: {@code walk} (an artifact walk resolves;
+ * without one no walk-riding pass enumerates anything) and {@code gc} (a collector resolves; {@code false} means
+ * nothing is ever reclaimed). Both resolve against the live configuration - a selection or a required setting can turn
+ * either off - so each is re-resolved per read. This module reports them, so the server does not reach into the
+ * {@code gc} and {@code walk} SPIs.
  */
 public final class ReclamationCapabilityContributor implements CapabilityContributor {
 

@@ -6,19 +6,17 @@ import build.jenesis.repository.settings.Setting;
 import build.jenesis.repository.settings.SettingsContributor;
 
 /**
- * Describes the retention settings, so they surface on the settings screens exactly when this module is installed -
- * without the engine, a retention dial would tune nothing.
- *
- * <p>The cadence entry renders its key and default straight off {@link CleanupTaskProvider}'s {@code IntervalSetting}
- * constant, and the import-job ttl off {@link CleanupTask}'s {@code RetentionSetting}, so the catalogue and the code
- * cannot drift. The cadence is the whole retention family's dial - four more reapers read the same key from their
- * own modules - each stating the same default itself, since a constant cannot be shared across module boundaries.
+ * Describes the retention settings, so they appear exactly when this module is installed. The cadence entry renders
+ * {@link CleanupTaskProvider}'s {@code IntervalSetting} and the job TTLs {@link CleanupTask}'s
+ * {@code RetentionSetting}s, so the catalogue cannot drift. The cadence is the retention family's dial: other reapers
+ * read the same key from their own modules, each stating the same default, since a constant cannot be shared across
+ * those module boundaries.
  */
 public final class RetentionSettingsContributor implements SettingsContributor {
 
-    /** A value the kind accepts but a retention policy does not: a negative count, or a zero or negative age - which
-     *  would invert the rule and evict everything but each coordinate's newest version on the next sweep. The policy's
-     *  own parse decides, so this refuses exactly what a sweep would. */
+    /** A value the kind accepts but a policy does not - a negative count, or a zero or negative age, which would evict
+     *  all but each coordinate's newest version. The policy's own parse decides, so this refuses exactly what a sweep
+     *  would. */
     @Override
     public Optional<String> refusal(Setting setting, String value, UnaryOperator<String> deployment) {
         try {

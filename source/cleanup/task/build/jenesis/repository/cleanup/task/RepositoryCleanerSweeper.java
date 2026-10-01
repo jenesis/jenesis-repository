@@ -7,8 +7,8 @@ import build.jenesis.repository.cleanup.RetentionPolicy;
 import build.jenesis.repository.cleanup.RetentionSweeper;
 
 /**
- * The {@link RetentionSweeper} over the {@link RepositoryCleaner} engine: each call runs the given policy over the
- * inventory - the same engine the scheduled pass uses, so the on-demand endpoints and the sweep cannot drift.
+ * The {@link RetentionSweeper} over {@link RepositoryCleaner}: the engine the walk's retention uses, so the on-demand
+ * endpoints and the scheduled retention cannot drift.
  */
 public final class RepositoryCleanerSweeper implements RetentionSweeper {
 

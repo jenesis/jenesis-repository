@@ -9,11 +9,10 @@ import build.jenesis.repository.walk.WalkConsumer;
 import build.jenesis.repository.walk.WalkPass;
 
 /**
- * The browse's per-folder subtree sizes rolled up at the end of a walk: when a pass carrying this consumer
- * completes over a repository, the inventory recomputes the folder totals from the tree - the post-order fold on
- * its own {@code walks/rollup} pass, whose per-segment partials are bound to that pass's segments, which is why
- * it still opens one. The publish observers keep the totals incrementally; this is the repair, riding the
- * {@code retention} walk daily by default instead of every hour.
+ * The browse's per-folder subtree sizes rolled up at the end of a walk: when a pass carrying this consumer completes
+ * over a repository, the inventory recomputes the folder totals in a post-order fold on its own {@code walks/rollup}
+ * pass, whose per-segment partials are bound to that pass's segments. The publish observers keep totals incrementally;
+ * this is the repair, on the {@code retention} entry, daily by default.
  */
 public final class RollUpConsumer implements WalkConsumer {
 

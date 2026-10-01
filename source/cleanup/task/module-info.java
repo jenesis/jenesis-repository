@@ -1,19 +1,14 @@
 /**
- * The retention engine and its scheduled pass as a plugin module: it provides
- * {@link build.jenesis.repository.cleanup.RetentionProvider} (the on-demand plan/sweep engine) and
- * {@link build.jenesis.repository.maintenance.MaintenanceTaskProvider} answering to {@code cleanup}, plus the
- * retention settings - so a deployment without this module runs without retention, and installing it adds the
- * endpoints' engine, the background pass and the settings in one step. The import-job status object is small
- * machine-written JSON, parsed with the Jackson databind already on the server path (a library, not a hand-rolled
- * reader).
+ * The retention engine and the scheduled cleanup pass: a {@link build.jenesis.repository.cleanup.RetentionProvider}, a
+ * {@link build.jenesis.repository.maintenance.MaintenanceTaskProvider} answering to {@code cleanup}, the retention
+ * settings and the walk consumers for retention and roll-up - so a deployment without this module runs without
+ * retention.
  *
- * <p>What the scheduled pass does is narrower than it was: the reaps that are neither a walk nor a repair, which
- * are the import-job auto-dismiss and a quota'd tenant's usage reconciliation. Retention, garbage collection and
- * the browse's subtree-size roll-up are walk consumers instead - {@code RetentionConsumer} judges inventory rows as
- * the walk streams them, {@code GcConsumer} and {@code RollUpConsumer} run at the end of a pass that carries them,
- * and the {@code retention} entry of the walks setting carries all three daily by default. The collector itself is
- * still the discovered {@code build.jenesis.repository.gc.GarbageCollectorProvider} capability, and with none
- * resolved the walk evicts but reclaims nothing.
+ * <p>The scheduled pass reaps finished import and export jobs and reconciles a quota'd tenant's usage. Retention,
+ * garbage collection and the subtree-size roll-up are walk consumers, carried daily by default by the walks setting's
+ * {@code retention} entry; the collector is the discovered
+ * {@code build.jenesis.repository.gc.GarbageCollectorProvider}, and with none resolved retention evicts but nothing is
+ * reclaimed. Job records are small JSON read with Jackson.
  *
  * @jenesis.release 25
  * @jenesis.bom pin-repository.properties

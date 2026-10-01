@@ -7,19 +7,16 @@ import build.jenesis.repository.cleanup.RepositoryInventory;
 import build.jenesis.repository.cleanup.RetentionPolicy;
 
 /**
- * Runs a {@link RetentionPolicy} over a {@link RepositoryInventory}. {@link #plan} computes what would be removed
- * (a dry run); {@link #sweep} computes the same plan and applies it, evicting each condemned release through the
- * inventory. The plan is returned either way, so a deployment can report what was removed and why.
+ * Runs a {@link RetentionPolicy} over a {@link RepositoryInventory}: {@link #plan} computes what would be removed,
+ * {@link #sweep} computes and applies it, evicting each condemned release through the inventory. The plan is returned
+ * either way, for reporting.
  *
- * <p>Both stream the inventory's grouped release enumeration through the policy's one-coordinate-at-a-time
- * {@link RetentionPolicy#planner planner} instead of materialising {@code releases()} into a list: memory is one
- * coordinate's version group plus the returned plan (the report, sized by what the policy condemns, not by what the
- * repository holds), and the sweep evicts each group's condemned versions <em>as the enumeration flows</em> - so a
- * sweep over a walk-riding inventory that crashes mid-pass has already applied every group it passed, and the
- * resumed pass (or, for a coordinate whose group a crash split, the next pass) finishes the rest. The returned plan
- * is what <em>this</em> call condemned - a resumed walk-riding sweep reports its own share of the pass, not the
- * pass total. The enumeration is the inventory's published rows, one per version with its coordinate, on a pass of
- * its own rather than the shared rebuild pass, whose unit is the pointer and which carries no coordinate to group by.
+ * <p>Both stream the inventory's grouped releases through the policy's {@link RetentionPolicy#planner planner}, so
+ * memory is one coordinate's versions plus the plan (sized by what is condemned), and a sweep evicts each group as the
+ * enumeration flows: a crash mid-pass has applied every group passed, and the resumed or next pass finishes the rest.
+ * The returned plan is what this call condemned - a resumed walk-riding sweep reports its share. The enumeration is the
+ * inventory's published rows, one per version with its coordinate, since the shared rebuild pass's unit is the pointer,
+ * which carries no coordinate to group by.
  */
 public final class RepositoryCleaner {
 

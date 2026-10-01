@@ -4,10 +4,7 @@ import module java.base;
 import build.jenesis.repository.cleanup.RetentionProvider;
 import build.jenesis.repository.cleanup.RetentionSweeper;
 
-/**
- * Discovers the retention engine: always available when this module is installed - the engine needs no
- * configuration; the policy it applies is supplied per call.
- */
+/** Discovers the retention engine: always available when installed; the policy is supplied per call. */
 public final class RepositoryCleanerProvider implements RetentionProvider {
 
     @Override

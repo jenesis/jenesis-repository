@@ -12,21 +12,19 @@ import build.jenesis.repository.walk.WalkConsumer;
 import build.jenesis.repository.walk.WalkPass;
 
 /**
- * Retention as a listener of the walk: each repository's policy - its four rules resolved one by one through the
- * repository's effective configuration, the repository's own value over its tenant's over the deployment's, which the
- * maintenance pass hands over through {@link #onRepository} - judges the releases as the inventory rows stream past, coordinate group by coordinate
- * group in the order the rows come, and evicts what the policy says - exactly the sweep the hourly cleanup pass
- * ran over a walk of its own. A retention policy is a configuration that runs, so this consumer rides the
- * {@code retention} walk entry by default, daily; a deployment that wants no retention removes the entry.
+ * Retention as a listener of the walk: each repository's policy - its four rules resolved through the repository's
+ * effective configuration (its own value over its tenant's over the deployment's), handed over by {@link #onRepository}
+ * - judges the releases as the inventory rows stream past, one coordinate group at a time in row order, and evicts what
+ * it condemns. A policy is a configuration that runs, so this consumer rides the {@code retention} walk entry, daily by
+ * default; a deployment wanting no retention removes the entry.
  *
- * <p>Per store and per pass it keeps the policy's planner, which buffers one coordinate's versions until the next
- * coordinate begins; a resumed pass re-judges the group the crash split conservatively and the next pass completes
- * it, as the walk-based sweep did.
+ * <p>Per store and pass it keeps the policy's planner, buffering one coordinate's versions; a resumed pass re-judges a
+ * group a crash split conservatively and the next pass completes it.
  */
 public final class RetentionConsumer implements WalkConsumer {
 
-    /** The consumer's name: its toggle ({@code jenrepo.retention-sweep}) and how a walk entry names it - not
-     *  {@code retention}, which is the engine-selection dial. */
+    /** The consumer's name: its toggle ({@code jenrepo.retention-sweep}) and walk-entry name - not {@code retention},
+     *  which is the engine-selection dial. */
     public static final String NAME = "retention-sweep";
 
     private final Map<Object, Sweep> sweeps = new ConcurrentHashMap<>();
@@ -106,7 +104,7 @@ public final class RetentionConsumer implements WalkConsumer {
     private Sweep sweep(ArtifactStore store) throws IOException {
         Sweep sweep = sweeps.get(store.identity());
         if (sweep == null) {
-            // A driver that knows no repository hands nothing over; the deployment's configuration then judges it.
+            // A driver that names no repository hands nothing over; the deployment's configuration judges it.
             sweep = new Sweep(store, configurations.getOrDefault(store.identity(), Features.settings()));
             sweeps.put(store.identity(), sweep);
         }

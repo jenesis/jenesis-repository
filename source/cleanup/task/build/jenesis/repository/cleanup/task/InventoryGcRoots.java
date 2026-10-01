@@ -8,13 +8,10 @@ import build.jenesis.repository.store.ArtifactStore;
 import build.jenesis.repository.store.Known;
 
 /**
- * The pointer roots, answered from the durable ecosystem record this module keeps.
- *
- * <p>The answer is the union of {@code publish} and every installed format's lent roots, which is complete for
- * what is installed and blind to what is not. The inventory records every ecosystem it has ever stored, so it can
- * see the case that union cannot: content held for a format nobody has installed any more, whose blobs no root
- * names and which a sweep would therefore delete. Where that is so it refuses, and the collection pass defers
- * rather than reclaiming.
+ * The pointer roots, answered from the durable ecosystem record this module keeps. The union of {@code publish} and
+ * every installed format's lent roots is complete for what is installed and blind to what is not; the inventory records
+ * every ecosystem it ever stored, so it sees content held for a format no longer installed, whose blobs no root names
+ * and a sweep would delete. Then it refuses, and the collection defers.
  */
 public final class InventoryGcRoots implements GcRoots {
 
