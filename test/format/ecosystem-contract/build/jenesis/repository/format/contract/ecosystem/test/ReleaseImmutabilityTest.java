@@ -226,6 +226,92 @@ class ReleaseImmutabilityTest {
                         opaque("PUT", WINGET_INSTALLER, "an installer")));
     }
 
+    /**
+     * The formats whose publish request carries what a release says about itself beside its file - a release
+     * document, a manifest, an index line built from the request's metadata, attestations - each uploading the same
+     * file with that part made distinct by {@code variant}. A re-publish of a release's identical file converges, so
+     * these are the parts a re-publish could otherwise rewrite under an immutable release.
+     */
+    static List<Format> described() {
+        String boundary = "release-boundary";
+        byte[] wheel = "a wheel".getBytes(StandardCharsets.UTF_8);
+        byte[] crate = "a crate".getBytes(StandardCharsets.UTF_8);
+        byte[] tarball = "a tarball".getBytes(StandardCharsets.UTF_8);
+        return List.of(
+                new Format("pypi", new PyPiFormatFixture(), 200, 400, "File already exists",
+                        "/pypi/simple/release-lib/release_lib-1.0.0-py3-none-any.whl",
+                        variant -> new Upload(ContractExchange.of("POST", "/pypi/", Packages.twineForm(boundary,
+                                        "release-lib", "release_lib-1.0.0-py3-none-any.whl", wheel,
+                                        "[{\"envelope\":\"" + variant + "\"}]"))
+                                .header("Content-Type", "multipart/form-data; boundary=" + boundary), wheel)),
+                new Format("gems", new RubyGemsFormatFixture(), 200, 409, "Repushing of gem versions is not allowed",
+                        "/rubygems/gems/release-lib-1.0.0.gem", variant -> {
+                            byte[] gem = Packages.gem("release-lib", "1.0.0");
+                            return new Upload(ContractExchange.of("POST", "/rubygems/api/v1/gems",
+                                            Packages.fileForm(boundary, "gem", "release-lib-1.0.0.gem", gem,
+                                                    Map.of("attestations", "[{\"bundle\":\"" + variant + "\"}]")))
+                                    .header("Content-Type", "multipart/form-data; boundary=" + boundary), gem);
+                        }),
+                new Format("cargo", new CargoFormatFixture(), 200, 400, "is already uploaded",
+                        "/cargo/release/api/v1/crates/release-lib/1.0.0/download",
+                        variant -> new Upload(ContractExchange.of("PUT", "/cargo/release/api/v1/crates/new",
+                                Packages.cargoFrame("release-lib", "1.0.0", crate,
+                                        variant.isEmpty() ? "" : "feature-" + variant.length())), crate)),
+                new Format("npm", new NpmFormatFixture(), 201, 403, "cannot publish over",
+                        "/npm/release-lib/-/release-lib-1.0.0.tgz",
+                        variant -> new Upload(ContractExchange.of("PUT", "/npm/release-lib",
+                                Packages.npmEnvelope("release-lib", "1.0.0", tarball, variant)), tarball)),
+                new Format("swift", new SwiftFormatFixture(), 201, 409, "already published", SWIFT_RELEASE + ".zip",
+                        variant -> {
+                            byte[] archive = Packages.zip(Map.of("lib/Package.swift",
+                                    "// swift-tools-version:5.9\n".getBytes(StandardCharsets.UTF_8)));
+                            return new Upload(ContractExchange.of("PUT", SWIFT_RELEASE,
+                                            Packages.swiftForm("release-boundary", archive,
+                                                    "{\"author\":{\"name\":\"" + variant + "\"}}", null))
+                                    .header("Content-Type", "multipart/form-data; boundary=release-boundary"),
+                                    archive);
+                        }));
+    }
+
+    /** The formats whose request carries nothing beside the file but what the file itself says, and why. */
+    private static final Map<String, String> UNDESCRIBED = Map.of(
+            "nuget", "a push carries the package alone, bare or as the one file part of a form: everything the "
+                    + "release says - its id, version and dependency groups - is read out of the .nuspec inside it");
+
+    @ParameterizedTest
+    @MethodSource("described")
+    void the_same_file_published_again_with_other_metadata_is_refused_and_the_release_is_untouched(Format format)
+            throws IOException {
+        ArtifactStore store = store(format);
+        Upload first = format.upload(store, "");
+        assertThat(first.exchange().status()).as("the first upload of %s lands", format).isEqualTo(format.accepted());
+        Map<String, byte[]> released = contents(format.name());
+
+        Upload second = format.upload(store, "rewritten");
+
+        assertThat(second.exchange().status()).as("%s refuses the version as its registry does", format)
+                .isEqualTo(format.refusal());
+        assertThat(second.exchange().responseText()).contains(format.words());
+        assertThat(changed(released, contents(format.name())))
+                .as("no key the release had is rewritten by a re-publish of %s's file with other metadata", format)
+                .isEmpty();
+        assertThat(format.upload(store, "").exchange().status())
+                .as("while the identical request still converges").isEqualTo(format.accepted());
+    }
+
+    /** Every format that unwraps its artifact from a request carries the request's other parts or says why not. */
+    @Test
+    void every_unwrapping_format_is_held_to_its_release_documents_or_says_why_not() {
+        Set<String> unwrapping = screening().stream().map(Format::name).collect(Collectors.toSet());
+        Set<String> held = described().stream().map(Format::name).collect(Collectors.toSet());
+        assertThat(unwrapping.stream().filter(name -> !held.contains(name) && !UNDESCRIBED.containsKey(name))
+                .sorted().toList())
+                .as("a format whose publish unwraps its artifact from a request with other parts: add it to "
+                        + "described(), or to UNDESCRIBED with the reason its request carries nothing else")
+                .isEmpty();
+        assertThat(UNDESCRIBED.keySet()).isSubsetOf(unwrapping).doesNotContainAnyElementsOf(held);
+    }
+
     /** The formats whose own publish runs the screen, so a held upload is laid out by the format itself. */
     static List<Format> screening() {
         Set<String> screening = Set.of("pypi", "nuget", "cargo", "npm", "gems", "swift");

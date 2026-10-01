@@ -99,6 +99,53 @@ class SwiftReleaseTest {
                 .contains("contract.widget 1.0.0 is already published with other content");
     }
 
+    /** The manifest and the signature are the release's too: the same archive sent again with another of either is
+     *  refused, and what the release serves beside its archive is what it was published with. */
+    @Test
+    void the_same_archive_with_another_manifest_or_signature_is_refused() throws IOException {
+        ArtifactStore store = store();
+        byte[] archive = "the source archive".getBytes(StandardCharsets.UTF_8);
+        assertThat(publish(store, form(archive, "// swift-tools-version:5.9\n", "a signature")).status())
+                .isEqualTo(201);
+
+        ContractExchange manifest = publish(store, form(archive, "// swift-tools-version:6.0\n", "a signature"));
+        ContractExchange signature = publish(store, form(archive, "// swift-tools-version:5.9\n", "another"));
+
+        assertThat(manifest.status()).as("another manifest").isEqualTo(409);
+        assertThat(signature.status()).as("another signature").isEqualTo(409);
+        assertThat(get(store, RELEASE + "/Package.swift").responseText()).isEqualTo("// swift-tools-version:5.9\n");
+        assertThat(get(store, RELEASE + ".zip").responseHeader("X-Swift-Package-Signature"))
+                .isEqualTo(Base64.getEncoder().encodeToString("a signature".getBytes(StandardCharsets.UTF_8)));
+        assertThat(publish(store, form(archive, "// swift-tools-version:5.9\n", "a signature")).status())
+                .as("the identical form converges").isEqualTo(201);
+    }
+
+    /** A signed form: the archive, the manifest and the signature as their own parts. */
+    private static byte[] form(byte[] archive, String manifest, String signature) {
+        ByteArrayOutputStream body = new ByteArrayOutputStream();
+        body.writeBytes(part("source-archive", archive));
+        body.writeBytes(part("package-manifest", manifest.getBytes(StandardCharsets.UTF_8)));
+        body.writeBytes(part("source-archive-signature", signature.getBytes(StandardCharsets.UTF_8)));
+        body.writeBytes(("--" + BOUNDARY + "--\r\n").getBytes(StandardCharsets.UTF_8));
+        return body.toByteArray();
+    }
+
+    private static byte[] part(String name, byte[] content) {
+        ByteArrayOutputStream part = new ByteArrayOutputStream();
+        part.writeBytes(("--" + BOUNDARY + "\r\nContent-Disposition: form-data; name=\"" + name + "\"\r\n"
+                + "Content-Type: application/octet-stream\r\n\r\n").getBytes(StandardCharsets.UTF_8));
+        part.writeBytes(content);
+        part.writeBytes("\r\n".getBytes(StandardCharsets.UTF_8));
+        return part.toByteArray();
+    }
+
+    private static ContractExchange publish(ArtifactStore store, byte[] form) throws IOException {
+        ContractExchange exchange = ContractExchange.of("PUT", RELEASE, form)
+                .header("Content-Type", "multipart/form-data; boundary=" + BOUNDARY);
+        new SwiftFormatFixture().serving().handle(exchange, store);
+        return exchange;
+    }
+
     private ArtifactStore store() {
         return ArtifactStoreProvider.resolve("filesystem",
                 key -> "jenrepo.filesystem.root".equals(key) ? root.toString() : null);

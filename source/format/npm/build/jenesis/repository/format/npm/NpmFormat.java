@@ -325,13 +325,7 @@ public final class NpmFormat implements RepositoryFormat, ProxyLeg, BlobLayout, 
             exchange.respond(413);   // an envelope field past its bound - nothing was indexed
             return;
         } catch (Publication.RepublishConflict taken) {
-            // A version's tarball never changes once published, and npm's registry answers a second publish of it
-            // this way rather than with a bare conflict. The words go in the JSON document's error field, the one
-            // place `npm publish` reads a refusal's reason from; any other body leaves it printing a generic 403 that
-            // reads as a missing permission.
-            exchange.setResponseHeader("Content-Type", "application/json");
-            exchange.respond(403, MAPPER.writeValueAsBytes(
-                    Map.of("error", "You cannot publish over the previously published versions.")));
+            publishedOver(exchange);
             return;
         }
         if (envelope == null) {
@@ -353,7 +347,12 @@ public final class NpmFormat implements RepositoryFormat, ProxyLeg, BlobLayout, 
                 // the same reason: the packument screens every version on its tarball's marker, so a held version is
                 // laid out and listed nowhere until it is released.
                 case QUARANTINE -> {
-                    index(name, envelope, blobs, store);
+                    try {
+                        index(name, envelope, blobs, store);
+                    } catch (Publication.RepublishConflict taken) {
+                        publishedOver(exchange);
+                        return;
+                    }
                     exchange.respond(202);
                     return;
                 }
@@ -365,10 +364,27 @@ public final class NpmFormat implements RepositoryFormat, ProxyLeg, BlobLayout, 
                 }
             }
         }
-        index(name, envelope, blobs, store);
+        try {
+            index(name, envelope, blobs, store);
+        } catch (Publication.RepublishConflict taken) {
+            publishedOver(exchange);
+            return;
+        }
         deprecations(name, envelope, blobs, store, exchange);
         exchange.setResponseHeader("Content-Type", "application/json");
         exchange.respond(201, MAPPER.writeValueAsString(Map.of("ok", true)).getBytes(StandardCharsets.UTF_8));
+    }
+
+    /**
+     * A version's tarball, and the document and attestations it was published with, never change once published, and
+     * npm's registry answers a second publish of it this way rather than with a bare conflict. The words go in the
+     * JSON document's error field, the one place {@code npm publish} reads a refusal's reason from; any other body
+     * leaves it printing a generic 403 that reads as a missing permission.
+     */
+    private static void publishedOver(FormatExchange exchange) throws IOException {
+        exchange.setResponseHeader("Content-Type", "application/json");
+        exchange.respond(403, MAPPER.writeValueAsBytes(
+                Map.of("error", "You cannot publish over the previously published versions.")));
     }
 
     /**
@@ -690,17 +706,27 @@ public final class NpmFormat implements RepositoryFormat, ProxyLeg, BlobLayout, 
                 continue;
             }
             String versionKey = "npm/" + name + "/versions/" + version.getKey();
-            if (envelope.attestations() != null && envelope.published().contains(file)) {
+            boolean attached = envelope.published().contains(file);
+            if (!attached && blobs.exists(versionKey)) {
+                // A version this request carries no tarball for keeps the document it was published with: a client
+                // PUTs the whole package document back to deprecate, and the deprecation reaches the version through
+                // its lifecycle mark below, never by rewriting what the release says it depends on.
+                continue;
+            }
+            if (envelope.attestations() != null && attached) {
                 // The bundles land before the version is discoverable, and the version's own entry names them, so
                 // no client reads a version whose attestations are still to come.
-                blobs.write(attestationsKey(name, version.getKey()), envelope.attestations());
+                blobs.writeRelease(attestationsKey(name, version.getKey()), envelope.attestations());
                 version.setValue(withAttestations(version.getValue(), version.getKey(), envelope.attestations()));
             }
+            // The document is the release's own: written where none stands, kept where the same one stands, and a
+            // re-publish of the same tarball with another one is refused rather than rewriting the release.
             indexing.commit(
                     new ArtifactDescriptor("npm", name, version.getKey(), "/npm/" + name,
                             "application/json", version.getKey().contains("-"), null, -1L),
                     new ByteArrayInputStream(version.getValue()), METADATA,
-                    _ -> Publication.Visibility.through((hash, _, _) -> blobs.link(versionKey, hash)));
+                    _ -> Publication.Visibility.through((hash, size, _) -> blobs.linkRelease(versionKey, hash,
+                            size)));
         }
         if (envelope.distTags() != null) {
             indexing.commit(ArtifactDescriptor.at("npm", "/npm/" + name),

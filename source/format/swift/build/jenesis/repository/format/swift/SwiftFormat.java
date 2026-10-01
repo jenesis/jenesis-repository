@@ -563,7 +563,9 @@ public final class SwiftFormat implements RepositoryFormat, ArtifactLayout, Blob
      * <p><b>The commit point is the archive's pointer</b>, linked through {@link Blobs#linkRelease}, which decides
      * inside the pointer's compare-and-set: of two first publishes racing with different archives one lands and the
      * other is refused with {@code 409}, the specification's answer for a release that already exists, and a
-     * re-publish of the same archive converges. The documents follow it, and the release list last. Two first
+     * re-publish of the same form converges. The documents follow it, and the release list last; they are the
+     * release's own, so a re-publish of the same archive with other metadata, another manifest or another signature
+     * is refused with {@code 409} as well rather than rewriting what an immutable release says. Two first
      * publishes of one version racing with different archives can each write their signature before either links;
      * the sidecar then left beside the winner may be the loser's, which fails to verify over the winner's archive and
      * reads as an invalid signature - never as a valid one, since what a signature vouches for is decided by the bytes
@@ -678,8 +680,10 @@ public final class SwiftFormat implements RepositoryFormat, ArtifactLayout, Blob
      * its version listed.
      */
     private static void held(Release release, Blobs blobs, String hash) throws IOException {
-        // A hold never replaces a released archive: refused before the mark, so nothing is left held.
+        // A hold never replaces a released archive nor what its release says: refused before the mark, so nothing is
+        // left held.
         blobs.refuseReplacement(release.archiveKey(), hash);
+        release.refuseReplacement(blobs);
         Withheld.mark(blobs.store(), hash, release.described());
         blobs.linkRelease(release.archiveKey(), hash, release.archive().size());
         release.lay(blobs);   // held: the release list keeps it out
@@ -707,23 +711,48 @@ public final class SwiftFormat implements RepositoryFormat, ArtifactLayout, Blob
                     null, -1L);
         }
 
-        /** Store the archive's signature as its sidecar, where the screen's sibling read finds it. */
+        /**
+         * Store the archive's signature as its sidecar, where the screen's sibling read finds it. Beside an archive
+         * that already stands it is part of that release and kept as it is ({@link Blobs#writeRelease}); with no
+         * archive standing it is this publish's own, and replaces whatever a publish that was refused or held off
+         * left there.
+         */
         void sign(Blobs blobs) throws IOException {
-            if (signature != null) {
+            if (signature == null) {
+                return;
+            }
+            if (blobs.hash(archiveKey()).isPresent()) {
+                blobs.writeRelease(archiveKey() + SIGNATURE, signature);
+            } else {
                 blobs.write(archiveKey() + SIGNATURE, signature);
             }
         }
 
         /** Everything else the release serves beside its archive, written once the archive's pointer stands: the
-         *  manifest, the release document, the repository-URL index and, last, the release list. */
+         *  manifest, the release document, the repository-URL index and, last, the release list. The manifest and
+         *  the document are the release's own, so a re-publish of its archive that would change either is refused
+         *  ({@link Blobs#writeRelease}). */
         void lay(Blobs blobs) throws IOException {
             if (manifest != null) {
-                blobs.write(SwiftListings.manifestKey(repo, scope, name, version, ""), manifest);
+                blobs.writeRelease(SwiftListings.manifestKey(repo, scope, name, version, ""), manifest);
             }
-            blobs.write(SwiftListings.metadataKey(repo, scope, name, version),
-                    release(scope, name, version, archive.hash(), metadata));
+            blobs.writeRelease(SwiftListings.metadataKey(repo, scope, name, version), document());
             indexRepositoryUrls(blobs, repo, scope, name, metadata);
             new SwiftListings(blobs).refresh(repo, scope, name, version);
+        }
+
+        /** Refuse, before anything of this publish is written, a manifest or document other than the one the
+         *  release that stands already has - what {@link #lay} would refuse once it ran. */
+        void refuseReplacement(Blobs blobs) throws IOException {
+            if (manifest != null) {
+                blobs.refuseReplacement(SwiftListings.manifestKey(repo, scope, name, version, ""), manifest);
+            }
+            blobs.refuseReplacement(SwiftListings.metadataKey(repo, scope, name, version), document());
+        }
+
+        /** The release document endpoint 4.2 answers. */
+        byte[] document() {
+            return release(scope, name, version, archive.hash(), metadata);
         }
 
         /** Announce the stored signature as its own publish once the archive is laid out, so the signature dimension

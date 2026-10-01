@@ -231,6 +231,20 @@ public final class Blobs {
         }
     }
 
+    /**
+     * Write a document a release serves beside its file - a release's metadata, its manifest, the attestations or
+     * the signature its publish carried, an index line built from its publish's metadata - under the rule its file is
+     * linked by ({@link #linkRelease}): written where none stands, kept where the same one stands, and refused with
+     * {@link Publication.RepublishConflict} where another stands, unless the publish may replace releases. A re-publish
+     * of a release's identical file therefore converges on the release as it stands and cannot change what the
+     * release says about itself; only the identical request converges.
+     */
+    public void writeRelease(String key, byte[] content) throws IOException {
+        requireSafeKey(key);
+        Stored stored = stored(new ByteArrayInputStream(content));
+        linkRelease(key, stored.hash(), stored.size());
+    }
+
     /** The body a format answers a refused second upload of a released file with, when its registry prescribes none
      *  of its own: which file, and that a published version does not change. */
     public static byte[] alreadyPublished(String what) {
@@ -252,6 +266,15 @@ public final class Blobs {
         if (standing.isPresent() && !standing.get().equals(hash)) {
             throw new Publication.RepublishConflict(key, standing.get(), hash);
         }
+    }
+
+    /**
+     * {@link #refuseReplacement(String, String)} for a document {@link #writeRelease} would write, named by its
+     * content: the check a held upload makes for each document of its release before it marks its bytes held, so a
+     * refused re-publish of a release's identical file never leaves that file marked.
+     */
+    public void refuseReplacement(String key, byte[] content) throws IOException {
+        refuseReplacement(key, Checksums.sha256(content));
     }
 
     /**

@@ -39,10 +39,17 @@ final class Packages {
      * observable rather than reading back a tag the fixture itself wrote.
      */
     static byte[] npmEnvelope(String name, String version, byte[] tarball) {
+        return npmEnvelope(name, version, tarball, "");
+    }
+
+    /** {@link #npmEnvelope(String, String, byte[])} whose version document carries {@code description}: the same
+     *  tarball, published with another document. */
+    static byte[] npmEnvelope(String name, String version, byte[] tarball, String description) {
         String file = shortName(name) + "-" + version + ".tgz";
         return ("{\"_id\":\"" + name + "\",\"name\":\"" + name + "\","
                 + "\"versions\":{\"" + version + "\":{"
                 + "\"name\":\"" + name + "\",\"version\":\"" + version + "\","
+                + (description.isEmpty() ? "" : "\"description\":\"" + description + "\",")
                 + "\"dist\":{\"shasum\":\"" + sha1Hex(tarball) + "\"}}},"
                 + "\"_attachments\":{\"" + file + "\":{"
                 + "\"content_type\":\"application/octet-stream\","
@@ -99,10 +106,22 @@ final class Packages {
      *  carrying the distribution. Field order is the client's, and twine really does send {@code name} first. */
     static byte[] twineForm(String boundary, String project, String filename, byte[] distribution)
             throws IOException {
+        return twineForm(boundary, project, filename, distribution, null);
+    }
+
+    /** {@link #twineForm(String, String, String, byte[])} carrying {@code attestations} as the PEP 740 field, sent
+     *  before the file as twine sends it; none when {@code null}. */
+    static byte[] twineForm(String boundary, String project, String filename, byte[] distribution,
+                            String attestations) throws IOException {
         ByteArrayOutputStream form = new ByteArrayOutputStream();
         form.write(("--" + boundary + "\r\n"
                 + "Content-Disposition: form-data; name=\"name\"\r\n\r\n"
                 + project + "\r\n").getBytes(StandardCharsets.UTF_8));
+        if (attestations != null) {
+            form.write(("--" + boundary + "\r\n"
+                    + "Content-Disposition: form-data; name=\"attestations\"\r\n\r\n"
+                    + attestations + "\r\n").getBytes(StandardCharsets.UTF_8));
+        }
         form.write(("--" + boundary + "\r\n"
                 + "Content-Disposition: form-data; name=\"content\"; filename=\"" + filename + "\"\r\n"
                 + "Content-Type: application/octet-stream\r\n\r\n").getBytes(StandardCharsets.UTF_8));
@@ -392,8 +411,15 @@ final class Packages {
      *  metadata, a {@code u32} {@code .crate} length, then the archive bytes. The archive itself is opaque to the
      *  protocol - the coordinate rides in the metadata - so the kit's own generated body publishes here unchanged. */
     static byte[] cargoFrame(String name, String version, byte[] crate) throws IOException {
+        return cargoFrame(name, version, crate, "");
+    }
+
+    /** {@link #cargoFrame(String, String, byte[])} whose metadata declares a feature named {@code feature}: the same
+     *  crate, published with another index line. */
+    static byte[] cargoFrame(String name, String version, byte[] crate, String feature) throws IOException {
         byte[] metadata = ("{\"name\":\"" + name + "\",\"vers\":\"" + version + "\",\"deps\":[],"
-                + "\"features\":{},\"links\":null}").getBytes(StandardCharsets.UTF_8);
+                + "\"features\":{" + (feature.isEmpty() ? "" : "\"" + feature + "\":[]") + "},\"links\":null}")
+                .getBytes(StandardCharsets.UTF_8);
         ByteArrayOutputStream frame = new ByteArrayOutputStream();
         littleEndian(frame, metadata.length);
         frame.write(metadata);

@@ -560,10 +560,11 @@ public final class RubyGemsFormat implements RepositoryFormat, ProxyLeg, BlobLay
         return spec;
     }
 
-    /** Keep the attestations a push carried, unless they name no bundle - an empty array is not kept. */
+    /** Keep the attestations a push carried, unless they name no bundle - an empty array is not kept. They are the
+     *  version's own, so a re-push of the same gem with others is refused rather than rewriting them. */
     private static void keepAttestations(Blobs blobs, Spec spec, byte[] bundles) throws IOException {
         if (bundles != null && namesABundle(bundles)) {
-            blobs.write(attestationsKey(spec.name() + "-" + spec.version()), bundles);
+            blobs.writeRelease(attestationsKey(spec.name() + "-" + spec.version()), bundles);
         }
     }
 
@@ -595,9 +596,14 @@ public final class RubyGemsFormat implements RepositoryFormat, ProxyLeg, BlobLay
         if (spec == null) {
             return;   // nothing servable to hold open; the hold stays reviewable by its stored blob alone
         }
+        byte[] bundles = attestations.read();
         try {
-            // A hold never replaces a released gem: refused before the mark, so nothing is left held.
+            // A hold never replaces a released gem nor its attestations: refused before the mark, so nothing is left
+            // held.
             blobs.refuseReplacement(gemKey(spec.name(), spec.version()), hash);
+            if (bundles != null && namesABundle(bundles)) {
+                blobs.refuseReplacement(attestationsKey(spec.name() + "-" + spec.version()), bundles);
+            }
         } catch (Publication.RepublishConflict taken) {
             publication.unpublish("/quarantine" + endpoint);
             throw taken;
@@ -606,7 +612,7 @@ public final class RubyGemsFormat implements RepositoryFormat, ProxyLeg, BlobLay
         Withheld.mark(store, hash, described);
         blobs.linkRelease(gemKey(spec.name(), spec.version()), hash, -1L);
         blobs.write("rubygemfiles/" + spec.name() + "-" + spec.version() + ".gemspec.rz", QuickSpec.deflated(spec));
-        keepAttestations(blobs, spec, attestations.read());
+        keepAttestations(blobs, spec, bundles);
         blobs.write("rubygems/" + spec.name() + "/versions/" + spec.version(),
                 line(spec, hash).getBytes(StandardCharsets.UTF_8));
         new RubyGemsListings(blobs).published(spec.name(), spec.version(),

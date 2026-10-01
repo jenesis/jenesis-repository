@@ -765,8 +765,12 @@ public final class PyPiFormat implements RepositoryFormat, ProxyLeg, BlobLayout,
         if (project == null || Keys.unsafe(project) || Keys.unsafe(filename)) {
             return;
         }
-        // A hold never replaces a released file: refused before the mark, so nothing is left held.
+        // A hold never replaces a released file nor its attestations: refused before the mark, so nothing is left held.
         blobs.refuseReplacement(fileKey(project, filename), hash);
+        byte[] attestations = attestationsDocument(form.attestations);
+        if (attestations != null) {
+            blobs.refuseReplacement(attestationsKey(project, filename), attestations);
+        }
         Withheld.mark(store, hash, new PyPiFormat().describe("/pypi/simple/" + project + "/" + filename)
                 .orElse(ArtifactDescriptor.at("PyPI", "/pypi/simple/" + project + "/" + filename)));
         blobs.linkRelease(fileKey(project, filename), hash, -1L);
@@ -934,19 +938,30 @@ public final class PyPiFormat implements RepositoryFormat, ProxyLeg, BlobLayout,
     /** Keep an upload's attestations when it carried a non-empty list; anything else is not provenance. */
     private static void storeAttestations(Blobs blobs, String project, String filename, String attestations)
             throws IOException {
+        byte[] document = attestationsDocument(attestations);
+        if (document != null) {
+            // The attestations are the file's own: a re-upload of the same file with others is refused rather than
+            // rewriting what the release was published with.
+            blobs.writeRelease(attestationsKey(project, filename), document);
+        }
+    }
+
+    /** The attestations document an upload's {@code attestations} field is kept as, or {@code null} when the field
+     *  carries no non-empty JSON array. */
+    private static byte[] attestationsDocument(String attestations) {
         if (attestations == null) {
-            return;
+            return null;
         }
         JsonNode list;
         try {
             list = MAPPER.readTree(attestations);
         } catch (RuntimeException notJson) {
-            return;
+            return null;
         }
         if (list == null || !list.isArray() || list.isEmpty()) {
-            return;
+            return null;
         }
-        blobs.write(attestationsKey(project, filename), MAPPER.writeValueAsBytes(list));
+        return MAPPER.writeValueAsBytes(list);
     }
 
     /**

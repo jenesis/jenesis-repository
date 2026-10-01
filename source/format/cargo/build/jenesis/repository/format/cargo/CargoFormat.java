@@ -278,8 +278,11 @@ public final class CargoFormat implements RepositoryFormat, ArtifactLayout, Prox
                                 .through((hash, size, _) -> blobs.linkRelease(crateKey(repo, canonical, version), hash,
                                         size))
                                 // The index line that advertises it, after it - never before, so a crash never leaves a
-                                // sparse index naming a crate no download can serve.
-                                .andThrough((_, _, _) -> blobs.link(indexKey(repo, canonical, version), line))
+                                // sparse index naming a crate no download can serve. It is the release's own record
+                                // of its dependencies and features, so a re-publish of the same crate with other
+                                // metadata is refused rather than rewriting what a resolver reads for it.
+                                .andThrough((_, _, _) -> blobs.linkRelease(indexKey(repo, canonical, version), line,
+                                        -1L))
                                 // The served sparse-index file is written here, on the publish: the version's line
                                 // joins the crate's stored index rather than being concatenated on every read.
                                 .andThrough((_, _, _) -> new CargoListings(blobs).refresh(repo, canonical, version));
@@ -337,12 +340,13 @@ public final class CargoFormat implements RepositoryFormat, ArtifactLayout, Prox
         }
         String line = blobs.store(new ByteArrayInputStream(
                 indexLine(metadata, name, version, hash).getBytes(StandardCharsets.UTF_8)));
-        // A hold never replaces a released crate: refused before the mark, so nothing is left held.
+        // A hold never replaces a released crate, nor its index line: refused before the mark, so nothing is left held.
         blobs.refuseReplacement(crateKey(repo, canonical, version), hash);
+        blobs.refuseReplacement(indexKey(repo, canonical, version), line);
         Withheld.mark(store, hash, new ArtifactDescriptor(ECOSYSTEM, canonical, version,
                 downloadPath(repo, canonical, version), null, false, null, -1L));
         blobs.linkRelease(crateKey(repo, canonical, version), hash, -1L);
-        blobs.link(indexKey(repo, canonical, version), line);
+        blobs.linkRelease(indexKey(repo, canonical, version), line, -1L);
         new CargoListings(blobs).refresh(repo, canonical, version);   // held: the stored index keeps it out
     }
 
