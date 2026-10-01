@@ -354,6 +354,23 @@ class OciFormatTest {
     }
 
     @Test
+    void a_generated_catalog_lists_its_names_in_ascending_order() throws IOException {
+        // A stored listing's entries are in ascending id order, and '-' sorts below the '/' a depth-first walk would
+        // put first: library, library-x, library/foo. Forgetting the stored catalogue makes the next read generate it.
+        push("library", "1.0", "{}".getBytes(StandardCharsets.UTF_8));
+        push("library/foo", "1.0", "{}".getBytes(StandardCharsets.UTF_8));
+        push("library-x", "1.0", "{}".getBytes(StandardCharsets.UTF_8));
+        StoredListing.forget(store, "oci/_catalog");
+
+        FakeExchange catalog = new FakeExchange("GET", "/v2/_catalog");
+        format.handle(catalog, store);
+        assertThat(catalog.status()).isEqualTo(200);
+        String names = catalog.responseText();
+        assertThat(names.indexOf("\"library\"")).isLessThan(names.indexOf("\"library-x\""));
+        assertThat(names.indexOf("\"library-x\"")).isLessThan(names.indexOf("\"library/foo\""));
+    }
+
+    @Test
     void a_traversal_laced_image_name_names_no_manifest_tag_list_or_upload() throws IOException {
         // A '..'- or empty-segment-laced image name is refused in-format before it becomes an oci/<name>/... store key
         // - the name-side counterpart of the digest and tag guards, so the one multi-segment request element does not

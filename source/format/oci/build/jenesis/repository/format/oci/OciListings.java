@@ -229,37 +229,69 @@ final class OciListings {
     /**
      * Every image name under the {@code oci/} tree - a node carrying a {@code tags} container - with a listed tag, each
      * stated at the sequence of its tag list. Walked once, on first materialisation or by the rebuild pass, never per
-     * request. Names are emitted depth first: a node's own entry, then its children by name.
+     * request.
+     *
+     * <p>Names are emitted in ascending order, as a stored listing's entries must be: at each level a child's own name
+     * sorts as {@code c} and the names beneath it as {@code c/}, so {@code library-x} comes between {@code library}
+     * and {@code library/foo} - a {@code -} or a {@code .} sorts below the {@code /} a depth-first walk would put
+     * first.
      */
     private void collect(String prefix, String name, StoredListing.Generator.Sink sink) throws IOException {
-        List<String> children = new ArrayList<>(store.list(prefix));
-        children.sort(Comparator.comparing((String child) -> !child.equals("tags")).thenComparing(child -> child));
-        for (String child : children) {
-            // A dot-prefixed child is one of the format's own spaces: no image name may begin with a dot.
-            if (child.startsWith(".")) {
+        // A work-list rather than recursion: the depth is a client's multi-segment image name.
+        Deque<Level> levels = new ArrayDeque<>();
+        levels.push(level(prefix, name));
+        while (!levels.isEmpty()) {
+            Level level = levels.peek();
+            if (!level.keys().hasNext()) {
+                levels.pop();
                 continue;
             }
-            String childName = name.isEmpty() ? child : name + "/" + child;
-            if (child.equals("tags") && !name.isEmpty()) {
-                // The header counts the tags, so the list is materialised if absent and its body never read. Not
-                // tagsSpec(name): that one derives the catalogue being built here.
-                Optional<StoredListing.Served> document = StoredListing.open(store,
-                        StoredListing.Spec.of(tags(name), TAGS, tagged -> generateTags(name, tagged)));
-                if (document.isPresent()) {
-                    try (StoredListing.Served served = document.get()) {
-                        if (served.header().entries() > 0) {
-                            sink.accept(name, quoted(name).getBytes(StandardCharsets.UTF_8), served.header().seq());
-                        } else {
-                            sink.absent(name, served.header().seq());
-                        }
-                    }
+            String key = level.keys().next();
+            boolean beneath = key.endsWith("/");
+            String child = beneath ? key.substring(0, key.length() - 1) : key;
+            String childName = level.name().isEmpty() ? child : level.name() + "/" + child;
+            if (beneath) {
+                levels.push(level(level.prefix() + "/" + child, childName));
+            } else if (!store.isEmpty(level.prefix() + "/" + child + "/tags")) {
+                image(childName, sink);
+            }
+        }
+    }
+
+    /** One level of the catalogue walk: its children, each as its own name {@code c} and as the names beneath it
+     *  {@code c/}, in ascending order. */
+    private record Level(String prefix, String name, Iterator<String> keys) {
+    }
+
+    private Level level(String prefix, String name) {
+        List<String> keys = new ArrayList<>();
+        for (String child : store.list(prefix)) {
+            // A dot-prefixed child is one of the format's own spaces: no image name may begin with a dot. A node's
+            // tags and manifests are the image's own, not names beneath it.
+            if (child.startsWith(".") || child.equals("tags") || child.equals("manifests")) {
+                continue;
+            }
+            keys.add(child);
+            keys.add(child + "/");
+        }
+        Collections.sort(keys);
+        return new Level(prefix, name, keys.iterator());
+    }
+
+    /** One image's catalogue entry, at the sequence of its tag list: the header counts the tags, so the list is
+     *  materialised if absent and its body never read. Not {@code tagsSpec(name)}: that one derives the catalogue
+     *  being built here. */
+    private void image(String name, StoredListing.Generator.Sink sink) throws IOException {
+        Optional<StoredListing.Served> document = StoredListing.open(store,
+                StoredListing.Spec.of(tags(name), TAGS, tagged -> generateTags(name, tagged)));
+        if (document.isPresent()) {
+            try (StoredListing.Served served = document.get()) {
+                if (served.header().entries() > 0) {
+                    sink.accept(name, quoted(name).getBytes(StandardCharsets.UTF_8), served.header().seq());
+                } else {
+                    sink.absent(name, served.header().seq());
                 }
-                continue;
             }
-            if (child.equals("manifests")) {
-                continue;
-            }
-            collect(prefix + "/" + child, childName, sink);
         }
     }
 
