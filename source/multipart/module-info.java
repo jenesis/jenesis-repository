@@ -1,19 +1,12 @@
 /**
- * The one {@code multipart/form-data} reader the product parses request bodies with: a forward-only, streaming,
- * explicitly bounded cursor over an envelope's parts ({@code MultipartBody}).
+ * The one {@code multipart/form-data} reader request bodies are parsed with: a forward-only, streaming, explicitly
+ * bounded cursor over an envelope's parts ({@code MultipartBody}), and the writer beside it.
  *
- * <p>Three call sites need it and none of them may know about the others - the NuGet push and the PyPI (twine) upload
- * hand their file part straight to the content-addressed store, and the console's settings import reads a bounded
- * document. Spring's {@code MultipartResolver} cannot serve any of them: it is switched off in every app on purpose,
- * because it (and {@code FormContentFilter}) would drain an <em>artifact</em> upload body before the format handler
- * read it. So the walk lived as two private copies inside the two format modules and the console simply did not work
- * wherever the resolver was off.
- *
- * <p>Hence a module of its own rather than a home inside one of them: a {@code format/*} module must require only its
- * SPI and never a peer or the console, and the console must not pull a format in. The module is
- * deliberately weightless - {@code java.base} plus the single already-pinned, permissively licensed boundary parser
- * both formats use ({@code org.apache.commons.fileupload2.core}; a library rather than a hand-scan of a binary
- * body) - so requiring it costs a caller nothing it did not already carry.
+ * <p>The NuGet push and the PyPI upload stream their file part into the store, and the console's settings import reads
+ * a bounded document; Spring's {@code MultipartResolver} is off in every app because it would drain an artifact upload.
+ * A module of its own, since a format module may require only its SPI and the console may not pull a format in -
+ * {@code java.base} plus the pinned {@code org.apache.commons.fileupload2.core} boundary parser, so requiring it costs
+ * a caller nothing.
  *
  * @jenesis.release 25
  * @jenesis.bom pin-repository.properties

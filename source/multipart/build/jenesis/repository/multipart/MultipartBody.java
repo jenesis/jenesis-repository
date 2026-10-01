@@ -5,79 +5,49 @@ import org.apache.commons.fileupload2.core.MultipartInput;
 import org.apache.commons.fileupload2.core.ParameterParser;
 
 /**
- * The one streaming reader for a {@code multipart/form-data} request body: a forward-only cursor over the parts of an
- * envelope, where a <em>file</em> part is handed out as a stream bounded to that part and a small <em>field</em> part
- * is read whole against an explicit byte bound.
+ * The one streaming reader for a {@code multipart/form-data} request body: a forward-only cursor over an envelope's
+ * parts, where a <em>file</em> part is handed out as a stream bounded to that part and a small <em>field</em> part is
+ * read whole against an explicit byte bound.
  *
- * <h2>Why this exists in its own module</h2>
- * The product parses multipart bodies in five places that must not know about each other - the NuGet push and its
- * quality inspector, the PyPI (twine) upload and its quality inspector, and the console's settings import - and it used
- * to do so with four private copies of the same walk ({@code NuGetFormat.firstFilePart}, {@code PyPiFormat.Form},
- * {@code NuGetQualityInspector.multipart} and {@code PyPiQualityInspector.fields}) plus, for the console, Spring's
- * {@code MultipartResolver}. The two format copies went first and the two inspector copies after them; those had also
- * each hand-derived the boundary from the body's own leading delimiter - see {@link #declaredBoundary(byte[])}. The
- * resolver is deliberately switched off in every app ({@code spring.servlet.multipart.enabled=false}), because it - and
- * {@code FormContentFilter} - would drain an <em>artifact</em> request body before the format handler ever read it:
- * twine's upload and {@code dotnet nuget push} are both {@code multipart/form-data}. So the console cannot use the
- * resolver, and the two formats already could not. One reader, in a module of its own, is what lets all five share the
- * mechanism (shared mechanism is reused, never copied) without the console reaching a format module or a
- * format reaching the console.
- *
- * <p>The module stays {@code java.base}-light on purpose: {@code java.base} plus the one already-pinned, permissively
- * licensed parser both formats use ({@code org.apache.commons.fileupload2.core} - the boundary scan is not something
- * to hand-roll over binary bodies), and nothing else. It names no format, no server, no
- * Spring type and no store.
+ * <p>The NuGet push, the PyPI (twine) upload, their quality inspectors and the console's settings import all parse
+ * multipart bodies and must not know about each other. Spring's {@code MultipartResolver} is switched off in every app
+ * ({@code spring.servlet.multipart.enabled=false}), because it and {@code FormContentFilter} would drain an artifact
+ * upload before the format handler read it. So one reader lives in a module of its own, {@code java.base} plus the
+ * pinned {@code org.apache.commons.fileupload2.core} boundary parser, naming no format, server, Spring type or store.
  *
  * <h2>Streaming</h2>
- * {@link Part#stream()} returns {@link MultipartInput#newInputStream() the part's own bounded view} of the request
- * body, so an uploaded artifact is copied network-to-store in bounded chunks and is never materialised. Nothing here
- * ever holds a file part; the only heap read is {@link Part#bytes(int)}, and it is bounded by a limit the caller
- * states.
+ * {@link Part#stream()} returns {@link MultipartInput#newInputStream() the part's own bounded view} of the body, so an
+ * artifact copies network-to-store and is never materialised; the only heap read is {@link Part#bytes(int)}, bounded by
+ * the caller.
  *
- * <h2>Bounds, and what happens at one (Contract clause 12)</h2>
+ * <h2>Bounds (Contract clause 12)</h2>
  * <ul>
- *   <li><b>A file part is unbounded, deliberately.</b> A {@code .nupkg} or a wheel has no size cap - a multi-gigabyte
- *       package that no heap could hold still publishes, because it only ever streams. That is what the publish paths
- *       rely on and this reader does not change it.</li>
- *   <li><b>A field part is bounded, explicitly.</b> {@link Part#bytes(int)} / {@link Part#text(int)} read at most
- *       {@code limit} bytes and <b>reaching the bound is an outcome, never a shorter value</b>: an over-limit part
- *       yields {@link Optional#empty()}, which the caller maps to a visible refusal. A truncated value that still
- *       parsed would be the dangerous outcome - a half-read settings bundle imported as if it were whole, or a cut-off
- *       {@code name} field forging a different project coordinate. This mirrors
- *       {@code ArchiveInflation#entry}, the one archive-inflation read and the same doctrine; it is
- *       restated rather than required here because a multipart FIELD is not an archive member - the shared bound is
- *       about how far one archive entry may inflate, and this is about how long a form field may be.</li>
- *   <li><b>A field is bounded:</b> accumulated into an unbounded buffer, a body that declared a gigabyte-long form
- *       field would be buffered whole. {@link #FIELD_LIMIT} closes that hole.</li>
- *   <li><b>Part count is not bounded</b> - a part the caller does not read is drained to the next boundary and
- *       discarded, so an envelope with many parts costs time but not heap, exactly as before.</li>
+ *   <li><b>A file part is unbounded</b>: a multi-gigabyte package publishes, because it only ever streams.</li>
+ *   <li><b>A field part is bounded</b> ({@link #FIELD_LIMIT}, or the caller's limit): {@link Part#bytes(int)} /
+ *       {@link Part#text(int)} read at most {@code limit} bytes, and reaching the bound yields
+ *       {@link Optional#empty()}, never a shorter value - a truncated settings bundle or a cut-off {@code name} field
+ *       must not parse as whole. The doctrine of {@code ArchiveInflation#entry}, applied to form fields.</li>
+ *   <li><b>Part count is not bounded</b>: an unread part is drained to the next boundary and discarded, costing time
+ *       but not heap.</li>
  * </ul>
  *
  * <h2>Using it</h2>
- * The cursor is forward-only and single-pass. {@link #next()} advances to the next part, first releasing the previous
- * one - draining it if the caller never read it, closing the handed-out stream if it did - so a caller never has to
- * remember to finish a part before moving on. A part the caller keeps a stream on may be read across a commit
- * boundary and the walk resumed afterwards (which is what the PyPI upload does: it reads the form fields that arrive
- * <em>after</em> the distribution while the distribution is already stored).
+ * Forward-only and single-pass. {@link #next()} first releases the previous part - draining it if unread, closing the
+ * handed-out stream if read - so a caller never has to finish a part. A caller may keep a part's stream across a commit
+ * and resume the walk afterwards, as the PyPI upload does for the fields that follow the distribution.
  *
- * <p>Not thread-safe and not reusable: it is a per-request cursor over a socket, held by one request thread.
+ * <p>Not thread-safe and not reusable: a per-request cursor over a socket.
  */
 public final class MultipartBody {
 
-    /**
-     * The shared bound for a small {@code multipart/form-data} <em>field</em> - a project name, an action, a digest.
-     * Every field a request body of ours is named by is tiny by the protocol's own nature, so a part claiming more
-     * than this is not a field value and is refused rather than buffered. A caller whose payload is genuinely a
-     * document rather than a field (the console's settings bundle) states its own limit at its call site instead.
-     */
+    /** The shared bound for a small form field - a project name, an action, a digest. Every field a request of ours
+     *  carries is tiny by protocol, so a larger part is refused rather than buffered; a caller uploading a document
+     *  (the settings bundle) states its own limit. */
     public static final int FIELD_LIMIT = 64 * 1024;
 
-    /**
-     * {@code MultipartInput}'s boundary scanner assumes each read fills its buffer; a raw socket (or a
-     * {@code SequenceInputStream} across parts) returns short reads, which makes it mis-scan a boundary when a part is
-     * preceded by another part - splitting the streamed body and dropping bytes. A small buffered wrapper restores
-     * fill-complete reads without holding the body whole. It lives once, here, so a new caller cannot forget it.
-     */
+    /** {@code MultipartInput}'s boundary scanner assumes each read fills its buffer; a socket returns short reads,
+     *  which makes it mis-scan a boundary after a preceding part, splitting the body and dropping bytes. A small
+     *  buffered wrapper restores full reads without holding the body; it lives here so no caller forgets it. */
     private static final int READ_BUFFER = 64 * 1024;
 
     private final MultipartInput input;
@@ -91,12 +61,9 @@ public final class MultipartBody {
         this.input = input;
     }
 
-    /**
-     * The boundary declared by a {@code Content-Type} header, or {@link Optional#empty()} when the header is absent,
-     * is not a {@code multipart/form-data} content type, or declares no boundary. A caller that must tell "not a
-     * multipart at all" from "a multipart that declares no boundary" (the NuGet push, which also accepts a bare
-     * {@code .nupkg} body) checks the media type itself first.
-     */
+    /** The boundary a {@code Content-Type} header declares, or {@link Optional#empty()} when the header is absent, not
+     *  {@code multipart/form-data}, or names no boundary. A caller that must tell "not multipart" from "multipart
+     *  without a boundary" (the NuGet push, which also takes a bare {@code .nupkg}) checks the media type itself. */
     public static Optional<String> boundary(String contentType) {
         if (contentType == null || !contentType.contains("multipart/form-data")) {
             return Optional.empty();
@@ -106,21 +73,13 @@ public final class MultipartBody {
     }
 
     /**
-     * The boundary a body declares in its <em>own</em> leading delimiter line ({@code --<boundary>} followed by a line
-     * ending), or {@link Optional#empty()} when the body does not open with one - which is how a caller that never
-     * sees the {@code Content-Type} header tells a multipart envelope from any other request body.
+     * The boundary a body declares in its own leading delimiter line ({@code --<boundary>} and a line ending), or
+     * {@link Optional#empty()} when it opens with none - how a caller without the headers, such as a
+     * {@code QualityInspector} handed only bytes and a path, tells a multipart envelope from any other body.
      *
-     * <p><b>Why this belongs here.</b> A {@code QualityInspector} is handed the artifact's bytes and its request path
-     * and nothing else - the headers are long gone by the time a screen inspects a body - so the twine upload and the
-     * {@code dotnet nuget push} envelope are both recognised from the delimiter the sender wrote into the body. Both
-     * derived it by hand, with two different answers for the same question: one accepted a bare {@code LF} where the
-     * other demanded {@code CRLF}, and one required a non-empty boundary where the other did not. That is a shared
-     * concern answered twice, and the third copy of a hand-scan whose other two copies were already removed.
-     *
-     * <p>The boundary must be non-empty, as RFC 2046 requires (1-70 characters): a body whose first line is exactly
-     * {@code --} announces no envelope, and is an ordinary body that happens to begin with two dashes rather than a
-     * broken form. Either line ending is accepted, because a sender that writes {@code LF} has still named a boundary
-     * and the reader below splits on the boundary itself, not on the line ending it was announced with.
+     * <p>The boundary must be non-empty (RFC 2046, 1-70 characters): a first line of exactly {@code --} is an ordinary
+     * body beginning with two dashes. Either line ending is accepted, since the reader splits on the boundary, not the
+     * line ending.
      */
     public static Optional<String> declaredBoundary(byte[] body) {
         if (body == null || body.length < 3 || body[0] != '-' || body[1] != '-') {
@@ -140,10 +99,8 @@ public final class MultipartBody {
         return end <= 2 ? Optional.empty() : Optional.of(new String(body, 2, end - 2, StandardCharsets.UTF_8));
     }
 
-    /**
-     * A cursor over {@code body}, split on {@code boundary}. The body is never read past the part the caller is
-     * currently looking at, and this reader never closes it - the request owns it.
-     */
+    /** A cursor over {@code body}, split on {@code boundary}. The body is never read past the current part, and never
+     *  closed here - the request owns it. */
     public static MultipartBody over(InputStream body, String boundary) throws IOException {
         return new MultipartBody(MultipartInput.builder()
                 .setInputStream(new BufferedInputStream(body, READ_BUFFER))
@@ -151,11 +108,9 @@ public final class MultipartBody {
                 .get());
     }
 
-    /**
-     * The next part of the envelope, or {@link Optional#empty()} at its end. The previous part is released first: a
-     * stream the caller took is closed (which drains it to this part's boundary; closing it again is a no-op, so a
-     * caller's own try-with-resources stays correct), and a part the caller never touched is drained and discarded.
-     */
+    /** The next part, or {@link Optional#empty()} at the end. The previous part is released first: a taken stream is
+     *  closed (draining it; a second close is a no-op, so try-with-resources stays correct), and an untouched part is
+     *  drained. */
     public Optional<Part> next() throws IOException {
         if (ended) {
             return Optional.empty();
@@ -183,10 +138,8 @@ public final class MultipartBody {
         return nextFile(null);
     }
 
-    /**
-     * The next part that carries a filename <em>and</em> is the named form control, discarding every other part on the
-     * way; {@link Optional#empty()} when the envelope ends without one. A {@code null} name matches any file part.
-     */
+    /** The next file part that is the named form control, discarding every other part; {@link Optional#empty()} when
+     *  the envelope ends without one. A {@code null} name matches any file part. */
     public Optional<Part> nextFile(String name) throws IOException {
         for (Optional<Part> part = next(); part.isPresent(); part = next()) {
             if (part.get().file() && (name == null || name.equals(part.get().name()))) {
@@ -206,11 +159,9 @@ public final class MultipartBody {
         return Map.of();
     }
 
-    /**
-     * One part of the envelope: its form-control name, its filename when it is a file part, and exactly one way to
-     * consume its body - streamed ({@link #stream()}) or read whole against a bound ({@link #bytes(int)} /
-     * {@link #text(int)}). Valid only until the cursor advances.
-     */
+    /** One part: its form-control name, its filename when it is a file part, and exactly one way to consume its body -
+     *  streamed ({@link #stream()}) or read whole against a bound ({@link #bytes(int)} / {@link #text(int)}). Valid
+     *  until the cursor advances. */
     public final class Part {
 
         private final String name;
@@ -239,11 +190,9 @@ public final class MultipartBody {
             return filename != null;
         }
 
-        /**
-         * This part's body as a stream bounded to it - the streaming leg, and the only way an artifact-sized part may
-         * be consumed. The caller may close it (and should); the cursor closes it anyway when it advances, so the two
-         * cannot disagree about where the envelope continues.
-         */
+        /** This part's body as a stream bounded to it - the only way to consume an artifact-sized part. The caller
+         *  should close it; the cursor closes it anyway on advancing, so the two agree on where the envelope
+         *  continues. */
         public InputStream stream() {
             if (consumed) {
                 throw new IllegalStateException("The body of multipart part '" + name + "' was already consumed");
@@ -254,12 +203,11 @@ public final class MultipartBody {
         }
 
         /**
-         * This part's complete body when it holds at most {@code limit} bytes, or {@link Optional#empty()} when it
-         * holds more. Reading one byte past the limit is what tells the two apart, so an over-limit part is an
-         * explicit non-value rather than a prefix the caller could mistake for the whole thing.
+         * This part's complete body when it holds at most {@code limit} bytes, else {@link Optional#empty()}. Reading
+         * one byte past the limit tells the two apart, so an over-limit part is an explicit non-value, never a prefix.
          *
          * @param limit the most bytes that count as a complete value - {@link #FIELD_LIMIT} for a form field, or the
-         *              caller's own stated bound for a document it uploads
+         *     caller's own bound for a document it uploads
          */
         public Optional<byte[]> bytes(int limit) throws IOException {
             if (limit < 0 || limit == Integer.MAX_VALUE) {

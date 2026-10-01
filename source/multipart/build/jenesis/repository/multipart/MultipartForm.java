@@ -3,13 +3,10 @@ package build.jenesis.repository.multipart;
 import module java.base;
 
 /**
- * A {@code multipart/form-data} envelope to send: the writer beside {@link MultipartBody}, the reader. Text fields and
- * file parts in the order given, the file parts streamed from wherever their bytes are rather than held, and the
- * envelope's whole length known up front whenever every part's is - so a client publishing a large artifact in a form
- * sends a {@code Content-Length} rather than a chunked body a registry may refuse.
- *
- * <p>Opened once per send: {@link #open()} returns a fresh stream each time, which is what lets a request that is
- * retried or redirected send the same envelope again.
+ * A {@code multipart/form-data} envelope to send - the writer beside {@link MultipartBody}: text fields and file parts
+ * in order, file parts streamed from their source, and the whole length known up front whenever every part's is, so a
+ * client sends a {@code Content-Length} rather than a chunked body a registry may refuse. {@link #open()} returns a
+ * fresh stream each time, so a retried or redirected request sends the same envelope again.
  */
 public final class MultipartForm {
 
