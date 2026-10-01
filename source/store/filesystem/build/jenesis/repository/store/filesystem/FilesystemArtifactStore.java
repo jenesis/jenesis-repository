@@ -6,39 +6,32 @@ import build.jenesis.repository.store.ArtifactStore;
 import build.jenesis.repository.store.OwnerOnly;
 
 /**
- * The default {@link ArtifactStore}: blobs under a mounted root directory, keyed by their object path.
- * Version tokens pair the file's last-modified stamp with a digest of its bytes (see {@link #token}), so
- * {@link #writeVersioned} is a compare-and-set on the stored <em>incarnation</em> rather than on the tick it was
- * written in. The compare and the move it amounts to are made exclusive across <em>processes</em> as well as threads
- * - the striped monitors below for threads, and for processes an operating-system lock on one of sixty-four stripe
- * files under {@code .cas} at the root, held from the compare to the move - so several nodes on one shared mount
- * (NFS, EFS, a host path) lose no update to one another. The stripe is chosen from the key relative to the root and
- * not from the absolute path, so two nodes mounting one share at different paths meet on the same lock; the lock
- * files are the store's own and no listing, page or scan reports them. Without the file lock, two JVMs each making
- * three thousand compare-and-set increments to one key over one directory come up short, both having passed the
- * compare with one token and both moved, the second move discarding the first write; and two nodes publishing
- * versions of one Go module into one directory drop a version from the module's list. The lock is
- * advisory, as file locks are: a mount that does not honour them (an NFS export without its lock daemon) is one the
- * deployment must not share.
+ * The default {@link ArtifactStore}: blobs under a mounted root directory, keyed by their object path. A version token
+ * pairs the file's last-modified stamp with a digest of its bytes (see {@link #token}), so {@link #writeVersioned} is a
+ * compare-and-set on the stored incarnation rather than on the tick it was written in.
+ *
+ * <p>The compare and the move are exclusive across processes as well as threads: striped monitors for threads, and for
+ * processes an operating-system lock on one of sixty-four stripe files under {@code .cas} at the root, held from the
+ * compare to the move - so several nodes on one shared mount (NFS, EFS, a host path) lose no update to one another. The
+ * stripe is chosen from the key relative to the root, so nodes mounting the share at different paths meet on the same
+ * lock; no listing, page or scan reports the lock files. The lock is advisory, as file locks are: a mount that does not
+ * honour them (an NFS export without its lock daemon) must not be shared.
  */
 public final class FilesystemArtifactStore implements ArtifactStore {
 
-    /** Striped monitors for {@link #writeVersioned}: the last-modified compare-and-set is a check-then-move, so two
-     *  in-process threads holding the same token would otherwise both pass the check and both land. Static, so
-     *  every scoped view (each a new instance over the same directory tree) serializes against the same stripes;
-     *  two unrelated keys sharing a stripe merely serialize a small-object write, never a blob stream. The monitor
-     *  is also what keeps the process lock on the same stripe's file from being asked for twice by one JVM, which
-     *  the platform refuses rather than queues. */
+    /** Striped monitors for {@link #writeVersioned}, which is a check-then-move. Static, so every scoped view over the
+     *  same tree serializes on the same stripes; two keys sharing a stripe only serialize a small-object write. The
+     *  monitor also keeps one JVM from asking for the same stripe file's process lock twice, which the platform refuses
+     *  rather than queues. */
     private static final Object[] LOCKS = new Object[64];
 
-    /** The directory of stripe lock files under the top-level root, one per monitor stripe: a dotted name, so it is
-     *  no tenant and no key anyone can name, on the shared mount itself, where a lock has to be to reach the other
-     *  node. A file is created on first use and never deleted - a deleted lock file is a new inode to the next opener
-     *  and no lock at all to the one still holding the old. */
+    /** The directory of stripe lock files under the top-level root: a dotted name, so no tenant or key can name it, on
+     *  the shared mount where the other node can see the lock. A file is never deleted - a deleted lock file is a new
+     *  inode to the next opener and no lock at all to the one still holding the old. */
     private static final String CAS_LOCKS = ".cas";
 
-    /** How long a writer waits for another process's stripe lock before the write fails: a holder keeps it for one
-     *  compare and one move of a small object, so a wait this long is a holder that will not return. */
+    /** How long a writer waits for another process's stripe lock: a holder keeps it for one compare and one small move,
+     *  so a wait this long is a holder that will not return. */
     private static final Duration LOCK_PATIENCE = Duration.ofSeconds(30);
 
     static {
@@ -49,8 +42,7 @@ public final class FilesystemArtifactStore implements ArtifactStore {
 
     private final Path root;
 
-    /** The stripe lock files' directory, shared by every scoped view of one store: a scope narrows the root and not
-     *  the mount, and two nodes contending for one key contend under the same top-level root. */
+    /** The stripe lock directory, shared by every scoped view: a scope narrows the root, not the mount. */
     private final Path locks;
 
     /** Whether a write is forced to the disk before it answers ({@link #durableMove}); every scoped view shares it. */
@@ -104,30 +96,23 @@ public final class FilesystemArtifactStore implements ArtifactStore {
         try {
             return regularFile(path);
         } catch (IOException failure) {
-            // The signature carries no checked exception - and widening it would not help, since the object-store
-            // backends fail with their SDK's own unchecked types - so unchecked is how this backend reaches the same
-            // visibility the other three already have.
+            // The signature carries no checked exception, so unchecked is how this backend raises the failure the
+            // object-store backends raise as their SDKs' unchecked types.
             throw new UncheckedIOException("Cannot tell whether an object is stored at " + path, failure);
         }
     }
 
     /**
-     * Whether a regular file is stored at this path, telling <em>"there is nothing here"</em> apart from <em>"I could
-     * not look"</em> - the discrimination {@link Files#isRegularFile} does not make and cannot be asked to make.
+     * Whether a regular file is stored at this path, telling "there is nothing here" apart from "I could not look" -
+     * which {@link Files#isRegularFile} cannot, since it answers {@code false} for a permission refusal, an I/O error
+     * or a stale mount. Store contract clause 6 forbids that fusion: a screen that fails closed on a store failure
+     * needs the failure, most of all where an absent answer destroys or discloses (the un-condemn probe before a
+     * re-publish links a condemned blob, an image manifest's reference lending, the withhold and blob-present probes of
+     * every serve).
      *
-     * <p>{@code Files.isRegularFile} answers {@code false} for a permission refusal, an I/O error and a stale or
-     * disconnected mount exactly as it does for an absent object, because it swallows every {@link IOException}
-     * internally. That fusion is the whole defect class this store's contract clause 6 forbids: the object stores
-     * already re-throw everything that is not a 404, and a screen that fails closed on a store failure cannot do so
-     * if the store answers a confident {@code false} instead. It matters most where an absent answer <em>destroys</em>
-     * or <em>discloses</em>: the un-condemn probe a re-publish makes before linking a blob the collector condemned,
-     * the reference lending an image's manifest does for its layers, and the withhold and blob-present probes every
-     * serve screen runs.
-     *
-     * <p>Both {@code ENOENT} and {@code ENOTDIR} - nothing at the key, and an ancestor of the key is itself a stored
-     * object, which is ordinary in the {@code publish/} namespace where a pointer and a path below it coexist - arrive
-     * as {@link NoSuchFileException} and are genuinely absent. Everything else is a failure to look and is raised,
-     * checked here and mapped by each caller to whatever its own signature can carry.
+     * <p>{@code ENOENT} and {@code ENOTDIR} - nothing at the key, or an ancestor of the key is itself a stored object,
+     * which is ordinary in {@code publish/} - arrive as {@link NoSuchFileException} and are absent. Everything else is
+     * raised.
      */
     private static boolean regularFile(Path path) throws IOException {
         try {
@@ -161,17 +146,14 @@ public final class FilesystemArtifactStore implements ArtifactStore {
         return Channels.newInputStream(channel);
     }
 
-    /** Create an upload temp file in {@code dir}, (re-)creating the directory first and retrying if a concurrent
-     *  {@link #delete} tidied the now-empty container away between the create-directory and the create-file. Without
-     *  the retry a publish into a directory another thread is emptying fails with a spurious {@code NoSuchFileException}
-     *  - the {@link #delete} tidy already guards the reverse direction (its {@code DirectoryNotEmptyException} catch),
-     *  so this closes the other half of the same race. */
+    /** Create an upload temp file in {@code dir}, re-creating the directory and retrying if a concurrent
+     *  {@link #delete} tidied the empty container away in between - the other half of the race {@link #delete}'s
+     *  {@code DirectoryNotEmptyException} catch handles. */
     private static Path createUploadTemp(Path dir) throws IOException {
         for (int attempt = 0; ; attempt++) {
             try {
-                // Owner-only creation (rwx------ dir, rw------- temp), so a blob never inherits the process
-                // umask's world-readable default; the rw------- temp keeps those perms through the atomic move
-                // into its final blob/key path (rename preserves the inode's mode).
+                // Owner-only creation (rwx------ dir, rw------- temp), so a blob never inherits a world-readable umask;
+                // the rename into place keeps the temp's mode.
                 OwnerOnly.createDirectories(dir);
                 return OwnerOnly.createTempFile(dir, ".upload", ".tmp");
             } catch (NoSuchFileException e) {
@@ -197,17 +179,11 @@ public final class FilesystemArtifactStore implements ArtifactStore {
         }
     }
 
-    /**
-     * Move a spooled file into place so that what a caller was told is stored survives a power loss: the file's bytes
-     * are forced to the disk before the rename, so the name never points at content still in the page cache, and the
-     * directory is forced after it, so the rename itself is on the disk. Without the first a crash can leave a
-     * pointer naming an empty or torn blob; without the second the name can vanish although the write answered.
-     *
-     * <p>Each costs a synchronous flush on the write path - a few milliseconds a write on a local SSD, more on a
-     * network disk - which is the price of a {@code 201} meaning stored. A file system that cannot open a directory
-     * for syncing (not one this store is deployed on) skips the directory half rather than failing the write. A store
-     * that is not {@linkplain #durable durable} renames and leaves the flushes to the operating system.
-     */
+    /** Move a spooled file into place so that what a caller was told is stored survives a power loss: the file's bytes
+     *  are forced before the rename, so the name never points at content still in the page cache, and the directory
+     *  after it, so the rename itself is on the disk. That costs a synchronous flush or two per write, the price of a
+     *  {@code 201} meaning stored. A file system that cannot open a directory for syncing skips the directory half. A
+     *  store that is not {@linkplain #durable durable} renames and leaves the flushes to the operating system. */
     private void durableMove(Path temp, Path target) throws IOException {
         force(temp);
         Files.move(temp, target, StandardCopyOption.REPLACE_EXISTING, StandardCopyOption.ATOMIC_MOVE);
@@ -232,13 +208,12 @@ public final class FilesystemArtifactStore implements ArtifactStore {
         try (FileChannel channel = FileChannel.open(directory, StandardOpenOption.READ)) {
             channel.force(true);
         } catch (UnsupportedOperationException | AccessDeniedException _) {
-            // A file system that offers no directory handle to sync; the rename stands as the platform leaves it.
+            // No directory handle to sync on this file system; the rename stands as the platform leaves it.
         }
     }
 
-    /** Whether the blob already stored at {@code blob} holds exactly the bytes spooled at {@code temp}, whose
-     *  SHA-256 is its name: the same length, and then the same hash read back - a blob a crash tore before its
-     *  bytes reached the disk has the right name and the wrong content, and keeping it would serve it for ever. */
+    /** Whether the blob stored at {@code blob} holds exactly the bytes spooled at {@code temp}, whose SHA-256 is its
+     *  name: a blob a crash tore before its bytes reached the disk has the right name and the wrong content. */
     private static boolean intact(Path blob, Path temp, String hash) throws IOException {
         if (Files.size(blob) != Files.size(temp)) {
             return false;
@@ -263,9 +238,8 @@ public final class FilesystemArtifactStore implements ArtifactStore {
             }
             String hash = HexFormat.of().formatHex(digest.digest());
             Path blob = blobs.resolve(hash);
-            // The same bytes uploaded again keep the stored blob only once it proves it holds them; one the bytes
-            // were lost from is replaced by this upload, so re-sending the artifact repairs it. The proof reads the
-            // stored blob once, and only when the upload is a duplicate.
+            // A duplicate upload keeps the stored blob only once it proves it holds these bytes; a torn one is
+            // replaced, so re-sending the artifact repairs it. The proof reads the stored blob only for a duplicate.
             if (Files.isRegularFile(blob) && intact(blob, temp, hash)) {
                 Files.delete(temp);
             } else {
@@ -324,17 +298,16 @@ public final class FilesystemArtifactStore implements ArtifactStore {
     }
 
     /** An empty child set and an unreadable container are different facts, and the difference decides deletions: the
-     *  collector loads a whole reference shard through {@link #list}, and a shard that reads empty because the
-     *  directory could not be opened marks every blob under that leading byte unreferenced. A container that is
-     *  absent or is itself a stored object genuinely has no children; anything else surfaces. */
+     *  collector loads a reference shard through {@link #list}, and a shard that read empty because its directory could
+     *  not be opened would mark every blob under that byte unreferenced. A container that is absent, or is itself a
+     *  stored object, has no children; any other failure is raised. */
     @Override
     public List<String> list(String prefix) {
         Path dir = resolve(prefix);
         try (Stream<Path> entries = Files.list(dir)) {
-            // The stripe locks under .cas are the store's own, never a stored entry: a root listing skips them.
+            // The stripe locks under .cas are the store's own: a root listing skips them.
             return entries.filter(path -> !path.equals(locks)).map(path -> path.getFileName().toString())
-                    // Skip an atomic write's in-flight .upload*.tmp file, a sibling here until it is renamed
-                    // into place, so a concurrent listing never returns it as if it were a stored entry.
+                    // An atomic write's in-flight .upload*.tmp sibling is never a stored entry.
                     .filter(name -> !(name.startsWith(".upload") && name.endsWith(".tmp")))
                     .map(FileNames::decode)
                     .sorted().toList();
@@ -345,34 +318,25 @@ public final class FilesystemArtifactStore implements ArtifactStore {
         }
     }
 
-    /**
-     * One page is one scan of the directory, whatever the page's width. A directory listing has no order and no
-     * seek, so selecting the {@code limit} names past {@code startAfter} reads every sibling and keeps the smallest
-     * {@code limit} of them: O(limit) memory however wide the level, and O(siblings) time per page, where an object
-     * store's listing is O(page). The bound is stated rather than fixed - an index that gave this store a seek would
-     * be a second store to keep consistent with the first - and what it decides for a caller is the page width. A
-     * request-path read that renders one window pays one scan whatever its width, so it keeps the default; a walk
-     * that drains a level - follows the continuation to exhaustion - pays one scan per page, the level's width
-     * squared over the page's, and takes {@code BoundedChildren.DRAIN_PAGE}, ten times the default: a bounded read
-     * of twenty thousand entries from a million-entry level, a thousand a page, rescans the directory some sixty
-     * times; at the drain width it is a handful of scans.
-     */
+    /** One page is one scan of the directory, whatever the page's width: a directory listing has no order and no seek,
+     *  so selecting the {@code limit} names past {@code startAfter} reads every sibling and keeps the smallest -
+     *  O(limit) memory, O(siblings) time per page, where an object store's listing is O(page). A request-path read
+     *  rendering one window pays one scan and keeps the default width; a walk that drains a level pays one scan per
+     *  page and takes {@code BoundedChildren.DRAIN_PAGE}, ten times wider, which turns some sixty rescans of a
+     *  million-entry directory into a handful. */
     @Override
     public void pageListed(String prefix, String startAfter, int limit, Consumer<Listed> consumer) {
         Path dir = resolve(prefix);
         if (limit <= 0) {
             return;
         }
-        // A directory listing is unordered and a filesystem has no start-at seek, so select the page in one
-        // bounded scan: keep the limit smallest names past startAfter in a capped TreeMap - O(limit) memory
-        // however many millions of entries the directory holds, where sorting list() would buffer them all.
-        // The attributes come from the same stat the selection already needs to tell a directory from a file, so
-        // carrying them costs nothing beyond what a names-only page paid.
+        // Keep the limit smallest names past startAfter in a capped TreeMap: O(limit) memory however large the
+        // directory. The attributes come from the stat that already tells a directory from a file.
         TreeMap<String, Listed> smallest = new TreeMap<>();
         try (DirectoryStream<Path> entries = Files.newDirectoryStream(dir)) {
             for (Path path : entries) {
                 String name = FileNames.decode(path.getFileName().toString());
-                // The same in-flight .upload*.tmp filter as list(), so a concurrent atomic write never pages out.
+                // The same in-flight .upload*.tmp filter as list().
                 if (name.startsWith(".upload") && name.endsWith(".tmp") || path.equals(locks) || name.compareTo(startAfter) <= 0) {
                     continue;
                 }
@@ -386,19 +350,17 @@ public final class FilesystemArtifactStore implements ArtifactStore {
         } catch (NoSuchFileException | NotDirectoryException _) {
             return; // mirror list(): a vanished container, or one that is itself a stored object, pages as empty
         } catch (IOException failure) {
-            // NOT mirrored from list(): a short page is how the shared walk learns a container is drained,
-            // so an unreadable directory paging as empty ends a traversal early and reports it as exhausted.
+            // Unlike list(): a short page is how the shared walk learns a container is drained, so an unreadable
+            // directory must not page as empty.
             throw new UncheckedIOException("Cannot page the children of " + dir, failure);
         }
         smallest.values().forEach(consumer);
     }
 
-    /** A child as the listing saw it: a regular file carries its size and age, a directory carries neither because
-     *  a container has none of its own. A stat that races a delete degrades to the names-only shape rather than
-     *  failing the page - the walk re-judges every key on read anyway. */
+    /** A child as the listing saw it: a regular file carries its size and age, a directory neither. A stat that races a
+     *  delete degrades to the names-only shape rather than failing the page; the walk re-judges every key on read. */
     private static Listed listed(String prefix, String name, Path path) {
-        // Through the same container normalisation the object stores compose their keys with, so a caller's
-        // trailing slash yields a/b/name here as it does there rather than the doubled a/b//name a raw join makes.
+        // The object stores' container normalisation, so a trailing slash yields a/b/name, not a/b//name.
         String container = ArtifactStore.container(prefix);
         String key = container.isEmpty() ? name : container + "/" + name;
         try {
@@ -411,8 +373,8 @@ public final class FilesystemArtifactStore implements ArtifactStore {
         }
     }
 
-    /** How long a write temp is left alone before a scan reclaims it: comfortably longer than any single atomic
-     *  write, so an in-flight one is never touched, and short enough that a crashed one does not outlive the day. */
+    /** How long a write temp is left alone before a scan reclaims it: far longer than any single atomic write, short
+     *  enough that a crashed one does not outlive the day. */
     private static final Duration TEMP_GRACE = Duration.ofHours(1);
 
     @Override
@@ -422,10 +384,9 @@ public final class FilesystemArtifactStore implements ArtifactStore {
         }
         Path base = resolve(prefix);
         Path rootPath = root.normalize();
-        // The same capped-TreeMap selection page() uses, for the same reason: a file tree is walked in whatever order
-        // the directories hand it over, and the page owed is the lexicographically smallest keys past startAfter.
-        // Holding limit + 1 of them costs O(limit) however many millions the prefix contains. The extra one is what
-        // distinguishes "the page exactly drained the prefix" from "there is more" without a second pass.
+        // The capped-TreeMap selection page() uses: a file tree is walked in whatever order directories hand it over,
+        // and the page owed is the smallest keys past startAfter. Holding limit + 1 tells "drained exactly" from
+        // "more".
         TreeMap<String, Listed> smallest = new TreeMap<>();
         String after = startAfter == null ? "" : startAfter;
         if (!Files.isDirectory(base)) {
@@ -434,29 +395,24 @@ public final class FilesystemArtifactStore implements ArtifactStore {
         Files.walkFileTree(base, new SimpleFileVisitor<>() {
             @Override
             public FileVisitResult preVisitDirectory(Path dir, BasicFileAttributes attributes) {
-                // The stripe locks under .cas are the store's own, never stored objects: a scan does not enter them.
+                // The stripe locks under .cas are the store's own: a scan does not enter them.
                 return dir.equals(locks) ? FileVisitResult.SKIP_SUBTREE : FileVisitResult.CONTINUE;
             }
 
             @Override
             public FileVisitResult visitFile(Path path, BasicFileAttributes attributes) {
                 String name = path.getFileName().toString();
-                // The same in-flight .upload*.tmp filter as list() and page(), so a concurrent atomic write is never
-                // scanned out as a stored object - and, past a grace window, the one place they are RECLAIMED.
-                //
-                // A write creates a temp and atomically moves it into place; a crash between the two leaves the temp
-                // behind, filtered out of every listing and therefore invisible to everything - it is not an object,
-                // so no sweep counts it, and the volume ratchets toward a permanent full. Reaping it here is a side
-                // effect in a read, which needs justifying: this is the only traversal that visits every file under a
-                // prefix, the class that creates the temps is the one that knows their shape, and the grace window is
-                // what keeps a concurrent in-flight write safe. A failure to delete is ignored - another node may
-                // have won the race, and a scan must not fail because a reclaim did.
+                // The in-flight .upload*.tmp filter, and past a grace window the one place such temps are reclaimed. A
+                // crash between a write's temp and its rename leaves a temp that every listing hides, so no sweep would
+                // ever count or remove it and the volume would fill. This is the only traversal that visits every file
+                // under a prefix, and the grace window keeps an in-flight write safe. A failed delete is ignored:
+                // another node may have won the race.
                 if (name.startsWith(".upload") && name.endsWith(".tmp")) {
                     if (attributes.lastModifiedTime().toInstant().isBefore(Instant.now().minus(TEMP_GRACE))) {
                         try {
                             Files.deleteIfExists(path);
                         } catch (IOException _) {
-                            // Raced, or not ours to delete. The next scan tries again.
+                            // Raced, or not ours to delete; the next scan tries again.
                         }
                     }
                     return FileVisitResult.CONTINUE;
@@ -477,20 +433,13 @@ public final class FilesystemArtifactStore implements ArtifactStore {
 
             @Override
             public FileVisitResult visitFileFailed(Path path, IOException failure) throws IOException {
-                // A file that VANISHED is not a file that could not be examined. The walk reads a directory and
-                // then stats each name it found, and a concurrent write closes that gap constantly: the temp this
-                // very visitor filters out is renamed into place between the two, and the stat then fails. An
-                // enumeration that omits a file which no longer exists is not short - it is correct, because a
-                // deleted file is exactly what a listing is entitled not to report.
+                // A file that vanished is not a file that could not be examined: a concurrent write renames its temp
+                // into place between the directory read and the stat, and a listing is entitled not to report a deleted
+                // file. Aborting here would skip the cache reaper's sweep whenever a write was in flight - under
+                // sustained load, every interval.
                 //
-                // Aborting on it instead - a NoSuchFileException for a .upload*.tmp under sustained publishing -
-                // would skip the cache reaper's sweep whenever a write was in flight, which under continuous load is
-                // every interval. The cap would then stop being enforced by the mechanism whose whole job is to
-                // enforce it, silently, with nothing but a warning to say so.
-                //
-                // Every other failure still throws: a short scan is how a sweep
-                // learns a prefix is drained, so a file that is THERE and cannot be read must fail the call rather
-                // than silently shorten it into a claim of completeness.
+                // Every other failure throws: a short scan is how a sweep learns a prefix is drained, so a file that is
+                // there and cannot be read must fail the call rather than shorten it into a claim of completeness.
                 if (failure instanceof NoSuchFileException) {
                     return FileVisitResult.CONTINUE;
                 }
@@ -516,11 +465,9 @@ public final class FilesystemArtifactStore implements ArtifactStore {
 
     @Override
     public Optional<Capacity> capacity() throws IOException {
-        // A real volume, so a real answer - and a failure to measure one throws rather than reporting empty, which
-        // would read as "this backend has no volume" and silently disable a free-space policy.
-        // A scoped store's root need not exist yet - a tenant subspace is a directory the first write creates - and
-        // the volume is the same either way, so measure the nearest ancestor that does. Only a root with no existing
-        // ancestor at all is a real failure, and that throws.
+        // A failure to measure throws rather than reporting empty, which would read as "no volume" and disable a
+        // free-space policy. A scoped root need not exist yet - the first write creates it - so measure the nearest
+        // existing ancestor; only a root with none at all fails.
         Path measured = root;
         while (!Files.exists(measured) && measured.getParent() != null) {
             measured = measured.getParent();
@@ -536,7 +483,7 @@ public final class FilesystemArtifactStore implements ArtifactStore {
             try {
                 Files.setLastModifiedTime(path, FileTime.from(Instant.now()));
             } catch (NoSuchFileException _) {
-                // Raced with a delete: there is nothing left to mark, and recency-on-read is advisory anyway.
+                // Raced with a delete: nothing left to mark, and recency-on-read is advisory.
             }
         }
     }
@@ -544,21 +491,17 @@ public final class FilesystemArtifactStore implements ArtifactStore {
     @Override
     public Optional<Versioned> readVersioned(String key) throws IOException {
         Path path = resolve(key);
-        // Through the same discrimination exists() makes, and for the same reason: an unreadable pointer answering
-        // Optional.empty() is how "the marker is not there, serve it" and "no other alias holds these bytes, lift the
-        // hold" get decided on a store that could not be read. Absence is a value; a failure to look is not.
+        // The same discrimination as exists(): an unreadable pointer answering empty would decide "the marker is not
+        // there, serve it" or "no other alias holds these bytes, lift the hold" on a store that could not be read.
         if (!regularFile(path)) {
             return Optional.empty();
         }
-        // The regular-file probe and the token/content reads are not one atomic operation: a concurrent delete can
-        // vanish the file in the window between the probe and the reads (or between reading the token and the bytes),
-        // which throws NoSuchFileException (or, on some providers, FileNotFoundException) where the contract - and the
-        // object-store backends' 404 -> empty behaviour - is Optional.empty(). Map that race to absent, so a reader
-        // that lost to a delete simply sees no object, never an escaping exception.
+        // The probe and the reads are not atomic, so a concurrent delete between them throws NoSuchFileException (or
+        // FileNotFoundException on some providers); that race maps to absent, as an object store's 404 does.
         try {
-            // Stamp before content: a write landing in between then pairs the OLD stamp with NEW content, so a
-            // compare-and-set from this read loses and retries - the safe direction. The reverse order would pair
-            // a fresh stamp with stale content and let a stale update pass as current.
+            // Stamp before content: a write landing in between pairs the OLD stamp with NEW content, so a
+            // compare-and-set from this read loses and retries - the safe direction. The reverse would let a stale
+            // update pass as current.
             long modified = Files.getLastModifiedTime(path).toMillis();
             byte[] content = Files.readAllBytes(path);
             return Optional.of(new Versioned(content, token(modified, content)));
@@ -567,15 +510,8 @@ public final class FilesystemArtifactStore implements ArtifactStore {
         }
     }
 
-    /**
-     * The token without the body, which on this backend means the file read through the checksums rather than into
-     * an array.
-     *
-     * <p>The inherited body is {@code readVersioned(key).map(Versioned::token)}, and the SPI names all four shipped
-     * backends as overriding it. This one did not, so every caller here paid the whole object to learn its version -
-     * including {@code StoredListing}, which asks for the token of a document it is about to update <em>in order not
-     * to hold it</em>.
-     */
+    /** The token without the body: the file is read through the checksums rather than into an array, so a caller about
+     *  to update a large document (a {@code StoredListing}) never holds it. */
     @Override
     public Optional<Object> version(String key) throws IOException {
         Path path = resolve(key);
@@ -583,8 +519,7 @@ public final class FilesystemArtifactStore implements ArtifactStore {
             return Optional.empty();
         }
         try {
-            // Stamp before content, for the reason readVersioned states: a write landing in between pairs the OLD
-            // stamp with NEW bytes, so a compare-and-set from this token loses and retries - the safe direction.
+            // Stamp before content, as readVersioned explains.
             long modified = Files.getLastModifiedTime(path).toMillis();
             return Optional.of(token(modified, path));
         } catch (NoSuchFileException | FileNotFoundException e) {
@@ -593,30 +528,21 @@ public final class FilesystemArtifactStore implements ArtifactStore {
     }
 
     /**
-     * The opaque version token: the last-modified stamp <em>and</em> a digest of the stored bytes, so it identifies
-     * the object incarnation rather than the tick it was written in.
+     * The opaque version token: the last-modified stamp <em>and</em> a digest of the stored bytes, so it identifies the
+     * object's incarnation rather than the tick it was written in.
      *
-     * <p>The stamp alone was not enough, and the gap is. A stamp is a property of a <em>moment</em>, not of an
-     * object: delete a key and re-create it inside the same millisecond and the new incarnation carries the same
-     * stamp, so a token read from the object that is now gone still passes the compare-and-set and a stale write lands
-     * over content it never saw. The window is not the filesystem's - ext4 timestamps are nanosecond-resolution - it is
-     * this token's, because {@code toMillis()} truncates to it; and it is reachable through the plain SPI, where
-     * {@link #delete} plus a create-if-absent {@link #writeVersioned} on the same key is how a revoked credential's
-     * metadata, a swept garbage-collection marker and a feed snapshot pointer are all re-created. Two writes inside one
-     * tick are handled by nudging the stamp forward (below); the deleted-and-re-created incarnation is the case that
-     * nudge cannot see, because there is no earlier stamp left to compare against.
+     * <p>A stamp alone identifies a moment: a key deleted and re-created inside one millisecond ({@code toMillis()}
+     * truncates) carries the same stamp, so a token read from the gone object would pass the compare-and-set and a
+     * stale write would land over content it never saw. {@link #delete} followed by a create-if-absent
+     * {@link #writeVersioned} is how a revoked credential's metadata, a collection marker and a feed snapshot pointer
+     * are re-created. Two writes in one tick are handled by nudging the stamp forward; a deleted and re-created
+     * incarnation has no earlier stamp to compare against, and the digest covers it - as an S3 or Azure ETag and a GCS
+     * generation do for those backends. A key re-created with byte-identical content at the same stamp is the state the
+     * stale token's holder read, so the compare-and-set concedes nothing.
      *
-     * <p>Folding the content in closes it without inventing a rule: an S3 or Azure ETag <em>is</em> a content
-     * identity, and a GCS generation is a per-incarnation counter, so this is the filesystem reaching the identity its
-     * three peer backends already have rather than a fourth semantics. What remains identical across an
-     * incarnation boundary is a key deleted and re-created with byte-identical content at the same stamp - where the
-     * stored state a stale token still passes against is the state its holder read, so the compare-and-set concedes
-     * nothing.
-     *
-     * <p>The content digest is the length and two CRCs (CRC-32 and CRC-32C, 64 bits between them), not a
-     * cryptographic hash: the token tells incarnations apart, it does not certify bytes, and every versioned read
-     * and write computes it over the whole object - a multi-megabyte listing included - so it is computed at memory
-     * speed. Both CRCs are intrinsics on every platform the JDK targets.
+     * <p>The digest is the length and two CRCs (CRC-32 and CRC-32C, 64 bits between them), not a cryptographic hash: it
+     * tells incarnations apart rather than certifying bytes, and it is computed over the whole object on every
+     * versioned read and write, so it runs at memory speed on intrinsics.
      */
     private static Object token(long modified, byte[] content) {
         CRC32 crc = new CRC32();
@@ -626,16 +552,9 @@ public final class FilesystemArtifactStore implements ArtifactStore {
         return token(modified, content.length, crc.getValue(), crcc.getValue());
     }
 
-    /**
-     * The same token, computed over the file rather than over an array of its bytes.
-     *
-     * <p>Every component of the token is streamable - a stamp, a length and two rolling checksums - so the array the
-     * other overload takes was never the token's requirement, only its caller's. It is this one that the paths which
-     * do not want the object use: {@link #version}, and the compare half of both {@link #writeVersioned} overloads,
-     * where the <em>stored</em> document is what gets hashed and can be a listing sized by the whole repository. Read
-     * through an array those paths cost the stored object in heap however small the thing being written is, which is
-     * what made a one-file publish into a large folder fail on a server that could serve that folder perfectly well.
-     */
+    /** The same token, streamed over the file rather than an array. Used where the object itself is not wanted -
+     *  {@link #version} and the compare half of both {@link #writeVersioned} overloads - since the stored document can
+     *  be a listing sized by the whole repository, and the heap a small write needs must not grow with it. */
     private static Object token(long modified, Path path) throws IOException {
         CRC32 crc = new CRC32();
         CRC32C crcc = new CRC32C();
@@ -651,7 +570,7 @@ public final class FilesystemArtifactStore implements ArtifactStore {
         return token(modified, length, crc.getValue(), crcc.getValue());
     }
 
-    /** The one rendering both overloads agree on - the token is its text, so there is exactly one place it is made. */
+    /** The one rendering both overloads share. */
     private static Object token(long modified, long length, long crc, long crcc) {
         return modified + ":" + length + ":" + Long.toHexString(crc) + ":" + Long.toHexString(crcc);
     }
@@ -661,11 +580,8 @@ public final class FilesystemArtifactStore implements ArtifactStore {
         return compareAndSet(resolve(ArtifactStore.key(key)), expected, temp -> Files.write(temp, content));
     }
 
-    /**
-     * The streaming compare-and-set: the same spool, compare and rename, with the temporary file filled from the
-     * stream rather than from an array. The length is unused here, and is a parameter because the object stores
-     * cannot begin a conditional upload without one.
-     */
+    /** The streaming compare-and-set: the temporary file is filled from the stream. The length is unused here; it is a
+     *  parameter because the object stores cannot begin a conditional upload without one. */
     @Override
     public boolean writeVersioned(String key, InputStream content, long length, Object expected)
             throws IOException {
@@ -673,18 +589,13 @@ public final class FilesystemArtifactStore implements ArtifactStore {
                 temp -> Files.copy(content, temp, StandardCopyOption.REPLACE_EXISTING));
     }
 
-    /**
-     * A compare-and-set on {@code path}: the new content is spooled beside it and forced to the disk first, and the
-     * stored document is hashed into its token, both with no lock held; the key's stripe is then locked for the
-     * comparison and the rename alone; and the directory is forced once the lock is released. The flushes and the
-     * hash - the slow parts, the hash proportional to the stored document however small the write - so cost no rival
-     * on the stripe its turn, a write whose token is already stale loses without taking the lock, and a write that
-     * loses the comparison drops what it spooled.
-     */
+    /** A compare-and-set on {@code path}: the new content is spooled beside it and forced to the disk, and the stored
+     *  document is hashed into its token, with no lock held; the key's stripe is then locked for the comparison and
+     *  rename alone, and the directory is forced after release. The slow parts - flushes and a hash proportional to the
+     *  stored document - therefore cost no rival its turn, a write whose token is already stale loses without the lock,
+     *  and a loser drops what it spooled. */
     private boolean compareAndSet(Path path, Object expected, Spool spool) throws IOException {
-        // The same .upload*.tmp shape a keyed write spools through, so list()'s in-flight filter hides this temp file
-        // too and an aborted write never leaves it behind; createUploadTemp re-creates the parent if a concurrent
-        // delete tidied it away.
+        // The .upload*.tmp shape, so listings hide it; createUploadTemp re-creates a parent a concurrent delete tidied.
         Path temp = createUploadTemp(path.getParent());
         boolean moved = false;
         try {
@@ -711,10 +622,8 @@ public final class FilesystemArtifactStore implements ArtifactStore {
         return moved;
     }
 
-    /**
-     * What identifies a stored file without reading it: the file system's key for it (device and inode where there
-     * is one), its full-precision modification time and its length. {@code null} for a key with no file.
-     */
+    /** What identifies a stored file without reading it: the file system's key for it (device and inode where there is
+     *  one), its full-precision modification time and its length. {@code null} for a key with no file. */
     private record Stamp(Object file, FileTime modified, long size) {
 
         static Stamp of(Path path) throws IOException {
@@ -730,23 +639,20 @@ public final class FilesystemArtifactStore implements ArtifactStore {
     }
 
     /**
-     * The stored document's token, hashed before the stripe lock is taken, with the stamps read on either side of
-     * the hash.
+     * The stored document's token, hashed before the stripe lock is taken, with stamps read on either side of the hash.
      *
-     * <p>Under the lock it {@linkplain #stands stands} for the current file only when that file is provably the
-     * incarnation that was hashed: the stamps either side of the hash agree with each other and with the one read
-     * under the lock, the file system names the file, and the file was last modified at least {@link #SETTLED}
-     * before the spool file was written. The last condition is what makes the stamp sufficient. A file is replaced
-     * by a rename, which frees the old file's inode for reuse, so a delete and a re-create can produce a new file
-     * with the old inode, length and - inside one tick of the file system's clock - modification time. Any file
-     * that replaced the hashed one did so after the spool file was written, so its modification time is at least the
-     * spool file's, both read off the same file system's clock; a hashed file older than that by more than a tick
-     * cannot share its stamp. A file modified within the margin is hashed again under the lock.
+     * <p>Under the lock it {@linkplain #stands stands} for the current file only when that file is provably the hashed
+     * incarnation: both stamps agree with each other and with the one read under the lock, the file system names the
+     * file, and the file was last modified at least {@link #SETTLED} before the spool file was written. That last
+     * condition makes the stamp sufficient: a rename frees the old inode for reuse, so a re-created file could share
+     * inode, length and - within one tick - modification time; but any file that replaced the hashed one did so after
+     * the spool file was written, so its modification time is at least the spool file's on the same clock. A file
+     * modified within the margin is hashed again under the lock.
      */
     private record Hashed(Stamp stamp, Object token, boolean consistent, FileTime spooled) {
 
-        /** How far the hashed file's modification time must precede the spool file's: far beyond the coarsest
-         *  file-system timestamp tick and a small step of the clock. */
+        /** How far the hashed file's modification time must precede the spool file's: well beyond the coarsest
+         *  file-system tick and a small clock step. */
         static final Duration SETTLED = Duration.ofSeconds(1);
 
         /** Nothing hashed: a create, which compares against absence and has no stored document to hash. */
@@ -773,9 +679,8 @@ public final class FilesystemArtifactStore implements ArtifactStore {
         }
     }
 
-    /** The stripe a key's compare-and-set serializes on, chosen from the key relative to the top-level root and never
-     *  from the absolute path: two processes mounting one share at different paths resolve one key to two paths,
-     *  and a stripe taken from the path would let them hold two different locks for one write. */
+    /** The stripe a key serializes on, chosen from the key relative to the top-level root, never the absolute path: two
+     *  processes mounting one share at different paths must take the same lock for one write. */
     private int stripe(Path path) {
         String key = locks.getParent().normalize().relativize(path).toString().replace(File.separatorChar, '/');
         return Math.floorMod(key.hashCode(), LOCKS.length);
@@ -787,15 +692,11 @@ public final class FilesystemArtifactStore implements ArtifactStore {
         void fill(Path temp) throws IOException;
     }
 
-    /**
-     * The compare-and-set proper, under both locks: compare the stored incarnation's token with {@code expected} and,
-     * when it matches, move the spooled content into place atomically. The token is the one hashed before the lock
-     * when the file is provably the incarnation that was hashed ({@link Hashed#stands}), and is hashed again here
-     * otherwise. The token must advance on every successful update, including a re-write of byte-identical content
-     * (which the digest half of the token cannot distinguish): two writes inside one clock tick would otherwise leave
-     * it unchanged, and a third writer holding the pre-update token would still pass the compare - a stale write
-     * disguised as a fresh one.
-     */
+    /** The compare-and-set proper, under both locks: compare the stored incarnation's token with {@code expected} and,
+     *  on a match, move the spooled content into place atomically. The pre-lock token is used when the file is provably
+     *  the hashed incarnation ({@link Hashed#stands}), and re-hashed otherwise. The token must advance on every
+     *  successful update, even of byte-identical content the digest cannot tell apart: otherwise two writes in one tick
+     *  leave it unchanged and a third writer holding the old token would still pass. */
     private static boolean compareAndMove(Path path, Object expected, Path temp, Hashed before) throws IOException {
         Stamp now = Stamp.of(path);
         boolean present = now != null;
@@ -813,15 +714,11 @@ public final class FilesystemArtifactStore implements ArtifactStore {
         return true;
     }
 
-    /**
-     * The process lock on a stripe file, taken by polling rather than by blocking. A blocking {@code lock()} is the
-     * kernel's {@code F_SETLKW}, and POSIX record locks belong to the <em>process</em>: when two threads of one node
-     * wait on two stripes the other node's threads hold, the kernel reads a cycle between the two processes where
-     * there is none between the four threads and refuses one waiter with {@code EDEADLK} - "Resource deadlock
-     * avoided", a publish answering 500 under two nodes on one directory. The
-     * non-blocking {@code tryLock()} carries no such detection, so the waiter polls it at a millisecond, bounded so
-     * a holder that never returns fails the write loudly rather than parking it for ever.
-     */
+    /** The process lock on a stripe file, taken by polling rather than blocking. A blocking {@code lock()} is the
+     *  kernel's {@code F_SETLKW}, and POSIX record locks belong to the process: two threads of one node waiting on two
+     *  stripes the other node's threads hold look like a cycle between the processes, and the kernel refuses a waiter
+     *  with {@code EDEADLK} ("Resource deadlock avoided"). {@code tryLock()} has no such detection, so the waiter polls
+     *  at a millisecond, bounded so a holder that never returns fails the write loudly. */
     private static FileLock acquire(FileChannel channel) throws IOException {
         Instant deadline = Instant.now().plus(LOCK_PATIENCE);
         while (true) {
@@ -850,22 +747,18 @@ public final class FilesystemArtifactStore implements ArtifactStore {
     }
 
     /**
-     * How a key becomes a file name and back: every byte of a key outside ASCII is written as {@code %XX} of its
-     * UTF-8 encoding, upper-case, and a name is read back by decoding exactly those. An ASCII key is its own file
-     * name, so nothing already on disk moves.
+     * How a key becomes a file name and back: every byte of a key outside ASCII is written as upper-case {@code %XX} of
+     * its UTF-8 encoding, and a name is read back by decoding exactly those. An ASCII key is its own file name.
      *
-     * <p>It exists because a path is resolved through the JVM's file-name encoding ({@code sun.jnu.encoding}),
-     * which follows the process locale: under a POSIX or C locale it is ASCII, and {@code Path.resolve} of a key
-     * carrying a non-ASCII character throws {@code InvalidPathException} - on a node whose
-     * locale was unset, where a Maven version folder named {@code na\u00efve} could not be published, listed or
-     * served while the same store on a UTF-8 node held it. A repository's keys are the client's coordinates, and
-     * whether one can be stored must not depend on how the node's shell was started; nor may two nodes over one
-     * share name one key two ways. So the mapping is decided here, once, from the key's bytes alone.
+     * <p>A path is resolved through the JVM's file-name encoding ({@code sun.jnu.encoding}), which follows the process
+     * locale: under a POSIX or C locale it is ASCII, and resolving a key holding {@code naïve} throws
+     * {@code InvalidPathException}. Whether a client's coordinate can be stored must not depend on how the node's shell
+     * was started, nor may two nodes over one share name one key two ways, so the mapping is decided from the key's
+     * bytes alone.
      *
-     * <p>Only {@code %} followed by a hex byte at or above {@code 0x80} decodes; {@code %2F} and {@code %25}, which
-     * a scope segment already writes for a slash and a percent sign, are ASCII and pass through unchanged in both
-     * directions. A raw non-ASCII name an earlier UTF-8 node wrote decodes to itself and is not the name this
-     * mapping resolves the key to; such a key is addressed under its new name from now on.
+     * <p>Only {@code %} followed by a hex byte at or above {@code 0x80} decodes; {@code %2F} and {@code %25}, which a
+     * scope segment writes for a slash and a percent sign, are ASCII and pass through unchanged. A raw non-ASCII file
+     * name decodes to itself and is not the name this mapping resolves its key to.
      */
     static final class FileNames {
 
