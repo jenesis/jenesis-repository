@@ -6,25 +6,14 @@ import tools.jackson.databind.json.JsonMapper;
 import tools.jackson.databind.node.ObjectNode;
 
 /**
- * Where a pass keeps what it derived about one coordinate, and how it decides whether it may skip deriving it
- * again.
+ * Where a pass keeps what it derived about one coordinate, and whether it may skip deriving it again. <b>Where</b> is
+ * the pass's own section of the coordinate's metadata document; an absent section means not yet judged. <b>Whether</b>
+ * is a fingerprint of the inputs: the same inputs reach the same answer, so the pass skips and says so. The decision
+ * lives here, once, because two passes reading the format differently would disagree on whether a cached answer is
+ * usable, which shows up as a pass that never stops re-deriving.
  *
- * <p>Both questions are mechanical and neither belongs to a domain module. <b>Where</b> is the pass's own section of
- * the coordinate's consolidated metadata document; an absent section means this coordinate has not been judged
- * here. <b>Whether</b> is a fingerprint of the inputs:
- * the same inputs mean re-deriving would reach the same answer, so the pass skips and says it did.
- *
- * <p>Five passes had written both out by hand - the four AI passes plus the bytecode reachability sweep - and the
- * {@code readCache} of each was the same code but for the type of its coordinate. Extracting a helper would have
- * given divergence a shared subroutine; moving the <em>decision</em> here is what stops it. Read the format strictly in
- * one pass and leniently in another and the two disagree about whether a cached answer is usable, which shows up as a
- * pass that will not stop re-deriving.
- *
- * <p><b>Why here and not on the maintenance context.</b> {@code RepositoryContext} is the surface that already
- * hands a pass its store, its clock and its meters, and this belongs beside them. But the metadata SPI re-exports
- * the compliance SPI, so putting it there would drag compliance into all thirty modules that implement a
- * maintenance task - a retention sweep does not need the gate's contracts to reap a directory. It lives instead in
- * the module that owns the concept, which every pass that keeps an outcome already requires.
+ * <p>It lives in the module that owns the concept rather than on {@code RepositoryContext}, because the metadata SPI
+ * re-exports the compliance SPI and every maintenance task would then depend on the gate's contracts.
  */
 public final class OutcomeCache {
 
@@ -71,11 +60,8 @@ public final class OutcomeCache {
         }
     }
 
-    /**
-     * The stored document for {@code key} when it parses and carries this pass's format stamp, else a fresh
-     * stamped one. A document that is absent, unparseable or written in an older shape is not an error - the pass
-     * simply derives it again - so this answers an empty document rather than failing.
-     */
+    /** The stored document for {@code key} when it parses and carries this pass's format stamp, else a fresh stamped
+     *  one - an absent, unparseable or older document is simply derived again. */
     public ObjectNode read(Key key) throws IOException {
         if (meta.section(key.ecosystem(), key.coordinate(), key.version(), tag)
                 .flatMap(Section::payload).orElse(null) instanceof ObjectNode node
@@ -85,24 +71,16 @@ public final class OutcomeCache {
         return fresh();
     }
 
-    /**
-     * Store what the pass derived. A write that cannot land is logged by the caller and not raised: losing a cache
-     * entry costs one re-derivation on the next pass, which is strictly better than failing the sweep that
-     * produced it.
-     */
+    /** Store what the pass derived. A write that cannot land is logged by the caller, not raised: a lost entry costs
+     *  one re-derivation, which is better than failing the sweep. */
     public void write(Key key, ObjectNode document, Instant when) throws IOException {
         meta.mutate(key.ecosystem(), key.coordinate(), key.version(), tag,
                 _ -> Section.derived(tag, schema, when, Signal.NEUTRAL, document));
     }
 
-    /**
-     * Whether the stored outcome was derived from exactly these inputs, so re-deriving would reach the same answer
-     * and the pass may skip this coordinate and say it did.
-     *
-     * <p>A pass that also needs its <em>output</em> to still be present asks that separately: a fingerprint match
-     * on its own cannot tell an unchanged input from a verdict somebody lost, and a bare-fingerprint skip would
-     * mask that loss forever.
-     */
+    /** Whether the stored outcome was derived from exactly these inputs, so the pass may skip this coordinate. A pass
+     *  that also needs its output to still be present asks that separately: a fingerprint alone cannot tell an
+     *  unchanged input from a lost verdict. */
     public boolean matches(Key key, String fingerprint) throws IOException {
         return fingerprint.equals(read(key).path(FINGERPRINT).asString(null));
     }

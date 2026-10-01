@@ -4,18 +4,13 @@ import module java.base;
 import module tools.jackson.databind;
 
 /**
- * One contributor's tagged section envelope inside the consolidated document: the uniform wrapper every
- * subsection shares - {@code schema} (the contributor-owned section version), {@code updated} (this section's own
- * freshness instant, replacing the scattered per-subsystem {@code lastScanned} stamps), {@code state}
- * ({@link State#DERIVED}/{@link State#EMPTY}/{@link State#ERROR}), an optional {@link SectionError} (present iff
- * {@code state} is {@code error}), an optional {@link Signal} (severity or neutral), and the opaque {@code data}
- * payload the contributor owns.
+ * One contributor's section envelope in the consolidated document: {@code schema} (the contributor's section version),
+ * {@code updated} (this section's own freshness), {@code state} ({@link State#DERIVED}/{@link State#EMPTY}/
+ * {@link State#ERROR}), a {@link SectionError} present iff the state is {@code error}, an optional {@link Signal}, and
+ * the opaque {@code data} the contributor owns.
  *
- * <p>The {@code data} is a raw {@link JsonNode}: the envelope is uniform and reader-tolerant, but the payload is
- * whatever the owning subsystem serialises (the findings section's {@code data} is exactly what the findings
- * ledger writes today), and a reader that does not own a section never parses its {@code data} - it carries the
- * whole section verbatim (see {@code MetadataDocument}). {@code data} may be {@code null}, which serialises as an
- * empty object.
+ * <p>A reader that does not own a section never parses its {@code data}; it carries the whole section verbatim (see
+ * {@code MetadataDocument}). {@code data} may be {@code null}, which serialises as an empty object.
  */
 public record Section(String tag, int schema, Instant updated, State state, SectionError error, Signal signal,
                       JsonNode data) {
@@ -40,20 +35,18 @@ public record Section(String tag, int schema, Instant updated, State state, Sect
         return new Section(tag, schema, updated, State.DERIVED, null, signal, data);
     }
 
-    /** An inspected-but-empty section - "present, nothing to declare", distinct from a section that was never
-     *  derived (absent from the document). */
+    /** An inspected-but-empty section - "present, nothing to declare", distinct from one never derived (absent). */
     public static Section empty(String tag, int schema, Instant updated) {
         return new Section(tag, schema, updated, State.EMPTY, null, Signal.NEUTRAL, null);
     }
 
-    /** A durably-failed section - the persisted derive-failure, degrading alone. */
+    /** A durably failed section, which degrades alone. */
     public static Section error(String tag, int schema, Instant updated, SectionError error) {
         return new Section(tag, schema, updated, State.ERROR, Objects.requireNonNull(error, "error"),
                 Signal.NEUTRAL, null);
     }
 
-    /** The payload, absent when this section carries none (a {@link State#EMPTY} or {@link State#ERROR} section, or
-     *  a derived one written without data). */
+    /** The payload, absent when the section carries none (an empty or error section, or a derived one without data). */
     public Optional<JsonNode> payload() {
         return data == null || data.isMissingNode() || data.isNull() ? Optional.empty() : Optional.of(data);
     }

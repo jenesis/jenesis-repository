@@ -5,31 +5,26 @@ import module tools.jackson.databind;
 import module org.slf4j;
 
 /**
- * The consolidated, versioned, tagged per-coordinate metadata document: a top-level {@code format} version and
- * a {@code sections} object mapping each contributor's tag to its {@link Section} envelope. This value type owns
- * the reader-tolerance and round-trip-fidelity contract - the generalisation of {@code StoreFindings}' carried-rows
- * model to the <em>section</em> level.
+ * The consolidated, versioned, tagged per-coordinate metadata document: a top-level {@code format} version and a
+ * {@code sections} object mapping each contributor's tag to its {@link Section} envelope. This type owns reader
+ * tolerance and round-trip fidelity.
  *
- * <p><strong>Total, section-carrying read.</strong> {@link #read} never throws: a torn or foreign object (non-JSON
- * bytes, or something another module placed under {@code meta/}) reads as an empty document with a WARNING, never
- * an exception - one stray object must not blank a coordinate's whole trail. Every section is held as its raw
- * envelope {@link JsonNode}; a reader parses only the sections it asks for ({@link #section}), and a mutator
- * ({@link #mutate}) re-parses only the tags it transforms and re-serialises every other section's raw node
- * verbatim. Unknown and newer-tagged sections therefore survive every writer <em>by construction</em>, so an older
- * node never eats a newer node's section (the row-carry property, now format-wide).
+ * <p><strong>Total, section-carrying read.</strong> {@link #read} never throws: a torn or foreign object reads as an
+ * empty document with a warning, so one stray object cannot blank a coordinate's trail. Every section is held as its
+ * raw envelope; a reader parses only the sections it asks for ({@link #section}), and {@link #mutate} re-parses only
+ * the tags it transforms and re-serialises every other section verbatim - so an older node never drops a newer node's
+ * section.
  *
- * <p><strong>Format guard.</strong> A reader whose known {@link #FORMAT} is older than the document's renders what
- * it recognises but {@link #mutate} refuses to write (fails loudly), never downgrade-rewriting the envelope - the
- * lossless-downgrade half of the versioning rules.
+ * <p><strong>Format guard.</strong> A reader whose {@link #FORMAT} is older than the document's renders what it
+ * recognises, but {@link #mutate} refuses to write rather than downgrade the envelope.
  *
- * <p>Instances are immutable; {@link #mutate} returns a new document. Two writers on <em>different</em> sections
- * conflict only on the store's CAS token and converge on retry (each re-reads and re-applies its own section);
- * two writers on the <em>same</em> section keep that section owner's merge semantics.
+ * <p>Immutable; {@link #mutate} returns a new document. Writers of different sections conflict only on the store's CAS
+ * token and converge on retry; writers of the same section keep that section owner's merge semantics.
  */
 public final class MetadataDocument {
 
-    /** This reader's known envelope format version. A document whose {@code format} exceeds this is rendered but
-     *  not mutated ({@link #mutate} fails loudly). Bumped only on a breaking <em>envelope</em> change. */
+    /** This reader's envelope format version. A document with a higher {@code format} is rendered but not mutated.
+     *  Bumped only on a breaking envelope change. */
     public static final int FORMAT = 1;
 
     private static final String FORMAT_FIELD = "format";
@@ -50,9 +45,8 @@ public final class MetadataDocument {
 
     private final int format;
 
-    // Tag -> raw section envelope node, in document order. Every section (recognised or not) is held raw; the typed
-    // view (section) parses on demand and a mutate re-parses only the tags it touches, so an unmutated section
-    // round-trips through serialize byte-for-structure verbatim - the section-level carry.
+    // Tag -> raw section envelope, in document order. The typed view parses on demand and a mutate re-parses only the
+    // tags it touches, so an unmutated section round-trips verbatim.
     private final SequencedMap<String, JsonNode> sections;
 
     private MetadataDocument(int format, SequencedMap<String, JsonNode> sections) {
@@ -60,17 +54,13 @@ public final class MetadataDocument {
         this.sections = sections;
     }
 
-    /** An empty document at this reader's {@link #FORMAT} - the starting point for a coordinate version never
-     *  written before. */
+    /** An empty document at this reader's {@link #FORMAT}. */
     public static MetadataDocument empty() {
         return new MetadataDocument(FORMAT, new LinkedHashMap<>());
     }
 
-    /**
-     * Read a document from its stored bytes, totally: a torn/foreign object reads as {@link #empty} with a WARNING
-     * rather than throwing, and every section is held as its raw envelope node (parsed lazily and tolerantly by
-     * {@link #section}), so an unreadable individual section is carried, not dropped.
-     */
+    /** Read a document from its stored bytes, totally: a torn or foreign object reads as {@link #empty} with a warning,
+     *  and every section is held raw, so an unreadable section is carried, not dropped. */
     public static MetadataDocument read(byte[] content) {
         JsonNode root;
         try {
@@ -80,8 +70,7 @@ public final class MetadataDocument {
             return empty();
         }
         if (root == null || !root.isObject()) {
-            // A non-object under meta/ (a foreign file, an empty body) is not this document - read as empty rather
-            // than letting one stray object blank the coordinate's trail, exactly as StoreFindings' read is total.
+            // A non-object under meta/ (a foreign file, an empty body) is not this document: read as empty.
             return empty();
         }
         int format = root.path(FORMAT_FIELD).asInt(FORMAT);
@@ -93,8 +82,7 @@ public final class MetadataDocument {
         return new MetadataDocument(format, sections);
     }
 
-    /** This document's envelope format version - the reader's {@link #FORMAT} for one it wrote or read at its own
-     *  version, or a higher number for one a newer node wrote. */
+    /** This document's envelope format version - {@link #FORMAT}, or higher for one a newer node wrote. */
     public int format() {
         return format;
     }
@@ -114,17 +102,14 @@ public final class MetadataDocument {
         return sections.containsKey(tag);
     }
 
-    /** The raw section envelope node for a tag, or {@code null} when absent - the verbatim node a carry preserves,
-     *  for a generic renderer or a diagnostic that inspects an unrecognised section. */
+    /** The raw section envelope for a tag, or {@code null} when absent - the node a carry preserves, for a generic
+     *  renderer or a diagnostic. */
     public JsonNode raw(String tag) {
         return sections.get(tag);
     }
 
-    /**
-     * The typed view of one section, parsed tolerantly from its raw envelope; empty when the tag is absent or its
-     * envelope cannot be parsed as a {@link Section} (in which case the raw node is still carried by a
-     * {@link #mutate} - the typed view simply does not surface it).
-     */
+    /** The typed view of one section, parsed tolerantly; empty when the tag is absent or its envelope does not parse as
+     *  a {@link Section}, in which case {@link #mutate} still carries the raw node. */
     public Optional<Section> section(String tag) {
         JsonNode node = sections.get(tag);
         if (node == null || !node.isObject()) {
@@ -146,8 +131,8 @@ public final class MetadataDocument {
                 signal = Signal.of(severity(signalNode.path(SEVERITY_FIELD).asString(null)));
             }
             JsonNode data = node.path(DATA_FIELD);
-            // An error envelope round-trips through the Section invariant (error present iff state==error); a raw
-            // node that violates it is carried but not surfaced typed.
+            // The Section invariant (error present iff state==error) holds for the typed view; a raw node violating it
+            // is still carried.
             return Optional.of(new Section(tag, schema, updated, state,
                     state == State.ERROR ? (error == null ? new SectionError("unknown", "") : error) : null,
                     signal, data.isMissingNode() ? null : data));
@@ -158,11 +143,9 @@ public final class MetadataDocument {
     }
 
     /**
-     * Apply each section transform in one logical step and return the resulting document; sections not named in
-     * {@code mutations} are carried verbatim. Refuses (throws {@link IllegalStateException}) when this document's
-     * {@code format} is newer than this reader knows - never downgrade-rewrites a newer envelope.
+     * Apply each section transform in one logical step; sections not named in {@code mutations} are carried verbatim.
      *
-     * @throws IllegalStateException when {@link #newerThanKnown()} - the loud format guard
+     * @throws IllegalStateException when {@link #newerThanKnown()} - a newer envelope is never downgrade-rewritten
      */
     public MetadataDocument mutate(SequencedMap<String, SectionMutation> mutations) {
         if (newerThanKnown()) {
@@ -186,8 +169,8 @@ public final class MetadataDocument {
         return new MetadataDocument(FORMAT, next);
     }
 
-    /** Serialise this document to the bytes stored under its {@link MetadataKey#version} key: {@code format} plus
-     *  the {@code sections} object, every section written from its raw node so a carried section is byte-preserved. */
+    /** Serialise this document for its {@link MetadataKey#version} key: {@code format} plus {@code sections}, every
+     *  section written from its raw node. */
     public byte[] serialize() {
         ObjectNode root = JSON.createObjectNode();
         root.put(FORMAT_FIELD, format);

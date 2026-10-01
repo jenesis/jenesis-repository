@@ -3,24 +3,19 @@ package build.jenesis.repository.metadata;
 import module java.base;
 
 /**
- * The tri-state a contributor's section envelope carries - the load-bearing distinction the consolidation
- * preserves and extends. Today's {@code present-but-empty} ("inspected, none declared") versus {@code absent}
- * ("never derived") - the distinction {@code LicenseInventory} depends on - maps to {@link #EMPTY} versus a section
- * that is simply not in the document. The third state, {@link #ERROR}, is the durable half of the derive-failure
- * contract: an inspector that could not parse an artifact records {@code error} on its own section, degrading alone
- * rather than blanking the coordinate.
+ * The state a section envelope carries. "Inspected, none declared" is {@link #EMPTY}, distinct from a section absent
+ * from the document ("never derived"), which licence inventory depends on; {@link #ERROR} records that an inspector
+ * could not parse an artifact, so its section degrades alone.
  */
 public enum State {
 
-    /** The contributor derived this section and its {@code data} stands - the normal case. */
+    /** The contributor derived this section and its {@code data} stands. */
     DERIVED("derived"),
 
-    /** Inspected, nothing to declare: present-but-empty, distinct from a section that was never derived (absent).
-     *  The "inspected, none declared" half of the tri-state. */
+    /** Inspected, nothing to declare - distinct from a section never derived (absent). */
     EMPTY("empty"),
 
-    /** The derive attempt failed durably - the persisted half of the derive-failure contract; the envelope carries
-     *  a {@link SectionError} explaining what could not be parsed, so the section degrades alone. */
+    /** The derive failed durably; the envelope carries a {@link SectionError}, so the section degrades alone. */
     ERROR("error");
 
     private final String wire;
@@ -34,9 +29,9 @@ public enum State {
         return wire;
     }
 
-    /** The state a wire token names, defaulting to {@link #DERIVED} for an absent or unrecognised token - a
-     *  best-effort typed view: {@code state} is advisory for rendering and gating, and an unmutated section always
-     *  round-trips through its raw node regardless of how its state parsed. */
+    /** The state a wire token names, {@link #DERIVED} for an absent or unrecognised token. Best-effort: {@code state}
+     *  is advisory for rendering and gating, and an unmutated section round-trips through its raw node whatever it
+     *  parsed as. */
     public static State ofWire(String wire) {
         for (State state : values()) {
             if (state.wire.equals(wire)) {

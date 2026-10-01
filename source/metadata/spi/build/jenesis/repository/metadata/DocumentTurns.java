@@ -4,20 +4,17 @@ import module java.base;
 import build.jenesis.repository.store.ArtifactStore;
 
 /**
- * Writers of one metadata document on one node take their turn rather than race.
+ * Writers of one metadata document on one node take turns rather than race.
  *
- * <p>A version's document is written by every publish of that version - its published section, its origin row, its
- * licences - and rivals publishing one release at once (a CI job and its retries, a fan-out of builds) each run a
- * read-transform-compare-and-set on it together. Only one of them can win each round, so with more rivals than the
- * store's compare-and-set tries the rest would run out and their publishes fail with a {@code 500} - thirty-two
- * rivals on one release are enough. Taking a turn per document first leaves the
- * compare-and-set only the writers of other nodes to arbitrate, which is the contention it was sized for.
+ * <p>A version's document is written by every publish of that version - its published section, origin row, licences -
+ * and rivals publishing one release at once each run a read-transform-compare-and-set on it. Only one wins each round,
+ * so with more rivals than the store's compare-and-set tries the rest would fail with a {@code 500}. A per-document
+ * turn leaves the compare-and-set only the other nodes' writers to arbitrate.
  *
- * <p>Every writer of the document takes it - the section-scoped mutate and the inventory's own publish and licence
- * writes alike - since a turn only one of them takes orders nothing. A turn wraps the compare-and-set and nothing
- * after it, and the transform inside is a pure function of the document, so no holder of one turn ever asks for
- * another. Striped rather than one lock per key, so the set is bounded however many documents a node writes; two
- * documents sharing a stripe wait for each other, which costs time and never correctness.
+ * <p>Every writer of the document takes it - the section mutate and the inventory's publish and licence writes - since
+ * a turn only some take orders nothing. A turn wraps the compare-and-set alone, and the transform inside is pure, so no
+ * holder asks for a second turn. Striped, so the set is bounded; two documents sharing a stripe only wait for each
+ * other.
  */
 public final class DocumentTurns {
 

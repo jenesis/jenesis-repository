@@ -3,15 +3,12 @@ package build.jenesis.repository.metadata;
 import module java.base;
 
 /**
- * A section-scoped transform, applied inside the store's read-transform-compare-and-set loop. It sees only its own
- * section's current envelope ({@link Optional#empty()} when the section was never derived) and returns the new one;
- * every other section in the document is carried through the commit untouched, so an unknown or newer
- * writer's section is never dropped by a mutator that does not own it.
+ * A section-scoped transform inside the store's read-transform-compare-and-set loop. It sees only its own section's
+ * current envelope ({@link Optional#empty()} when never derived) and returns the new one; every other section is
+ * carried untouched.
  *
- * <p>Because a concurrent writer can lose the CAS token and force a re-read, the transform may be invoked more than
- * once for a single logical mutation - it must be a pure function of {@code current}, re-derivable each attempt
- * (the same discipline {@code StoreFindings}' row mutation follows). Returning {@code null} leaves the section
- * absent, or removes it if it was present.
+ * <p>A lost CAS token forces a re-read, so the transform may run more than once for one mutation: it must be a pure
+ * function of {@code current}. Returning {@code null} leaves the section absent, or removes it.
  */
 @FunctionalInterface
 public interface SectionMutation {
