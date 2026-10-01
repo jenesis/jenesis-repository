@@ -4,29 +4,22 @@ import module java.base;
 import module org.slf4j;
 
 /**
- * The ONE bounded client every externally-sourced HTTP JSON feed fetches through - a vulnerability advisory API, a
- * known-exploited catalogue, an exploit-probability model, a maintainer-health dataset. It owns exactly the concerns
- * that are identical for every vendor and where the recurring audit defects lived: timeouts and the whole-fetch
- * deadline, header (authentication) injection, the non-200 branch, cursor pagination bounded by a page cap that
- * <em>fails visibly</em>, a response byte cap, a retry schedule, the fail-closed / fail-soft policy, the clean
- * self-skip when a feed is not configured, and - through {@link FeedSnapshots} - a mirrored catalogue committed
- * together with its staleness stamp.
+ * The one bounded client every externally-sourced HTTP JSON feed fetches through - an advisory API, a known-exploited
+ * catalogue, an exploit-probability model, a maintainer-health dataset. It owns what is the same for every vendor:
+ * timeouts and the whole-fetch deadline, header (authentication) injection, the non-200 branch, cursor pagination
+ * bounded by a page cap that fails visibly, a response byte cap, a retry schedule, the fail-closed / fail-soft policy,
+ * the clean self-skip of an unconfigured feed, and - through {@link FeedSnapshots} - a mirrored catalogue committed
+ * with its staleness stamp. The vendor's URL shape, credential, wire format and field mapping stay in the feed module,
+ * which reaches this client through the {@link FeedRequest}s it builds and the {@link Reader} it hands in.
  *
- * <p>It owns none of the vendor-specific half. The URL shape, the credential, the wire format, the field mapping and
- * the ecosystem/coordinate mapping stay in the feed module, which reaches this client through the
- * {@link FeedRequest}s it builds and the {@link Reader} it hands in to fold each page.
+ * <p><strong>Nothing global is discovered.</strong> The transport, the clock, the pause and the tenant-scoped store all
+ * arrive as arguments, so a feed can be driven from recorded responses and a read path asserted to make no request.
  *
- * <p><strong>Nothing global is discovered.</strong> The transport, the clock, the pause and (for a snapshot feed) the
- * already tenant-scoped store all arrive as arguments. A whole feed can therefore be driven from recorded responses
- * with a transport that throws on any real socket, and a read path can be asserted to make no request at all.
- *
- * <h3>Fetching, and why a partial answer cannot escape</h3>
- * A caller supplies a {@link Supplier} of {@link Reader}, not a reader: one fresh accumulator is built per
- * <em>attempt</em>, and {@link Reader#complete()} is called only once every page of that attempt has been drawn.
- * A fetch that hits a cap, a bad status, the deadline or the attempt limit therefore drops its half-filled
- * accumulator on the floor - there is no code path on which a caller receives a value assembled from some of the
- * pages. That is the "bounds fail visibly" gate made structural rather than remembered, and it is also what makes a
- * retry safe: an attempt never resumes another attempt's partial state.
+ * <h3>Why a partial answer cannot escape</h3>
+ * A caller supplies a {@link Supplier} of {@link Reader}: one fresh accumulator per attempt, and
+ * {@link Reader#complete()} is called only once every page of that attempt is drawn. A fetch that hits a cap, a bad
+ * status, the deadline or the attempt limit drops its half-filled accumulator, so no caller ever receives a value
+ * assembled from some of the pages, and a retry never resumes another attempt's state.
  *
  * {@snippet :
  * FeedClient client = FeedClient.of("kev", FeedTransport.jdk(Duration.ofSeconds(10)), FeedPolicy.closed());
@@ -35,66 +28,47 @@ import module org.slf4j;
  *
  * <h2>Contract</h2>
  * <ol>
- * <li><b>Thread-safety.</b> A client is immutable and safe to share across threads; it holds no per-fetch state. It
- *     is as thread-safe as the {@link FeedTransport} handed in. It does <em>not</em> serialise concurrent fetches:
- *     a feed that must collapse a burst into one upstream call (a metered vendor) does that in front of the client,
- *     and a scheduled mirror refresh is already single-flight.</li>
- * <li><b>Idempotency / replay.</b> A fetch is a read of the vendor and mutates nothing outside the store, so it may
- *     be repeated freely. A retry restarts the whole fetch from its first request with a <em>fresh</em> reader, so
- *     no page is ever folded twice into one answer. {@link #refresh} is idempotent against the store: an unchanged
- *     catalogue commits the same content-addressed body and only advances the stamp.</li>
- * <li><b>Absence sentinel.</b> Every call answers an {@link Answer}; {@code null} is never returned and a
- *     {@code null} from a {@link Reader} fails loudly. An unconfigured client answers {@link Status#SKIPPED} with
- *     the reason, a degraded fetch {@link Status#DEGRADED} with the failure, and only {@link Status#FETCHED} carries
- *     a value - the record makes the other combinations unrepresentable.</li>
- * <li><b>Selection failure.</b> A feed whose required configuration is unset builds an
- *     {@link #unconfigured} client and self-skips cleanly, touching neither the network nor the store. It never
- *     degrades into "a feed that answers nothing", which a consumer would read as a clean result.</li>
- * <li><b>Streaming.</b> A response body reaches a {@link Reader} as an {@link java.io.InputStream}, capped
- *     at {@link FeedPolicy#maxResponseBytes()}, so a multi-megabyte catalogue is parsed incrementally and is never
- *     materialised. Only the reduced snapshot a {@link Reader} of {@code byte[]} yields is held whole, and that is
- *     bounded by {@link FeedPolicy#maxSnapshotBytes()}. {@link Reader#document} is the shared reader for the
- *     single-response feeds, and it hands that same stream to the parse for the same reason: <b>there is no
- *     whole-body reader here, and its absence is deliberate</b>. A convenience answering the body as a
- *     {@code String} or a {@code byte[]} would be the one every feed reached for, and every feed would then spend
- *     heap proportional to what the vendor chose to send, inside the very client that exists to bound it.</li>
- * <li><b>Tenant scoping.</b> The client stores nothing by itself. {@link #refresh} writes only through the
- *     {@link FeedSnapshots} it is handed, whose store is already tenant-scoped; the client never scopes or discovers
- *     a store.</li>
- * <li><b>Error visibility.</b> Nothing is swallowed. Under {@link FeedPolicy.FailMode#CLOSED} every failure
- *     is thrown as a {@link FeedException} naming the feed, the reason, the status and the attempts. Under
- *     {@link FeedPolicy.FailMode#SOFT} it is returned as {@link Status#DEGRADED} carrying that same exception and
- *     logged once - the blast radius being a ranking aid that is absent for this cycle, never an advisory answer
- *     that reads as clean.</li>
- * <li><b>Read purity.</b> This client is the <em>write</em> half of a feed: fetching is what a refresh
- *     does. A read path renders {@link FeedSnapshots#current()} and {@link FeedSnapshots#open}, which reach no
- *     network at all - proven by handing a query path a transport that throws on any call.</li>
- * <li><b>Staleness.</b> A mirrored feed's staleness is durable, not process-local: {@link #refresh}
- *     commits the fetch instant in the same store object as the snapshot it stamps, so a restart, a failover and a
- *     second replica all see the same answer to "when was this last refreshed", and a view can always show it.</li>
- * <li><b>Lifecycle / ownership.</b> The client owns nothing it did not create: the transport, its HTTP client, the
- *     clock and the store belong to the caller, which also closes them. It starts no thread and caches nothing
- *     between calls, so an instance may be built per feed at wiring time and kept, or built per call.</li>
- * <li><b>Ordering / concurrency.</b> Pages are drawn strictly in cursor order on the calling thread, one request at
- *     a time - there is no fan-out and no parallelism to make results order-dependent. Two concurrent
- *     {@link #refresh} calls are arbitrated by the snapshot pointer's compare-and-set, and the loser adopts the
- *     winner's stamp.</li>
- * <li><b>Bounded work / cancellation.</b> Every dimension is capped and each cap has a <em>named</em>
- *     outcome: {@link FeedPolicy#maxPages()} pages ({@link FeedException.Reason#PAGE_CAP}),
- *     {@link FeedPolicy#maxResponseBytes()} per body ({@link FeedException.Reason#RESPONSE_CAP}),
- *     {@link FeedPolicy#maxSnapshotBytes()} per committed snapshot
- *     ({@link FeedException.Reason#SNAPSHOT_CAP}), {@link FeedPolicy#maxAttempts()} attempts,
- *     {@link FeedPolicy#requestTimeout()} per request and {@link FeedPolicy#deadline()} for the whole fetch across
- *     pages and retries ({@link FeedException.Reason#DEADLINE}). No cap returns a plausible-but-incomplete answer:
- *     reaching one always fails, and under {@link FeedPolicy.FailMode#SOFT} the prior-good snapshot keeps serving.
- *     An interrupt is honoured promptly, restores the thread's interrupt flag and ends the fetch as
- *     {@link FeedException.Reason#INTERRUPTED}.</li>
- * <li><b>Durability / delivery.</b> {@link #fetch} is durable-free: it writes nothing. {@link #refresh}'s
- *     commit point is the snapshot pointer's compare-and-set, pointer-last after the body is durable, so the
- *     visible states are exactly "the previous snapshot" and "the new snapshot" - never a mixture. A refresh that
- *     does not complete leaves the prior-good snapshot and its fetch instant untouched and only moves
- *     {@code nextRefreshAt} out by {@link FeedPolicy#retryInterval()}. The durable source of truth is that pointer;
- *     a lost refresh heals by being retried on schedule.</li>
+ *   <li><b>Thread-safety.</b> Immutable and safe to share, as thread-safe as its {@link FeedTransport}. It does not
+ *       serialise concurrent fetches: a feed that must collapse a burst does that in front of the client.</li>
+ *   <li><b>Idempotency / replay.</b> A fetch mutates nothing, so it may be repeated. A retry restarts from the first
+ *       request with a fresh reader, so no page is folded twice. {@link #refresh} of an unchanged catalogue commits the
+ *       same content-addressed body and only advances the stamp.</li>
+ *   <li><b>Absence sentinel.</b> Every call answers an {@link Answer}, never {@code null}, and a {@code null} from a
+ *       {@link Reader} fails loudly. Unconfigured answers {@link Status#SKIPPED} with the reason, a degraded fetch
+ *       {@link Status#DEGRADED} with the failure, and only {@link Status#FETCHED} carries a value.</li>
+ *   <li><b>Selection failure.</b> A feed whose required configuration is unset builds an {@link #unconfigured} client
+ *       that self-skips, touching neither network nor store, and is never "a feed that answers nothing".</li>
+ *   <li><b>Streaming.</b> A body reaches a {@link Reader} as an {@link java.io.InputStream} capped at
+ *       {@link FeedPolicy#maxResponseBytes()}; only the reduced snapshot a {@code byte[]} reader yields is held,
+ *       bounded by {@link FeedPolicy#maxSnapshotBytes()}. There is no whole-body reader, since every feed would use it
+ *       and spend heap proportional to what the vendor sent.</li>
+ *   <li><b>Tenant scoping.</b> {@link #refresh} writes only through the {@link FeedSnapshots} it is handed, over an
+ *       already tenant-scoped store; the client never scopes or discovers a store.</li>
+ *   <li><b>Error visibility.</b> Nothing is swallowed. Under {@link FeedPolicy.FailMode#CLOSED} every failure is thrown
+ *       as a {@link FeedException} naming the feed, reason, status and attempts; under {@link FeedPolicy.FailMode#SOFT}
+ *       it is returned as {@link Status#DEGRADED} with that exception and logged once - an absent ranking aid, never an
+ *       advisory answer that reads as clean.</li>
+ *   <li><b>Read purity.</b> This is the write half of a feed. A read path renders {@link FeedSnapshots#current()} and
+ *       {@link FeedSnapshots#open}, which reach no network.</li>
+ *   <li><b>Staleness.</b> {@link #refresh} commits the fetch instant in the same store object as the snapshot it
+ *       stamps, so every node and every restart sees the same "last refreshed".</li>
+ *   <li><b>Lifecycle / ownership.</b> The transport, the clock and the store belong to the caller, which closes them.
+ *       The client starts no thread and caches nothing between calls.</li>
+ *   <li><b>Ordering / concurrency.</b> Pages are drawn strictly in cursor order on the calling thread, one at a time.
+ *       Two concurrent {@link #refresh} calls are arbitrated by the snapshot pointer's compare-and-set, the loser
+ *       adopting the winner's stamp.</li>
+ *   <li><b>Bounded work / cancellation.</b> Every cap has a named outcome: {@link FeedPolicy#maxPages()}
+ *       ({@link FeedException.Reason#PAGE_CAP}), {@link FeedPolicy#maxResponseBytes()} per body
+ *       ({@link FeedException.Reason#RESPONSE_CAP}), {@link FeedPolicy#maxSnapshotBytes()}
+ *       ({@link FeedException.Reason#SNAPSHOT_CAP}), {@link FeedPolicy#maxAttempts()},
+ *       {@link FeedPolicy#requestTimeout()} per request and {@link FeedPolicy#deadline()} for the whole fetch
+ *       ({@link FeedException.Reason#DEADLINE}). Reaching a cap always fails, never answers incompletely; under
+ *       {@link FeedPolicy.FailMode#SOFT} the prior-good snapshot keeps serving. An interrupt ends the fetch promptly as
+ *       {@link FeedException.Reason#INTERRUPTED} and restores the flag.</li>
+ *   <li><b>Durability / delivery.</b> {@link #fetch} writes nothing. {@link #refresh}'s commit point is the snapshot
+ *       pointer's compare-and-set, after the body is durable, so the visible states are the previous snapshot and the
+ *       new one. An incomplete refresh leaves the prior-good snapshot and its instant untouched and moves
+ *       {@code nextRefreshAt} by {@link FeedPolicy#retryInterval()}; it heals by being retried on schedule.</li>
  * </ol>
  */
 public final class FeedClient {
@@ -122,15 +96,13 @@ public final class FeedClient {
         this.unconfigured = unconfigured;
     }
 
-    /** A client over the system clock, sleeping between retries - the production form. */
+    /** A client over the system clock, sleeping between retries. */
     public static FeedClient of(String feed, FeedTransport transport, FeedPolicy policy) {
         return of(feed, transport, policy, Clock.systemUTC(), Pause.sleeping());
     }
 
-    /**
-     * A client with the clock and the retry pause injected - the form a test drives, so a backoff schedule and a
-     * deadline are asserted exactly and instantly rather than waited out.
-     */
+    /** A client with the clock and the retry pause injected, so a backoff schedule and a deadline are asserted without
+     *  waiting. */
     public static FeedClient of(String feed, FeedTransport transport, FeedPolicy policy, Clock clock, Pause pause) {
         if (feed == null || feed.isBlank()) {
             throw new IllegalArgumentException("A feed client needs the feed's name");
@@ -144,12 +116,10 @@ public final class FeedClient {
     }
 
     /**
-     * The clean self-skip: a client for a feed whose configuration is incomplete. Every call answers
-     * {@link Status#SKIPPED} naming what is missing, and no call touches the network or the store - so an
-     * unconfigured licensed feed costs nothing and, crucially, is never mistaken for a feed that answered nothing.
+     * The self-skip for a feed whose configuration is incomplete: every call answers {@link Status#SKIPPED} naming what
+     * is missing and touches neither network nor store, so it is never mistaken for a feed that answered nothing.
      *
-     * @param missing the configuration keys that are unset, named in the skip reason so an operator is told what to
-     *                supply rather than left with a silently inert feed.
+     * @param missing the configuration keys that are unset, named in the skip reason
      */
     public static FeedClient unconfigured(String feed, String... missing) {
         if (feed == null || feed.isBlank()) {
@@ -178,15 +148,14 @@ public final class FeedClient {
     }
 
     /**
-     * Draw a feed answer: send {@code first}, hand each response to a fresh {@link Reader}, follow the cursor the
-     * reader returns until it returns none, and answer with what {@link Reader#complete()} then yields.
+     * Draw a feed answer: send {@code first}, hand each response to a fresh {@link Reader}, follow the cursor it
+     * returns until none, and answer with what {@link Reader#complete()} yields.
      *
-     * @param first  the first request - the vendor URL with the vendor's credential already on it.
-     * @param reader builds a fresh accumulator per attempt (see the class javadoc: this is what makes a partial
-     *               answer unrepresentable and a retry safe).
-     * @return {@link Status#FETCHED} with the value, {@link Status#SKIPPED} when this client is unconfigured, or
-     *         {@link Status#DEGRADED} when the policy fails soft.
-     * @throws FeedException when the policy fails closed and the fetch did not complete.
+     * @param first the first request, with the vendor's credential on it
+     * @param reader builds a fresh accumulator per attempt, so a partial answer is unrepresentable and a retry safe
+     * @return {@link Status#FETCHED} with the value, {@link Status#SKIPPED} when unconfigured, or
+     *     {@link Status#DEGRADED} when the policy fails soft
+     * @throws FeedException when the policy fails closed and the fetch did not complete
      */
     public <T> Answer<T> fetch(FeedRequest first, Supplier<? extends Reader<T>> reader) throws FeedException {
         Objects.requireNonNull(first, "first");
@@ -227,23 +196,20 @@ public final class FeedClient {
     }
 
     /**
-     * Refresh a mirrored catalogue: fetch it exactly as {@link #fetch} does, then commit the snapshot the reader
-     * yielded <em>together with</em> its staleness stamp through {@code snapshots}.
-     *
-     * <p>What happens at each outcome is the whole point of the method:
+     * Refresh a mirrored catalogue: fetch it as {@link #fetch} does, then commit the snapshot together with its
+     * staleness stamp through {@code snapshots}.
      * <ul>
-     * <li><b>Complete fetch</b> - the body is written, the pointer moves by compare-and-set, and the answer carries
-     *     the new {@link FeedSnapshots.Refresh}, whose fetch instant and snapshot were committed by that one write.</li>
-     * <li><b>Any incomplete fetch</b> (a cap, a bad status, the deadline, an exhausted retry budget) - <em>nothing</em>
-     *     is committed. The prior-good snapshot and its fetch instant stand untouched; only {@code nextRefreshAt} is
-     *     pushed out by {@link FeedPolicy#retryInterval()} so the failure is retried rather than hammered. The failure
-     *     is then thrown (fail-closed) or returned as {@link Status#DEGRADED} (fail-soft).</li>
-     * <li><b>Unconfigured</b> - {@link Status#SKIPPED}; the store is not touched at all.</li>
+     *   <li><b>Complete fetch</b> - the body is written and the pointer moves by compare-and-set; the answer carries
+     *       the new {@link FeedSnapshots.Refresh}.</li>
+     *   <li><b>Any incomplete fetch</b> - nothing is committed; the prior-good snapshot and its instant stand, and only
+     *       {@code nextRefreshAt} moves by {@link FeedPolicy#retryInterval()}. The failure is thrown (fail-closed) or
+     *       returned as {@link Status#DEGRADED} (fail-soft).</li>
+     *   <li><b>Unconfigured</b> - {@link Status#SKIPPED}; the store is not touched.</li>
      * </ul>
      *
-     * @param snapshots where this feed's snapshot and stamp live, over an already tenant-scoped store.
-     * @param first     the first request of the catalogue download.
-     * @param reader    yields the reduced catalogue to persist; bounded by {@link FeedPolicy#maxSnapshotBytes()}.
+     * @param snapshots where the snapshot and stamp live, over an already tenant-scoped store
+     * @param first the first request of the catalogue download
+     * @param reader yields the reduced catalogue to persist, bounded by {@link FeedPolicy#maxSnapshotBytes()}
      */
     public Answer<FeedSnapshots.Refresh> refresh(FeedSnapshots snapshots,
                                                FeedRequest first,
@@ -276,7 +242,7 @@ public final class FeedClient {
         try {
             return Answer.fetched(snapshots.commit(snapshot, policy.refreshInterval()));
         } catch (IOException e) {
-            // The store itself is failing, so there is no point deferring through it as well.
+            // The store itself is failing, so deferring through it is pointless.
             FeedException failure = failure(FeedException.Reason.TRANSPORT, 0, 1,
                     "the drawn snapshot could not be committed to the store", e);
             if (policy.failMode() == FeedPolicy.FailMode.CLOSED) {
@@ -306,8 +272,8 @@ public final class FeedClient {
         FeedRequest request = first;
         for (int page = 1; ; page++) {
             if (page > policy.maxPages()) {
-                // The gate-4 outcome: a feed that keeps advertising another page is refused outright rather than
-                // answered with the first maxPages pages, which would be a plausible but incomplete view.
+                // A feed that keeps advertising pages is refused rather than answered with the first maxPages, which
+                // would look complete.
                 throw failure(FeedException.Reason.PAGE_CAP, 0, attempt,
                         "the feed kept paginating past the " + policy.maxPages() + "-page cap at " + request.uri()
                                 + "; refusing to serve a bounded-but-incomplete answer", null);
@@ -337,9 +303,8 @@ public final class FeedClient {
             }
             FeedRequest cursor = next.get();
             if (policy.sameOriginOnly() && !first.sameOrigin(cursor.uri())) {
-                // A vendor-supplied cursor pointing at another origin steers the fetch (an SSRF when the target is
-                // internal) and carries this request's credential header to it. No legitimate cursor leaves its own
-                // origin, so this fails closed and visibly.
+                // A cursor on another origin would steer the fetch and carry this request's credential to it; no
+                // legitimate cursor leaves its origin.
                 throw failure(FeedException.Reason.CROSS_ORIGIN, 0, attempt,
                         "the feed's pagination cursor left its origin: " + cursor.uri() + " is not on "
                                 + first.uri().getScheme() + "://" + first.uri().getHost(), null);
@@ -360,8 +325,8 @@ public final class FeedClient {
         } catch (FeedException e) {
             throw e;
         } catch (IOException e) {
-            // A SocketTimeoutException is an InterruptedIOException that nobody interrupted, so the thread's flag -
-            // not the exception's type - decides: a real cancellation ends the fetch, a read timeout is retryable.
+            // A read timeout is an InterruptedIOException nobody interrupted, so the thread's flag decides: a
+            // cancellation ends the fetch, a timeout is retryable.
             if (e instanceof InterruptedIOException && Thread.currentThread().isInterrupted()) {
                 throw failure(FeedException.Reason.INTERRUPTED, 0, attempt, "interrupted while requesting "
                         + request.uri(), e);
@@ -416,41 +381,23 @@ public final class FeedClient {
         return Answer.degraded(raised);
     }
 
-    /**
-     * Folds one feed answer, page by page. A fresh instance is built per attempt, so an implementation may hold the
-     * mutable accumulation it needs without ever leaking a partial answer: {@link #complete()} is reached only when
-     * every page has been read.
-     *
-     * <p>A feed whose answer is <em>one</em> response - no cursor to follow - implements none of this and takes
-     * {@link #document} instead; that is the majority shape, and it was six near-identical private classes before it
-     * had a home here.
-     */
+    /** Folds one feed answer, page by page. A fresh instance is built per attempt, so it may hold mutable accumulation
+     *  without leaking a partial answer: {@link #complete()} is reached only when every page has been read. A feed
+     *  answering one response takes {@link #document} instead. */
     public interface Reader<T> {
 
         /**
-         * The reader for a feed whose whole answer is a single response: parse the body, and there is no next page.
-         *
-         * <p>This is the shape a vendor query has when it answers one document - an envelope, a filtered index, a
-         * resolution step, a batch of scores, a stream of records. Every such feed wrote the same twelve lines: hold
-         * a field, parse into it in {@code read}, return {@code Optional.empty()}, hand the field back from
-         * {@code complete}. The twelve lines are the client's to own; what stays the feed's is {@code parse}, which
-         * is the only vendor-specific part of them.
-         *
-         * <p>It answers a {@link Supplier}, not a reader, because the client's fresh-accumulator-per-attempt rule is
-         * the structural half of "bounds fail visibly" (see the class javadoc) - a shared reader that could be reused
-         * across attempts would be a way to smuggle one attempt's state into the next.
+         * The reader for a feed whose whole answer is one response: parse the body, and there is no next page. It
+         * answers a {@link Supplier} to keep the fresh-accumulator-per-attempt rule.
          *
          * {@snippet :
          * FeedClient.Answer<JsonNode> answer = client.fetch(FeedRequest.get(uri), FeedClient.Reader.document(JSON::readTree));
          * }
          *
-         * @param parse turns the response body into the answer. Deliberately given the {@link InputStream} and not
-         *              the bytes: there is no whole-body convenience here and there will not be one, because a
-         *              catalogue body is megabytes and materialising it would spend the heap the policy's byte cap
-         *              exists to bound (a {@code readAllBytes} is refused on this path). A parse reads
-         *              <em>from</em> the stream - a streaming JSON parse of one
-         *              document, or a record-per-line fold of a newline-delimited one - and must not retain it:
-         *              the response is closed the moment the parse returns.
+         * @param parse turns the response body into the answer, reading from the capped stream - a streaming parse of
+         *     one document, or a fold of a newline-delimited one - and not retaining it, since the response closes when
+         *     the parse returns. There is no whole-body form: a catalogue is megabytes, which the byte cap exists to
+         *     keep off the heap.
          */
         static <T> Supplier<Reader<T>> document(Body<T> parse) {
             Objects.requireNonNull(parse, "parse");
@@ -471,27 +418,22 @@ public final class FeedClient {
             };
         }
 
-        /** How one response body becomes an answer - the vendor-specific half of {@link #document}, and the only
-         *  half of it that is not the same for every feed. */
+        /** How one response body becomes an answer: the vendor-specific half of {@link #document}. */
         @FunctionalInterface
         interface Body<T> {
 
-            /**
-             * Parse {@code body} - already capped at {@link FeedPolicy#maxResponseBytes()} by the client - into the
-             * answer. Read from the stream rather than materialising it; do not close it and do not retain it beyond
-             * this call.
-             */
+            /** Parse {@code body}, already capped at {@link FeedPolicy#maxResponseBytes()}, into the answer. Read from
+             *  the stream; do not close or retain it. */
             T read(InputStream body) throws IOException;
         }
 
         /**
          * Fold one page and say where the next one is.
          *
-         * @param page     the 1-based page index within this attempt.
-         * @param response the answer, whose body stream is capped at the policy's response cap and is closed as soon
-         *                 as this method returns - so a reader consumes what it needs here rather than retaining it.
-         * @return the request drawing the next page, or empty when this was the last one. The cursor must stay on the
-         *         first request's origin unless the policy says otherwise.
+         * @param page the 1-based page index within this attempt
+         * @param response the answer, its body capped and closed as soon as this method returns
+         * @return the request drawing the next page, or empty when this was the last; it stays on the first request's
+         *     origin unless the policy says otherwise
          */
         Optional<FeedRequest> read(int page, FeedResponse response) throws IOException;
 
@@ -509,11 +451,9 @@ public final class FeedClient {
         DEGRADED
     }
 
-    /**
-     * What one fetch produced. A value is present exactly when {@link Status#FETCHED} and a failure exactly when
-     * {@link Status#DEGRADED} - enforced here, so "an empty answer" and "a failed answer" can never be confused by
-     * a consumer, which is the whole reason an advisory feed must not report an outage as a clean package.
-     */
+    /** What one fetch produced: a value exactly when {@link Status#FETCHED}, a failure exactly when
+     *  {@link Status#DEGRADED}, so an empty answer and a failed one can never be confused - an advisory feed must not
+     *  report an outage as clean. */
     public record Answer<T>(Status status, Optional<T> value, Optional<FeedException> failure, String note) {
 
         public Answer {
@@ -559,10 +499,7 @@ public final class FeedClient {
         }
     }
 
-    /**
-     * How the client waits between retries, injected so a test asserts the exact backoff schedule without spending
-     * it. The production form sleeps; a test's form records the durations it was asked for.
-     */
+    /** How the client waits between retries, injected so a test asserts the backoff schedule without spending it. */
     @FunctionalInterface
     public interface Pause {
 
@@ -609,7 +546,7 @@ public final class FeedClient {
 
         @Override
         public long skip(long requested) throws IOException {
-            // Skipped bytes are spent bytes: a reader that jumps over a payload still made the feed send it.
+            // Skipped bytes were still sent by the feed, so they count.
             long skipped = super.skip(requested);
             if (skipped > 0) {
                 count(skipped);

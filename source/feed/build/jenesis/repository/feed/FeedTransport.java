@@ -6,36 +6,26 @@ import build.jenesis.repository.net.http.ScreenedHttpClient;
 import module java.net.http;
 
 /**
- * The one network operation a feed makes, isolated so that everything above it - request shaping, caps, backoff,
- * pagination, fail-mode policy, snapshot persistence - is exercised without a socket. A contract suite hands in a
- * transport answering from recorded responses, or one that throws on any call at all to prove a read path performs
- * no I/O; production hands in {@link #jdk(Duration)}.
- *
- * <p>A transport is a pure "send this, give me the answer" seam: it never retries, never follows a redirect into
- * another origin, never inspects the status. Those are {@link FeedClient}'s, so every feed gets them identically.
+ * The one network operation a feed makes, isolated so everything above it is exercised without a socket: a test hands
+ * in recorded responses, or a transport that throws to prove a read path performs no I/O; production uses
+ * {@link #jdk(Duration)}. It never retries, follows a redirect or inspects the status; those are {@link FeedClient}'s.
  */
 @FunctionalInterface
 public interface FeedTransport {
 
     /**
-     * Send one request and answer with its response, whose body stream the caller closes.
+     * Send one request and answer with its response, whose body the caller closes.
      *
-     * @param request the request to send.
-     * @param timeout the per-request budget {@link FeedClient} allows this call - already the smaller of the policy's
-     *                request timeout and what is left of the whole fetch's deadline.
-     * @throws IOException when the request cannot be sent or the response headers cannot be read.
+     * @param request the request to send
+     * @param timeout the per-request budget: the smaller of the policy's request timeout and what is left of the
+     *     deadline
+     * @throws IOException when the request cannot be sent or the response headers cannot be read
      */
     FeedResponse send(FeedRequest request, Duration timeout) throws IOException;
 
-    /**
-     * A transport over the JDK HTTP client the caller owns and closes (clause 10) - the form a deployment uses when
-     * it pools one client across several feeds, or must configure a proxy, an SSL context or an executor.
-     *
-     * <p>Redirects are deliberately <em>not</em> followed: a redirect is a vendor-controlled hop that would carry the
-     * request's credential header to whatever host the answer names, which is exactly the cross-origin exfiltration
-     * {@link FeedClient} refuses on the pagination path. A feed that legitimately moved answers a 3xx, which the
-     * client reports as the named non-200 failure rather than chasing.
-     */
+    /** A transport over a JDK HTTP client the caller owns and closes (clause 10), for a deployment pooling one client
+     *  or configuring a proxy, SSL context or executor. Redirects are not followed: a redirect would carry the
+     *  credential to a host the vendor names, so a 3xx is reported as the named non-200 failure. */
     static FeedTransport jdk(HttpClient client) {
         Objects.requireNonNull(client, "client");
         return (request, timeout) -> {
@@ -55,14 +45,9 @@ public interface FeedTransport {
         };
     }
 
-    /**
-     * A transport over a JDK HTTP client this method builds with {@code connectTimeout} and no redirect following -
-     * the convenience form. The client lives for as long as the transport is referenced; a deployment that must
-     * close it explicitly builds its own and uses {@link #jdk(HttpClient)}.
-     *
-     * <p>A bounded connect timeout is not optional: a black-holed feed host (a firewall dropping the SYN with no
-     * RST) would otherwise park the refresh forever, and a refresh is single-flight.
-     */
+    /** A transport over a JDK HTTP client built here with {@code connectTimeout} and no redirects; a deployment that
+     *  must close it builds its own ({@link #jdk(HttpClient)}). The connect timeout is mandatory, since a host dropping
+     *  the SYN would otherwise park the single-flight refresh forever. */
     static FeedTransport jdk(Duration connectTimeout) {
         return jdk(ScreenedHttpClient.newBuilder()
                 .connectTimeout(Objects.requireNonNull(connectTimeout, "connectTimeout"))

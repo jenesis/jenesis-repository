@@ -4,18 +4,14 @@ import module java.base;
 import build.jenesis.repository.net.Origins;
 
 /**
- * One HTTP request a feed makes: where, how, with which headers, and (for the feeds that query by POST) with which
- * body. It is the whole vendor-specific half of a fetch, built by the feed module that knows the vendor's URL shape
- * and credential scheme, and handed to {@link FeedClient} which knows nothing about either.
+ * One HTTP request a feed makes: where, how, with which headers and, for a POST query, which body - the vendor-specific
+ * half of a fetch, built by the feed module and handed to {@link FeedClient}.
  *
- * <p>Immutable and freely shared: every mutator returns a fresh request rather than changing this one, so the first
- * request of a paginated fetch can be retried verbatim after a failed attempt and a request held by a scheduler
- * cannot be edited under it.
+ * <p>Immutable: every mutator returns a fresh request, so a first request can be retried verbatim.
  *
- * <p><strong>Credentials never reach a log or an exception message.</strong> {@link #toString()} masks the value of
- * every header whose name carries a credential ({@code Authorization}, {@code Cookie}, an {@code *-api-key},
- * {@code *-token}, ...), because a {@link FeedException} names the request it failed on and a feed's bearer token
- * must not travel into an operator's log with it.
+ * <p><strong>Credentials never reach a log or an exception message.</strong> {@link #toString()} masks every header
+ * whose name carries a credential ({@code Authorization}, {@code Cookie}, {@code *-api-key}, {@code *-token}, ...),
+ * since a {@link FeedException} names the request it failed on.
  */
 public record FeedRequest(URI uri, String method, Map<String, String> headers, String body) {
 
@@ -92,12 +88,8 @@ public record FeedRequest(URI uri, String method, Map<String, String> headers, S
         return Optional.ofNullable(headers.get(name));
     }
 
-    /**
-     * Whether {@code other} is on this request's origin. A cursor page a vendor hands back must resolve to the same
-     * origin as the operator-configured first request: an absolute {@code next} pointing anywhere else both steers the
-     * fetch (an SSRF, when the target is internal) and exfiltrates the request's credential header (when the target
-     * is a public attacker host).
-     */
+    /** Whether {@code other} is on this request's origin. A cursor elsewhere would both steer the fetch (an SSRF, when
+     *  the target is internal) and carry the request's credential to another host. */
     public boolean sameOrigin(URI other) {
         return Origins.same(uri, other);
     }

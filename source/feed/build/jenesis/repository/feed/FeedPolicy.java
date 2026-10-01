@@ -3,22 +3,17 @@ package build.jenesis.repository.feed;
 import module java.base;
 
 /**
- * Every bound and every behavioural knob one feed runs under, in one immutable value: the fail mode, the timeouts,
- * the pagination and byte caps, the retry schedule and the refresh intervals. A feed module states its policy once
- * where it builds its client instead of scattering a {@code MAX_PAGES} constant, a request timeout and a TTL across
- * its implementation - and every bound is therefore inspectable, testable and, where an operator should own it,
- * settable from that feed's own settings.
+ * Every bound and knob one feed runs under, as one immutable value: the fail mode, the timeouts, the pagination and
+ * byte caps, the retry schedule and the refresh intervals, stated once where a feed builds its client.
  *
- * <p>Start from {@link #closed()} or {@link #soft()} - the two fail modes the signal families actually divide into -
- * and narrow with the withers, each named exactly like its accessor:
+ * <p>Start from {@link #closed()} or {@link #soft()} and narrow with the withers, each named like its accessor:
  * {@snippet :
  * FeedPolicy.closed().maxPages(10).requestTimeout(Duration.ofSeconds(15))
  * }
  *
- * <p><strong>Why the deadline exists.</strong> A per-request timeout does not bound a paginated fetch: fifty pages
- * at thirty seconds each is a twenty-five-minute call that still looks bounded on every individual request. The
- * {@link #deadline()} bounds the whole fetch - every page and every retry together - so a single-flight refresh can
- * never park a scheduler behind a slow-but-not-hung feed.
+ * <p>The {@link #deadline()} bounds the whole fetch, every page and retry together, since a per-request timeout does
+ * not bound a paginated fetch: fifty pages at thirty seconds each would park a single-flight refresh for twenty-five
+ * minutes.
  */
 public record FeedPolicy(FailMode failMode,
                          Duration requestTimeout,
@@ -34,23 +29,15 @@ public record FeedPolicy(FailMode failMode,
                          Duration retryInterval,
                          boolean sameOriginOnly) {
 
-    /**
-     * What a feed's consumer must see when the feed cannot answer. The two modes are a property of the <em>signal</em>,
-     * not of the vendor: a missing advisory answer would read as "this package is clean" and must therefore fail
-     * closed, while a missing exploit-probability score or maintainer-health score only leaves a ranking aid absent
-     * and may fail soft.
-     */
+    /** What a feed's consumer sees when the feed cannot answer. The mode is a property of the signal: a missing
+     *  advisory answer would read as "clean" and fails closed, while a missing exploit-probability or maintainer-health
+     *  score only leaves a ranking aid absent and may fail soft. */
     public enum FailMode {
-        /**
-         * A failure is raised as a {@link FeedException}. The consumer never mistakes an error for an empty answer -
-         * the mode every advisory and malicious-package feed uses.
-         */
+        /** A failure is raised as a {@link FeedException}; the mode of every advisory and malicious-package feed. */
         CLOSED,
-        /**
-         * A failure degrades: the fetch answers {@link FeedClient.Status#DEGRADED} carrying the failure, the caller
-         * keeps whatever it had before, and one warning is logged. The mode a ranking aid uses, where an absent
-         * signal is a safe answer and blocking every publish on a vendor outage is not.
-         */
+        /** A failure degrades: the fetch answers {@link FeedClient.Status#DEGRADED}, the caller keeps what it had, and
+         *  one warning is logged. The mode of a ranking aid, where blocking every publish on a vendor outage would be
+         *  wrong. */
         SOFT
     }
 
@@ -81,12 +68,9 @@ public record FeedPolicy(FailMode failMode,
         }
     }
 
-    /**
-     * The fail-closed default: 30 s per request, a 5 min whole-fetch deadline, 50 pages, 3 attempts with a 1 s
-     * exponential backoff capped at 30 s, a 64 MiB response cap and a 16 MiB snapshot cap, refreshed every 6 hours
-     * and retried after 15 minutes, refusing a cross-origin cursor. The numbers mirror what the hand-rolled feed
-     * clients converged on, so adopting the client is not also a behaviour change.
-     */
+    /** The fail-closed default: 30 s per request, a 5 min whole-fetch deadline, 50 pages, 3 attempts with a 1 s
+     *  exponential backoff capped at 30 s, a 64 MiB response cap and a 16 MiB snapshot cap, refreshed every 6 hours and
+     *  retried after 15 minutes, refusing a cross-origin cursor. */
     public static FeedPolicy closed() {
         return new FeedPolicy(FailMode.CLOSED,
                 Duration.ofSeconds(30),
@@ -103,7 +87,7 @@ public record FeedPolicy(FailMode failMode,
                 true);
     }
 
-    /** {@link #closed()}'s bounds with {@link FailMode#SOFT} - the ranking-aid shape. */
+    /** {@link #closed()}'s bounds with {@link FailMode#SOFT}, for a ranking aid. */
     public static FeedPolicy soft() {
         return closed().failMode(FailMode.SOFT);
     }
@@ -133,23 +117,9 @@ public record FeedPolicy(FailMode failMode,
                 maxBackoff, maxResponseBytes, maxSnapshotBytes, refreshInterval, retryInterval, sameOriginOnly);
     }
 
-    /**
-     * The three retry-curve withers below are <b>test seams</b>, and deliberately the only withers on this record
-     * with no production caller.
-     *
-     * <p>Every other value here is chosen in code by the signal source that owns the feed - {@code maxPages},
-     * {@code failMode}, {@code refreshInterval} and the rest all have callers picking a value for their vendor. The
-     * retry curve does not, because no source has needed one other than the default: a first delay, a multiplier and
-     * a ceiling that together bound how hard a transient upstream is retried.
-     *
-     * <p>They exist because a suite that cannot shorten the curve can only assert it by waiting out real seconds of
-     * exponential backoff, which makes the suite slow and flaky for behaviour that is exactly specified. Stated here
-     * because "public, honoured, and called by nothing" is otherwise indistinguishable from a knob that was built
-     * and never wired up, and telling the two apart by eye is what an audit of this shape costs.
-     *
-     * <p>They are not operator dials and are not reachable from configuration. If a source ever needs a gentler
-     * curve for a rate-limited vendor, it sets one here the way it already sets its page count.
-     */
+    /** The three retry-curve withers are test seams with no production caller: no source has needed a curve other than
+     *  the default, and a suite that cannot shorten it must wait out real backoff. They are not operator dials; a
+     *  source that needs a gentler curve for a rate-limited vendor sets one here, as it sets its page count. */
     public FeedPolicy backoff(Duration value) {
         return new FeedPolicy(failMode, requestTimeout, deadline, maxPages, maxAttempts, value, backoffMultiplier,
                 maxBackoff, maxResponseBytes, maxSnapshotBytes, refreshInterval, retryInterval, sameOriginOnly);
@@ -185,23 +155,17 @@ public record FeedPolicy(FailMode failMode,
                 maxBackoff, maxResponseBytes, maxSnapshotBytes, refreshInterval, value, sameOriginOnly);
     }
 
-    /**
-     * Whether a pagination cursor must stay on the first request's origin. Leave it on: a vendor that hands back an
-     * absolute cursor pointing elsewhere is either compromised or being impersonated, and the request's credential
-     * header would travel with it. Turn it off only for a deployment whose own mirror legitimately paginates across
-     * hosts, and say why where the policy is built.
-     */
+    /** Whether a pagination cursor must stay on the first request's origin. Leave it on: a cursor pointing elsewhere
+     *  would carry the request's credential with it. Turn it off only for a mirror that legitimately paginates across
+     *  hosts, and say why where the policy is built. */
     public FeedPolicy sameOriginOnly(boolean value) {
         return new FeedPolicy(failMode, requestTimeout, deadline, maxPages, maxAttempts, backoff, backoffMultiplier,
                 maxBackoff, maxResponseBytes, maxSnapshotBytes, refreshInterval, retryInterval, value);
     }
 
-    /**
-     * The delay before {@code attempt} (1-based, so attempt 2 is the first retry): the vendor's {@code Retry-After}
-     * when it named one, else an exponential backoff from {@link #backoff()}, both capped by {@link #maxBackoff()}.
-     * Deterministic by design - no jitter - so a test asserts the exact schedule; a caller that must spread a fleet's
-     * refreshes does so where it schedules them, not inside a single-flight fetch.
-     */
+    /** The delay before {@code attempt} (1-based, so attempt 2 is the first retry): the vendor's {@code Retry-After}
+     *  when it named one, else exponential backoff from {@link #backoff()}, both capped by {@link #maxBackoff()}. No
+     *  jitter, so a schedule is exact; spreading a fleet's refreshes belongs where they are scheduled. */
     public Duration delayBefore(int attempt, Optional<Duration> retryAfter) {
         if (retryAfter.isPresent() && !retryAfter.get().isNegative()) {
             return min(retryAfter.get(), maxBackoff);

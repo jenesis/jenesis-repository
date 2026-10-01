@@ -1,25 +1,14 @@
 /**
- * The shared bounded feed client: the one mechanism every externally-sourced HTTP JSON feed - a vulnerability
- * advisory API, a known-exploited catalogue, an exploit-probability model, a maintainer-health dataset - rides
- * instead of hand-rolling its own client. It owns exactly the concerns that are the same for every vendor and are
- * where the recurring audit defects lived: {@code HttpClient} setup and timeouts, header (authentication) injection,
- * the non-200 branch, the whole-fetch deadline, bounded cursor pagination with an <em>explicit</em> cap exhaustion,
- * bounded response bodies, retry backoff, the fail-closed / fail-soft policy, the clean self-skip when a feed is not
- * configured, and - for a feed that mirrors a whole catalogue - the snapshot and its staleness stamp committed
- * together through the {@code ArtifactStore}, pointer-last, with the prior-good snapshot retained whenever a refresh
- * does not complete.
+ * The shared bounded feed client every externally-sourced HTTP JSON feed rides: it owns timeouts and the whole-fetch
+ * deadline, header injection, the non-200 branch, bounded cursor pagination, bounded bodies, retry backoff, the
+ * fail-closed / fail-soft policy, the self-skip of an unconfigured feed, and, for a mirrored catalogue, the snapshot
+ * and its staleness stamp committed together through the {@code ArtifactStore}. The vendor-specific half stays with the
+ * feed, which hands in its {@code FeedTransport}, {@code Clock} and {@code FeedClient.Reader}, so nothing global is
+ * discovered.
  *
- * <p>What it deliberately does <em>not</em> own is everything vendor-specific: the URLs, the credentials, the wire
- * shape, the field mapping and the ecosystem/coordinate mapping all stay with the feed implementation, which reaches
- * the client through an injected {@code FeedTransport} and {@code Clock} and hands its own {@code FeedClient.Reader}
- * in to fold each page. Because the transport, the clock and the store all arrive as arguments, the client discovers
- * no global state: a contract suite drives a whole feed from recorded responses with a transport that would throw on
- * a real socket, and a read path can be asserted to make no request at all.
- *
- * <p>This is a <strong>support module, not an SPI contract module</strong>. It carries the weight an SPI must not -
- * {@code java.net.http} and the store - so a {@code java.base}-light contract interface is never coupled to a
- * transport by requiring it. No module may {@code requires transitive} it; the feed client is depended on by the
- * implementation that fetches, never leaked through the seam that declares.
+ * <p>A <strong>support module, not an SPI contract module</strong>: it carries {@code java.net.http} and the store, so
+ * no module may {@code requires transitive} it; the implementation that fetches depends on it, never the seam that
+ * declares.
  *
  * @jenesis.bom pin-repository.properties
  * @jenesis.signature signature-repository.properties

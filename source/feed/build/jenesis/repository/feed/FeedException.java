@@ -3,15 +3,11 @@ package build.jenesis.repository.feed;
 import module java.base;
 
 /**
- * The one named failure a bounded feed fetch raises, carrying <em>which</em> feed failed, <em>why</em> in a
- * machine-readable {@link Reason}, the HTTP status where there was one, how many attempts were spent, and the delay
- * the vendor asked for where it named one. Every bound this client enforces answers with one of these rather than
- * with a plausible-but-incomplete result: a pagination cap is {@link Reason#PAGE_CAP}, an over-long body is
- * {@link Reason#RESPONSE_CAP}, an over-budget fetch is {@link Reason#DEADLINE} (fail fast, and bounds fail
- * visibly).
+ * The one named failure a bounded feed fetch raises: which feed, why ({@link Reason}), the HTTP status where there was
+ * one, the attempts spent, and the delay the vendor asked for. Every bound answers with one of these rather than with
+ * an incomplete result.
  *
- * <p>It extends {@link IOException} so it travels the same path a feed's own I/O failure already travels, and so a
- * fail-closed consumer that catches {@code IOException} keeps failing closed.
+ * <p>An {@link IOException}, so a fail-closed consumer catching {@code IOException} keeps failing closed.
  */
 public final class FeedException extends IOException {
 
@@ -83,19 +79,15 @@ public final class FeedException extends IOException {
         return attempts;
     }
 
-    /**
-     * The delay the vendor's {@code Retry-After} asked for, when it sent one. A vendor that says how long its rate
-     * limit lasts is obeyed in preference to guessing shorter, which is what exhausts a quota.
-     */
+    /** The delay the vendor's {@code Retry-After} asked for, when it sent one; obeyed in preference to a shorter guess,
+     *  which exhausts a quota. */
     public Optional<Duration> retryAfter() {
         return Optional.ofNullable(retryAfter);
     }
 
-    /**
-     * Whether another attempt could plausibly succeed: a transport failure, a rate limit ({@code 429}) or a server
-     * error ({@code 5xx}). A rejected credential, a missing entitlement, a malformed answer and every bound this
-     * client enforces are <em>not</em> retryable - retrying them only burns quota and hides the cause.
-     */
+    /** Whether another attempt could succeed: a transport failure, a {@code 429} or a {@code 5xx}. A rejected
+     *  credential, a missing entitlement, a malformed answer and every bound are not retryable; retrying them burns
+     *  quota and hides the cause. */
     public boolean retryable() {
         return switch (reason) {
             case TRANSPORT -> true;
