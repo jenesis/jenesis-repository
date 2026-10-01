@@ -1,41 +1,24 @@
 package build.jenesis.repository.audit;
 
 /**
- * The {@code action} names of the privileged mutations more than one surface can perform.
+ * The {@code action} names of the privileged mutations more than one surface can perform. A console mutation and its
+ * {@code /api} twin must land in the trail as the same event, because the trail is queried by action: "who released a
+ * held artifact this quarter" is one query, and an answer silently omitting the console's releases is worse than none.
  *
- * <p><b>Why these are constants.</b> A console mutation and its {@code /api} twin must land in the trail as the
- * same event, because the trail is queried by action: an operator asking "who released a held artifact this
- * quarter" runs one query, and an answer that silently omits every release done through the console is worse than
- * no answer. Until this class existed the guarantee was two string literals in two modules that happened to
- * agree - fourteen of them - and the only thing keeping them equal was that nobody had edited one. Both javadocs
- * asserted the property ({@code TenantScope.audit} claimed "the same action the /api twin emits"), which is the
- * shape of a rule that is restated rather than shared, and restated rules drift.
+ * <p>An action only one surface performs stays where it is emitted, and moves here the day a second surface gains it.
  *
- * <p><b>What belongs here.</b> An action name emitted from more than one surface. An action only one surface can
- * perform stays where it is emitted - a constant referenced once is indirection, not sharing - and moves here the
- * day a second surface gains the capability.
- *
- * <p><b>What these names are.</b> Wire values: they are written into a durable, queryable record that outlives the
- * code, so renaming one is a data migration and not a refactor. A test that asserts on the trail should spell the
- * literal out rather than reference the constant, so that a rename fails the test instead of silently travelling
- * with it.
+ * <p>These are wire values written into a durable, queryable record, so renaming one is a data migration. A test
+ * asserting on the trail spells the literal out, so a rename fails it rather than travelling with it.
  */
 public final class AuditActions {
 
     private AuditActions() {
     }
 
-    /**
-     * Identity, and the whole point of it.
-     *
-     * <p>A {@code static final String} initialised from a literal is a compile-time constant, so javac <em>inlines
-     * its value</em> into every class that reads it. Referencing {@code AuditActions.QUARANTINE_RELEASE} and
-     * typing {@code "quarantine.release"} then produce byte-for-byte identical class files, and no inspection can
-     * tell the two apart - which would leave the sharing here a convention again, enforced by nothing, exactly the
-     * state this class exists to end. Routing each value through a method makes it a run-time read: a consumer
-     * emits a {@code getstatic}, the literal stays in this class alone, and
-     * {@code AuditActionOwnershipRule} can fail a module that spells one out for itself.
-     */
+    /** Identity, and the point of it: a {@code static final String} initialised from a literal is a compile-time
+     *  constant that javac inlines into every reader, so referencing a constant and typing its literal would compile to
+     *  identical class files. Routing each value through a method makes a consumer emit a {@code getstatic}, keeping
+     *  the literal in this class alone, so a class-file rule can fail a module that spells one out for itself. */
     private static String action(String name) {
         return name;
     }
@@ -52,8 +35,8 @@ public final class AuditActions {
     /** A gate policy value set. */
     public static final String POLICY_SET = action("policy.set");
 
-    /** A setting's value stored, at any level - the deployment's, a tenant's, a repository's or a project's; the
-     *  target is the key, prefixed by the level it was set at. */
+    /** A setting's value stored at any level - the deployment's, a tenant's, a repository's or a project's; the target
+     *  is the key, prefixed by its level. */
     public static final String SETTING_SET = action("setting.set");
 
     /** A setting's stored value cleared, so it inherits again; targeted as {@link #SETTING_SET} is. */
@@ -92,8 +75,7 @@ public final class AuditActions {
     /** A role removed. */
     public static final String ROLE_REMOVE = action("role.remove");
 
-    // A trust change is recorded by the core's own trusts surface, which owns those two names; the console
-    // references build.jenesis.repository.server.TrustsController.SET / .REMOVE rather than restating them here.
+    // A trust change is recorded under the names TrustsController owns (SET and REMOVE), which the console references.
 
     /** A version marked deprecated - by an operator, or by the ecosystem client's own command. */
     public static final String LIFECYCLE_DEPRECATED = action("lifecycle.deprecated");

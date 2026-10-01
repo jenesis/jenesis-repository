@@ -5,12 +5,11 @@ import build.jenesis.repository.bounds.InheritedBound;
 
 /**
  * A durable, queryable audit trail of security-relevant changes: who ({@code actor}, a credential hash or a named
- * source), what ({@code action}) and on what ({@code target}), per tenant. Recording is best-effort - a failed
- * write must never fail the operation it audits - and a disabled trail records nothing while still answering
- * queries over what was recorded before. How events are persisted is the implementation's part, supplied by an
- * {@link AuditTrailProvider} module discovered with {@link ServiceLoader}; with none installed the {@link #none()
- * none} trail stands in, so a deployment that must keep no audit data removes the module and can prove nothing
- * records.
+ * source), what ({@code action}) and on what ({@code target}), per tenant. Recording is best-effort - a failed write
+ * never fails the operation it audits - and a disabled trail records nothing while still answering queries over earlier
+ * records. Persistence is an {@link AuditTrailProvider} module's, discovered with {@link ServiceLoader}; with none the
+ * {@link #none() none} trail stands in, so a deployment that must keep no audit data removes the module and can prove
+ * nothing records.
  */
 public interface AuditTrail {
 
@@ -18,8 +17,8 @@ public interface AuditTrail {
     record Event(Instant at, String actor, String action, String target) {
     }
 
-    /** A bounded slice of a tenant's trail: the events in this page (newest first) and whether older events remain
-     *  past it, so a console or API render pages on rather than pulling the whole (unrotated) trail on every read. */
+    /** A bounded slice of a tenant's trail: the page's events (newest first) and whether older events remain, so a
+     *  render pages rather than pulling the whole trail. */
     record Page(List<Event> events, boolean more, String next) {
 
         public Page {
@@ -31,16 +30,14 @@ public interface AuditTrail {
         }
     }
 
-    /** The furthest an offset page reaches into a trail: an offset past it is clamped, so an offset
-     *  can never make a read buffer more than this many events. Deeper reads follow a page's {@code next} cursor. */
+    /** The furthest an offset page reaches: an offset past it is clamped, so no offset read buffers more than this many
+     *  events. Deeper reads follow a page's {@code next} cursor. */
     int MAX_OFFSET = 10_000;
 
-    /**
-     * One page of the trail by cursor: the events after {@code after} (the {@code next} of the previous page; null or
-     * blank for the newest page), at most {@code limit} of them, newest first. A cursor read costs the page alone
-     * however deep into the trail it reaches, where an offset read costs the offset as well. The inherited form
-     * resolves the cursor over the materialised answer; a store-backed trail resumes its walk at the cursor.
-     */
+    /** One page by cursor: the events after {@code after} (the previous page's {@code next}; null or blank for the
+     *  newest page), at most {@code limit}, newest first. A cursor read costs the page alone however deep it reaches.
+     *  The inherited form resolves the cursor over the materialised answer; a store-backed trail resumes its walk at
+     *  the cursor. */
     default Page query(String tenant, Instant from, Instant to, String action, String after, int limit)
             throws IOException {
         int offset = after == null || after.isBlank() ? 0 : parseOffset(after);
@@ -63,56 +60,45 @@ public interface AuditTrail {
     /** Record an event for {@code tenant}; best-effort (a failed write is dropped) and a no-op when disabled. */
     void record(String tenant, String actor, String action, String target);
 
-    /** A tenant's events, newest first, optionally bounded by {@code from}/{@code to} (inclusive) and a single
-     *  {@code action}; any of the filters may be {@code null}. The whole (unrotated) trail is materialised, so a
-     *  request-path render that only needs a slice pages through {@link #query(String, Instant, Instant, String, int,
-     *  int)} instead, and a whole-trail export streams through {@link #stream}; this stays for callers that genuinely
-     *  want the list in hand. */
+    /** A tenant's events, newest first, optionally bounded by {@code from}/{@code to} (inclusive) and one
+     *  {@code action}; any filter may be {@code null}. The whole unrotated trail is materialised, so a render pages
+     *  through {@link #query(String, Instant, Instant, String, int, int)} and an export streams through
+     *  {@link #stream}. */
     List<Event> query(String tenant, Instant from, Instant to, String action) throws IOException;
 
-    /** A sink {@link #stream} pushes each event to; it may throw {@link IOException} because a CSV export writes each
-     *  row straight to the (network) response as it arrives. */
+    /** A sink {@link #stream} pushes each event to; it may throw {@link IOException}, since a CSV export writes each
+     *  row to the response as it arrives. */
     @FunctionalInterface
     interface Sink {
         void accept(Event event) throws IOException;
     }
 
     /**
-     * Stream a tenant's events, newest first, filtered exactly as {@link #query(String, Instant, Instant, String)}, to
-     * {@code sink} one at a time - the CSV export writes each row straight to the response, so the whole (unrotated)
-     * trail never lands in heap at once.
+     * Stream a tenant's events, newest first, filtered as {@link #query(String, Instant, Instant, String)}, to
+     * {@code sink} one at a time, so a CSV export never holds the trail in heap.
      *
-     * <p><strong>A trail streams its own storage; the inherited body is a small-trail fallback and says so out loud.</strong>
-     * The {@code default} delegates to {@link #streamByQuery}, which materialises the whole
-     * {@link #query(String, Instant, Instant, String)} answer and emits it row by row - it puts the entire unrotated
-     * trail in heap to stream it, the one thing this signature exists to avoid. So it refuses rather than pretending:
-     * past the ceiling {@link InheritedBound} states it throws an {@link IllegalStateException} naming the inheriting
-     * class and the remedy. The store-backed trail overrides it to hold only one day's events in heap at a time
-     * (bounded by that day's volume) - the streaming twin of the paged
-     * {@link #query(String, Instant, Instant, String, int, int)}, and what lets a very large trail export within a
-     * flat memory envelope; a trail whose events genuinely <em>are</em> in memory calls {@link #streamByQuery} by name.
+     * <p><strong>A trail streams its own storage.</strong> The inherited default materialises the whole answer through
+     * {@link #streamByQuery}, so past the ceiling {@link InheritedBound} states it throws, naming the inheriting class
+     * and the remedy. The store-backed trail overrides it to hold one day's events at a time; an in-memory trail calls
+     * {@link #streamByQuery} by name.
      *
-     * @throws IllegalStateException when the inherited fallback matches more events than {@link InheritedBound}
-     *                               permits an inherited default to materialise
+     * @throws IllegalStateException when the inherited fallback matches more events than {@link InheritedBound} permits
+     *     an inherited default to materialise
      */
     default void stream(String tenant, Instant from, Instant to, String action, Sink sink) throws IOException {
         streamByQuery(this, tenant, from, to, action, sink);
     }
 
     /**
-     * A bounded page of a tenant's events, newest first: at most {@code limit} of them from {@code offset}, filtered
-     * exactly as {@link #query(String, Instant, Instant, String)} - so a console or API render serves a slice rather
-     * than the whole trail on every request.
+     * A bounded page of a tenant's events, newest first: at most {@code limit} from {@code offset}, filtered as
+     * {@link #query(String, Instant, Instant, String)}.
      *
-     * <p>The {@code default} delegates to {@link #pageByQuery}, which materialises the whole trail and slices it, and
-     * carries the same visible ceiling as {@link #stream}: past what {@link InheritedBound} permits it throws rather
-     * than turning one console render into an unbounded heap allocation. The store-backed trail overrides it to bound
-     * the walk, reading only the page's objects (the epoch-millis in each object's name selects the newest page before
-     * any body is read) and never sorting the whole trail - the {@code QuarantineLog.events(int)} idiom applied per
-     * day.
+     * <p>The inherited default slices the materialised trail through {@link #pageByQuery} and throws past
+     * {@link InheritedBound}'s ceiling, as {@link #stream} does. The store-backed trail reads only the page's objects -
+     * the epoch-millis in each name selects the page before any body is read - and never sorts the whole trail.
      *
-     * @throws IllegalStateException when the inherited fallback matches more events than {@link InheritedBound}
-     *                               permits an inherited default to materialise
+     * @throws IllegalStateException when the inherited fallback matches more events than {@link InheritedBound} permits
+     *     an inherited default to materialise
      */
     default Page query(String tenant, Instant from, Instant to, String action, int offset, int limit)
             throws IOException {
@@ -120,13 +106,11 @@ public interface AuditTrail {
     }
 
     /**
-     * Emit {@code trail}'s whole {@link #query(String, Instant, Instant, String)} answer to {@code sink} event by
-     * event - the explicit, named form of the fallback {@link #stream} inherits, for a trail whose events are already
-     * in memory (the none trail, an in-process recorder). It is bounded, and the bound throws: see
-     * {@link InheritedBound}, which holds the ceiling and the refusal for every SPI that ships this shape.
+     * Emit {@code trail}'s whole {@link #query(String, Instant, Instant, String)} answer to {@code sink} event by event
+     * - the named form of {@link #stream}'s fallback, for an in-memory trail. Bounded by {@link InheritedBound}.
      *
      * @throws IllegalStateException when the filter matches more events than {@link InheritedBound} permits an
-     *                               inherited default to materialise
+     *     inherited default to materialise
      */
     static void streamByQuery(AuditTrail trail, String tenant, Instant from, Instant to, String action, Sink sink)
             throws IOException {
@@ -137,12 +121,11 @@ public interface AuditTrail {
     }
 
     /**
-     * Page {@code trail} by materialising and slicing its whole {@link #query(String, Instant, Instant, String)}
-     * answer - the explicit, named form of the fallback {@link #query(String, Instant, Instant, String, int, int)}
-     * inherits, for a trail whose events are already in memory. Bounded exactly as {@link #streamByQuery} is.
+     * Page {@code trail} by slicing its materialised {@link #query(String, Instant, Instant, String)} answer - the
+     * named form of the paged query's fallback, bounded as {@link #streamByQuery} is.
      *
      * @throws IllegalStateException when the filter matches more events than {@link InheritedBound} permits an
-     *                               inherited default to materialise
+     *     inherited default to materialise
      */
     static Page pageByQuery(AuditTrail trail, String tenant, Instant from, Instant to, String action, int offset,
                             int limit) throws IOException {
@@ -153,8 +136,8 @@ public interface AuditTrail {
         return new Page(all.subList(start, end), end < all.size());
     }
 
-    /** The shared trail standing in when no audit module is installed: records nothing, answers no events. It is a
-     *  singleton, so a caller can tell "no audit module" by identity ({@code trail == AuditTrail.none()}). */
+    /** The trail standing in when no audit module is installed: records nothing, answers no events. A singleton, so
+     *  {@code trail == AuditTrail.none()} tells "no audit module". */
     AuditTrail NONE = new AuditTrail() {
 
         @Override
