@@ -3,32 +3,20 @@ package build.jenesis.repository.importer;
 import module java.base;
 
 /**
- * Why a migration walk stopped, classified rather than collapsed.
- *
- * <p>A bare {@link IOException} whichever way an incumbent refused would leave the prose in the message as the only
- * difference between "your token expired", "that repository does not exist" and "the instance is restarting" - and
- * a caller (an import job deciding whether to retry, a console deciding what to tell the operator, an edition wiring
- * a backoff) would have nothing to key on but string matching. This exception carries the one
- * fact those callers need:
- *
+ * Why a migration walk stopped, classified rather than collapsed, so an import job deciding whether to retry or a
+ * console deciding what to say keys on a kind rather than the message:
  * <ul>
- *   <li>{@link Kind#AUTH} - the incumbent refused the credential the request carried (or the absence of one). Retrying
- *       is pointless until the operator changes the credential.</li>
- *   <li>{@link Kind#MISSING} - the incumbent answered, but the repository or asset named is not there. Retrying is
- *       pointless until the operator changes the request.</li>
- *   <li>{@link Kind#TRANSIENT} - the incumbent could not answer <em>now</em>: a transport failure, a throttle, an
- *       overload, a gateway. The same request may well succeed later, so this is the only kind a retry helps.</li>
- *   <li>{@link Kind#PROTOCOL} - the incumbent answered something this connector cannot walk: no listing and no index,
- *       a folder tree past its depth cap, a download aimed off-origin at a private host. The migration needs a
- *       different source or a different setting, not a retry.</li>
+ *   <li>{@link Kind#AUTH} - the incumbent refused the credential, or its absence; retrying is pointless until it
+ *       changes.</li>
+ *   <li>{@link Kind#MISSING} - the incumbent answered, but the repository or asset is not there; retrying is pointless
+ *       until the request changes.</li>
+ *   <li>{@link Kind#TRANSIENT} - the incumbent could not answer now: transport, throttle, overload, gateway. The one
+ *       kind a retry helps.</li>
+ *   <li>{@link Kind#PROTOCOL} - it answered something this connector cannot walk: no listing or index, a tree past its
+ *       depth cap, a download aimed off-origin at a private host. A different source or setting is needed.</li>
  * </ul>
- *
- * <p>{@link #classify(int)} is the single mapping from an HTTP status to a kind, so five connectors cannot arrive at
- * five different ideas of what a {@code 429} means. A connector that surfaces a status through {@link #status} inherits
- * it; a connector with a non-HTTP failure names its kind directly.
- *
- * <p>The messages are unchanged from the plain {@code IOException}s this replaces - a kind is added, nothing is taken
- * away - so an operator still reads which URL failed and with what status.
+ * {@link #classify(int)} is the one mapping from an HTTP status to a kind, so connectors agree on what a {@code 429}
+ * means. The message still names the failing URL and status.
  */
 public final class ImportFailure extends IOException {
 
@@ -64,14 +52,10 @@ public final class ImportFailure extends IOException {
         return kind;
     }
 
-    /**
-     * The kind an HTTP status means for a migration walk, stated once for every connector.
-     *
-     * <p>{@code 401}/{@code 403}/{@code 407} are the credential; {@code 404}/{@code 410} are absence; {@code 408},
-     * {@code 425}, {@code 429} and every {@code 5xx} are "not now"; anything else is a protocol answer this connector
-     * did not expect. A {@code 2xx} is not a failure at all and is deliberately classified {@link Kind#PROTOCOL}: a
-     * connector that hands a success status to this method has already decided the response was unusable.
-     */
+    /** The kind an HTTP status means for a migration walk: {@code 401}/{@code 403}/{@code 407} the credential,
+     *  {@code 404}/{@code 410} absence, {@code 408}, {@code 425}, {@code 429} and every {@code 5xx} "not now", anything
+     *  else an unexpected protocol answer. A {@code 2xx} is {@link Kind#PROTOCOL}: a connector passing a success here
+     *  has already decided the response was unusable. */
     public static Kind classify(int status) {
         return switch (status) {
             case 401, 403, 407 -> Kind.AUTH;
@@ -81,21 +65,20 @@ public final class ImportFailure extends IOException {
         };
     }
 
-    /** A failure carrying an upstream status: {@code "<what> failed (<status>) for <url>"}, classified by
-     *  {@link #classify(int)}. {@code what} names the leg ("Nexus listing", "Download"), so the message reads the way
-     *  it always did. */
+    /** A failure carrying an upstream status, {@code "<what> failed (<status>) for <url>"}, classified by
+     *  {@link #classify(int)}; {@code what} names the leg ("Nexus listing", "Download"). */
     public static ImportFailure status(int status, URI url, String what) {
         return new ImportFailure(classify(status), what + " failed (" + status + ") for " + url);
     }
 
-    /** A transport failure - the fetcher answered nothing at all, so nothing about the incumbent is known. Transient
-     *  by definition: an unresolvable host, a refused connection and a dropped socket are all "not now". */
+    /** A transport failure: the fetcher answered nothing, so it is transient - an unresolvable host, a refused
+     *  connection and a dropped socket are all "not now". */
     public static ImportFailure unreachable(URI url) {
         return new ImportFailure(Kind.TRANSIENT, "No response from " + url);
     }
 
-    /** A failure in what the incumbent answered rather than in whether it answered - no listing and no index, a tree
-     *  past its depth cap, a download aimed somewhere this connector refuses to follow. */
+    /** A failure in what the incumbent answered rather than whether: no listing or index, a tree past its depth cap, a
+     *  download this connector refuses to follow. */
     public static ImportFailure protocol(String message) {
         return new ImportFailure(Kind.PROTOCOL, message);
     }

@@ -3,83 +3,58 @@ package build.jenesis.repository.importer;
 import module java.base;
 
 /**
- * A foreign repository to import from: it enumerates every asset of a source repository and hands each one - its
- * ecosystem format, its path within the repository, and its bytes - to a consumer. A source is the read half of a
- * migration; the repository's import orchestrator is the write half, routing each asset to the
- * {@link build.jenesis.repository.format.RepositoryImporter} that handles its format. An implementation ships as its
- * own module that provides an {@link ImportSourceProvider}; the server discovers them with
- * {@link java.util.ServiceLoader}, so supporting another incumbent is a matter of adding a module, with the server
- * none the wiser. Nexus, Artifactory, the vendor-neutral Maven tree walk, the format-native index walk and jenesis
- * itself are the built-in ones.
- * Every implementation streams through the same {@link build.jenesis.repository.format.ProxyFormat.Fetcher} the proxy
- * uses, so an import is tested without the network.
+ * A foreign repository to import from: it enumerates every asset of a source repository and hands each - its format,
+ * its path within the repository, its bytes - to a consumer, the read half of a migration; the orchestrator routes each
+ * to the {@link build.jenesis.repository.format.RepositoryImporter} of its format. A connector ships as its own module
+ * providing an {@link ImportSourceProvider}, discovered with {@link java.util.ServiceLoader}. Every implementation
+ * streams through the shared {@link build.jenesis.repository.format.ProxyFormat.Fetcher}, so an import is tested
+ * without the network.
  *
  * <h2>Contract</h2>
- * The read half's behavioural contract, proven per connector by {@code ImportContract} in the importer testkit. The
- * provider that builds a source ({@link ImportSourceProvider}) carries the construction-side clauses.
+ * The read half's contract, proven per connector by {@code ImportContract}; {@link ImportSourceProvider} carries the
+ * construction side.
  * <ol>
- * <li><b>Thread-safety.</b> A source is built per migration and walked by one thread; it need not be concurrent. It
- *     <em>is</em> immutable in its configuration - {@code withCredentials}/{@code from} answer a new instance - so a
- *     resumed walk never mutates the source an interrupted one held.</li>
- * <li><b>Idempotency / replay.</b> {@link #forEach} is replayable. A walk resumed from a cursor a prior run reported
- *     continues rather than re-delivering what that run had fully consumed, and re-running it from the same cursor
- *     delivers the same assets in the same order. A cursor the source can no longer place (the incumbent's index moved)
- *     restarts the walk rather than skipping the remainder - an import is idempotent, so re-importing is safe where
- *     losing assets is not.</li>
- * <li><b>Absence sentinel.</b> An empty repository is a walk that reports no asset and one terminal {@code null}
- *     checkpoint, never an exception. A {@code null} cursor means "complete"; a non-{@code null} one means "resume
- *     here".</li>
- * <li><b>Streaming.</b> {@link Content#open} is deferred and unbuffered: the asset's bytes are not fetched
- *     while it is enumerated, and when it is opened the stream comes straight off the network, so the consumer's copy
- *     to storage is the only pass over the body. A whole-repository listing is itself streamed where the incumbent
- *     serves one document for it.</li>
- * <li><b>Error visibility.</b> An incumbent that refuses, is absent or cannot answer surfaces as an
- *     {@link ImportFailure} carrying its {@link ImportFailure.Kind} - auth, missing, transient and protocol are
- *     distinguishable without reading the message. A malformed <em>entry</em> is different: an incomplete or
- *     traversal-laced listing row is skipped and the walk continues, because one bad row must not abort a migration.</li>
- * <li><b>Traversal refusal.</b> A reported {@link Asset} path is repository-relative and {@link #safePath} - a listing
- *     path derives from a name someone published to the incumbent, and it becomes a store write on the write half. A
- *     source screens every path it reports; the importer refuses one that slipped through
- *     ({@code RepositoryImporter.importable}), and the two screens agree by construction.</li>
- * <li><b>Fetch refusal.</b> The twin of the clause above, on the half that reaches outward. A listing row carries a
- *     <em>path</em>, which the clause above screens, and frequently also a <em>location</em> the source must
- *     dereference to obtain the bytes - and that location is likewise a value the incumbent supplied, so it is
- *     likewise not to be trusted. A source therefore fetches only through the {@link build.jenesis.repository.format.ProxyFormat.Fetcher} it was
- *     handed, which is already screened ({@code ImportScreen}, applied by {@code ImportSourceProvider.open}); it
- *     may wrap that fetcher to add credentials, and it may not replace it, build an HTTP client of its own, or
- *     dereference a location by any other route. A location the screen refuses fails the walk loudly rather than
- *     being skipped, because a refused download is either an incumbent that is misconfigured or one that is
- *     hostile, and a walk that quietly omits the asset reports the same "nothing here" as an empty repository.
- *     <p>Stated on this side as well as on {@code ImportSourceProvider}'s clause 10 because the two halves are
- *     enforced in different places and a contract that constrains what a provider is <em>given</em> but not what a
- *     source may <em>do</em> with it leaves the more dangerous half unstated - and a download-URL screen left
- *     per-connector drifts into different answers across the connectors.</li>
- * <li><b>Ordering / concurrency.</b> The enumeration order is deterministic for a given source state, because that is
- *     what makes a cursor mean anything: a resumed walk must be able to skip exactly what the interrupted one
- *     completed. {@link Checkpoint#reached} is called only after every asset of a batch has been fully consumed, so a
- *     cursor never claims progress the consumer has not made.</li>
- * <li><b>Bounded work / cancellation.</b> The walk pages rather than materialising a whole catalogue, and every
- *     recursive descent carries a depth cap. Reaching a cap is an explicit {@link ImportFailure}, never a truncated
- *     asset list that a caller would read as a complete migration.</li>
- * <li><b>Durability / delivery.</b> A source is stateless and durable nowhere; the cursor it reports is the only
- *     progress token, and persisting it is the caller's job. A crash between an asset's import and the next checkpoint
- *     re-delivers that asset on resume, which the content-addressed store absorbs.</li>
+ *   <li><b>Thread-safety.</b> Built per migration and walked by one thread. Immutable in its configuration -
+ *       {@code withCredentials}/{@code from} answer a new instance - so a resumed walk never mutates an interrupted
+ *       one's source.</li>
+ *   <li><b>Idempotency / replay.</b> {@link #forEach} resumed from a reported cursor continues rather than
+ *       re-delivering what was consumed, and the same cursor delivers the same assets in the same order. A cursor the
+ *       source can no longer place restarts the walk rather than skipping the rest: re-importing is safe, losing assets
+ *       is not.</li>
+ *   <li><b>Absence sentinel.</b> An empty repository reports no asset and one terminal {@code null} checkpoint, never
+ *       an exception. A {@code null} cursor means complete; any other means resume here.</li>
+ *   <li><b>Streaming.</b> {@link Content#open} is deferred and unbuffered: nothing is fetched while enumerating, and
+ *       the opened stream comes off the network, so the consumer's copy is the one pass. A whole-repository listing
+ *       served as one document is streamed.</li>
+ *   <li><b>Error visibility.</b> An incumbent that refuses, is absent or cannot answer surfaces as an
+ *       {@link ImportFailure} of the matching {@link ImportFailure.Kind}. A malformed <em>entry</em> is skipped and the
+ *       walk continues.</li>
+ *   <li><b>Traversal refusal.</b> A reported {@link Asset} path is repository-relative and {@link #safePath}, since it
+ *       derives from a name published to the incumbent and becomes a store write. The importer refuses one that slipped
+ *       through ({@code RepositoryImporter.importable}); the two screens agree by construction.</li>
+ *   <li><b>Fetch refusal.</b> A row's location is incumbent-supplied too, so a source fetches only through the fetcher
+ *       it was handed, already screened ({@code ImportScreen}, applied by {@code ImportSourceProvider.open}); it may
+ *       wrap it to add credentials, never replace it, build its own client or dereference a location another way. A
+ *       refused location fails the walk loudly rather than being skipped, which would read as an empty repository.</li>
+ *   <li><b>Ordering / concurrency.</b> Enumeration order is deterministic for a source state, so a cursor means
+ *       something. {@link Checkpoint#reached} is called only after every asset of a batch is consumed.</li>
+ *   <li><b>Bounded work / cancellation.</b> The walk pages, and every recursive descent has a depth cap; reaching a cap
+ *       is an explicit {@link ImportFailure}, never a truncated list read as complete.</li>
+ *   <li><b>Durability / delivery.</b> A source is stateless; its cursor is the only progress token, persisted by the
+ *       caller. A crash between an asset's import and the next checkpoint re-delivers it, which the content-addressed
+ *       store absorbs.</li>
  * </ol>
  */
 public interface ImportSource {
 
-    /** Enumerate the source's assets, handing each to {@code consumer}, and reporting a resume cursor to
-     *  {@code checkpoint} after each batch is fully consumed - an opaque token to resume the walk from, or
-     *  {@code null} once the walk is complete. A walk that is interrupted can be resumed from the last reported
-     *  cursor (a source that supports resuming takes it when created); a source with no pagination reports a single
-     *  {@code null} at the end. */
+    /** Enumerate the assets, handing each to {@code consumer} and reporting a resume cursor to {@code checkpoint} after
+     *  each batch is fully consumed, {@code null} once complete. A source without pagination reports one {@code null}
+     *  at the end. */
     void forEach(Asset consumer, Checkpoint checkpoint) throws IOException;
 
-    /** Whether a listing-derived path is safe to report as an asset's repository-relative path: relative, with no
-     *  empty, {@code .} or {@code ..} segment and no backslash. The path a source reports becomes a store write on
-     *  the import's write half, and a foreign listing is only semi-trusted (an asset's path can derive from a name
-     *  someone published to the incumbent) - so a source skips an asset whose path fails this instead of letting a
-     *  traversal-laced name aim the write outside the import's scope. */
+    /** Whether a listing-derived path is safe to report: relative, with no empty, {@code .} or {@code ..} segment and
+     *  no backslash. A source skips an asset failing this, since the path becomes a store write and may derive from a
+     *  name published to the incumbent. */
     static boolean safePath(String path) {
         if (path == null || path.isEmpty() || path.indexOf('\\') >= 0) {
             return false;
@@ -92,39 +67,26 @@ public interface ImportSource {
         return true;
     }
 
-    /** One asset of the source: the ecosystem {@code format}, the {@code path} within the repository, and a handle
-     *  that downloads its bytes. The content is read lazily, so an asset whose format no importer handles is never
-     *  downloaded - the orchestrator skips it without spending the bandwidth. */
+    /** One asset: its ecosystem {@code format}, its {@code path} in the repository, and a lazy handle to its bytes, so
+     *  an asset no importer handles is never downloaded. */
     @FunctionalInterface
     interface Asset {
         void accept(String format, String path, Content content) throws IOException;
 
         /**
-         * A row the connector refused to carry, and why.
+         * A row the connector refused to carry, and why, so a listing whose every row was refused does not finish
+         * looking like an empty source; {@link Reason#UNSAFE_PATH} in particular is the signal of a hostile source. A
+         * default no-op, so a lambda implementing this interface compiles.
          *
-         * <p>It exists because a drop is otherwise invisible: every connector {@code continue}s past a traversal-laced
-         * path,
-         * an incomplete listing row or a malformed URL, and the consumer only ever counted what it received. A
-         * listing whose every row is laced therefore finished {@code completed, imported: 0, skipped: 0} - which
-         * reads exactly like migrating an empty source. "Nothing was there" and "everything was refused" were the
-         * same answer.
-         *
-         * <p>That matters most for {@link Reason#UNSAFE_PATH}: a traversal-laced path is the one signal that a
-         * migration source is hostile, and it was the thing being discarded in silence.
-         *
-         * <p>A default no-op, so the lambdas that implement this interface today keep compiling and a connector
-         * reports what it drops as it is taught to.
-         *
-         * @param path   the offending path as the source gave it, which may be hostile - a caller that renders it
-         *               must treat it as untrusted text, never as a path it resolves
+         * @param path the offending path as given, possibly hostile: a caller rendering it treats it as untrusted text,
+         *     never as a path it resolves
          * @param reason what was wrong with it
          */
         default void dropped(String path, Reason reason) {
         }
     }
 
-    /** Why a connector refused a row. Carried rather than collapsed into one count, because "a hostile source" and
-     *  "a broken listing" are different operational facts and only the first is an attack indicator. */
+    /** Why a connector refused a row, kept apart since a hostile source and a broken listing are different facts. */
     enum Reason {
 
         /** The path was not {@link #safePath} - a traversal attempt, an absolute path, or a control character. */
@@ -137,16 +99,15 @@ public interface ImportSource {
         MALFORMED_URL
     }
 
-    /** A deferred download of one asset's bytes, opened only once an importer has claimed the asset's format. The
-     *  stream copies straight from the source to storage, so a large artifact is never buffered whole; the caller
-     *  owns and closes it. */
+    /** A deferred download of one asset's bytes, opened once an importer claimed its format; the stream copies from the
+     *  source to storage, never buffered, and the caller closes it. */
     @FunctionalInterface
     interface Content {
         InputStream open() throws IOException;
     }
 
-    /** Notified after a batch is fully consumed with the cursor to resume from (the next page's token), or
-     *  {@code null} when the walk is complete - the seam a job uses to persist progress for a resumable re-sync. */
+    /** Notified after a batch is consumed with the cursor to resume from, or {@code null} when complete: where a job
+     *  persists progress. */
     @FunctionalInterface
     interface Checkpoint {
         void reached(String cursor) throws IOException;

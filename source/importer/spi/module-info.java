@@ -1,16 +1,10 @@
 /**
- * The import-source SPI - the read half of a migration. An {@link build.jenesis.repository.importer.ImportSource}
- * enumerates a foreign repository's assets; an {@link build.jenesis.repository.importer.ImportSourceProvider} builds one
- * for a named incumbent from an {@link build.jenesis.repository.importer.ImportRequest}. A connector ships as its own
- * module that {@code provides} a provider, discovered with {@code ServiceLoader}, so the server supports another
- * incumbent by adding a module without knowing it. A walk that cannot continue fails with an
- * {@link build.jenesis.repository.importer.ImportFailure}, whose {@code Kind} tells a refused credential from an absent
- * repository, an unavailable instance and an unwalkable protocol - one classification for every connector, so a job
- * deciding whether to retry has something better than the message text to key on. Every URL a migration fetches -
- * the operator's own and every one a listing hands back - passes {@link build.jenesis.repository.importer.ImportScreen},
- * which rides on the fetcher a connector is handed rather than inside any connector, so a connector cannot forget it.
- * Depends only on the format SPI (for the shared {@code ProxyFormat.Fetcher}) and java.base; a connector reads and
- * writes its own JSON with Jackson.
+ * The import-source SPI, the read half of a migration: an {@link build.jenesis.repository.importer.ImportSource}
+ * enumerates a foreign repository's assets, built by an {@link build.jenesis.repository.importer.ImportSourceProvider}
+ * from an {@link build.jenesis.repository.importer.ImportRequest}; a connector ships as a module that {@code provides}
+ * a provider. A walk that cannot continue fails with an {@link build.jenesis.repository.importer.ImportFailure}
+ * classified by kind. Every URL a migration fetches passes {@link build.jenesis.repository.importer.ImportScreen} on
+ * the fetcher a connector is handed.
  *
  * @jenesis.release 25
  * @jenesis.bom pin-repository.properties
@@ -21,8 +15,6 @@ module build.jenesis.repository.importer {
     uses build.jenesis.repository.importer.ImportSourceProvider;
     exports build.jenesis.repository.importer;
 
-    // The family extends IconContributor, so every implementation gains the optional mark seam and
-    // the console resolves one answer for all of them. Transitive: an implementation overriding
-    // icon() names IconResource in its own signature.
+    // The family extends IconContributor; transitive, since an implementation overriding icon() names IconResource.
     requires transitive build.jenesis.repository.icon;
 }

@@ -5,9 +5,8 @@ import module java.base;
 /**
  * The configuration of a submitted migration, handed to an {@link ImportSourceProvider} to build its
  * {@link ImportSource}: the incumbent's {@code url} and the {@code repository} to walk (both required), and the
- * optional bits a given source needs - an ecosystem {@code format} (an Artifactory repository holds one; a Nexus
- * instance reports it per asset), HTTP basic {@code username}/{@code password}, and a {@code cursor} to resume an
- * interrupted walk from. A provider reads what it needs and ignores the rest.
+ * optional parts a source needs - an ecosystem {@code format}, HTTP basic {@code username}/{@code password}, and a
+ * {@code cursor} to resume from.
  */
 public final class ImportRequest {
 
