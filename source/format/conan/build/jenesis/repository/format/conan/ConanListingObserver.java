@@ -11,11 +11,10 @@ import build.jenesis.repository.store.ListingObserver;
 import build.jenesis.repository.store.StoredListing;
 
 /**
- * Keeps the Conan {@linkplain ConanListings stored revision index} in step with the transitions that happen off the
- * upload path - a hold on a stored file and its release, a removal - by re-deciding the one file's entry and its
- * revision's. A transition that names a coordinate and version but no file regenerates that version's documents in
- * place, across every registry; one that names only a content hash regenerates every Conan document. A lifecycle
- * mark changes nothing a Conan client reads.
+ * Keeps the Conan {@linkplain ConanListings stored revision index} in step with transitions off the upload path - a
+ * hold and its release, a removal - by re-deciding the one file's entry and its revision's. A subject naming a
+ * coordinate and version but no file regenerates that version's documents across registries; one naming only a content
+ * hash regenerates every Conan document. A lifecycle mark changes nothing a Conan client reads.
  */
 public final class ConanListingObserver implements ListingObserver {
 

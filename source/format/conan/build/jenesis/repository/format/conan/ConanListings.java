@@ -14,15 +14,12 @@ import tools.jackson.databind.node.ObjectNode;
 import tools.jackson.core.JsonToken;
 
 /**
- * A Conan recipe's and package's revision index as stored listings: the {@code revisions} document of a parent (a
- * recipe reference or a package id under a recipe revision), whose entries are its revisions with their upload
- * times, newest first; its {@code latest}, derived from the revisions on every write as the newest entry; and the
- * {@code files} document of one revision, whose entries are the file names it serves. Each lives beside the raw
- * subtree it describes, under an {@code @}-prefixed name no client-computed revision carries.
+ * A Conan recipe's and package's revision index as stored listings: a parent's {@code revisions} (its revisions with
+ * upload times, newest first) with {@code latest} derived, and one revision's {@code files}. Each sits beside the raw
+ * subtree it describes, under an {@code @}-prefixed name no revision carries.
  *
- * <p>A file is listed exactly when its pointer is not withheld - the screen the on-read generation applied per
- * file; a revision is listed exactly when it still exists and either lists a file or holds none at all (a revision
- * nothing has been uploaded to names no withheld coordinate, so only a hold that took every file unlists it).
+ * <p>A file is listed exactly when its pointer is not withheld; a revision while it exists and lists a file or holds
+ * none, so only a hold that took every file unlists it.
  */
 final class ConanListings {
 
@@ -42,20 +39,10 @@ final class ConanListings {
             return entries;
         }
 
-        /**
-         * <b>This one collects, and no appender can replace it.</b>
-         *
-         * <p>Every other codec here writes its entries in the ascending id order a {@code Sink} delivers them in,
-         * which is why an appender can emit as they arrive. This document is ordered by {@link #ordered} - newest
-         * revision first, by a timestamp read out of each entry - so its order is a function of <em>all</em> the
-         * entries and is not knowable until the last one has been seen. A spooling appender does not help either:
-         * a spool defers the opening bytes, it does not reorder the body.
-         *
-         * <p>The document is one recipe's revisions, so collecting it is bounded by what a publisher pushes to one
-         * recipe rather than by the repository. That is the reason this is acceptable, and it is worth saying
-         * outright: "the codec has no appender" is otherwise indistinguishable from the oversight that made a
-         * streaming generator write into a buffer everywhere else.
-         */
+        /** <b>This one collects, and no appender can replace it.</b> The document is ordered newest first by a time
+         *  read from each entry ({@link #ordered}), not in the id order a {@code Sink} delivers, so its order is
+         *  unknown until the last entry. It holds one recipe's revisions, bounded by a publisher rather than by the
+         *  repository. */
         @Override
         public byte[] join(SortedMap<String, byte[]> entries) {
             StringBuilder array = new StringBuilder("{\"revisions\":[");
@@ -97,15 +84,7 @@ final class ConanListings {
             return ConanFormat.MAPPER.writeValueAsBytes(root);
         }
 
-        /**
-         * The stored entries, pulled one at a time rather than split out of the whole document.
-         *
-         * <p>The counterpart of the appender below, and the half that was missing: with only {@code append} the
-         * generation streamed while every incremental update still read the document back through the
-         * materialising default. One recipe's files is bounded by a publisher rather than by the repository, so
-         * this is parity rather than a memory fix - but the two halves belong together, and a codec with one is
-         * a codec somebody will assume has both.
-         */
+        /** The stored entries, pulled one at a time, the counterpart of the appender below. */
         @Override
         public Reader read(InputStream in, long ignored) throws IOException {
             JsonParser parser = ConanFormat.MAPPER.createParser(in);
@@ -144,8 +123,7 @@ final class ConanListings {
             };
         }
 
-        /** The same object, written as the names arrive - unlike its sibling above, this document is in the id
-         *  order a {@code Sink} delivers, so it needs nothing held. */
+        /** The same object, written as the names arrive, in the id order a {@code Sink} delivers. */
         @Override
         public Appender append(OutputStream out) {
             return new Appender() {
@@ -232,8 +210,6 @@ final class ConanListings {
         return revBase + "/" + FILES;
     }
 
-    // ---- specs ----
-
     /** The revisions of a parent - a recipe reference ({@code conan/<repo>/r/<name>/<version>/<user>/<channel>}) or a
      *  package id under a recipe revision ({@code .../<rrev>/pkg/<pid>}) - with {@code latest} derived. */
     StoredListing.Spec revisionsSpec(String parent) {
@@ -250,8 +226,6 @@ final class ConanListings {
     StoredListing.Spec filesSpec(String revBase) {
         return StoredListing.Spec.materialising(files(revBase), FILE_ENTRIES, () -> generateFiles(revBase));
     }
-
-    // ---- generation: the first materialisation and the repair pass ----
 
     private SortedMap<String, byte[]> generateRevisions(String parent) throws IOException {
         SortedMap<String, byte[]> entries = new TreeMap<>();
@@ -303,10 +277,7 @@ final class ConanListings {
         }
     }
 
-    // ---- the write path ----
-
-    /** Re-decide one file's entry and its revision's from the store's current state - after an upload, a proxy fill,
-     *  a hold, a release or a removal. */
+    /** Re-decide one file's entry and its revision's from the store's current state. */
     void refresh(String parent, String revision, String filename) throws IOException {
         String revBase = parent + "/" + revision;
         String key = revBase + "/files/" + filename;
@@ -318,8 +289,7 @@ final class ConanListings {
         refreshRevision(parent, revision);
     }
 
-    /** Re-decide one revision's entry: listed while it exists and its stored files listing names a file, or while it
-     *  holds no file at all. */
+    /** Re-decide one revision's entry: listed while it exists and lists a file, or holds no file at all. */
     void refreshRevision(String parent, String revision) throws IOException {
         String revBase = parent + "/" + revision;
         boolean listed = false;
@@ -339,7 +309,7 @@ final class ConanListings {
     }
 
     /** Regenerate the listing at this key if it is a Conan one: a revisions document, a files document, or the
-     *  {@code latest} that regenerates with its revisions. */
+     *  {@code latest} regenerating with its revisions. */
     boolean rebuild(String listing) throws IOException {
         if (!listing.startsWith("conan/")) {
             return false;

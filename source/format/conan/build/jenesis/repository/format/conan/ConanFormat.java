@@ -26,70 +26,51 @@ import build.jenesis.repository.walk.BoundedChildren;
 import build.jenesis.repository.walk.TraversalException;
 
 /**
- * The Conan (C/C++) registry format (the Conan v2 REST protocol), so {@code conan upload} and {@code conan install}
- * resolve C/C++ packages over the shared store. It owns {@code /conan/...}, where the first path segment is a registry:
- * a capability {@code GET /conan/<repo>/v2/ping} advertises {@code X-Conan-Server-Capabilities: revisions} (so a Conan 2
- * client uses the revisions API), a recipe or package <i>file</i> is pushed with
- * {@code PUT /conan/<repo>/v2/conans/<name>/<version>/<user>/<channel>/revisions/<rrev>/files/<file>} (and its package
- * equivalent under {@code .../packages/<package_id>/revisions/<prev>/files/<file>}), and the same path serves the file
- * back. A reference without a user/channel uses Conan's {@code _} placeholder for both.
+ * The Conan (C/C++) registry format (the Conan v2 REST protocol): {@code conan upload} and {@code conan install} over
+ * the shared store, under {@code /conan/...}, the first segment a registry. {@code GET /conan/<repo>/v2/ping}
+ * advertises {@code X-Conan-Server-Capabilities: revisions}, so a Conan 2 client uses the revisions API; a recipe file
+ * is pushed with {@code PUT /conan/<repo>/v2/conans/<name>/<version>/<user>/<channel>/revisions/<rrev>/files/<file>} (a
+ * package file under {@code .../packages/<package_id>/revisions/<prev>/files/<file>}) and served from the same path. A
+ * reference without user and channel uses Conan's {@code _} placeholder.
  *
- * <p><b>Revision-addressed, indexed on write.</b> A Conan client computes the recipe revision ({@code rrev}) and the
- * package revision ({@code prev}) itself - a hash of the exported sources / the built binary - and uploads each file to
- * that revision's path, so this format is a streaming, revision-addressed file store: it stores whatever the client
- * pushes at the client's revision and never has to open an archive (the coordinate is in the request path, not inside
- * the bytes). The revision index a client reads - the recipe's {@code latest} and {@code revisions}, a revision's
- * {@code files} listing, and the same three for a package_id's revisions - is a {@linkplain ConanListings stored
- * listing} each upload updates with its one entry, and a read streams as it is. The {@code latest} revision is the
- * most recently uploaded, so each file upload stamps its revision's time (a small compare-and-set pointer through the
- * store), and {@code latest} / {@code revisions} order by it.
+ * <p><b>Revision-addressed, indexed on write.</b> The client computes the recipe and package revisions itself and
+ * uploads each file to its revision's path, so the coordinate is in the path and no archive is opened. The index a
+ * client reads - a recipe's {@code latest} and {@code revisions}, a revision's {@code files}, and the same for a
+ * package id - is a {@linkplain ConanListings stored listing} each upload updates by one entry. {@code latest} is the
+ * most recently uploaded, so each upload stamps its revision's time by compare-and-set.
  *
- * <p><b>Streaming publish.</b> An uploaded file streams straight through {@link Blobs#write(String, InputStream)} into
- * the content-addressed store, hashed on the way and never buffered, so an arbitrarily large {@code conan_package.tgz}
- * never lands in heap; a download streams the blob back out. Files dedupe in the shared {@code blobs/} namespace like
- * every other language format.
+ * <p><b>Streaming publish.</b> A file streams through {@link Blobs#write(String, InputStream)} into the
+ * content-addressed store, so a {@code conan_package.tgz} of any size never lands in heap.
  *
- * <p>The layout declares its ecosystem ({@code "Conan"}) so the console and download tracking key on it;
- * {@link #describe} resolves a recipe/package file download path to its {@code <name>} coordinate and version. OSV
- * carries no dedicated Conan advisory feed today, so vulnerability screening is a graceful no-op while a coordinate
- * still drives license and malicious-package screening (the sibling {@code compliance/conan} inspector).
- * File pointers live in the shared {@code Blobs} namespace, so the {@code publish/}-namespace eviction ({@link #paths})
- * stays empty; coordinate-scoped enforcement runs through the {@code BlobLayout} seam
- * ({@link #blobKeys}/{@link #servedPaths}) instead.
+ * <p>The ecosystem is {@code "Conan"}, and {@link #describe} maps a file path to its {@code <name>} coordinate and
+ * version. OSV has no Conan feed, so vulnerability screening finds nothing while the coordinate drives licence and
+ * malicious-package screening. Pointers live in the shared {@code Blobs} namespace, so {@link #paths} is empty and a
+ * coordinate is reached through {@link #blobKeys} and {@link #servedPaths}.
  *
- * <p><b>Pull-through proxy.</b> The same layout is also a {@link ProxyFormat}: a local miss on a {@code v2/conans/...}
- * read is served from an upstream Conan server, mapping {@code /conan/<repo>/v2/conans/...} to
- * {@code <upstream>/v2/conans/...} (the local registry name is a deployment alias, so it is stripped and the rest of the
- * v2 path maps through). An immutable revision file ({@code .../revisions/<rrev>/files/<file>} and its package
- * equivalent - a content-addressed, revision-pinned blob) streams from upstream straight into the CAS
- * ({@link ProxyRelay#fill}, never buffered), stamps its revision's time, and is served locally, so a
- * later read is a local hit that never touches the upstream. The mutable index a client reads ({@code latest},
- * {@code revisions}, a revision's {@code files} listing, a {@code search}) is streamed through fresh on every read -
- * these documents carry no download URLs (a client builds a file URL from the request path, which already roots at this
- * repository), so the index needs no rewrite. {@link #defaultUpstream()} is ConanCenter (the canonical public Conan
- * registry); a deployment can name a different upstream per repository.
+ * <p><b>Pull-through proxy.</b> A local {@code v2/conans/...} miss is served from an upstream Conan server, the alias
+ * stripped and the path mapped through. A revision file is immutable: it streams into the store
+ * ({@link ProxyRelay#fill}), stamps its revision's time and serves locally. The index ({@code latest},
+ * {@code revisions}, {@code files}, {@code search}) is streamed fresh and carries no download URLs.
+ * {@link #defaultUpstream()} is ConanCenter.
  */
 public final class ConanFormat implements RepositoryFormat, ArtifactLayout, ProxyLeg, BlobLayout, RepositoryImporter,
         RepositoryExporter {
 
-    /** The package-ecosystem name this format's artifacts report (distinct from {@link #name()}, the routing id). OSV
-     *  has no dedicated Conan feed, so vulnerability lookups on it simply find nothing; the coordinate still drives
-     *  license and malicious-package screening. */
+    /** The ecosystem name this format's artifacts report, distinct from {@link #name()}, the routing id. */
     public static final String ECOSYSTEM = "Conan";
 
-    /** Package-private like its peers in the other formats: the listing codec beside this parses with it too,
-     *  and a second mapper for one reader would be a second configuration to keep in step. */
+    /** Shared with the listing codec beside this, so one mapper configuration serves both. */
     static final ObjectMapper MAPPER = new ObjectMapper();
 
     private static final String PREFIX = "/conan/";
     private static final String CONANS = "v2/conans/";
 
-    /** The canonical public Conan registry a proxy repository mirrors when a deployment enables proxying without naming
-     *  an upstream (Conan 2's {@code conancenter} remote), the Conan analogue of npm's registry.npmjs.org. */
+    /** The canonical public Conan registry mirrored when a deployment names no upstream, Conan 2's
+     *  {@code conancenter}. */
     private static final URI CONAN_CENTER = URI.create("https://center2.conan.io");
 
-    /** The Conan 2 server capabilities a client reads from {@code /v2/ping}: {@code revisions} is required for the
-     *  revisions REST API this format speaks; {@code complex_search} advertises pattern search (a follow-on). */
+    /** The capabilities a client reads from {@code /v2/ping}: {@code revisions} is required for the revisions API this
+     *  format speaks; {@code complex_search} advertises pattern search. */
     private static final String CAPABILITIES = "revisions,complex_search";
 
     @Override
@@ -110,25 +91,15 @@ public final class ConanFormat implements RepositoryFormat, ArtifactLayout, Prox
     @Override
     public List<String> blobKeys(String coordinate, String version, ArtifactStore store) throws IOException {
         if (!BlobLayout.addressable(coordinate, version)) {
-            // A traversal-shaped coordinate or version maps nowhere: these keys are what an eviction DELETES, and
-            // ArtifactStore.delete is not screened. The shared per-part screen, so a legitimately
-            // multi-segment coordinate still resolves.
+            // A traversal-shaped coordinate or version maps nowhere, since an eviction deletes these keys; judged part
+            // by part.
             return List.of();
         }
-        // A Conan recipe/package file is addressed by client-computed revisions (rrev/prev) and a pushed filename, none
-        // derivable from the <name,version> coordinate alone, so discover them by walking the version's own subtree
-        // conan/<repo>/r/<name>/<version> (recipeBase without the user/channel) - users -> channels -> rrevs -> the
-        // recipe files/*, plus each rrev's pkg/<pid>/<prev>/files/* package files. Every file under a revision's files/
-        // directory is a Blobs.write pointer with a bare-hex body, so the BlobLayout.blobHashes default resolves the
-        // withhold set from them (the time/commit/latest markers live OUTSIDE files/ and are never collected). A
-        // retroactive KEV/license hold marks those hashes - the file serve and the revision's files listing both gate on
-        // the marker - and an eviction deletes these exact keys; an empty return would make a hold a silent no-op
-        // (no marker, no review handle) and a KEV-listed recipe/package would keep serving. Every level under the
-        // version is
-        // attacker-publishable, so it is PAGED a page at a time (store.page), never list()ed whole (a whole
-        // listing there is a denial-of-service lever); the tree depth is fixed
-        // (user/channel/rrev[/pkg/pid/prev]/files), so the walk is bounded, not recursive over an attacker-controlled
-        // depth.
+        // Files are addressed by client-computed revisions and pushed names, so they are found by walking the version's
+        // own subtree conan/<repo>/r/<name>/<version>: users, channels, recipe revisions and their files, and each
+        // revision's pkg/<pid>/<prev>/files. Each pointer's body is the blob hash, from which the withhold set derives;
+        // a hold marks those hashes and eviction deletes these keys. Every level is publisher-grown, so each is paged;
+        // the depth is fixed.
         List<ConanFile> files = conanFiles(coordinate, version, store);
         List<String> keys = new ArrayList<>(files.size());
         for (ConanFile file : files) {
@@ -137,12 +108,10 @@ public final class ConanFormat implements RepositoryFormat, ArtifactLayout, Prox
         return keys;
     }
 
-    /** The request paths this coordinate version's recipe and package files serve at - a recipe file at
-     *  {@code /conan/<repo>/v2/conans/<name>/<version>/<user>/<channel>/revisions/<rrev>/files/<file>} and a package
-     *  file at {@code .../revisions/<rrev>/packages/<pid>/revisions/<prev>/files/<file>}, the inverse of
-     *  {@link #describe}, so a retroactive hold links a {@code /quarantine} review handle per served path exactly as
-     *  {@code ArtifactLayout.paths} does for a publish/ layout. Every collected file pointer is live (it was found by
-     *  listing), so each maps to a served path. Reads only the tiny pointers, never a blob body. */
+    /** The request paths this version's files serve at - a recipe file at
+     *  {@code /conan/<repo>/v2/conans/<name>/<version>/<user>/<channel>/revisions/<rrev>/files/<file>}, a package file
+     *  at {@code .../revisions/<rrev>/packages/<pid>/revisions/<prev>/files/<file>} - where a retroactive hold links
+     *  its {@code /quarantine} handles. Only pointers are read. */
     @Override
     public List<String> servedPaths(String coordinate, String version, ArtifactStore store) throws IOException {
         if (!BlobLayout.addressable(coordinate, version)) {
@@ -156,29 +125,22 @@ public final class ConanFormat implements RepositoryFormat, ArtifactLayout, Prox
         return paths;
     }
 
-    /** One stored Conan file located by the retroactive-hold discovery walk: its store pointer key and the request path
-     *  it serves at. */
+    /** One stored file found by the hold discovery walk: its pointer key and the path it serves at. */
     private record ConanFile(String key, String path) {
     }
 
-    /** The bounded page size the retroactive-hold discovery walk streams each subtree level through. */
+    /** The page size the hold discovery walk lists each level in. */
     private static final int WALK_PAGE = 1000;
 
-    /** One level of the version subtree: a flat container enumerated through the shared bounded primitive,
-     *  which is what these six statically nested, fixed-depth loops actually are - a generic subtree walk would buy an
-     *  {@code exists} probe per name that none of them needs. This feeds {@code blobKeys}/{@code servedPaths}, so a
-     *  level that answered short would be a KEV-listed recipe or package file that keeps serving after its hold: the
-     *  entry cap is therefore OFF, and the binding bound is the primitive's step budget (1000 page round-trips,
-     *  ~10^6 names per level), which raises a named {@link TraversalException} rather than dropping keys. */
+    /** One level of the version subtree, a flat container: the walk is a fixed nest of these. It feeds {@code blobKeys}
+     *  and {@code servedPaths}, where a short level would leave a held file serving, so the entry cap is off and the
+     *  step budget (1000 pages) raises a {@link TraversalException} rather than dropping keys. */
     private static final BoundedChildren LEVEL =
             BoundedChildren.bounded().entries(Integer.MAX_VALUE).page(WALK_PAGE);
 
-    /** Every recipe and package file stored for {@code (name, version)}, across all users, channels and revisions -
-     *  the correct retroactive-hold scope (a hold covers every revision of the version). The registry set is
-     *  operator-configured (bounded), so a bare {@code store.list("conan")} is right for it; every level beneath the
-     *  version root is attacker-publishable, so each is enumerated through the shared bounded {@link #LEVEL} scan,
-     *  never {@code list()}ed whole. The tree depth is fixed (user/channel/rrev[/pkg/pid/prev]/files), so this is a
-     *  fixed nest of flat enumerations rather than a recursion over an attacker-controlled depth. */
+    /** Every recipe and package file stored for {@code (name, version)}, across all users, channels and revisions,
+     *  since a hold covers every revision. The registry set is operator-configured, so a plain list suits it; every
+     *  level below the version is publisher-grown and scanned through the bounded {@link #LEVEL}, at a fixed depth. */
     private static List<ConanFile> conanFiles(String name, String version, ArtifactStore store) throws IOException {
         if (Keys.unsafe(name) || Keys.unsafe(version)) {
             return List.of();
@@ -211,16 +173,14 @@ public final class ConanFormat implements RepositoryFormat, ArtifactLayout, Prox
         return files;
     }
 
-    /** The request path a recipe file serves at, the mirror of the {@code PUT}/{@code GET}
-     *  {@code /conan/<repo>/v2/conans/<name>/<version>/<user>/<channel>/revisions/<rrev>/files/<file>} route. */
+    /** The request path a recipe file serves at, its {@code PUT}/{@code GET} route. */
     private static String recipePath(String repo, String name, String version, String user, String channel,
                                      String rrev, String file) {
         return PREFIX + repo + "/" + CONANS + name + "/" + version + "/" + user + "/" + channel
                 + "/revisions/" + rrev + "/files/" + file;
     }
 
-    /** The request path a package file serves at, the mirror of the
-     *  {@code .../revisions/<rrev>/packages/<pid>/revisions/<prev>/files/<file>} route. */
+    /** The request path a package file serves at, its {@code PUT}/{@code GET} route. */
     private static String packagePath(String repo, String name, String version, String user, String channel,
                                       String rrev, String pid, String prev, String file) {
         return PREFIX + repo + "/" + CONANS + name + "/" + version + "/" + user + "/" + channel
@@ -243,7 +203,7 @@ public final class ConanFormat implements RepositoryFormat, ArtifactLayout, Prox
         String repo = rest.substring(0, slash);
         String sub = rest.substring(slash + 1);
         String method = exchange.method();
-        // The capability and authentication handshake a Conan client performs before it reads or uploads.
+        // The capability and authentication handshake a client performs first.
         if (sub.equals("v2/ping") || sub.equals("v1/ping")) {
             if (!method.equals("GET") && !method.equals("HEAD")) {
                 exchange.respond(405);
@@ -254,11 +214,9 @@ public final class ConanFormat implements RepositoryFormat, ArtifactLayout, Prox
             return;
         }
         if (sub.equals("v2/users/authenticate") || sub.equals("v1/users/authenticate")) {
-            // A Conan client exchanges its credentials here for a bearer token it sends on subsequent requests. The
-            // real authorization is enforced by the server's security layer around this format, which reads a key
-            // out of a bearer token - so the token handed back IS the password the client logged in with (its
-            // repository key), and every later request carries that key. Without a Basic login the handshake still
-            // completes, with a placeholder the security layer treats as no credential.
+            // A client exchanges its credentials for a bearer token. The security layer around this format reads a key
+            // from a bearer token, so the token is the password the client logged in with, its repository key. Without
+            // a Basic login the handshake completes with a placeholder read as no credential.
             exchange.setResponseHeader("Content-Type", "text/plain");
             exchange.answer(basicPassword(exchange.requestHeader("Authorization"))
                     .orElse("jenesis").getBytes(StandardCharsets.UTF_8));
@@ -291,16 +249,13 @@ public final class ConanFormat implements RepositoryFormat, ArtifactLayout, Prox
         return colon < 0 || colon == credential.length() - 1 ? Optional.empty() : Optional.of(credential.substring(colon + 1));
     }
 
-    /**
-     * Route a {@code /v2/conans/<name>/<version>/<user>/<channel>/...} request to the recipe/package index or a file.
-     * The reference is always four segments (a missing user/channel is the {@code _} placeholder), then a tail that
-     * selects {@code latest}, {@code revisions}, a revision's {@code files} listing or a single file, for the recipe or
-     * one of its packages. A file {@code PUT} streams into the CAS and updates the stored index; a file {@code GET}
-     * streams it back; an index read streams the stored document.
-     */
+    /** Route a {@code /v2/conans/<name>/<version>/<user>/<channel>/...} request: the reference is always four segments,
+     *  then a tail selecting {@code latest}, {@code revisions}, a revision's {@code files} or one file, of the recipe
+     *  or a package. A file {@code PUT} streams into the store and updates the index, a {@code GET} streams it back, an
+     *  index read streams the stored document. */
     private void conans(String repo, String path, FormatExchange exchange, ArtifactStore store) throws IOException {
         String[] t = path.split("/", -1);
-        // <name>/<version>/<user>/<channel>/<tail...> - at least the reference plus one tail token.
+        // <name>/<version>/<user>/<channel>/<tail...>: the reference and at least one tail token.
         if (t.length < 5) {
             exchange.respond(404);
             return;
@@ -323,8 +278,8 @@ public final class ConanFormat implements RepositoryFormat, ArtifactLayout, Prox
         }
     }
 
-    /** Dispatch everything under a recipe revision: its {@code files} listing / a single recipe file, or a package's
-     *  {@code latest} / {@code revisions} / {@code files} / a single package file. */
+    /** Dispatch everything under a recipe revision: its {@code files} or one recipe file, or a package's
+     *  {@code latest}, {@code revisions}, {@code files} or one package file. */
     private void recipeRevision(String repo, String recipe, String[] t, FormatExchange exchange, ArtifactStore store)
             throws IOException {
         String rrev = t[5];
@@ -379,18 +334,14 @@ public final class ConanFormat implements RepositoryFormat, ArtifactLayout, Prox
         }
     }
 
-    /**
-     * The latest revision under {@code parent} (a recipe base or a package_id base): the revision with the greatest
-     * stored upload time <b>among the revisions that still have something servable</b>, derived from the stored
-     * {@code revisions} document on every write. {@code {"revision": "<rev>", "time": "<iso>"}}, or a {@code 404}
-     * when nothing is published there (so a proxy registry can later fill it from upstream) - and equally when a hold
-     * has left no revision servable, because this route answers a single revision and so has no empty form to render
-     * (the shape Go's {@code @latest} takes).
-     */
+    /** The latest revision under {@code parent} (a recipe or a package id): the one with the greatest upload time among
+     *  those still servable, derived from the stored {@code revisions} on every write, as
+     *  {@code {"revision": "<rev>", "time": "<iso>"}}. A {@code 404} when nothing is published, which a proxy fills
+     *  from upstream, and when a hold left nothing servable, since one revision has no empty form. */
     private void latest(String repo, String parent, FormatExchange exchange, ArtifactStore store) throws IOException {
         if (!hosted(repo, store)) {
-            // A proxy repo needs this local miss so the pull-through streams the authoritative upstream latest
-            // revision rather than answering from a locally cached (and possibly no-longer-newest) revision.
+            // A proxy registry misses locally, so pull-through answers the upstream's latest rather than a cached older
+            // one.
             exchange.respond(404);
             return;
         }
@@ -399,8 +350,7 @@ public final class ConanFormat implements RepositoryFormat, ArtifactLayout, Prox
             return;
         }
         ConanListings listings = new ConanListings(new Blobs(store));
-        // latest is derived from the stored revisions on every write; a parent read before its revisions were
-        // materialised derives it now, once.
+        // latest derives from the stored revisions; a parent read before they exist derives it once.
         Optional<StoredListing.Served> served = StoredListing.openDerived(store, ConanListings.latest(parent));
         if (served.isEmpty()) {
             StoredListing.open(store, listings.revisionsSpec(parent)).ifPresent(ConanFormat::closeQuietly);
@@ -420,25 +370,15 @@ public final class ConanFormat implements RepositoryFormat, ArtifactLayout, Prox
         }
     }
 
-    /**
-     * All revisions under {@code parent} that still have something servable, newest first, as the stored
-     * {@code revisions} document: {@code {"revisions": [{"revision": "<rev>", "time": "<iso>"}, ...]}}, or a
-     * {@code 404} when nothing is published there.
-     *
-     * <p><b>Screened, and empty rather than absent when a hold takes everything.</b> The 404 is keyed on the
-     * <em>raw</em> revision set, never on the screened one: this route is addressed by the recipe's own name, which
-     * the client already had, so answering {@code {"revisions": []}} discloses nothing it did not supply while a 404
-     * would assert "no such recipe" - a different fact, and one a client caches. That is the rule PyPI's per-project
-     * index, npm's packument, Cargo's sparse index, Conda's repodata and this format's own {@code files} listing all
-     * follow; the listing routes that enumerate names a client did NOT supply (PyPI's Simple root, Composer's
-     * list.json, CocoaPods' shard) drop the container instead, which is the same rule on the other shape. The probe
-     * is paid only until the document exists.
-     */
+    /** Every revision under {@code parent} still servable, newest first, as the stored {@code revisions} document
+     *  {@code {"revisions": [{"revision": "<rev>", "time": "<iso>"}, ...]}}, or a {@code 404} when nothing is
+     *  published. The 404 is keyed on the raw revision set: the route is addressed by the recipe's own name, so an
+     *  empty list discloses nothing the client did not supply, while a 404 would claim "no such recipe". The probe is
+     *  paid only until the document exists. */
     private void revisions(String repo, String parent, FormatExchange exchange, ArtifactStore store)
             throws IOException {
         if (!hosted(repo, store)) {
-            // A proxy repo needs this local miss so the pull-through streams the authoritative upstream revision list
-            // (every revision) rather than shadowing it with only the locally cached revisions.
+            // A proxy registry misses locally, so pull-through answers the upstream's full revision list.
             exchange.respond(404);
             return;
         }
@@ -449,18 +389,13 @@ public final class ConanFormat implements RepositoryFormat, ArtifactLayout, Prox
         serveListing(new ConanListings(new Blobs(store)).revisionsSpec(parent), exchange, store);
     }
 
-    /**
-     * A revision's file listing as the stored {@code files} document: {@code {"files": {"conanfile.py": {},
-     * "conanmanifest.txt": {}, ...}}}, or a {@code 404} when the revision holds no files. A withheld file is not
-     * listed - a compliance hold withholds the file's blob (its download 404s), so listing it would disclose a
-     * quarantined file a client then cannot fetch - the way OCI screens a held image out of its tags; the write that
-     * holds or releases the file re-decides its entry.
-     */
+    /** A revision's file listing as the stored {@code files} document, {@code {"files": {"conanfile.py": {}, ...}}}, or
+     *  a {@code 404} when the revision holds no files. A withheld file is not listed, since a client could not fetch
+     *  it. */
     private void files(String repo, String revBase, FormatExchange exchange, ArtifactStore store)
             throws IOException {
         if (!hosted(repo, store)) {
-            // A proxy repo needs this local miss so the pull-through streams the authoritative upstream files listing
-            // (every file of the revision) rather than shadowing it with only the files cached so far.
+            // A proxy registry misses locally, so pull-through answers the upstream's full listing.
             exchange.respond(404);
             return;
         }
@@ -471,7 +406,7 @@ public final class ConanFormat implements RepositoryFormat, ArtifactLayout, Prox
         serveListing(new ConanListings(new Blobs(store)).filesSpec(revBase), exchange, store);
     }
 
-    /** Stream a stored index document, materialising it once when a store from before the layout has none. */
+    /** Stream a stored index document, materialising it once when the store has none. */
     private static void serveListing(StoredListing.Spec spec, FormatExchange exchange, ArtifactStore store)
             throws IOException {
         Optional<StoredListing.Served> served = StoredListing.open(store, spec);
@@ -489,19 +424,18 @@ public final class ConanFormat implements RepositoryFormat, ArtifactLayout, Prox
         try {
             served.close();
         } catch (IOException ignored) {
-            // nothing was read from it
+            // Nothing was read from it.
         }
     }
 
-    /** A revision, package id or file segment a client may not use: the {@code @}-prefixed names are where the
-     *  stored index of a parent lives, beside its raw revisions. Real revisions and package ids are hex hashes. */
+    /** A segment a client may not use: {@code @}-prefixed names hold a parent's stored index beside its raw revisions.
+     *  Real revisions and package ids are hex hashes. */
     private static boolean reserved(String segment) {
         return segment.startsWith("@");
     }
 
-    /** Serve a stored file ({@code GET}/{@code HEAD}) or stream an upload into the CAS ({@code PUT}). The upload is
-     *  content-addressed while it streams, so a large package archive never lands in heap; the upload also stamps its
-     *  revision's time so {@link #latest} / {@link #revisions} order correctly. */
+    /** Serve a stored file ({@code GET}/{@code HEAD}) or stream an upload into the store ({@code PUT}), the upload
+     *  stamping its revision's time so {@link #latest} and {@link #revisions} order correctly. */
     private void file(String repo, String revBase, String fileKey, String filename, FormatExchange exchange,
                       ArtifactStore store) throws IOException {
         if (Keys.unsafe(filename)) {
@@ -511,8 +445,8 @@ public final class ConanFormat implements RepositoryFormat, ArtifactLayout, Prox
         Blobs blobs = new Blobs(store);
         switch (exchange.method()) {
             case "PUT" -> {
-                // A revision is named for its content, so a file of it never changes under that name: a second
-                // upload with other bytes is refused rather than rewriting a revision a lock file pins.
+                // A revision is named for its content, so other bytes under it are refused rather than rewriting what a
+                // lock file pins.
                 String hash = blobs.store(exchange.requestStream());
                 try {
                     blobs.linkRelease(fileKey, hash, -1L);
@@ -522,10 +456,8 @@ public final class ConanFormat implements RepositoryFormat, ArtifactLayout, Prox
                 }
                 stampTime(store, revBase + "/time");
                 indexed(revBase, filename, blobs);
-                // Stamp the per-registry hosted-publish marker, so a later latest/revisions/files read serves the
-                // local index. A pull-through proxy repository (whose files are cached by proxy(), which stamps only
-                // the revision time, never this marker) never writes it, so its index reads miss locally and reproxy
-                // the authoritative upstream index for an uncached revision rather than shadowing it (the RPM gate).
+                // The per-registry hosted marker switches on the local index; a proxy registry never writes it, so its
+                // index reads fall through to the upstream's.
                 markHosted(store, hostedKey(repo));
                 exchange.respond(201);
             }
@@ -550,40 +482,34 @@ public final class ConanFormat implements RepositoryFormat, ArtifactLayout, Prox
         }
     }
 
-    /** A file landed under {@code revBase} (an upload or a proxy fill): its entry joins the revision's stored files
-     *  listing and the revision's entry its parent's stored revisions, with {@code latest} derived. */
+    /** A file landed under {@code revBase}, by upload or proxy fill: its entry joins the revision's files and the
+     *  revision's entry its parent's revisions, with {@code latest} derived. */
     private static void indexed(String revBase, String filename, Blobs blobs) throws IOException {
         int slash = revBase.lastIndexOf('/');
         new ConanListings(blobs).refresh(revBase.substring(0, slash), revBase.substring(slash + 1), filename);
     }
 
-    /** Stamp a revision's upload time to now, a small compare-and-set pointer through the store (never a raw file). The
-     *  stamp is load-bearing - it drives latest-revision ordering - so a lost compare-and-set re-reads the token and
-     *  retries (the shared {@link Retries} policy: a revision's files are uploaded one after the other and, from
-     *  several writers, at the same moment, so the stamp contends with its own siblings) rather than discarding the
-     *  returned boolean, which would leave a concurrently-uploaded revision unstamped and mis-ordered. */
+    /** Stamp a revision's upload time by compare-and-set through {@link Retries}: the stamp orders {@code latest}, and
+     *  a revision's files arrive one after another and from several writers, so the stamp contends with its siblings
+     *  and a lost race is retried. */
     private static void stampTime(ArtifactStore store, String key) throws IOException {
         Retries.update(store, key, _ -> Long.toString(System.currentTimeMillis()).getBytes(StandardCharsets.UTF_8));
     }
 
     private static final byte[] HOSTED = "1".getBytes(StandardCharsets.UTF_8);
 
-    /** The reserved store key of a registry's hosted-publish marker - a child of {@code conan/<repo>}, a sibling of the
-     *  {@code r/} recipe tree, so it is never surfaced by any revision/file listing. */
+    /** A registry's hosted marker, beside the {@code r/} recipe tree, so no listing surfaces it. */
     private static String hostedKey(String repo) {
         return "conan/" + repo + "/hosted";
     }
 
-    /** Whether this registry has ever taken a hosted upload - it then carries {@link #hostedKey}, which a pull-through
-     *  proxy never writes (its file cache stamps only the revision time). The {@code latest}/{@code revisions}/{@code
-     *  files} index gate keys on it so a proxy registry's index reads always miss locally and reproxy the upstream
-     *  index (every revision/file) for an uncached revision rather than shadowing it. */
+    /** Whether this registry has taken a hosted upload. The index gate keys on it, so a proxy registry's index reads
+     *  relay the upstream's. */
     private static boolean hosted(String repo, ArtifactStore store) throws IOException {
         return store.readVersioned(hostedKey(repo)).isPresent();
     }
 
-    /** Stamp the hosted-publish marker once, idempotently - a compare-and-set against an absent pointer, so a
-     *  concurrent upload's lost race simply means a peer already set it. */
+    /** Stamp the hosted marker once, by compare-and-set against absence; a lost race means a peer set it. */
     private static void markHosted(ArtifactStore store, String key) throws IOException {
         if (store.readVersioned(key).isEmpty()) {
             store.writeVersioned(key, HOSTED, null);
@@ -595,19 +521,11 @@ public final class ConanFormat implements RepositoryFormat, ArtifactLayout, Prox
         return Optional.of(CONAN_CENTER);
     }
 
-    /**
-     * Serve a local {@code v2/conans/...} miss from an upstream Conan server. The request
-     * {@code /conan/<repo>/v2/conans/<tail>} maps to {@code <upstream>/v2/conans/<tail>} - the local registry name is a
-     * deployment alias, so it is stripped and the rest of the v2 path maps through unchanged. An immutable revision file
-     * ({@code .../revisions/<rrev>/files/<file>} or its package equivalent) is fetched once, streamed straight into the
-     * content-addressed store ({@link ProxyRelay#fill}, never buffered) under the same key
-     * {@link #file} serves from, its revision time stamped, and then served locally by re-dispatching through
-     * {@link #handle} - so a later read is a local hit that never touches the upstream. Any other read (the mutable
-     * {@code latest} / {@code revisions} / {@code files} index or a {@code search}) is streamed through fresh on every
-     * read, never cached and never rewritten (these documents carry no download URLs). The {@code ping} and
-     * authentication handshake are answered locally and so never miss to here. Returns {@code false} - letting the local
-     * {@code 404} stand - for a non-{@code v2/conans} path, a transport failure or an upstream miss.
-     */
+    /** Serve a local {@code v2/conans/...} miss from an upstream Conan server, {@code /conan/<repo>/v2/conans/<tail>}
+     *  mapping to {@code <upstream>/v2/conans/<tail>}. A revision file is fetched once into the store under the key
+     *  {@link #file} serves from, its revision time stamped, and served by re-dispatching through {@link #handle}. Any
+     *  other read - the index or a {@code search} - is streamed fresh, never cached or rewritten. {@code ping} and
+     *  authentication answer locally. {@code false} lets the local {@code 404} stand. */
     @Override
     public boolean pullThrough(FormatExchange exchange, ArtifactStore store, URI upstream,
                                ProxyFormat.Fetcher fetcher) throws IOException {
@@ -629,16 +547,14 @@ public final class ConanFormat implements RepositoryFormat, ArtifactLayout, Prox
         URI target = URI.create(root + "/" + sub);
         FileRef file = fileRef(repo, sub.substring(CONANS.length()));
         if (file != null) {
-            // Point-integrity: the revision's conanmanifest.txt lists each file's MD5, so read that sibling and verify
-            // the streamed file against it, refusing a mismatch - the checksum parity the Maven proxy leg has. The
-            // manifest is a SEPARATE fetch from the file below, so a manifest this repository could not read is not
-            // "this revision declares no MD5 for the file" and must not become an unverified fill.
+            // The revision's conanmanifest.txt lists each file's MD5, and the streamed file is held to it. The manifest
+            // is a separate fetch, and one that could not be read must not become an unverified fill.
             String name = sub.substring(sub.lastIndexOf('/') + 1);
             ProxyRelay.Declared expected = manifestChecksum(target, name, fetcher);
             if (!expected.readable()) {
                 return ProxyRelay.unverifiable(target, expected);
             }
-            // An immutable, revision-pinned file: fetch once, cache into the CAS, then serve locally.
+            // An immutable, revision-pinned file: cached once, then served locally.
             try (ProxyFormat.Download download = fetcher.download(target, Map.of()).orElse(null)) {
                 if (download == null || download.status() != 200) {
                     return false;
@@ -652,13 +568,9 @@ public final class ConanFormat implements RepositoryFormat, ArtifactLayout, Prox
             handle(exchange, store);
             return true;
         }
-        // A mutable index (latest / revisions / files listing / search): stream fresh, never cache, no rewrite. Forward
-        // the client's conditional-request validators so a 304-capable client's revalidation reaches the upstream, and
-        // relay the upstream's validators back so its next read can revalidate rather than re-streaming the index.
-        // ENUMERATION: every one of these shapes answers "what exists" - which recipe revisions, which package ids,
-        // which files a revision carries - so an absent one is an answer a `conan install` resolves against, not a
-        // "not cached here". The verdict is ProxyRelay's; this leg keeps its own loop only for the HEAD short-circuit
-        // and the upstream Content-Type below, which streamFresh deliberately does not fold in.
+        // The index is streamed fresh with validators forwarded both ways. Every shape answers what exists, an
+        // ENUMERATION a conan install resolves against; the loop is this leg's own for the HEAD short-circuit and the
+        // upstream Content-Type.
         try (ProxyFormat.Download download =
                      fetcher.download(target, ProxyRelay.conditionalHeaders(exchange)).orElse(null)) {
             if (download == null) {
@@ -691,14 +603,9 @@ public final class ConanFormat implements RepositoryFormat, ArtifactLayout, Prox
         return true;
     }
 
-    /**
-     * The store key and time-pointer key of a proxied immutable revision file, or {@code null} when {@code tail} (the
-     * part after {@code v2/conans/}) is instead an index a proxy must stream fresh. It recognises exactly the two
-     * file-download shapes {@link #describe} does - a recipe file {@code .../revisions/<rrev>/files/<file>} and a
-     * package file {@code .../packages/<pid>/revisions/<prev>/files/<file>} - and computes the same store keys
-     * {@link #file} serves from, so a cached blob is a local hit on the next read. Every path segment is
-     * traversal-guarded before it becomes a store key.
-     */
+    /** The store and time-pointer keys of a proxied revision file, or {@code null} when {@code tail} is an index to
+     *  stream fresh. The two file shapes {@link #describe} recognises, keyed as {@link #file} serves them, every
+     *  segment traversal-guarded. */
     private static FileRef fileRef(String repo, String tail) {
         String[] t = tail.split("/", -1);
         boolean recipeFile = t.length == 8 && t[4].equals("revisions") && t[6].equals("files");
@@ -722,8 +629,7 @@ public final class ConanFormat implements RepositoryFormat, ArtifactLayout, Prox
         return new FileRef(recipe + "/" + t[5] + "/pkg/" + t[7], t[9], t[11]);
     }
 
-    /** The stored file a request path names - the same two shapes {@link #describe} recognises - or {@code null}
-     *  when the path is an index or not this format's. */
+    /** The stored file a request path names, or {@code null} for an index or another format's path. */
     static FileRef locate(String path) {
         if (!path.startsWith(PREFIX)) {
             return null;
@@ -736,8 +642,7 @@ public final class ConanFormat implements RepositoryFormat, ArtifactLayout, Prox
         return fileRef(rest.substring(0, slash), rest.substring(slash + 1 + CONANS.length()));
     }
 
-    /** One stored revision file: its parent (a recipe reference or a package id base), its revision and its name -
-     *  from which the CAS key it serves from and the revision-time pointer an upload stamps follow. */
+    /** One stored revision file: its parent, its revision and its name, from which its key and time pointer follow. */
     record FileRef(String parent, String revision, String filename) {
 
         String revBase() {
@@ -753,16 +658,14 @@ public final class ConanFormat implements RepositoryFormat, ArtifactLayout, Prox
         }
     }
 
-    /** The MD5 the revision's {@code conanmanifest.txt} records for {@code file} (a Conan manifest is a timestamp line
-     *  followed by {@code <path>: <md5>} lines, the {@code md5} being of that file's bytes), read from the sibling in
-     *  the same {@code files/} directory so a proxied revision file can be verified against it. The manifest is a small
-     *  bounded metadata document, fetched buffered and only on a file miss.
+    /**
+     * The MD5 the revision's {@code conanmanifest.txt} records for {@code file} (a timestamp line, then
+     * {@code <path>: <md5>} lines), read from the sibling in the same {@code files/} directory, once per file miss.
      *
-     *  <p>{@link ProxyRelay.Declared#NONE} - cache without a point check, as Maven serves a jar whose {@code .sha1}
-     *  sibling is missing - for the manifest itself (it carries no self-checksum) and when the manifest
-     *  <em>answered</em> and declares nothing: a {@code 404}/{@code 410}, or a manifest listing no 16-byte {@code md5}
-     *  for this file. {@linkplain ProxyRelay.Declared#unreadable Unreadable} when the manifest could not be read at
-     *  all, which is not the revision declaring anything. */
+     * <p>{@link ProxyRelay.Declared#NONE}, cached without a check, for the manifest itself and when the manifest
+     * answered and declares nothing: a {@code 404}/{@code 410}, or no 16-byte {@code md5} for the file.
+     * {@linkplain ProxyRelay.Declared#unreadable Unreadable} when it could not be read.
+     */
     private static ProxyRelay.Declared manifestChecksum(URI target, String file, ProxyFormat.Fetcher fetcher)
             throws IOException {
         if (file.equals("conanmanifest.txt")) {
@@ -814,7 +717,7 @@ public final class ConanFormat implements RepositoryFormat, ArtifactLayout, Prox
             return Optional.empty();
         }
         String[] t = rest.substring(slash + 1 + CONANS.length()).split("/", -1);
-        // A file download path ends .../files/<file>; a listing/index path carries no artifact to describe.
+        // A download path ends .../files/<file>; an index path describes nothing.
         String name = t[0];
         String version = t.length > 1 ? t[1] : null;
         boolean recipeFile = t.length == 8 && t[4].equals("revisions") && t[6].equals("files");
@@ -831,21 +734,12 @@ public final class ConanFormat implements RepositoryFormat, ArtifactLayout, Prox
                 contentType(filename), prerelease(version), null, -1L));
     }
 
-    /**
-     * The recipe or package version a stored Conan pointer serves - the backwards direction the inventory back-fill
-     * rebuilds a lost {@code published} record from.
-     *
-     * <p>Conan is the easy shape: the pair is two <em>path segments</em> near the root of a tree whose depth is
-     * fixed. A recipe file is {@code conan/<repo>/r/<name>/<version>/<user>/<channel>/<rrev>/files/<file>} and a
-     * package file adds {@code pkg/<pid>/<prev>/} before its own {@code files/}, so a name and a version are read
-     * at fixed indices and nothing is split on a character either may contain. Both are composed one segment at a
-     * time by the same guard {@code blobKeys} resolves through, so a multi-segment value cannot arrive here.
-     *
-     * <p>The two shapes are distinguished by length and by the literal {@code pkg} rather than by searching for
-     * {@code files}, because the markers this format keeps beside a revision - {@code time}, {@code commit},
-     * {@code latest} - live outside {@code files/} and must not be claimed: they are not the version's content and
-     * a row rebuilt from one would age by a marker's key rather than by an artifact's.
-     */
+    /** The recipe or package version a stored Conan pointer serves, from which the inventory back-fill rebuilds a lost
+     *  {@code published} record. Name and version are segments at fixed indices of a fixed-depth tree - a recipe file
+     *  is {@code conan/<repo>/r/<name>/<version>/<user>/<channel>/<rrev>/files/<file>}, a package file adds
+     *  {@code pkg/<pid>/<prev>/} - so nothing is split. The shapes are told apart by length and the literal
+     *  {@code pkg}, so the {@code time}, {@code commit} and {@code latest} markers outside {@code files/} are never
+     *  claimed. */
     @Override
     public Optional<ArtifactDescriptor> describePointer(String key) {
         String[] parts = key.split("/", -1);
@@ -865,8 +759,7 @@ public final class ConanFormat implements RepositoryFormat, ArtifactLayout, Prox
 
     @Override
     public List<String> paths(String coordinate, String version, ArtifactStore store) {
-        // Conan file pointers live in the shared Blobs namespace (like npm/pypi/go/rpm/cargo/conda/composer/cocoapods),
-        // not the Publication namespace coordinate-based eviction walks, so nothing is enumerable from the coordinate.
+        // Pointers live in the shared Blobs namespace, so the coordinate enumerates nothing in publish/.
         return List.of();
     }
 
@@ -894,21 +787,14 @@ public final class ConanFormat implements RepositoryFormat, ArtifactLayout, Prox
         return "conan/" + repo + "/r/" + name + "/" + version + "/" + user + "/" + channel;
     }
 
-    /**
-     * A path segment ({@code name}, {@code version}, {@code user}, {@code channel}, {@code rrev}, {@code package_id},
-     * {@code prev}, {@code filename}) becomes store-key segments, so a value that is empty, carries a path separator or
-     * control character, or is a {@code .}/{@code ..} traversal segment could steer a write or read outside the
-     * package's key space and is refused. Real Conan references are identifiers, revisions are hex hashes, filenames are
-     * flat names, and a missing user/channel is the {@code _} placeholder - so no legitimate value is rejected.
-     */
+    /** Answer a JSON document. */
 
     private static void respondJson(FormatExchange exchange, JsonNode node) throws IOException {
         exchange.setResponseHeader("Content-Type", "application/json");
         exchange.answer(MAPPER.writeValueAsBytes(node));
     }
 
-    /** The migration-import capability, delegated to the layout-only {@link ConanImporter} - the format IS the
-     *  discovered importer now (an {@code instanceof} capability), and the importer class stays as its delegate. */
+    /** The migration-import capability, delegated to {@link ConanImporter}. */
     private final ConanImporter importer = new ConanImporter();
 
     @Override
@@ -926,11 +812,9 @@ public final class ConanFormat implements RepositoryFormat, ArtifactLayout, Prox
         importer.importArtifact(path, content, store);
     }
 
-    /**
-     * Every revision of the version is uploaded as {@code conan upload} uploads it through the v2 API: each recipe
-     * file of a revision, then each file of every package built from it, put at the path it is served from - which
-     * names the revisions the client computed, so the target holds the same revisions rather than new ones.
-     */
+    /** Every revision of the version is uploaded as {@code conan upload} does through the v2 API - each recipe file,
+     *  then each file of every package - at the path it is served from, which names the client's revisions, so the
+     *  target holds the same revisions. */
     @Override
     public Exported export(ArtifactStore repository, String coordinate, String version, ExportTarget target)
             throws IOException {
