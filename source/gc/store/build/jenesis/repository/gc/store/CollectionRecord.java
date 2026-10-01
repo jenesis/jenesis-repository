@@ -3,15 +3,10 @@ package build.jenesis.repository.gc.store;
 import module java.base;
 
 /**
- * What this node's collections have done, whichever collector instance did it: the blobs reclaimed across every
- * collect since the node started, the blobs the last sweep left condemned, and when the last collect ran and whether
- * it completed.
- *
- * <p>Node-wide because a collector has no single owner. One is resolved per maintenance pass, by the walk that runs
- * collections, by the maintenance screen and by the capabilities answer that only asks whether one is installed - so
- * figures kept on an instance started from zero with every resolve, and whichever instance registered last was the
- * one reported, usually one that never ran. Every {@code collect} adds to this record instead, so the reclaimed count
- * climbs for the life of the node like any counter, and a resolve that collects nothing changes nothing.
+ * What this node's collections have done, whichever collector instance did it: the blobs reclaimed by every collect
+ * since the node started, the blobs the last sweep left condemned, and when the last collect ran and whether it
+ * completed. Node-wide because a collector is resolved wherever one is asked for - per pass, by the walk, by the
+ * maintenance screen, by the capabilities answer - so figures kept on an instance would restart with every resolve.
  */
 final class CollectionRecord {
 

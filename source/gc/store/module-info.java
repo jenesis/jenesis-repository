@@ -1,14 +1,10 @@
 /**
- * The reference {@code GarbageCollector} ({@code mark-sweep}, discovered with {@code ServiceLoader}), riding the
- * shared artifact walk - never its own listing loop - so the mark over the caller's pointer roots and the sweep
- * over {@code blobs/} are both ordered, resumable, segmented and multi-node-safe. Sharded mark: references land as
- * append-only batch objects {@code gc/<pass>/refs/<hh>/...}, flushed before every walk checkpoint so no committed
- * cursor ever lies about an unflushed reference; sweep memory is one leading-byte shard at a time, O(N/256), never
- * an O(N) set. Condemn-then-collect: an unreferenced blob is first condemned ({@code gc/condemned/<hash>}, the
- * marker is the clock) and deleted only when a <em>later</em> pass confirms it still unreferenced - at least one
- * full collection interval of grace - with the marker re-read immediately before deletion and cleared on the write
- * path by every pointer link, so a referenced, re-linked or in-flight blob is never deleted. Settings:
- * {@code jenrepo.gc.stride} (checkpoint stride of the collector's walk passes, default 20000).
+ * The reference {@code GarbageCollector} ({@code mark-sweep}), riding the shared artifact walk, so the mark over the
+ * pointer roots and the sweep over {@code blobs/} are ordered, resumable, segmented and multi-node-safe. The mark
+ * writes append-only reference batches {@code gc/<pass>/refs/<hh>/...}, flushed before every walk checkpoint; the sweep
+ * holds one leading-byte shard at a time. An unreferenced blob is first condemned ({@code gc/condemned/<hash>}) and
+ * deleted only when a later pass confirms it, after a claim on the marker that a re-publish of the same bytes contends
+ * for by compare-and-set - so a referenced, re-linked or in-flight blob is never deleted.
  *
  * @jenesis.release 25
  * @jenesis.bom pin-repository.properties
@@ -18,10 +14,8 @@ module build.jenesis.repository.gc.store {
     requires build.jenesis.repository.gc;
     requires build.jenesis.repository.walk;
     requires build.jenesis.repository.observation;
-    // The reference-lending seam only: a format that serves out of the shared blobs/ namespace declares the roots it
-    // pins blobs under and, through BlobReferences.references, the blobs its stored documents keep alive that no
-    // pointer body names. This is the format SPI, never a format plugin - the collector still knows no format, parses
-    // no format's documents and is handed its lenders by its provider.
+    // The reference-lending seam of the format SPI, never a format plugin: the collector parses no format's documents
+    // and is handed its lenders by its provider.
     requires build.jenesis.repository.format;
     exports build.jenesis.repository.gc.store to build.jenesis.repository.gc.test,
             build.jenesis.repository.format.oci.test;

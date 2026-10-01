@@ -7,11 +7,10 @@ import build.jenesis.repository.observation.TaskStatus;
 import build.jenesis.repository.observation.ObservabilitySource;
 
 /**
- * The mark-and-sweep collector's signals, from what this node's collections have recorded ({@link CollectionRecord}):
- * {@code jenrepo.gc.condemned}, the blobs the last sweep left condemned awaiting the confirming pass;
- * {@code jenrepo.gc.collected}, the blobs reclaimed since the node started; and {@code jenrepo.gc.lastrun}, the last
- * collect. A node that has not collected reports nothing, so a deployment without the collector contributes no
- * signal rather than a healthy-looking empty one.
+ * The mark-and-sweep collector's signals from {@link CollectionRecord}: {@code jenrepo.gc.condemned}, the blobs the
+ * last sweep left condemned; {@code jenrepo.gc.collected}, the blobs reclaimed since the node started; and
+ * {@code jenrepo.gc.lastrun}, the last collect. A node that has not collected reports nothing rather than a
+ * healthy-looking empty signal.
  */
 public final class GarbageCollectorObservability implements ObservabilitySource {
 

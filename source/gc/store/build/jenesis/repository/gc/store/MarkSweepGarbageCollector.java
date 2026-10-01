@@ -14,58 +14,43 @@ import build.jenesis.repository.walk.ArtifactWalk;
 import build.jenesis.repository.walk.WalkPass;
 
 /**
- * The reference {@link GarbageCollector}, riding the shared artifact walk - never its own listing loop - so both
- * of its enumerations are ordered, resumable, segmented and multi-node-safe, and no phase ever holds the whole
- * store in memory. Both are passes of their own rather than the shared rebuild pass: the mark must see every
- * pointer, withheld ones included (a held artifact's blob is referenced, and a mark that took the rebuild's screened
- * view would leave it for the sweep), and the sweep walks {@code blobs/}, which the rebuild never visits. Folding
- * the mark into the shared walk was built and rejected: re-expressing the lease fence over the walk's shard space
- * deleted a live blob, because a superseding pass advances the manifest when it starts and writes its first shard
- * later, and {@code MarkSweepTest} caught it.
+ * The reference {@link GarbageCollector}, riding the shared artifact walk, so both enumerations are ordered, resumable,
+ * segmented and multi-node-safe and no phase holds the whole store in memory. Both are passes of their own rather than
+ * the shared rebuild pass: the mark must see every pointer, withheld ones included, and the sweep walks {@code blobs/},
+ * which the rebuild never visits. The mark cannot ride the shared walk either: the lease fence over the walk's shard
+ * space would delete a live blob, because a superseding pass advances the manifest before it writes its first shard
+ * ({@code MarkSweepTest} holds this).
  *
- * <p><b>Mark, sharded.</b> One walk pass ({@code gc-mark}) over the caller's pointer roots reads each small leaf
- * object and keeps every hash it names, buffered in memory only up to the walk's checkpoint stride: the walk
- * flushes the buffer <em>before</em> every cursor commit ({@code KeyVisitor.beforeCheckpoint}), so a resume can
- * never skip a pointer whose reference was lost with a crashed buffer - the guard on the absolute invariant that
- * a referenced blob is never deleted. Flushed references land as immutable, append-only batch objects
- * {@code gc/<pass>/refs/<hh>/<collector>-<n>} sharded by the hash's leading byte (never a read-modify-write, so
- * concurrent workers and crash-replays only ever add duplicate observations, which union away). Once the mark
- * pass completes, its shards are complete for every live pointer: every segment was fully walked by whoever
- * finished it, so a straggler's late flush can only add redundancy.
+ * <p><b>Mark, sharded.</b> One walk pass ({@code gc-mark}) over the pointer roots reads each small leaf and keeps every
+ * hash it names, buffered only up to the checkpoint stride: the buffer is flushed before every cursor commit
+ * ({@code KeyVisitor.beforeCheckpoint}), so a resume never skips a pointer whose reference died with a crashed buffer.
+ * Flushed references land as immutable append-only batches {@code gc/<pass>/refs/<hh>/<collector>-<n>}, sharded by the
+ * hash's leading byte, so concurrent workers and replays only add duplicates. Once the mark completes, its shards cover
+ * every live pointer.
  *
- * <p><b>Condemn-then-collect, across two consecutive passes.</b> A second walk pass ({@code gc-sweep}) streams the
- * flat {@code blobs/} namespace in hash order - so the current {@code <hh>} shard's references are the only set in
- * memory, O(N/256) - and judges each blob against the completed mark: a referenced blob has any stale
- * {@code gc/condemned/<hash>} marker removed; an unreferenced one is <em>condemned</em> (marker created, stamped
- * with this pass) the first time and <em>deleted only when its marker carries an earlier pass</em> - the marker is
- * the clock, giving every crash-torn or in-flight publish a full mark-pass enumeration of grace (spared the moment it
- * is referenced) with no store-timestamp API, and a wall-clock floor on top ({@code jenrepo.gc.grace}, two hours
- * unless set) so a fast generation turnover across nodes cannot shorten it. The marker is the arbiter between the
- * delete and a publish relying on the same bytes ({@link Condemned}): the sweep claims it by compare-and-set over the
- * token it judged the blob by, and deletes only once the claim has landed, while a dedup re-publish spares the blob
- * by compare-and-set on the same marker - so whichever lands first decides, and a publish that meets a claim is
- * refused with a retryable answer rather than linking bytes that are going. Blob first, marker last; a marker whose
- * blob is gone is swept by the convergence leg, which also drops the reference shards of superseded passes.
+ * <p><b>Condemn, then collect in a later pass.</b> A second pass ({@code gc-sweep}) streams {@code blobs/} in hash
+ * order - so one {@code <hh>} shard of references is in memory at a time - and judges each blob: a referenced blob
+ * loses any stale {@code gc/condemned/<hash>} marker; an unreferenced one is condemned (marker stamped with this pass)
+ * the first time and deleted only when its marker carries an earlier pass. The marker is the clock, giving an in-flight
+ * publish a full mark of grace, with a wall-clock floor on top ({@code jenrepo.gc.grace}, two hours unless set) so fast
+ * generation turnover cannot shorten it. The marker also arbitrates between the delete and a publish relying on the
+ * same bytes ({@link Condemned}): the sweep claims it by compare-and-set over the token it judged by and deletes only
+ * once the claim lands, while a dedup re-publish spares the blob by compare-and-set on the same marker - whichever
+ * lands first decides, and a publish meeting a claim gets a retryable refusal. Blob first, marker last; the convergence
+ * leg removes markers whose blob is gone and the reference shards of superseded passes.
  *
- * <p>Both phases only ever act on shapes they recognise: a leaf that names no SHA-256 is skipped at mark, and a
- * {@code blobs/} name that is not a hash is never judged, let alone deleted. A pointer body is read through
- * {@link ServableNames#hash(byte[])}, the one seam that owns the dialect a stored pointer body may carry - the bare
- * lower-case hex the {@code publish/} and {@code blobs/} pointers carry, or the algorithm-qualified
- * {@code sha256:<hex>} an OCI tag pointer carries - so both dialects name the same blob and both are counted. Only
- * the mark's <em>body</em> read normalises: every other name the collector judges ({@code gc/condemned/<hash>}
- * children, {@code blobs/} names, a raw hash) is a store key it writes itself and stays strictly bare hex.
+ * <p>Only recognised shapes are acted on: a leaf naming no SHA-256 is skipped, and a {@code blobs/} name that is not a
+ * hash is never judged. A pointer body is read through {@link ServableNames#hash(byte[])}, which owns both dialects -
+ * bare hex, and an OCI tag pointer's {@code sha256:<hex>}. Every other name the collector judges is a key it writes
+ * itself, in bare hex.
  *
- * <p><b>What a pointer body cannot say, its format says.</b> One body naming one blob is exact only for a format whose
- * every served blob has a pointer. A format that serves blobs reachable only through a stored <em>document</em> has
- * more to declare, and declares it through {@link BlobReferences#references}: the mark asks the format that owns a
- * visited key what else that key keeps alive and unions the answer into the same reference set. The collector itself
- * still parses no format's documents - that neutrality is the reason this is a seam and not a special case - it only
- * unions what the owning format tells it with the hash it read itself. Handing it no lenders (the core's own
- * shape, and every existing test) leaves the mark byte-for-byte what it was.
+ * <p><b>What a pointer body cannot say, its format says.</b> A format serving blobs reachable only through a stored
+ * document declares them through {@link BlobReferences#references}: the mark asks the format owning a visited key what
+ * else it keeps alive and unions the answer in. The collector parses no format's documents; with no lenders the mark is
+ * the pointer-body scan alone.
  *
- * <p>What a collect does is recorded node-wide ({@code CollectionRecord}), not on the instance, and the discovered
- * {@code GarbageCollectorObservability} reports it: a collector is resolved wherever one is asked for, so an
- * instance's own figures would restart at every resolve. {@code plan} is a dry run and records nothing.
+ * <p>What a collect does is recorded node-wide ({@code CollectionRecord}) and reported by
+ * {@code GarbageCollectorObservability}. {@code plan} is a dry run and records nothing.
  */
 public final class MarkSweepGarbageCollector implements GarbageCollector {
 
@@ -81,23 +66,17 @@ public final class MarkSweepGarbageCollector implements GarbageCollector {
     private final ArtifactWalk walk;
 
     /** A wall-clock floor on the condemn-to-collect grace, on top of the one-pass generation gap: two hours in a
-     *  deployment unless {@code jenrepo.gc.grace} names another ({@link GarbageCollector#defaultGrace()}), zero for a
-     *  collector built without one. Zero keeps the grace purely generation-based: condemn in one pass, collect in the
-     *  next. A positive value guards the
-     *  case where generations advance faster than the nominal collection interval - several nodes each running
-     *  {@code collect}, or a node restarting and re-collecting after a segment lease expires - by refusing to delete a
-     *  blob until it has also carried its condemned marker for at least this long. Strictly more conservative than the
-     *  generation gap alone: it can only ever delay a deletion, never bring one forward, so it cannot delete a blob
-     *  the generation rule would spare. */
+     *  deployment unless {@code jenrepo.gc.grace} says otherwise ({@link GarbageCollector#defaultGrace()}), zero for a
+     *  collector built without one. It covers generations advancing faster than the collection interval - several nodes
+     *  collecting, a node re-collecting after a lease expires - and can only delay a deletion, never bring one
+     *  forward. */
     private final Duration graceFloor;
 
-    /** The installed formats that lend their reference sets, paired with the roots each declared - so a visited key is
-     *  only ever offered to the format that owns its root, and a pointer-only deployment pays one prefix test per leaf.
-     *  Empty for a deployment with no blobs-namespace format installed, which is exactly the pre-seam behaviour. */
+    /** The installed lending formats, paired with the roots each declared, so a visited key is offered only to the
+     *  format owning its root and a pointer-only deployment pays one prefix test per leaf. */
     private final List<Lender> lenders;
 
-    /** One format's reference-lending capability, narrowed to the root it declared it under. A format that declares
-     *  several roots contributes one of these per root, so the ownership test stays a single {@code startsWith}. */
+    /** One format's lending capability under one declared root, so ownership is a single {@code startsWith}. */
     private record Lender(String root, BlobReferences format) {
 
         private boolean owns(String key) {
@@ -109,9 +88,8 @@ public final class MarkSweepGarbageCollector implements GarbageCollector {
     private final String collector = UUID.randomUUID().toString().substring(0, 8);
     private final AtomicLong batches = new AtomicLong();
 
-    /** What a pass's running time is measured on. A collection's instants are the collector's clock - the one a
-     *  caller hands {@link #collect} - and a delete is stamped with that instant advanced by how long the pass has
-     *  run, so a long sweep's last delete is stamped when it happened rather than when the pass began. */
+    /** The clock a pass's running time is measured on. A delete is stamped with the collection's instant advanced by
+     *  how long the pass has run, so a long sweep's last delete is stamped when it happened. */
     private final Clock clock;
 
     public MarkSweepGarbageCollector(ArtifactWalk walk) {
@@ -122,12 +100,10 @@ public final class MarkSweepGarbageCollector implements GarbageCollector {
         this(walk, graceFloor, List.of());
     }
 
-    /** {@code lenders} are the installed {@link BlobReferences} formats ({@link BlobReferences#installed()}, resolved
-     *  once by the provider so the collector itself carries no discovery), each contributing the blobs its documents
-     *  keep alive beyond what a pointer body names. Handing an empty list is the pointer-body-only mark this collector
-     *  has always run. A lender declaring a root the collector owns or judges ({@code blobs}, {@code gc},
-     *  {@code walks}) is refused here rather than silently ignored: a format claiming to lend references under the
-     *  namespace being swept is a wiring bug, and swallowing it would leave its blobs unmarked. */
+    /** {@code lenders} are the installed {@link BlobReferences} formats, resolved by the provider so the collector
+     *  carries no discovery; an empty list is the pointer-body-only mark. A lender declaring a root the collector owns
+     *  or judges ({@code blobs}, {@code gc}, {@code walks}) is refused here: a format lending references under the
+     *  namespace being swept is a wiring bug, and ignoring it would leave its blobs unmarked. */
     public MarkSweepGarbageCollector(ArtifactWalk walk, Duration graceFloor, List<BlobReferences> lenders) {
         this(walk, graceFloor, lenders, Clock.systemUTC());
     }
@@ -172,11 +148,9 @@ public final class MarkSweepGarbageCollector implements GarbageCollector {
             }
             Marker parsed = store.readVersioned(CONDEMNED + "/" + name)
                     .map(MarkSweepGarbageCollector::parse).orElse(null);
-            // Mirror collect()'s deletion test exactly, so the dry run previews precisely what the next collect would
-            // reclaim: condemned by a judgment at or before the completed mark (an unreadable/newer marker is not due,
-            // repaired by a sweep) AND past the wall-clock grace floor (two hours by default). Applying the same floor
-            // here is what keeps plan and collect in agreement - without it the dry run over-reports every blob still
-            // inside its grace window.
+            // Mirror collect()'s deletion test exactly, so the dry run previews what the next collect reclaims:
+            // condemned at or before the completed mark (an unreadable or newer marker is not due) and past the
+            // wall-clock grace floor.
             if (parsed == null || parsed.pass() > judged
                     || Duration.between(parsed.since(), now).compareTo(graceFloor) < 0) {
                 return;
@@ -189,12 +163,10 @@ public final class MarkSweepGarbageCollector implements GarbageCollector {
         return GcPlan.of(true, 0, 0, due[0], sample);
     }
 
-    /** The generation of the most recent mark whose reference shards still stand - the largest {@code gc/<n>} below
-     *  the current, in-progress generation. Preferred over {@code generation - 1} so the dry run stays correct after
-     *  a corrupt-manifest recovery re-bases the generation on the wall clock (a jump, not a {@code +1}), which would
-     *  otherwise point {@link References} at a {@code gc/<clock-1>} that never existed and preview every condemned
-     *  blob as due. In the ordinary sequential case this <em>is</em> {@code generation - 1}. Zero when no earlier
-     *  pass has left shards. */
+    /** The generation of the most recent mark whose reference shards still stand - the largest {@code gc/<n>} below the
+     *  current one, rather than {@code generation - 1}, because a corrupt-manifest recovery re-bases the generation on
+     *  the wall clock and {@link References} would otherwise read shards that never existed and preview every condemned
+     *  blob as due. Zero when no earlier pass left shards. */
     private static long lastCompletedGeneration(ArtifactStore store, long below) throws IOException {
         long best = 0;
         for (String child : store.list("gc")) {
@@ -216,10 +188,9 @@ public final class MarkSweepGarbageCollector implements GarbageCollector {
         List<String> named;
         switch (pointerRoots) {
             case Known.Unknown<List<String>> unknown -> {
-                // The root set could not be named in full, so some namespace's serving pointers are invisible to the
-                // mark and every blob beneath them would read as unreferenced. Refuse before the mark begins:
-                // nothing is walked, nothing is condemned, nothing is deleted, and the reason travels back with the
-                // plan. The refusal is here - at the deletion - rather than left to every caller to remember.
+                // The root set could not be named in full, so some namespace's pointers would be invisible to the mark
+                // and their blobs would read as unreferenced. Refuse before the mark: nothing walked, condemned or
+                // deleted, and the reason travels back with the plan.
                 return GcPlan.refused(unknown);
             }
             case Known.Present<List<String>> present -> named = present.value();
@@ -228,9 +199,8 @@ public final class MarkSweepGarbageCollector implements GarbageCollector {
         Instant started = clock.instant();
         WalkPass marked = walk.walk(store, MARK, markRoots(named), new Mark(store));
         if (!marked.complete()) {
-            // Another node still holds mark segments: the reference shards are not yet complete, and judging
-            // blobs against an incomplete mark could condemn (though never delete) everything it missed. Report
-            // the partial pass and let the next interval - or the node that finishes - do the judging.
+            // Another node still holds mark segments: judging against an incomplete mark could condemn what it missed.
+            // Report the partial pass and leave the judging to the next interval or the node that finishes.
             CollectionRecord.collected(now, 0, -1, false);
             return GcPlan.of(false, 0, 0, 0, List.of());
         }
@@ -246,18 +216,17 @@ public final class MarkSweepGarbageCollector implements GarbageCollector {
     }
 
 
-    /** The bookkeeping convergence after a completed sweep: a marker whose blob is gone (a collected blob's, or the
-     *  residue of a sweep that died after deleting one) is removed once the claim window has passed, and the
-     *  reference shards of every superseded pass are dropped - so the {@code gc/} space converges instead of growing forever, and
-     *  an idempotent re-run over a converged store changes nothing. */
+    /** The bookkeeping convergence after a completed sweep: a marker whose blob is gone is removed once the claim
+     *  window has passed, and superseded passes' reference shards are dropped, so {@code gc/} converges and a re-run
+     *  over a converged store changes nothing. */
     private void converge(ArtifactStore store, long generation, Instant now) throws IOException {
         // A collection is stamped with the collector's clock, a claim with the wall clock it was written at.
         Instant collectedSettled = now.minus(Condemned.CLAIM_EXPIRY);
         Instant claimSettled = Instant.now().minus(Condemned.CLAIM_EXPIRY);
         each(store, CONDEMNED, name -> {
             if (hash(name) && !store.exists("blobs/" + name)) {
-                // A marker whose blob is gone stays while a publish may still be meeting it: a claim not yet expired,
-                // or a collection more recent than the claim window. After that it is residue.
+                // A marker whose blob is gone stays while a publish may still meet it - an unexpired claim, or a
+                // collection inside the claim window. After that it is residue.
                 String key = CONDEMNED + "/" + name;
                 Optional<ArtifactStore.Versioned> marker = store.readVersioned(key);
                 String body = marker.map(held -> new String(held.content(), StandardCharsets.UTF_8)).orElse("");
@@ -283,7 +252,7 @@ public final class MarkSweepGarbageCollector implements GarbageCollector {
         }
     }
 
-    /** Delete a whole bookkeeping subtree (a superseded pass's reference batches - bounded, never artifacts). */
+    /** Delete a bookkeeping subtree - a superseded pass's reference batches, never artifacts. */
     private static void drop(ArtifactStore store, String prefix) throws IOException {
         if (store.exists(prefix)) {
             store.delete(prefix);
@@ -294,14 +263,11 @@ public final class MarkSweepGarbageCollector implements GarbageCollector {
         }
     }
 
-    /** What an answered-but-empty root set means. {@code publish} always exists, so both {@link Known.Absent} ("the
-     *  question was asked and there are no pointer roots") and a {@link Known.Present} empty list are contradictions
-     *  rather than deployment states - and, unlike an unanswerable set, they are caller bugs, so they fail loudly
-     *  instead of being absorbed into a refusal an operator would have to go looking for. */
+    /** {@code publish} always exists, so an answered-but-empty root set ({@link Known.Absent}, or an empty
+     *  {@link Known.Present}) is a caller bug and fails loudly, unlike an unanswerable set, which is refused. */
     private static final String NO_ROOTS = "garbage collection needs at least one pointer root, e.g. publish";
 
-    /** Validate and normalise the caller's pointer roots: at least one, and never one of the store namespaces the
-     *  collector itself owns or judges - marking {@code blobs} as a pointer root is a caller bug, not a layout. */
+    /** Validate the caller's pointer roots: at least one, and never a namespace the collector owns or judges. */
     private static List<String> roots(List<String> pointerRoots) {
         if (pointerRoots == null || pointerRoots.isEmpty()) {
             throw new IllegalArgumentException(NO_ROOTS);
@@ -309,13 +275,10 @@ public final class MarkSweepGarbageCollector implements GarbageCollector {
         return pointerRoots.stream().distinct().sorted().map(MarkSweepGarbageCollector::root).toList();
     }
 
-    /** The roots the mark actually walks: the caller's, plus the roots every installed lender declared for itself.
-     *  The caller still owns the layout - it names {@code publish} and whatever else it knows - but a lender that says
-     *  "my blobs live under {@code oci/}" is the format's own word for it, and a deployment whose caller forgot that
-     *  root would have the lender installed and never be asked, which is precisely how a blobs-namespace format's
-     *  content becomes invisible to the scan and is reclaimed out from under it. Unioning can only ever enumerate more
-     *  and therefore mark more, so it never deletes something the caller's list would have spared; each added root
-     *  passes the same screen. In the ordinary case the caller already named them and this changes nothing. */
+    /** The roots the mark walks: the caller's plus every root an installed lender declared. A caller that forgot a
+     *  lender's root would leave that format installed and never asked, and its blobs reclaimed under it; a union can
+     *  only mark more, so it never deletes what the caller's list would spare. Each added root passes the same
+     *  screen. */
     private List<String> markRoots(List<String> pointerRoots) {
         Set<String> union = new TreeSet<>(roots(pointerRoots));
         for (Lender lender : lenders) {
@@ -332,8 +295,8 @@ public final class MarkSweepGarbageCollector implements GarbageCollector {
         return root;
     }
 
-    /** The mark phase's visitor: buffer every hash a pointer leaf names, flushed as append-only batch objects
-     *  before each walk checkpoint - so no committed cursor ever lies about an unflushed reference. */
+    /** The mark's visitor: buffer every hash a pointer leaf names, flushed as append-only batches before each walk
+     *  checkpoint, so no committed cursor lies about an unflushed reference. */
     private final class Mark implements ArtifactWalk.KeyVisitor {
 
         private final ArtifactStore store;
@@ -352,35 +315,29 @@ public final class MarkSweepGarbageCollector implements GarbageCollector {
         @Override
         public void visit(ArtifactStore.Listed entry) throws IOException {
             String key = entry.key();
-            // The format-declared references FIRST, and deliberately outside the pointer-size gate below: that gate
-            // bounds how large an object this phase will read as a POINTER BODY, and a format whose references live in
-            // a document knows its own bound (BlobReferences clause 6). Asking after the gate would silently drop the
-            // references of any key that is not itself pointer-shaped - the same class of omission fixed one line
-            // down, and with the same consequence: an unmarked blob is condemned and then deleted.
+            // Lent references first, outside the pointer-size gate below: that gate bounds what is read as a pointer
+            // body, and a format whose references live in a document knows its own bound (BlobReferences clause 6).
+            // Asking after the gate would drop the references of every key that is not pointer-shaped, and an unmarked
+            // blob is deleted.
             //
-            // An IOException from a lender is NOT contained: BlobReferences clause 3 makes a short list illegal, so a
-            // lender that cannot resolve a key it recognises throws, and the only safe reading of "I do not know what
-            // this keeps alive" is to fail the pass. The walk propagates it, collect() never reaches the sweep, and
-            // nothing is deleted. Catching it here would turn "cannot enumerate" into "references nothing", which is
-            // exactly the fail-OPEN this seam exists to make unrepresentable.
+            // A lender's IOException is not contained: a short list is illegal (clause 3), so "cannot enumerate" fails
+            // the pass, collect() never reaches the sweep, and nothing is deleted. Catching it would read as
+            // "references nothing".
             for (Lender lender : lenders) {
                 if (!lender.owns(key)) {
                     continue;
                 }
                 for (String reference : lender.format().references(key, store)) {
-                    // Judged by the same bare-hex predicate the body read is judged by, and sharded the same way, so a
-                    // lent hash lands exactly where the sweep - which names a blob by its bare hex - looks for it.
+                    // The same bare-hex predicate and sharding as the body read, so a lent hash lands where the sweep
+                    // looks.
                     String named = ServableNames.hash(reference);
                     if (hash(named)) {
                         buffer.computeIfAbsent(named.substring(0, 2), _ -> new ArrayList<>()).add(named);
                     }
                 }
             }
-            // The pointer-size gate, answered from the listing that enumerated this key wherever the backend's
-            // listing carried a size - which is every shipped backend. A mark pass opens every key in the pointer
-            // tree, so asking the store for each one's size was a round trip per pointer, spent only to decide not
-            // to read the handful that are not pointer-shaped. A backend whose listing says nothing still gets
-            // asked, so the gate is never weaker than it was.
+            // The pointer-size gate, answered from the listing's size where the backend carried one (every shipped
+            // backend), rather than a round trip per pointer; a listing without one still asks the store.
             long size = entry.size().orElseGet(() -> {
                 try {
                     return store.size(key);
@@ -395,15 +352,10 @@ public final class MarkSweepGarbageCollector implements GarbageCollector {
             if (pointer.isEmpty()) {
                 return; // removed between the walk's listing and this read - nothing references through it
             }
-            // The body's dialect is read through the one seam that owns it, never re-parsed here: a pointer body is
-            // either the bare lower-case hex the publish/ and blobs/ pointers carry or the algorithm-qualified
-            // sha256:<hex> of the OCI Distribution tag pointers, and both denote the same blob. Reading it as bare hex
-            // instead left every tag pointer unparsed, so the blob it references never entered the reference set and
-            // the sweep condemned and then DELETED live content - the one thing this collector may never do. The
-            // judgement below still applies to the bare hash, which is also how the sweep names a blob and how a
-            // reference shard is keyed, so the reference is recorded where the sweep looks for it; a body in neither
-            // dialect still names no hash and is still never counted. Same normalisation ServableNames.hash was
-            // introduced for on the withhold screen, and the one RebuildPass reads its pointer bodies through.
+            // The body's dialect is read through the seam that owns it: bare hex for publish/ and blobs/ pointers,
+            // sha256:<hex> for OCI tag pointers, both naming the same blob - a tag pointer read as bare hex would leave
+            // its blob unreferenced and deleted. The judgement below applies to the bare hash, which is how the sweep
+            // names a blob and a shard is keyed. A body in neither dialect names no hash.
             String named = ServableNames.hash(pointer.get().content());
             if (hash(named)) {
                 buffer.computeIfAbsent(named.substring(0, 2), _ -> new ArrayList<>()).add(named);
@@ -416,9 +368,8 @@ public final class MarkSweepGarbageCollector implements GarbageCollector {
                 return;
             }
             if (generation == 0) {
-                // The pass this worker is contributing to; read lazily since it exists only once the walk began.
-                // Should the claim have been reclaimed and the manifest turned over, references land in the newer
-                // pass's shards - a stale-but-true observation that can only ever spare a blob, never condemn one.
+                // The pass this worker contributes to, read lazily. If the manifest turned over meanwhile, references
+                // land in the newer pass's shards - a true observation that can only spare a blob.
                 generation = walk.pass(store, MARK).map(WalkPass::generation)
                         .orElseThrow(() -> new IOException("no mark pass to record references under"));
             }
@@ -445,14 +396,14 @@ public final class MarkSweepGarbageCollector implements GarbageCollector {
         private final ArtifactStore store;
         private final long generation;
         private final Instant now;
-        /** The {@link #clock}'s reading when the pass began, against which {@link #now} is advanced. */
+        /** The {@link #clock}'s reading when the pass began, against which {@link #now} advances. */
         private final Instant started;
         private final References references;
         /** The condemned markers of the shard being swept, so the sparing question is answered in memory. */
         private final Markers markers;
         private long condemned, spared, collected;
-        /** Blobs this sweep left carrying a condemned marker - newly condemned this pass plus those still within
-         *  their grace - the in-flight {@code gc/condemned/} set the jenrepo.gc.condemned gauge reports. */
+        /** Blobs this sweep left condemned - newly condemned plus those within their grace - the set the
+         *  {@code jenrepo.gc.condemned} gauge reports. */
         private long standing;
         private final List<String> sample = new ArrayList<>();
 
@@ -476,13 +427,10 @@ public final class MarkSweepGarbageCollector implements GarbageCollector {
             }
             String marker = CONDEMNED + "/" + hash;
             if (references.contains(hash)) {
-                // Asked in memory first. Almost every blob in a healthy store is referenced and carries no marker,
-                // and probing the store for one would cost an existence read per referenced blob per pass - most of
-                // a collection's reads - for an answer that is nearly always "absent".
-                // The markers stream in the same hash order the blobs do, so one shard is resident at a time,
-                // exactly as the reference shards are. A stale snapshot can only make this skip a delete, leaving
-                // a marker on a referenced blob for the next pass to clear - the convergence this already relies
-                // on - and never deletes anything, which is the only direction that would matter.
+                // Asked in memory first: almost every blob is referenced and unmarked, and a store probe per referenced
+                // blob would be most of a collection's reads. The markers stream in the blobs' hash order, one shard
+                // resident at a time. A stale snapshot can only skip a delete, leaving a marker for the next pass to
+                // clear.
                 if (markers.condemned(hash) && deleteIfPresent(store, marker)) {
                     spared++; // referenced again - the dedup re-publish an earlier pass condemned
                 }
@@ -491,38 +439,35 @@ public final class MarkSweepGarbageCollector implements GarbageCollector {
             Optional<ArtifactStore.Versioned> current = store.readVersioned(marker);
             Marker parsed = current.map(MarkSweepGarbageCollector::parse).orElse(null);
             if (parsed == null) {
-                // Unreferenced but not (recognisably) condemned yet: condemn it now, never delete it in the pass
-                // that first judged it. Create-if-absent (an unreadable marker is repaired on its own token); a
-                // lost race means a concurrent sweeper condemned it, which is convergence, not a lost update.
+                // Unreferenced and not yet (recognisably) condemned: condemn now, never delete in the pass that first
+                // judged it. Create-if-absent (an unreadable marker is repaired on its own token); a lost race is a
+                // concurrent sweeper's condemnation, which converges.
                 var _ = store.writeVersioned(marker, Condemned.condemnation(generation, now),
                         current.map(ArtifactStore.Versioned::token).orElse(null));
                 condemned++;
                 standing++; // now condemned, awaiting the confirming pass
             } else if (parsed.pass() < generation && Duration.between(parsed.since(), now).compareTo(graceFloor) >= 0
                     && referencesStillStand()) {
-                // Condemned by an earlier pass, still unreferenced by this one, past the wall-clock grace floor
-                // (two hours by default), and our reference shards still stand (the lease fence below). Claim the
-                // marker over the token we judged the blob by: a dedup re-publish that re-referenced these bytes since
-                // spared them by writing the same marker, so a claim that does not land means the blob is relied on
-                // again and is spared, and one that lands refuses every publish of these bytes until they are gone.
-                // The completed mark's shard needs no re-read: it gained nothing but duplicates since the pass
-                // finished.
+                // Condemned by an earlier pass, still unreferenced, past the grace floor, and our shards still stand.
+                // Claim the marker over the token we judged by: a re-publish that re-referenced these bytes wrote the
+                // same marker, so a claim that does not land spares the blob, and one that lands refuses every publish
+                // of these bytes until they are gone. The completed mark's shard needs no re-read: it has only gained
+                // duplicates since.
                 Instant claiming = Instant.now();
                 if (!Condemned.claim(store, hash, current.get(), claiming)) {
                     spared++;
                     return;
                 }
                 if (Duration.between(claiming, Instant.now()).compareTo(Condemned.CLAIM_EXPIRY.dividedBy(2)) > 0) {
-                    // Paused between the claim and the delete for long enough that a publish may be about to take
-                    // the claim back: the next pass judges the blob again.
+                    // Paused between claim and delete long enough that a publish may take the claim back: re-judge next
+                    // pass.
                     standing++;
                     return;
                 }
-                // The blob goes and the marker stays, rewritten to say so: a publish that stored these bytes while the
-                // blob still stood had its upload dropped as a duplicate, and when it asks to spare them it must meet
-                // a marker, since an absent one lets it link a pointer at nothing. The convergence leg removes the
-                // marker once no such publish can still be in flight, counting from the delete: a stamp taken when
-                // the pass began would shorten that window by however long the sweep ran before reaching this blob.
+                // The blob goes and the marker stays, rewritten to say so: a publish whose upload was dropped as a
+                // duplicate while the blob stood must meet a marker when it asks to spare the bytes, or it would link a
+                // pointer at nothing. The convergence leg removes it once no such publish can be in flight, counted
+                // from the delete itself.
                 deleteIfPresent(store, key);
                 Condemned.collected(store, hash, now.plus(Duration.between(started, clock.instant())));
                 collected++;
@@ -530,54 +475,34 @@ public final class MarkSweepGarbageCollector implements GarbageCollector {
                     sample.add(hash);
                 }
             } else {
-                // parsed.pass() >= generation, or younger than the grace floor: still within its grace, its marker
-                // left standing for the confirming pass - part of the in-flight condemned set.
+                // Still within its grace (a pass at or after ours, or younger than the floor): left for the confirming
+                // pass.
                 standing++;
             }
         }
 
-        /** A lease fence against deleting a blob after this sweep's reference shards were dropped from under it. The
-         *  shards this sweep judges against live under {@code gc/<generation>/refs} (keyed by the mark generation),
-         *  and {@link #converge} drops a pass's shards only for {@code pass < generation} - so they can only vanish
-         *  once a mark completes at a generation strictly greater than ours. A paused or lease-expired sweep worker
-         *  that resumes after that has stopped could otherwise re-judge against emptied shards and delete a still-
-         *  referenced blob (every hash reads as unreferenced when the shards are gone). Re-reading the mark manifest
-         *  immediately before each delete, and refusing when its generation has advanced past ours, closes that
-         *  window: an advanced generation is the necessary precondition for our shards to have been dropped, so this
-         *  never deletes against a superseded reference set. It is deliberately conservative - it may defer a still-
-         *  safe delete while another node's newer mark is only in flight (its converge has not run) - which the next
-         *  pass, marking afresh, re-judges and reclaims. Correctness over a marginal deletion this round. */
+        /** A lease fence against deleting after this sweep's reference shards were dropped. The shards live under
+         *  {@code gc/<generation>/refs} and {@link #converge} drops only shards of a generation below the current mark,
+         *  so ours can only vanish once a mark completes at a greater generation; a paused sweep resuming after that
+         *  would read every hash as unreferenced. Re-reading the mark's generation before each delete and refusing once
+         *  it has advanced closes that. Conservative: it may defer a safe delete while a newer mark is still in flight,
+         *  which the next pass reclaims. */
         private boolean referencesStillStand() throws IOException {
-            // An unreadable mark manifest is not "no mark has advanced past me". walk.pass answers an empty Optional
-            // both when no pass exists and when its manifest could not be read or parsed, and this is the fence
-            // immediately in front of the delete - so an .orElse(0L) here would read a corrupt or unreachable
-            // manifest as a lease that still stands and delete against reference shards that may already be gone.
-            // Absence of the proof is not proof: with nothing to judge the lease by, the blob is spared and the next
-            // pass re-judges it. We can only be here inside a sweep that followed a completed mark, so an empty
-            // answer is always the unreadable case rather than a genuinely fresh store.
-            // The generation alone, not the whole pass: this fence asks whether the mark we are sweeping under
-            // still stands, and assembling every segment state to read one number off the manifest would cost up
-            // to thirty three reads per blob deleted - the largest single line of a collection. Same read of the
-            // same object, same freshness, same answer, without the segments it does not use.
+            // An empty answer is an unreadable manifest here (a sweep only follows a completed mark), and absence of
+            // proof is not proof, so the blob is spared. Only the generation is read, not the segment states, which
+            // would cost dozens of reads per delete.
             return walk.generation(store, MARK).map(current -> current <= generation).orElse(false);
         }
     }
 
-    /**
-     * The condemned markers, read the way the reference shards are: one leading-byte shard resident at a time,
-     * in the hash order the sweep already streams blobs in.
-     *
-     * <p>It answers the sparing question - does this referenced blob carry a marker an earlier pass left - which
-     * was an existence read per referenced blob per pass, and is nearly always no. A whole store condemned at
-     * once is a state this collector really reaches, so the resident set is a shard rather than the set: at ten
-     * million blobs all condemned that is some forty thousand hashes, not ten million. Past {@link #CAP} it stops
-     * holding them and says so, and the caller falls back to asking the store per blob - slower, and bounded,
-     * which is the right way round.
-     */
+    /** The condemned markers, read as the reference shards are: one leading-byte shard resident at a time, in the
+     *  sweep's hash order. They answer whether a referenced blob carries an earlier pass's marker - nearly always no -
+     *  without a store read per blob. A wholly condemned store is reachable, so the resident set is one shard, and past
+     *  {@link #CAP} it stops holding and the caller probes the store per blob instead. */
     private static final class Markers {
 
-        /** Hashes held for one shard before falling back to probing. Forty thousand is a ten-million-blob store
-         *  wholly condemned; past that the memory matters more than the round trips. */
+        /** Hashes held for one shard before falling back to probing - above a ten-million-blob store wholly
+         *  condemned. */
         private static final int CAP = 50_000;
 
         private final ArtifactStore store;
@@ -589,8 +514,8 @@ public final class MarkSweepGarbageCollector implements GarbageCollector {
             this.store = store;
         }
 
-        /** Whether {@code hash} may carry a marker: exact when the shard is held, and {@code true} - ask the
-         *  store - when it was too large to hold. */
+        /** Whether {@code hash} may carry a marker: exact when the shard is held, {@code true} (ask the store) when it
+         *  was too large. */
         private boolean condemned(String hash) throws IOException {
             String leading = hash.substring(0, 2);
             if (!leading.equals(shard)) {
@@ -625,11 +550,11 @@ public final class MarkSweepGarbageCollector implements GarbageCollector {
         }
     }
 
-    /** How many marker names one listing asks for; the sweep reads at most a shard's worth however large it is. */
+    /** How many marker names one listing asks for. */
     private static final int PAGE = 1_000;
 
-    /** The completed mark's reference shards, loaded one leading-byte shard at a time - both consumers stream
-     *  hashes in name order, so this is a sequential read of at most 256 shards, never an O(N) set. */
+    /** The completed mark's reference shards, loaded one leading-byte shard at a time in the name order both consumers
+     *  stream in - at most 256 sequential reads, never an O(N) set. */
     private static final class References {
 
         private final ArtifactStore store;
@@ -668,8 +593,8 @@ public final class MarkSweepGarbageCollector implements GarbageCollector {
         }
     }
 
-    /** A condemned marker's content: the pass whose judgment condemned the blob (the clock the grace interval is
-     *  measured in) and when - the {@code since} a console shows and the {@code jenrepo.gc.grace} floor measures. */
+    /** A condemned marker's content: the pass whose judgment condemned the blob (the grace clock) and when - the
+     *  {@code since} a console shows and the {@code jenrepo.gc.grace} floor measures. */
     private record Marker(long pass, Instant since) {
     }
 
@@ -693,12 +618,9 @@ public final class MarkSweepGarbageCollector implements GarbageCollector {
         return true;
     }
 
-    /** Whether a value is a bare SHA-256 - the only shape the collector ever trusts as naming a blob. Deliberately
-     *  NOT widened to the qualified {@code sha256:<hex>} dialect: besides the mark's pointer body it also judges
-     *  {@code gc/condemned/<hash>} child names, {@code blobs/} names and a raw hash, all of them store keys the
-     *  collector writes itself and all of them bare hex, so widening here would make it accept a malformed name in
-     *  three places to fix a dialect that occurs in one. The pointer body is normalised at its read instead, and this
-     *  then judges the hash that body named. */
+    /** Whether a value is a bare SHA-256 - the only shape the collector trusts as naming a blob. Not widened to
+     *  {@code sha256:<hex>}: it also judges marker names, {@code blobs/} names and raw hashes, all keys the collector
+     *  writes in bare hex; the one qualified dialect is normalised at the pointer-body read instead. */
     private static boolean hash(String value) {
         if (value.length() != 64) {
             return false;
@@ -716,8 +638,7 @@ public final class MarkSweepGarbageCollector implements GarbageCollector {
         void accept(String name) throws IOException;
     }
 
-    /** Stream every immediate child name under {@code prefix} through {@code action}, pulled over the store's pages at
-     *  the drain width - never one list. */
+    /** Stream every immediate child name under {@code prefix} through {@code action}, paged at the drain width. */
     private static void each(ArtifactStore store, String prefix, NameAction action) throws IOException {
         Names names = Names.over(store, prefix);
         for (String name = names.next(); name != null; name = names.next()) {
