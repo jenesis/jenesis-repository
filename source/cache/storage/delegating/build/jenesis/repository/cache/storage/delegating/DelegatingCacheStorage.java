@@ -10,38 +10,26 @@ import build.jenesis.repository.store.Documents;
 import build.jenesis.repository.walk.Traversal;
 
 /**
- * The one {@link CacheStorage} implementation: the build cache's domain model expressed over an
- * {@link ArtifactStore}, so a cache entry is an object in the same keyed byte store an artifact is.
- *
- * <h2>Why this exists</h2>
- *
- * The cache has no backends of its own: {@code s3}, {@code gcs}, {@code azure-blob} and {@code filesystem} cache
- * backends would be a second copy of the artifact store's - the same SDK client build, the same endpoint screen, the
- * same credential chain, the same conditional write, the same paginator - and two copies of one thing drift, down to
- * reading the same values under different key spellings.
- *
- * <p>{@link CacheStorage} stays an SPI, because a cache store that is genuinely NOT an artifact store - a Redis tier,
- * an ephemeral node-local disk with different durability - is a thing a deployment could want, and the seam is cheap
- * to keep and expensive to reintroduce. What is not duplicated is the storage beneath it.
+ * The one {@link CacheStorage} implementation: the build cache's model over an {@link ArtifactStore}, so a cache entry
+ * is an object in the same keyed byte store an artifact is. The cache has no backends of its own, which would duplicate
+ * the artifact store's SDK clients, endpoint screens, credential chains and conditional writes. {@link CacheStorage}
+ * stays an SPI for a store that genuinely is not an artifact store - a Redis tier, an ephemeral local disk.
  *
  * <h2>The mapping</h2>
  *
- * A cache entry is the key {@code <project>/<step>/<inputs>}; a project's own files are {@code <project>/<file>} and
- * its settings {@code <project>/.system/config/settings/<module>.json}; the console's access tree is the {@code .users/} paths, at the same prefix under the same tenant scope. The one
- * exception is deliberate and is the provider's business, not this class's: the
- * filesystem cache root and the artifact-store root are different directories by design.
+ * An entry is the key {@code <project>/<step>/<inputs>}; a project's own files are {@code <project>/<file>} and its
+ * settings {@code <project>/.system/config/settings/<module>.json}; the console's access tree is the {@code .users/}
+ * paths, under the same tenant scope.
  *
- * <h2>What this class may not cost</h2>
+ * <h2>What it may not cost</h2>
  *
- * Storage is on the hot path, so the delegation is held to the round-trip count the hand-written backends had. Two
- * places would otherwise have regressed, and both are why {@link ArtifactStore} grew the primitives it did:
- * {@link #entries} takes each entry's size and recency from the listing that enumerated it, rather than stat-ing once
- * per entry on the pass that walks the whole cache; and {@link #fileVersion} asks {@link ArtifactStore#version} for a
- * token rather than downloading an object to read one off it.
+ * Storage is on the hot path, so the delegation keeps the round trips low: {@link #entries} takes each entry's size and
+ * recency from the listing that enumerated it rather than a stat per entry, and {@link #fileVersion} asks
+ * {@link ArtifactStore#version} for a token rather than downloading the object.
  */
 public final class DelegatingCacheStorage implements CacheStorage {
 
-    /** The provisioning marker {@link #createProject} writes - see there for why it exists. */
+    /** The provisioning marker {@link #createProject} writes. */
     public static final String PROJECT_PROPERTIES = "project.properties";
 
     /** When the project was provisioned, in the marker. */
@@ -55,27 +43,25 @@ public final class DelegatingCacheStorage implements CacheStorage {
 
     @Override
     public CacheStorage scope(String tenant) {
-        // The store's own segment screen would admit names the cache does not, so the cache's rule is applied here:
-        // a tenant subspace is named by the same predicate every other tenant-scoped surface uses.
+        // The store's segment screen admits names the cache does not, so a tenant is named by the predicate every other
+        // tenant-scoped surface uses.
         if (!Names.isTenant(tenant)) {
             throw new IllegalArgumentException("Not a tenant name: " + tenant);
         }
         return new DelegatingCacheStorage(store.scope(tenant));
     }
 
-    // ---- entries -------------------------------------------------------------------------------------------------
+    // ---- entries
 
-    /**
-     * The shared write-path addressability screen, applied before the delegate is touched. A store key is opaque, so
-     * without it an unaddressable entry is stored LITERALLY, at a key {@link #entries} then skips forever - invisible
-     * to the size cap, the ttl and the free-space sweep. {@link Names#isEntry} is the same predicate the enumeration
-     * applies, so what can be written is exactly what can be found again.
-     */
+    /** An entry's store key, {@code <project>/<step>/<inputs>}. */
     private static String key(Entry entry) {
         return entry.project() + "/" + entry.step() + "/" + entry.inputs();
     }
 
-    /** The write path's screen; see {@link #addressable}. */
+    /** The write path's screen, applied before the delegate is touched. A store key is opaque, so an unaddressable
+     *  entry would be stored literally at a key {@link #entries} then skips forever - invisible to the size cap, the
+     *  ttl and the free-space sweep. {@link Names#isEntry} is the enumeration's own predicate, so what can be written
+     *  can be found again. */
     private static String requireEntry(Entry entry) {
         if (!Names.isEntry(entry)) {
             throw new IllegalArgumentException("Unaddressable cache entry: " + entry);
@@ -106,13 +92,9 @@ public final class DelegatingCacheStorage implements CacheStorage {
         return project;
     }
 
-    /**
-     * The screens above are the WRITE path's. A read is deliberately lenient: an unaddressable name reads as absent -
-     * empty properties, a null version, no entries - because that is what the hand-written backends answered and
-     * because it is the honest answer. Nothing can have been stored under a name the write path refuses, so "there is
-     * nothing there" is true, and a caller asking about a name a user typed should get an empty page rather than an
-     * exception it would have to catch to render one.
-     */
+    /** The read path's leniency: an unaddressable name reads as absent - empty properties, a null version, no entries -
+     *  because nothing can be stored under a name the write path refuses, and a caller asking about a typed name should
+     *  get an empty page rather than an exception. */
     private static boolean addressable(String path) {
         return Names.isPath(path);
     }
@@ -122,16 +104,15 @@ public final class DelegatingCacheStorage implements CacheStorage {
         return Names.isEntry(entry) && store.exists(key(entry));
     }
 
-    // ---- recency stamps ----------------------------------------------------------------------------------------
+    // ---- recency stamps
 
-    /** The container of an entry's stamps, beside the entry: {@code <entry key>.used/}. It sorts directly after the
-     *  entry in a recursive listing (the entry's key is its prefix), which is what lets {@link #entries} fold a
-     *  stamp into its entry from the same page. */
+    /** The container of an entry's stamps, {@code <entry key>.used/}. It sorts directly after the entry in a recursive
+     *  listing, so {@link #entries} folds a stamp into its entry from the same page. */
     private static final String STAMPS = ".used/";
 
-    /** How many stamps of one entry a point read looks at. The steady state is one; a renewal leaves two for a
-     *  moment; more than this is a backend that lost deletes, and the newest may then be missed - which costs one
-     *  redundant stamp, never a wrong eviction of a hot entry, since a hit always stamps when in doubt. */
+    /** How many of an entry's stamps a point read examines. The steady state is one, a renewal briefly leaves two; past
+     *  this the newest may be missed, which costs one redundant stamp and never evicts a hot entry, since a hit stamps
+     *  when in doubt. */
     private static final int STAMPS_SCANNED = 8;
 
     private static String stamps(Entry entry) {
@@ -178,8 +159,8 @@ public final class DelegatingCacheStorage implements CacheStorage {
             if (newest[0] != null) {
                 return Optional.of(new Recency(newest[0], true));
             }
-            // Never stamped: the entry's own time, the same fallback the enumeration folds in, by one point read of
-            // the entry itself. A backend that lists no time reads as the epoch - past any window, so stamped on use.
+            // Never stamped: the entry's own time, by one point read - the enumeration's fallback. A backend listing no
+            // time reads as the epoch, past any window, so it is stamped on use.
             return store.listed(key(entry))
                     .map(listed -> new Recency(listed.modified().orElse(Instant.EPOCH), false));
         } catch (IOException _) {
@@ -222,9 +203,8 @@ public final class DelegatingCacheStorage implements CacheStorage {
             return Traversal.Result.exhausted(0, 0);    // nothing can have been stored under a refused name
         }
         String after = Pages.entry(project, cursor);
-        // One recursive listing, and the size and recency ride along in it - the property this delegation had to keep.
-        // Collecting limit + 1 is what makes the truncation answer exact rather than merely safe, exactly as the
-        // hand-written backends did: the extra record proves there is more without a second request asking.
+        // One recursive listing carries size and recency. Collecting limit + 1 makes the truncation answer exact: the
+        // extra record proves there is more without a second request.
         SequencedMap<String, Folded> page = new LinkedHashMap<>();
         long steps = 0;
         String scanCursor = after.isEmpty() ? "" : project + "/" + after;
@@ -236,9 +216,9 @@ public final class DelegatingCacheStorage implements CacheStorage {
                         page.put(relative, new Folded(listed));
                         return;
                     }
-                    // An entry's stamps list directly after it, so they fold into the entry already on the page; a
-                    // stamp whose entry is not on it belongs to the entry a resumed page started after, which was
-                    // delivered with its stamps by the page before - or to no entry at all, and is nothing.
+                    // An entry's stamps list directly after it and fold into it on this page; a stamp whose entry is
+                    // not here belongs to the entry a resumed page started after, delivered with its stamps already -
+                    // or to nothing.
                     Map.Entry<String, Instant> stamp = stampShaped(relative);
                     if (stamp != null) {
                         Folded owner = page.get(stamp.getKey());
@@ -261,9 +241,9 @@ public final class DelegatingCacheStorage implements CacheStorage {
         return Pages.entries(project, folded, limit, steps, entries);
     }
 
-    /** An entry as the listing delivered it, gathering the stamps that follow it; recency is the newest stamp, and
-     *  only without one the listing's modification time - so a stamped entry's recency is the same on every backend
-     *  and survives a copy of the store, while a never-read entry ages from when this backend received it. */
+    /** An entry as listed, gathering the stamps that follow it: recency is the newest stamp, and only without one the
+     *  listing's modification time - so a stamped entry's recency is the same on every backend and survives a copy of
+     *  the store, while a never-read entry ages from when this backend received it. */
     private static final class Folded {
 
         private final ArtifactStore.Listed listed;
@@ -287,9 +267,8 @@ public final class DelegatingCacheStorage implements CacheStorage {
         }
     }
 
-    /** The deletion token: the entry's store key and the stamps that go with it, so a delete leaves no stamp behind
-     *  for an entry that is gone. Opaque to every caller, which is why it may carry more than a key; its text is the
-     *  key alone. */
+    /** The deletion token: the entry's key and its stamps, so a delete leaves no stamp behind. Opaque to callers; its
+     *  text is the key alone. */
     private record Located(String key, List<String> stamps) {
 
         @Override
@@ -298,10 +277,8 @@ public final class DelegatingCacheStorage implements CacheStorage {
         }
     }
 
-    /** Whether a project-relative key is an ENTRY rather than the project's own files, its settings or anything
-     *  else that shares the prefix: exactly {@code <step>/<inputs>}, both hex, no deeper. The hand-written backends
-     *  applied the same shape test to the same listing, and it is what keeps a policy document out of an eviction
-     *  pass's candidate set. */
+    /** Whether a project-relative key is an entry - exactly {@code <step>/<inputs>}, both hex, no deeper - rather than
+     *  the project's own files or settings, which keeps a policy document out of an eviction pass's candidates. */
     private static boolean entryShaped(String relative) {
         int slash = relative.indexOf('/');
         if (slash < 0) {
@@ -325,14 +302,13 @@ public final class DelegatingCacheStorage implements CacheStorage {
         }
     }
 
-    // ---- projects ------------------------------------------------------------------------------------------------
+    // ---- projects
 
     @Override
     public boolean projectExists(String project) {
-        // Anything under the prefix, in one listing capped at a single entry. A project does not have to be
-        // provisioned to exist - a build writing an entry brings it into being, and the console must see it - so this
-        // deliberately does not key on a marker. A provisioned-but-empty project is covered by the same call, because
-        // provisioning writes its marker, which is an object under the prefix.
+        // Anything under the prefix, one listing capped at one entry. A build writing an entry brings a project into
+        // being and the console must see it, so this does not key on the marker; a provisioned empty project has its
+        // marker under the prefix.
         try {
             return Names.isProject(project) && store.scan(project, "", 1, _ -> { }).delivered() > 0;
         } catch (IOException e) {
@@ -341,20 +317,12 @@ public final class DelegatingCacheStorage implements CacheStorage {
     }
 
     /**
-     * Provision a project by writing its marker.
+     * Provision a project by writing its marker. A keyed store has no empty container, so this small document is what
+     * makes a created project that nothing has pushed to yet survive a page reload. It carries {@code created}, and
+     * whatever an operator sets later lives here too, read back through {@link #readConfig}.
      *
-     * <p>A keyed store has no such thing as an empty container - a directory is an artefact of a filesystem, and on
-     * an object store it simply does not exist until something is under it. So provisioning writes a small document
-     * that IS the project's existence: without it, a project an operator created and has not yet pushed to would
-     * vanish from the console the moment the page reloaded.
-     *
-     * <p>It carries {@code created}, so a project's age is knowable: a marker that exists anyway may as well answer
-     * the question. A description or anything else an operator sets
-     * later lives here too, and is read back through the ordinary {@link #readConfig}, so this needs no new API.
-     *
-     * <p>Provisioning does NOT define existence, only guarantees it: {@link #projectExists} asks whether anything is
-     * under the prefix, because a build that pushes to an unprovisioned project brings it into being and the console
-     * has to see that one too.
+     * <p>Provisioning guarantees existence without defining it: {@link #projectExists} asks whether anything is under
+     * the prefix, since a build pushing to an unprovisioned project creates it.
      */
     @Override
     public void createProject(String project) throws IOException {
@@ -373,7 +341,7 @@ public final class DelegatingCacheStorage implements CacheStorage {
         return children("", cursor, limit, names, Names::isProject);
     }
 
-    // ---- configuration files -------------------------------------------------------------------------------------
+    // ---- configuration files
 
     @Override
     public Properties readConfig(String project, String file) {
@@ -417,15 +385,14 @@ public final class DelegatingCacheStorage implements CacheStorage {
     @Override
     public Object fileVersion(String path) {
         try {
-            // A token WITHOUT the body: the object stores answer this with a metadata request, where reading the
-            // object to take its token off it would download a document on every revalidation.
+            // A token without the body: a metadata request on the object stores, not a download per revalidation.
             return addressable(path) ? store.version(path).orElse(null) : null;
         } catch (IOException e) {
             throw new UncheckedIOException("Could not read the version of " + path, e);
         }
     }
 
-    // ---- directories ---------------------------------------------------------------------------------------------
+    // ---- directories
 
     @Override
     public Traversal.Result listDir(String prefix, String cursor, int limit, Consumer<String> names) {
@@ -434,15 +401,13 @@ public final class DelegatingCacheStorage implements CacheStorage {
     }
 
     /**
-     * The shared body of {@link #projects} and {@link #listDir}: one page of immediate child CONTAINERS under a
-     * prefix, filtered, with the extra name that makes the truncation answer exact rather than merely safe.
+     * The body of {@link #projects} and {@link #listDir}: one page of immediate child containers under a prefix,
+     * filtered, with the extra name that makes the truncation answer exact.
      *
-     * <p>Containers only, in both callers: a project is a container of entries and a {@code .users/} node is a
-     * container of documents, so a leaf document sitting beside them is not a child either surface may report. The
-     * delegate has no listing that distinguishes the two - {@code page} merges a blob and a same-named container into
-     * one name by design - so a child is a container iff something is under it, which is one bounded probe per
-     * candidate. That is the one place this delegation costs a call the hand-written backends did not make, and it is
-     * bounded by the page size rather than by the container's size.
+     * <p>Containers only: a project is a container of entries and a {@code .users/} node one of documents, so a leaf
+     * beside them is no child either surface reports. {@code page} merges a blob and a same-named container into one
+     * name, so a child is a container iff something is under it - one bounded probe per candidate, bounded by the page
+     * size.
      */
     private Traversal.Result children(String prefix, String cursor, int limit, Consumer<String> names,
                                       Predicate<String> keep) {
@@ -474,7 +439,7 @@ public final class DelegatingCacheStorage implements CacheStorage {
         return Pages.names(prefix, page, limit, steps, names);
     }
 
-    /** Whether a child name is a container: one bounded scan that stops at the first key beneath it. */
+    /** Whether a child name is a container: one bounded scan stopping at the first key beneath it. */
     private boolean container(String prefix, String name) throws IOException {
         String child = prefix.isEmpty() ? name : prefix + "/" + name;
         return store.scan(child, "", 1, _ -> { }).delivered() > 0;
@@ -493,14 +458,13 @@ public final class DelegatingCacheStorage implements CacheStorage {
             if (!scan.truncated()) {
                 return;
             }
-            // Deleting as we go means the next page starts where this one ended rather than re-listing from the top,
-            // and a crash halfway leaves a partially deleted tree that a re-run finishes - which is what a recursive
-            // delete can promise on a store with no atomic subtree operation.
+            // Deleting as it goes, the next page starts where this one ended; a crash leaves a partial tree a re-run
+            // finishes - what a recursive delete can promise on a store with no atomic subtree operation.
             cursor = scan.cursor().orElseThrow();
         }
     }
 
-    // ---- capacity ------------------------------------------------------------------------------------------------
+    // ---- capacity
 
     @Override
     public long usableSpace() {
@@ -512,8 +476,8 @@ public final class DelegatingCacheStorage implements CacheStorage {
         return capacity().map(ArtifactStore.Capacity::total).orElse(0L);
     }
 
-    /** The pair is answered together or not at all, and the sentinels above are this interface's way of saying "this
-     *  backend has no volume" - the store says it by answering empty. */
+    /** The pair is answered together or not at all; the sentinels are this interface's "no volume", which the store
+     *  says by answering empty. */
     private Optional<ArtifactStore.Capacity> capacity() {
         try {
             return store.capacity();

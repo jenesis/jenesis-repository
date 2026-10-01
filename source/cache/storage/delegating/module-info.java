@@ -1,12 +1,8 @@
 /**
- * The cache storage: one provider, delegating to the repository's own artifact store. It {@code provides} one
- * {@link build.jenesis.repository.cache.storage.CacheStorageProvider} per backend name - {@code filesystem}, {@code s3},
- * {@code gcs}, {@code azure-blob} - each building the same {@code DelegatingCacheStorage} over an
- * {@code ArtifactStore} resolved from the deployment's own configuration.
- *
- * <p>This module replaces four backend modules that were a second implementation of the artifact store's storage.
- * It depends on no cloud SDK at all: the SDK wiring lives once, in the store backends, and is reached
- * here through {@code ArtifactStoreProvider.resolve}.
+ * The cache storage: one provider delegating to the repository's own artifact store - a
+ * {@link build.jenesis.repository.cache.storage.CacheStorageProvider} that builds {@code DelegatingCacheStorage} over a
+ * segment of the {@code ArtifactStore} the node resolved. It depends on no cloud SDK: the SDK wiring lives once, in the
+ * store backends.
  *
  * @jenesis.release 25
  * @jenesis.bom pin-repository.properties

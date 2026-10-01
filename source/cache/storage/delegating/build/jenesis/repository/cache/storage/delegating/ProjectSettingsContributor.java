@@ -6,13 +6,11 @@ import build.jenesis.repository.settings.Setting;
 import build.jenesis.repository.settings.SettingsContributor;
 
 /**
- * A build-cache project's policy ({@link ProjectPolicy}) as three project settings, live: each is set for one project,
- * for a tenant's projects or for every project, the narrowest value winning. They are declared beside the one cache
- * storage there is, because every composition that holds projects carries it: the build cache applies them on every
- * write and on its reaper's clock, the console when an operator asks for a sweep now.
- *
- * <p>The size cap and the unused-entry lifetime are what a new project should not forget, so the project wizard asks
- * them; the sweep order is tuning.
+ * A build-cache project's policy ({@link ProjectPolicy}) as three live project settings, set for one project, a
+ * tenant's projects or every project, the narrowest winning. Declared beside the one cache storage, which every
+ * composition holding projects carries: the build cache applies them on every write and on its reaper's clock, the
+ * console when an operator asks for a sweep. The project wizard asks the size cap and the unused-entry lifetime; the
+ * sweep order is tuning.
  */
 public final class ProjectSettingsContributor implements SettingsContributor {
 
