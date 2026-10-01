@@ -25,13 +25,8 @@ import build.jenesis.repository.walk.WalkProvider;
  */
 public final class CleanupTaskProvider implements MaintenanceTaskProvider {
 
-    /** How often the storage sweeps run. Deliberately the same dial five reapers read (cleanup, quarantine-retention,
-     *  build-scan-retention, staging-reap, test-history-retention), so one operator switch paces the whole retention
-     *  family; the shared default is stated here in each of them. */
-    /** The reaps' cadence, hourly: the whole retention family's dial - four more reapers read the same key with
-     *  the same default, so it has one. Retention, collection and the roll-up do not run on it; they are
-     *  listeners of the walk, and the reaps here list their own small spaces. */
-    static final IntervalSetting INTERVAL = IntervalSetting.of("cleanup-interval", "PT1H");
+    /** The reapers' shared cadence. */
+    static final IntervalSetting INTERVAL = IntervalSetting.CLEANUP;
 
     @Override
     public String name() {

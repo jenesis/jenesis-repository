@@ -74,6 +74,10 @@ public final class IntervalSetting {
      *  upstream feeds. */
     public static final IntervalSetting SCANS = millis("scan-interval-millis", "PT1H");
 
+    /** How often the storage reapers run - cleanup, quarantine retention, staging reap, and the telemetry and audit
+     *  retentions. One dial paces the whole family, hourly by default; each reaper lists only its own small space. */
+    public static final IntervalSetting CLEANUP = of("cleanup-interval", "PT1H");
+
     private final String key;
     private final String fallbackText;
     private final Duration fallback;

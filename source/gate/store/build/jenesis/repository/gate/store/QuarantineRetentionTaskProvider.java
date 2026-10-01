@@ -15,10 +15,8 @@ import build.jenesis.repository.maintenance.MaintenanceTaskProvider;
  */
 public final class QuarantineRetentionTaskProvider implements MaintenanceTaskProvider {
 
-    /** How often the storage sweeps run. Deliberately the same dial five reapers read (cleanup, quarantine-retention,
-     *  build-scan-retention, staging-reap, test-history-retention), so one operator switch paces the whole retention
-     *  family; the shared default is stated here in each of them. */
-    private static final IntervalSetting INTERVAL = IntervalSetting.of("cleanup-interval", "PT1H");
+    /** The reapers' shared cadence. */
+    private static final IntervalSetting INTERVAL = IntervalSetting.CLEANUP;
 
     @Override
     public String name() {

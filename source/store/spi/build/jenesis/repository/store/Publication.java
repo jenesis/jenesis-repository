@@ -1529,7 +1529,7 @@ public final class Publication {
                 // because it can account for the bytes, and cutting it back to a ceiling it never named would hand it
                 // a prefix under a bound it did not choose.
                 try (InputStream in = store.open(key.get())) {
-                    byte[] prefix = in.readNBytes(limit + 1);
+                    byte[] prefix = in.readNBytes(ArtifactStore.oneMoreThan(limit));
                     boolean truncated = prefix.length > limit;
                     return Optional.of(new PublishInterceptor.Content.Bounded(
                             truncated ? Arrays.copyOf(prefix, limit) : prefix, truncated));
