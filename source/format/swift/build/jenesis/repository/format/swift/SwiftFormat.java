@@ -553,11 +553,21 @@ public final class SwiftFormat implements RepositoryFormat, ArtifactLayout, Blob
      * downloads, and the after-commit notification fires once they serve. The digest the store computed becomes the
      * {@code checksum} the release document publishes.
      *
+     * <p><b>The signature is judged with the archive.</b> A signed form carries the archive's signature as a part of
+     * its own, so it is stored as the archive's sidecar <em>before</em> the screen runs, and the signature dimension
+     * reads it as the archive's evidence there - an untrusted or invalid signature decides the archive's own verdict,
+     * as an embedded one does for the formats that carry it inside the artifact, rather than being recorded after a
+     * publish nothing held. A release already standing at other bytes is refused before the sidecar is written, so a
+     * refused publish never leaves its signature beside the archive that stands.
+     *
      * <p><b>The commit point is the archive's pointer</b>, linked through {@link Blobs#linkRelease}, which decides
      * inside the pointer's compare-and-set: of two first publishes racing with different archives one lands and the
      * other is refused with {@code 409}, the specification's answer for a release that already exists, and a
-     * re-publish of the same archive converges. Nothing keyed by the version is written before it, so a refused
-     * publish replaces nothing of the release that stands; the documents follow it, and the release list last.
+     * re-publish of the same archive converges. The documents follow it, and the release list last. Two first
+     * publishes of one version racing with different archives can each write their signature before either links;
+     * the sidecar then left beside the winner may be the loser's, which fails to verify over the winner's archive and
+     * reads as an invalid signature - never as a valid one, since what a signature vouches for is decided by the bytes
+     * it is checked against.
      *
      * <p>A release the screen holds is laid out all the same, behind its withhold marker ({@link #held}), so its
      * review release is the marker clear; one it rejects is answered {@code 422} with nothing linked.
@@ -619,6 +629,8 @@ public final class SwiftFormat implements RepositoryFormat, ArtifactLayout, Blob
         Release release = new Release(repo, scope, name, version, archive, declared.get(), manifest, signature);
         Publication.Commit commit = null;
         try {
+            blobs.refuseReplacement(release.archiveKey(), archive.hash());
+            release.sign(blobs);
             try (InputStream stored = blobs.open(archive.hash())) {
                 commit = new Publication(blobs.store()).commit(release.described(), stored, REPUBLISH,
                         _ -> Publication.Visibility
@@ -695,12 +707,16 @@ public final class SwiftFormat implements RepositoryFormat, ArtifactLayout, Blob
                     null, -1L);
         }
 
-        /** Everything the release serves beside its archive, written once the archive's pointer stands: the
-         *  signature, the manifest, the release document, the repository-URL index and, last, the release list. */
-        void lay(Blobs blobs) throws IOException {
+        /** Store the archive's signature as its sidecar, where the screen's sibling read finds it. */
+        void sign(Blobs blobs) throws IOException {
             if (signature != null) {
                 blobs.write(archiveKey() + SIGNATURE, signature);
             }
+        }
+
+        /** Everything else the release serves beside its archive, written once the archive's pointer stands: the
+         *  manifest, the release document, the repository-URL index and, last, the release list. */
+        void lay(Blobs blobs) throws IOException {
             if (manifest != null) {
                 blobs.write(SwiftListings.manifestKey(repo, scope, name, version, ""), manifest);
             }
@@ -710,8 +726,8 @@ public final class SwiftFormat implements RepositoryFormat, ArtifactLayout, Blob
             new SwiftListings(blobs).refresh(repo, scope, name, version);
         }
 
-        /** Announce the stored signature as its own publish, so the signature dimension re-derives the archive's
-         *  verdict over it and records it. */
+        /** Announce the stored signature as its own publish once the archive is laid out, so the signature dimension
+         *  records the verdict on the archive's version - a held one's too, which no accepted screen records. */
         void announceSignature(Blobs blobs) {
             if (signature != null) {
                 new Publication(blobs.store()).published(ArtifactDescriptor.at(ECOSYSTEM, path() + SIGNATURE));
