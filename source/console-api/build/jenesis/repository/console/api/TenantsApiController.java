@@ -21,23 +21,19 @@ import org.springframework.web.bind.annotation.RestController;
 
 /**
  * The deployment's tenants over the API - {@code GET /api/admin/tenants}, and {@code PUT} and {@code DELETE} on
- * {@code /api/admin/tenants/{name}} - which the console's tenants screen offered and nothing else did, so creating
- * a tenant was the one thing only possible by clicking.
+ * {@code /api/admin/tenants/{name}}.
  *
- * <p><b>The same implementation as the screen.</b> A creation is {@link TenantService#create} and a deletion is
- * {@link TenantPurge#delete}: the tenant's artifacts, credentials, audit space and console members, in the order the
- * screen removes them. Only the actor differs. The screen attributes an act to the signed-in member; a request here
- * carries a key, which the key filter makes the principal - so the console's own actor would write the key itself
- * into the audit trail. The services are therefore built per request over the same stores, attributing to the key's
- * one-way hash as every other API route does.
+ * <p><b>The screen's implementation.</b> Creation is {@link TenantService#create} and deletion
+ * {@link TenantPurge#delete} - artifacts, credentials, audit space and console members, in the screen's order. Only the
+ * actor differs: a request here carries a key, so the services are built per request attributing to the key's one-way
+ * hash, never the key.
  *
- * <p><b>Why here and not beside the screen.</b> The console's module is the console's URL space - every route it
- * maps is served under the console's chain, with a session and a login redirect - and these are API routes, answered
- * with a key, so they sit with the console store's other API twins.
+ * <p>These are API routes answered with a key, so they sit with the console store's other API twins rather than under
+ * the console's session chain.
  *
- * <p><b>Who may.</b> Tenants are deployment-wide, so a key needs the manage rights over every repository - which the
- * authorization manager requires of this path - and must belong to the operator tenant, the API's counterpart of the
- * console's super-admin. A tenant's own administrator may not create or delete tenants, however wide its grant.
+ * <p><b>Who may.</b> Tenants are deployment-wide: a key needs manage rights over every repository, which the
+ * authorization manager requires of this path, and must belong to the operator tenant - the API's counterpart of the
+ * console's super-admin. A tenant's own administrator may not.
  */
 @RestController
 public class TenantsApiController {
@@ -108,8 +104,8 @@ public class TenantsApiController {
         return ResponseEntity.ok(new Tenant(name));
     }
 
-    /** The refusal a key outside the operator tenant gets, answered as the deployment's {@link AccessDenial} says and
-     *  before any tenant is looked up; nothing when authorization is switched off. */
+    /** The refusal a key outside the operator tenant gets, as the deployment's {@link AccessDenial} words it, before
+     *  any tenant is looked up; nothing when authorization is off. */
     private Optional<ResponseEntity<?>> refused(HttpServletRequest request) {
         if (!authorization.enforced()) {
             return Optional.empty();

@@ -14,11 +14,10 @@ import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 
 /**
- * Wires the console store's API twins into the repository server. Imported through {@code ServerModuleProvider}
- * discovery (see {@link ConsoleApiModule}), never named by the server. Each controller takes the console's
- * <em>root</em> storage as an {@link ObjectProvider}, resolved lazily: the storage is wired by the console node, so
- * a repository-only composition does not have it, and asking for it outright would stop that composition booting
- * rather than leaving these endpoints answering {@code 501} - an absent feature is a 501, never a dead context.
+ * Wires the console store's API twins into the repository server, imported through {@code ServerModuleProvider}
+ * discovery ({@link ConsoleApiModule}). Each controller takes the console's root storage as an {@link ObjectProvider},
+ * resolved lazily: a repository-only composition lacks it, and its endpoints answer {@code 501} rather than stopping
+ * the context from booting.
  */
 @Configuration(proxyBeanMethods = false)
 public class ConsoleApiConfig {
@@ -46,8 +45,7 @@ public class ConsoleApiConfig {
         return new BrowseChildrenController(repositories, routing);
     }
 
-    /** The tenants, over the documents the console's own tenant directory is built over: the repository store's root,
-     *  which every composition has, so this twin needs no console to answer. */
+    /** The tenants, over the repository store's root, which every composition has, so this twin needs no console. */
     @Bean
     public TenantsApiController tenantsApiController(Repositories repositories, Authorization authorization,
                                                      AuditTrail audit, RepositoryProperties properties) {

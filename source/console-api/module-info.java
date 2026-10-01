@@ -1,12 +1,9 @@
 /**
- * The console store's API twins as a removable server feature module: the key-header-authenticated routes that
- * reach the same {@code ui-store} services the admin console's screens do - a tenant's SCIM bearer token, the
- * build-cache projects and their eviction, an artifact's origin trail and a folder's children - so a capability an
- * operator can click can also be scripted, run from CI and driven by the CLI. It provides
- * {@link build.jenesis.repository.server.kernel.ServerModuleProvider}, so the repository server imports its
- * configuration through {@code ServiceLoader} discovery and names none of these endpoints; the composition root
- * keeps only the two routes that are the application's own. Open so Spring can reflect over the
- * controllers and their configuration.
+ * The console store's API twins as a removable server module: the key-header routes reaching the same {@code ui-store}
+ * services the console's screens do - a tenant's SCIM token, the build-cache projects and their eviction, the tenants,
+ * an artifact's origin trail and a folder's children - so what an operator can click can also be scripted. It provides
+ * {@link build.jenesis.repository.server.kernel.ServerModuleProvider}, so the server names none of these endpoints.
+ * Open so Spring can reflect over the controllers.
  *
  * @jenesis.release 25
  * @jenesis.bom pin-repository.properties

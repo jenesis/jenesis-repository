@@ -15,16 +15,14 @@ import org.springframework.web.bind.annotation.ResponseBody;
 import org.springframework.web.bind.annotation.RestController;
 
 /**
- * The folder probe over the API: one window of the immediate children under a path in a tenant's named repository,
- * each marked folder or artifact with its size, and the cursor that resumes after it. It is the key-header twin of
- * the console's folder screen ({@code /ui/repositories/{repo}/browse/children}) and reaches the same implementation,
- * {@link RepositoryBrowse#page}, so the two answer the same children for one folder; the command line's
- * {@code browse children} drives it.
+ * The folder probe over the API: one window of the immediate children under a path in a tenant's repository, each
+ * marked folder or artifact with its size, and the cursor past them. The key-header twin of the console's folder screen
+ * ({@code /ui/repositories/{repo}/browse/children}), reaching the same {@link RepositoryBrowse#page}; the command
+ * line's {@code browse children} drives it.
  *
- * <p>Bounded and paged by cursor, never a whole level: a window is at most {@link #MAX_LIMIT} children
- * ({@link #DEFAULT_LIMIT} unless asked), and {@code next} - the child name to pass back as {@code after} - is present
- * exactly when the folder holds more. Paths are the ones a client names within the repository, mapped onto the tree
- * the format lays out on the way in and back on the way out, as {@code /api/browse} maps them.
+ * <p>Paged by cursor, never a whole level: at most {@link #MAX_LIMIT} children ({@link #DEFAULT_LIMIT} unless asked),
+ * and {@code next} - the child name to pass back as {@code after} - is present exactly when more remain. Paths are the
+ * client's, mapped onto the format's stored tree and back, as {@code /api/browse} maps them.
  */
 @RestController
 public class BrowseChildrenController {
@@ -47,16 +45,13 @@ public class BrowseChildrenController {
     public record ChildrenView(String prefix, List<Child> children, String next) {
     }
 
-    /** One child: its name, its path within the repository, whether it is a folder, and its size in bytes - a
-     *  folder's rolled-up total, {@code -1} while none is known. */
+    /** One child: its name, its path within the repository, whether it is a folder, and its size in bytes - a folder's
+     *  rolled-up total, {@code -1} while unknown. */
     public record Child(String name, String path, boolean folder, long bytes) {
     }
 
-    /**
-     * The window of children under {@code prefix} after the child named {@code after}. A path that names no folder -
-     * nothing servable beneath it - is a {@code 404}, so a mistyped path is not read as an empty folder; the
-     * repository's root is never missing and answers an empty window when the repository holds nothing yet.
-     */
+    /** The window of children under {@code prefix} after {@code after}. A path naming no folder is a {@code 404}, so a
+     *  typo does not read as an empty folder; the repository root is never missing. */
     @GetMapping("/api/browse/children")
     @ResponseBody
     public ChildrenView children(@RequestParam("repo") String repo,

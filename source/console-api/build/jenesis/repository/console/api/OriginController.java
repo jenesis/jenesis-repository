@@ -14,20 +14,15 @@ import org.springframework.web.bind.annotation.ResponseBody;
 import org.springframework.web.bind.annotation.RestController;
 
 /**
- * The machine-readable <em>origin</em> (provenance-of-source) audit-export API: the {@code origin}
- * acquisition rows of a published or fallback-fetched artifact path over a tenant's named repository - where <em>this</em>
- * deployment's bytes for the coordinate version came from (a hand upload, or which fallback fetched them, when, stored or
- * passed through). It is the key-header-authenticated twin of the console's session-scoped origin panel
- * ({@code /repositories/{repo}/artifact/origin}), reachable by an operator tool or audit export the same anonymous /
- * key-header way the sibling {@code BrowseController} browse/search reads are - so the durable origin trail can be pulled
- * over the API without a console session (which a headless audit job has no way to hold a selected tenant in).
+ * The <em>origin</em> audit-export API: the {@code origin} acquisition rows of a published or fallback-fetched path in
+ * a tenant's repository - where this deployment's bytes for the coordinate version came from (a hand upload, or which
+ * fallback fetched them, when, stored or passed through). The key-header twin of the console's origin panel
+ * ({@code /repositories/{repo}/artifact/origin}), so a headless audit job can pull the trail without a session.
  *
- * <p>Both surfaces share the one merge - {@link RepositoryBrowse#originOf} - which unions a coordinate's
- * format-coordinate document (a hand upload's {@code local-upload} row) and its path-derived document (a fallback fetch's
- * {@code fallback} row, keyed off the request path its verdict sibling shares), so an uploaded artifact, a
- * fallback-fetched one, and a hybrid's locally-shadowed fallback all read back their full acquisition history here,
- * including a no-store fallback's row that survives durably beside transient bytes that never landed (only the two
- * small sections are read, never the artifact body).
+ * <p>Both share {@link RepositoryBrowse#originOf}, which unions the coordinate's format-coordinate document (an
+ * upload's {@code local-upload} row) and its path-derived document (a fallback's {@code fallback} row), so an uploaded,
+ * a fetched and a locally shadowed artifact all read back their full history - including a no-store fallback's durable
+ * row. Only the two small sections are read.
  */
 @RestController
 public class OriginController {
@@ -50,9 +45,8 @@ public class OriginController {
         if (tenant == null) {
             return null;
         }
-        // The read is confined to the tenant's named repository store and traversal-guarded exactly as the console
-        // origin panel is (RepositoryBrowse.safePrefix), so a crafted path cannot escape the repository subtree.
-        // The path is the one a client names within the repository, laid out as the format stores it.
+        // Confined to the tenant's repository and traversal-guarded as the console panel is
+        // (RepositoryBrowse.safePrefix); the client's path is mapped to the format's stored layout.
         return RepositoryBrowse.originOf(repositories.store(tenant, repo),
                 RepositoryBrowse.safePrefix(repositories.formatPath(tenant, repo, RepositoryBrowse.safePrefix(path))));
     }

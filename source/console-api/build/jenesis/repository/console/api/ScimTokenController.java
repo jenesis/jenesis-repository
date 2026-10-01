@@ -17,21 +17,14 @@ import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.web.bind.annotation.RestController;
 
 /**
- * Issuing and clearing a tenant's SCIM bearer token over the API: the key-header-authenticated twin of the
- * console's admin screen, minting through the same {@link ScimTokens}.
+ * Issuing and clearing a tenant's SCIM bearer token over the API: the key-header twin of the console's admin screen,
+ * minting through the same {@link ScimTokens}, so an identity-provider connector can be set up by script.
  *
- * <p><b>Why it exists.</b> Setting up a tenant's identity-provider connector meant clicking a button, so the one
- * step that makes SCIM provisioning work could not be done by the tool that does everything else around it - a
- * deployment scripted end to end still had to stop and open a browser once. That is the gap the surface-parity rule
- * reported, and the reason the product's rule is one capability on three surfaces rather than two.
+ * <p><b>The secret is returned once.</b> {@link ScimTokens} stores only its SHA-256, so this response is the one moment
+ * it is readable; a caller that loses it mints another.
  *
- * <p><b>The secret is returned once and never again.</b> {@link ScimTokens} stores only the SHA-256 of the token,
- * so this response is the single moment it exists in readable form - exactly as the console's screen says when it
- * shows it. A caller that loses it mints another; there is no read-back, by construction rather than by policy.
- *
- * <p>The tenant's SCIM configuration lives in the console node's segment of the store, so a repository-only
- * composition does not have it and this answers 501 there rather than refusing to start - the same shape its
- * sibling {@link CacheProjectsController} and {@code StagingController} use for a feature that is not installed.
+ * <p>The tenant's SCIM configuration lives in the console node's segment of the store, so a repository-only composition
+ * answers {@code 501} here rather than refusing to start.
  */
 @RestController
 public class ScimTokenController {
@@ -76,13 +69,9 @@ public class ScimTokenController {
         return Map.of("cleared", true);
     }
 
-    /**
-     * The tenant's SCIM configuration, scoped by the tenant the routing answers for the request.
-     *
-     * <p>Deliberately the root storage rather than the console's {@code tenantStorage}, which is request-scoped
-     * around the <em>selected session</em>: that bean throws when nothing is selected, which is every headless
-     * call, and would otherwise act on the session's tenant rather than the request's.
-     */
+    /** The tenant's SCIM configuration, scoped by the tenant the routing answers for the request - the root storage,
+     *  not the console's session-scoped {@code tenantStorage}, which a headless call cannot use and which would name
+     *  the session's tenant. */
     private ScimTokens tokens(String tenant, HttpServletResponse response) {
         Documents root = storage.getIfAvailable();
         if (root == null) {
@@ -96,7 +85,7 @@ public class ScimTokenController {
         return new ScimTokens(root.scope(tenant));
     }
 
-    /** The same action names the console records, so one query over the trail sees both surfaces' rotations. */
+    /** The action names the console records, so one query over the trail sees both surfaces' rotations. */
     private void record(String tenant, String key, String action) {
         audit.record(tenant, key == null ? "anonymous" : Authorization.hash(key), action, "scim");
     }
