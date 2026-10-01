@@ -4,18 +4,15 @@ import module java.base;
 import build.jenesis.repository.compliance.Verdict;
 
 /**
- * One policy-as-code rule: a compiled {@link PolicyExpression} over a subject's facts and the {@link Verdict} to raise
- * when it holds. It generalises the fixed gate dimensions - instead of a built-in "reject at or above this CVSS band",
- * an operator writes {@code reject #severityRank >= 4 and #reachable} and the rule composes with every other discovered
- * dimension exactly as the built-in ones do. Parsed from one line of the {@code policy-rules} setting:
- * {@code <verdict> <expression>}, e.g. {@code quarantine #severityRank >= 3 and #reachable}.
+ * One policy-as-code rule: a compiled {@link PolicyExpression} over a subject's facts and the {@link Verdict} raised
+ * when it holds - {@code reject #severityRank >= 4 and #reachable} - composing with every other dimension as the
+ * built-in ones do. Parsed from one {@code policy-rules} line, {@code <verdict> <expression>}.
  */
 record PolicyRule(Verdict verdict, PolicyExpression expression) {
 
-    /** Parse one rule line: the first whitespace-delimited token is the verdict ({@code allow} / {@code quarantine} /
-     *  {@code reject}), the remainder the expression. Throws {@link IllegalArgumentException} on a missing or unknown
-     *  verdict, a missing expression, or an expression that does not compile - so a live settings rebuild rejects a
-     *  malformed policy and rolls back rather than wedging the gate. */
+    /** Parse one rule line: the first token is the verdict ({@code allow}, {@code quarantine}, {@code reject}), the
+     *  rest the expression. {@link IllegalArgumentException} on a missing or unknown verdict, a missing expression or
+     *  one that does not compile, so a malformed policy rolls back. */
     static PolicyRule parse(String line) {
         String trimmed = line.strip();
         int split = 0;

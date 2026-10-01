@@ -1,14 +1,10 @@
 /**
- * The policy-as-code dimension of the compliance gate as a plugin module: it provides
- * {@link build.jenesis.repository.compliance.GatePolicyProvider} answering to {@code policy}, so the gate discovers an
- * expression-based policy through {@code ServiceLoader} and a deployment without this module simply never gates on a
- * code policy and lists no policy settings. It generalises the fixed gate dimensions - a CVSS threshold, a version
- * floor, a licence rule are each expressible as {@code <verdict> <expression>} over a subject's severity, licence,
- * reachability and coordinate metadata ({@code reject #severityRank >= 4 and #reachable}), folded into the same
- * strongest-verdict aggregation as the built-in dimensions. The expression engine is SpEL (a maintained expression
- * evaluator, so no policy grammar is hand-rolled), evaluated in a read-only sandbox that forbids type references,
- * constructors and method invocation, so an operator-authored rule reads facts and combines them but can never reach a
- * class or execute code - the reason a rule is bound to plain-string variables rather than reflected into any type here.
+ * The policy-as-code dimension of the compliance gate: a {@link build.jenesis.repository.compliance.GatePolicyProvider}
+ * answering to {@code policy}; without this module no code policy gates and no policy setting is listed. A CVSS
+ * threshold, version floor or licence rule is each expressible as {@code <verdict> <expression>} over a subject's
+ * severity, licence, reachability and metadata ({@code reject #severityRank >= 4 and #reachable}), folded into the
+ * strongest-verdict aggregation. The engine is SpEL in a read-only sandbox forbidding type references, constructors and
+ * method invocation, with rules bound to plain variables, so a rule can never reach a class or execute code.
  *
  * @jenesis.release 25
  * @jenesis.bom pin-repository.properties

@@ -6,13 +6,11 @@ import build.jenesis.repository.compliance.ComplianceGate;
 import build.jenesis.repository.compliance.GatePolicy;
 
 /**
- * The policy-as-code dimension of the gate: it flattens a subject and the gate's shared advisory lookup into
- * {@link PolicyInput} variables and evaluates each configured {@link PolicyRule}, raising the rule's verdict for every
- * one that holds. It generalises the fixed dimensions - a CVSS threshold, a version floor, a licence policy are each a
- * rule an operator can now express directly ({@code reject #severityRank >= 4}, {@code quarantine
- * !#licenses.?[#this matches '(?i).*agpl.*'].empty}) - and folds into the same strongest-verdict aggregation, so it
- * composes with the built-in dimensions without either knowing of the other. Empty findings when no rule holds, so a
- * subject no rule speaks to passes this dimension exactly as before.
+ * The policy-as-code dimension: it flattens a subject and the gate's advisory lookup into {@link PolicyInput} variables
+ * and evaluates each configured {@link PolicyRule}, raising the verdict of every rule that holds. A CVSS threshold, a
+ * version floor or a licence policy is each expressible as a rule ({@code reject #severityRank >= 4},
+ * {@code quarantine !#licenses.?[#this matches '(?i).*agpl.*'].empty}), folded into the same strongest-verdict
+ * aggregation as the built-in dimensions. No rule holding means no findings.
  */
 final class PolicyGatePolicy implements GatePolicy {
 

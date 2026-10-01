@@ -7,18 +7,16 @@ import org.springframework.expression.spel.standard.SpelExpressionParser;
 import org.springframework.expression.spel.support.SimpleEvaluationContext;
 
 /**
- * One compiled policy expression, evaluated against a subject's {@link PolicyInput} variables in a locked-down sandbox.
- * The expression language is SpEL (a maintained expression evaluator, so no policy grammar is hand-rolled), but it is
- * evaluated through {@link SimpleEvaluationContext#forReadOnlyDataBinding()} - a context that permits property access,
- * relational and boolean operators, collection selection and regular-expression {@code matches}, and forbids Java type
- * references ({@code T(...)}), constructors and method invocation. So an operator-authored rule can read the subject's
- * facts and combine them, but cannot reach a class, call a method or execute code - the policy surface is data-in,
- * boolean-out, never a code-execution vector even though the rule text is operator configuration.
+ * One compiled policy expression, evaluated against a subject's {@link PolicyInput} variables in a sandbox. The
+ * language is SpEL, evaluated through {@link SimpleEvaluationContext#forReadOnlyDataBinding()}, which permits property
+ * access, relational and boolean operators, collection selection and {@code matches}, and forbids type references
+ * ({@code T(...)}), constructors and method invocation - so an operator's rule reads and combines facts but cannot
+ * reach a class or execute code.
  *
- * <p>A rule that does not parse throws at construction, so a live settings rebuild rejects a malformed policy and rolls
- * back (the {@code GatePolicyProvider.create} contract) rather than wedging the running gate. A rule that parses but
- * fails at evaluation (a reference to an unknown variable used in an arithmetic comparison, say) does <em>not</em> match
- * and logs one line, so a single broken rule can never block every upload - it simply enforces nothing until fixed.
+ * <p>A rule that does not parse throws at construction, so a live settings rebuild rejects it and rolls back (the
+ * {@code GatePolicyProvider.create} contract). A rule that fails at evaluation (an unknown variable in an arithmetic
+ * comparison, say) does not match and logs one line, so a broken rule enforces nothing rather than blocking every
+ * upload.
  */
 final class PolicyExpression {
 
@@ -29,8 +27,7 @@ final class PolicyExpression {
     private final String text;
     private final Expression expression;
 
-    /** Compile {@code text} as a SpEL boolean expression; throws {@link IllegalArgumentException} when it does not
-     *  parse, so the caller's {@code create} rejects a bad rule up front. */
+    /** Compile {@code text} as a SpEL boolean expression; {@link IllegalArgumentException} when it does not parse. */
     PolicyExpression(String text) {
         this.text = text;
         try {
@@ -44,11 +41,10 @@ final class PolicyExpression {
         return text;
     }
 
-    /** Whether the expression holds for a subject's variables. A non-boolean result or an evaluation error is a
-     *  non-match (logged), so a broken rule enforces nothing rather than gating everything. */
+    /** Whether the expression holds for a subject's variables; a non-boolean result or an evaluation error is a logged
+     *  non-match. */
     boolean matches(Map<String, Object> variables) {
-        // A fresh read-only context per evaluation: the sandbox that forbids type references, constructors and method
-        // invocation, so a rule can only read the bound variables and combine them.
+        // A fresh read-only sandbox context per evaluation, so a rule only reads the bound variables.
         SimpleEvaluationContext context = SimpleEvaluationContext.forReadOnlyDataBinding().build();
         variables.forEach(context::setVariable);
         try {

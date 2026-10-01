@@ -5,11 +5,9 @@ import build.jenesis.repository.settings.Setting;
 import build.jenesis.repository.settings.SettingsContributor;
 
 /**
- * Describes the policy-as-code dimension's one tunable - the rule set - so it surfaces on the settings screens,
- * {@code /api/settings} and the CLI exactly when this module is installed, and the modules console pairs it with the
- * module. A gate-policy knob, so it is marked {@link Setting.Scope#TENANT}: a tenant may carry its own rules
- * independently of the deployment default (the per-tenant effective chain), a plugin declaring its own scope rather
- * than the neutral core classifying it. Empty (the default) means the dimension enforces nothing.
+ * Describes the policy dimension's one setting, the rule set, so it appears exactly when this module is installed. A
+ * gate-policy dial, {@link Setting.Scope#TENANT}: a tenant may carry its own rules over the deployment default. Empty,
+ * the default, enforces nothing.
  */
 public final class PolicySettingsContributor implements SettingsContributor {
 
