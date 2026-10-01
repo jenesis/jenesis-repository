@@ -30,20 +30,14 @@ import build.jenesis.repository.store.Providers;
  * than being re-interpreted per format (a guard one format applies to a shared concern is applied by every
  * format with that concern). The enforcement is named per clause, because it is not uniform:
  * <ul>
- *   <li><b>kit-proven</b> - clauses 2, 3 and 4 ({@code PUBLISH_SERVES_EXACT_BYTES}, {@code HEAD_ANSWERS_FROM_METADATA}),
- *       6 ({@code REQUEST_PATH_TRAVERSAL_REFUSED}, judged by walking the store afterwards rather than by a status
- *       code), 7 ({@code WITHHELD_VERSION_LEAVES_EVERY_ENUMERATION}) and 12's determinism half
- *       ({@code GENERATED_INDEX_IS_REVALIDATABLE});</li>
+ *   <li><b>kit-proven</b> - clauses 2, 3 and 4 ({@code PUBLISH_SERVES_EXACT_BYTES},
+ *       {@code HEAD_ANSWERS_FROM_METADATA}), 6 ({@code REQUEST_PATH_TRAVERSAL_REFUSED}, judged by walking the store
+ *       afterwards rather than by a status code), 7 ({@code WITHHELD_VERSION_LEAVES_EVERY_ENUMERATION}) and 12's
+ *       determinism half ({@code GENERATED_INDEX_IS_REVALIDATABLE});</li>
  *   <li><b>documented only</b> - clauses 1, 4, 5, 7, 8, 9, 10, 11, 12's bounded-listing half, 13, 14, 15 and 16.
- *       They are stated here in a form a test could be written against, not because one exists.
- *
- *       <p>Clauses 4, 7, 12, 14 and 15 were once approximated by scans over the tree's source text. They are
- *       not any more. Such a scan catches a <em>new</em> offending call site, never a wrong one - it reads this
- *       repository's spelling rather than an implementation's behaviour, and every format that got the spelling
- *       right passed whatever it then did. These clauses bind an implementer of this interface, wherever it is
- *       written; what would hold one to them is a driver in the contract kit, and until that exists they are
- *       stated, not enforced. Saying so is the point: a clause nobody checks is a clause an implementer can still
- *       read, whereas a clause a scan pretended to check is one nobody looks at twice.</li>
+ *       They are stated here in a form a test could be written against. They bind an implementer of this
+ *       interface wherever it is written; what would hold one to them is a driver in the contract kit, and until
+ *       that exists they are stated, not enforced.</li>
  * </ul>
  * <ol>
  * <li><b>Thread-safety.</b> A format is a stateless singleton the server calls concurrently from every request
@@ -64,7 +58,8 @@ import build.jenesis.repository.store.Providers;
  *     metadata file, a manifest) may be buffered whole, and a format that buffers one bounds it explicitly.</li>
  * <li><b>Tenant scoping.</b> The {@link ArtifactStore} handed to {@link #handle} is already scoped to one
  *     tenant and repository, and it is the only storage a format may touch: every key a format composes stays under
- *     its own namespace within that scope, so no request path can address another format's or another tenant's keys.</li>
+ *     its own namespace within that scope, so no request path can address another format's or another tenant's
+ *     keys.</li>
  * <li><b>Traversal refusal.</b> A request path is client-supplied and is refused before it becomes a store key. A path
  *     carrying a {@code .} or {@code ..} segment, or a {@code \} anywhere - exactly the shapes
  *     {@link ArtifactStore#traversalFree} names, the backslash among them because it is a separator on a
@@ -85,17 +80,17 @@ import build.jenesis.repository.store.Providers;
  *     Fetching an upstream is the separate, opt-in {@link ProxyFormat} capability, never something the hosted read
  *     path does on a miss.</li>
  * <li><b>Error visibility.</b> Nothing on a correctness-bearing path is swallowed: a store failure while
- *     serving or accepting surfaces rather than degrading to a {@code 404}, or to a {@code 201} that stored nothing.</li>
+ *     serving or accepting surfaces rather than degrading to a {@code 404}, or to a {@code 201} that stored
+ *     nothing.</li>
  * <li><b>Lifecycle / ownership.</b> The dispatcher discovers formats through {@link ServiceLoader} and keeps them for
  *     the life of the process; a format owns no thread, no client and no cache, and closes nothing. A format whose
  *     {@link #requiredConfig} is unset self-disables at discovery rather than failing at request time.
- *     <p><b>What a format remembers is an optimisation, never correctness</b> - and the deployment shape settles
- *     that rather than this clause's authority. A repository runs on several nodes, so two of them are two JVMs
- *     holding two instance sets; anything a format remembered that a later answer depended on would already be
- *     wrong across nodes, with nothing to notice it. So what is permitted is state whose loss costs repeated work
- *     and nothing else. The one instance of it in this build is the throttle pacing OCI's upload-session reap,
- *     where a second holder simply reaps sooner and the reap is idempotent; the import walk's digest memory says
- *     the same of itself in its own words, that its bound is on recall and never on correctness.</li>
+ *     <p><b>What a format remembers is an optimisation, never correctness.</b> A repository runs on several nodes,
+ *     so two of them are two JVMs holding two instance sets; anything a format remembered that a later answer
+ *     depended on would be wrong across nodes, with nothing to notice it. So what is permitted is state whose loss
+ *     costs repeated work and nothing else - the throttle pacing OCI's upload-session reap, where a second holder
+ *     simply reaps sooner and the reap is idempotent, or the import walk's digest memory, bounded on recall and
+ *     never on correctness.</li>
  * <li><b>Ordering / concurrency.</b> Two requests against one path may run concurrently; a format's pointer writes are
  *     compare-and-set, so a concurrent republish resolves last-writer-wins rather than tearing. A format imposes no
  *     ordering on the dispatcher and behaves identically whatever order the other formats were discovered in.</li>
@@ -112,7 +107,7 @@ import build.jenesis.repository.store.Providers;
  *     (hash-on-write, never a {@code byte[]}), runs the discovered {@code PublishInterceptor} chain over the resulting
  *     descriptor exactly once, and restreams the accepted blob into {@link #handle} - whose job is then pure layout.
  *     The whole choreography is {@code Publication.commit}'s and is stated once in its own contract; a format's
- *     obligations against it are these three, and they are what implementations have actually disagreed about:
+ *     obligations against it are these:
  *     <ul>
  *       <li>a format <b>runs no screen of its own</b>. It does not invoke the interceptor chain, and a second
  *           format-embedded pass over already-screened bytes is not this model - this clause refuses one;</li>
@@ -179,11 +174,6 @@ import build.jenesis.repository.store.Providers;
  *           on the way, which a crafted archive may have placed early as a decoy - so "this artifact carries no such
  *           member" and "we never reached one" stay different answers. A format that lets a bound-stopped walk read
  *           as an empty archive has the fail-open shape this clause exists to refuse.</li>
- *       <li><b>Ignoring it is visible.</b> clause 15 refuses a
- *           module that opens a decompressing stream without routing an entry through the shared bound and fails the
- *           build, with a reason-bearing allowlist for the walks that materialise nothing. It catches a <em>new</em>
- *           unbounded inflation the moment it is written, which is what turns this clause from a rule a format could
- *           silently arrive without into one it has to answer.</li>
  *     </ul></li>
  * <li><b>Console mark (the inherited {@link IconContributor} half).</b> A format may lend the console a small SVG
  *     mark, and {@link #name()} is the identity that mark is attributed to. Both obligations are stated once on
@@ -260,10 +250,8 @@ public interface RepositoryFormat extends IconContributor {
      * <p><b>Why the screen is here rather than in each format.</b> A request path carrying a {@code .} or
      * {@code ..} segment addresses nothing in any format's namespace, so it is a {@code 404} - and if it is not
      * refused at the request seam it reaches the store's own key screen, where it surfaces as an
-     * {@code IllegalArgumentException} that escapes as an unmapped {@code 500}. The same four-line screen opening
-     * each format's {@code handle} would be two screens that have to agree, maintained in every format, with a new
-     * format having to know to write it. One screen, applied by the seam every caller goes through, cannot be forgotten
-     * by a format that does not know it exists.
+     * {@code IllegalArgumentException} that escapes as an unmapped {@code 500}. One screen, applied by the seam every
+     * caller goes through, cannot be forgotten by a format.
      */
     default void handle(FormatExchange exchange, ArtifactStore store) throws IOException {
         if (!ArtifactStore.traversalFree(exchange.path())) {
@@ -285,13 +273,13 @@ public interface RepositoryFormat extends IconContributor {
      * stores and runs the discovered {@link build.jenesis.repository.store.PublishInterceptor} chain over a claimed
      * {@code PUT}/{@code POST}/{@code PATCH} body <em>before</em> {@link #handle} sees it, then restreams the accepted
      * blob into {@link #handle}, whose job is now pure layout - lay the bytes out in this format's namespace, no
-     * screening of its own. {@code false} means the format owns its whole screening choreography and the edge dispatches
-     * its writes unscreened, because no request body it receives is the artifact: either the protocol splits one
-     * artifact across many requests - OCI's {@code /v2/} blob-upload sessions and manifest, screened at the manifest
-     * choke point - or it wraps the artifact in an envelope - a multipart form (PyPI, NuGet, RubyGems, Swift), a JSON
-     * document carrying it base64'd (npm), a length-prefixed frame (Cargo) - which the format unwraps before it drives
-     * the shared commit over the artifact's own bytes. {@code true} is the correct default for a format whose body is
-     * its artifact; a new format inherits edge screening by leaving it alone. The ecosystem format contract's
+     * screening of its own. {@code false} means the format owns its whole screening choreography and the edge
+     * dispatches its writes unscreened, because no request body it receives is the artifact: either the protocol splits
+     * one artifact across many requests - OCI's {@code /v2/} blob-upload sessions and manifest, screened at the
+     * manifest choke point - or it wraps the artifact in an envelope - a multipart form (PyPI, NuGet, RubyGems, Swift),
+     * a JSON document carrying it base64'd (npm), a length-prefixed frame (Cargo) - which the format unwraps before it
+     * drives the shared commit over the artifact's own bytes. {@code true} is the correct default for a format whose
+     * body is its artifact; a new format inherits edge screening by leaving it alone. The ecosystem format contract's
      * screening census holds every format to whichever it declares, by checking that the bytes a publish serves are
      * the request body (for {@code true}) or among the bytes the discovered screen assessed (for {@code false}).
      */
@@ -404,7 +392,6 @@ public interface RepositoryFormat extends IconContributor {
      *  configured off ({@code jenrepo.<name>=false}) or with required config unset is absent exactly as a missing
      *  module is, on every one of those paths alike. An import, a staging promotion, the gate's sibling read or a
      *  hold's replay that discovered the formats raw would serve a switched-off one.
-     *
      *
      *  <p>Several installed formats may declare the <em>same</em> {@link EcosystemLayout#ecosystem() ecosystem}, and
      *  that is not an error - see {@link EcosystemLayout}. Every consumer that maps an ecosystem back to a layout

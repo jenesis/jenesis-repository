@@ -6,9 +6,9 @@
  * parse) every proxying format shares, and to {@link build.jenesis.repository.blobs.ProxyLeg}, the seam those
  * formats implement instead of {@code ProxyFormat} directly so the front-door request-path screen
  * ({@link build.jenesis.repository.blobs.Keys#unsafePath}) is applied once for all of them rather than copied into
- * each leg - both live here because this is the one module every format module already requires. The same
- * argument puts {@link build.jenesis.repository.blobs.OutboundTargets} here: the screen a leg owes the
- * <em>outbound</em> URL it then fetches, which had been written out seven times in two contradictory policies.
+ * each leg - both live here because this is the one module every format module already requires. So does
+ * {@link build.jenesis.repository.blobs.OutboundTargets}, the screen a leg owes the <em>outbound</em> URL it then
+ * fetches.
  * Pure JDK beyond the format and store SPIs and the shared settings guard the outbound screen delegates to.
  *
  * @jenesis.release 25
@@ -27,8 +27,8 @@ module build.jenesis.repository.blobs {
     requires build.jenesis.repository.store;
     requires build.jenesis.repository.server.spi;
     // OutboundTargets delegates the two dangerous halves rather than restating them: the transport half, the dial and
-    // the http(s)/host capability floor are PrivateHostGuard's, the blocked address ranges are PrivateHosts
-    // table above. This module contributes only the wrapper around them, once for every leg.
+    // the http(s)/host capability floor are PrivateHostGuard's, the blocked address ranges PrivateHosts'. This
+    // module contributes only the wrapper around them, once for every leg.
     requires build.jenesis.repository.settings;
     exports build.jenesis.repository.blobs;
 }

@@ -26,8 +26,8 @@ import build.jenesis.repository.icon.Marks;
  *
  * <p>Discovery is static for the life of the JVM and a mark is a constant in its format's module, so a namespace's
  * or an ecosystem's answer never changes for the process lifetime and each is resolved once and memoized: a
- * repository list renders a mark per repository per namespace and a browse search one per hit, which without this
- * re-scanned the format list and re-decoded the same constant bytes on every row.
+ * repository list renders a mark per repository per namespace and a browse search one per hit, and neither re-scans
+ * the format list or re-decodes the same constant bytes per row.
  *
  * <p>Presentation only: it maps a format identity to its mark, holds no domain state, reads no store and performs no
  * I/O - it is called on a render path.

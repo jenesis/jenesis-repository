@@ -127,12 +127,10 @@ public final class Blobs {
 
     /**
      * Stream {@code content} into the content-addressed store while digesting it under {@code algorithm}, and point
-     * {@code key} at it only when the computed digest equals {@code expected} - the point-integrity twin of the Maven
-     * proxy leg's checksum check (which streams a proxied artifact under a digest, compares it to the ecosystem's
-     * published checksum, and refuses the artifact on a mismatch). This is the one place a {@code blobs}-namespace
-     * caching proxy leg verifies a proxied artifact against the checksum its ecosystem declares (an npm
-     * {@code dist.integrity}, a Cargo {@code cksum}, a Conda {@code sha256}, ...) before it becomes servable, so a
-     * corrupted or tampered upstream body is caught here rather than cached and served as authentic.
+     * {@code key} at it only when the computed digest equals {@code expected}. This is the one place a
+     * {@code blobs}-namespace caching proxy leg verifies a proxied artifact against the checksum its ecosystem declares
+     * (an npm {@code dist.integrity}, a Cargo {@code cksum}, a Conda {@code sha256}, ...) before it becomes servable,
+     * so a corrupted or tampered upstream body is caught here rather than cached and served as authentic.
      *
      * <p>On a <b>match</b> the pointer is {@linkplain #link written} exactly as {@link #write} would, so the artifact
      * is a local hit on the next read. On a <b>mismatch</b> the pointer is <b>not</b> written: nothing in the serving
@@ -302,18 +300,16 @@ public final class Blobs {
      * Establish a value at {@code key} <b>exactly once</b> and return what is stored there afterwards - this call's
      * content if it won, and the winner's if it lost.
      *
-     * <p><b>Why this exists, and what it is not.</b> {@link #write} is last-writer-wins, which is right for content
-     * a peer would write identically. It is wrong for a value that is <em>generated</em>, because two generators
-     * produce two different values and the loser's is not a duplicate of the winner's - it is a second answer to a
-     * question that must have one. A signing key is the case that bites: every caller that generated one goes on to
-     * use the value it generated, so a lost race means signing with a key nobody can verify against.
+     * <p>{@link #write} is last-writer-wins, which is right for content a peer would write identically and wrong for
+     * a value that is <em>generated</em>: two generators produce two different values, and the loser's is a second
+     * answer to a question that must have one. A signing key is the example - every caller that generated one goes on
+     * to use it, so a lost race would mean signing with a key nobody can verify against.
      *
      * <p>Provisioning a key as {@code if absent, generate, write the secret, write the public} lets two first
      * publishes interleave so the stored public half comes from one pair and the private half from the other, and
      * the index this repository signs then does not verify against the key it serves.
      *
-     * <p>The loser's generated value becomes an unreferenced blob, which is what a collector is for. Paying that on
-     * a genuine race is the cheap side of the trade; the expensive side is two keys.
+     * <p>The loser's generated value becomes an unreferenced blob, which the collector reclaims.
      */
     public byte[] establish(String key, Fresh fresh) throws IOException {
         requireSafeKey(key);
@@ -370,8 +366,8 @@ public final class Blobs {
     /**
      * Locate the artifact at {@code key} for a download: empty when nothing is published there or the blob is
      * {@linkplain build.jenesis.repository.store.Withheld withheld}. Two point reads - the pointer, the marker - with
-     * the blob's length read off the pointer where {@link #link} recorded it ({@code -1} for a pointer written before
-     * it was, which is served without a length until the reconcile pass regenerates it), and the {@link #serve} that
+     * the blob's length read off the pointer where {@link #link} recorded it ({@code -1} for a pointer that carries
+     * none, which is served without a length until the reconcile pass regenerates it), and the {@link #serve} that
      * follows opens the blob for its bytes: that open is what proves the blob present, so a pointer whose blob is
      * gone answers a clean 404 there rather than a truncated 200 here, and the download pays no separate stat.
      */
@@ -439,10 +435,10 @@ public final class Blobs {
     }
 
     /** Resolve the pointer at {@code key} to its blob and stream it to {@code out}; false if nothing is published
-     *  there or the blob is {@linkplain build.jenesis.repository.store.Withheld withheld} - the blobs-namespace twin of the {@code publish/}
-     *  namespace's withheld screen, so a retroactive compliance hold retracts serving here exactly as it does for a
-     *  Maven path. This is the one choke point every blobs-namespace format streams through, so the check covers all
-     *  of them at once. */
+     *  there or the blob is {@linkplain build.jenesis.repository.store.Withheld withheld} - the blobs-namespace twin of
+     *  the {@code publish/} namespace's withheld screen, so a retroactive compliance hold retracts serving here exactly
+     *  as it does for a Maven path. This is the one choke point every blobs-namespace format streams through, so the
+     *  check covers all of them at once. */
     public boolean read(String key, OutputStream out) throws IOException {
         Optional<String> content = contentHash(key);
         if (content.isPresent()) {
@@ -468,24 +464,21 @@ public final class Blobs {
         return store.readVersioned(key).isPresent();
     }
 
-    /** Whether the pointer at {@code key} resolves to a blob that is {@linkplain build.jenesis.repository.store.Withheld withheld} - the
-     *  enumeration-side twin of the {@link #read}/{@link #size} withheld screen. A blobs-namespace format screens a
-     *  held version out of its index / listing / registration surface with this the same way {@link #read} retracts
-     *  its download, so a client cannot even learn a quarantined coordinate exists (an existence-disclosure the
-     *  serving-path screen alone left open). It is exactly the check the serve makes - the pointer resolved to its
-     *  content hash, then the {@code withheld/<hash>} marker on that hash - not a re-implementation, so a listing and a
-     *  download agree on what is held. One existence probe per listed entry (the OCI catalog/tags screen's shape);
-     *  {@code false} when nothing is published at {@code key}, since an absent pointer lists nothing to screen.
+    /** Whether the pointer at {@code key} resolves to a blob that is
+     *  {@linkplain build.jenesis.repository.store.Withheld withheld} - the enumeration-side twin of the
+     *  {@link #read}/{@link #size} withheld screen. A blobs-namespace format screens a held version out of its index /
+     *  listing / registration surface with this the same way {@link #read} retracts its download, so a client cannot
+     *  even learn a quarantined coordinate exists. It is exactly the check the serve makes - the pointer resolved to
+     *  its content hash, then the {@code withheld/<hash>} marker on that hash - not a re-implementation, so a listing
+     *  and a download agree on what is held. One existence probe per listed entry (the OCI catalog/tags screen's
+     *  shape); {@code false} when nothing is published at {@code key}, since an absent pointer lists nothing to screen.
      *
      *  <p>Routed through the servable-name seam's {@link ServableNames#disclosableKey} under
      *  {@link ServableNames.Policy#HIDE_WITHHELD}, which wraps the WHOLE pointer -&gt; hash -&gt; marker probe
      *  fail-closed: a hostile pointer key (or a stored pointer whose target carries a NUL / encoding-hostile char, so
      *  {@code FilesystemArtifactStore.resolve} throws {@link java.nio.file.InvalidPathException}) is treated as
-     *  undisclosable - i.e. withheld - rather than propagating an uncaught {@code RuntimeException} that would 500 every
-     *  later packument GET. An unwrapped {@code store.readVersioned(key)} ahead of the fail-closed check would lose
-     *  the seam's fail-closed guarantee at this choke point.
-     *  {@code disclosableKey} returns whether the key is disclosable; withheld is its negation, preserving this method's
-     *  contract for every normal case (absent pointer / servable hash =&gt; not withheld; withheld hash =&gt; withheld). */
+     *  undisclosable - i.e. withheld - rather than propagating an uncaught {@code RuntimeException} that would 500
+     *  every later packument GET. */
     public boolean withheld(String key) throws IOException {
         Optional<String> content = contentHash(key);
         if (content.isPresent()) {
@@ -513,12 +506,9 @@ public final class Blobs {
      * prefix it sits under and {@link ArtifactStore#key} refuses to write a key that long. Request paths are shaped by
      * clients, so a format that composes a store prefix from one can be handed a prefix of any length.
      *
-     * <p>This is a derived fact, not a swallowed failure, and the distinction is the whole reason it is written here
-     * rather than as a {@code catch}. Asking the backend about an unnameable prefix gets a different answer from each
-     * one: an object store pages nothing, while a filesystem raises {@code ENAMETOOLONG} - which the default store
-     * raises rather than answering an empty listing, because "I could not look" is not "there is nothing here".
-     * Neither answer belongs at a
-     * request seam: the correct one is knowable without the round trip, so it is taken before it.
+     * <p>This is a derived fact, not a swallowed failure: the backends answer an unnameable prefix differently (an
+     * object store pages nothing, a filesystem raises {@code ENAMETOOLONG}, which the default store propagates because
+     * "I could not look" is not "there is nothing here"), and the correct answer is knowable without the round trip.
      *
      * <p>Deliberately only the byte cap, and not {@link ArtifactStore#key}'s full screen. The segment and
      * traversal-freedom clauses are about what a <em>format</em> may compose and are answered by each format's own
@@ -534,11 +524,9 @@ public final class Blobs {
      * can drive a <em>shared</em> store primitive (the bounded and screened enumerations, which take an
      * {@code ArtifactStore}) over a format's own pointer namespace.
      *
-     * <p>This accessor exists precisely so no second copy of those primitives, and no {@code Blobs}-shaped overload of
-     * them, ever gets written: a format that must page or screen a container reaches the one implementation in the
-     * walk module through here, rather than a {@code Blobs}-flavoured re-spelling growing beside it. It is the store
-     * this view was constructed with and nothing more - every write path still goes through this class's own methods,
-     * which is where the key guard, the CAS retry and the withheld screen live.
+     * <p>A format that must page or screen a container reaches the one implementation in the walk module through
+     * here. It is the store this view was constructed with and nothing more - every write path still goes through
+     * this class's own methods, which is where the key guard, the CAS retry and the withheld screen live.
      */
     public ArtifactStore store() {
         return store;

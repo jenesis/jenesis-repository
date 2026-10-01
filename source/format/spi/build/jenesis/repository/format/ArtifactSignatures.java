@@ -16,21 +16,20 @@ import build.jenesis.repository.store.PublishInterceptor;
  *
  * <h2>Why the format supplies evidence rather than a path</h2>
  *
- * The naive seam - "tell me where the signature file is" - is Maven's shape mistaken for everyone's. Four installed
- * formats answer <em>what is signed</em> four different ways: a Maven {@code .asc} commits to the artifact's own bytes;
+ * A seam that answers "where is the signature file" fits Maven's shape alone. Four installed formats answer <em>what
+ * is signed</em> four different ways: a Maven {@code .asc} commits to the artifact's own bytes;
  * a {@code .deb}'s {@code _gpgorigin} commits to the concatenation of the archive's <em>other</em> {@code ar} members
  * in archive order; an RPM header signature commits to the header blob alone; a NuGet {@code .signature.p7s} commits
  * to the package's content manifest rather than to the package. A seam that returns a path can express the first and
- * none of the rest, and a verifier built on one would acquire Maven's shape permanently.
+ * none of the rest.
  *
  * <p>So a format returns {@link Evidence}: the signature bytes, and a {@linkplain Signed reopenable stream of exactly
  * the bytes that signature commits to}. Those are the two things every scheme has and the only two that differ per
  * format. Verification, trust, grading and indexing sit above this seam and name no ecosystem.
  *
  * <p>{@link Signed} being reopenable rather than a {@code byte[]} is what keeps the body streamed: a package is
- * unbounded,
- * a signature is kilobytes, and the two-pass read ({@code _gpgorigin} lifted first, the large members streamed into the
- * verifier afterwards) is how a multi-gigabyte {@code .deb} is verified in bounded heap today.
+ * unbounded, a signature is kilobytes, and the two-pass read ({@code _gpgorigin} lifted first, the large members
+ * streamed into the verifier afterwards) is how a multi-gigabyte {@code .deb} is verified in bounded heap.
  *
  * <h2>Coverage by a signed document</h2>
  *
@@ -68,9 +67,8 @@ import build.jenesis.repository.store.PublishInterceptor;
  * consequence that remains is that the dimension above this seam sees "no signature" for an artifact whose
  * provenance is in fact established, one hop away, by an index it never looks at.
  *
- * <p>Until an index is stored here, this seam is honest about its scope rather than approximating: a format whose
- * ecosystem works this way declares what it really does, in its fixture, with its reason. That is the census
- * entry, not a gap nobody wrote down.
+ * <p>A format whose ecosystem works this way declares what it really does in its fixture, with its reason - a census
+ * entry rather than an unrecorded gap.
  *
  * <h2>Contract</h2>
  * This is a role sub-interface of {@code RepositoryFormat}, so that contract still binds and the clauses below state
@@ -130,9 +128,9 @@ public interface ArtifactSignatures extends EcosystemLayout {
      * a format a body that is present and never read - so a sidecar that is there is a claim, and a signature
      * inside the archive answers nothing. That silence is correct for most layouts and wrong for one shape: a
      * format whose publish endpoint is not its serving path, where the descriptor carries the endpoint's address
-     * and the coordinate is only readable once the body is parsed. NuGet is that shape, and until this existed no
-     * pushed package had its signature judged at all - the expectation was empty at the one moment the bytes were
-     * in front of the gate.
+     * and the coordinate is only readable once the body is parsed. NuGet is that shape: without this declaration the
+     * expectation would be empty at the one moment the bytes are in front of the gate, and no pushed package would
+     * have its signature judged.
      *
      * <p><b>Declaring it costs a read only where it yields one, which is the point of declaring it.</b> A format
      * that says {@code true} is claimed on the strength of its declaration, and the screen reads a claimed
@@ -337,9 +335,6 @@ public interface ArtifactSignatures extends EcosystemLayout {
          * published there. A sibling longer than the limit comes back flagged
          * {@linkplain PublishInterceptor.Content.Bounded#truncated() truncated} rather than raising, so a format
          * declines to produce evidence rather than asserting something about a prefix.
-         *
-         * <p>The bounded pair is the store contract's own record rather than a third copy of two values that
-         * already exist twice in this build.
          */
         Optional<PublishInterceptor.Content.Bounded> sibling(String path, int limit) throws IOException;
 
@@ -366,10 +361,10 @@ public interface ArtifactSignatures extends EcosystemLayout {
      * The ordinary case, stated once: a detached signature at {@code <path><suffix>}, covering the artifact's own
      * bytes. A format delegates to this in one line rather than restating the convention.
      *
-     * <p>It is here rather than per format for the reason {@code ServableNames} already gives for owning the sidecar
-     * suffixes centrally - every path-addressed ecosystem spells this the same way, and a format that had to remember
-     * the convention is a format that will forget it. What a format still states for itself is {@code signable} and
-     * {@code coverage}, because those are the per-format product decisions the convention cannot make.
+     * <p>It is here rather than per format for the reason {@code ServableNames} gives for owning the sidecar suffixes
+     * centrally: every path-addressed ecosystem spells this the same way. What a format still states for itself is
+     * {@code signable} and {@code coverage}, because those are the per-format product decisions the convention cannot
+     * make.
      *
      * @param ecosystem the delegating format's {@link EcosystemLayout#ecosystem()}
      * @param suffix    the sidecar suffix, including the dot

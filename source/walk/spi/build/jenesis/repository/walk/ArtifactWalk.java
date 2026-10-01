@@ -27,7 +27,7 @@ import build.jenesis.repository.store.ArtifactStore;
  * ({@link WalkPass.Status#ACTIVE} - re-invoke later, or let another node finish). Fan a pass across a worker pool
  * by calling {@code walk} from several threads; across VMs by calling it on several nodes.
  *
- * <p><b>Delivery contract</b> (documented honestly): every key present for the whole pass is visited
+ * <p><b>Delivery contract.</b> Every key present for the whole pass is visited
  * <em>exactly once per pass</em> in the absence of a crash; after a crash-resume, <em>at least once</em> for the
  * uncommitted stride tail - so every consumer must be idempotent per item (upsert / re-judge semantics). A key
  * published while the pass runs is visited by this pass if it sorts after its segment's cursor at that moment, and
@@ -86,8 +86,8 @@ public interface ArtifactWalk {
      *
      * <p>For a caller that needs to know only whether the pass it is acting under still stands - a lease fence
      * immediately before a destructive act - where reading every segment to use one number off the manifest is
-     * pure cost: asked through {@code pass} before every blob a collector deletes, it costs a manifest read and up to
-     * thirty two segment reads each, the largest single line of a collection.
+     * pure cost: asked through {@code pass} before every blob a collector deletes, it would cost a manifest read and
+     * a read per segment each time.
      *
      * <p>The default assembles the whole pass, so an implementation that cannot answer more cheaply is correct
      * without doing anything; a store-backed one reads the manifest alone.

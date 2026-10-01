@@ -14,7 +14,8 @@ public interface FormatExchange {
 
     String method();
 
-    /** The request path, with any repository prefix already stripped (so a format sees {@code /maven/...}, {@code /v2/...}). */
+    /** The request path, with any repository prefix already stripped (so a format sees {@code /maven/...},
+     *  {@code /v2/...}). */
     String path();
 
     /**
@@ -104,7 +105,7 @@ public interface FormatExchange {
      * a range of it - the first byte of that range, so a serve that opens its content can open it there
      * ({@code ArtifactStore.open(key, offset)}) and write only from it, rather than read the whole artifact for the
      * response to throw the prefix away. A serve that asks writes its content from this offset; one that never asks
-     * writes it from the start, as before. Exchanges that slice no range answer {@code 0}.
+     * writes it from the start. Exchanges that slice no range answer {@code 0}.
      */
     default long from(long contentLength) {
         return 0L;

@@ -16,8 +16,7 @@ import build.jenesis.repository.store.StoredListing;
  * listing under the format's namespace in place, never deleting one under a reader.
  *
  * <p>The format supplies what is its own: which descriptor names an entry, how one entry is refreshed, and how a
- * whole document is rebuilt. The routing around them was written the same way in each format's observer, and
- * lives here once.
+ * whole document is rebuilt. The routing around them is the same for every format and lives here.
  */
 public abstract class BlobsListingObserver implements ListingObserver {
 

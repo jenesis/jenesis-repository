@@ -6,9 +6,7 @@ import build.jenesis.repository.store.ArtifactStore;
 
 /**
  * The reusable iterative deep-walk over an {@link ArtifactStore}'s key layout - the one descent primitive every
- * store-subtree traversal in the product drives, extracted so no format ever hand-rolls a store tree walk again (the
- * recurring shape behind every "someone re-invented a recursive descent" defect: Debian's {@code collectDebs}, the OCI
- * backfill, and the reference walk itself all re-implemented exactly this before their fixes). Its two riders are the
+ * store-subtree traversal in the product drives, so no format hand-rolls a store tree walk. Its two riders are the
  * unbounded whole-store enumeration ({@code StoreArtifactWalk}, which segments and resumes it across nodes) and the
  * bounded scoped enumeration ({@link PagedTreeWalk}, which caps and checkpoints it for a serving surface); there is no
  * third traversal pipeline. Given a store and a root prefix, {@link #descend} visits every stored leaf under it in
@@ -242,15 +240,15 @@ public final class Trees {
             return true;
         }
 
-        /** Process one node: a stored key is a leaf ({@link Visitor#visit} it when {@link Visitor#emits in range}) and
-         *  yields no frame; a subtree the visitor will not {@link Visitor#enters enter} is pruned and yields no frame;
-         *  any other name is a container to descend, returned as a fresh {@link Frame}. */
         /** The bare child name of a listed key - the paging cursor and the traversal screen both work in names. */
         private static String name(String key) {
             int slash = key.lastIndexOf('/');
             return slash < 0 ? key : key.substring(slash + 1);
         }
 
+        /** Process one node: a stored key is a leaf ({@link Visitor#visit} it when {@link Visitor#emits in range}) and
+         *  yields no frame; a subtree the visitor will not {@link Visitor#enters enter} is pruned and yields no frame;
+         *  any other name is a container to descend, returned as a fresh {@link Frame}. */
         private Frame open(ArtifactStore.Listed entry) throws IOException {
             String key = entry.key();
             // A listing that reported a SIZE has already proven this child is a stored object: only a leaf has one,
@@ -303,7 +301,7 @@ public final class Trees {
                 if (seekChild != null && !seekYielded) {
                     // The seek-path child, descended first and WITHOUT the ceiling guard; its own enters() prune (in
                     // open) still applies the upper bound. It is named rather than listed, so it carries no metadata
-                    // and open() probes it exactly as before.
+                    // and open() probes it for existence.
                     seekYielded = true;
                     return ArtifactStore.Listed.of(Traversal.key(key, seekChild));
                 }

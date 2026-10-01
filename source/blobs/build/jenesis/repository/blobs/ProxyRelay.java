@@ -139,10 +139,9 @@ public final class ProxyRelay {
      * {@code true} - because the leg <em>did</em> serve a response, and the {@code false} that means "let the local
      * {@code 404} stand" would have let a lie stand.
      *
-     * <p>That lie is not hypothetical, which is why this is a seam and not a per-leg line: on a loaded machine a fetch
-     * can outlast the shipped transport's five-second connect timeout, which reports a timeout as the empty result,
-     * and a network blip and a real absence are the same bytes on the wire. The rule lives here rather than once per
-     * proxying format so a new format cannot reopen the hole by writing the obvious {@code return false}.
+     * <p>The transport reports a timeout as the empty result, so a network blip and a real absence reach a leg in the
+     * same shape. The rule lives here rather than once per proxying format so a new format cannot reopen the hole by
+     * writing the obvious {@code return false}.
      */
     public static boolean unanswered(URI target, FormatExchange exchange, Document document, String reason)
             throws IOException {
@@ -160,16 +159,13 @@ public final class ProxyRelay {
      * integrity-surface half of the same split {@link Document} makes on the discovery surface, and the reason it is a
      * value with three states rather than a nullable {@code byte[]} with two.
      *
-     * <p>{@code ProxyFormat} clause 5 licenses one fall-back and states the reason for it: "an ecosystem that
-     * advertises no digest proxies unverified rather than fabricating a check". That reasoning was written for the
-     * upstream having <em>published nothing</em> - Maven serves jars whose {@code .sha1} sibling is missing, Packagist
-     * leaves {@code shasum} blank for a VCS-sourced dist - and every leg that resolves a digest out of a second
-     * document was applying it to a third case the clause never covered: <em>we could not read what it published</em>.
-     * A packument fetch that timed out, a compact index behind a shared-egress {@code 429}, a registration leaf whose
-     * advertised URL the outbound screen refuses - each of them returned "this ecosystem declares no checksum for this
-     * artifact", and the artifact was then cached with an unverified write. Anyone who can drop the sidecar fetch turns
-     * integrity off for that pull, and clause 5's "held to it and a mismatch is refused" quietly does not run - the
-     * same conflation as an unreadable enumeration, one layer down.
+     * <p>{@code ProxyFormat} clause 5 lets an ecosystem that advertises no digest proxy unverified rather than
+     * fabricate a check. That fall-back covers an upstream that <em>published nothing</em> - Maven serves jars whose
+     * {@code .sha1} sibling is missing, Packagist leaves {@code shasum} blank for a VCS-sourced dist - and never one
+     * whose declaration <em>could not be read</em>: a packument fetch that timed out, a compact index behind a
+     * shared-egress {@code 429}, a registration leaf whose advertised URL the outbound screen refuses. Treating those
+     * as "declares nothing" would let anyone who can drop the sidecar fetch turn integrity off for that pull - the same
+     * conflation as an unreadable enumeration, one layer down.
      *
      * <p>So the three states are named and a leg returns one of them:
      * <ul>
@@ -261,7 +257,7 @@ public final class ProxyRelay {
 
     /**
      * Fetch the small document that declares a proxied artifact's digest, buffered, and fold the transport /
-     * miss / refusal ladder every leg was writing out by hand into {@link Declared}. On a {@code 200} the caller parses
+     * miss / refusal ladder into {@link Declared}. On a {@code 200} the caller parses
      * {@link Sidecar#document()} for the digest and returns {@link Declared#of} or {@link Declared#NONE}; otherwise it
      * returns {@link Sidecar#verdict()} unchanged, this class having already decided whether the upstream declared
      * nothing or could not be read.
@@ -297,15 +293,12 @@ public final class ProxyRelay {
     }
 
     /**
-     * Decline a cache fill whose declaring document could not be read - the refusal shape established for a proxy
-     * leg and the one this whole split exists to reach: nothing is cached, nothing is served, the local {@code 404}
-     * stands (so a later pull re-hits the upstream), and the operator is told which artifact was refused and why. It
-     * never throws: a proxy leg runs after a local miss, so a throw here would surface as an unmapped {@code 500} where
-     * {@link ProxyLeg}'s clause 2 says the truthful answer is the {@code 404}.
+     * Decline a cache fill whose declaring document could not be read: nothing is cached, nothing is served, the local
+     * {@code 404} stands (so a later pull re-hits the upstream), and the operator is told which artifact was refused
+     * and why. It never throws: a proxy leg runs after a local miss, so a throw here would surface as an unmapped
+     * {@code 500} where {@link ProxyLeg}'s clause 2 says the truthful answer is the {@code 404}.
      *
-     * <p>It is a {@code WARN} rather than a {@code DEBUG} because it is the operator-visible half of the refusal. A
-     * {@code DEBUG} line logged while still caching the artifact would be evidence that says nothing, since a line
-     * nobody reads beside a fill that happened anyway is not a refusal.
+     * <p>It logs at {@code WARN} because the line is the operator-visible half of the refusal.
      *
      * @return {@code false} always, so a leg reads {@code return ProxyRelay.unverifiable(...)}
      */
@@ -316,16 +309,17 @@ public final class ProxyRelay {
     }
 
     /**
-     * Cache one proxied artifact under whatever its ecosystem declared for it - the shared three-way every
-     * {@code writeVerified} leg makes, held once so the fall-back cannot quietly widen to cover a document that was
-     * never read.
+     * Cache one proxied artifact under whatever its ecosystem declared for it - the three-way every
+     * {@code writeVerified} leg makes, held once so the fall-back cannot widen to cover a document that was never
+     * read.
      *
      * <ul>
      * <li>{@linkplain Declared#readable() unreadable} - the fill is declined through {@link #unverifiable}: nothing is
      *     stored, nothing is linked, nothing is served.</li>
      * <li>{@linkplain Declared#verifiable() declared} - the body streams into the content-addressed store under the
      *     digest and the serving pointer is linked only once it matches ({@link Blobs#writeVerified}, pointer-last);
-     *     a mismatch is refused and logged, leaving an unreferenced blob rather than something that briefly served.</li>
+     *     a mismatch is refused and logged, leaving an unreferenced blob rather than something that briefly
+     *     served.</li>
      * <li>{@link Declared#NONE} - the document answered and declares no digest, so the body is cached unverified, which
      *     is clause 5's documented behaviour. Logged at {@code DEBUG} so an operator can still see which fills ran
      *     without a point check.</li>

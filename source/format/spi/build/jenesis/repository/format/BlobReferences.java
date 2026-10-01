@@ -119,8 +119,6 @@ public interface BlobReferences {
      * console browse, an enforcement sweep, a hold release) catches this one, degrades to what it can name and says
      * so, and lets a plain {@link IOException} propagate - because degrading on a store hiccup would silently
      * under-enforce a hold, while propagating on one corrupt stored document would fail a whole repository's pass.
-     * Catching {@code IOException} to get that behaviour would take both; catching this takes exactly the one that
-     * will never resolve itself.
      *
      * <p>It is deliberately <em>not</em> raised for an absent document. An absent one is residue - a blob already
      * collected - and clause 2's empty answer is the honest one there.
@@ -152,15 +150,11 @@ public interface BlobReferences {
      * without carrying its own {@code uses} clause. Empty when no installed format serves from a blobs namespace,
      * which is the core's own shape: only the collector's caller-supplied {@code publish/} roots are then scanned.
      *
-     * <p>It filters {@link RepositoryFormat#installed()} rather than running a {@link ServiceLoader} of its own.
-     * <b>Not because the second instance set would have been stateful</b> - it would not: a format's memory is an
-     * optimisation and cannot be anything else, since a multi-node deployment holds one instance set per JVM
-     * already ({@link RepositoryFormat}'s lifecycle clause). The reasons are the other three. A raw load bypasses
-     * {@code Providers.all}, so a blank or duplicated format name would reach a <em>deletion</em> path unvalidated,
-     * which is the one path where a discovery-order winner is unrecoverable. It is a second answer to "what is
-     * installed", free to drift from the one that serves the requests whose blobs are being judged. And it
-     * reconstructs every format on the module path on each call, for a set that is fixed for the life of the
-     * process.
+     * <p>It filters {@link RepositoryFormat#installed()} rather than running a {@link ServiceLoader} of its own. A
+     * raw load would bypass {@code Providers.all}, so a blank or duplicated format name would reach a
+     * <em>deletion</em> path unvalidated, where a discovery-order winner is unrecoverable; it would be a second
+     * answer to "what is installed", free to drift from the one that serves the requests whose blobs are being
+     * judged; and it would reconstruct every format on each call, for a set that is fixed for the process.
      */
     static List<BlobReferences> installed() {
         List<BlobReferences> lenders = new ArrayList<>();
@@ -176,16 +170,12 @@ public interface BlobReferences {
      * Every root a live pointer can sit under: the {@code publish/} tree plus each installed lender's own
      * blob roots.
      *
-     * <p><b>One computation, because two of them is a deletion bug waiting for a divergence.</b> A garbage collector
-     * asking {@code installed()} for its lenders and a walk asking the discovered formats which ones are blob-rooted
-     * are not the same question: one accepts any installed {@link BlobReferences}, the other only the ones that are
-     * also a format wearing a particular sub-interface. Derived twice, on the day they disagree the walk enumerates a
-     * smaller set than the collector judges against, every pointer under the missing root reads as absent, and the
-     * blobs beneath it are condemned and then deleted. There is no test that would fail first; the artifacts would
-     * simply be gone.
-     *
-     * <p>So the set has one home, and callers that need it as a plain list and callers that need it wrapped in a
-     * {@code Known} answer both start here.
+     * <p><b>One computation for every caller.</b> A garbage collector asking {@code installed()} for its lenders and
+     * a walk asking the discovered formats which ones are blob-rooted are not the same question, and derived twice
+     * they could disagree: the walk would enumerate a smaller set than the collector judges against, every pointer
+     * under the missing root would read as absent, and the blobs beneath it would be condemned and then deleted. So
+     * callers that need the set as a plain list and callers that need it wrapped in a {@code Known} answer both start
+     * here.
      */
     static List<String> pointerRoots() {
         List<String> roots = new ArrayList<>();

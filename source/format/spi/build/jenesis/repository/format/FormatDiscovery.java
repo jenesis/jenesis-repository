@@ -39,20 +39,19 @@ final class FormatDiscovery {
      * inventory describing a path, the compliance screen deciding whose prefix a publish is under, a browse rendering
      * a row. Re-derived per call, each call would walk every declared format and ask the configuration whether it was
      * enabled and fully configured, which for a deployment carrying twenty-odd formats is twenty-odd property lookups
-     * and two list allocations, per artifact - enough to make {@code RepositoryFormat.installed} the hottest product
-     * frame under load, in one method that answers the same thing every time.
+     * and two list allocations, per artifact, in one method that answers the same thing every time.
      *
      * <h2>Why holding it is safe, and what would make it unsafe</h2>
      *
      * The answer is a function of {@link Features#lookup() the installed lookup} and of nothing else, so the lookup
-     * IS the cache key - by identity, because {@link Features#configure} installs a new one and {@link
-     * Features#reset} installs a fresh default each time it is called. A deployment configures once at boot and the
-     * answer is then fixed for the process; a test that reconfigures gets a fresh answer because it reconfigured.
+     * IS the cache key - by identity, because {@link Features#configure} installs a new one and
+     * {@link Features#reset} installs a fresh default each time it is called. A deployment configures once at boot and
+     * the answer is then fixed for the process; a test that reconfigures gets a fresh answer because it reconfigured.
      *
      * <p>The one shape this would get wrong is a caller that changes a format's toggle <em>underneath</em> the
      * default lookup - setting the {@code jenrepo.<name>} system property without calling {@link Features#configure}
-     * or {@link Features#reset} - since the default lookup reads those live. Nothing in either tree does that, and a
-     * test that wants to is one {@code Features.reset()} away from being right.
+     * or {@link Features#reset} - since the default lookup reads those live. A caller that changes a toggle calls
+     * {@code Features.reset()} as well.
      */
     static List<RepositoryFormat> installed() {
         UnaryOperator<String> lookup = Features.lookup();

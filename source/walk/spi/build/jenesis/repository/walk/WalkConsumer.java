@@ -73,10 +73,10 @@ import build.jenesis.repository.store.Features;
  *     therefore owns no threads and no clients, and - because a process death is indistinguishable from a fresh
  *     start - keeps no cross-pass state it cannot rebuild from the store.</li>
  * <li><b>Ordering / concurrency.</b> Within one worker: {@link #onPassStarted} fires before that worker's first
- *     {@link #onRetained}; keys arrive in the walk's total path order <em>within a segment</em>; {@link #beforeCheckpoint}
- *     fires after the deliveries it covers and before the cursor that would skip them is committed; and
- *     {@link #onPassCompleted} fires once this worker observed the pass complete. Across segments and workers there
- *     is no global order at all, so a consumer must never derive meaning from delivery sequence.</li>
+ *     {@link #onRetained}; keys arrive in the walk's total path order <em>within a segment</em>;
+ *     {@link #beforeCheckpoint} fires after the deliveries it covers and before the cursor that would skip them is
+ *     committed; and {@link #onPassCompleted} fires once this worker observed the pass complete. Across segments and
+ *     workers there is no global order at all, so a consumer must never derive meaning from delivery sequence.</li>
  * <li><b>Bounded work / cancellation.</b> The pass hands over one artifact at a time and buffers nothing on the
  *     consumer's behalf, so per-pass memory is the consumer's own choice and its own risk: a snapshot rebuilder that
  *     accumulates the whole store in heap is bounded by the store's artifact count and must say so. There is no
@@ -97,7 +97,8 @@ import build.jenesis.repository.store.Features;
  *           reaches {@code onPassCompleted} is a fragment. Such a consumer must detect the resume - it is handed the
  *           same {@link WalkPass#generation()} it already began accumulating for, which is the signal, and it must
  *           persist that fact because its own memory did not survive - and then refuse to commit, leaving the previous
- *           snapshot standing and recording the degradation of clause 8. It converges on the next <em>full</em> pass.</li>
+ *           snapshot standing and recording the degradation of clause 8. It converges on the next <em>full</em>
+ *           pass.</li>
  *     </ul>
  *     No consumer may claim a stronger class than the one it implements: the walk's cursor is the only durability the
  *     pass itself provides.</li>
@@ -199,12 +200,10 @@ public interface WalkConsumer {
      * deliveries it declares, and not shown on the walks screen - it reports itself absent, which is what a repair
      * of nothing is.
      *
-     * <p>It exists because the toggle alone made every consumer ride unless an operator knew its key by name.
-     * Forwarding is off unless configured, and its repair consumer has its own key ({@code forwarding-repair},
-     * also defaulting on): a deployment that never forwards anywhere still paid that consumer on every walk pass,
-     * and switching forwarding off did nothing about it. A consumer answers here with the same read its feature's
-     * own provider makes - {@link Features#enabled(String, boolean)} with the feature's real default - so the two
-     * cannot disagree about whether the feature is on.
+     * <p>Without it a consumer would ride unless an operator knew its own toggle key by name - a deployment that
+     * never forwards anywhere would still pay the forwarding repair consumer on every walk pass. A consumer answers
+     * here with the same read its feature's own provider makes - {@link Features#enabled(String, boolean)} with the
+     * feature's real default - so the two cannot disagree about whether the feature is on.
      */
     default boolean enabled() {
         return true;
@@ -234,8 +233,8 @@ public interface WalkConsumer {
      * Whether this consumer reads {@link ArtifactDescriptor#size()} off the pointers it is handed.
      *
      * <p>{@code true} by default. The length rides the pointer itself, so every consumer gets it for nothing and the
-     * walk stats a blob only for a pointer that carries no length - once, writing the length back. The declaration
-     * says what the consumer reads, and charges that one stat to the consumer that wanted it.
+     * walk stats a blob only for a pointer that carries no length - once, writing the length back. {@link RebuildPass}
+     * does not consult this declaration: it completes a lengthless pointer whichever consumers listen.
      */
     default boolean needsBlobSize() {
         return true;
@@ -342,7 +341,7 @@ public interface WalkConsumer {
      *
      * <p>This is {@link ArtifactWalk.KeyVisitor#beforeCheckpoint} carried through to the consumer by
      * {@link RebuildPass}, so a consumer driven by the shared pass gets the same flush guarantee a visitor driving the
-     * walk directly has always had. It fires only after {@link #onPassStarted}: a worker that has delivered nothing
+     * walk directly has. It fires only after {@link #onPassStarted}: a worker that has delivered nothing
      * has nothing to flush.
      */
     default void beforeCheckpoint(String cursor) throws IOException {
@@ -357,24 +356,18 @@ public interface WalkConsumer {
      *  moment it learns the {@link WalkPass#generation()} whose re-appearance is its only signal that a later pass is
      *  a crash-resume rather than a fresh start (clause 12). A deployment fans passes over its repositories across
      *  workers, calling this one instance for several stores at once, so a consumer that keeps per-pass state keys it
-     *  by {@link ArtifactStore#identity()} and resets only that store's here. There is deliberately no store-less
-     *  form beside this one: two arities of one hook meant an implementor overriding the other got silence. */
+     *  by {@link ArtifactStore#identity()} and resets only that store's here. */
     default void onPassStarted(WalkPass pass, ArtifactStore store) {
     }
 
-    /** The pass over {@code store} enumerated everything - the commit / compact / heal hook for a consumer that acts
-     *  at pass end, for that store alone. It declares no {@link IOException}: a consumer that persists here wraps a
-     *  store failure in an {@link UncheckedIOException}, which propagates out of the pass just as a checked one
-     *  would. */
     /**
      * Where this consumer's {@link #onPassCompleted} sits among the others: lower runs first, and equal order is
      * the order they were discovered in.
      *
      * <p>It exists for one relationship, and only completion is ordered by it. A consumer's completion work can
      * orphan content - a retention sweep unpublishes what it evicted - so anything that reclaims must see the store
-     * as the others left it, or it reclaims one pass late - and that must not rest on the consumers happening to be
-     * listed in one file in the right order, which stops being true the moment one of them moves to a module of its
-     * own.
+     * as the others left it, or it reclaims one pass late - and that must not rest on the order the consumers happen
+     * to be discovered in.
      */
     default int order() {
         return 0;
@@ -383,6 +376,10 @@ public interface WalkConsumer {
     /** The order of a consumer that must complete after every other: reclamation, which reads what they left. */
     int LAST = Integer.MAX_VALUE;
 
+    /** The pass over {@code store} enumerated everything - the commit / compact / heal hook for a consumer that acts
+     *  at pass end, for that store alone. It declares no {@link IOException}: a consumer that persists here wraps a
+     *  store failure in an {@link UncheckedIOException}, which fails this consumer's generation as a checked one would
+     *  (clause 6). */
     default void onPassCompleted(WalkPass pass, ArtifactStore store) {
     }
 

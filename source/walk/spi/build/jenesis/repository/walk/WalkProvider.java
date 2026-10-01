@@ -59,7 +59,7 @@ public interface WalkProvider {
     /** The implementation name this provider answers to, e.g. {@code paged-descent} - and, because
      *  {@link Features} spends one namespace on both shapes, the key {@code jenrepo.<name>=false}
      *  switches it off by. It may therefore not be the name of any SPI <em>family</em>: a walk called {@code store}
-     *  keyed its toggle to the artifact store's selection key. */
+     *  would key its toggle to the artifact store's selection key. */
     String name();
 
     /** Build the walk, reading settings through {@code config}; empty when configured off. */
@@ -74,12 +74,11 @@ public interface WalkProvider {
     /**
      * Whether a walk implementation is installed and not switched off.
      *
-     * <p><b>No production surface reads this</b>, and this javadoc asserted that a console and a walk-riding
-     * maintenance surface gated on it for as long as neither did. The reader that exists is the reclamation
-     * module's {@code CapabilityContributor}, which reports the {@code walk} flag from
-     * {@link #resolve resolve(config).isPresent()}, and every walk-riding pass resolves the walk itself.
+     * <p><b>No production surface reads this.</b> The reclamation module's {@code CapabilityContributor} reports the
+     * {@code walk} flag from {@link #resolve resolve(config).isPresent()}, and every walk-riding pass resolves the
+     * walk itself.
      *
-     * <p><b>It is also not the same question, which is why it must not be adopted as one.</b> This answers
+     * <p><b>It is not the capability question, and must not be read as one.</b> This answers
      * {@link Features#enabled}: a provider whose {@link #requiredConfig} keys are unset counts as installed here while
      * {@link #resolve} - which asks {@link Features#active} - reports it absent, and two enabled providers count here
      * while {@link #resolve} refuses them as ambiguous. A surface gated on this would therefore open for a walk that

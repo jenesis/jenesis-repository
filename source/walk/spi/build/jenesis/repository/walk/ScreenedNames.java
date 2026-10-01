@@ -12,14 +12,11 @@ import build.jenesis.repository.store.ServableNames;
  * type decides nothing - driven by the shared bounded primitive {@link BoundedChildren}, so a screened listing is also
  * a bounded, resumable one without a second page loop existing anywhere.
  *
- * <p><strong>Why the screen has to live inside the enumeration.</strong> Hand-written per format, it is two steps:
- * list the container, then filter each name through a withhold probe. The steps are separable, so they get
- * separated - by a refactor, by a new surface copied from an older one, by a format author who only knows the first
- * step - and a listing that forgot the second one publishes the <em>existence</em> of a quarantined or retracted
- * artifact, which is the disclosure the hold was meant to prevent. Here the two are one call and cannot be pulled
- * apart: the store paging is private, the caller never sees an unscreened name, and there is no constructor, no
- * policy and no override that yields an unscreened enumeration. Forgetting the screen is not a mistake this API can
- * express.
+ * <p><strong>Why the screen lives inside the enumeration.</strong> As two steps - list the container, then filter
+ * each name through a withhold probe - the second can be dropped, and a listing without it publishes the
+ * <em>existence</em> of a quarantined or retracted artifact, which is the disclosure the hold was meant to prevent.
+ * Here the two are one call: the store paging is private, the caller never sees an unscreened name, and there is no
+ * constructor, no policy and no override that yields an unscreened enumeration.
  *
  * <p><strong>Choosing a face, not a predicate.</strong> A caller says which seam face an enumerated name is judged by;
  * it can never supply the judgement itself:
@@ -47,8 +44,8 @@ import build.jenesis.repository.store.ServableNames;
  *
  * <p><strong>Two caps, one outcome vocabulary.</strong> The scan cap (how many stored names one call may examine, from
  * the {@link BoundedChildren} bounds) bounds the work; the {@linkplain #take take} cap (how many disclosable names one
- * call may deliver) bounds the answer. Either one ends the call {@linkplain Traversal.Result#truncated() truncated} with a
- * continuation cursor - never a short list that looks complete - and the bounds with no safe continuation (step
+ * call may deliver) bounds the answer. Either one ends the call {@linkplain Traversal.Result#truncated() truncated}
+ * with a continuation cursor - never a short list that looks complete - and the bounds with no safe continuation (step
  * budget, hostile segment) still raise {@link TraversalException} exactly as {@link BoundedChildren} defines. The take
  * cap is only spent when a <em>further</em> disclosable name has been proven to exist, so a container whose
  * disclosable names exactly fill the page still answers exhausted.
@@ -61,9 +58,9 @@ import build.jenesis.repository.store.ServableNames;
  *   <li><b>Idempotency / replay.</b> A pure read that commits nothing: re-running a scan, or resuming from an older
  *       cursor, is always safe. A sink with side effects must be idempotent per name, since a crash before the cursor
  *       is committed replays the last page.</li>
- *   <li><b>Absence sentinel.</b> An absent or empty container is not an error - {@linkplain Traversal.Result#exhausted() exhausted}
- *       with zero delivered, and {@link #any} is {@code false}. {@code null} is never returned; a {@code null} or empty
- *       cursor starts at the beginning.</li>
+ *   <li><b>Absence sentinel.</b> An absent or empty container is not an error -
+ *       {@linkplain Traversal.Result#exhausted() exhausted} with zero delivered, and {@link #any} is {@code false}.
+ *       {@code null} is never returned; a {@code null} or empty cursor starts at the beginning.</li>
  *   <li><b>Selection failure.</b> The face is chosen by construction, so an unscreened enumeration is unrepresentable
  *       rather than a silent fallback. A {@link #paths}/{@link #versionFolders} scan aimed outside the
  *       {@linkplain ServableNames#PUBLISHED served pointer root} - where a derived request path would be a fiction -
@@ -90,9 +87,9 @@ import build.jenesis.repository.store.ServableNames;
  *       one call never parallelises itself; the screen is applied in that same order, so two callers of the same
  *       container in the same state see the same names in the same order.</li>
  *   <li><b>Bounded work / cancellation.</b> The scan cap, the take cap, the step budget and the page width bound every
- *       call. The visible outcome at a bound is {@linkplain Traversal.Result#truncated() truncated} plus a cursor (scan and take caps)
- *       or a {@link TraversalException} naming the bound (steps, hostile segment). A caller cancels by throwing from
- *       {@link Disclosed#accept}.</li>
+ *       call. The visible outcome at a bound is {@linkplain Traversal.Result#truncated() truncated} plus a cursor (scan
+ *       and take caps) or a {@link TraversalException} naming the bound (steps, hostile segment). A caller cancels by
+ *       throwing from {@link Disclosed#accept}.</li>
  *   <li><b>Durability / delivery.</b> Nothing is committed here; a caller that persists the continuation cursor
  *       commits it through the store after the page's effects, so a crash replays a page rather than skipping one.</li>
  * </ol>

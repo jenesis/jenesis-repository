@@ -24,7 +24,7 @@ import build.jenesis.repository.store.ArtifactStore;
  * {@link #imports} rather than {@code handles} (which {@link RepositoryFormat#handles(String)} owns for request-path
  * claiming) and {@link #importTarget} rather than {@code describe} (which {@link ArtifactLayout#describe(String)} owns
  * for the coordinate behind a request path) - so one format object can carry the layout and the importer capability
- * at once. There is no backwards-compatibility constraint, so a rename lands as one change.
+ * at once.
  *
  * <h2>Contract</h2>
  * This is a role sub-interface of {@link RepositoryFormat}: that contract still binds, and the clauses below state what
@@ -33,7 +33,8 @@ import build.jenesis.repository.store.ArtifactStore;
  * discovered importer.
  * <ol>
  * <li><b>Thread-safety.</b> The importer is the format singleton, and the orchestrator may walk several assets
- *     concurrently, so both methods are safe to call concurrently. Neither may keep per-asset state on the instance.</li>
+ *     concurrently, so both methods are safe to call concurrently. Neither may keep per-asset state on the
+ *     instance.</li>
  * <li><b>Idempotency / replay.</b> An import is resumable and therefore replayed: {@link #importArtifact} of the same
  *     path and bytes twice must converge on the same stored state, never duplicate it. The content-addressed blob makes
  *     the body idempotent; a format's own sidecars and pointers must be written the same way (compare-and-set, or a
@@ -43,13 +44,13 @@ import build.jenesis.repository.store.ArtifactStore;
  *     screens this"), not a way to decline an asset: the edge reads it as permission to stream the source bytes
  *     straight through, so an importer that cannot lay an asset out must refuse it rather than answer empty.</li>
  * <li><b>Traversal refusal.</b> A source path is as client-supplied as a request path - it derives from a name someone
- *     published to the incumbent - so a path that is not {@link #importable} is refused by <em>both</em> methods with an
- *     {@link IllegalArgumentException} naming it. It is never echoed into the descriptor {@link #importTarget} returns:
- *     that descriptor's path is what the import edge screens against and what an edition records for a held or rejected
- *     asset, and its store key is what a quarantine diversion is composed from, so a traversal-shaped path there aims
- *     the screen and the record at a coordinate the asset will never occupy. The read half is contract-bound never to
- *     report such a path ({@code ImportSource.safePath}); this is the belt behind that brace, and it is the one
- *     {@link ArtifactLayout#addressable} screen the coordinate seam already uses rather than a second definition.</li>
+ *     published to the incumbent - so a path that is not {@link #importable} is refused by <em>both</em> methods with
+ *     an {@link IllegalArgumentException} naming it. It is never echoed into the descriptor {@link #importTarget}
+ *     returns: that descriptor's path is what the import edge screens against and what an edition records for a held or
+ *     rejected asset, and its store key is what a quarantine diversion is composed from, so a traversal-shaped path
+ *     there aims the screen and the record at a coordinate the asset will never occupy. The read half is contract-bound
+ *     never to report such a path ({@code ImportSource.safePath}); this screen holds regardless, and it is the
+ *     {@link ArtifactLayout#addressable} screen the coordinate seam already uses.</li>
  * <li><b>Streaming.</b> {@link #importArtifact} copies its stream straight to storage; an artifact is never
  *     materialised. An importer that must parse a coordinate or a manifest out of the content may buffer it only under
  *     an explicit cap (the OCI manifest limit is the reference), never a whole artifact.</li>
@@ -79,10 +80,9 @@ public interface RepositoryImporter {
      * non-empty, and every segment a single addressable name - no empty, {@code .} or {@code ..} segment, no separator
      * smuggled inside one, no backslash.
      *
-     * <p>Deliberately {@link ArtifactLayout#addressable} applied segment by segment rather than a second screen: the
-     * coordinate seam already refuses exactly these shapes through that predicate, and a source path is the same kind
-     * of semi-trusted, client-supplied name one segment at a time. Stating it here means a new importer inherits the
-     * guard instead of being the next one to compose {@code "/raw/" + "../x"}.
+     * <p>It is {@link ArtifactLayout#addressable} applied segment by segment: a source path is the same kind of
+     * semi-trusted, client-supplied name the coordinate seam screens, and stating it here means a new importer
+     * inherits the guard.
      */
     static boolean importable(String sourcePath) {
         if (sourcePath == null) {
@@ -104,9 +104,7 @@ public interface RepositoryImporter {
     }
 
     /** Whether this format can import a source repository of the given format - the source manager's name, e.g.
-     *  {@code maven2}, {@code docker}, {@code npm}, {@code pypi}, {@code nuget}, {@code rubygems}, {@code raw}. Named
-     *  {@code imports} rather than {@code handles} so it does not collide with {@link RepositoryFormat#handles(String)}
-     *  (same erasure) on a format that carries both. */
+     *  {@code maven2}, {@code docker}, {@code npm}, {@code pypi}, {@code nuget}, {@code rubygems}, {@code raw}. */
     boolean imports(String sourceFormat);
 
     /** The <em>target-layout</em> descriptor the asset at {@code sourcePath} will occupy once imported - the coordinate
@@ -116,17 +114,15 @@ public interface RepositoryImporter {
      *  result marks the asset as one this format lays out without an edge screen (OCI, whose multi-blob manifest
      *  protocol owns its own screening choke point, returns empty), and the edge streams its bytes straight to
      *  {@link #importArtifact} unchanged. Derived from the path only - no content read. Abstract on purpose: every
-     *  importing format must decide the coordinate its assets land on, so a demoted layout-only import cannot silently
-     *  skip the edge screen. Named {@code importTarget} rather than {@code describe} so it does not collide with
-     *  {@link ArtifactLayout#describe(String)} (same erasure) on a layout-aware format that carries both. */
+     *  importing format decides the coordinate its assets land on, so none skips the edge screen by default. */
     Optional<ArtifactDescriptor> importTarget(String sourcePath);
 
     /** Lay one <em>already-screened</em> asset out - its path within the source repository and its content stream -
      *  into the content-addressed store. The content reaching here has already passed the import edge's screen (or is
-     *  explicitly unscreenable, when {@link #importTarget} returned empty), so this only lays the bytes out in the format's
-     *  namespace: it does not screen or render a verdict. On an edge {@code ACCEPT} the stream is the restreamed
-     *  {@code blobs/<hash>} the screen stored, not the raw source download. The stream copies straight to storage; an
-     *  importer that must inspect the content (to parse a manifest or a coordinate) may read it into a buffer, but a
-     *  plain blob streams through unbuffered. The caller closes the stream. */
+     *  explicitly unscreenable, when {@link #importTarget} returned empty), so this only lays the bytes out in the
+     *  format's namespace: it does not screen or render a verdict. On an edge {@code ACCEPT} the stream is the
+     *  restreamed {@code blobs/<hash>} the screen stored, not the raw source download. The stream copies straight to
+     *  storage; an importer that must inspect the content (to parse a manifest or a coordinate) may read it into a
+     *  buffer, but a plain blob streams through unbuffered. The caller closes the stream. */
     void importArtifact(String path, InputStream content, ArtifactStore store) throws IOException;
 }

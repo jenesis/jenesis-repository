@@ -9,8 +9,8 @@ import build.jenesis.repository.format.FormatExchange;
  * re-implementing it. The source stream is passed straight through (never buffered whole), so the format spools a large
  * package into the CAS unbuffered; the format's response is discarded, since a replay cares that the version
  * materialises, not what the publish would have answered. Carries no query parameters, and request headers only when
- * built with them ({@link #put(String, InputStream, Map)}) - the language importers each declared a private, byte-identical copy
- * of this stub before it was hoisted here, the one module every format module already requires.
+ * built with them ({@link #put(String, InputStream, Map)}). It lives here because this is the one module every
+ * format module already requires.
  *
  * <p>The method defaults to {@code PUT} (the raw-push shape every pool/flat-container/dist format uses); a format whose
  * publish endpoint is a {@code POST} (the RubyGems gem push) builds one with {@link #post}.
@@ -22,7 +22,8 @@ public final class ReplayExchange implements FormatExchange {
     private final InputStream body;
     private final Map<String, String> headers;
 
-    /** A {@code PUT} replay of {@code body} at {@code path} - the raw-push shape the pool/flat-container/dist formats use. */
+    /** A {@code PUT} replay of {@code body} at {@code path} - the raw-push shape the pool/flat-container/dist formats
+     *  use. */
     public ReplayExchange(String path, InputStream body) {
         this("PUT", path, body, Map.of());
     }

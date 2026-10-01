@@ -16,12 +16,12 @@ import build.jenesis.repository.store.ArtifactStore;
  * an incomplete traversal cannot be represented as a complete one by accident: a result with a cursor is truncated
  * and one without is exhausted, and there is no second field for the two to disagree in.
  *
- * <p><strong>Not every bound answers here - and which bound answers where is the most misread thing in this API.</strong>
- * A bounded traversal has two kinds of cap and they behave <em>oppositely</em>, deliberately:
+ * <p><strong>Not every bound answers here.</strong> A bounded traversal has two kinds of cap and they behave
+ * <em>oppositely</em>, deliberately:
  * <ul>
  *   <li><b>the entry cap TRUNCATES</b> - "how many entries may one call deliver" ends the call with
- *       {@linkplain Result#truncated() truncated} and a cursor. It is a bound on the <em>size of one answer</em>, and the caller can
- *       ask for the next answer, so paging it costs nothing but another round;</li>
+ *       {@linkplain Result#truncated() truncated} and a cursor. It is a bound on the <em>size of one answer</em>, and
+ *       the caller can ask for the next answer, so paging it costs nothing but another round;</li>
  *   <li><b>the step, depth and segment caps THROW</b> {@link TraversalException} - they never appear as an
  *       {@link Result} at all. They are bounds on <em>how pathological the key
  *       space is</em>, and they have no safe continuation: a cursor cannot express "resume below a subtree I refused
@@ -31,8 +31,8 @@ import build.jenesis.repository.store.ArtifactStore;
  *       drop keys while answering in the vocabulary of completeness.</li>
  * </ul>
  * So: <b>a {@code Result} never means "I stopped because the tree was hostile"</b>. Catching
- * {@link TraversalException} and treating it as a truncation re-introduces exactly the silent incompleteness this
- * type exists to prevent; a caller that must survive a hostile subtree serves what is durably stored and flags the
+ * {@link TraversalException} and treating it as a truncation is the silent incompleteness this type exists to
+ * prevent; a caller that must survive a hostile subtree serves what is durably stored and flags the
  * anomaly by {@link TraversalException#reason()}, but never presents the short answer as a complete listing.
  * {@link TraversalException} documents each reason's rationale in full.
  *
@@ -49,13 +49,14 @@ public final class Traversal {
 
     /**
      * What one bounded traversal call saw: the continuation {@code cursor} (present exactly when
-     * {@linkplain #truncated() truncated}), how many entries it {@code delivered}, and how many {@code steps} - nodes opened or
-     * page round-trips - it spent doing so. The step count is a diagnostic for an operator sizing a budget, not a
-     * completeness proof.
+     * {@linkplain #truncated() truncated}), how many entries it {@code delivered}, and how many {@code steps} - nodes
+     * opened or page round-trips - it spent doing so. The step count is a diagnostic for an operator sizing a budget,
+     * not a completeness proof.
      *
-     * <p>A cap reached exactly at the end of the scope answers {@linkplain #truncated() truncated}, and the continuation then
-     * returns an {@linkplain #exhausted() exhausted} result that delivered nothing. The bias is deliberate and one-way: a
-     * traversal may under-claim completeness and cost one extra empty round, and may never over-claim it.
+     * <p>A cap reached exactly at the end of the scope answers {@linkplain #truncated() truncated}, and the
+     * continuation then returns an {@linkplain #exhausted() exhausted} result that delivered nothing. The bias is
+     * deliberate and one-way: a traversal may under-claim completeness and cost one extra empty round, and may never
+     * over-claim it.
      */
     public record Result(Optional<String> cursor, long delivered, long steps) {
 

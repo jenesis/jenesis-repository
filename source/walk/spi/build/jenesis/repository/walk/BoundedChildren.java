@@ -7,7 +7,7 @@ import build.jenesis.repository.store.ArtifactStore;
 /**
  * A bounded, resumable enumeration of <em>one container's</em> immediate child names - the flat sibling of
  * {@link PagedTreeWalk}, and deliberately a different primitive rather than a subtree walk with the depth turned down
- * to one. Half the "unbounded listing" defects in the product are not tree walks at all: a search window scanning a
+ * to one. Many enumerations are not tree walks at all: a search window scanning a
  * registry's id space, a version list under one coordinate, a revision's file set, a marker space folded into a
  * digest. Those want exactly this - {@link ArtifactStore#page} driven to the end of one container, with a cap and a
  * continuation - and forcing them through a tree walk would buy an {@link ArtifactStore#exists} probe per name that
@@ -25,15 +25,11 @@ import build.jenesis.repository.store.ArtifactStore;
  *       holds.</li>
  * </ul>
  *
- * <p><strong>One cap truncates; two throw.</strong> The three bounds above do not fail the same way, and the
- * asymmetry is the same one {@link PagedTreeWalk} carries - stated again here because a caller meets this primitive
- * without necessarily meeting that one. Only {@link #entries()} - the bound on how large <em>one answer</em> may be -
- * ends the call as a value ({@linkplain Traversal.Result#truncated() truncated} plus a cursor to resume from). {@link #steps()} and
- * the traversal-free segment screen <b>throw</b> {@link TraversalException} and produce no {@link Traversal.Result}
- * at all: a step budget too small to reach the next name would hand back a cursor that makes no forward progress -
- * a livelock dressed up as paging - and a stored name carrying a separator or a {@code .}/{@code ..} segment must
- * never be composed into a key. Truncating either would drop names while answering in the vocabulary of completeness,
- * so a caller must not catch a {@link TraversalException} into a short list. See {@link Traversal} for the rule.
+ * <p><strong>One cap truncates; two throw.</strong> Only {@link #entries()} - the bound on how large <em>one
+ * answer</em> may be - ends the call as a value ({@linkplain Traversal.Result#truncated() truncated} plus a cursor to
+ * resume from). {@link #steps()} and the traversal-free segment screen <b>throw</b> {@link TraversalException},
+ * because neither has a continuation that makes progress, so a caller must not catch one into a short list.
+ * {@link Traversal} states the rule.
  *
  * <p><strong>The scope root is a legal prefix.</strong> Unlike {@link PagedTreeWalk}, which is always aimed at a named
  * subtree (enumerating a whole store is the resumable, segmented {@link ArtifactWalk}'s job, not a request's), this
@@ -41,18 +37,10 @@ import build.jenesis.repository.store.ArtifactStore;
  * enumerations legitimately sit there: a tenant's repositories, a scope's top-level spaces. Pass it deliberately;
  * an accidentally empty prefix variable enumerates the whole scope.
  *
- * <p><strong>Why {@code scan} and not {@code list}.</strong> The name is load-bearing, not taste: the
- * bounded-listing clause binds every {@code .list(} call site in the
- * source tree and demands a boundedness justification for each. Naming this method {@code list} would make every
- * migrated - and therefore now provably bounded - call site look like a fresh offender and force a per-site allowlist
- * grant, drowning the ratchet's signal in the very migration that fixes it. Migrating a hand-rolled loop onto this
- * primitive should <em>remove</em> a census entry, not move it. Do not rename it back; the same applies to
- * {@code children}, {@code versions} and {@code coordinates}, the enumeration tokens the disclosure ratchet watches.
- *
  * <p><strong>Exactly at the boundary.</strong> A short page proves the container is drained, so an entry cap met at
- * the end of a short page still answers {@linkplain Traversal.Result#exhausted() exhausted}; a cap met at the end of a <em>full</em>
- * page answers {@linkplain Traversal.Result#truncated() truncated}, and the continuation may then deliver nothing. The bias is the
- * one {@link Traversal.Result} documents: under-claim completeness, never over-claim it.
+ * the end of a short page still answers {@linkplain Traversal.Result#exhausted() exhausted}; a cap met at the end of a
+ * <em>full</em> page answers {@linkplain Traversal.Result#truncated() truncated}, and the continuation may then deliver
+ * nothing. The bias is the one {@link Traversal.Result} documents: under-claim completeness, never over-claim it.
  *
  * <h2>Contract</h2>
  * <ol>
@@ -61,9 +49,9 @@ import build.jenesis.repository.store.ArtifactStore;
  *   <li><b>Idempotency / replay.</b> A pure read that commits nothing: re-running a call, or resuming from an older
  *       cursor, is always safe. A consumer with side effects must be idempotent per name, since a crash before the
  *       cursor is committed replays the last page.</li>
- *   <li><b>Absence sentinel.</b> An absent or empty container is not an error - {@linkplain Traversal.Result#exhausted() exhausted}
- *       with zero delivered. {@code null} is never returned; a {@code null} or empty cursor starts at the
- *       beginning.</li>
+ *   <li><b>Absence sentinel.</b> An absent or empty container is not an error -
+ *       {@linkplain Traversal.Result#exhausted() exhausted} with zero delivered. {@code null} is never returned; a
+ *       {@code null} or empty cursor starts at the beginning.</li>
  *   <li><b>Selection failure.</b> A malformed prefix raises {@link TraversalException}; a cursor that is not an
  *       immediate child key of that prefix, or a non-positive bound, raises {@link IllegalArgumentException}. Neither
  *       degrades to an empty page.</li>
@@ -81,10 +69,11 @@ import build.jenesis.repository.store.ArtifactStore;
  *   <li><b>Ordering / concurrency.</b> Lexicographic child order, exactly {@link ArtifactStore#page}'s, deterministic
  *       and never self-parallelised.</li>
  *   <li><b>Bounded work / cancellation.</b> The three caps bound every call, and the visible outcome at a bound is
- *       asymmetric by design: {@linkplain Traversal.Result#truncated() truncated} plus a cursor for the <em>entry</em> cap, which is a
- *       bound on one answer's size and therefore resumable, and a thrown {@link TraversalException} naming the bound
- *       for <em>steps</em> and a hostile segment, which have no continuation that makes progress. A caller may not
- *       convert the second kind into the first. A caller cancels by throwing from {@link Names#accept}.</li>
+ *       asymmetric by design: {@linkplain Traversal.Result#truncated() truncated} plus a cursor for the <em>entry</em>
+ *       cap, which is a bound on one answer's size and therefore resumable, and a thrown {@link TraversalException}
+ *       naming the bound for <em>steps</em> and a hostile segment, which have no continuation that makes progress. A
+ *       caller may not convert the second kind into the first. A caller cancels by throwing from
+ *       {@link Names#accept}.</li>
  *   <li><b>Durability / delivery.</b> Nothing is committed here; the cursor becomes durable only when the caller
  *       writes it through the store, and must be committed after the page's effects so a crash replays a page rather
  *       than skipping one.</li>
@@ -118,16 +107,10 @@ public record BoundedChildren(int steps, int entries, int page) {
      * Bounds for draining a whole container: no cap on names, no cap on round-trips, and {@code page} the only knob
      * left.
      *
-     * <p><b>Why this exists rather than two calls.</b> {@link #STEPS} is documented as "enough page round-trips to
-     * drain a container of {@link #ENTRIES} names at the default page size" - it is sized <em>for the default entry
-     * cap</em>. So raising {@code entries} without raising {@code steps} does not remove the ceiling, it moves it
-     * somewhere nobody wrote down: the walk now stops after {@code steps × page} names, and stopping is a
-     * {@link TraversalException.Reason#STEPS} rather than an answer.
-     *
-     * <p>That is not hypothetical. An OCI image with a million tags served fine on memory - the generator streams -
-     * and then failed with a 500, because {@code entries(MAX_VALUE).page(1_000)} left the default thousand steps in
-     * place and a thousand pages of a thousand names is exactly a million. The two knobs are coupled and were being
-     * set one at a time; naming the intent is what stops that.
+     * <p>{@link #STEPS} is sized <em>for the default entry cap</em>, so raising {@code entries} without raising
+     * {@code steps} does not remove the ceiling, it moves it to {@code steps × page} names - a million at the
+     * defaults - where stopping is a {@link TraversalException.Reason#STEPS} rather than an answer. The two knobs are
+     * coupled, and this names the intent so they are set together.
      */
     public static BoundedChildren draining(int page) {
         return new BoundedChildren(Integer.MAX_VALUE, Integer.MAX_VALUE, page);
@@ -145,26 +128,12 @@ public record BoundedChildren(int steps, int entries, int page) {
      * time</em>. Draining a container of N names therefore costs N/page scans of N entries: quadratic, and only on
      * a filesystem.
      *
-     * <p>That is not a small effect at the sizes a large deployment reaches. A walk of the inventory in
-     * {@value #PAGE}-name pages at a million versions is a thousand scans of a million entries: two and a half times
-     * the versions of a 400,000-version walk costs more than five times the work, as a quadratic predicts.
-     *
      * <p>So a drain trades memory it can afford for scans it cannot: {@value #DRAIN_PAGE} names in hand instead of
-     * {@value #PAGE} cuts the scans by the same factor - at a million tags, <b>834 s at a {@value #PAGE} page against
-     * 188 s at {@value #DRAIN_PAGE}</b>, nothing else changed.
+     * {@value #PAGE} cuts the scans by the same factor, and at a million names a drain is a hundred scans, where the
+     * quadratic term no longer dominates the work the walk feeds.
      *
-     * <p><b>A single-sweep drain is not worth owning at this size.</b> The obvious next step is for the store to
-     * drain in one sweep - read the directory once, spill sorted runs, merge them - and at the same million tags it
-     * takes <b>198 s</b>, against 188 for simply paging ten times wider. No better, and a k-way merge and a spool
-     * file worse to own. The reason is
-     * arithmetic: at a {@value #DRAIN_PAGE} page a million names is only a hundred scans, so the quadratic term has
-     * already stopped dominating and the remaining time is the work the walk feeds, not the walk.
-     *
-     * <p>That is a statement about <em>this</em> size, not about the shape. The term is still quadratic, so it
-     * returns: at ten million names a {@value #DRAIN_PAGE} page is a thousand scans of ten million, and a single
-     * pass would win by orders of magnitude. The fix to reach for then is a store that drains in one sweep - and
-     * it should be reached for when the quadratic bites again, not before, which is why the code is not carried in
-     * the meantime.
+     * <p>The term is still quadratic: at ten million names this page is a thousand scans of ten million, and a store
+     * that drains in one sweep (read the directory once, merge sorted runs) would then win by orders of magnitude.
      */
     public static final int DRAIN_PAGE = ArtifactStore.DRAIN_PAGE;
 

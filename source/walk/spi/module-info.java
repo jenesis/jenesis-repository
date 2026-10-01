@@ -17,7 +17,7 @@
  * enumeration of the pointer roots feeding every discovered consumer.
  *
  * <p>Beside the pass model the module owns the shared <em>traversal primitives</em> every scoped store enumeration
- * rides, so a format never hand-rolls a stack walk or a page loop again: {@code Trees} is the one iterative
+ * rides, so a format never hand-rolls a stack walk or a page loop: {@code Trees} is the one iterative
  * (never recursive) depth-first descent over a store's key layout - the reference {@code ArtifactWalk} implementation
  * drives it too, so there is exactly one descent in the product; {@code PagedTreeWalk} adds depth / step / entry /
  * page caps and a continuation cursor to it for a request-scoped subtree walk; {@code BoundedChildren} is its flat

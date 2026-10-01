@@ -10,12 +10,11 @@ import build.jenesis.repository.server.spi.ClientAddresses;
  *
  * <p>Five formats - npm, Composer, Cargo, CocoaPods and NuGet - rewrite the URLs inside a packument, a p2
  * document, a sparse-index entry, a podspec and a service index, so this decides where a client is told to fetch
- * from. One copy is not a style preference here: a defect in it has to be fixed once rather than five times, and a
- * sixth format must not inherit a flaw from a copy-paste.
+ * from.
  *
  * <p>The formats that emit <em>relative</em> URLs instead - PyPI's rewritten hrefs, conda, Debian, RPM, gems, Go,
- * Conan, HuggingFace - need no base at all and do not call this. That is the better answer where a format allows
- * it, which makes the base a divergence to contain rather than a rule to spread.
+ * Conan, HuggingFace - need no base at all and do not call this. Relative URLs are the better answer where a format
+ * allows them.
  *
  * <h2>Where the base comes from, in order</h2>
  *
@@ -24,8 +23,8 @@ import build.jenesis.repository.server.spi.ClientAddresses;
  *   outright. It is the answer for a deployment behind a front door that rewrites paths or sends no forwarded
  *   headers at all - nothing in the request can reconstruct such an address, so the operator names it.</li>
  *   <li><b>A trusted proxy's forwarded headers</b>: {@code X-Forwarded-Proto} and {@code X-Forwarded-Host} are
- *   believed only when the request's peer is within {@code trusted-proxies} - the rule {@code X-Forwarded-For} has
- *   always been held to for the source-IP allowlist. From anyone else they are ignored: a client that sets its own
+ *   believed only when the request's peer is within {@code trusted-proxies} - the rule {@code X-Forwarded-For} is
+ *   held to for the source-IP allowlist. From anyone else they are ignored: a client that sets its own
  *   could otherwise have the registry publish an index - one that may then be cached and served to others - pointing
  *   wherever it likes.</li>
  *   <li><b>The request itself</b>: the scheme the server terminated and the {@code Host} the client asked for,

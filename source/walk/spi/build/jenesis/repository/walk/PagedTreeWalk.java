@@ -6,8 +6,8 @@ import build.jenesis.repository.store.ArtifactStore;
 
 /**
  * A bounded, resumable descent of one store subtree - the shared primitive every serving surface that must enumerate
- * "all the keys under this coordinate" drives, instead of hand-rolling the same stack walk, the same page loop and the
- * same forgotten cap once per format. It is {@link Trees#descend} (the one iterative descent, never recursion, so an
+ * "all the keys under this coordinate" drives, instead of hand-rolling a stack walk, a page loop and a cap per
+ * format. It is {@link Trees#descend} (the one iterative descent, never recursion, so an
  * attacker-shaped key depth cannot overflow a thread stack) with four caps and a continuation bolted on; it is not a
  * second traversal pipeline, and it does not page the store any way other than {@link ArtifactStore#page}.
  *
@@ -23,28 +23,23 @@ import build.jenesis.repository.store.ArtifactStore;
  *       that survives an attacker-shaped tree of a million empty containers holding no leaf at all: a cap on delivered
  *       entries alone would never fire there.</li>
  *   <li>{@link #entries()} - how many leaves one call may deliver ({@value #ENTRIES} by default). Reaching it ends the
- *       call with {@linkplain Traversal.Result#truncated() truncated} and a cursor - the continuation, not a failure. Leaves are
- *       counted as delivered to the consumer, so a caller that filters downstream is bounded by {@link #steps()},
- *       not by this.</li>
+ *       call with {@linkplain Traversal.Result#truncated() truncated} and a cursor - the continuation, not a failure.
+ *       Leaves are counted as delivered to the consumer, so a caller that filters downstream is bounded by
+ *       {@link #steps()}, not by this.</li>
  *   <li>{@link #page()} - the sibling-page width the descent buffers per open container ({@value #PAGE} by default),
  *       so one pathologically wide container cannot dominate the heap.</li>
  * </ul>
  *
- * <p><strong>One cap truncates; three throw.</strong> The four bounds above do not fail the same way, and reading them
- * as if they did is the single most common mistake against this API. Only {@link #entries()} - the bound on how large
- * <em>one answer</em> may be - ends the call as a value: {@linkplain Traversal.Result#truncated() truncated} plus a cursor, which the
- * caller feeds back to get the rest. {@link #depth()}, {@link #steps()} and the traversal-free segment screen
- * <b>throw</b> {@link TraversalException} and produce no {@link Traversal.Result} at all, because they are bounds on
- * how pathological the key space is and none of them has a safe continuation: no cursor in path order can say "resume
- * below a subtree I refused to enter", a step budget too small to re-establish a resume position would hand back a
- * cursor that makes no forward progress, and a name that is not a traversal-free segment must never become a key.
- * Truncating there would drop keys while answering in the vocabulary of completeness - so a caller must not catch a
- * {@link TraversalException} into a short list. See {@link Traversal} for the rule and {@link TraversalException} for
- * each reason's rationale.
+ * <p><strong>One cap truncates; three throw.</strong> Only {@link #entries()} - the bound on how large <em>one
+ * answer</em> may be - ends the call as a value: {@linkplain Traversal.Result#truncated() truncated} plus a cursor,
+ * which the caller feeds back to get the rest. {@link #depth()}, {@link #steps()} and the traversal-free segment
+ * screen <b>throw</b> {@link TraversalException}, because none of them has a safe continuation, and a caller must not
+ * catch one into a short list. {@link Traversal} states the rule and {@link TraversalException} each reason's
+ * rationale.
  *
  * <p><strong>Exhausted or truncated.</strong> The call answers a {@link Traversal.Result}. Reaching the entry cap
- * never looks like a complete listing: the outcome is {@linkplain Traversal.Result#truncated() truncated} and the cursor is the last
- * delivered leaf key. Feeding that cursor back resumes strictly after it, in the same
+ * never looks like a complete listing: the outcome is {@linkplain Traversal.Result#truncated() truncated} and the
+ * cursor is the last delivered leaf key. Feeding that cursor back resumes strictly after it, in the same
  * {@linkplain Trees#order path order} the descent visits in, so no key between two calls is skipped and no key is
  * delivered twice. The resume is a <em>seek</em>, not a re-scan: the cursor's own path is descended directly and every
  * container on it pages from just past the cursor's child, so continuing deep inside a huge subtree costs O(depth)
@@ -67,8 +62,8 @@ import build.jenesis.repository.store.ArtifactStore;
  *       at-least-once across a crash that lost an uncommitted cursor, so a consumer with side effects must be
  *       idempotent per key.</li>
  *   <li><b>Absence sentinel.</b> An absent or empty subtree is not an error: the result is
- *       {@linkplain Traversal.Result#exhausted() exhausted} with zero delivered and no cursor. {@code null} is never returned; a
- *       {@code null} or empty cursor argument means "start at the beginning".</li>
+ *       {@linkplain Traversal.Result#exhausted() exhausted} with zero delivered and no cursor. {@code null} is never
+ *       returned; a {@code null} or empty cursor argument means "start at the beginning".</li>
  *   <li><b>Selection failure.</b> A malformed root or a cursor that is not a key under the root is a caller error and
  *       fails immediately - {@link TraversalException} naming the offending key for a root that is not a
  *       traversal-free key, {@link IllegalArgumentException} for a cursor aimed outside the root or a non-positive
@@ -93,12 +88,12 @@ import build.jenesis.repository.store.ArtifactStore;
  *       one call never parallelises itself. Concurrent calls over disjoint cursors of the same subtree are
  *       independent.</li>
  *   <li><b>Bounded work / cancellation.</b> The four caps above bound every call, and the visible outcome at a bound
- *       is asymmetric by design: {@linkplain Traversal.Result#truncated() truncated} plus a cursor for the <em>entry</em> cap, which
- *       is a bound on one answer's size and therefore resumable, and a thrown {@link TraversalException} naming the
- *       bound and the key for <em>depth</em>, <em>steps</em> and a hostile segment, which are bounds on how
- *       pathological the key space is and have no continuation that makes progress. A caller may not convert the
- *       second kind into the first. A caller cancels by throwing from {@link Leaves#accept}, which abandons the
- *       descent immediately.</li>
+ *       is asymmetric by design: {@linkplain Traversal.Result#truncated() truncated} plus a cursor for the
+ *       <em>entry</em> cap, which is a bound on one answer's size and therefore resumable, and a thrown
+ *       {@link TraversalException} naming the bound and the key for <em>depth</em>, <em>steps</em> and a hostile
+ *       segment, which are bounds on how pathological the key space is and have no continuation that makes progress. A
+ *       caller may not convert the second kind into the first. A caller cancels by throwing from {@link Leaves#accept},
+ *       which abandons the descent immediately.</li>
  *   <li><b>Durability / delivery.</b> The primitive commits nothing; the caller owns the commit point. The cursor is
  *       durable only once the caller has written it through the store, and the crash window is exactly the gap
  *       between committing a page's effects and committing its cursor - a window that costs a replay of one page,
@@ -197,11 +192,9 @@ public record PagedTreeWalk(int depth, int steps, int entries, int page) {
      * The same walk with a subtree {@code prune} - a whole branch the caller does not merely decline to emit but
      * declines to <em>enter</em>.
      *
-     * <p>The distinction is not an optimisation. A caller that filters in {@link Leaves#accept} still pays the
-     * descent: every container under the pruned branch is opened, every page of it read, and every step charged
-     * against a budget that exists to bound exactly that work. For a branch that is stored but never served - the
-     * gate's {@code publish/quarantine} review subtree is the case this exists for - that is both a cost the answer
-     * never uses and a screen stated in the wrong place, because "never enumerated" and "enumerated then dropped"
+     * <p>A caller that filters in {@link Leaves#accept} still pays the descent: every container under the branch is
+     * opened, every page of it read, and every step charged against the budget. For a branch that is stored but never
+     * served - the gate's {@code publish/quarantine} review subtree - "never enumerated" and "enumerated then dropped"
      * are different guarantees when the enumeration is what is bounded.
      */
     public Traversal.Result walk(ArtifactStore store, String root, String cursor, Leaves leaves, Prune prune)

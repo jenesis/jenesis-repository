@@ -32,7 +32,7 @@ import build.jenesis.repository.store.ArtifactStore;
  *     <li>A <b>version-pinned or content-addressed</b> document - an artifact, a per-version manifest or metadata file
  *         the client already resolved to a fixed identity. Here the {@code 404} says "not cached here", the client
  *         re-pulls or falls through to its next configured source, and nothing about a build's resolution is decided
- *         by the absence. {@code false} for every failure is right, and stays right.</li>
+ *         by the absence. {@code false} for every failure is right.</li>
  *     <li>An <b>enumeration</b> - a version list, a packument, a PEP 503 simple index, a {@code repodata} or
  *         {@code Packages} index, a {@code maven-metadata.xml}. Here the {@code 404} <em>is</em> an answer: an empty
  *         enumeration a build resolves against, which the client records as a fact about the world ("this package has
@@ -66,11 +66,10 @@ import build.jenesis.repository.store.ArtifactStore;
  *     <p><b>The check runs before anything is linked, never as a retraction afterwards</b>. An adapter may
  *     have to <em>store</em> the body first - that is how a digest is computed while the bytes stream instead of
  *     buffering them - but a stored blob is inert until a pointer references it, so every adapter can verify before
- *     the layout and none has to undo one. The difference is not stylistic: a fill that links first is briefly
- *     serving bytes it has not verified, a failure part-way through the undoing leaves them served for good, and
- *     there is no repair route on this leg at all, because the pointer it failed to remove is exactly what stops the
- *     next pull from being a miss (clause "Read purity": a local hit never touches the upstream). Every leg in this
- *     repository is in that order, and an adapter in another edition that links first and undoes it is a defect
+ *     the layout and none has to undo one. A fill that links first is briefly serving bytes it has not verified, a
+ *     failure part-way through the undoing leaves them served for good, and there is no repair route on this leg at
+ *     all, because the pointer it failed to remove is exactly what stops the next pull from being a miss (clause
+ *     "Read purity": a local hit never touches the upstream). An adapter that links first and undoes it is a defect
  *     against this clause rather than a variation of it.
  *     <p><b>"We could not read the digest" is not "the upstream publishes none".</b> The unverified fall-back above
  *     is written for the upstream having <em>published nothing</em> - Maven serves jars whose {@code .sha1} sibling
@@ -79,8 +78,8 @@ import build.jenesis.repository.store.ArtifactStore;
  *     behind a shared-egress {@code 429}, a registration leaf whose advertised URL an outbound screen refuses, a
  *     checksum sibling answered by a captive portal: answering any of those as "this ecosystem declares no digest for
  *     this artifact" would cache the artifact with no point check at all. That is a silent fail-open, not a wrong
- *     answer - anyone able to drop one
- *     sidecar fetch turns this clause's "held to it and a mismatch is refused" off for that pull - and it is the
+ *     answer - anyone able to drop one sidecar fetch turns this clause's "held to it and a mismatch is refused" off
+ *     for that pull - and it is the
  *     integrity-surface twin of the split clause 2 makes on the discovery surface. So an adapter splits the same way,
  *     by <em>who said what</em>:
  *     <ul>
@@ -185,9 +184,8 @@ public interface ProxyFormat {
      * The documents an upstream publishes <em>about</em> an artifact, fetched beside it on a fill so the screen sees
      * them before it decides: a detached signature, a Sigstore bundle, a registry's attestations for the version. A
      * client never asks for most of them - nothing in a Maven resolution requests the {@code .asc}, and no gem client
-     * fetches the attestations API - so without this a proxied artifact was screened with whatever sidecar an earlier
-     * client request had left in the store, which is usually nothing, and the missing-signature dial softened to
-     * ALLOW on the proxy leg for exactly that reason.
+     * fetches the attestations API - so without this a proxied artifact would be screened with whatever sidecar an
+     * earlier client request had left in the store, which is usually nothing.
      *
      * <p>Each companion names the request path it is kept at and the upstream URL it is fetched from. The caller
      * fetches every companion once per fill, bounded to {@link ArtifactSignatures.Material#LARGEST_SIGNATURE},
@@ -312,12 +310,12 @@ public interface ProxyFormat {
         Optional<Download> download(URI url, Map<String, String> requestHeaders) throws IOException;
 
         /**
-         * Ask the upstream for a {@code GET}'s status and response headers <em>without</em> its body - the size, content
-         * type, {@code ETag} / {@code Last-Modified} and auth challenge a {@code HEAD} is served from, so a repository
-         * can answer a client {@code HEAD} (or size-probe a candidate) without pulling the artifact. An empty result is
-         * a transport failure and a non-{@code 200} rides in the {@link Head}'s status, mirroring {@link #fetch} /
-         * {@link #download} - the caller acts on the status rather than the fetcher throwing. {@link #NONE} answers
-         * empty here as it does for every capability.
+         * Ask the upstream for a {@code GET}'s status and response headers <em>without</em> its body - the size,
+         * content type, {@code ETag} / {@code Last-Modified} and auth challenge a {@code HEAD} is served from, so a
+         * repository can answer a client {@code HEAD} (or size-probe a candidate) without pulling the artifact. An
+         * empty result is a transport failure and a non-{@code 200} rides in the {@link Head}'s status, mirroring
+         * {@link #fetch} / {@link #download} - the caller acts on the status rather than the fetcher throwing.
+         * {@link #NONE} answers empty here as it does for every capability.
          *
          * <p>A real transport issues an actual HTTP {@code HEAD}, so the body is never opened at all and a huge
          * uncached artifact's {@code HEAD} costs a header exchange rather than a body transfer - the
@@ -330,8 +328,8 @@ public interface ProxyFormat {
 
         /**
          * Fetch a document the walk cannot proceed without, raising {@link Unavailable} where the upstream did not
-         * deliver one. It is the preamble every enumeration wrote out for itself - an empty answer, then a
-         * non-{@code 200} - written once, so the classification clause 2 states cannot drift from one format to the
+         * deliver one. It is the preamble every enumeration needs - an empty answer, then a non-{@code 200} -
+         * written once, so the classification clause 2 states cannot drift from one format to the
          * next. A leg that reads some status as an answer rather than a failure (a {@code 404} meaning "this package
          * contributes nothing") keeps its own branch and calls the {@link Unavailable} factories directly.
          *
@@ -429,7 +427,8 @@ public interface ProxyFormat {
         }
     }
 
-    /** An upstream response: the HTTP status, the body, and the response headers (for content type and auth challenges). */
+    /** An upstream response: the HTTP status, the body, and the response headers (for content type and auth
+     *  challenges). */
     record Fetched(int status, byte[] body, Map<String, String> headers) {
 
         /** The first value of a response header, case-insensitively, or {@code null}. */

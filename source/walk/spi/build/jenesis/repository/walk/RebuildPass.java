@@ -26,7 +26,7 @@ import build.jenesis.repository.store.ServableNames;
  * per published version with its coordinate, where this pass would hand them several pointers per version and no
  * coordinate; the size roll-up folds directories post-order), or its <em>completeness rule</em> (the collector's
  * mark and the two reconciles must see every pointer, withheld ones included - a mark that took this pass's screened
- * view would leave a held artifact's blob unmarked and the sweep would reclaim it). What rides here today is the
+ * view would leave a held artifact's blob unmarked and the sweep would reclaim it). What rides here is the
  * pointer-level consumers - a module view, a format's inventory backfill - and a new consumer that keys on pointers
  * belongs here rather than on a walk of its own.
  *
@@ -71,8 +71,8 @@ import build.jenesis.repository.store.ServableNames;
  * the one that broke, which is what propagating the failure through a shared cursor would cost. Either way nothing
  * is served as whole that is
  * not: a stuck pass is visible through {@link ArtifactWalk#pass} / {@link ArtifactWalk#segments}, a failed
- * consumer through {@link #failed}. {@link WalkConsumer#onPassStarted} fires on this worker before its first delivery (and
- * before {@code onPassCompleted} on an empty store - a rebuild from an empty truth is still a rebuild);
+ * consumer through {@link #failed}. {@link WalkConsumer#onPassStarted} fires on this worker before its first delivery
+ * (and before {@code onPassCompleted} on an empty store - a rebuild from an empty truth is still a rebuild);
  * {@link WalkConsumer#onPassCompleted} fires when this worker observed the pass complete. The hooks are per-worker:
  * with one scheduled worker driving the pass - the default - a snapshot rebuilder sees the whole pass between its
  * hooks, while a deployment that fans {@code run} across threads or nodes keeps every streaming consumer correct
@@ -386,8 +386,8 @@ public final class RebuildPass {
         private final Map<WalkConsumer.Family, List<WalkConsumer>> listening;
         private final Map<String, WalkConsumer.Family> familyByRoot;
         private final String scope;
-        /** Whether any consumer listening on POINTERS reads the blob's size - resolved once, not per pointer. */
-        /** Whether any of them distinguishes a withheld pointer from a served one - likewise resolved once. */
+        /** Whether any consumer listening on POINTERS distinguishes a withheld pointer from a served one - resolved
+         *  once, not per pointer. */
         private final boolean heldWanted;
         /** Whether any listener uses a pointer delivery at all; with none, no pointer body is read. */
         private final boolean pointersWanted;
@@ -524,8 +524,8 @@ public final class RebuildPass {
             visit(key, store.size(key));
         }
 
-        /** The size the listing already carried: a HEAD per object was the walk's largest single cost over an object
-         *  store, paid for every key to decide whether it was small enough to be a pointer. */
+        /** The size the listing already carried, so the walk pays no HEAD per object to decide whether a key is small
+         *  enough to be a pointer - over an object store that would be the walk's largest single cost. */
         @Override
         public void visit(ArtifactStore.Listed entry) throws IOException {
             visit(entry.key(), entry.size().isPresent() ? entry.size().getAsLong() : store.size(entry.key()));
@@ -567,8 +567,7 @@ public final class RebuildPass {
                 return;
             }
             if (!pointersWanted) {
-                // No listener uses a pointer delivery, so there is none to build and the body need not be read.
-                // That was a second full read of the pointer tree beside the reader that actually uses it. A
+                // No listener uses a pointer delivery, so there is none to build and the body need not be read. A
                 // consumer that asked for every key has already had this one, above, without a body being read.
                 return;
             }

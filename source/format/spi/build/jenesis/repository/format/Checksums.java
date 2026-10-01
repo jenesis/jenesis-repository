@@ -6,13 +6,10 @@ import module java.base;
  * The checksum a format publishes beside an artifact, as the hex every one of them serves it in.
  *
  * <p>Computing one is what a format does constantly - a Maven {@code .sha1} twin, a Debian {@code Packages} entry,
- * an OCI descriptor's digest, a gem's checksum, a Conda index record - and the same six lines had been written out
- * five times, in five modules, character for character apart from the method name and whether the algorithm was a
- * parameter or fixed. Five copies of one function is five chances for one of them to disagree about the encoding,
- * and the encoding is wire-visible: a client verifies what is served against what the document says.
+ * an OCI descriptor's digest, a gem's checksum, a Conda index record - and the encoding is wire-visible: a client
+ * verifies what is served against what the document says, so every format computes it here.
  *
- * <p>Lower case is not a preference here. It is what every one of those five produced and therefore what is
- * already published, and it is what the formats' own specifications call for.
+ * <p>Lower case is what the formats' own specifications call for, and what is already published.
  */
 public final class Checksums {
 

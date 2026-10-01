@@ -18,13 +18,11 @@ import build.jenesis.repository.store.ArtifactStore;
  * control characters together, and which the store's own write screen is stated in terms of. {@link #unsafe} judges a
  * <em>single name part</em> a format splices into a key (a package name, a version, an upstream-chosen filename), so
  * it adds the one question the core's path predicate cannot answer for a name part: a {@code /} is a separator in a
- * path and hostile in a name. {@link #unsafePath} judges a whole client-supplied <em>request path</em> and is now
- * exactly the core question, kept as a named seam because the shared request screen reads better asking
- * {@code Keys.unsafePath} at a request boundary than negating a store predicate.
+ * path and hostile in a name. {@link #unsafePath} judges a whole client-supplied <em>request path</em> and is
+ * exactly the core question, named for what a request boundary asks.
  *
- * <p><b>This class carries no copy of the character rule</b>: two statements of one rule could only drift, and the
- * front door and the store boundary would then disagree about which publishes are legal, each believing the other
- * agreed.
+ * <p><b>This class carries no copy of the character rule</b>, so the front door and the store boundary cannot
+ * disagree about which publishes are legal.
  */
 public final class Keys {
 
@@ -49,13 +47,11 @@ public final class Keys {
      * it carries a {@code .} or {@code ..} segment, or when it bears a {@code \} or a C0 control character anywhere.
      * A backslash means a separator on a Windows-hosted filesystem backend and a literal character on the three
      * object stores; a control character smuggles a null or a line break into a key and into every log line and
-     * generated index that key later reaches. Neither is part of a legitimate coordinate in any of the fourteen
-     * ecosystems, so refusing them costs nothing.
+     * generated index that key later reaches. Neither is part of a legitimate coordinate in any ecosystem, so
+     * refusing them costs nothing.
      *
-     * <p>This method is a pure delegation, and that is the point: the request seam and the store's write screen
-     * ask one predicate, so they cannot refuse different shapes. It stays as a named method rather than being
-     * inlined at its call site because {@code unsafePath} says what a request boundary is asking, and because a
-     * future request-only rule - one that has no business in a store key screen - would land here.
+     * <p>This method is a pure delegation: the request seam and the store's write screen ask one predicate, so they
+     * cannot refuse different shapes.
      *
      * <p>An <em>empty</em> segment is deliberately not unsafe, exactly as {@link ArtifactStore#traversalFree} rules:
      * a trailing slash on a directory-style read and a doubled separator are legitimate request shapes, not traversals.

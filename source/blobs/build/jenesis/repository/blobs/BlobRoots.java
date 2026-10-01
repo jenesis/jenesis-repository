@@ -19,12 +19,11 @@ import build.jenesis.repository.format.EcosystemLayout;
  * a blob no pointer names is reclaimed. Without this a blobs-namespace format's content is invisible to the reference
  * scan, which reclaims (deletes) blobs the format still serves. This is the direct counterpart of Maven's
  * {@code Publication}-namespace path: {@code blobRoots} is to the blobs namespace what the {@code publish/} scan is to
- * Maven. The declaration has one home, never a second one on the collector's own lending seam, because two homes
- * for one answer produce a data-loss bug the day they disagree; {@link BlobReferences} is the home, because the
- * collector that must not get it wrong asks
- * {@link BlobReferences#installed()} for its lenders.
+ * Maven. The declaration has one home, {@link BlobReferences}, because the collector asks
+ * {@link BlobReferences#installed()} for its lenders and two homes for one answer would lose data the day they
+ * disagreed.
  *
- * <p><b>What extending it buys, beyond one home.</b> Every blobs-namespace format is a lender the
+ * <p>Every blobs-namespace format is therefore a lender the
  * mark phase can ask {@link BlobReferences#references what else a visited key keeps alive}, at zero cost and with no
  * per-format edit: the inherited default answers empty, which is <em>exact</em> for a format whose every served blob is
  * named by a bare-hex pointer body - the scan already counted it. A format whose content is reachable only through a

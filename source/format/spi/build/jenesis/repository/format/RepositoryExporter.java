@@ -54,7 +54,6 @@ public interface RepositoryExporter {
     default void exported(ArtifactStore repository, String coordinate, ExportTarget target) throws IOException {
     }
 
-    /** What the job walks to find this format's versions. */
     /**
      * The ecosystem whose inventory rows name this format's versions, for a format that is not itself the
      * {@link EcosystemLayout} they were recorded under - OCI, whose layout is a capability provider of its own. Empty,
@@ -73,6 +72,7 @@ public interface RepositoryExporter {
         return "/";
     }
 
+    /** What the job walks to find this format's versions. */
     default Units units() {
         return Units.INVENTORY;
     }

@@ -10,26 +10,19 @@ import build.jenesis.repository.store.ArtifactStore;
 /**
  * The pull-through leg of a proxying format, with the front-door path screen already applied. Every proxying format
  * implements this rather than {@link ProxyFormat} directly, so the screen a proxy leg owes its request
- * path is a property of <em>the seam</em> instead of a line each of the fourteen legs had to remember to write.
+ * path is a property of <em>the seam</em> instead of a line each leg must remember to write.
  *
- * <p>A screen each leg writes for itself splits: a divergence on a shared concern is a bug even when no leg is
- * exploitable, and one the store boundary below does not re-screen. So {@link #proxy} is
- * {@code default} and {@code final} in spirit - it screens, then hands control to {@link #pullThrough}, which is the
- * only method a format writes. A fifteenth format cannot get this wrong by omission, because there is nothing left for
- * it to omit.
+ * <p>{@link #proxy} is {@code default} and {@code final} in spirit - it screens, then hands control to
+ * {@link #pullThrough}, which is the only method a format writes, so a new format cannot omit the screen.
  *
  * <p>{@link Keys#unsafePath} is a pure delegation to {@code ArtifactStore.traversalFree}, which refuses a backslash
  * and a C0 control character alongside the {@code .}/{@code ..} segments. So this seam and the layouts' own request
- * screens refuse exactly the same shapes, and there is one predicate rather than two that agree.
- *
- * <p>The value of {@code unsafePath} is not that it is stricter, but that a request boundary names what it is asking. A
- * future request-only rule - one with no business in a store key screen - would land there, and until one does the
- * two are the same question.
+ * screens refuse exactly the same shapes, through one predicate.
  *
  * <h2>Contract</h2>
  * This is a role sub-interface of {@link ProxyFormat}, which is itself a role of {@link RepositoryFormat}: every clause
- * of both contracts binds unchanged and is documented in {@code ../jenesis-repository}, which owns them. Only what this
- * seam <em>adds</em> is stated here.
+ * of both contracts binds unchanged and is documented on those interfaces. Only what this seam <em>adds</em> is
+ * stated here.
  * <ol>
  * <li><b>Thread-safety.</b> Unchanged: a format is a stateless singleton the server calls concurrently. This interface
  *     adds no state of its own - {@link #proxy} is a pure screen over its arguments and holds nothing between
@@ -51,22 +44,17 @@ import build.jenesis.repository.store.ArtifactStore;
  *     {@link ProxyRelay.Document#ENUMERATION} or {@link ProxyRelay.Document#PINNED}, and the <em>rule</em> - upstream
  *     {@code 404}/{@code 410} is a real miss and the local {@code 404} stands; a transport failure or any other
  *     non-{@code 200} answers {@code 502} and is logged - lives once, in
- *     {@link ProxyRelay#unanswered}. The classification could not be lifted with it: which of a format's paths is a
- *     version list is exactly the protocol knowledge only that format has, so unlike {@link #proxy}'s request-path
- *     screen this seam cannot discharge the obligation structurally. What it does instead is make the
- *     classification <em>unskippable</em> - there is no relay helper that does not take a {@link ProxyRelay.Document}
- *     - and the enumeration clause below requires a row from every leg
- *     naming its enumeration and pinned paths, so a fifteenth format cannot get it wrong by silence.</li>
+ *     {@link ProxyRelay#unanswered}. The classification stays with the format: which of its paths is a version list
+ *     is protocol knowledge only the format has, so unlike {@link #proxy}'s request-path screen this seam cannot
+ *     discharge the obligation structurally. It makes the classification <em>unskippable</em> instead - no relay
+ *     helper omits the {@link ProxyRelay.Document} - and every leg names its enumeration and pinned paths.</li>
  * <li><b>A digest we could not read is not a digest the upstream does not publish.</b> The same split, one
  *     layer down, on the <em>integrity</em> surface - where it is not a wrong answer but a silent fail-open.
- *     {@link ProxyFormat} clause 5 licenses one fall-back and gives the reason for it: an ecosystem that advertises no
- *     digest proxies unverified rather than fabricating a check. That reasoning was written for the upstream having
- *     <em>published nothing</em>, and every leg whose digest comes out of a <em>second</em> document was applying it to
- *     a case the clause never covered: <em>we could not read what it published</em>. A packument fetch that timed out,
- *     a compact index behind a shared-egress {@code 429}, a registration leaf the outbound screen refuses - each
- *     returned "this ecosystem declares no checksum for this artifact", and the artifact was then cached with an
- *     unverified write. Anyone who can drop one sidecar fetch turns integrity off for that pull, and clause 5's "held
- *     to it and a mismatch is refused" quietly does not run.
+ *     {@link ProxyFormat} clause 5 lets an ecosystem that advertises no digest proxy unverified rather than fabricate
+ *     a check. That covers an upstream that <em>published nothing</em>, never a leg whose digest comes out of a
+ *     <em>second</em> document it <em>could not read</em> - a packument fetch that timed out, a compact index behind a
+ *     shared-egress {@code 429}, a registration leaf the outbound screen refuses. Treating those as "declares no
+ *     checksum" would let anyone who can drop one sidecar fetch turn integrity off for that pull.
  *     <p><b>So every fill names which of the three it is</b> -
  *     {@link ProxyRelay.Declared#of a declared digest}, {@link ProxyRelay.Declared#NONE} ("the document answered and
  *     declares none", clause 5's fall-back, deliberately unchanged), or
@@ -74,10 +62,9 @@ import build.jenesis.repository.store.ArtifactStore;
  *     {@link ProxyRelay#fill}: an unreadable declaration <b>declines the fill</b> through
  *     {@link ProxyRelay#unverifiable} (a {@code WARN}, nothing cached, nothing served, the local {@code 404} standing
  *     so a later pull re-hits the upstream), a declared one is verified pointer-last, and only {@code NONE} caches
- *     unverified. As with the clause above, the <em>classification</em> could not be lifted: which fetch declares a
- *     digest, and which of its outcomes is the upstream answering, is protocol knowledge only the format has. It is
- *     stated as a clause here, which every leg owes: a leg
- *     has no row naming its declaring document. Three legs (composer, cocoapods, pypi) have no split to make because
+ *     unverified. As with the clause above, the <em>classification</em> stays with the format: which fetch declares a
+ *     digest, and which of its outcomes is the upstream answering, is protocol knowledge only the format has, and
+ *     every leg names its declaring document. Three legs (composer, cocoapods, pypi) have no split to make because
  *     their declaring document is the same one that resolves the download URL, so an unreadable one already declines
  *     the whole fill; one (huggingface) reads its digest off the artifact's own response headers, so there is no second
  *     fetch to drop; and one (debian) can reach no declaring document from a {@code pool/} request at all. Each of
@@ -88,7 +75,7 @@ import build.jenesis.repository.store.ArtifactStore;
  *     rather than trusting it.</li>
  * <li><b>Error visibility.</b> Nothing is swallowed. The screen decides before any store or network call and
  *     returns a value; it never catches an exception out of {@link #pullThrough}, so a transport or store failure
- *     surfaces exactly as it did when each leg screened for itself.</li>
+ *     surfaces unchanged.</li>
  * <li><b>Read purity.</b> The screen performs no store read, no fetch and no write, so a refusal costs a
  *     string scan and reaches neither the upstream nor the store. This is the property that makes the screen safe to
  *     run unconditionally on every proxied request.</li>
@@ -122,17 +109,13 @@ import build.jenesis.repository.store.ArtifactStore;
  *     not a policy question but an {@code HttpRequest.newBuilder} {@code IllegalArgumentException}, i.e. a {@code 500}
  *     where clause 2 says {@code 404}. The blocked host ranges themselves stay the shared free
  *     {@code build.jenesis.repository.net.PrivateHosts} classifier - never a private copy.
- *     <p><b>The whole screen is {@link OutboundTargets}, and there is exactly one of it</b>. Two disagreeing shapes of
- *     the host half - <em>same-origin-exempt</em> (NuGet, Cargo, rpm) versus <em>absolute-refuse</em> (Composer, PyPI,
- *     CocoaPods) - were once left in use deliberately, so that a security fix could not silently change fourteen legs'
- *     reachability at the same time. The question was then settled on the exempting side, tightened to the upstream's
- *     <em>origin</em> rather than its bare host name: a target at the scheme-and-authority the operator configured is
- *     admitted, everything cross-origin runs the full screen. The argument is {@link OutboundTargets}'s - the
- *     configured upstream itself is judged on its transport half alone, so absolute-refuse was applying a stricter rule
- *     to the upstream's second path than the product applies to the upstream, and the exempting rule is already stated
- *     for the leg with this shape ({@code ImportScreen.refusalReason}). Both directions are ratcheted by the proxy
- *     contract kit: a leg that refuses its own upstream's origin fails, and so does one that follows a private target
- *     off it.</li>
+ *     <p><b>The whole screen is {@link OutboundTargets}, and there is exactly one of it</b>: a target at the
+ *     scheme-and-authority the operator configured is admitted, and everything cross-origin runs the full screen.
+ *     The configured upstream itself is judged on its transport half alone, so its own origin is not held to a
+ *     stricter rule on a second path ({@link OutboundTargets} states the reasoning, and
+ *     {@code ImportScreen.refusalReason} applies the same rule). Both directions are ratcheted by the proxy contract
+ *     kit: a leg that refuses its own upstream's origin fails, and so does one that follows a private target off
+ *     it.</li>
  * <li><b>Rewrite fidelity.</b> A leg that serves an upstream <em>document</em> rather than an artifact either rewrites
  *     the download URLs inside it to point back through this repository (npm's packument {@code dist.tarball}) or
  *     leaves the document alone because it carries no absolute URLs (Conan's index reads, HuggingFace's tree API).
@@ -154,17 +137,17 @@ public interface ProxyLeg extends RepositoryFormat, ProxyFormat {
      *
      * <p><b>Why one deployment-global dial and not one per format.</b> The question it answers is about this
      * deployment's network position and the transport it will put a credential on - not about npm versus rpm. An
-     * operator running a plaintext internal mirror has that mirror for every format they proxy from it, so a per-format
-     * dial would be the same answer typed fourteen times, and each copy a chance to believe the guard is on while one
-     * format's traffic is in the clear. It is the same reason {@code PrivateHostGuard} refuses to split its two halves
-     * into two settings, the same shape as {@code forwarding-allow-internal}, {@code emulator-allow-internal} and
-     * {@code block-private-import-hosts}, and the reason it is not tenant-overridable: one tenant must not be able to
-     * put the deployment's per-host upstream credential on the wire in cleartext for everyone.
+     * operator running a plaintext internal mirror has that mirror for every format they proxy from it, and a
+     * per-format dial would be a chance to believe the guard is on while one format's traffic is in the clear. It is
+     * the same reason {@code PrivateHostGuard} refuses to split its two halves into two settings, the same shape as
+     * {@code forwarding-allow-internal}, {@code emulator-allow-internal} and {@code block-private-import-hosts}, and
+     * the reason it is not tenant-overridable: one tenant must not be able to put the deployment's per-host upstream
+     * credential on the wire in cleartext for everyone.
      */
     String ALLOW_INTERNAL = "proxy-allow-internal";
 
     /**
-     * Whether {@link #ALLOW_INTERNAL} is set for this exchange - the one read of the dial, so fourteen legs cannot
+     * Whether {@link #ALLOW_INTERNAL} is set for this exchange - the one read of the dial, so the legs cannot
      * drift on the key's spelling or its default. Absent configuration reads as {@code false}: {@code FormatExchange}
      * answers {@code null} for any exchange that carries no configuration (a headless embed, an internal push
      * exchange, a test double), and the secure answer for "no configuration at all" is the guard on.

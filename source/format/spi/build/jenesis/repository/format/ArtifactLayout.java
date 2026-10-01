@@ -58,12 +58,10 @@ import build.jenesis.repository.store.ArtifactStore;
  * <li><b>Exclusive prefixes.</b> A prefix {@link #paths} returns for a coordinate version contains that version's
  *     files and <em>nothing else</em> - in particular, nothing belonging to another version of the same coordinate.
  *     Two distinct versions therefore map to prefixes neither of which contains the other.
- *     <p>This is the clause with teeth, because of what the prefixes are for: eviction enumerates every key beneath
- *     them and unpublishes it, so a layout that answered the <em>module</em> directory rather than the version's own
- *     would delete a version's siblings, and the operator asked only for one version to go. It is stated here rather
- *     than left implicit because every layout in this build happens to honour it, which is exactly the condition
- *     under which an assumption goes unnoticed until a layout does not - and the reading that produces one is
- *     natural: "where does this version live" has an obvious answer one directory too high.
+ *     <p>Eviction enumerates every key beneath the prefixes and unpublishes it, so a layout that answered the
+ *     <em>module</em> directory rather than the version's own would delete a version's siblings, and the operator
+ *     asked only for one version to go. "Where does this version live" has an obvious answer one directory too
+ *     high.
  *     <p>A layout whose pattern gives a version no directory of its own therefore cannot be expressed here, and
  *     should answer empty rather than a prefix it does not own. That is a real constraint on a layout's pattern, not
  *     a gap to be worked around at the call site: the caller has no way to tell an exclusive prefix from a shared
@@ -85,15 +83,10 @@ public interface ArtifactLayout extends EcosystemLayout {
      * {@code /} rule the store screens a <em>scope segment</em> on ({@link ArtifactStore#segment}), stated once here
      * for every layout rather than re-derived per format: a Maven artifactId, an OCI tag and a module name are all
      * single segments, and a Maven groupId is checked component by component because its dots become separators.
-     * Shared so a new layout inherits the guard instead of being the next one to forget it.
      *
-     * <p><b>It says "the same rule" and asks for it</b>, rather than restating it. Spelling out {@code .}, {@code ..}
-     * and {@code \} here would be the same rule only for as long as nobody adds to the original - and a copy that fell
-     * behind would let a tab-bearing coordinate be addressable here and refused at the key screen. That gap is not
-     * merely cosmetic, because the keys {@link #paths} composes are handed to eviction, and a delete is not screened
-     * the way
-     * a write is: the composing seam is the one that has to refuse. A guard that describes itself as a copy of
-     * another is a guard that will fall behind it.
+     * <p>It asks the store's predicate rather than restating it, so it cannot fall behind the key screen: the keys
+     * {@link #paths} composes are handed to eviction, and a delete is not screened the way a write is, so the
+     * composing seam is the one that has to refuse.
      */
     static boolean addressable(String... parts) {
         for (String part : parts) {
@@ -113,7 +106,8 @@ public interface ArtifactLayout extends EcosystemLayout {
     String ecosystem();
 
     /** The descriptor for a request path this format owns (hash and size unset, since nothing is stored yet), or empty
-     *  when the path carries no coordinate to describe (generated metadata, a directory). Derived from the path only. */
+     *  when the path carries no coordinate to describe (generated metadata, a directory). Derived from the path only.
+     *  */
     Optional<ArtifactDescriptor> describe(String path);
 
     /**
@@ -147,27 +141,20 @@ public interface ArtifactLayout extends EcosystemLayout {
      *  design for a format that serves from a blobs namespace rather than from the published tree - see the class
      *  note above before reading that as a missing mapping.
      *
-     *  <p><b>These two overloads split on "touches the store", where a caller's real question is "opens a blob".</b>
-     *  That is worth knowing before writing a layout whose pattern is per-repository: it would want a third shape -
-     *  a bounded read of its own small configuration document, which opens no artifact - and neither overload
-     *  expresses it, so such a layout must either use this one and be excluded from every read path that must not
-     *  buffer a blob, or fix one pattern for the whole deployment.
-     *
-     *  <p>The standing rule is the second, and it is a decision rather than an omission: a layout's pattern is
-     *  deployment-wide. Nothing installed needs otherwise, and both alternatives are worse until something does -
-     *  narrowing this overload means moving Maven's module-view mirror to a seam of its own, and three overloads on
-     *  one concern is the shape a reader misreads. {@link #describe(String, ArtifactStore)} already carries the
-     *  read direction for a per-repository layout, so only this direction is deferred. */
+     *  <p>The two overloads split on "touches the store", where a caller's real question is "opens a blob": this one
+     *  may open an artifact (Maven's module-view mirror reads a jar), so it is excluded from every read path that must
+     *  not buffer a blob. In this direction a layout's pattern is therefore deployment-wide;
+     *  {@link #describe(String, ArtifactStore)} carries the read direction for a per-repository layout. */
     List<String> paths(String coordinate, String version, ArtifactStore store);
 
     /** The request-path folders a coordinate version occupies computed from the coordinate alone - no artifact read,
      *  the primary layout path first. A <em>read path</em> that only needs to navigate to a coordinate's folder (a
-     *  console search linking a hit into the browse tree) calls this, never {@link #paths(String, String, ArtifactStore)}
-     *  whose store-derived cross-published mirrors may open a stored artifact (Maven reads a jar's module name for its
-     *  {@code /module/} mirror) - so the read path never buffers a blob. Defaults to empty, which is exact for a format
-     *  whose pointers are not enumerable from the coordinate alone (the shared-{@code blobs} formats already return
-     *  empty from the store overload); a format overrides it when its primary folder is a pure function of the
-     *  coordinate. */
+     *  console search linking a hit into the browse tree) calls this, never {@link #paths(String, String,
+     *  ArtifactStore)} whose store-derived cross-published mirrors may open a stored artifact (Maven reads a jar's
+     *  module name for its {@code /module/} mirror) - so the read path never buffers a blob. Defaults to empty, which
+     *  is exact for a format whose pointers are not enumerable from the coordinate alone (the shared-{@code blobs}
+     *  formats already return empty from the store overload); a format overrides it when its primary folder is a pure
+     *  function of the coordinate. */
     default List<String> paths(String coordinate, String version) {
         return List.of();
     }

@@ -9,9 +9,9 @@ import module java.base;
  * numerically where both sides are numeric and lexically otherwise, a missing component reads as zero, and a
  * pre-release sorts below the same release, identifier by identifier.
  *
- * <p>The npm, Go and NuGet registries all specify this ordering, and each format carried its own verbatim copy of
- * it. Three copies of a comparator is three chances for two ecosystems to disagree about which of two versions is
- * newer - which is not a cosmetic disagreement, since the answer decides what {@code latest} resolves to.
+ * <p>The npm, Go and NuGet registries all specify this ordering, and the formats share this one comparator: the
+ * answer decides what {@code latest} resolves to, so two ecosystems must not disagree about which of two versions is
+ * newer.
  */
 public final class Semver {
 
