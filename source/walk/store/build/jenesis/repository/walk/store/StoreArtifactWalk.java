@@ -10,42 +10,31 @@ import build.jenesis.repository.walk.WalkPass;
 import build.jenesis.repository.walk.WalkSegment;
 
 /**
- * The reference {@link ArtifactWalk} over the store's own key layout. Enumeration is a depth-first descent that
- * visits sibling names in lexicographic order - one total order over all keys - and it consumes the store
- * exclusively through {@link ArtifactStore#page}, so a flat millions-entry namespace is paged, never buffered, and
- * a resume deep inside one is a seek on a backend that pages natively. A key is a leaf where an object is stored
- * ({@link ArtifactStore#exists}); a name with children is a container to descend (the store's layouts never make one
- * key both, matching a filesystem, where that is impossible by construction).
+ * The reference {@link ArtifactWalk} over the store's own key layout: a depth-first descent visiting siblings in
+ * lexicographic order, consuming the store only through {@link ArtifactStore#page}, so a flat namespace of millions is
+ * paged rather than buffered and a deep resume is a seek on a backend that pages natively. A key is a leaf where an
+ * object is stored ({@link ArtifactStore#exists}); a name with children is a container. The store's layouts never make
+ * one key both.
  *
- * <p>The total order a name-sorted descent produces is <em>path order</em>: keys compare character by character
- * with the {@code '/'} separator below every other character, so a subtree ({@code app/...}) sits wholly before a
- * longer sibling name it prefixes ({@code app.txt}) - where plain string order would interleave the two, a resume
- * cursor of {@code app/nested} would wrongly exclude the not-yet-visited {@code app.txt}. Every cursor and range
- * comparison therefore goes through {@link #order}, keeping the arithmetic exactly consistent with the visit
- * sequence.
+ * <p>The descent's total order is <em>path order</em>: {@code '/'} compares below every other character, so a subtree
+ * ({@code app/...}) sits wholly before a longer sibling it prefixes ({@code app.txt}) - plain string order would
+ * interleave them and a cursor at {@code app/nested} would skip {@code app.txt}. Every cursor and range comparison goes
+ * through {@link #order}.
  *
- * <p>Pass state is durable in the walked store and nowhere else. The manifest
- * ({@code walks/<consumer>/manifest}) carries the pass generation, its roots and the static segment plan;
- * create-if-absent is the coordinator election, so no leader exists afterwards. Each segment
- * ({@code walks/<consumer>/segments/<nn>}) is one compare-and-set object embedding its claim
- * ({@code state, holder, expiry, cursor}): a claim is a CAS over pending-or-expired (never a live holder's - refuse,
- * don't steal), every checkpoint commit renews the lease in the same write, and a commit that loses the CAS means
- * the claim was reclaimed after expiry, so the worker stops. A taken-over segment resumes from its last committed
- * cursor: node death costs at most one checkpoint stride of re-visits, never a restart.
+ * <p>Pass state is durable in the walked store alone. The manifest ({@code walks/<consumer>/manifest}) holds the
+ * generation, roots and static segment plan; create-if-absent is the coordinator election, so no leader persists. Each
+ * segment ({@code walks/<consumer>/segments/<nn>}) is one compare-and-set object embedding its claim (state, holder,
+ * expiry, cursor): a claim is a CAS over pending or expired (never a live holder's), every checkpoint renews the lease
+ * in the same write, and a lost commit means the claim was reclaimed, so the worker stops. A taken-over segment resumes
+ * from its last committed cursor, so node death costs at most one checkpoint stride.
  *
- * <p>The segment plan is static per pass: each root's children are paged up to a planning cap and packed into
- * contiguous ranges toward the {@code jenrepo.walk.segments} target; a root whose fan-out exceeds the cap and whose
- * sampled children are all long lowercase hex (the content-addressed {@code blobs/} namespace) is cut by leading hex
- * byte instead - uniform by construction, with no listing at all - and any other over-cap root conservatively stays
- * one segment. Adaptive mid-pass splitting is deliberately out of scope: splitting a claimed range safely needs a
- * two-object CAS the store does not have.
+ * <p>The plan is static per pass: each root's children are paged up to a planning cap and packed into contiguous ranges
+ * toward {@code jenrepo.walk.segments}; an over-cap root whose sampled children are all long lowercase hex
+ * ({@code blobs/}) is cut by leading hex byte without listing, and any other over-cap root stays one segment. Mid-pass
+ * splitting would need a two-object CAS the store does not have.
  *
- * <p>What a walk sees is recorded node-wide ({@code WalkRecord}), not on the instance, and the discovered
- * {@code ArtifactWalkObservability} reports it: {@code jenrepo.walk.segments}, the pass last joined or finished as done
- * segments against its segment count; {@code jenrepo.walk.resumes}, the segments this node took over from an expired
- * holder; and {@code jenrepo.walk.pass}, that pass's generation and state. A walk is resolved wherever one is asked
- * for, so an instance's own figures would restart at every resolve. Pass state itself stays durable in the walked
- * store; a node that has never walked reports nothing.
+ * <p>What a walk sees is recorded node-wide ({@code WalkRecord}) and reported by {@code ArtifactWalkObservability},
+ * since a walk is resolved wherever one is asked for and an instance's figures would restart with each resolve.
  */
 public final class StoreArtifactWalk implements ArtifactWalk {
 
@@ -53,7 +42,7 @@ public final class StoreArtifactWalk implements ArtifactWalk {
     private final int segments;
     private final Duration ttl;
     private final Clock clock;
-    /** This instance's identity inside segment claims; each {@link #walk} call suffixes a worker counter. */
+    /** This instance's identity in segment claims; each {@link #walk} call suffixes a worker counter. */
     private final String node = UUID.randomUUID().toString().substring(0, 8);
     private final AtomicLong workers = new AtomicLong();
 
@@ -73,8 +62,8 @@ public final class StoreArtifactWalk implements ArtifactWalk {
         String scope = ArtifactStore.segment(consumer);
         String holder = node + "/" + workers.incrementAndGet();
         Manifest manifest = manifest(store, scope, roots);
-        // The pass is recorded from the moment it is joined, not only on completion: a pass recorded only when it
-        // finished is never seen RUNNING, and two nodes' fleet view read no walk at all while one of them walked.
+        // Recorded from the moment the pass is joined, so a running pass is seen RUNNING rather than only once
+        // finished.
         WalkRecord.observed(pass(store, scope, manifest));
         while (true) {
             Claimed claimed = claim(store, scope, manifest, holder);
@@ -94,7 +83,7 @@ public final class StoreArtifactWalk implements ArtifactWalk {
         return manifest == null ? Optional.empty() : Optional.of(pass(store, scope, manifest));
     }
 
-    /** The manifest carries the generation, so the segments this pass is made of need not be read to learn it. */
+    /** The manifest carries the generation, so no segment need be read to learn it. */
     @Override
     public Optional<Long> generation(ArtifactStore store, String consumer) throws IOException {
         Manifest manifest = parseManifest(
@@ -114,7 +103,7 @@ public final class StoreArtifactWalk implements ArtifactWalk {
             Range range = manifest.ranges().get(index);
             Segment segment = parseSegment(store.readVersioned(segmentKey(scope, index)).orElse(null));
             if (segment == null || segment.generation() != manifest.generation()) {
-                // Never started this pass (or a stale leftover of an earlier one): pending from the plan.
+                // Never started this pass, or a leftover of an earlier one: pending from the plan.
                 result.add(new WalkSegment(manifest.generation(), index, range.root(), range.from(), range.to(),
                         WalkSegment.State.PENDING, null, null, null));
             } else {
@@ -125,9 +114,9 @@ public final class StoreArtifactWalk implements ArtifactWalk {
         return result;
     }
 
-    // --- the pass manifest -----------------------------------------------------------------------------------
+    // ---- the pass manifest
 
-    /** The static plan and claim state of one pass; the store object is the only copy, this is a parsed view. */
+    /** The static plan and claim state of one pass, parsed from the store object that is its only copy. */
     private record Manifest(long generation, Instant started, List<String> roots, List<Range> ranges,
                             boolean complete) {
     }
@@ -136,8 +125,8 @@ public final class StoreArtifactWalk implements ArtifactWalk {
     private record Range(String root, String from, String to) {
     }
 
-    /** Read the current manifest, starting a fresh pass (create-if-absent / complete-then-increment, both CAS -
-     *  the coordinator election) when none is running. A lost race re-reads the winner's pass and joins it. */
+    /** Read the current manifest, starting a fresh pass - create-if-absent or complete-then-increment, both CAS, the
+     *  coordinator election - when none runs. A lost race re-reads and joins the winner's pass. */
     private Manifest manifest(ArtifactStore store, String scope, List<String> roots) throws IOException {
         String key = manifestKey(scope);
         while (true) {
@@ -146,8 +135,8 @@ public final class StoreArtifactWalk implements ArtifactWalk {
             if (manifest != null && !manifest.complete()) {
                 return manifest;
             }
-            // A corrupt manifest parses null but still occupies the CAS slot: base the new generation on the
-            // clock so stale segment objects (whose generation is unknowable) can never masquerade as current.
+            // A corrupt manifest parses null but holds the CAS slot: base the new generation on the clock so stale
+            // segments, whose generation is unknowable, can never pass as current.
             long generation = manifest != null ? manifest.generation() + 1
                     : current.isPresent() ? Math.max(1, clock.millis()) : 1;
             List<String> ordered = roots.stream().distinct().sorted().toList();
@@ -159,7 +148,7 @@ public final class StoreArtifactWalk implements ArtifactWalk {
         }
     }
 
-    /** Cut each root into contiguous key ranges toward the global segment target (split evenly across roots). */
+    /** Cut each root into contiguous key ranges toward the segment target, split evenly across roots. */
     private List<Range> plan(ArtifactStore store, List<String> roots) {
         int target = Math.max(1, segments / Math.max(1, roots.size()));
         int cap = Math.max(64, 4 * target);
@@ -169,22 +158,22 @@ public final class StoreArtifactWalk implements ArtifactWalk {
             store.page(root, "", cap, children::add);
             if (children.size() >= cap) {
                 if (children.stream().allMatch(StoreArtifactWalk::hex)) {
-                    // The flat content-addressed namespace: cut by leading hex byte, uniform by construction,
-                    // without listing the (possibly millions of) children at all.
+                    // The flat content-addressed namespace: cut by leading hex byte, uniform by construction, without
+                    // listing it.
                     List<String> cuts = new ArrayList<>();
                     for (int value = 0; value < 256; value++) {
                         cuts.add(root + "/" + String.format(Locale.ROOT, "%02x", value));
                     }
                     pack(root, cuts, target, ranges);
                 } else {
-                    // Over-cap fan-out with no uniform naming to cut by: one conservative segment (the recorded
-                    // scalability limit - a static plan cannot balance what it cannot enumerate cheaply).
+                    // Over-cap fan-out with no uniform naming to cut by: one segment, since a static plan cannot
+                    // balance what it cannot enumerate cheaply.
                     ranges.add(new Range(root, null, null));
                 }
             } else if (children.isEmpty() || children.size() >= target) {
                 pack(root, keys(root, children), target, ranges);
             } else {
-                // Too few children to meet the target: descend one level and cut at grandchild boundaries.
+                // Too few children to meet the target: cut at grandchild boundaries.
                 List<String> cuts = new ArrayList<>();
                 for (String child : children) {
                     List<String> grand = new ArrayList<>();
@@ -230,29 +219,27 @@ public final class StoreArtifactWalk implements ArtifactWalk {
         return true;
     }
 
-    // --- segment claims --------------------------------------------------------------------------------------
+    // ---- segment claims
 
-    /** A parsed segment-state object; {@code null} fields where the object never recorded them. */
+    /** A parsed segment-state object; {@code null} fields where it recorded none. */
     private record Segment(long generation, WalkSegment.State state, String holder, Instant expiry, String cursor) {
     }
 
-    /** A freshly won claim: the segment, the cursor to resume from, and the CAS token of the claiming write. */
+    /** A won claim: the segment, the cursor to resume from, and the claiming write's CAS token. */
     private record Claimed(int index, Range range, String cursor, Object token) {
     }
 
-    /** Scan the plan in order and CAS-claim the first pending, expired or stale-generation segment; {@code null}
-     *  when nothing is claimable (all done, or live holders own the rest). A lost CAS just moves on. */
+    /** Scan the plan in order and CAS-claim the first pending, expired or stale-generation segment; {@code null} when
+     *  nothing is claimable. A lost CAS moves on. */
     private Claimed claim(ArtifactStore store, String scope, Manifest manifest, String holder) throws IOException {
         for (int index = 0; index < manifest.ranges().size(); index++) {
             String key = segmentKey(scope, index);
             Optional<ArtifactStore.Versioned> current = store.readVersioned(key);
             Segment segment = parseSegment(current.orElse(null));
             if (segment != null && segment.generation() > manifest.generation()) {
-                // The pass turned over to a newer generation while this worker held a manifest read at pass entry.
-                // The newer segment is a live claim of the pass that superseded ours - refuse-don't-steal applies
-                // across generations too, so leave it untouched (stealing it would reset a live holder's cursor and
-                // ping-pong the two passes). Our own pass is finished; skipping every newer segment lets claim() run
-                // dry and walk() return through finish(), and the next call reads the current manifest.
+                // A newer generation's segment is a live claim of the pass that superseded ours: never stolen, which
+                // would reset a live holder's cursor and ping-pong the passes. Our pass is finished; claim() runs dry,
+                // walk() returns through finish(), and the next call reads the current manifest.
                 continue;
             }
             boolean stale = segment == null || segment.generation() != manifest.generation();
@@ -263,9 +250,8 @@ public final class StoreArtifactWalk implements ArtifactWalk {
                 continue;
             }
             String cursor = stale ? null : segment.cursor();
-            // A same-generation CLAIMED segment that reached here is an expired holder's (a live one was skipped
-            // above): reclaiming it is a takeover resuming from its committed cursor, the jenrepo.walk.resumes
-            // signal. A pending or stale-generation segment is a fresh claim, not a resume.
+            // A same-generation CLAIMED segment here is an expired holder's (live ones were skipped): a takeover
+            // resuming from its cursor, counted in jenrepo.walk.resumes. A pending or stale segment is a fresh claim.
             boolean takeover = !stale && segment.state() == WalkSegment.State.CLAIMED;
             byte[] content = Documents.bytes(serialize(manifest.generation(), index, manifest.ranges().get(index),
                     WalkSegment.State.CLAIMED, holder, now.plus(ttl), cursor));
@@ -285,8 +271,8 @@ public final class StoreArtifactWalk implements ArtifactWalk {
         return null;
     }
 
-    /** Count the pass's finished segments and, when every one is done, CAS-flip the manifest to complete (all
-     *  finishers may race here; the flip is idempotent and one write wins). */
+    /** Count the pass's finished segments and, when all are done, CAS-flip the manifest to complete; finishers may race
+     *  and the idempotent flip has one winner. */
     private WalkPass finish(ArtifactStore store, String scope, Manifest manifest) throws IOException {
         if (done(store, scope, manifest) == manifest.ranges().size()) {
             Optional<ArtifactStore.Versioned> current = store.readVersioned(manifestKey(scope));
@@ -319,17 +305,17 @@ public final class StoreArtifactWalk implements ArtifactWalk {
                 done(store, scope, manifest), manifest.complete() ? WalkPass.Status.COMPLETE : WalkPass.Status.ACTIVE);
     }
 
-    // --- walking one claimed segment ---------------------------------------------------------------------------
+    // ---- walking one claimed segment
 
-    /** The renewal CAS lost: the claim expired and another worker took the segment over - stop, don't steal back. */
+    /** The renewal CAS lost: the claim expired and another worker took the segment - stop, never steal it back. */
     private static final class ClaimLost extends IOException {
         ClaimLost() {
             super("The segment claim expired and was taken over");
         }
     }
 
-    /** One worker executing one claimed segment: the ordered depth-first descent, the bounds arithmetic, and the
-     *  checkpoint commit that doubles as lease renewal. */
+    /** One worker executing one claimed segment: the ordered descent, the bounds arithmetic, and the checkpoint commit
+     *  that renews the lease. */
     private final class Worker {
 
         private final ArtifactStore store;
@@ -362,15 +348,13 @@ public final class StoreArtifactWalk implements ArtifactWalk {
             this.cursor = claimed.cursor();
         }
 
-        /** Walk the range from its cursor; a lost renewal stops quietly (the new holder finishes the segment), a
-         *  visitor failure propagates with the claim left to expire and resume from the last committed cursor. */
+        /** Walk the range from its cursor. A lost renewal stops quietly, the new holder finishing the segment; a
+         *  visitor failure propagates, the claim left to expire and resume from the last committed cursor. */
         private void run() throws IOException {
             try {
-                // The ordered depth-first descent over this segment's range is the shared Trees.descend primitive:
-                // this walk supplies the range steering (seek to the resume/range start, prune and stop at the range
-                // bounds, emit-and-checkpoint each in-range leaf) and Trees.descend runs the iterative, paged,
-                // path-ordered traversal - so the reference walk and every consumer share one deep-walk, and no key
-                // depth can overflow the stack. The visit sequence is byte-for-byte the pre-order name-sorted descent.
+                // The ordered descent is the shared Trees.descend: this walk steers it by range (seek to the start,
+                // prune and stop at the bounds, emit and checkpoint each in-range leaf), and Trees.descend runs the
+                // iterative, paged, path-ordered traversal, so no key depth can overflow the stack.
                 Trees.descend(store, range.root(), new Trees.Visitor() {
                     @Override
                     public void visit(String leaf) throws IOException {
@@ -404,16 +388,14 @@ public final class StoreArtifactWalk implements ArtifactWalk {
                 });
                 commit(WalkSegment.State.DONE);
             } catch (ClaimLost _) {
-                // A lost renewal mid-walk, or a lost CAS on the terminal DONE commit itself, both mean the claim
-                // was reclaimed while this worker held it - the new holder finishes the segment, so stop quietly
-                // rather than failing the whole pass. A segment shorter than one checkpoint stride never renews
-                // between claim and completion, so its DONE commit is the first and only place its lease is tested.
+                // A lost renewal, or a lost CAS on the terminal DONE commit, means the claim was reclaimed: the new
+                // holder finishes, so stop quietly. A segment shorter than one stride tests its lease only at that DONE
+                // commit.
             }
         }
 
-        /** Deliver one in-range leaf to the walk's {@link KeyVisitor}, advance the cursor, and commit (renewing the
-         *  lease) every {@code checkpoint} keys - the range-consumer callback {@link Trees#descend} drives on each
-         *  visited leaf. */
+        /** Deliver one in-range leaf to the {@link KeyVisitor}, advance the cursor, and commit (renewing the lease)
+         *  every {@code checkpoint} keys - the callback {@link Trees#descend} drives per leaf. */
         private void emit(ArtifactStore.Listed entry) throws IOException {
             String key = entry.key();
             visitor.visit(entry);
@@ -423,10 +405,9 @@ public final class StoreArtifactWalk implements ArtifactWalk {
             }
         }
 
-        /** Commit cursor + state; the same write renews the lease. Losing the CAS proves the claim was reclaimed.
-         *  The visitor flushes first ({@link KeyVisitor#beforeCheckpoint}), so a committed cursor never lies about
-         *  a derived write still sitting in a consumer's buffer - a failed flush leaves the previous cursor
-         *  standing and the re-visit replays what the flush lost. */
+        /** Commit cursor and state, renewing the lease in the same write; a lost CAS proves the claim was reclaimed.
+         *  The visitor flushes first ({@link KeyVisitor#beforeCheckpoint}), so a committed cursor never runs ahead of a
+         *  consumer's buffered write - a failed flush leaves the previous cursor and the re-visit replays it. */
         private void commit(WalkSegment.State state) throws IOException {
             visitor.beforeCheckpoint(cursor);
             byte[] content = Documents.bytes(serialize(generation, index, range, state, holder, clock.instant().plus(ttl),
@@ -434,9 +415,8 @@ public final class StoreArtifactWalk implements ArtifactWalk {
             if (!store.writeVersioned(key, content, token)) {
                 throw new ClaimLost();
             }
-            // Re-read for the next compare-and-set's token - and verify the object is still ours: a claim that
-            // expired and was taken over between the write and this read must not hand us the thief's token, or
-            // the next commit would steal the segment back from its live holder.
+            // Re-read for the next CAS's token and confirm the object is still ours: a takeover between the write and
+            // this read must not hand us the new holder's token, or the next commit would steal the segment back.
             Optional<ArtifactStore.Versioned> current = store.readVersioned(key);
             Segment ours = parseSegment(current.orElse(null));
             if (ours == null || !holder.equals(ours.holder())) {
@@ -445,17 +425,17 @@ public final class StoreArtifactWalk implements ArtifactWalk {
             token = current.get().token();
         }
 
-        /** Whether a leaf key is inside the range and past the resume cursor ({@code from} inclusive, {@code to}
-         *  and the cursor exclusive). */
+        /** Whether a leaf is in the range and past the resume cursor ({@code from} inclusive, {@code to} and the cursor
+         *  exclusive). */
         private boolean includes(String key) {
             return (from == null || order(key, from) >= 0)
                     && (to == null || order(key, to) < 0)
                     && (resume == null || order(key, resume) > 0);
         }
 
-        /** Whether any key under {@code prefix/} can still fall inside the range and past the cursor. In path
-         *  order every such key sorts at or above {@code prefix + "/"} and strictly below {@code prefix + "0"}
-         *  ({@code '0'} being the character after {@code '/'}), so those two strings bound the whole subtree. */
+        /** Whether any key under {@code prefix/} can still fall in the range and past the cursor. In path order every
+         *  such key sorts at or above {@code prefix + "/"} and below {@code prefix + "0"} ({@code '0'} follows
+         *  {@code '/'}), bounding the subtree. */
         private boolean intersects(String prefix) {
             String floor = prefix + "/";
             String ceiling = prefix + "0";
@@ -464,8 +444,8 @@ public final class StoreArtifactWalk implements ArtifactWalk {
                     && (resume == null || order(ceiling, resume) > 0);
         }
 
-        /** The seek target inside this segment: the resume cursor when it lies past the range start, else the
-         *  range start; {@code null} when the walk starts at the beginning. */
+        /** The seek target in this segment: the resume cursor when past the range start, else the range start;
+         *  {@code null} from the beginning. */
         private String lower() {
             if (resume != null) {
                 return from == null || order(resume, from) >= 0 ? resume : from;
@@ -474,16 +454,13 @@ public final class StoreArtifactWalk implements ArtifactWalk {
         }
     }
 
-    /**
-     * The walk's total key order - <em>path order</em>, {@link Trees#order the shared descent order} the range bounds
-     * ({@code includes} / {@code intersects}) compare under, so the segment arithmetic stays exactly consistent with
-     * the visit sequence {@link Trees#descend} produces.
-     */
+    /** The walk's total key order - path order, {@link Trees#order the shared descent order} - which the range bounds
+     *  compare under, consistent with the visit sequence {@link Trees#descend} produces. */
     static int order(String left, String right) {
         return Trees.order(left, right);
     }
 
-    // --- store object (de)serialisation ------------------------------------------------------------------------
+    // ---- store object (de)serialisation
 
     private static String manifestKey(String scope) {
         return "walks/" + scope + "/manifest";
@@ -515,8 +492,8 @@ public final class StoreArtifactWalk implements ArtifactWalk {
         return properties;
     }
 
-    /** Parse a manifest object; {@code null} for an absent or unparseable one (self-heal: a fresh pass replaces
-     *  it by CAS on the same token, so corruption is never fatal). */
+    /** Parse a manifest; {@code null} for an absent or unparseable one, which a fresh pass replaces by CAS on its
+     *  token, so corruption is never fatal. */
     private static Manifest parseManifest(ArtifactStore.Versioned versioned) {
         if (versioned == null) {
             return null;

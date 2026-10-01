@@ -1,13 +1,10 @@
 /**
- * The default {@code ArtifactWalk} reference implementation over the store's own key layout - the generalisation of
- * the private depth-first inventory walk into the shared, totally ordered, resumable, range-segmented, multi-node
- * walk the SPI promises, provided as {@code paged-descent} (the default) and discovered with {@code ServiceLoader}.
- * It enumerates exclusively through the {@code ArtifactStore.page} ordered-paging primitive, so a flat millions-entry
- * namespace is never materialised as one list and a resume deep inside it is a seek on a backend that pages natively.
- * All pass state lives in the walked store ({@code walks/<consumer>/...}, compare-and-set objects only) - persist
- * only through the store, so a pass survives process death on any node sharing it. Settings:
- * {@code jenrepo.walk.checkpoint} (cursor-commit stride, default 1000), {@code jenrepo.walk.segments} (target
- * segment count per pass, default 32), {@code jenrepo.walk.ttl} (claim lease seconds, default 900).
+ * The default {@code ArtifactWalk} over the store's own key layout - the shared, totally ordered, resumable,
+ * range-segmented, multi-node walk the SPI promises - provided as {@code paged-descent}. It enumerates only through
+ * {@code ArtifactStore.page}, so a flat namespace of millions is never one list and a deep resume is a seek. All pass
+ * state lives in the walked store as compare-and-set objects ({@code walks/<consumer>/...}), so a pass survives process
+ * death on any node sharing it. Settings: {@code jenrepo.walk.checkpoint} (default 1000), {@code jenrepo.walk.segments}
+ * (default 32), {@code jenrepo.walk.ttl} (seconds, default 900).
  *
  * @jenesis.release 25
  * @jenesis.bom pin-repository.properties

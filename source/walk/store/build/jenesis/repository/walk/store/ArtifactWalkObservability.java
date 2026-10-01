@@ -7,13 +7,11 @@ import build.jenesis.repository.observation.TaskStatus;
 import build.jenesis.repository.observation.ObservabilitySource;
 
 /**
- * The shared walk's signals, from what this node's walks have recorded ({@link WalkRecord}): {@code jenrepo.walk.segments}
- * - the pass last joined or finished, done segments against its segment count, so the overview shows how far it has
- * converged; {@code jenrepo.walk.resumes} - segments this node took over from an expired (dead) holder's cursor, the
- * multi-node health signal a steadily climbing count exposes; and {@code jenrepo.walk.pass} - that pass's generation
- * and started stamp, {@code RUNNING} while segments are still claimed and {@code IDLE} once every segment is done. A
- * node that has never walked reports nothing, so a deployment without the feature contributes no signal rather than a
- * healthy-looking empty one.
+ * The shared walk's signals from {@link WalkRecord}: {@code jenrepo.walk.segments}, the last pass's done segments
+ * against its count; {@code jenrepo.walk.resumes}, segments taken over from an expired holder - a climbing count is the
+ * multi-node health signal; and {@code jenrepo.walk.pass}, that pass's generation and start, {@code RUNNING} while
+ * segments are claimed and {@code IDLE} once all are done. A node that never walked reports nothing rather than a
+ * healthy-looking empty signal.
  */
 public final class ArtifactWalkObservability implements ObservabilitySource {
 

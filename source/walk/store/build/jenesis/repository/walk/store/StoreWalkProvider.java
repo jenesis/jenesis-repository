@@ -6,23 +6,16 @@ import build.jenesis.repository.walk.ArtifactWalk;
 import build.jenesis.repository.walk.WalkProvider;
 
 /**
- * Provides the {@link StoreArtifactWalk} reference implementation as {@code paged-descent} - the default selection
- * when no {@code jenrepo.walk} names another.
+ * Provides {@link StoreArtifactWalk} as {@code paged-descent}, the default when {@code jenrepo.walk} names no other.
  *
- * <p><b>The feature name is not {@code store}, though the walk descends the store's own key layout, because a
- * provider name <em>is</em> a configuration key</b>. {@code Features} spends one namespace on two shapes:
- * {@code jenrepo.<spi>=<name>} selects a singleton implementation and
- * {@code jenrepo.<name>=false} switches a discovered one off. A walk named {@code store} would key its toggle to
- * {@code jenrepo.store} - the artifact store's own selection key, which every deployment sets - and setting that
- * off-switch would select an artifact-store backend called {@code false} and refuse to boot, so the toggle could not
- * be used at all. {@code paged-descent} names what the walk does - bounded {@code startAfter} paging
- * over an ordered depth-first descent - and owns its own key.
+ * <p>Not named {@code store}: a provider name is a configuration key. {@code jenrepo.<spi>=<name>} selects a singleton
+ * and {@code jenrepo.<name>=false} switches a discovered one off, so a walk named {@code store} would put its toggle on
+ * {@code jenrepo.store} - the artifact-store selection - where {@code false} would select a backend named
+ * {@code false}. {@code paged-descent} names what it does and owns its key.
  *
- * <p>Settings, read through the config lookup:
- * {@code jenrepo.walk.checkpoint} items per cursor commit (default 1000), {@code jenrepo.walk.segments} target
- * segments per pass (default 32), {@code jenrepo.walk.ttl} claim lease seconds (default 900 - a checkpoint stride
- * must renew within it, so scale the two together). A malformed value fails loudly rather than walking with a
- * silently-wrong stride.
+ * <p>Settings: {@code jenrepo.walk.checkpoint}, items per cursor commit (default 1000); {@code jenrepo.walk.segments},
+ * target segments per pass (default 32); {@code jenrepo.walk.ttl}, claim lease seconds (default 900 - a checkpoint
+ * stride must renew within it, so scale the two together). A malformed value fails loudly.
  */
 public final class StoreWalkProvider implements WalkProvider {
 

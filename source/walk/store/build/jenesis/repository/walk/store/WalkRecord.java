@@ -5,13 +5,9 @@ import module java.base;
 import build.jenesis.repository.walk.WalkPass;
 
 /**
- * What this node's walks have seen, whichever walk instance saw it: the pass it last joined or finished, and the
- * segments it took over from a holder whose claim had expired.
- *
- * <p>Node-wide because a walk has no single owner. One is resolved wherever a walk is asked for - by the rebuild
- * driver, by every collector, by the capabilities answer that only asks whether one is installed - so figures kept on
- * an instance started from zero with every resolve, and whichever instance registered last was the one reported,
- * usually one that never walked. Every walk records here instead.
+ * What this node's walks have seen, whichever walk instance saw it: the pass last joined or finished, and the segments
+ * taken over from an expired holder. Node-wide because a walk is resolved wherever one is asked for - the rebuild
+ * driver, every collector, the capabilities answer - so figures on an instance would restart with every resolve.
  */
 final class WalkRecord {
 
