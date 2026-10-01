@@ -30,7 +30,7 @@ import build.jenesis.repository.store.Withheld;
  * <p>The operation's screen stores the manifest bytes content-addressed at the serving key {@code blobs/<hex>}
  * <em>before</em> the chain runs, so on a non-ACCEPT verdict the marker is load-bearing: without it a rejected manifest
  * would remain pullable by digest straight out of {@code blobs/<hex>}. So ACCEPT lays out OCI's native metadata (the
- * {@code oci/types/<hex>} media-type sidecar, the tag pointer for a tag reference) and clears any stale marker, while
+ * {@code oci/.types/<hex>} media-type sidecar, the tag pointer for a tag reference) and clears any stale marker, while
  * QUARANTINE and REJECT write the {@code withheld/<hex>} marker and lay out nothing - a held or rejected manifest then
  * 404s by digest and by tag exactly as a withheld blob does, while its already-uploaded layer blobs stay served raw
  * (layers are out of this choke point's scope, screened bytes by bytes belongs to the manifest that names them).
@@ -111,7 +111,7 @@ final class OciManifests {
                 accepted -> {
                     // The media-type sidecar is a parse result, not a serving surface - written first, through the
                     // sidecar seam, which refuses a publish/ key so a pointer can never be smuggled in ahead of it.
-                    accepted.sidecar("oci/types/" + accepted.hash(), servedType.getBytes(StandardCharsets.UTF_8));
+                    accepted.sidecar("oci/.types/" + accepted.hash(), servedType.getBytes(StandardCharsets.UTF_8));
                     return Publication.Visibility
                             .through((hex, _, target) -> {
                                 if (!reference.startsWith("sha256:")) {

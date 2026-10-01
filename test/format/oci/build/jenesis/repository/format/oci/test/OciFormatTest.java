@@ -172,18 +172,18 @@ class OciFormatTest {
         FakeExchange patch = new FakeExchange("PATCH", "/v2/app/blobs/uploads/" + id,
                 "half-a-layer".getBytes(StandardCharsets.UTF_8));
         reaping.handle(patch, store);
-        assertThat(store.list("oci/uploads/" + id)).as("the chunk is staged").isNotEmpty();
+        assertThat(store.list("oci/.uploads/" + id)).as("the chunk is staged").isNotEmpty();
 
         // Before the TTL elapses a reap spares the still-live session.
         clock.advance(Duration.ofHours(23));
         assertThat(reaping.reap(store)).isZero();
-        assertThat(store.list("oci/uploads/" + id)).isNotEmpty();
+        assertThat(store.list("oci/.uploads/" + id)).isNotEmpty();
 
         // Past the TTL the abandoned session - staged chunks and start marker both - is swept.
         clock.advance(Duration.ofHours(2));
         assertThat(reaping.reap(store)).isEqualTo(1);
-        assertThat(store.list("oci/uploads/" + id)).as("the staged chunks are gone").isEmpty();
-        assertThat(store.list("oci/upload-sessions")).as("the start marker is gone").doesNotContain(id);
+        assertThat(store.list("oci/.uploads/" + id)).as("the staged chunks are gone").isEmpty();
+        assertThat(store.list("oci/.upload-sessions")).as("the start marker is gone").doesNotContain(id);
     }
 
     @Test
@@ -202,7 +202,7 @@ class OciFormatTest {
         FakeExchange next = new FakeExchange("POST", "/v2/app/blobs/uploads/");
         reaping.handle(next, store);
         assertThat(next.status()).isEqualTo(202);
-        assertThat(store.list("oci/uploads/" + stale)).as("the stale session was reaped on the new upload").isEmpty();
+        assertThat(store.list("oci/.uploads/" + stale)).as("the stale session was reaped on the new upload").isEmpty();
     }
 
     @Test
@@ -219,7 +219,7 @@ class OciFormatTest {
         String id = begin.responseHeader("Docker-Upload-UUID");
         reaping.handle(new FakeExchange("PUT", "/v2/app/blobs/uploads/" + id, full,
                 Map.of("digest", "sha256:" + hex), Map.of()), store);
-        assertThat(store.list("oci/upload-sessions")).as("finalizing cleared the session marker").doesNotContain(id);
+        assertThat(store.list("oci/.upload-sessions")).as("finalizing cleared the session marker").doesNotContain(id);
 
         clock.advance(Duration.ofDays(30));
         assertThat(reaping.reap(store)).isZero();
@@ -373,7 +373,7 @@ class OciFormatTest {
 
     @Test
     void a_chunk_upload_to_a_traversal_laced_session_id_is_refused_before_any_store_write() throws IOException {
-        // The upload session id is echoed back by the client on PATCH/PUT and flows into oci/uploads/<id> chunk keys; a
+        // The upload session id is echoed back by the client on PATCH/PUT and flows into oci/.uploads/<id> chunk keys; a
         // '..'-laced id must not aim those staged-chunk writes and deletes at a neighbouring key space. Guarded like the
         // image name, it 404s before any store write - the id-side counterpart of the name guard, so the one client-
         // echoed segment does not lean on the servlet firewall alone.
@@ -381,7 +381,7 @@ class OciFormatTest {
                 "chunk".getBytes(StandardCharsets.UTF_8));
         format.handle(patch, store);
         assertThat(patch.status()).as("a traversal-laced session id stages no chunk").isEqualTo(404);
-        assertThat(store.list("oci/uploads")).as("no staged chunk was written under a traversal id").isEmpty();
+        assertThat(store.list("oci/.uploads")).as("no staged chunk was written under a traversal id").isEmpty();
     }
 
     private void push(String name, String reference, byte[] manifest) throws IOException {
@@ -748,7 +748,7 @@ class OciFormatTest {
         String digest = "sha256:" + sha256(manifest.getBytes(StandardCharsets.UTF_8));
         store.write("blobs/" + digest.substring("sha256:".length()),
                 new ByteArrayInputStream(manifest.getBytes(StandardCharsets.UTF_8)));
-        store.writeVersioned("oci/types/" + digest.substring("sha256:".length()),
+        store.writeVersioned("oci/.types/" + digest.substring("sha256:".length()),
                 "application/vnd.oci.image.manifest.v1+json".getBytes(StandardCharsets.UTF_8), null);
 
         // The walk has laid out one tag so far.
@@ -780,7 +780,7 @@ class OciFormatTest {
         String digest = "sha256:" + sha256(manifest.getBytes(StandardCharsets.UTF_8));
         store.write("blobs/" + digest.substring("sha256:".length()),
                 new ByteArrayInputStream(manifest.getBytes(StandardCharsets.UTF_8)));
-        store.writeVersioned("oci/types/" + digest.substring("sha256:".length()),
+        store.writeVersioned("oci/.types/" + digest.substring("sha256:".length()),
                 "application/vnd.oci.image.manifest.v1+json".getBytes(StandardCharsets.UTF_8), null);
         store.writeVersioned("oci/imported/tags/1.0", digest.getBytes(StandardCharsets.UTF_8), null);
 
@@ -888,7 +888,7 @@ class OciFormatTest {
         assertThat(hits.get()).as("a re-pull re-hits upstream - nothing was cached").isEqualTo(2);
     }
 
-    /** A store decorator that counts how many times the chunk directory ({@code oci/uploads/<id>}) is listed, so a
+    /** A store decorator that counts how many times the chunk directory ({@code oci/.uploads/<id>}) is listed, so a
      *  test can prove a chunked upload's per-PATCH cost never re-scans the staged chunks. Everything else delegates. */
     private static final class CountingUploadsList implements ArtifactStore {
         @Override
@@ -914,7 +914,7 @@ class OciFormatTest {
 
         @Override
         public List<String> list(String prefix) {
-            if (prefix.startsWith("oci/uploads/")) {
+            if (prefix.startsWith("oci/.uploads/")) {
                 uploadsListings++;
             }
             return delegate.list(prefix);

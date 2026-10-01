@@ -50,7 +50,7 @@ class OciMountTest {
         assertThat(mount.status()).isEqualTo(201);
         assertThat(mount.responseHeader("Location")).isEqualTo("/v2/app/blobs/sha256:" + hex);
         assertThat(mount.responseHeader("Docker-Content-Digest")).isEqualTo("sha256:" + hex);
-        assertThat(target.isEmpty("oci/upload-sessions")).as("no upload session was opened").isTrue();
+        assertThat(target.isEmpty("oci/.upload-sessions")).as("no upload session was opened").isTrue();
 
         FakeExchange pull = new FakeExchange("GET", "/v2/app/blobs/sha256:" + hex);
         format.handle(pull, target);

@@ -12,7 +12,7 @@ import build.jenesis.repository.observation.ObservabilitySource;
 /**
  * An {@link ArtifactStore} that caps the total stored content bytes of the scope it wraps. Content counts against
  * the limit whether it is a finished content blob ({@code blobs/<hash>}) or the still-in-flight chunks of an OCI
- * chunked-upload session staged under {@code oci/uploads/} before they are finalized into a blob; the small pointers
+ * chunked-upload session staged under {@code oci/.uploads/} before they are finalized into a blob; the small pointers
  * and metadata a publish also writes are negligible and pass through unmetered. Metering the upload staging closes
  * the bypass where an authenticated writer opens chunked-upload sessions and never finalizes them: those bytes are
  * really stored, but before they land in {@code blobs/} they would otherwise grow the store without ever touching the
@@ -47,7 +47,7 @@ public final class QuotaArtifactStore implements ArtifactStore, ObservabilitySou
     // The OCI chunked-upload staging: an un-finalized session's chunks are real stored content, so they count too.
     // A deliberate, documented cross-format coupling - the same key-convention sharing the formats already lean on -
     // rather than let staged bytes bypass the cap until (if ever) they are finalized into a blob.
-    private static final String UPLOADS = "oci/uploads/";
+    private static final String UPLOADS = "oci/.uploads/";
     private static final String USED = Scopes.space(Scopes.QUOTA) + "/used";
 
     private final ArtifactStore delegate;
@@ -120,7 +120,7 @@ public final class QuotaArtifactStore implements ArtifactStore, ObservabilitySou
     }
 
     /** Sum the live content directly under the wrapped scope and store the total as the authoritative counter: the
-     *  flat {@code blobs/} namespace plus the in-flight {@code oci/uploads/} staging, each paged via {@link #page} so
+     *  flat {@code blobs/} namespace plus the in-flight {@code oci/.uploads/} staging, each paged via {@link #page} so
      *  a millions-entry scope never materialises as one list. Summing the staging as well keeps a reseed exactly
      *  consistent with the live write/delete path, so a reconcile does not silently drop an un-finalized session's
      *  bytes and reopen the bypass the metering closes. Use this only when the meter is the scope that holds the
@@ -139,13 +139,13 @@ public final class QuotaArtifactStore implements ArtifactStore, ObservabilitySou
         return total;
     }
 
-    /** Sum the staged chunk bytes of every un-finalized OCI upload session under {@code oci/uploads/}, paging both
+    /** Sum the staged chunk bytes of every un-finalized OCI upload session under {@code oci/.uploads/}, paging both
      *  the session level and each session's chunk level rather than listing them. The staging is small (a handful of
      *  sessions, each itself bounded by this quota) and shallow (session then numbered chunks), so this stays cheap
      *  next to the blob pass while counting the same bytes the live path meters. */
     private long uploadBytes() throws IOException {
         long total = 0L;
-        Names sessions = Names.over(delegate, "oci/uploads");
+        Names sessions = Names.over(delegate, "oci/.uploads");
         for (String session = sessions.next(); session != null; session = sessions.next()) {
             String prefix = UPLOADS + session;
             Names chunks = Names.over(delegate, prefix);
@@ -168,7 +168,7 @@ public final class QuotaArtifactStore implements ArtifactStore, ObservabilitySou
     }
 
     /** Whether a key names content that consumes the quota: a finished blob, or the in-flight chunks of an OCI
-     *  chunked-upload session staged under {@code oci/uploads/}. Pointers and format sidecars are not metered. */
+     *  chunked-upload session staged under {@code oci/.uploads/}. Pointers and format sidecars are not metered. */
     private static boolean metered(String key) {
         return key.startsWith(BLOBS) || key.startsWith(UPLOADS);
     }
@@ -183,7 +183,7 @@ public final class QuotaArtifactStore implements ArtifactStore, ObservabilitySou
         // A content-addressed blob whose key (blobs/<hash>) already resolves is byte-for-byte the content being
         // written: there is nothing to store, so skip the delegate write entirely rather than re-upload (and re-spool)
         // identical bytes. The dedup is probed here, before the body is ever streamed to the backend, so a re-put of
-        // stored content costs one existence check and reads none of the body. Staged oci/uploads/ chunks are not
+        // stored content costs one existence check and reads none of the body. Staged oci/.uploads/ chunks are not
         // content-addressed, so they keep their overwrite semantics and fall through to the write below.
         if (!fresh && key.startsWith(BLOBS)) {
             return;

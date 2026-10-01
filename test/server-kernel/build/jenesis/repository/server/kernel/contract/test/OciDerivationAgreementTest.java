@@ -25,7 +25,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
  * homes for one answer is a data-loss bug waiting for the day they disagree: a hash the hold knows and the scan does
  * not is a live blob the next collection pass condemns and then deletes out from under a held image, and a hash the
  * scan knows and the hold does not is a layer that keeps serving through a hold that reports itself enforced. So the
- * layout resolves the image's manifest hex and hands the free seam the {@code oci/types/<hex>} key that names it.
+ * layout resolves the image's manifest hex and hands the free seam the {@code oci/.types/<hex>} key that names it.
  *
  * <p><b>A suite that proved agreement must now prove the collapse.</b> Every shape below still runs both sides over
  * the same stored bytes and still demands the same set - the legs are the regression net for the delegation, and they
@@ -161,7 +161,7 @@ class OciDerivationAgreementTest {
         sidecar(store, manifest);                               // no tag pointer at all: the digest-only shape
 
         assertThat(layout.blobHashes("library/untagged", "sha256:" + manifest, store))
-                .containsExactlyInAnyOrderElementsOf(FREE_OCI.references("oci/types/" + manifest, store))
+                .containsExactlyInAnyOrderElementsOf(FREE_OCI.references("oci/.types/" + manifest, store))
                 .containsExactlyInAnyOrder(manifest, config, layer);
     }
 
@@ -202,8 +202,8 @@ class OciDerivationAgreementTest {
 
         assertThat(layout.blobHashes("library/collapse", "1.0", store))
                 .as("the hold side derives nothing of its own any more: it resolves the manifest hex and lends the "
-                        + "free seam the oci/types/<hex> key that names it")
-                .containsExactlyElementsOf(FREE_OCI.references("oci/types/" + index, store))
+                        + "free seam the oci/.types/<hex> key that names it")
+                .containsExactlyElementsOf(FREE_OCI.references("oci/.types/" + index, store))
                 .contains(index, amd, arm, amdConfig, armConfig);
         assertThat(layout.blobHashes("library/collapse", "1.0", store))
                 .as("and a tag reference resolves to that same key rather than to a second derivation")
@@ -287,7 +287,7 @@ class OciDerivationAgreementTest {
         // The degrade is SYMMETRIC now, and it was not before. The hand-rolled walk WARNed only when the root
         // had been resolved from a TAG pointer, on the argument that only a tag pointer's target is contractually a
         // manifest; an image pulled by digest whose manifest no longer parses lost its layers from every hold and
-        // enumeration in silence. The oci/types/<hex> sidecar is written for EVERY accepted manifest, so its target is
+        // enumeration in silence. The oci/.types/<hex> sidecar is written for EVERY accepted manifest, so its target is
         // contractually a manifest too - the free seam raises for the root of either key, and this side says so either
         // way. The list is unchanged; being told is the whole change.
         ArtifactStore store = store();
@@ -322,7 +322,7 @@ class OciDerivationAgreementTest {
         tag(store, "library/app", "1.0", manifest);
 
         assertThat(FREE_OCI.references("oci/library/app/tags/1.0", store))
-                .containsExactlyInAnyOrderElementsOf(FREE_OCI.references("oci/types/" + manifest, store))
+                .containsExactlyInAnyOrderElementsOf(FREE_OCI.references("oci/.types/" + manifest, store))
                 .containsExactlyInAnyOrder(manifest, config, layer);
     }
 
@@ -366,7 +366,7 @@ class OciDerivationAgreementTest {
                 .as("the hold side and the reference scan must name the same blobs for %s:%s, or one of them is "
                         + "marking a blob the other has deleted", coordinate, version)
                 .containsExactlyInAnyOrderElementsOf(FREE_OCI.references(pointer, store))
-                .containsExactlyInAnyOrderElementsOf(FREE_OCI.references("oci/types/" + manifest, store));
+                .containsExactlyInAnyOrderElementsOf(FREE_OCI.references("oci/.types/" + manifest, store));
         assertThat(hold.getFirst())
                 .as("the manifest hex leads the hold's list - it is the /quarantine review handle's link target, and "
                         + "withheldByAnotherAlias reads it as the per-image identity")
@@ -403,7 +403,7 @@ class OciDerivationAgreementTest {
     /** The media-type sidecar {@code OciManifests.ingest} writes for every accepted manifest - the key that makes a
      *  digest-only image reachable to the scan at all, and the key the hold side hands the free seam. */
     private static void sidecar(ArtifactStore store, String manifest) throws IOException {
-        store.write("oci/types/" + manifest, new ByteArrayInputStream(OCI_MANIFEST.getBytes(StandardCharsets.UTF_8)));
+        store.write("oci/.types/" + manifest, new ByteArrayInputStream(OCI_MANIFEST.getBytes(StandardCharsets.UTF_8)));
     }
 
     private static void tag(ArtifactStore store, String name, String tag, String manifest) throws IOException {

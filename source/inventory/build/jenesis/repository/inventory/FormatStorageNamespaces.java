@@ -1,7 +1,7 @@
 package build.jenesis.repository.inventory;
 
 import module java.base;
-import build.jenesis.repository.blobs.BlobRoots;
+import build.jenesis.repository.format.BlobReferences;
 import build.jenesis.repository.format.RepositoryFormat;
 import build.jenesis.repository.maintenance.StorageNamespace;
 import build.jenesis.repository.store.StoredListing;
@@ -10,7 +10,7 @@ import build.jenesis.repository.store.StoredListing;
  * The storage-manifest registrar for the discovered formats: one {@link Declared} entry per installed format,
  * attributed to the format's own JPMS module, naming the artifact spaces that format's data lives in - its
  * {@code publish/<name>} pointer mirror and the {@code publish/quarantine/<name>} review mirror beside it, its
- * stored listings, and (for a blobs-namespace format) each declared blob root with its listings. A format module
+ * stored listings, and (for a blobs-namespace format) each root it lends the reference scan, with its listings. A format module
  * carries none of this itself, so without it a format dropped from an image - or toggled off with
  * {@code jenrepo.<name>=false}, which the reclaiming passes treat identically - would hold data no manifest entry
  * described: invisible to the orphaned-data diagnostic, unreachable for the explicit purge, and the repository it
@@ -36,13 +36,18 @@ public final class FormatStorageNamespaces implements StorageNamespace {
     public List<Declared> declarations() {
         Map<String, Set<String>> byModule = new TreeMap<>();
         for (RepositoryFormat format : RepositoryFormat.installed()) {
+            // A provider that rides this seam for a capability alone serves nothing and owns no space: OCI's
+            // inventory layout lays out the roots the serving OCI format writes, and that format owns them.
+            if (!format.offered()) {
+                continue;
+            }
             Set<String> prefixes = byModule.computeIfAbsent(
                     format.getClass().getModule().getName(), module -> new TreeSet<>());
             prefixes.add("publish/" + format.name());
             prefixes.add("publish/quarantine/" + format.name());
             prefixes.add(StoredListing.ROOT + format.name());
-            if (format instanceof BlobRoots roots) {
-                for (String root : roots.blobRoots()) {
+            if (format instanceof BlobReferences lender) {
+                for (String root : lender.blobRoots()) {
                     prefixes.add(root);
                     prefixes.add(StoredListing.ROOT + root);
                 }

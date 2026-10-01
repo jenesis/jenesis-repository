@@ -84,7 +84,10 @@
                     <th scope="col"><span class="app-sr-only">Actions</span></th></tr></thead>
                 <tbody>
                 <tr th:each="m : ${modules.?[orphaned()]}">
-                    <td><code th:text="${m.module}">module</code></td>
+                    <td><code th:text="${m.module}">module</code>
+                        <!--/* A space another installed module also declares is left by the purge, and said so. */-->
+                        <small th:each="kept : ${m.orphanKept}" class="app-list__description"
+                               th:text="'leaves ' + ${kept}">leaves index/search (repository, also search)</small></td>
                     <td th:text="${m.orphanObjects}">0</td>
                     <td th:text="${m.orphanBytes}">0</td>
                     <td class="app-list__actions">

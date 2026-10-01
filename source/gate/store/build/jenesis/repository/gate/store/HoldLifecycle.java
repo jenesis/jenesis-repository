@@ -48,7 +48,7 @@ public final class HoldLifecycle {
 
     private static final Logger LOGGER = LoggerFactory.getLogger(HoldLifecycle.class);
 
-    /** The media type an OCI release stamps into the {@code oci/types/<hex>} sidecar when the held manifest recorded no
+    /** The media type an OCI release stamps into the {@code oci/.types/<hex>} sidecar when the held manifest recorded no
      *  {@code Content-Type} - the same default the {@code OciManifests} accept path and serve path fall back to, so
      *  a released manifest that was pushed without a content type serves as the OCI image manifest exactly as an
      *  accepted one would. */
@@ -379,7 +379,7 @@ public final class HoldLifecycle {
      * at the OCI manifest choke point's QUARANTINE leg) replays neither: an OCI push serves by digest straight from
      * {@code blobs/<hex>} under the native {@code withheld/<hex>} marker, never through a {@code publish/} pointer, so
      * its release completes the deferred OCI layout the QUARANTINE leg skipped (see {@link #releaseOci}) - the
-     * {@code oci/types/<hex>} sidecar and the tag pointer - rather than re-driving a format. The screen is suppressed for
+     * {@code oci/.types/<hex>} sidecar and the tag pointer - rather than re-driving a format. The screen is suppressed for
      * the deploy/import replay ({@link ComplianceScreen#replaying}) so a format whose own handle re-publishes through
      * {@code Publication} (Maven's does) does not re-quarantine the just-released bytes; the OCI completion writes no
      * body through {@code Publication.screen}, so it needs no such suppression. When the format/importer is no longer
@@ -469,7 +469,7 @@ public final class HoldLifecycle {
      * The OCI manifest choke point stored the manifest content-addressed at the serving key {@code blobs/<hash>} but, on
      * QUARANTINE, laid out none of OCI's native metadata and set the {@code withheld/<hash>} marker instead; the shared
      * release tail lifts that marker, and this writes the two things the accept path would have: the
-     * {@code oci/types/<hash>} media-type sidecar the serve path returns verbatim, and - for a tag reference (never a
+     * {@code oci/.types/<hash>} media-type sidecar the serve path returns verbatim, and - for a tag reference (never a
      * {@code sha256:} digest reference, which already resolves by digest) - the {@code oci/<name>/tags/<tag>} pointer at
      * {@code sha256:<hash>} <em>only when that tag is still absent</em> (see {@link #linkOciTag}), so a pull by tag
      * resolves without rolling back a clean manifest re-pushed to the same tag during the hold. The image name and tag
@@ -492,7 +492,7 @@ public final class HoldLifecycle {
         String name = path.substring("/v2/".length(), manifests);
         String reference = path.substring(manifests + "/manifests/".length());
         String mediaType = dispatch.headers().getOrDefault("Content-Type", OCI_MANIFEST);
-        store.write("oci/types/" + hash, new ByteArrayInputStream(mediaType.getBytes(StandardCharsets.UTF_8)));
+        store.write("oci/.types/" + hash, new ByteArrayInputStream(mediaType.getBytes(StandardCharsets.UTF_8)));
         // A digest reference already pulls by digest once the marker lifts; only a tag reference needs the pointer laid
         // out so the released image also pulls by tag.
         if (!reference.startsWith("sha256:")) {

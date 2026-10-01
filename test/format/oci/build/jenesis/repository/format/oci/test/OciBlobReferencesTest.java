@@ -113,9 +113,9 @@ class OciBlobReferencesTest {
         byte[] body = manifest(config, layer);
         String manifest = pushManifest("library/app", "sha256:" + sha256(body), body);
 
-        assertThat(store.exists("oci/types/" + manifest)).as("every accepted manifest gets its sidecar").isTrue();
+        assertThat(store.exists("oci/.types/" + manifest)).as("every accepted manifest gets its sidecar").isTrue();
         assertThat(store.list("oci/library/app/tags")).as("and a by-digest push links no tag").isEmpty();
-        assertThat(format.references("oci/types/" + manifest, store))
+        assertThat(format.references("oci/.types/" + manifest, store))
                 .containsExactlyInAnyOrder(manifest, config, layer);
     }
 
@@ -141,15 +141,15 @@ class OciBlobReferencesTest {
     void a_key_that_names_no_image_lends_nothing() throws IOException {
         // The staging spaces of a push that never became an image, and a sidecar whose name is not a digest: empty is
         // the honest "keeps no further blob alive", and a never-finalized upload is what collection is FOR.
-        store.writeVersioned("oci/uploads/session/0", "chunk".getBytes(StandardCharsets.UTF_8), null);
-        store.writeVersioned("oci/upload-sessions/session", "1".getBytes(StandardCharsets.UTF_8), null);
-        store.writeVersioned("oci/types/not-a-digest", "text/plain".getBytes(StandardCharsets.UTF_8), null);
+        store.writeVersioned("oci/.uploads/session/0", "chunk".getBytes(StandardCharsets.UTF_8), null);
+        store.writeVersioned("oci/.upload-sessions/session", "1".getBytes(StandardCharsets.UTF_8), null);
+        store.writeVersioned("oci/.types/not-a-digest", "text/plain".getBytes(StandardCharsets.UTF_8), null);
         store.writeVersioned("oci/library/app/tags/dangling",
                 "sha256:not-a-digest".getBytes(StandardCharsets.UTF_8), null);
 
-        assertThat(format.references("oci/uploads/session/0", store)).isEmpty();
-        assertThat(format.references("oci/upload-sessions/session", store)).isEmpty();
-        assertThat(format.references("oci/types/not-a-digest", store)).isEmpty();
+        assertThat(format.references("oci/.uploads/session/0", store)).isEmpty();
+        assertThat(format.references("oci/.upload-sessions/session", store)).isEmpty();
+        assertThat(format.references("oci/.types/not-a-digest", store)).isEmpty();
         assertThat(format.references("oci/library/app/tags/dangling", store)).isEmpty();
         assertThat(format.references("oci/library/app/tags/absent", store)).isEmpty();
         assertThat(format.references("publish/maven/some.jar", store))
@@ -165,10 +165,10 @@ class OciBlobReferencesTest {
         byte[] junk = "not a manifest at all".getBytes(StandardCharsets.UTF_8);
         String hex = sha256(junk);
         store.writeVersioned("blobs/" + hex, junk, null);
-        store.writeVersioned("oci/types/" + hex,
+        store.writeVersioned("oci/.types/" + hex,
                 "application/vnd.oci.image.manifest.v1+json".getBytes(StandardCharsets.UTF_8), null);
 
-        assertThatThrownBy(() -> format.references("oci/types/" + hex, store))
+        assertThatThrownBy(() -> format.references("oci/.types/" + hex, store))
                 // The named refusal of clause 3, not a bare IOException: these bytes will never parse, and a consumer
                 // deriving the same set to decide what to WITHHOLD has to be able to degrade on exactly this without
                 // also degrading on a store outage. It stays an IOException, so a collector that catches nothing at
@@ -189,10 +189,10 @@ class OciBlobReferencesTest {
         byte[] oversized = new byte[4 * 1024 * 1024 + 1];
         Arrays.fill(oversized, (byte) '{');
         store.write("blobs/" + hex, new ByteArrayInputStream(oversized));
-        store.writeVersioned("oci/types/" + hex,
+        store.writeVersioned("oci/.types/" + hex,
                 "application/vnd.oci.image.manifest.v1+json".getBytes(StandardCharsets.UTF_8), null);
 
-        assertThatThrownBy(() -> format.references("oci/types/" + hex, store))
+        assertThatThrownBy(() -> format.references("oci/.types/" + hex, store))
                 .isInstanceOf(BlobReferences.Unresolvable.class)
                 .hasMessageContaining(hex)
                 .hasMessageContaining("manifest bound");
@@ -207,13 +207,13 @@ class OciBlobReferencesTest {
         byte[] body = manifest(sha256("c".getBytes(StandardCharsets.UTF_8)));
         String hex = sha256(body);
         store.writeVersioned("blobs/" + hex, body, null);
-        store.writeVersioned("oci/types/" + hex,
+        store.writeVersioned("oci/.types/" + hex,
                 "application/vnd.oci.image.manifest.v1+json".getBytes(StandardCharsets.UTF_8), null);
         ArtifactStore failing = new FailingReads(store);
 
-        assertThat(format.references("oci/types/" + hex, store))
+        assertThat(format.references("oci/.types/" + hex, store))
                 .as("the same key resolves cleanly while the store answers").isNotEmpty();
-        assertThatThrownBy(() -> format.references("oci/types/" + hex, failing))
+        assertThatThrownBy(() -> format.references("oci/.types/" + hex, failing))
                 .isInstanceOf(IOException.class)
                 .isNotInstanceOf(BlobReferences.Unresolvable.class);
     }
@@ -293,10 +293,10 @@ class OciBlobReferencesTest {
         // Residue, not an invariant break: a sidecar whose manifest blob is absent keeps nothing else alive, and must
         // not be confused with the present-but-unreadable case above.
         String hex = sha256("gone".getBytes(StandardCharsets.UTF_8));
-        store.writeVersioned("oci/types/" + hex,
+        store.writeVersioned("oci/.types/" + hex,
                 "application/vnd.oci.image.manifest.v1+json".getBytes(StandardCharsets.UTF_8), null);
 
-        assertThat(format.references("oci/types/" + hex, store)).containsExactly(hex);
+        assertThat(format.references("oci/.types/" + hex, store)).containsExactly(hex);
     }
 
     @Test

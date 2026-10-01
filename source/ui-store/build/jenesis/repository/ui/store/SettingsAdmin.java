@@ -259,12 +259,13 @@ public class SettingsAdmin {
             StorageNamespaces.Report orphan = orphans.remove(capability.module());
             views.add(new ModuleView(capability.module(), capability.installed(), capability.enabled(),
                     capability.gated(), capability.enableKey(), capability.live(), capability.toggleable(), settings,
-                    orphan == null ? 0 : orphan.objects(), orphan == null ? 0 : orphan.bytes()));
+                    orphan == null ? 0 : orphan.objects(), orphan == null ? 0 : orphan.bytes(),
+                    orphan == null ? List.of() : kept(orphan)));
         }
         // A removed module may be named only by its persisted storage manifest (no stored settings document, no
         // contributor) - it still deserves a row, so the operator sees its orphaned data at all.
         orphans.forEach((module, orphan) -> views.add(new ModuleView(module, false, false, false, null, false,
-                false, List.of(), orphan.objects(), orphan.bytes())));
+                false, List.of(), orphan.objects(), orphan.bytes(), kept(orphan))));
         views.sort(Comparator.comparing(ModuleView::module));
         return views;
     }
@@ -961,10 +962,11 @@ public class SettingsAdmin {
      *  the diagnostic that informs, while reclaiming stays an explicit operator purge, never a screen action. */
     public record ModuleView(String module, boolean installed, boolean enabled, boolean gated, String enableKey,
                              boolean live, boolean toggleable, List<SettingView> settings,
-                             long orphanObjects, long orphanBytes) {
+                             long orphanObjects, long orphanBytes, List<String> orphanKept) {
 
         public ModuleView {
             settings = List.copyOf(settings);
+            orphanKept = List.copyOf(orphanKept);
         }
 
         /** Whether an enabled/disabled toggle here applies only on the next restart, so the row shows the honest
@@ -984,6 +986,13 @@ public class SettingsAdmin {
         public boolean orphaned() {
             return orphanObjects > 0;
         }
+    }
+
+    /** What a purge of a removed module leaves because installed modules declare it too, as the screen says it. */
+    private static List<String> kept(StorageNamespaces.Report report) {
+        return report.kept().stream()
+                .map(kept -> kept.prefix() + " (" + kept.scope() + ", also " + String.join(", ", kept.owners()) + ")")
+                .toList();
     }
 
     /** One setting rendered for the config page: its key and human label, its inline documentation, its value kind

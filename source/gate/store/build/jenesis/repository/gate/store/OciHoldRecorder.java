@@ -21,7 +21,7 @@ import build.jenesis.repository.gate.QuarantineDispatch;
  * needs to complete the deferred OCI layout: the {@code oci} format, the {@link QuarantineDispatch#OCI OCI} method, the
  * stored manifest hash the descriptor already carries ({@link ArtifactDescriptor#hash}), and the manifest media type on
  * the context map's {@code Content-Type} key so {@link HoldLifecycle#release} reproduces the pushed manifest's type in
- * the {@code oci/types/<hex>} sidecar. The image name and tag are read back off the request path at release, so no
+ * the {@code oci/.types/<hex>} sidecar. The image name and tag are read back off the request path at release, so no
  * further context is captured. Every non-OCI publish, and an OCI {@code ACCEPT}/{@code REJECT}, is a no-op - a
  * quarantined deploy/import already records its own dispatch through its own edge, and an accepted or rejected manifest
  * has no hold to release.
@@ -50,7 +50,7 @@ public final class OciHoldRecorder implements PublishInterceptor {
         Map<String, String> context = new LinkedHashMap<>();
         if (artifact.contentType() != null && !artifact.contentType().isBlank()) {
             // The one datum a release needs beyond the path and hash: the pushed manifest's media type, reproduced into
-            // the oci/types/<hex> sidecar. Carried on the Content-Type key the deploy dispatch also frames from, so the
+            // the oci/.types/<hex> sidecar. Carried on the Content-Type key the deploy dispatch also frames from, so the
             // stored descriptor stays the same shape; absent, the release defaults to the OCI image-manifest type.
             context.put("Content-Type", artifact.contentType());
         }

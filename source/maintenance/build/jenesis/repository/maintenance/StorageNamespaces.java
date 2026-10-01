@@ -169,17 +169,36 @@ public final class StorageNamespaces {
     }
 
     /** One walk serves the plan and the purge, so the dry-run listing is exactly the delete's blast radius. A
-     *  shared (deployment-global) prefix is walked once at the store root; the tenant-scoped prefixes per scope. */
+     *  shared (deployment-global) prefix is walked once at the store root; the tenant-scoped prefixes per scope.
+     *
+     *  <p>A prefix an installed module also declares - the same one, or one inside or around it, at the same scope -
+     *  is not walked at all: it holds that module's data too, and a purge of one owner would delete the other's. The
+     *  report names it with the modules that still own it, so the plan says what it leaves and why. That happens
+     *  where a stored manifest entry outlived a module whose space another module now declares; installed modules
+     *  never share one. */
     private Report sweep(StorageNamespace.Declared declared, Collection<String> tenants, boolean delete)
             throws IOException {
+        List<StorageNamespace.Declared> others = StorageNamespace.declared().stream()
+                .filter(other -> !other.module().equals(declared.module())).toList();
+        List<Report.Kept> kept = new ArrayList<>();
+        Set<String> sharedOwned = owned(declared.sharedPrefixes(), others, StorageNamespace.Declared::sharedPrefixes,
+                "shared", kept);
+        Set<String> tenantOwned = owned(declared.tenantPrefixes(), others, StorageNamespace.Declared::tenantPrefixes,
+                "tenant", kept);
+        Set<String> repositoryOwned = owned(declared.repositoryPrefixes(), others,
+                StorageNamespace.Declared::repositoryPrefixes, "repository", kept);
         List<Report.Space> spaces = new ArrayList<>();
         for (String prefix : declared.sharedPrefixes()) {
-            space(spaces, prefix, delete);
+            if (!sharedOwned.contains(prefix)) {
+                space(spaces, prefix, delete);
+            }
         }
         for (String tenant : tenants) {
             ArtifactStore.segment(tenant);
             for (String prefix : declared.tenantPrefixes()) {
-                space(spaces, tenant + "/" + prefix, delete);
+                if (!tenantOwned.contains(prefix)) {
+                    space(spaces, tenant + "/" + prefix, delete);
+                }
             }
             if (declared.repositoryPrefixes().isEmpty()) {
                 continue;
@@ -195,7 +214,9 @@ public final class StorageNamespaces {
                     continue;
                 }
                 for (String prefix : declared.repositoryPrefixes()) {
-                    space(spaces, tenant + "/" + repository + "/" + prefix, delete);
+                    if (!repositoryOwned.contains(prefix)) {
+                        space(spaces, tenant + "/" + repository + "/" + prefix, delete);
+                    }
                 }
             }
         }
@@ -205,7 +226,34 @@ public final class StorageNamespaces {
             objects += space.objects();
             bytes += space.bytes();
         }
-        return new Report(declared.module(), !delete, List.copyOf(spaces), objects, bytes);
+        return new Report(declared.module(), !delete, List.copyOf(spaces), objects, bytes, List.copyOf(kept));
+    }
+
+    /** The prefixes of {@code prefixes} another module also owns at this scope, each added to {@code kept} with its
+     *  owners. */
+    private static Set<String> owned(Set<String> prefixes, List<StorageNamespace.Declared> others,
+                                     Function<StorageNamespace.Declared, Set<String>> scope, String label,
+                                     List<Report.Kept> kept) {
+        Set<String> owned = new TreeSet<>();
+        for (String prefix : prefixes) {
+            List<String> owners = new ArrayList<>();
+            for (StorageNamespace.Declared other : others) {
+                if (scope.apply(other).stream().anyMatch(theirs -> overlap(prefix, theirs))) {
+                    owners.add(other.module());
+                }
+            }
+            if (!owners.isEmpty()) {
+                owned.add(prefix);
+                kept.add(new Report.Kept(label, prefix, List.copyOf(owners)));
+            }
+        }
+        return owned;
+    }
+
+    /** Whether two prefixes name one space or one inside the other, segment by segment - {@code audit/quarantine}
+     *  and {@code audit/quarantine-index} are neighbours, not one inside the other. */
+    public static boolean overlap(String one, String other) {
+        return one.equals(other) || one.startsWith(other + "/") || other.startsWith(one + "/");
     }
 
     private void space(List<Report.Space> spaces, String prefix, boolean delete) throws IOException {
@@ -253,14 +301,21 @@ public final class StorageNamespaces {
     /** What one plan, purge or orphan scan found: the module, whether this was a dry run, and the per-prefix
      *  counts (each prefix fully scoped, {@code <tenant>/<repository>/<prefix>} or {@code <tenant>/<prefix>},
      *  listing only prefixes that hold data). */
-    public record Report(String module, boolean dryRun, List<Space> spaces, long objects, long bytes) {
+    public record Report(String module, boolean dryRun, List<Space> spaces, long objects, long bytes,
+                         List<Kept> kept) {
 
         public Report {
             spaces = List.copyOf(spaces);
+            kept = List.copyOf(kept);
         }
 
         /** One fully-scoped prefix and what it holds. */
         public record Space(String prefix, long objects, long bytes) {
+        }
+
+        /** A declared prefix the purge leaves, at its {@code scope} ({@code repository}, {@code tenant} or
+         *  {@code shared}), because the installed {@code owners} declare it too. */
+        public record Kept(String scope, String prefix, List<String> owners) {
         }
     }
 

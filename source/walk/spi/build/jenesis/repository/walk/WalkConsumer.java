@@ -319,7 +319,7 @@ public interface WalkConsumer {
      *
      * <p><b>It exists because "the pointers" is not the same set as "everything that keeps a blob alive".</b> A
      * format may hold a blob alive through a stored <em>document</em> rather than through a pointer body: the OCI
-     * media-type sidecars under {@code oci/types/<hex>} resolve to a manifest, and that manifest's config and
+     * media-type sidecars under {@code oci/.types/<hex>} resolve to a manifest, and that manifest's config and
      * layers are live content, yet the sidecar's own body is a media type and no walk would call it a serving
      * pointer. A reference scan handed only the pointers would not ask about those keys, and a blob nothing asked
      * about is a blob that gets condemned and then deleted. So the consumer that must see everything says so, and

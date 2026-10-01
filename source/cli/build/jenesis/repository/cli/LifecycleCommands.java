@@ -162,6 +162,12 @@ final class LifecycleCommands {
         for (SettingsClient.PurgeSpace space : plan.spaces()) {
             System.out.printf("  %s: %d object(s), %d byte(s)%n", space.prefix(), space.objects(), space.bytes());
         }
+        if (plan.kept() != null) {
+            for (SettingsClient.PurgeKept kept : plan.kept()) {
+                System.out.printf("  leaves %s (%s), which %s also declare%n", kept.prefix(), kept.scope(),
+                        String.join(", ", kept.owners()));
+            }
+        }
         if (!delete) {
             System.out.printf("%d object(s), %d byte(s) in total. Re-run with --delete to purge.%n",
                     plan.objects(), plan.bytes());

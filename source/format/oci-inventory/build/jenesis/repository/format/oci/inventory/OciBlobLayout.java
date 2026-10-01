@@ -58,13 +58,13 @@ import build.jenesis.repository.format.Checksums;
  *       pulled only by digest carries no tag pointer, so a scan that reads bodies alone condemns and then deletes a
  *       live image's layers. Closing that needs the mark phase to <em>ask the format that owns the visited key's root
  *       what else that key keeps alive</em> - the {@code BlobReferences} seam, which resolves the manifest
- *       from either key that names one (the tag pointer, or the {@code oci/types/<hex>} media-type sidecar
+ *       from either key that names one (the tag pointer, or the {@code oci/.types/<hex>} media-type sidecar
  *       {@code OciManifests.ingest} writes for EVERY accepted manifest, tagged or not) and lends back the manifest's
  *       own hash, an index's sub-manifests and each one's config, layer and legacy {@code fsLayers} digests. The
  *       collector still parses no format's document; it unions what the format lends into the same shards under the
  *       same bare-hex predicate.</li>
  *   <li><b>Sweep - what an eviction takes away.</b> {@link #blobKeys} is the handle, and it names the
- *       {@code oci/types/<hex>} sidecar as well as the tag pointer, guarded so a sibling tag on the same digest keeps
+ *       {@code oci/.types/<hex>} sidecar as well as the tag pointer, guarded so a sibling tag on the same digest keeps
  *       it. That is what makes the two halves a cycle rather than a ratchet: without it the sidecar outlives the image
  *       and keeps lending its blobs for ever, so an evicted image is <em>retained</em> rather than reclaimed - the safe
  *       direction, but unbounded storage growth.</li>
@@ -150,7 +150,7 @@ public final class OciBlobLayout implements RepositoryFormat, BlobLayout {
      *
      * <p>The reference scan never consults {@link #blobHashes}, which is the hold side's derivation and carries the
      * opposite degrade. The sweep half of the cycle is {@link #blobKeys}, which retires a manifest by destroying its
-     * last tag pointer and its {@code oci/types/<hex>} sidecar together.
+     * last tag pointer and its {@code oci/.types/<hex>} sidecar together.
      */
     @Override
     public List<String> blobRoots() {
@@ -159,7 +159,7 @@ public final class OciBlobLayout implements RepositoryFormat, BlobLayout {
 
     /**
      * The store keys an eviction or discard of one image version deletes - the tag pointer, and the manifest's
-     * {@code oci/types/<hex>} media-type sidecar when this version is the last live tag holding it.
+     * {@code oci/.types/<hex>} media-type sidecar when this version is the last live tag holding it.
      *
      * <p>A tag reference maps to its {@code oci/<name>/tags/<tag>} pointer; a digest reference names no pointer key at
      * all (content-addressed - one {@code withheld/<hex>} marker retracts it, which {@code discardBlobs} deliberately
@@ -168,7 +168,7 @@ public final class OciBlobLayout implements RepositoryFormat, BlobLayout {
      *
      * <p><b>Why the sidecar is an eviction key at all.</b> The {@code BlobReferences} seam lends the reference
      * scan the blobs an image keeps alive, resolved from either of the two keys that name a manifest: the tag pointer,
-     * and {@code oci/types/<hex>} - the sidecar {@code OciManifests.ingest} writes for EVERY accepted manifest, which
+     * and {@code oci/.types/<hex>} - the sidecar {@code OciManifests.ingest} writes for EVERY accepted manifest, which
      * is a digest-only image's only durable record. That closes a live-data-loss hole - a pass condemning and
      * then deleting a live image's config and layers
      * - but opens a storage one at the other end unless something retires the sidecar: an evicted image would stay
@@ -201,17 +201,17 @@ public final class OciBlobLayout implements RepositoryFormat, BlobLayout {
             return List.of();                   // not a live tag pointer: this version occupies no key to destroy
         }
         String hex = hex(new String(pointer.get().content(), StandardCharsets.UTF_8).trim());
-        if (hex == null || !store.exists("oci/types/" + hex)) {
+        if (hex == null || !store.exists("oci/.types/" + hex)) {
             return List.of(key);                // no sidecar to retire (or a body that names no manifest)
         }
         if (sharedByAnotherTag(key, hex, store)) {
             return List.of(key);                // a sibling alias still needs the sidecar - delete less
         }
-        return List.of(key, "oci/types/" + hex);
+        return List.of(key, "oci/.types/" + hex);
     }
 
     /**
-     * {@link #blobKeys}, and for a digest reference the manifest's {@code oci/types/<hex>} sidecar - the record this
+     * {@link #blobKeys}, and for a digest reference the manifest's {@code oci/.types/<hex>} sidecar - the record this
      * registry serves a manifest through - when no live tag pointer anywhere in the repository still names it.
      *
      * <p>A client that deletes a manifest by digest has already had every tag of the image naming it removed, and
@@ -232,7 +232,7 @@ public final class OciBlobLayout implements RepositoryFormat, BlobLayout {
         if (hex == null || !isImageName(coordinate)) {
             return List.of();
         }
-        String sidecar = "oci/types/" + hex;
+        String sidecar = "oci/.types/" + hex;
         if (!store.exists(sidecar) || sharedByAnotherTag(sidecar, hex, store)) {
             return List.of();
         }
@@ -241,7 +241,7 @@ public final class OciBlobLayout implements RepositoryFormat, BlobLayout {
 
     /**
      * Whether a live tag pointer other than {@code witness} resolves to the manifest {@code hex} - the cross-alias
-     * guard that keeps {@code oci/types/<hex>} standing while any sibling tag still serves that manifest.
+     * guard that keeps {@code oci/.types/<hex>} standing while any sibling tag still serves that manifest.
      * {@code witness} is a key the caller has just read and knows is there: the tag pointer being evicted, or the
      * sidecar itself when a manifest is removed by digest.
      *
@@ -280,7 +280,7 @@ public final class OciBlobLayout implements RepositoryFormat, BlobLayout {
     /** Keep the sidecar and say why - the one place the guard's fail-closed degrade is recorded, so "retained rather
      *  than reclaimed" is never a silent outcome. Always answers {@code true} ("treat as shared"). */
     private static boolean withheld(String own, String hex, String why) {
-        LOGGER.warn("Could not prove the OCI manifest sidecar oci/types/{} unshared while evicting {}, so it is kept: {}. "
+        LOGGER.warn("Could not prove the OCI manifest sidecar oci/.types/{} unshared while evicting {}, so it is kept: {}. "
                 + "Reclamation of that manifest is deferred to the next eviction of one of its tags; nothing that "
                 + "serves is affected.", hex, own, why);
         return true;
@@ -356,7 +356,7 @@ public final class OciBlobLayout implements RepositoryFormat, BlobLayout {
      * hold knows and the scan does not is a live blob the next pass deletes out from under a held image, and one the
      * scan knows and the hold does not is a layer serving through a hold that reports itself enforced. So the manifest
      * dialect stays with the format that owns it and this method only resolves the image's manifest hex and hands the
-     * free seam the {@code oci/types/<hex>} key that names it - the sidecar {@code OciManifests.ingest} writes for
+     * free seam the {@code oci/.types/<hex>} key that names it - the sidecar {@code OciManifests.ingest} writes for
      * every accepted manifest, which is a key the seam answers for whether or not the image is tagged.
      *
      * <p><b>What the delegation costs.</b> The two sides carry <b>opposite failure
@@ -396,7 +396,7 @@ public final class OciBlobLayout implements RepositoryFormat, BlobLayout {
         try {
             // The sidecar key rather than the tag pointer: it names this manifest whether or not the image is tagged,
             // and the seam resolves the hex straight out of the key without a second store read.
-            references = lender.references("oci/types/" + hex, store);
+            references = lender.references("oci/.types/" + hex, store);
         } catch (BlobReferences.Unresolvable unenumerable) {
             // Exactly this one, never a bare IOException: a store outage must keep propagating rather than becoming a
             // silently under-enforced hold. Alarm and degrade - blobHashes runs in the streamed sweep loop, and
@@ -496,21 +496,16 @@ public final class OciBlobLayout implements RepositoryFormat, BlobLayout {
         return Checksums.isSha256Hex(hex) ? hex : null;
     }
 
-    /** The reserved children at the {@code oci/} root that are never image-name segments - this format's sidecar and
-     *  upload spaces, mirroring the {@code OciFormat.DirCursor.reserved} rule so no traversal of the {@code oci/}
-     *  tree ever mistakes a sidecar for an image. */
-    static final Set<String> RESERVED = Set.of("types", "uploads", "upload-sessions");
-
     /**
      * The {@code (image name, tag)} a stored {@code oci/} key names when that key is a tag pointer, or {@code null}
      * when it is not one - the store-key half of this format's conventions, held here beside {@link #isImageName} and
      * {@link OciTags#isTag} because a tag pointer's shape is layout knowledge and every traversal of the
      * {@code oci/} tree needs exactly this decision.
      *
-     * <p>A tag pointer is {@code oci/<name>/tags/<tag>}: the FIRST {@code tags} segment ends the image name (the free
-     * {@code OciFormat.DirCursor.reserved} rule reserves {@code tags} at every level, so no image name contains one)
-     * and exactly one segment may follow it - a deeper key under a tag is not a pointer. The format's sidecar spaces at
-     * the {@code oci/} root ({@link #RESERVED}) are never image names, and both derived parts are screened through the
+     * <p>A tag pointer is {@code oci/<name>/tags/<tag>}: the FIRST {@code tags} segment ends the image name, and
+     * exactly one segment may follow it - a deeper key under a tag is not a pointer. The format's own spaces under
+     * {@code oci/} begin with a dot, which no image name may, so they are never image names, and both derived parts are
+     * screened through the
      * same Distribution grammar the serving path applies, so a hostile key can never be decoded into a coordinate this
      * format would not itself have written.
      */
@@ -540,7 +535,7 @@ public final class OciBlobLayout implements RepositoryFormat, BlobLayout {
             return null;                        // the root itself, were it ever a stored key, names no image
         }
         String[] segments = key.substring("oci/".length()).split("/");
-        if (segments.length < 3 || RESERVED.contains(segments[0])) {
+        if (segments.length < 3 || segments[0].startsWith(".")) {
             return null;
         }
         for (int index = 1; index < segments.length; index++) {
@@ -574,7 +569,7 @@ public final class OciBlobLayout implements RepositoryFormat, BlobLayout {
             return false;
         }
         for (String segment : name.split("/", -1)) {
-            if (segment.isEmpty()) {
+            if (segment.isEmpty() || segment.startsWith(".")) {
                 return false;
             }
         }

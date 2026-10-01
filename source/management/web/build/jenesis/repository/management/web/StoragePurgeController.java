@@ -88,8 +88,12 @@ public class StoragePurgeController {
         for (StorageNamespaces.Report.Space space : report.get().spaces()) {
             spaces.add(new SpaceView(space.prefix(), space.objects(), space.bytes()));
         }
+        List<KeptView> kept = new ArrayList<>();
+        for (StorageNamespaces.Report.Kept space : report.get().kept()) {
+            kept.add(new KeptView(space.scope(), space.prefix(), space.owners()));
+        }
         return ResponseEntity.ok(new PurgeView(namespace, dryRun,
-                spaces, report.get().objects(), report.get().bytes(),
+                spaces, report.get().objects(), report.get().bytes(), kept,
                 unreachable(), StorageNamespaces.UNREACHABLE_NOTE));
     }
 
@@ -112,7 +116,12 @@ public class StoragePurgeController {
     /** What one purge (or its dry run) covered, with the per-prefix breakdown of the fully scoped key-spaces - and
      *  the reserved key spaces it deliberately cannot reach, so the blast radius is read for what it is. */
     public record PurgeView(String namespace, boolean dryRun, List<SpaceView> spaces, long objects, long bytes,
-                            List<String> unreachable, String note) {
+                            List<KeptView> kept, List<String> unreachable, String note) {
+    }
+
+    /** A declared prefix the purge leaves at its {@code scope}, because the installed {@code owners} declare it
+     *  too. */
+    public record KeptView(String scope, String prefix, List<String> owners) {
     }
 
     /** One fully scoped prefix ({@code <tenant>/<repository>/<prefix>} or {@code <tenant>/<prefix>}) and what it

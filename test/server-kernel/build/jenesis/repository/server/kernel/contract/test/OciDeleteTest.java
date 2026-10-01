@@ -199,7 +199,7 @@ class OciDeleteTest {
         assertThat(send("DELETE", "/v2/app/manifests/sha256:" + referrer).status()).isEqualTo(202);
         assertThat(new String(send("GET", "/v2/app/referrers/sha256:" + subject).body(), StandardCharsets.UTF_8))
                 .doesNotContain(referrer);
-        assertThat(store.isEmpty("oci/app/manifests/" + subject + "/referrers")).isTrue();
+        assertThat(store.isEmpty("oci/app/.manifests/" + subject + "/referrers")).isTrue();
     }
 
     @Test
@@ -230,9 +230,27 @@ class OciDeleteTest {
 
         inventory.evict(inventory.release("oci", "app", "latest").orElseThrow());
 
-        assertThat(store.exists("oci/types/" + manifest))
+        assertThat(store.exists("oci/.types/" + manifest))
                 .as("an index that cannot speak for the tag's siblings keeps the record they may still need").isTrue();
         assertThat(send("GET", "/v2/app/manifests/1.0").status()).isEqualTo(200);
+    }
+
+    @Test
+    void an_image_may_be_named_what_the_format_s_own_spaces_are_named_and_none_may_begin_with_a_dot()
+            throws IOException {
+        String types = image("types", "an image called types", "1.0");
+        image("uploads", "an image called uploads", "1.0");
+        assertThat(send("GET", "/v2/types/manifests/1.0").status()).isEqualTo(200);
+        assertThat(new String(send("GET", "/v2/uploads/tags/list").body(), StandardCharsets.UTF_8)).contains("1.0");
+        assertThat(send("DELETE", "/v2/types/manifests/sha256:" + types).status())
+                .as("and removed like any other, its record beside the format's own").isEqualTo(202);
+
+        Exchange dotted = new Exchange("PUT", "/v2/.types/manifests/1.0", manifest("a".repeat(64)),
+                Map.of("Content-Type", "application/vnd.oci.image.manifest.v1+json"));
+        format.handle(dotted, store);
+        assertThat(dotted.status()).as("a name the grammar refuses, which is what keeps the format's spaces apart")
+                .isGreaterThanOrEqualTo(400);
+        assertThat(store.exists("oci/.types/tags/1.0")).isFalse();
     }
 
     @Test

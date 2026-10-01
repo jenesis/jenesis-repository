@@ -101,12 +101,12 @@ public final class OciFormat implements RepositoryFormat, ProxyFormat, Repositor
      *  Package-private so the migration-import path ({@link OciImporter}) bounds an imported manifest identically. */
     static final int MAX_MANIFEST = 4 * 1024 * 1024;
 
-    private static final String UPLOADS = "oci/uploads/";
+    private static final String UPLOADS = "oci/.uploads/";
 
     /** One start-time marker per open upload session, in its own namespace - kept out of the session's numbered
      *  chunks (so it never disturbs chunk indexing) and out of the quota-metered {@link #UPLOADS} staging (so the
      *  tiny marker is never itself counted). The reaper ages a never-finalized session out by this marker. */
-    private static final String SESSIONS = "oci/upload-sessions/";
+    private static final String SESSIONS = "oci/.upload-sessions/";
 
     /** How long an un-finalized chunked-upload session is kept before {@link #reap} drops it. A {@code docker push}
      *  that opens a session and streams chunks but never finalizes it (a crashed or hostile client) is stored bytes
@@ -296,7 +296,7 @@ public final class OciFormat implements RepositoryFormat, ProxyFormat, Repositor
         String id = session.startsWith("/") ? session.substring(1) : session;
         if (!isImageName(id)) {
             exchange.respond(404);                              // a client-supplied, traversal-laced session id names
-            return;                                             // no upload; the id must not aim an oci/uploads/<id> key
+            return;                                             // no upload; the id must not aim an oci/.uploads/<id> key
         }
         if (method.equals("PATCH")) {
             long uploaded = append(store, id, exchange.requestStream());
@@ -373,8 +373,8 @@ public final class OciFormat implements RepositoryFormat, ProxyFormat, Repositor
         long[] session = session(store, id);
         long timestamp = session[0] == 0L ? clock.millis() : session[0];   // a stray chunk with no POST starts the clock
         long index = session[1];
-        store.write("oci/uploads/" + id + "/" + index, chunk);
-        long size = Math.max(store.size("oci/uploads/" + id + "/" + index), 0L);
+        store.write("oci/.uploads/" + id + "/" + index, chunk);
+        long size = Math.max(store.size("oci/.uploads/" + id + "/" + index), 0L);
         long bytes = session[2] + size;
         writeSession(store, id, timestamp, index + 1, bytes);
         return bytes;
@@ -415,7 +415,7 @@ public final class OciFormat implements RepositoryFormat, ProxyFormat, Repositor
      *  drained, so finalizing a chunked upload streams the whole layer through {@link ArtifactStore#writeBlob}
      *  without ever holding it in memory. */
     private static InputStream chunks(ArtifactStore store, String id) {
-        List<String> indices = new ArrayList<>(store.list("oci/uploads/" + id));
+        List<String> indices = new ArrayList<>(store.list("oci/.uploads/" + id));
         indices.sort(Comparator.comparingInt(Integer::parseInt));
         Iterator<String> iterator = indices.iterator();
         return new SequenceInputStream(new Enumeration<>() {
@@ -427,7 +427,7 @@ public final class OciFormat implements RepositoryFormat, ProxyFormat, Repositor
             @Override
             public InputStream nextElement() {
                 try {
-                    return store.open("oci/uploads/" + id + "/" + iterator.next());
+                    return store.open("oci/.uploads/" + id + "/" + iterator.next());
                 } catch (IOException e) {
                     throw new UncheckedIOException(e);
                 }
@@ -439,8 +439,8 @@ public final class OciFormat implements RepositoryFormat, ProxyFormat, Repositor
      *  deleted last, so a crash mid-cleanup leaves it behind for the reaper to retry against rather than orphaning
      *  the chunks - the same converge-through-the-store, fail-toward-a-retry ordering the delete path elsewhere uses. */
     private static void cleanup(ArtifactStore store, String id) throws IOException {
-        for (String index : store.list("oci/uploads/" + id)) {
-            store.delete("oci/uploads/" + id + "/" + index);
+        for (String index : store.list("oci/.uploads/" + id)) {
+            store.delete("oci/.uploads/" + id + "/" + index);
         }
         store.delete(SESSIONS + id);
     }
@@ -469,7 +469,7 @@ public final class OciFormat implements RepositoryFormat, ProxyFormat, Repositor
     public int reap(ArtifactStore store) throws IOException {
         Instant cutoff = clock.instant().minus(uploadTtl);
         int reaped = 0;
-        for (String id : store.list("oci/upload-sessions")) {
+        for (String id : store.list("oci/.upload-sessions")) {
             Optional<ArtifactStore.Versioned> marker = store.readVersioned(SESSIONS + id);
             if (marker.isEmpty()) {
                 continue;
@@ -495,7 +495,7 @@ public final class OciFormat implements RepositoryFormat, ProxyFormat, Repositor
     @Override
     public List<String> blobRoots() {
         // Every key this format pins a blob under lives beneath oci/: the tag pointers (oci/<name>/tags/<tag>), the
-        // media-type sidecars (oci/types/<hex>) and the transient upload staging. A reference scan lists the leaves
+        // media-type sidecars (oci/.types/<hex>) and the transient upload staging. A reference scan lists the leaves
         // beneath this and asks references() what each one keeps alive.
         return List.of("oci");
     }
@@ -512,14 +512,14 @@ public final class OciFormat implements RepositoryFormat, ProxyFormat, Repositor
      * resolved here:
      * <ul>
      *   <li>{@code oci/<name>/tags/<tag>} - the tag pointer, whose body resolves the manifest;</li>
-     *   <li>{@code oci/types/<hex>} - the media-type sidecar, the durable record that {@code <hex>} is a manifest this
+     *   <li>{@code oci/.types/<hex>} - the media-type sidecar, the durable record that {@code <hex>} is a manifest this
      *       registry ingested and serves. It is written for EVERY accepted manifest ({@code OciManifests.ingest}),
      *       tagged or not, so it is the digest-only image's one lifeline.</li>
      * </ul>
      * Both resolve to a manifest hex, and from there the image's own set: the manifest itself, an image index's
      * sub-manifests (expanded with a work-list and an emitted set, never self-recursion - a hostile nested index must
      * not overflow the sweep's stack), and each sub-manifest's config, layers and legacy {@code fsLayers} blobSums.
-     * The upload staging ({@code oci/uploads/}, {@code oci/upload-sessions/}) names no served blob and answers empty:
+     * The upload staging ({@code oci/.uploads/}, {@code oci/.upload-sessions/}) names no served blob and answers empty:
      * a never-finalized push is exactly what garbage collection is for, and {@link #reap} already retires it.
      *
      * <p><b>It refuses rather than under-reports, and the refusal has a name.</b> A root manifest blob that is present
@@ -591,11 +591,11 @@ public final class OciFormat implements RepositoryFormat, ProxyFormat, Repositor
             return Optional.empty();
         }
         String rest = key.substring("oci/".length());
-        if (rest.startsWith("types/")) {
-            String hex = rest.substring("types/".length());
+        if (rest.startsWith(".types/")) {
+            String hex = rest.substring(".types/".length());
             return Checksums.isSha256Hex(hex) ? Optional.of(hex) : Optional.empty();
         }
-        if (rest.startsWith("uploads/") || rest.startsWith("upload-sessions/")) {
+        if (rest.startsWith(".uploads/") || rest.startsWith(".upload-sessions/")) {
             return Optional.empty();                            // staged chunks of a push that never became an image
         }
         // A tag pointer is oci/<name>/tags/<tag> and an image name is itself multi-segment, so the tag level is the
@@ -778,7 +778,7 @@ public final class OciFormat implements RepositoryFormat, ProxyFormat, Repositor
         // a fill or an import accepted it and retired when a client deletes it - and a withheld one 404s exactly as a
         // withheld blob does (the withheld/<hash> convention above), so a held image cannot be pulled by digest or
         // tag while its layers 404. A blob that was never accepted as a manifest is not served as one.
-        Optional<ArtifactStore.Versioned> sidecar = store.readVersioned("oci/types/" + hex);
+        Optional<ArtifactStore.Versioned> sidecar = store.readVersioned("oci/.types/" + hex);
         if (sidecar.isEmpty() || !store.exists(key) || Withheld.is(store, hex)) {
             exchange.respond(404);
             return;
@@ -831,7 +831,7 @@ public final class OciFormat implements RepositoryFormat, ProxyFormat, Repositor
         List<String> tags = new ArrayList<>();
         if (digest) {
             hex = hex(reference);
-            if (!store.exists("oci/types/" + hex)) {
+            if (!store.exists("oci/.types/" + hex)) {
                 hex = null;
             } else {
                 for (OciTagIndex.Tag tag : OciTagIndex.current(store, hex)) {
@@ -1799,16 +1799,19 @@ public final class OciFormat implements RepositoryFormat, ProxyFormat, Repositor
      * answer is {@code 404}, and a different answer again on each object-store backend. Delegating is what keeps this
      * screen and the store's write screen from ever disagreeing about which names are addressable.
      *
-     * <p>The empty-segment check stays local because it is genuinely this format's own: {@code traversalFree} permits
+     * <p>The segment checks stay local because they are genuinely this format's own: {@code traversalFree} permits
      * an empty segment on purpose - a trailing slash and a doubled separator are legitimate request shapes - while a
-     * Distribution name segment may not be empty.
+     * Distribution name segment may not be empty, and may not begin with a dot. That last rule is the grammar's, and
+     * it is also what this format's own spaces under {@code oci/} rely on: the sidecars, the upload staging, the
+     * digest-to-tags index and an image's referrer indexes all sit behind a leading dot, so no image can be named
+     * over one of them.
      */
     static boolean isImageName(String name) {
         if (name.isEmpty() || !ArtifactStore.traversalFree(name)) {
             return false;
         }
         for (String segment : name.split("/", -1)) {
-            if (segment.isEmpty()) {
+            if (segment.isEmpty() || segment.startsWith(".")) {
                 return false;
             }
         }

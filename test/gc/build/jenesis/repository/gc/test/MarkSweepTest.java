@@ -200,7 +200,7 @@ class MarkSweepTest {
         String manifest = publication.storeBlob(bytes(manifest(config, layer)));
         store.writeVersioned("oci/library/app/tags/1.0",
                 ("sha256:" + manifest).getBytes(StandardCharsets.UTF_8), null);
-        store.writeVersioned("oci/types/" + manifest, OCI_MANIFEST_TYPE.getBytes(StandardCharsets.UTF_8), null);
+        store.writeVersioned("oci/.types/" + manifest, OCI_MANIFEST_TYPE.getBytes(StandardCharsets.UTF_8), null);
 
         GcPlan first = collector().collect(store, Known.known(List.of("publish", "oci")), clock.instant());
         assertThat(first.condemned()).as("the config and the layer are condemned; only the manifest is named").isEqualTo(2);
@@ -224,7 +224,7 @@ class MarkSweepTest {
         String manifest = publication.storeBlob(bytes(manifest(config, layer)));
         store.writeVersioned("oci/library/app/tags/1.0",
                 ("sha256:" + manifest).getBytes(StandardCharsets.UTF_8), null);
-        store.writeVersioned("oci/types/" + manifest, OCI_MANIFEST_TYPE.getBytes(StandardCharsets.UTF_8), null);
+        store.writeVersioned("oci/.types/" + manifest, OCI_MANIFEST_TYPE.getBytes(StandardCharsets.UTF_8), null);
 
         GcPlan first = collector(new DocumentReferences())
                 .collect(store, Known.known(List.of("publish", "oci")), clock.instant());
@@ -249,7 +249,7 @@ class MarkSweepTest {
         // The other half of the same defect: a manifest pulled by digest and never tagged is a legitimate OCI state
         // (the format serves /v2/<name>/manifests/sha256:<hex> straight out of blobs/, and its API has no DELETE to
         // retire one), and it carries no tag pointer - so even once tag pointers named their manifests, NOTHING named
-        // this one and the sweep deleted the whole image, manifest included. The per-document sidecar oci/types/<hex>
+        // this one and the sweep deleted the whole image, manifest included. The per-document sidecar oci/.types/<hex>
         // is the durable record that this hex is a manifest the registry ingested and serves; resolving the image from
         // that key is what makes the untagged case reachable at all, and it is why a lender is asked about every key
         // under its roots, not only pointer-shaped ones.
@@ -258,7 +258,7 @@ class MarkSweepTest {
         String config = publication.storeBlob(bytes("an untagged image config"));
         String layer = publication.storeBlob(bytes("an untagged layer tarball"));
         String manifest = publication.storeBlob(bytes(manifest(config, layer)));
-        store.writeVersioned("oci/types/" + manifest, OCI_MANIFEST_TYPE.getBytes(StandardCharsets.UTF_8), null);
+        store.writeVersioned("oci/.types/" + manifest, OCI_MANIFEST_TYPE.getBytes(StandardCharsets.UTF_8), null);
 
         GcPlan bare = collector().collect(store, Known.known(List.of("publish", "oci")), clock.instant());
         assertThat(bare.condemned())
@@ -269,7 +269,7 @@ class MarkSweepTest {
         String config2 = other.storeBlob(bytes("an untagged image config"));
         String layer2 = other.storeBlob(bytes("an untagged layer tarball"));
         String manifest2 = other.storeBlob(bytes(manifest(config2, layer2)));
-        lending.writeVersioned("oci/types/" + manifest2, OCI_MANIFEST_TYPE.getBytes(StandardCharsets.UTF_8), null);
+        lending.writeVersioned("oci/.types/" + manifest2, OCI_MANIFEST_TYPE.getBytes(StandardCharsets.UTF_8), null);
 
         GcPlan first = collector(new DocumentReferences())
                 .collect(lending, Known.known(List.of("publish", "oci")), clock.instant());
@@ -293,7 +293,7 @@ class MarkSweepTest {
         Publication publication = new Publication(store);
         String layer = publication.storeBlob(bytes("a layer of an unreadable image"));
         String manifest = publication.storeBlob(bytes("!! not a document this format can read " + layer));
-        store.writeVersioned("oci/types/" + manifest, OCI_MANIFEST_TYPE.getBytes(StandardCharsets.UTF_8), null);
+        store.writeVersioned("oci/.types/" + manifest, OCI_MANIFEST_TYPE.getBytes(StandardCharsets.UTF_8), null);
 
         MarkSweepGarbageCollector collector = collector(new DocumentReferences());
         assertThatThrownBy(() -> collector.collect(store, Known.known(List.of("publish", "oci")), clock.instant()))
@@ -342,7 +342,7 @@ class MarkSweepTest {
         String config = publication.storeBlob(bytes("a config under a forgotten root"));
         String layer = publication.storeBlob(bytes("a layer under a forgotten root"));
         String manifest = publication.storeBlob(bytes(manifest(config, layer)));
-        store.writeVersioned("oci/types/" + manifest, OCI_MANIFEST_TYPE.getBytes(StandardCharsets.UTF_8), null);
+        store.writeVersioned("oci/.types/" + manifest, OCI_MANIFEST_TYPE.getBytes(StandardCharsets.UTF_8), null);
 
         GcPlan only = collector(new DocumentReferences()).collect(store, Known.known(List.of("publish")), clock.instant());
         assertThat(only.condemned()).as("the lender's own root is walked though the caller named only publish").isZero();

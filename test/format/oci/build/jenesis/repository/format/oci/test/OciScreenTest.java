@@ -85,7 +85,7 @@ class OciScreenTest {
         // were stored (screen stored blobs/<hex> before the gate ran).
         assertThat(store.exists("blobs/" + hex)).as("screen stored the manifest bytes").isTrue();
         assertThat(store.exists("withheld/" + hex)).as("the native withhold marker is set").isTrue();
-        assertThat(store.exists("oci/types/" + hex)).as("no media-type sidecar for a rejected manifest").isFalse();
+        assertThat(store.exists("oci/.types/" + hex)).as("no media-type sidecar for a rejected manifest").isFalse();
         assertThat(getStatus("/v2/gate-reject/app/manifests/sha256:" + hex))
                 .as("the rejected manifest is unpullable by digest").isEqualTo(404);
         assertThat(getStatus("/v2/gate-reject/app/manifests/1.0"))
@@ -138,7 +138,7 @@ class OciScreenTest {
 
         assertThat(store.exists("blobs/" + hex)).as("screen stored the imported manifest bytes").isTrue();
         assertThat(store.exists("withheld/" + hex)).as("a rejected import is withheld").isTrue();
-        assertThat(store.exists("oci/types/" + hex)).as("no sidecar for a rejected import").isFalse();
+        assertThat(store.exists("oci/.types/" + hex)).as("no sidecar for a rejected import").isFalse();
         assertThat(getStatus("/v2/gate-reject/app/manifests/sha256:" + hex))
                 .as("a rejected imported manifest is unpullable by digest").isEqualTo(404);
     }

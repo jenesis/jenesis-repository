@@ -10,7 +10,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 
 /**
  * The OCI importer claims the {@code docker}/{@code oci} source formats and stores each asset by its {@code sha256}
- * digest exactly as a push would: a manifest lands as a blob plus a {@code oci/types/<hex>} media-type sidecar (read
+ * digest exactly as a push would: a manifest lands as a blob plus a {@code oci/.types/<hex>} media-type sidecar (read
  * from the manifest's own {@code mediaType}) and, when referenced by a tag, a tag pointer; a layer lands as a blob.
  */
 class OciImporterTest {
@@ -57,7 +57,7 @@ class OciImporterTest {
         importer.importArtifact("v2/app/manifests/1.0", new ByteArrayInputStream(manifest), store);
 
         assertThat(store.exists("blobs/" + hex)).isTrue();
-        assertThat(read("oci/types/" + hex)).isEqualTo(type);
+        assertThat(read("oci/.types/" + hex)).isEqualTo(type);
         assertThat(store.readVersioned("oci/app/tags/1.0")).isPresent();
         assertThat(new String(store.readVersioned("oci/app/tags/1.0").orElseThrow().content(), StandardCharsets.UTF_8))
                 .isEqualTo("sha256:" + hex);

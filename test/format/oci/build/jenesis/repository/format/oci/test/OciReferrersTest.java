@@ -90,7 +90,7 @@ class OciReferrersTest {
         FakeExchange empty = get("/v2/app/referrers/sha256:" + "a".repeat(64), Map.of());
         assertThat(empty.status()).isEqualTo(200);
         assertThat(JSON.readTree(empty.responseBytes()).path("manifests")).isEmpty();
-        assertThat(StoredListing.present(store, "oci/app/manifests/" + "a".repeat(64) + "/referrers"))
+        assertThat(StoredListing.present(store, "oci/app/.manifests/" + "a".repeat(64) + "/referrers"))
                 .as("asking stores nothing for a subject nothing refers to").isFalse();
 
         FakeExchange malformed = new FakeExchange("GET", "/v2/app/referrers/sha256:nothex");
@@ -147,19 +147,19 @@ class OciReferrersTest {
     void the_index_is_read_as_stored_and_rebuilt_from_the_markers_the_pushes_wrote() throws IOException {
         String image = image("app", "1.0");
         String sbom = attach("app", image, SBOM, "sbom");
-        String listing = "oci/app/manifests/" + image + "/referrers";
+        String listing = "oci/app/.manifests/" + image + "/referrers";
         byte[] stored = body(listing);
 
         // The marker is the durable fact the index is generated from. Take it away and a read still answers the
         // stored document - it is read, not re-derived - while the rebuild pass regenerates from what is recorded.
-        store.delete("oci/app/manifests/" + image + "/referrers/" + sha256Of(sbom));
+        store.delete("oci/app/.manifests/" + image + "/referrers/" + sha256Of(sbom));
         assertThat(digests(get("/v2/app/referrers/sha256:" + image, Map.of())))
                 .as("a read streams the stored index and walks nothing").containsExactly(sbom);
         assertThat(new OciListingObserver().rebuild(listing, store)).isTrue();
         assertThat(digests(get("/v2/app/referrers/sha256:" + image, Map.of())))
                 .as("the rebuild regenerates the index from the markers").isEmpty();
 
-        store.write("oci/app/manifests/" + image + "/referrers/" + sha256Of(sbom), InputStream.nullInputStream());
+        store.write("oci/app/.manifests/" + image + "/referrers/" + sha256Of(sbom), InputStream.nullInputStream());
         new OciListingObserver().rebuild(listing, store);
         assertThat(body(listing))
                 .as("regenerated from the marker, the index is byte for byte the one the push maintained")
@@ -193,11 +193,11 @@ class OciReferrersTest {
         assertThat(put.status()).isEqualTo(202);
         assertThat(put.responseHeader("OCI-Subject")).isEqualTo("sha256:" + image);
         assertThat(digests(get("/v2/" + name + "/referrers/sha256:" + image, Map.of()))).isEmpty();
-        assertThat(store.exists("oci/" + name + "/manifests/" + image + "/referrers/" + hex))
+        assertThat(store.exists("oci/" + name + "/.manifests/" + image + "/referrers/" + hex))
                 .as("the relationship is recorded while the referrer is held").isTrue();
 
         // A reviewer's release: the media-type record the accepted layout would have written, and the lifted hold.
-        store.write("oci/types/" + hex, new ByteArrayInputStream(
+        store.write("oci/.types/" + hex, new ByteArrayInputStream(
                 "application/vnd.oci.image.manifest.v1+json".getBytes(StandardCharsets.UTF_8)));
         Withheld.clear(store, hex, Known.absent(), ArtifactDescriptor.at("oci", "/v2/" + name + "/manifests/sha256:" + hex));
         assertThat(digests(get("/v2/" + name + "/referrers/sha256:" + image, Map.of())))
@@ -221,8 +221,8 @@ class OciReferrersTest {
         // What an older client did against a registry that answered no referrers API: push the referrer, then an
         // index tagged sha256-<subject hex> listing it. A registry from before kept neither marker nor index.
         String sbom = attach("app", image, SBOM, "sbom");
-        store.delete("oci/app/manifests/" + image + "/referrers/" + sha256Of(sbom));
-        StoredListing.forget(store, "oci/app/manifests/" + image + "/referrers");
+        store.delete("oci/app/.manifests/" + image + "/referrers/" + sha256Of(sbom));
+        StoredListing.forget(store, "oci/app/.manifests/" + image + "/referrers");
         byte[] fallback = ("{\"schemaVersion\":2,\"mediaType\":\"application/vnd.oci.image.index.v1+json\","
                 + "\"manifests\":[{\"mediaType\":\"application/vnd.oci.image.manifest.v1+json\",\"size\":1,"
                 + "\"digest\":\"" + sbom + "\",\"artifactType\":\"" + SBOM + "\"}]}").getBytes(StandardCharsets.UTF_8);

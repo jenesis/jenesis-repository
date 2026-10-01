@@ -23,15 +23,15 @@ import tools.jackson.databind.node.ObjectNode;
  * attestation attached to an image without knowing its digest.
  *
  * <p><b>Maintained on the write path, never found by a walk.</b> A referrer's relationship is recorded when its
- * manifest is accepted: an empty marker at {@code oci/<name>/manifests/<subject>/referrers/<referrer>}, which is the
+ * manifest is accepted: an empty marker at {@code oci/<name>/.manifests/<subject>/referrers/<referrer>}, which is the
  * durable fact, and the referrer's descriptor put into the subject's stored index, a {@link StoredListing} under
- * {@code listing/oci/<name>/manifests/<subject>/referrers}. A read streams that one document; the marker space is
+ * {@code listing/oci/<name>/.manifests/<subject>/referrers}. A read streams that one document; the marker space is
  * enumerated only by the listing's generator - the first materialisation and the rebuild pass - and never per
  * request. The marker names no blob, so it keeps nothing alive: a referrer's manifest is kept, as every manifest
  * is, by its media-type sidecar.
  *
  * <p><b>Listed exactly while it serves.</b> A referrer is in the index while this registry records it as a manifest
- * (its {@code oci/types/<hex>} sidecar) and no hold withholds it - so a referrer the gate holds is recorded (its
+ * (its {@code oci/.types/<hex>} sidecar) and no hold withholds it - so a referrer the gate holds is recorded (its
  * marker is written) but not listed, joins the index when a reviewer releases it, and leaves it when a retroactive
  * hold lands or a client deletes it. Each such transition reaches {@link OciListingObserver}, which re-decides the
  * one entry.
@@ -240,7 +240,7 @@ final class OciReferrers {
 
     /** The listing a subject's index is stored as. */
     static String listing(String name, String subject) {
-        return "oci/" + name + "/manifests/" + subject + "/referrers";
+        return "oci/" + name + "/.manifests/" + subject + "/referrers";
     }
 
     /** The name and subject hex of a referrers listing key, or empty for any other key. */
@@ -249,18 +249,18 @@ final class OciReferrers {
             return Optional.empty();
         }
         String rest = listing.substring("oci/".length(), listing.length() - "/referrers".length());
-        int manifests = rest.lastIndexOf("/manifests/");
+        int manifests = rest.lastIndexOf("/.manifests/");
         if (manifests <= 0) {
             return Optional.empty();
         }
         String name = rest.substring(0, manifests);
-        String subject = rest.substring(manifests + "/manifests/".length());
+        String subject = rest.substring(manifests + "/.manifests/".length());
         return OciFormat.isImageName(name) && Checksums.isSha256Hex(subject)
                 ? Optional.of(new String[] {name, subject}) : Optional.empty();
     }
 
     private static String markers(String name, String subject) {
-        return "oci/" + name + "/manifests/" + subject + "/referrers";
+        return "oci/" + name + "/.manifests/" + subject + "/referrers";
     }
 
     StoredListing.Spec spec(String name, String subject) {
@@ -358,7 +358,7 @@ final class OciReferrers {
     /** The descriptor of the referrer {@code hex} of {@code subject} when it is listed: a manifest this registry
      *  records and serves, whose own {@code subject} is that one; empty otherwise. */
     private Optional<byte[]> listed(String name, String subject, String hex) throws IOException {
-        Optional<ArtifactStore.Versioned> sidecar = store.readVersioned("oci/types/" + hex);
+        Optional<ArtifactStore.Versioned> sidecar = store.readVersioned("oci/.types/" + hex);
         if (sidecar.isEmpty() || Withheld.is(store, hex)) {
             return Optional.empty();
         }

@@ -41,7 +41,7 @@ public record QuarantineDispatch(String format, String method, String hash, Map<
      *  (again not a hosted-deploy HTTP verb). An OCI push is multi-request and serves by digest from {@code blobs/<hex>}
      *  under the native {@code withheld/<hex>} marker, never through a {@code publish/} pointer, so a held manifest's
      *  release neither replays a format {@code handle} nor an importer's {@code importArtifact}: it completes the
-     *  deferred OCI layout the QUARANTINE leg skipped (the {@code oci/types/<hex>} media-type sidecar and, for a tag
+     *  deferred OCI layout the QUARANTINE leg skipped (the {@code oci/.types/<hex>} media-type sidecar and, for a tag
      *  reference, the {@code oci/<name>/tags/<tag>} pointer) from the recorded context, so {@code HoldLifecycle#release}
      *  makes the image pullable by tag and digest again. The {@code format} is {@code oci}, the {@code hash} the stored
      *  manifest hex, and the media type rides the context map's {@code Content-Type} key (the same framing header a

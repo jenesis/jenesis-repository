@@ -116,7 +116,7 @@ final class OciExport {
     /** The manifest {@code hex} put under {@code reference}, with the media type it was pushed with. */
     private static PublishedExport.File manifestFile(ArtifactStore store, String name, String reference, String hex)
             throws IOException {
-        String type = store.readVersioned("oci/types/" + hex)
+        String type = store.readVersioned("oci/.types/" + hex)
                 .map(versioned -> new String(versioned.content(), StandardCharsets.UTF_8).trim())
                 .orElse(OciFormat.OCI_MANIFEST);
         byte[] content;

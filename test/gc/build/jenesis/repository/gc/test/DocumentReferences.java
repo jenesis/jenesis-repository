@@ -12,7 +12,7 @@ import build.jenesis.repository.store.ArtifactStore;
  *
  * <ul>
  *   <li>{@code oci/<name>/tags/<tag>} - a pointer whose {@code sha256:<hex>} body names the document;</li>
- *   <li>{@code oci/types/<hex>} - a per-document sidecar whose KEY names it, the digest-only image's only lifeline.</li>
+ *   <li>{@code oci/.types/<hex>} - a per-document sidecar whose KEY names it, the digest-only image's only lifeline.</li>
  * </ul>
  *
  * <p>From there it reports every {@code sha256:<hex>} the document mentions - the manifest's own digest plus the
@@ -58,8 +58,8 @@ final class DocumentReferences implements BlobReferences {
 
     /** The document hash this key resolves to, or {@code null} for a key that names none. */
     private static String document(String key, ArtifactStore store) throws IOException {
-        if (key.startsWith("oci/types/")) {
-            String hex = key.substring("oci/types/".length());
+        if (key.startsWith("oci/.types/")) {
+            String hex = key.substring("oci/.types/".length());
             return hex.matches("[0-9a-f]{64}") ? hex : null;
         }
         if (!key.startsWith("oci/") || key.lastIndexOf("/tags/") < 0) {

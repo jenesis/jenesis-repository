@@ -419,7 +419,11 @@ public final class SettingsClient extends ClientCalls {
      *  purge deliberately cannot reach ({@code unreachable}, with its {@code note}), so a blast radius that lists no
      *  audit rows is not read as "there is no audit data". */
     public record PurgeReport(String namespace, boolean dryRun, List<PurgeSpace> spaces, long objects, long bytes,
-                              List<String> unreachable, String note) {
+                              List<PurgeKept> kept, List<String> unreachable, String note) {
+    }
+
+    /** A declared prefix the purge leaves, at its {@code scope}, because installed {@code owners} declare it too. */
+    public record PurgeKept(String scope, String prefix, List<String> owners) {
     }
 
     /** One fully scoped prefix ({@code <tenant>/<repository>/<prefix>} or {@code <tenant>/<prefix>}) and what it
