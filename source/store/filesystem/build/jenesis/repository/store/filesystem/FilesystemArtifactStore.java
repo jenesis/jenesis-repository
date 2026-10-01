@@ -165,10 +165,48 @@ public final class FilesystemArtifactStore implements ArtifactStore {
             try (OutputStream out = Files.newOutputStream(temp)) {
                 in.transferTo(out);
             }
-            Files.move(temp, path, StandardCopyOption.REPLACE_EXISTING, StandardCopyOption.ATOMIC_MOVE);
+            durableMove(temp, path);
         } catch (IOException e) {
             Files.deleteIfExists(temp);
             throw e;
+        }
+    }
+
+    /**
+     * Move a spooled file into place so that what a caller was told is stored survives a power loss: the file's bytes
+     * are forced to the disk before the rename, so the name never points at content still in the page cache, and the
+     * directory is forced after it, so the rename itself is on the disk. Without the first a crash can leave a
+     * pointer naming an empty or torn blob; without the second the name can vanish although the write answered.
+     *
+     * <p>Each costs a synchronous flush on the write path - a few milliseconds a write on a local SSD, more on a
+     * network disk - which is the price of a {@code 201} meaning stored. A file system that cannot open a directory
+     * for syncing (not one this store is deployed on) skips the directory half rather than failing the write.
+     */
+    private static void durableMove(Path temp, Path target) throws IOException {
+        try (FileChannel channel = FileChannel.open(temp, StandardOpenOption.WRITE)) {
+            channel.force(true);
+        }
+        Files.move(temp, target, StandardCopyOption.REPLACE_EXISTING, StandardCopyOption.ATOMIC_MOVE);
+        try (FileChannel directory = FileChannel.open(target.getParent(), StandardOpenOption.READ)) {
+            directory.force(true);
+        } catch (UnsupportedOperationException | AccessDeniedException _) {
+            // A file system that offers no directory handle to sync; the rename stands as the platform leaves it.
+        }
+    }
+
+    /** Whether the blob already stored at {@code blob} holds exactly the bytes spooled at {@code temp}, whose
+     *  SHA-256 is its name: the same length, and then the same hash read back - a blob a crash tore before its
+     *  bytes reached the disk has the right name and the wrong content, and keeping it would serve it for ever. */
+    private static boolean intact(Path blob, Path temp, String hash) throws IOException {
+        if (Files.size(blob) != Files.size(temp)) {
+            return false;
+        }
+        try (InputStream stored = Files.newInputStream(blob)) {
+            MessageDigest digest = MessageDigest.getInstance("SHA-256");
+            new DigestInputStream(stored, digest).transferTo(OutputStream.nullOutputStream());
+            return HexFormat.of().formatHex(digest.digest()).equals(hash);
+        } catch (NoSuchAlgorithmException e) {
+            throw new IllegalStateException(e);
         }
     }
 
@@ -183,10 +221,13 @@ public final class FilesystemArtifactStore implements ArtifactStore {
             }
             String hash = HexFormat.of().formatHex(digest.digest());
             Path blob = blobs.resolve(hash);
-            if (Files.isRegularFile(blob)) {
+            // The same bytes uploaded again keep the stored blob only once it proves it holds them; one the bytes
+            // were lost from is replaced by this upload, so re-sending the artifact repairs it. The proof reads the
+            // stored blob once, and only when the upload is a duplicate.
+            if (Files.isRegularFile(blob) && intact(blob, temp, hash)) {
                 Files.delete(temp);
             } else {
-                Files.move(temp, blob, StandardCopyOption.REPLACE_EXISTING, StandardCopyOption.ATOMIC_MOVE);
+                durableMove(temp, blob);
             }
             return hash;
         } catch (NoSuchAlgorithmException e) {
@@ -639,7 +680,7 @@ public final class FilesystemArtifactStore implements ArtifactStore {
         Path temp = createUploadTemp(path.getParent());
         try {
             spool.fill(temp);
-            Files.move(temp, path, StandardCopyOption.REPLACE_EXISTING, StandardCopyOption.ATOMIC_MOVE);
+            durableMove(temp, path);
             if (present && Files.getLastModifiedTime(path).toMillis() <= modified) {
                 Files.setLastModifiedTime(path, FileTime.fromMillis(modified + 1));
             }

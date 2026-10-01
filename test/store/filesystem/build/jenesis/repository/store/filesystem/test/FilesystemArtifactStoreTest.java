@@ -72,6 +72,25 @@ class FilesystemArtifactStoreTest {
     }
 
     @Test
+    void a_blob_a_crash_tore_is_repaired_by_uploading_the_same_bytes_again() throws IOException {
+        String content = "the artifact's bytes, which a power loss cut short";
+        String hash = store.writeBlob(bytes(content));
+        Path blob = root.resolve("blobs").resolve(hash);
+
+        Files.write(blob, content.substring(0, 7).getBytes(StandardCharsets.UTF_8));
+        assertThat(store.writeBlob(bytes(content))).isEqualTo(hash);
+        assertThat(Files.readString(blob)).as("a short blob is replaced, not kept").isEqualTo(content);
+
+        Files.write(blob, "x".repeat(content.length()).getBytes(StandardCharsets.UTF_8));
+        store.writeBlob(bytes(content));
+        assertThat(Files.readString(blob)).as("and so is one of the right length holding other bytes")
+                .isEqualTo(content);
+
+        store.writeBlob(bytes(content));
+        assertThat(Files.readString(blob)).as("an intact blob is kept").isEqualTo(content);
+    }
+
+    @Test
     void delete_removes_the_blob_and_tidies_the_empty_containers_it_leaves() throws IOException {
         store.write("a/b/c.bin", bytes("x"));
         store.delete("a/b/c.bin");
