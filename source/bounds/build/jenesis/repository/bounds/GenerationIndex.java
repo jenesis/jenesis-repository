@@ -7,31 +7,24 @@ import build.jenesis.repository.store.LineDocument;
 
 /**
  * A store-backed index published one whole generation at a time: a rebuild writes a fresh generation beside the live
- * one, then flips a single small marker to point at it, so a reader sees the old generation until the flip and the new
- * one after, never a half-built set. Two generations ({@code g0}/{@code g1}) alternate; the superseded one and any
- * half-built orphan a crashed rebuild left are reclaimed at the <em>start</em> of the next rebuild, so a page read in
- * flight across a flip always finds its generation intact.
+ * one and flips one small marker to it, so a reader sees the old generation until the flip and the new one after, never
+ * a half-built set. Two generations ({@code g0}/{@code g1}) alternate; the superseded one and any orphan of a crashed
+ * rebuild are reclaimed at the start of the next rebuild, so a page read in flight across a flip finds its generation
+ * intact.
  *
- * <p>Three indexes carried this machinery each, each saying it was "identical to" the other two - the findings filter,
- * the maintainer-health rank and the vulnerability rank. What differs between them is the <em>bucket</em>: the entry
- * body they write, the read they serve, and (for the filter) the facet nesting under a generation. What was the same
- * is here: the {@link Marker} codec, the {@link #upToDate stamp check}, the g0/g1 choice, the atomic flip and the
- * reclaim-every-generation-but-the-live-one orchestration. A caller supplies a {@link Writer} that fills a fresh
- * generation and a {@link Reclaimer} that empties one - {@link #reclaimFlat} is the shared reclaimer for a generation
- * whose entries are its immediate children, which the two rank indexes use; the filter passes its own for its nested
- * facet buckets.
+ * <p>The findings filter, the health rank and the vulnerability rank share this; what differs is the bucket - the entry
+ * body, the read, and the filter's facet nesting. A caller supplies a {@link Writer} that fills a fresh generation and
+ * a {@link Reclaimer} that empties one; {@link #reclaimFlat} serves a generation whose entries are its immediate
+ * children.
  *
- * <p>The marker is a {@link LineDocument} - a magic and a version, then a named field per line - so this primitive
- * stays in a {@code java.base}-light module beside {@link InheritedBound} rather than pulling a JSON library in for
- * three fields, and does not carry its own codec for them. A marker that does not parse - a torn write, a marker
- * of another shape - reads as <em>unbuilt</em>, exactly as an absent one does:
- * the next rebuild writes a fresh generation and the read falls back until it lands, which is the same self-heal a
- * torn generation already had.
+ * <p>The marker is a {@link LineDocument} (a magic, a version, a field per line), keeping this module {@code java.base}
+ * light. A marker that does not parse - a torn write, another shape - reads as unbuilt, as an absent one does: the next
+ * rebuild writes a fresh generation and readers fall back until it lands.
  */
 public final class GenerationIndex {
 
-    /** How many flat children one reclaim step deletes at a time, so a very large generation is torn down in pages
-     *  rather than listed whole into heap. */
+    /** How many flat children one reclaim step deletes, so a large generation is torn down in pages, not listed
+     *  whole. */
     private static final int GC_BATCH = 500;
 
     private static final String MAGIC = "jenesis-generation";
@@ -56,15 +49,15 @@ public final class GenerationIndex {
         }
     }
 
-    /** Fills a fresh generation under {@code generationPrefix} and answers how many entries it wrote - the count the
-     *  marker records. */
+    /** Fills a fresh generation under {@code generationPrefix} and answers how many entries it wrote - the marker's
+     *  count. */
     @FunctionalInterface
     public interface Writer {
         long write(String generationPrefix) throws IOException;
     }
 
-    /** Empties one generation under {@code generationPrefix} - the shape-aware delete a bucket definition owns
-     *  ({@link #reclaimFlat} for a flat one). */
+    /** Empties one generation under {@code generationPrefix} - the bucket's shape-aware delete ({@link #reclaimFlat}
+     *  for a flat one). */
     @FunctionalInterface
     public interface Reclaimer {
         void reclaim(String generationPrefix) throws IOException;
@@ -98,8 +91,8 @@ public final class GenerationIndex {
         return marker().map(marker -> marker.generationPrefix(prefix));
     }
 
-    /** Whether a live generation stands whose stamp already matches {@code stamp} - so a caller can skip the whole
-     *  fold in the steady state rather than computing it only for {@link #rebuild} to no-op. */
+    /** Whether a live generation's stamp already matches {@code stamp}, so a caller skips the whole fold in the steady
+     *  state. */
     public boolean upToDate(String stamp) throws IOException {
         Optional<Marker> marker = marker();
         return marker.isPresent() && marker.get().stamp().equals(stamp);
@@ -107,15 +100,13 @@ public final class GenerationIndex {
 
     /**
      * Rebuild if the inputs moved since the last build, else do nothing: reclaim the superseded generation and any
-     * crashed orphan, hand {@code writer} the fresh generation's prefix, then publish it with one marker write.
-     * A reader that read the old marker a moment ago still pages the old (still-standing) generation; every later
-     * reader sees this one.
+     * crashed orphan, hand {@code writer} the fresh prefix, then publish it with one marker write. A reader that read
+     * the old marker still pages the old, still-standing generation; later readers see this one.
      *
-     * <p>The marker write is a compare-and-set against the marker this rebuild started from. Two rebuilders on two
-     * nodes can only meet here when one's single-writer lease lapsed and the other took it; the one whose marker
-     * moved under it then loses the flip and the generation it built is an orphan the next rebuild reclaims, instead
-     * of its marker overwriting the newer rebuild's and pointing readers at a generation that rebuild is about to
-     * reclaim. The lost flip is reported, so the pass is counted as failed the way a lost lease renewal is.
+     * <p>The marker write is a compare-and-set against the marker this rebuild started from. Two rebuilders meet only
+     * when one's lease lapsed and the other took it; the one whose marker moved loses the flip, and its generation is
+     * an orphan the next rebuild reclaims rather than a marker pointing readers at a generation about to be reclaimed.
+     * The lost flip is reported, so the pass counts as failed.
      */
     public void rebuild(String stamp, Writer writer, Reclaimer reclaimer) throws IOException {
         Optional<ArtifactStore.Versioned> stored = store.readVersioned(built);
@@ -134,9 +125,8 @@ public final class GenerationIndex {
         }
     }
 
-    /** Reclaim every generation directory except the live one - the previous generation superseded by the last flip
-     *  and any half-built generation a crashed rebuild orphaned - so at a rebuild's start only the live generation
-     *  stands. */
+    /** Reclaim every generation directory but the live one - the one the last flip superseded and any crashed
+     *  orphan. */
     private void reclaimGenerationsExcept(int live, Reclaimer reclaimer) throws IOException {
         for (String child : store.list(prefix)) {
             if (!child.startsWith("g") || child.equals("g" + live)) {
@@ -149,9 +139,8 @@ public final class GenerationIndex {
         }
     }
 
-    /** Delete every entry directly under one prefix, in bounded pages so a very large level never lists whole into
-     *  heap - the reclaimer for an index whose entries are the generation's immediate children, and the one a nested
-     *  reclaimer tears each of its leaf buckets down with, rather than with a copy of this loop. */
+    /** Delete every entry directly under one prefix, in bounded pages - the flat reclaimer, which a nested one also
+     *  uses for each leaf bucket. */
     public void reclaimFlat(String generationPrefix) throws IOException {
         List<String> page = new ArrayList<>();
         do {
