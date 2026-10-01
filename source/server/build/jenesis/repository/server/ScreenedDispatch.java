@@ -29,10 +29,13 @@ import build.jenesis.repository.store.ReadMemo;
  *   <li>on {@code QUARANTINE} answers {@code 202} (stored for review, not laid out);</li>
  *   <li>on {@code REJECT} answers {@code 422} (nothing laid out; the orphan blob is left for garbage collection).</li>
  * </ul>
- * A write claimed by an {@link RepositoryFormat#screened() unscreened} format (OCI, whose multi-request protocol carries
- * no single body to screen) and every non-body verb ({@code GET}, {@code HEAD}, {@code DELETE}) dispatch through the
- * normal {@link FormatDispatcher} untouched, exactly as before - so the format-level pull-through and delete paths are
- * unchanged.
+ * A write claimed by an {@link RepositoryFormat#screened() unscreened} format - one whose protocol carries no single
+ * body that is the artifact, an OCI push split across requests or a form around a package - dispatches through the
+ * normal {@link FormatDispatcher}, and the format drives the same commit over the artifact it unwraps. The one edge
+ * concern such a write still takes from here is the tenant's {@code allow-redeploy}, bound around the dispatch, since a
+ * format links its released files through {@code Blobs.linkRelease} whichever side screened them. Every non-body verb
+ * ({@code GET}, {@code HEAD}, {@code DELETE}) dispatches untouched, so the pull-through and delete paths are the
+ * format's own.
  *
  * <p>With the core's empty discovered chain {@code screen} degrades to a plain store-then-restream and an
  * accepted {@code PUT} is byte-for-byte what a direct dispatch produced (the same content-addressed blob, the same
@@ -70,14 +73,18 @@ public final class ScreenedDispatch {
             return false;
         }
         RepositoryFormat format = owner.get();
-        if (isSingleBodyWrite(exchange.method()) && format.screened()) {
+        if (!isSingleBodyWrite(exchange.method())) {
+            return dispatcher.dispatch(tenant, exchange, store);
+        }
+        if (format.screened()) {
             // One memo for the one operation: the edge, the screen, the layout and the after-commit observers each
             // resolve the same serving pointer, review pointer and version document, and pay the store once for
             // each (ReadMemo). Dropped with the request; a compare-and-set never acts on a remembered token.
             screen(format, exchange, ReadMemo.over(store));
             return true;
         }
-        return dispatcher.dispatch(tenant, exchange, store);
+        return Publication.redeploying(hooks.redeploys(format, store),
+                () -> dispatcher.dispatch(tenant, exchange, store));
     }
 
     /** Store-and-screen the body once at the edge, then route by the chain's verdict: lay out on {@code ACCEPT},
@@ -135,10 +142,7 @@ public final class ScreenedDispatch {
                         // nothing was laid out, and no observer is told of a publish that did not happen.
                         return Publication.Visibility.declined();
                     }
-                    // A format whose request path names no artifact - a push endpoint - names what it laid out, and
-                    // the observers are told about that rather than the endpoint.
-                    return held.described().map(Publication.Visibility.laidOut()::describing)
-                            .orElse(Publication.Visibility.laidOut());
+                    return Publication.Visibility.laidOut();
                 });
         switch (commit.disposition()) {
             // ACCEPT was answered inside the layout above - the format writes its own 201, and a refusal its own

@@ -286,11 +286,14 @@ public interface RepositoryFormat extends IconContributor {
      * {@code PUT}/{@code POST}/{@code PATCH} body <em>before</em> {@link #handle} sees it, then restreams the accepted
      * blob into {@link #handle}, whose job is now pure layout - lay the bytes out in this format's namespace, no
      * screening of its own. {@code false} means the format owns its whole screening choreography and the edge dispatches
-     * its writes unscreened: the body never reaches the edge screen as one atomic upload, so the format screens where it
-     * can. Only the OCI/Docker format overrides this to {@code false} - its {@code /v2/} protocol splits one artifact
-     * across many requests (blob-upload sessions, then a manifest), which no single-body edge screen can gate, so it
-     * screens at its own manifest choke point instead. This is the correct default for a single-body format, not a
-     * back-compat shim; a new format inherits edge screening for free by leaving it alone.
+     * its writes unscreened, because no request body it receives is the artifact: either the protocol splits one
+     * artifact across many requests - OCI's {@code /v2/} blob-upload sessions and manifest, screened at the manifest
+     * choke point - or it wraps the artifact in an envelope - a multipart form (PyPI, NuGet, RubyGems, Swift), a JSON
+     * document carrying it base64'd (npm), a length-prefixed frame (Cargo) - which the format unwraps before it drives
+     * the shared commit over the artifact's own bytes. {@code true} is the correct default for a format whose body is
+     * its artifact; a new format inherits edge screening by leaving it alone. The ecosystem format contract's
+     * screening census holds every format to whichever it declares, by checking that the bytes a publish serves are
+     * the request body (for {@code true}) or among the bytes the discovered screen assessed (for {@code false}).
      */
     default boolean screened() {
         return true;

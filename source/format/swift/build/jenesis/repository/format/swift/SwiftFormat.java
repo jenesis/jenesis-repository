@@ -21,7 +21,9 @@ import build.jenesis.repository.format.PublishedExport;
 import build.jenesis.repository.format.RepositoryExporter;
 import build.jenesis.repository.store.ArtifactDescriptor;
 import build.jenesis.repository.store.ArtifactStore;
+import build.jenesis.repository.store.PublishInterceptor;
 import build.jenesis.repository.store.StoredListing;
+import build.jenesis.repository.store.Withheld;
 import tools.jackson.core.JacksonException;
 import tools.jackson.databind.DeserializationFeature;
 import tools.jackson.databind.JsonNode;
@@ -522,15 +524,43 @@ public final class SwiftFormat implements RepositoryFormat, ArtifactLayout, Blob
     // ---- the write path ----
 
     /**
-     * 4.6, publish. A multipart body carrying the source archive and, optionally, the release metadata.
+     * The republish policy handed to the hosted-publish operation: {@code OVERWRITE}, since the refusal of a release
+     * that already stands at other bytes is taken at the archive's own link ({@link Blobs#linkRelease}), inside the
+     * pointer's compare-and-set, where two racing first publishes are told apart.
+     */
+    private static final Publication.Republish REPUBLISH = Publication.Republish.overwrite();
+
+    /**
+     * A publish is a multipart form around the source archive, so the request body is not the artifact and an edge
+     * screening it would assess the form while clients download the archive inside it - {@code RepositoryFormat}'s
+     * envelope clause. So this format screens at its own choke point, {@link #publish}, over the archive's own bytes.
+     */
+    @Override
+    public boolean screened() {
+        return false;
+    }
+
+    /**
+     * 4.6, publish. A multipart body carrying the source archive and, optionally, the release metadata, the
+     * {@code Package.swift} and the archive's signature.
      *
-     * <p>The archive streams into the content-addressed store through the shared multipart reader - which bounds
-     * the form fields, so a body declaring a gigabyte-long field cannot be buffered whole - and the digest the
-     * store returns becomes the {@code checksum} the release document publishes. The archive is linked through
-     * {@link Blobs#linkRelease}, which decides inside the pointer's compare-and-set: of two first publishes racing
-     * with different archives one lands and the other is refused with {@code 409}, the specification's answer for a
-     * release that already exists, and a re-publish of the same archive is accepted and writes the release document
-     * again - so a publish whose document never landed, or whose answer was lost, converges when it is sent again.
+     * <p><b>The archive is what is screened.</b> The form is read whole first: the archive streams into the
+     * content-addressed store through the shared multipart reader - which bounds the form fields, so a body declaring
+     * a gigabyte-long field cannot be buffered whole - and the small parts are read against their limits. Only a form
+     * that is a release is offered to the screen: the archive is then read back from the store into the shared
+     * hosted-publish operation with the <em>discovered</em> interceptor chain and observers, under the descriptor of
+     * the archive's own download path and coordinate, so the bytes the chain assesses are the bytes a client
+     * downloads, and the after-commit notification fires once they serve. The digest the store computed becomes the
+     * {@code checksum} the release document publishes.
+     *
+     * <p><b>The commit point is the archive's pointer</b>, linked through {@link Blobs#linkRelease}, which decides
+     * inside the pointer's compare-and-set: of two first publishes racing with different archives one lands and the
+     * other is refused with {@code 409}, the specification's answer for a release that already exists, and a
+     * re-publish of the same archive converges. Nothing keyed by the version is written before it, so a refused
+     * publish replaces nothing of the release that stands; the documents follow it, and the release list last.
+     *
+     * <p>A release the screen holds is laid out all the same, behind its withhold marker ({@link #held}), so its
+     * review release is the marker clear; one it rejects is answered {@code 422} with nothing linked.
      *
      * <p>The metadata part is parsed, and the release document is built from the parsed value: metadata that is not
      * one JSON object is refused with {@code 400}, so a publisher cannot place a field of its own beside the
@@ -542,13 +572,12 @@ public final class SwiftFormat implements RepositoryFormat, ArtifactLayout, Blob
             exchange.respond(400);
             return;
         }
-        String archiveKey = SwiftListings.archiveKey(repo, scope, name, version);
         Optional<String> boundary = MultipartBody.boundary(exchange.requestHeader("Content-Type"));
         if (boundary.isEmpty()) {
             exchange.respond(400);
             return;
         }
-        String hash = null;
+        Blobs.Stored archive = null;
         byte[] metadata = "{}".getBytes(StandardCharsets.UTF_8);
         byte[] manifest = null;
         byte[] signature = null;
@@ -556,7 +585,7 @@ public final class SwiftFormat implements RepositoryFormat, ArtifactLayout, Blob
         MultipartBody body = MultipartBody.over(exchange.requestStream(), boundary.get());
         for (Optional<MultipartBody.Part> part = body.next(); part.isPresent(); part = body.next()) {
             switch (part.get().name()) {
-                case "source-archive" -> hash = blobs.store(part.get().stream());
+                case "source-archive" -> archive = blobs.stored(part.get().stream());
                 case "metadata" -> metadata = part.get().bytes(METADATA_LIMIT).orElse(null);
                 case "package-manifest" -> manifest = part.get().bytes(MANIFEST_LIMIT).orElse(null);
                 case "source-archive-signature" -> {
@@ -571,7 +600,7 @@ public final class SwiftFormat implements RepositoryFormat, ArtifactLayout, Blob
                 return;
             }
         }
-        if (hash == null) {
+        if (archive == null) {
             exchange.respond(400);
             return;
         }
@@ -587,30 +616,107 @@ public final class SwiftFormat implements RepositoryFormat, ArtifactLayout, Blob
             problem(exchange, 400, "the release metadata is not a JSON object");
             return;
         }
+        Release release = new Release(repo, scope, name, version, archive, declared.get(), manifest, signature);
+        Publication.Commit commit = null;
         try {
-            blobs.linkRelease(archiveKey, hash, -1L);
+            try (InputStream stored = blobs.open(archive.hash())) {
+                commit = new Publication(blobs.store()).commit(release.described(), stored, REPUBLISH,
+                        _ -> Publication.Visibility
+                                // The serving pointer, in this format's own namespace rather than publish/, so it is
+                                // declared through a Serving step. It goes first: it is where a release already
+                                // standing at other bytes refuses this one.
+                                .through((hash, size, _) -> blobs.linkRelease(release.archiveKey(), hash, size))
+                                .andThrough((_, _, _) -> release.lay(blobs)));
+            }
+            if (commit.disposition() == PublishInterceptor.Disposition.QUARANTINE) {
+                held(release, blobs, commit.hash());
+            }
         } catch (Publication.RepublishConflict taken) {
+            if (commit != null) {
+                // A held re-publish was refused before anything was marked: its review handle goes with it.
+                new Publication(blobs.store(), List.of(), List.of()).unpublish("/quarantine" + release.path());
+            }
             problem(exchange, 409, new String(Blobs.alreadyPublished(scope + "." + name + " " + version),
                     StandardCharsets.UTF_8));
             return;
         }
-        if (signature != null) {
-            blobs.write(archiveKey + SIGNATURE, signature);
-            // The sidecar is announced as its own publish so the signature dimension re-derives the verdict over the
-            // stored archive - the gate screened this request by its path before anything was stored, and the
-            // archive's own screening could not have read a sidecar that did not yet exist.
-            new Publication(blobs.store()).published(ArtifactDescriptor.at(ECOSYSTEM,
-                    PREFIX + repo + "/" + scope + "/" + name + "/" + version + ".zip" + SIGNATURE));
+        switch (commit.disposition()) {
+            case ACCEPT -> {
+                release.announceSignature(blobs);
+                exchange.setResponseHeader("Location", exchange.requestUri());
+                exchange.respond(201);
+            }
+            // Held for review: stored, laid out and withheld - the release list leaves it out until it is released.
+            case QUARANTINE -> {
+                release.announceSignature(blobs);
+                exchange.respond(202);
+            }
+            // Refused outright: nothing is linked, and the stored archive is the usual unreferenced
+            // content-addressed object a collection reclaims.
+            case REJECT -> exchange.respond(422);
         }
-        if (manifest != null) {
-            blobs.write(SwiftListings.manifestKey(repo, scope, name, version, ""), manifest);
+    }
+
+    /**
+     * Lay a <em>held</em> release out behind its withhold marker, so the review release that follows is the same
+     * marker clear a retroactive hold's release is - one hold-release mechanism for this format. The shared commit
+     * runs its accepted layout only on {@code ACCEPT}, so a screen-time {@code QUARANTINE} would otherwise store the
+     * archive and link nothing, and a release would materialise no version at all. The marker retracts the archive's
+     * hash before its pointer is linked, so at no instant is the held archive downloadable, its documents readable or
+     * its version listed.
+     */
+    private static void held(Release release, Blobs blobs, String hash) throws IOException {
+        // A hold never replaces a released archive: refused before the mark, so nothing is left held.
+        blobs.refuseReplacement(release.archiveKey(), hash);
+        Withheld.mark(blobs.store(), hash, release.described());
+        blobs.linkRelease(release.archiveKey(), hash, release.archive().size());
+        release.lay(blobs);   // held: the release list keeps it out
+    }
+
+    /**
+     * One release as its publish form named it: the stored archive and the parts beside it, and the documents they
+     * make. The accepted leg and the held leg lay it out through the same {@link #lay}, so the two can never write a
+     * different release for the same form.
+     */
+    private record Release(String repo, String scope, String name, String version, Blobs.Stored archive,
+                           ObjectNode metadata, byte[] manifest, byte[] signature) {
+
+        String archiveKey() {
+            return SwiftListings.archiveKey(repo, scope, name, version);
         }
-        blobs.write(SwiftListings.metadataKey(repo, scope, name, version),
-                release(scope, name, version, hash, declared.get()));
-        indexRepositoryUrls(blobs, repo, scope, name, declared.get());
-        new SwiftListings(blobs).refresh(repo, scope, name, version);
-        exchange.setResponseHeader("Location", exchange.requestUri());
-        exchange.respond(201);
+
+        /** The archive's own download path, which the screen assesses and holds it under. */
+        String path() {
+            return PREFIX + repo + "/" + scope + "/" + name + "/" + version + ".zip";
+        }
+
+        ArtifactDescriptor described() {
+            return new ArtifactDescriptor(ECOSYSTEM, scope + "." + name, version, path(), "application/zip", false,
+                    null, -1L);
+        }
+
+        /** Everything the release serves beside its archive, written once the archive's pointer stands: the
+         *  signature, the manifest, the release document, the repository-URL index and, last, the release list. */
+        void lay(Blobs blobs) throws IOException {
+            if (signature != null) {
+                blobs.write(archiveKey() + SIGNATURE, signature);
+            }
+            if (manifest != null) {
+                blobs.write(SwiftListings.manifestKey(repo, scope, name, version, ""), manifest);
+            }
+            blobs.write(SwiftListings.metadataKey(repo, scope, name, version),
+                    release(scope, name, version, archive.hash(), metadata));
+            indexRepositoryUrls(blobs, repo, scope, name, metadata);
+            new SwiftListings(blobs).refresh(repo, scope, name, version);
+        }
+
+        /** Announce the stored signature as its own publish, so the signature dimension re-derives the archive's
+         *  verdict over it and records it. */
+        void announceSignature(Blobs blobs) {
+            if (signature != null) {
+                new Publication(blobs.store()).published(ArtifactDescriptor.at(ECOSYSTEM, path() + SIGNATURE));
+            }
+        }
     }
 
     /** The release document endpoint 4.2 answers, assembled once at publish from what the store just told us. */

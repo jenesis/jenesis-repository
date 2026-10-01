@@ -29,6 +29,7 @@ import build.jenesis.repository.store.ArtifactDescriptor;
 import build.jenesis.repository.store.ArtifactStore;
 import build.jenesis.repository.store.StoredListing;
 import build.jenesis.repository.store.Publication;
+import build.jenesis.repository.store.Withheld;
 
 /**
  * The RubyGems format, so {@code gem push}, {@code bundle install} and {@code gem install} work over the same store.
@@ -315,6 +316,17 @@ public final class RubyGemsFormat implements RepositoryFormat, ProxyLeg, BlobLay
      */
     private static final Publication.Republish REPUBLISH = Publication.Republish.overwrite();
 
+    /**
+     * A push is the bare {@code .gem} or a multipart form around it ({@code gem push --attestations}), so the request
+     * body is not always the artifact, and an edge screening it would assess the form while clients download the gem
+     * inside it - {@code RepositoryFormat}'s envelope clause. So this format screens at its own choke point,
+     * {@link #push}, over the gem's own bytes whichever shape carried them.
+     */
+    @Override
+    public boolean screened() {
+        return false;
+    }
+
     /** The attestations a push carried beside its gem, read only once the gem part has been consumed and stored -
      *  a multipart client sends its parts in an order of its own, and the gem streams into the store unbuffered. */
     @FunctionalInterface
@@ -431,41 +443,28 @@ public final class RubyGemsFormat implements RepositoryFormat, ProxyLeg, BlobLay
      * serves, {@code /info/<name>} is a structural miss and the compact index does not name the gem; after the last
      * declared step the gem downloads, {@code /info} lists it and {@code /versions} carries it.
      *
-     * <p>The order matters: linking the {@code .gem} pointer <em>first</em> and only then writing the compact-index
-     * line, the quick spec and the rolled-forward {@code /versions} document would let a crash in between leave a
-     * downloadable gem whose {@code gem install} could not find its spec. So the one parse result that is not itself
-     * a serving surface, the quick spec, lands before
-     * anything serves, and the three writes that <em>are</em> visibility are declared to the operation in order:
+     * <p>The order matters, and every write is a step declared to the operation, so a failure in any of them fails
+     * the push loudly instead of answering {@code 200} over a half-built index:
      * <ol>
-     *   <li>the {@code .gem} pointer - the download, and the commit point;</li>
+     *   <li>the {@code .gem} pointer - the download, and the commit point. It goes first because it is where a
+     *       version already pushed refuses this one, so nothing keyed by the version is written for a refused push;</li>
+     *   <li>the quick spec - the precomputed {@code Gem::Specification} Marshal a plain {@code gem install} fetches -
+     *       and the attestations the push carried, both reachable only by a client that has already resolved the
+     *       version through {@code /info} or {@code /versions}, neither of which names it yet;</li>
      *   <li>the compact-index line under {@code rubygems/<name>/versions/<version>} - what makes the version
-     *       <em>enumerable</em> ({@code /info}, {@code blobKeys}, the screened version scan), declared after the bytes
-     *       it names rather than before them;</li>
+     *       <em>enumerable</em> ({@code /info}, {@code blobKeys}, the screened version scan);</li>
      *   <li>the stored {@code /info/<name>} document and, derived from it, the gem's line in the stored
-     *       repository-wide {@code /versions} document ({@link RubyGemsListings}) - the served listings, written
-     *       incrementally from the line above once it has landed, so a push costs one rewrite of each of the two
-     *       documents and never a scan of the other gems.</li>
+     *       repository-wide {@code /versions} document ({@link RubyGemsListings}), written incrementally from the
+     *       line above, so a push costs one rewrite of each and never a scan of the other gems.</li>
      * </ol>
-     * Declaring all three to the operation - rather than running them after a pointer the format wrote itself - is
-     * what makes a failure in any of them fail the push loudly instead of answering {@code 200} over a half-built
-     * index.
+     * At the instant a version becomes listable its quick spec is already there, so {@code gem install} never sees a
+     * listed version whose spec fetch answers {@code 404}.
      *
-     * <p>The quick spec is written <em>inside</em> the layout, before any of that: it is a precomputed rendering of
-     * the gemspec (the {@code Gem::Specification} Marshal that plain {@code gem install} fetches), keyed by the exact
-     * coordinate and reachable only by a client that has already resolved that coordinate through {@code /info} or
-     * {@code /versions} - neither of which names the version until step 2. Writing it first is therefore the strong
-     * ordering: at the instant a version becomes listable, its quick spec is already there, so {@code gem install}
-     * can never see a listed version whose spec fetch 404s. It goes through {@link Blobs#write} rather than the
-     * operation's sidecar seam because a blobs-namespace format stores its derived documents in the same
-     * pointer -&gt; blob representation as its artifacts (the serve path reads it back with the ordinary blob read),
-     * and that seam writes a raw store object; the ordering guarantee is the same, since this runs inside the layout,
-     * strictly before any declared visibility step.
-     *
-     * <p>The chain and the observer list are passed in <b>explicitly empty</b>: this format never screens (screening
-     * is the ingress edges' monopoly - the edge already ran the discovered {@code PublishInterceptor} chain over this
-     * body) and never notifies (the edge fires the one after-commit notification once its own commit returns). So the
-     * operation is used here for what it is - the pointer-last layout choreography - and adds neither a second gate
-     * nor a second publish event.
+     * <p><b>This is the format's screening choke point.</b> A push may arrive as a multipart form around the gem, so
+     * the request body is not always the artifact and this format is not edge-screened ({@link #screened()}): the
+     * operation is constructed with the <em>discovered</em> interceptor chain and observer list, so the one screen runs
+     * here over the gem's own bytes, whichever shape carried them, and the one after-commit notification fires here
+     * once the gem is visible - refined to the gem's own coordinate, since the push endpoint names none.
      */
     private void push(InputStream body, Attestations attestations, Blobs blobs, FormatExchange exchange,
                       ArtifactStore store) throws IOException {
@@ -480,33 +479,15 @@ public final class RubyGemsFormat implements RepositoryFormat, ProxyLeg, BlobLay
     /** The push {@link #push} answers, a version already pushed aside. */
     private void commitPush(InputStream body, Attestations attestations, Blobs blobs, FormatExchange exchange,
                             ArtifactStore store) throws IOException {
-        Spec[] pushed = new Spec[1];
-        Publication.Commit commit = new Publication(store, List.of(), List.of()).commit(
+        Publication.Commit commit = new Publication(store).commit(
                 ArtifactDescriptor.at("RubyGems", exchange.path()), body, REPUBLISH,
                 accepted -> {
-                    Spec spec;
-                    try (InputStream stored = accepted.open()) {
-                        spec = parse(gemspec(stored));
-                    }
-                    if (spec == null || Keys.unsafe(spec.name()) || Keys.unsafe(spec.version())) {
-                        // No parseable gemspec, or a gemspec-supplied name/version that would forge a pointer key with
-                        // '/' or '..': nothing servable, so nothing is declared and nothing is linked.
+                    Spec spec = pushed(store, accepted.hash());
+                    if (spec == null) {
+                        // No parseable gemspec, or one naming a coordinate or a dependency that would forge a key or
+                        // an index line: nothing servable, so nothing is declared and nothing is linked.
                         return Publication.Visibility.declined();
                     }
-                    for (Dependency dependency : spec.deps()) {
-                        String requirement = constraint(dependency.requirement());
-                        if (hasControlChar(dependency.name())
-                                || (requirement != null && hasControlChar(requirement))) {
-                            // A runtime-dependency name/requirement flows unescaped into the compact-index line
-                            // (<version> <deps>|<requirements>), one version per newline in /info. A gemspec (attacker
-                            // YAML) whose dependency name carries a newline would inject a spurious version line into
-                            // that gem's /info and skew the /versions md5 computed over it. Refuse any control
-                            // character (never legitimate in a dependency name or a version constraint) - the guard
-                            // Keys.unsafe already applies to the gem's own name/version.
-                            return Publication.Visibility.declined();
-                        }
-                    }
-                    pushed[0] = spec;
                     String versionKey = "rubygems/" + spec.name() + "/versions/" + spec.version();
                     byte[] bundles = attestations.read();
                     return Publication.Visibility
@@ -523,11 +504,7 @@ public final class RubyGemsFormat implements RepositoryFormat, ProxyLeg, BlobLay
                             // The attestations the form carried after the gem, kept before the listings below so the
                             // version is never discoverable without the provenance it was pushed with; an empty array
                             // is not kept.
-                            .andThrough((_, _, _) -> {
-                                if (bundles != null && namesABundle(bundles)) {
-                                    blobs.write(attestationsKey(spec.name() + "-" + spec.version()), bundles);
-                                }
-                            })
+                            .andThrough((_, _, _) -> keepAttestations(blobs, spec, bundles))
                             // The compact-index line carries the artifact's content address as its checksum: the hash
                             // the operation stored the body under, reused rather than hashing the blob a second time.
                             .andThrough((hash, _, _) -> blobs.write(versionKey,
@@ -536,15 +513,106 @@ public final class RubyGemsFormat implements RepositoryFormat, ProxyLeg, BlobLay
                             // gem's stored /info document (if the version is servable), which re-derives the gem's
                             // line in the stored compact index - no scan of the other gems.
                             .andThrough((hash, _, _) -> new RubyGemsListings(blobs).published(spec.name(),
-                                    spec.version(), line(spec, hash).getBytes(StandardCharsets.UTF_8)));
+                                    spec.version(), line(spec, hash).getBytes(StandardCharsets.UTF_8)))
+                            // The push endpoint names no gem, so the observers are told which one this laid out.
+                            .describing(described(spec));
                 });
-        if (commit.visible()) {
-            // The push endpoint names no gem, so the edge is told which one this laid out.
-            exchange.laidOut(new ArtifactDescriptor("RubyGems", pushed[0].name(), pushed[0].version(),
-                    "/rubygems/gems/" + pushed[0].name() + "-" + pushed[0].version() + ".gem",
-                    "application/octet-stream", false, null, -1L));
+        switch (commit.disposition()) {
+            case ACCEPT -> exchange.respond(commit.visible() ? 200 : 400);
+            // The chain HELD the gem. Its layout is written all the same, behind the withhold marker (see
+            // {@link #held}), so a review release is the marker clear rather than a replay of a push whose envelope
+            // no longer exists.
+            case QUARANTINE -> {
+                held(attestations, blobs, store, exchange.path(), commit.hash());
+                exchange.respond(202);
+            }
+            // Refused outright: nothing is linked and no marker is set, so no index lists it and the stored blob is
+            // the usual unreferenced content-addressed object a collection reclaims.
+            case REJECT -> exchange.respond(422);
         }
-        exchange.respond(commit.visible() ? 200 : 400);
+    }
+
+    /**
+     * The gem a stored push carries, parsed out of the stored blob - or {@code null} when nothing servable can be
+     * derived: no parseable gemspec, a name or version that would forge a pointer key, or a runtime dependency whose
+     * name or requirement carries a control character. The parse the accepted leg and the held leg share, so the two
+     * can never lay one push out under two coordinates.
+     *
+     * <p>The dependency check is there because a dependency name and requirement flow unescaped into the compact-index
+     * line ({@code <version> <deps>|<requirements>}), one version per newline in {@code /info}: a gemspec whose
+     * dependency carries a newline would inject a version line into the gem's {@code /info} and skew the
+     * {@code /versions} md5 computed over it. No control character is legitimate in either.
+     */
+    private Spec pushed(ArtifactStore store, String hash) throws IOException {
+        Spec spec;
+        try (InputStream stored = store.open("blobs/" + hash)) {
+            spec = parse(gemspec(stored));
+        }
+        if (spec == null || Keys.unsafe(spec.name()) || Keys.unsafe(spec.version())) {
+            return null;
+        }
+        for (Dependency dependency : spec.deps()) {
+            String requirement = constraint(dependency.requirement());
+            if (hasControlChar(dependency.name()) || (requirement != null && hasControlChar(requirement))) {
+                return null;
+            }
+        }
+        return spec;
+    }
+
+    /** Keep the attestations a push carried, unless they name no bundle - an empty array is not kept. */
+    private static void keepAttestations(Blobs blobs, Spec spec, byte[] bundles) throws IOException {
+        if (bundles != null && namesABundle(bundles)) {
+            blobs.write(attestationsKey(spec.name() + "-" + spec.version()), bundles);
+        }
+    }
+
+    /** The descriptor a pushed gem is observed and held under: its own download path and coordinate. */
+    private static ArtifactDescriptor described(Spec spec) {
+        return new ArtifactDescriptor("RubyGems", spec.name(), spec.version(),
+                "/rubygems/gems/" + spec.name() + "-" + spec.version() + ".gem", "application/octet-stream", false,
+                null, -1L);
+    }
+
+    /**
+     * Lay a <em>held</em> gem out behind its withhold marker, so the review release that follows is the same marker
+     * clear a retroactive hold's release is - one hold-release mechanism for this format. The shared commit runs its
+     * accepted layout only on {@code ACCEPT}, so a screen-time {@code QUARANTINE} would otherwise store the gem and
+     * link nothing, and a release would materialise no version at all.
+     *
+     * <p>The review pointer is re-keyed from the push endpoint, which every push shares, onto the gem's own download
+     * path, as NuGet's is: a second held push would otherwise overwrite the first one's shared handle, leaving the
+     * first gem's marker without a live review pointer for the reconcile backstop to lift as holderless - an
+     * unreviewed gem un-withheld.
+     *
+     * <p>The order is what keeps the held gem out of sight: the marker retracts the gem's hash before its pointer is
+     * linked, and the stored {@code /info} and {@code /versions} documents leave a version carrying the marker out.
+     */
+    private void held(Attestations attestations, Blobs blobs, ArtifactStore store, String endpoint, String hash)
+            throws IOException {
+        Publication publication = new Publication(store, List.of(), List.of());
+        Spec spec = pushed(store, hash);
+        if (spec == null) {
+            return;   // nothing servable to hold open; the hold stays reviewable by its stored blob alone
+        }
+        try {
+            // A hold never replaces a released gem: refused before the mark, so nothing is left held.
+            blobs.refuseReplacement(gemKey(spec.name(), spec.version()), hash);
+        } catch (Publication.RepublishConflict taken) {
+            publication.unpublish("/quarantine" + endpoint);
+            throw taken;
+        }
+        ArtifactDescriptor described = described(spec);
+        Withheld.mark(store, hash, described);
+        blobs.linkRelease(gemKey(spec.name(), spec.version()), hash, -1L);
+        blobs.write("rubygemfiles/" + spec.name() + "-" + spec.version() + ".gemspec.rz", QuickSpec.deflated(spec));
+        keepAttestations(blobs, spec, attestations.read());
+        blobs.write("rubygems/" + spec.name() + "/versions/" + spec.version(),
+                line(spec, hash).getBytes(StandardCharsets.UTF_8));
+        new RubyGemsListings(blobs).published(spec.name(), spec.version(),
+                line(spec, hash).getBytes(StandardCharsets.UTF_8));   // held: the stored documents keep it out
+        publication.link("/quarantine" + described.path(), hash);
+        publication.unpublish("/quarantine" + endpoint);
     }
 
     private void serveFile(String key, Blobs blobs, FormatExchange exchange) throws IOException {

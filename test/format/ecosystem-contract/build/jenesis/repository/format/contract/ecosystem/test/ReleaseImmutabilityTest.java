@@ -228,7 +228,7 @@ class ReleaseImmutabilityTest {
 
     /** The formats whose own publish runs the screen, so a held upload is laid out by the format itself. */
     static List<Format> screening() {
-        Set<String> screening = Set.of("pypi", "nuget", "cargo", "npm");
+        Set<String> screening = Set.of("pypi", "nuget", "cargo", "npm", "gems", "swift");
         return formats().stream().filter(format -> screening.contains(format.name())).toList();
     }
 

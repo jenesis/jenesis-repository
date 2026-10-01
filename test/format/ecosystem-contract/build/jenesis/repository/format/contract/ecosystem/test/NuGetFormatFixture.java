@@ -200,6 +200,21 @@ final class NuGetFormatFixture implements EcosystemFormatFixture {
     }
 
     /** Push one version through the format's own bare-body publish endpoint and hand back the exact bytes uploaded. */
+    /** {@code dotnet nuget push}'s own shape: the package as the file part of a multipart form, where
+     *  {@link #publishPackage} sends it bare. */
+    @Override
+    public List<Shape> otherShapes() {
+        return List.of(new Shape("multipart push", store -> {
+            byte[] artifact = Packages.nupkg(ID, "1.0.0");
+            seed(store, ContractExchange.of("PUT", "/nuget/v3/package",
+                    Packages.fileForm(FORM, "package", ID + ".1.0.0.nupkg", artifact, Map.of()))
+                    .header("Content-Type", "multipart/form-data; boundary=" + FORM), 201);
+            return new Packaged(artifact, served("1.0.0"), Packages.sha256(artifact));
+        }));
+    }
+
+    private static final String FORM = "nuget-push-boundary";
+
     private byte[] push(ArtifactStore store, String version) throws IOException {
         byte[] artifact = Packages.nupkg(ID, version);
         seed(store, ContractExchange.of("PUT", "/nuget/v3/package", artifact), 201);

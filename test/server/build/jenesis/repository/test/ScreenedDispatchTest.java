@@ -6,10 +6,12 @@ import module java.base;
 import build.jenesis.repository.format.FormatExchange;
 import build.jenesis.repository.format.ProxyFormat;
 import build.jenesis.repository.format.RepositoryFormat;
+import build.jenesis.repository.server.EdgeHooks;
 import build.jenesis.repository.server.FormatDispatcher;
 import build.jenesis.repository.server.ScreenedDispatch;
 import build.jenesis.repository.store.ArtifactStore;
 import build.jenesis.repository.store.ArtifactStoreProvider;
+import build.jenesis.repository.store.Publication;
 import static org.assertj.core.api.Assertions.assertThat;
 
 /**
@@ -235,6 +237,57 @@ public class ScreenedDispatchTest {
                 .isZero();
     }
 
+    /**
+     * An unscreened format commits its own publish and links a released file through {@code Blobs.linkRelease} as a
+     * screened one does, so the tenant's {@code allow-redeploy} has to reach its write through the edge just as it
+     * reaches a screened layout - otherwise the opt-out silently binds only the formats the edge screens.
+     */
+    @Test
+    void an_unscreened_write_runs_under_the_tenant_s_allow_redeploy() throws IOException {
+        List<Boolean> seen = new ArrayList<>();
+        RepositoryFormat unscreened = new RepositoryFormat() {
+
+            @Override
+            public String name() {
+                return "redeploying";
+            }
+
+            @Override
+            public boolean handles(String path) {
+                return path.startsWith("/redeploying/");
+            }
+
+            @Override
+            public boolean screened() {
+                return false;
+            }
+
+            @Override
+            public void serve(FormatExchange exchange, ArtifactStore store) throws IOException {
+                seen.add(Publication.redeployAllowed());
+                exchange.respond(201);
+            }
+        };
+        FormatDispatcher dispatcher = new FormatDispatcher(List.of(unscreened), Map.of(), ProxyFormat.Fetcher.NONE);
+        EdgeHooks allowing = new EdgeHooks() {
+
+            @Override
+            public boolean redeploys(RepositoryFormat format, ArtifactStore store) {
+                return true;
+            }
+        };
+
+        new ScreenedDispatch(dispatcher, allowing).dispatch("acme",
+                new FakeExchange("PUT", "/redeploying/a", new byte[0]), store);
+        new ScreenedDispatch(dispatcher).dispatch("acme",
+                new FakeExchange("PUT", "/redeploying/a", new byte[0]), store);
+        new ScreenedDispatch(dispatcher, allowing).dispatch("acme",
+                new FakeExchange("GET", "/redeploying/a", new byte[0]), store);
+
+        assertThat(seen).as("a write of a tenant that allows redeploys may replace a release, one of a tenant that "
+                + "does not may not, and a read is no publish at all").containsExactly(true, false, false);
+    }
+
     @Test
     void a_read_dispatches_unscreened() throws IOException {
         SpyFormat spy = new SpyFormat("spyscreened", "/spyscreened/", true);
@@ -257,7 +310,7 @@ public class ScreenedDispatchTest {
     }
 
     @Test
-    void the_default_is_edge_screened_and_only_oci_opts_out() {
+    void the_default_is_edge_screened_and_oci_opts_out() {
         RepositoryFormat plain = new RepositoryFormat() {
             @Override
             public String name() {
@@ -275,6 +328,6 @@ public class ScreenedDispatchTest {
         };
         assertThat(plain.screened()).as("a format is edge-screened by default").isTrue();
         assertThat(RepositoryFormat.installed("oci").orElseThrow().screened())
-                .as("only OCI opts out of the edge screen").isFalse();
+                .as("OCI, whose push is split across requests, opts out of the edge screen").isFalse();
     }
 }

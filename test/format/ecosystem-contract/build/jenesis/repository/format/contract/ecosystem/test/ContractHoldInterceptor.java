@@ -1,5 +1,7 @@
 package build.jenesis.repository.format.contract.ecosystem.test;
 
+import java.util.ArrayList;
+import java.util.List;
 import java.util.concurrent.atomic.AtomicBoolean;
 import build.jenesis.repository.format.testkit.ContractHold;
 import build.jenesis.repository.store.ArtifactDescriptor;
@@ -30,8 +32,28 @@ public final class ContractHoldInterceptor implements PublishInterceptor {
     /** While set, every upload a format screens is held for review. A check sets it around one upload and clears it. */
     public static final AtomicBoolean QUARANTINE_UPLOADS = new AtomicBoolean();
 
+    /** The content hashes this thread's screens assessed since {@link #recordAssessed()}; absent when not recording. */
+    private static final ThreadLocal<List<String>> ASSESSED = new ThreadLocal<>();
+
+    /** Start recording the content hash of every artifact the chain assesses on this thread - the screen runs on the
+     *  publishing thread, so what a check publishes next is what it records. */
+    static void recordAssessed() {
+        ASSESSED.set(new ArrayList<>());
+    }
+
+    /** The hashes recorded since {@link #recordAssessed()}, in order, and the end of the recording. */
+    static List<String> recordedAssessed() {
+        List<String> assessed = ASSESSED.get();
+        ASSESSED.remove();
+        return assessed == null ? List.of() : List.copyOf(assessed);
+    }
+
     @Override
     public Disposition assess(ArtifactDescriptor artifact, Content content) {
+        List<String> recording = ASSESSED.get();
+        if (recording != null) {
+            recording.add(artifact.hash());
+        }
         return QUARANTINE_UPLOADS.get() ? Disposition.QUARANTINE : Disposition.ACCEPT;
     }
 

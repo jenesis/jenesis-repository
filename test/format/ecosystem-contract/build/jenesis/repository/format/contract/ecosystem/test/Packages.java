@@ -111,6 +111,24 @@ final class Packages {
         return form.toByteArray();
     }
 
+    /** A multipart form whose one file part carries {@code file}, followed by the given text fields - the shape a
+     *  {@code dotnet nuget push} and a {@code gem push --attestations} send their artifact in. */
+    static byte[] fileForm(String boundary, String field, String filename, byte[] file, Map<String, String> fields)
+            throws IOException {
+        ByteArrayOutputStream form = new ByteArrayOutputStream();
+        form.write(("--" + boundary + "\r\n"
+                + "Content-Disposition: form-data; name=\"" + field + "\"; filename=\"" + filename + "\"\r\n"
+                + "Content-Type: application/octet-stream\r\n\r\n").getBytes(StandardCharsets.UTF_8));
+        form.write(file);
+        form.write("\r\n".getBytes(StandardCharsets.UTF_8));
+        for (Map.Entry<String, String> text : fields.entrySet()) {
+            form.write(("--" + boundary + "\r\nContent-Disposition: form-data; name=\"" + text.getKey() + "\"\r\n\r\n"
+                    + text.getValue() + "\r\n").getBytes(StandardCharsets.UTF_8));
+        }
+        form.write(("--" + boundary + "--\r\n").getBytes(StandardCharsets.UTF_8));
+        return form.toByteArray();
+    }
+
     // --- NuGet -------------------------------------------------------------------------------------------------
 
     /** A {@code .nupkg}: a zip whose {@code <id>.nuspec} names the coordinate the push keys the package by. */

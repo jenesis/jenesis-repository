@@ -170,6 +170,32 @@ interface EcosystemFormatFixture extends FormatFixture {
         return Optional.empty();
     }
 
+    /**
+     * The request shapes this format's protocol publishes a release in beyond the one {@link #publishPackage} (or the
+     * kit's opaque publish) sends - the same artifact pushed bare and inside a multipart form, say - each publishing
+     * one release into the store it is handed. The census that asks which bytes the screen assessed drives every
+     * shape, since a protocol that takes two shapes can screen one of them as an envelope. Empty (the default) for a
+     * protocol with one shape.
+     */
+    default List<Shape> otherShapes() {
+        return List.of();
+    }
+
+    /** One further request shape a release is published in, named for the census's report. */
+    record Shape(String name, Publisher publisher) {
+
+        public Shape {
+            Objects.requireNonNull(name, "name");
+            Objects.requireNonNull(publisher, "publisher");
+        }
+    }
+
+    /** Publishes one release in a shape of its own and names what it serves. */
+    @FunctionalInterface
+    interface Publisher {
+        Packaged publish(ArtifactStore store) throws IOException;
+    }
+
     /** A published package: the exact bytes the client uploaded, the request path that serves them back, and the
      *  content address of the {@code blobs/} object holding them (the key the {@code HEAD} leg seals). */
     record Packaged(byte[] artifact, String servedPath, String contentHash) {

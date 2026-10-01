@@ -45,21 +45,45 @@ public final class ContractExchange implements FormatExchange {
     private boolean buffered;
 
     /**
-     * The request paths of every write exchange built on this thread since {@link #recordWrites()}: what a contract
-     * property reads back after a fixture's publish, so it learns where the publish wrote without the fixture having
-     * to say - and cannot be passed over a path the fixture never drove, since the fixture drives every write through
+     * Every write exchange built on this thread since {@link #recordWrites()}: what a contract property reads back
+     * after a fixture's publish, so it learns where the publish wrote and what it sent without the fixture having to
+     * say - and cannot be passed over a request the fixture never drove, since the fixture drives every write through
      * this exchange.
      */
-    private static final ThreadLocal<List<String>> WRITES = new ThreadLocal<>();
+    private static final ThreadLocal<List<Write>> WRITES = new ThreadLocal<>();
 
-    /** Start recording the paths of the write exchanges this thread builds. */
+    /** One recorded write: the path it addressed and the body it carried, digested only when asked, so a recorded
+     *  streaming upload is never read twice unless a property needs its hash. */
+    public record Write(String path, Supplier<InputStream> body) {
+
+        public Write {
+            Objects.requireNonNull(path, "path");
+            Objects.requireNonNull(body, "body");
+        }
+
+        /** The SHA-256 of the request body, in lower-case hex, streamed through a digest. */
+        public String sha256() throws IOException {
+            MessageDigest digest = ContractExchange.sha256();
+            try (InputStream in = new DigestInputStream(body.get(), digest)) {
+                in.transferTo(OutputStream.nullOutputStream());
+            }
+            return HexFormat.of().formatHex(digest.digest());
+        }
+    }
+
+    /** Start recording the write exchanges this thread builds. */
     public static void recordWrites() {
         WRITES.set(new ArrayList<>());
     }
 
     /** The paths recorded since {@link #recordWrites()}, in order, and the end of the recording. */
     public static List<String> recordedWrites() {
-        List<String> written = WRITES.get();
+        return recordedWriteRequests().stream().map(Write::path).toList();
+    }
+
+    /** The writes recorded since {@link #recordWrites()}, in order, and the end of the recording. */
+    public static List<Write> recordedWriteRequests() {
+        List<Write> written = WRITES.get();
         WRITES.remove();
         return written == null ? List.of() : List.copyOf(written);
     }
@@ -69,9 +93,9 @@ public final class ContractExchange implements FormatExchange {
                              Supplier<InputStream> requestBody) {
         this.method = method;
         this.path = path;
-        List<String> recording = WRITES.get();
+        List<Write> recording = WRITES.get();
         if (recording != null && (method.equals("PUT") || method.equals("POST") || method.equals("PATCH"))) {
-            recording.add(path);
+            recording.add(new Write(path, requestBody));
         }
         this.query = Map.copyOf(query);
         this.requestHeaders = Map.copyOf(requestHeaders);

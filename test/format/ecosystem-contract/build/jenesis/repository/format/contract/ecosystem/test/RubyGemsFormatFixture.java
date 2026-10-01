@@ -177,6 +177,21 @@ final class RubyGemsFormatFixture implements EcosystemFormatFixture {
         return "/rubygems/gems/" + GEM + "-" + version + ".gem";
     }
 
+    /** {@code gem push --attestations}: the gem as the file part of a multipart form, its attestations a field after
+     *  it, where {@link #publishPackage} pushes the bare gem. */
+    @Override
+    public List<Shape> otherShapes() {
+        return List.of(new Shape("multipart push", store -> {
+            byte[] artifact = Packages.gem(GEM, "1.0.0");
+            seed(store, ContractExchange.of("POST", "/rubygems/api/v1/gems",
+                    Packages.fileForm(FORM, "gem", GEM + "-1.0.0.gem", artifact, Map.of("attestations", "[]")))
+                    .header("Content-Type", "multipart/form-data; boundary=" + FORM), 200);
+            return new Packaged(artifact, served("1.0.0"), Packages.sha256(artifact));
+        }));
+    }
+
+    private static final String FORM = "gem-push-boundary";
+
     private byte[] push(ArtifactStore store, String version) throws IOException {
         byte[] artifact = Packages.gem(GEM, version);
         seed(store, ContractExchange.of("POST", "/rubygems/api/v1/gems", artifact), 200);

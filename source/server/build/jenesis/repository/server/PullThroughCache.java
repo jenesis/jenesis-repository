@@ -454,11 +454,6 @@ public final class PullThroughCache {
         public void respond(int status, byte[] content) throws IOException {
             delegate.respond(status, content);
         }
-
-        @Override
-        public void laidOut(build.jenesis.repository.store.ArtifactDescriptor artifact) {
-            delegate.laidOut(artifact);
-        }
     }
 
     private static final class Deferred implements FormatExchange {
