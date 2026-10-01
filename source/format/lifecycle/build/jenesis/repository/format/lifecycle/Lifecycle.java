@@ -11,24 +11,20 @@ import build.jenesis.repository.walk.PagedTreeWalk;
 import build.jenesis.repository.walk.Traversal;
 
 /**
- * A hosted version's lifecycle flag - an operator's mark that a specific coordinate/version is <b>deprecated</b> or
- * <b>yanked</b> - persisted as a small per-tenant metadata object through the {@link ArtifactStore} abstraction and
- * read back by a format so it can be surfaced in that format's native response (npm's {@code deprecated} message,
- * Cargo's {@code yanked} flag, ...). The flag lives at {@code lifecycle/<coordinate>/<version>} <em>within the
- * repository's already-scoped store</em>, so it is confined to the tenant and repository exactly like the artifact it
- * annotates; the coordinate string is whatever uniquely identifies the artifact within that store - an npm package
- * name (a scoped {@code @scope/name} keeps its slash), a Cargo {@code <registry>/<crate>} - and both the reading
- * format and the writing operator endpoint agree on it here rather than each hard-coding a layout.
+ * A hosted version's lifecycle flag - a mark that a coordinate/version is <b>deprecated</b> or <b>yanked</b> -
+ * persisted as a small object in the repository's scoped store at {@code lifecycle/<coordinate>/<version>}, so it is
+ * confined to the tenant and repository as the artifact is, and read back by a format for its native response (npm's
+ * {@code deprecated} message, Cargo's {@code yanked} flag). The coordinate is whatever identifies the artifact in that
+ * store - an npm name (a scoped {@code @scope/name} keeps its slash), a Cargo {@code <registry>/<crate>} - and the
+ * format and the operator endpoint agree on it here.
  *
- * <p>The value is a tiny text object (the state's lower-case name, then an optional message on the following lines),
- * written with the same compare-and-set retry a versioned pointer uses so a concurrent re-mark resolves
- * last-writer-wins rather than lost. Reads and writes are the only place a flag's bytes touch storage, and they are a
- * bounded metadata object, never an artifact blob, so the streaming principle is untouched. The helper is stateless;
- * every operation takes the caller's already-scoped store.
+ * <p>The value is the state's lower-case name, then an optional message on the following lines, written with the
+ * compare-and-set retry a versioned pointer uses, so a concurrent re-mark resolves last-writer-wins. Stateless; every
+ * operation takes the caller's scoped store.
  */
 public final class Lifecycle {
 
-    /** The store-key namespace flags live under, a sibling of a format's own {@code <format>/...} data in the scope. */
+    /** The store-key namespace flags live under, beside a format's own {@code <format>/...} data. */
     private static final String ROOT = "lifecycle";
 
     private Lifecycle() {
@@ -37,10 +33,10 @@ public final class Lifecycle {
     /** Whether a version is affected by a lifecycle mark and, if so, what kind. */
     public enum State {
 
-        /** The version is discouraged but still resolvable - npm renders it as a {@code deprecated} warning. */
+        /** The version is discouraged but still resolvable - npm renders a {@code deprecated} warning. */
         DEPRECATED,
 
-        /** The version is withdrawn - Cargo renders it {@code yanked} so a resolver skips it unless already pinned. */
+        /** The version is withdrawn - Cargo renders it {@code yanked}, so a resolver skips it unless already pinned. */
         YANKED;
 
         /** Parse a case-insensitive state name ({@code deprecated} / {@code yanked}), or empty when unrecognised. */
@@ -71,17 +67,11 @@ public final class Lifecycle {
     public record Entry(String coordinate, String version, Flag flag) {
     }
 
-    /**
-     * A per-coordinate/version disclosure decision the
-     * {@linkplain #page(ArtifactStore, Disclosure, String, int) flat listing} routes each mark through - the
-     * servable-name enumeration seam face (typically
-     * {@code inventory.disclosableDisplay(coordinate + ":" + version, HIDE_WITHHELD)}) the operator surface supplies, so
-     * a withheld version's mark is not disclosed on the served view (served-view parity). It is injected
-     * rather than reached for here so this dependency-minimal, pure-JDK helper stays free of the inventory: the decision
-     * that needs the ecosystem/layout lives in the {@code web} adapter that already carries it. A mark whose coordinate/
-     * version the seam classifies not-disclosable (held) is dropped from the listing; every other mark - a
-     * deprecated-but-servable version, a ghost with no blob - is kept.
-     */
+    /** The disclosure decision the {@linkplain #page(ArtifactStore, Disclosure, String, int) flat listing} routes each
+     *  mark through - typically {@code inventory.disclosableDisplay(coordinate + ":" + version, HIDE_WITHHELD)},
+     *  supplied by the web adapter - so a withheld version's mark is not disclosed on the served view while this helper
+     *  stays free of the inventory. A mark the seam holds is dropped; every other, including a deprecated servable
+     *  version or a ghost with no blob, is kept. */
     @FunctionalInterface
     public interface Disclosure {
 
@@ -89,10 +79,8 @@ public final class Lifecycle {
         boolean disclosable(String coordinate, String version) throws IOException;
     }
 
-    /**
-     * The lifecycle flag on a coordinate/version, or empty when none is marked (or the names are not traversal-safe,
-     * so a crafted lookup can never read outside the {@code lifecycle/} subtree).
-     */
+    /** The flag on a coordinate/version, or empty when none is marked or the names are not traversal-safe, so a crafted
+     *  lookup never reads outside {@code lifecycle/}. */
     public static Optional<Flag> read(ArtifactStore store, String coordinate, String version) throws IOException {
         if (!safeCoordinate(coordinate) || !ArtifactStore.safeSegment(version)) {
             return Optional.empty();
@@ -116,27 +104,17 @@ public final class Lifecycle {
         return flags;
     }
 
-    /**
-     * One page of the flagged versions across the repository's store that {@code disclosure} discloses - the flat
-     * listing an operator surface renders, with each mark routed through the servable-name enumeration seam so a
-     * withheld version's mark is not disclosed on the served view. The {@link Disclosure} is supplied by the caller
-     * (the {@code lifecycle-web} adapter passes
-     * {@code (coordinate, version) -> inventory.disclosableDisplay(coordinate + ":" + version, HIDE_WITHHELD)}) so this
-     * helper stays inventory-free; a mark the seam classifies held is dropped, every other mark is kept.
-     *
-     * <p>This used to answer the whole repository at once, following the walk's cursor to exhaustion and accumulating
-     * every disclosed mark. The marks are one per deprecated or yanked version, so that container is sized by how much
-     * the repository holds and by nothing the operator sets - the same shape that made the NOTICE fail at 200,000
-     * versions. The walk was already paged underneath; only the answer was not.
-     */
+    /** One page of the repository's flagged versions that {@code disclosure} discloses - the flat listing an operator
+     *  surface renders, each mark routed through the caller's {@link Disclosure} (the {@code lifecycle-web} adapter
+     *  passes the servable-name seam), so a withheld version's mark is not disclosed. The marks are one per deprecated
+     *  or yanked version, sized by the repository, so the answer is paged like the walk beneath it. */
     public static Page page(ArtifactStore store, Disclosure disclosure, String after, int limit) throws IOException {
         List<Entry> disclosed = new ArrayList<>();
         String cursor = after == null || after.isEmpty() ? null : after;
         long examined = 0;
         while (disclosed.size() < limit && examined < EXAMINED) {
-            // Capped at the room left in the page, so a call can never deliver more marks than the caller asked for.
-            // That is what makes the cursor honest: everything delivered is kept, so the cursor the walk hands back
-            // resumes strictly after the last entry in the page, and nothing is trimmed away and then skipped.
+            // Capped at the room left in the page, so a call never delivers more than asked: everything delivered is
+            // kept, and the walk's cursor resumes strictly after the page's last entry.
             Traversal.Result result = MARKS.entries(limit - disclosed.size())
                     .walk(store, ROOT, cursor, key -> mark(store, key, disclosure, disclosed));
             examined += result.delivered();
@@ -148,37 +126,25 @@ public final class Lifecycle {
         return new Page(List.copyOf(disclosed), cursor);
     }
 
-    /**
-     * One page of disclosed marks and the cursor that continues it.
-     *
-     * <p>{@code next} is {@code null} only when the walk provably reached the end. A page that is short of the
-     * caller's limit but still carries a cursor is the {@link #EXAMINED} case, not the end of the repository - a
-     * caller that stops on a short page stops early, which is the bug this record's shape exists to prevent.
-     */
+    /** One page of disclosed marks and the cursor continuing it. {@code next} is {@code null} only when the walk
+     *  provably reached the end; a short page still carrying a cursor is the {@link #EXAMINED} case, and a caller must
+     *  continue. */
     public record Page(List<Entry> entries, String next) {
     }
 
-    /**
-     * How many stored marks one call may open before it answers short.
-     *
-     * <p>Disclosure filters after the walk delivers, so a repository whose marks are nearly all withheld would walk
-     * arbitrarily far to fill one page. That is the unbounded read this bound exists to stop; when it is reached the
-     * page comes back short <em>with</em> its cursor, so the caller continues rather than concluding it has seen
-     * everything.
-     */
+    /** How many stored marks one call may open before answering short. Disclosure filters after the walk, so a
+     *  repository whose marks are nearly all withheld would otherwise walk arbitrarily far for one page; at the bound
+     *  the page comes back short with its cursor. */
     private static final int EXAMINED = 10_000;
 
-    /** The bounds the mark listing descends {@code lifecycle/} under. The per-call entry cap is set by
-     *  {@link #page} to the room left in the page; the binding bound here is the step budget - one
-     *  {@link ArtifactStore#exists} probe per opened node - which raises a named
-     *  {@link build.jenesis.repository.walk.TraversalException} rather than answering short, and the depth ceiling
-     *  stays the store's own {@link ArtifactStore#MAX_SEGMENTS} write cap, so a key deeper than the store would
-     *  accept fails by name where the previous recursion silently stopped at 64 levels. */
+    /** The bounds the mark listing descends {@code lifecycle/} under. {@link #page} sets the entry cap to the room left
+     *  in the page; the binding bound is the step budget, raising a
+     *  {@link build.jenesis.repository.walk.TraversalException} rather than answering short, and depth is the store's
+     *  {@link ArtifactStore#MAX_SEGMENTS}. */
     private static final PagedTreeWalk MARKS = PagedTreeWalk.bounded().steps(1_000_000);
 
     /** Decode one stored mark and add it to {@code disclosed} when the seam discloses it. The key's last segment is the
-     *  version and everything between the root and it is the (possibly multi-segment) coordinate, exactly the pairing
-     *  {@link #key} writes. */
+     *  version, everything between the root and it the coordinate, as {@link #key} writes them. */
     private static void mark(ArtifactStore store, String key, Disclosure disclosure, List<Entry> disclosed)
             throws IOException {
         String relative = key.substring(ROOT.length() + 1);
@@ -200,11 +166,8 @@ public final class Lifecycle {
         }
     }
 
-    /**
-     * Mark a coordinate/version with the flag, overwriting any previous mark with a bounded compare-and-set retry so
-     * a concurrent re-mark of the same version resolves last-writer-wins rather than one writer silently dropping its
-     * update. A traversal-unsafe coordinate or version is refused (it must never key a write outside {@code lifecycle/}).
-     */
+    /** Mark a coordinate/version, overwriting any previous mark by a bounded compare-and-set retry, so a concurrent
+     *  re-mark resolves last-writer-wins. A traversal-unsafe coordinate or version is refused. */
     public static void mark(ArtifactStore store, String coordinate, String version, Flag flag) throws IOException {
         Objects.requireNonNull(flag, "flag");
         if (!safeCoordinate(coordinate)) {
@@ -218,8 +181,8 @@ public final class Lifecycle {
         Publication.notifyMarked(subject(coordinate, version), store);
     }
 
-    /** Clear a coordinate/version's mark; {@code true} when one was present, {@code false} when there was nothing to
-     *  clear (or the names are not traversal-safe). */
+    /** Clear a coordinate/version's mark; {@code true} when one was present, {@code false} when none was (or the names
+     *  are not traversal-safe). */
     public static boolean clear(ArtifactStore store, String coordinate, String version) throws IOException {
         if (!safeCoordinate(coordinate) || !ArtifactStore.safeSegment(version)) {
             return false;
@@ -233,12 +196,10 @@ public final class Lifecycle {
         return true;
     }
 
-    /**
-     * Mark a version as an ecosystem client's own command asked - {@code gem yank}, {@code cargo yank},
-     * {@code npm deprecate} - and record it on the audit trail as the caller that sent it. It writes the same mark
-     * {@link #mark(ArtifactStore, String, String, Flag)} writes for the operator's surfaces, under the same action
-     * name, so one state results whichever surface changed it.
-     */
+    /** Mark a version as an ecosystem client's own command asked - {@code gem yank}, {@code cargo yank},
+     *  {@code npm deprecate} - and audit it as that caller. It writes the mark
+     *  {@link #mark(ArtifactStore, String, String, Flag)} writes for the operator's surfaces, under the same action, so
+     *  one state results whichever surface changed it. */
     public static void mark(FormatExchange exchange, ArtifactStore store, String coordinate, String version, Flag flag)
             throws IOException {
         mark(store, coordinate, version, flag);
@@ -290,8 +251,8 @@ public final class Lifecycle {
     }
 
 
-    /** A coordinate may carry {@code /} (an npm scope, a Cargo {@code <registry>/<crate>}), so it is validated
-     *  segment-by-segment: every {@code /}-delimited part is a safe segment and none is empty ({@code //}). */
+    /** A coordinate may carry {@code /} (an npm scope, a Cargo {@code <registry>/<crate>}), so each {@code /}-delimited
+     *  part must be a safe, non-empty segment. */
     private static boolean safeCoordinate(String coordinate) {
         if (coordinate == null || coordinate.isEmpty()) {
             return false;
