@@ -13,20 +13,12 @@ import tools.jackson.databind.ObjectMapper;
 import tools.jackson.databind.node.ObjectNode;
 
 /**
- * A package's release list as a stored listing - the one document a Swift registry maintains.
+ * A package's release list as a stored listing: the specification's JSON object under {@code releases}, whose members -
+ * one per version - are the entries a publish rewrites.
  *
- * <p>The shape is the specification's: a JSON object under a top-level {@code releases} key, whose members are
- * version numbers. So the entries are those members, keyed by version, and a publish rewrites one of them.
- *
- * <h2>Two ways a release can be unavailable, and they are not the same</h2>
- *
- * <p>A withheld release <b>leaves the document</b>. Listing it would disclose that this repository holds a version
- * it has decided not to serve, which is the disclosure the withhold rule exists to prevent.
- *
- * <p>A <em>yanked</em> one stays, carrying the specification's own word for it: a {@code problem} object, which a
- * client is told to read as "unavailable for the purposes of package resolution". That is a native lifecycle
- * surface rather than an absence, so the mark is rendered into the entry - the same shape Helm's {@code deprecated}
- * has, and the opposite of the ecosystems whose only way to retire a version is to stop listing it.
+ * <p>A withheld release <b>leaves the document</b>, since listing it would disclose a version the repository has
+ * decided not to serve. A yanked one stays, carrying the specification's {@code problem} object, which a client reads
+ * as "unavailable for package resolution" - a native lifecycle surface, the shape Helm's {@code deprecated} has.
  */
 final class SwiftListings {
 
@@ -47,8 +39,8 @@ final class SwiftListings {
             return entries;
         }
 
-        /** The releases one member at a time through a streaming parser - the framed codec around this hands it
-         *  the bare object - so a publish into a package never holds every release of it in heap. */
+        /** The releases one member at a time through a streaming parser, so a publish never holds every release in
+         *  heap. */
         @Override
         public Reader read(InputStream in, long ignored) throws IOException {
             JsonParser parser = MAPPER.createParser(in);
@@ -88,14 +80,8 @@ final class SwiftListings {
             return MAPPER.writeValueAsBytes(members);
         }
 
-        /**
-         * The same object, written as the releases arrive.
-         *
-         * <p>One package's releases is a bounded document, so this is not a memory fix - it is the parity half of
-         * one. A codec that implements only {@code split} and {@code join} inherits an appender that collects
-         * every entry into a map and joins it at close, which is the shape that made the OCI tag list fail after
-         * three fixes above it; a format left in that state is a format whose generator streams into a buffer.
-         */
+        /** The same object, written as the releases arrive, so the generator streams rather than collecting every entry
+         *  into a map before joining it. */
         @Override
         public Appender append(OutputStream out) {
             return new Appender() {
@@ -159,7 +145,7 @@ final class SwiftListings {
                 + (swiftVersion.isEmpty() ? "" : "@swift-" + swiftVersion) + ".swift";
     }
 
-    /** The release document endpoint 4.2 answers, written by the publish that knows the archive's digest. */
+    /** The release document's key, written by the publish that knows the archive's digest. */
     static String metadataKey(String repo, String scope, String name, String version) {
         return packagePrefix(repo, scope, name) + "/" + version + "/metadata";
     }
@@ -181,14 +167,9 @@ final class SwiftListings {
         }
     }
 
-    /**
-     * One release's entry, or empty when it should not be listed at all.
-     *
-     * <p>No {@code url} member. The specification makes it optional and tells a client to expand
-     * {@code /{scope}/{name}/{version}} on the originating host when it is absent - so omitting it keeps a host
-     * name out of a stored document, which is the difference between a document that survives being reached
-     * through a different name and one that sends every client back to whichever host happened to publish.
-     */
+    /** One release's entry, or empty when it is not listed. No {@code url} member: the specification makes it optional
+     *  and a client then expands {@code /{scope}/{name}/{version}} on the host it asked, so the stored document names
+     *  no host and survives being reached under another name. */
     private Optional<byte[]> entry(String repo, String scope, String name, String version) throws IOException {
         String archive = archiveKey(repo, scope, name, version);
         if (!blobs.exists(archive) || blobs.withheld(archive)) {
@@ -196,8 +177,7 @@ final class SwiftListings {
         }
         Optional<Lifecycle.Flag> flag = Lifecycle.read(store, scope + "." + name, version);
         if (flag.isPresent() && flag.get().state() == Lifecycle.State.YANKED) {
-            // The specification's own word for a release a client must not resolve, and it stays LISTED - which is
-            // what makes a yank different from a hold here rather than a second spelling of it.
+            // The specification's word for a release a client must not resolve, and it stays listed - unlike a hold.
             String detail = flag.get().message() == null || flag.get().message().isBlank()
                     ? "this release was removed from the registry"
                     : flag.get().message();
@@ -207,7 +187,7 @@ final class SwiftListings {
         return Optional.of("{}".getBytes(StandardCharsets.UTF_8));
     }
 
-    /** The document as it would be built from the store - the first materialisation and the repair path. */
+    /** The document as built from the store - the first materialisation and the repair path. */
     private SortedMap<String, byte[]> generate(String repo, String scope, String name) throws IOException {
         SortedMap<String, byte[]> entries = new TreeMap<>();
         for (String file : blobs.list(packagePrefix(repo, scope, name))) {

@@ -32,31 +32,21 @@ import tools.jackson.databind.ObjectReader;
 import tools.jackson.databind.node.ObjectNode;
 
 /**
- * The Swift Package Registry (SE-0292), hosted.
+ * The Swift Package Registry (SE-0292), hosted and proxied.
  *
- * <p>Six endpoints, under {@code /swift/<repo>/}: list a package's releases, fetch a release's metadata, fetch its
- * {@code Package.swift}, download its source archive, look a package up by repository URL, and publish. A client
- * is pointed here with {@code swift package-registry set <base>/swift/<repo>}.
+ * <p>Six endpoints under {@code /swift/<repo>/}: list a package's releases, fetch a release's metadata, its
+ * {@code Package.swift} and its source archive, look a package up by repository URL, and publish. A client is pointed
+ * here with {@code swift package-registry set <base>/swift/<repo>}.
  *
- * <h2>The version is in a header, not the path</h2>
+ * <p>The API version is negotiated - {@code Accept: application/vnd.swift.registry.v1+json}, answered with
+ * {@code Content-Version: 1} - and the URL space is unversioned, so these paths carry no version.
  *
- * <p>Unusually among the formats here, this specification puts its API version in content negotiation -
- * {@code Accept: application/vnd.swift.registry.v1+json}, answered with {@code Content-Version: 1} - and leaves
- * the URL space unversioned. So there is no foreign {@code /vN} prefix to adopt, and this format's paths carry no
- * version of ours either, which is the rule this product already keeps everywhere it is free to.
+ * <p>The {@code checksum} a client verifies an archive against is the SHA-256 the store computed as the bytes streamed
+ * in, recorded in the release document at publish - it describes the bytes this repository serves, not a publisher's
+ * claim.
  *
- * <h2>What the archive's checksum is</h2>
- *
- * <p>A client verifies a downloaded archive against the {@code checksum} in the release metadata. That value is the
- * SHA-256 the content-addressed store computed as the bytes streamed in, so it describes the bytes this repository
- * will actually serve rather than anything a publisher asserted beside them - and it is recorded in the metadata
- * document at publish, when the store has just told us what it was.
- *
- * <h2>Two ways to be unavailable</h2>
- *
- * <p>A withheld release leaves the release list; a yanked one stays, carrying the specification's own
- * {@code problem} object. See {@link SwiftListings} for why those are different rather than two spellings of one
- * thing.
+ * <p>A withheld release leaves the release list; a yanked one stays with the specification's {@code problem} object
+ * (see {@link SwiftListings}).
  */
 public final class SwiftFormat implements RepositoryFormat, ArtifactLayout, BlobLayout, ArtifactSignatures,
         RepositoryExporter, RepositoryImporter, ProxyLeg {
@@ -64,16 +54,17 @@ public final class SwiftFormat implements RepositoryFormat, ArtifactLayout, Blob
     /** The archive signature's sidecar suffix under the archive key and path: {@code <version>.zip.sig}. */
     private static final String SIGNATURE = ".sig";
 
-    /** The one signature format the registry specification defines (SE-0305): a detached CMS structure over the
-     *  source archive, declared by the {@code X-Swift-Package-Signature-Format} header on publish and download. */
+    /** The one signature format the specification defines (SE-0305): a detached CMS structure over the source archive,
+     *  declared by the {@code X-Swift-Package-Signature-Format} header on publish and download. */
     private static final String SIGNATURE_FORMAT = "cms-1.0.0";
 
     private static boolean signable(String path) {
         return archivePath(path) != null;
     }
 
-    /** {@code {repo, scope, name, version}} for a source-archive path ({@code /swift/<repo>/<scope>/<name>/<version>.zip})
-     *  or a signature sidecar's ({@code ...zip.sig}), else {@code null}. */
+    /** {@code {repo, scope, name, version}} for a source-archive path
+     *  ({@code /swift/<repo>/<scope>/<name>/<version>.zip}) or its signature sidecar's ({@code ...zip.sig}), else
+     *  {@code null}. */
     private static String[] archivePath(String path) {
         if (!path.startsWith(PREFIX)) {
             return null;
@@ -114,8 +105,8 @@ public final class SwiftFormat implements RepositoryFormat, ArtifactLayout, Blob
         return SIGNATURES.evidence(path, material);
     }
 
-    /** A source archive's or its signature sidecar's serving key, when the pointer exists - for the compliance
-     *  screen's sibling read and the completion observer's re-derivation, which resolve through the layout. */
+    /** A source archive's or its signature sidecar's serving key, when the pointer exists - for the compliance screen's
+     *  sibling read and the completion observer. */
     @Override
     public Optional<String> servingKey(String requestPath, ArtifactStore store) throws IOException {
         String[] parts = archivePath(requestPath);
@@ -129,8 +120,8 @@ public final class SwiftFormat implements RepositoryFormat, ArtifactLayout, Blob
 
     private static final ObjectMapper MAPPER = new ObjectMapper();
 
-    /** How a publisher's metadata part is read: one JSON value and nothing after it, so a part carrying a second
-     *  value behind the first is refused rather than read as its first. */
+    /** Reads a publisher's metadata part as one JSON value with nothing after it, so a second value behind the first is
+     *  refused rather than ignored. */
     private static final ObjectReader METADATA = MAPPER.reader().with(DeserializationFeature.FAIL_ON_TRAILING_TOKENS);
 
     /** The package-ecosystem name Swift coordinates report. */
@@ -138,17 +129,14 @@ public final class SwiftFormat implements RepositoryFormat, ArtifactLayout, Blob
 
     private static final String PREFIX = "/swift/";
 
-    /**
-     * A source archive's signature is its {@code .sig} sidecar: optional, since most registries' packages carry none,
-     * PKCS#7 detached over the archive bytes as the specification defines it, and never asked of the sidecar itself.
-     * The sidecar arrives in the same multipart request as the archive ({@code source-archive-signature}) and is
-     * announced as its own publish once stored, so the completion observer re-derives the verdict over the stored
-     * archive exactly as it does for a Maven {@code .asc} that lands after its jar.
-     */
+    /** A source archive's signature is its {@code .sig} sidecar: optional, PKCS#7 detached over the archive bytes, and
+     *  never asked of the sidecar itself. It arrives in the publish's multipart form ({@code source-archive-signature})
+     *  and is announced as its own publish once stored, so the completion observer re-derives the verdict over the
+     *  stored archive. */
     private static final ArtifactSignatures SIGNATURES = ArtifactSignatures.detachedSidecar(ECOSYSTEM, SIGNATURE,
             ArtifactSignatures.Scheme.PKCS7, SwiftFormat::signable, ArtifactSignatures.Coverage.OPTIONAL);
 
-    /** What the specification's own examples send, and what this answers with. */
+    /** The version header the specification's examples send, and what this answers with. */
     private static final String CONTENT_VERSION = "Content-Version";
 
     private static final String API_VERSION = "1";
@@ -251,27 +239,23 @@ public final class SwiftFormat implements RepositoryFormat, ArtifactLayout, Blob
         return segment.endsWith(".json") ? segment.substring(0, segment.length() - ".json".length()) : segment;
     }
 
-    // ---- the read path ----
-
     // ---- proxy ----
 
     /** The media type each SE-0391 document is asked for with; a registry may refuse a request that names none. */
     private static final String ACCEPT = "application/vnd.swift.registry.v1+";
 
     /**
-     * Proxy a miss to an upstream SE-0391 registry - another organisation's, since there is no public one. The local
-     * repository name is a deployment's alias for it, so {@code /swift/<repo>/<rest>} maps to {@code <upstream>/<rest>}.
-     * Every target is composed that way, so nothing an upstream advertises is followed.
+     * Proxy a miss to an upstream SE-0391 registry (there is no public one). The local repository name aliases it, so
+     * {@code /swift/<repo>/<rest>} maps to {@code <upstream>/<rest>}; nothing an upstream advertises is followed.
      *
-     * <p>A package's release list (4.1) and the identifier lookup (4.5) are ENUMERATIONS, fetched fresh on each read,
-     * and only an upstream that answered 404/410 reaches the client as a 404. The release list is rewritten on the way
-     * out: each release's {@code url}, which names the upstream, is dropped, as this repository's own list drops it,
-     * so a client resolves each release relative to this repository and fetches it through its cache and gate. The
-     * lookup names identifiers rather than locations and is relayed as it is.
+     * <p>The release list (4.1) and the identifier lookup (4.5) are ENUMERATIONS, fetched fresh, and only an upstream
+     * that answered 404/410 reaches the client as a 404. Each release's upstream {@code url} is dropped from the list,
+     * as this repository's own list omits it, so a client fetches every release through this repository's cache and
+     * gate.
      *
      * <p>A release's metadata (4.2) and manifest (4.3) are PINNED and relayed fresh. Its source archive (4.4) is held
-     * to the {@code checksum} the release metadata declares for its {@code source-archive} - a separate document:
-     * one this repository could not read declines the fill, and a mismatch is refused.
+     * to the {@code checksum} the release metadata declares: metadata that could not be read declines the fill, and a
+     * mismatch is refused.
      */
     @Override
     public boolean pullThrough(FormatExchange exchange, ArtifactStore store, URI upstream,
@@ -387,14 +371,10 @@ public final class SwiftFormat implements RepositoryFormat, ArtifactLayout, Blob
         return ProxyRelay.Declared.NONE;
     }
 
-    /**
-     * 4.1, the release list.
-     *
-     * <p>The {@code 404} is keyed on the raw package folder rather than on the servable subset: a package this
-     * repository has never held is absent, while one whose every release is withheld is present with nothing to
-     * offer and answers an empty {@code releases} object. Collapsing those would assert "no such package" about
-     * something this repository does hold.
-     */
+    // ---- the read path ----
+
+    /** 4.1, the release list. The {@code 404} is keyed on the raw package folder: a package never held is absent, while
+     *  one whose every release is withheld answers an empty {@code releases} object. */
     private void releases(FormatExchange exchange, Blobs blobs, String repo, String scope, String name)
             throws IOException {
         if (Keys.unsafe(scope) || Keys.unsafe(name)
@@ -442,8 +422,7 @@ public final class SwiftFormat implements RepositoryFormat, ArtifactLayout, Blob
         if (!blobs.read(SwiftListings.manifestKey(repo, scope, name, version, swiftVersion), buffer)
                 && (swiftVersion.isEmpty()
                     || !blobs.read(SwiftListings.manifestKey(repo, scope, name, version, ""), buffer))) {
-            // A request for a tool-version-specific manifest falls back to the unversioned one, which is what the
-            // ecosystem's own layout means by their coexisting.
+            // A tool-version-specific manifest falls back to the unversioned one, as the ecosystem's layout intends.
             exchange.respond(404);
             return;
         }
@@ -463,8 +442,8 @@ public final class SwiftFormat implements RepositoryFormat, ArtifactLayout, Blob
                 "attachment; filename=\"" + name + "-" + version + ".zip\"");
         Optional<Blobs.Located> sidecar = blobs.locate(SwiftListings.archiveKey(repo, scope, name, version) + SIGNATURE);
         if (sidecar.isPresent()) {
-            // 4.4: a signed archive's signature rides the download in the headers the specification names, so a
-            // client that verifies (swift package-registry with a trust configuration) has it without a second read.
+            // A signed archive's signature rides the download in the headers 4.4 names, so a verifying client needs no
+            // second read.
             byte[] bytes;
             try (InputStream in = blobs.open(sidecar.get().hash())) {
                 bytes = in.readNBytes(ArtifactSignatures.Material.LARGEST_SIGNATURE);
@@ -472,7 +451,7 @@ public final class SwiftFormat implements RepositoryFormat, ArtifactLayout, Blob
             exchange.setResponseHeader("X-Swift-Package-Signature-Format", SIGNATURE_FORMAT);
             exchange.setResponseHeader("X-Swift-Package-Signature", Base64.getEncoder().encodeToString(bytes));
         }
-        // The specification's Digest header takes RFC 3230's base64 form, which is not the hex the store speaks.
+        // The Digest header takes RFC 3230's base64, not the store's hex.
         exchange.setResponseHeader("Digest", "sha-256=" + Base64.getEncoder()
                 .encodeToString(HexFormat.of().parseHex(located.get().hash())));
         exchange.setResponseHeader("Cache-Control", "public, immutable");
@@ -487,16 +466,12 @@ public final class SwiftFormat implements RepositoryFormat, ArtifactLayout, Blob
     }
 
     /**
-     * 4.5, the reverse lookup from a source-repository URL to package identifiers.
+     * 4.5, the reverse lookup from a source-repository URL to package identifiers, answered by point read from an index
+     * the publish writes.
      *
-     * <p>Answered from an index the publish writes, by point read - never by walking the packages and reading each
-     * one's metadata, which is the shape that would make this endpoint cost more the more the repository holds.
-     *
-     * <p><b>And it is screened.</b> A package whose every release is withheld is one this repository has decided
-     * not to serve, so naming it here would disclose it through the back door - the endpoint answers identifiers
-     * rather than releases, but an identifier nobody can resolve is still a statement that the repository holds
-     * it. The screen is the package's own release list, which a hold has already emptied: one header read per
-     * candidate, and a URL has few.
+     * <p><b>Screened.</b> A package whose every release is withheld is not named: an identifier is still a statement
+     * that the repository holds it. The screen is the package's own release list, which a hold has emptied - one header
+     * read per candidate.
      */
     private void identifiers(FormatExchange exchange, Blobs blobs, String repo) throws IOException {
         String url = exchange.queryParameter("url");
@@ -523,60 +498,43 @@ public final class SwiftFormat implements RepositoryFormat, ArtifactLayout, Blob
 
     // ---- the write path ----
 
-    /**
-     * The republish policy handed to the hosted-publish operation: {@code OVERWRITE}, since the refusal of a release
-     * that already stands at other bytes is taken at the archive's own link ({@link Blobs#linkRelease}), inside the
-     * pointer's compare-and-set, where two racing first publishes are told apart.
-     */
+    /** The republish policy: {@code OVERWRITE}, since a release already standing at other bytes is refused at the
+     *  archive's link ({@link Blobs#linkRelease}), inside the pointer's compare-and-set, where two racing first
+     *  publishes are told apart. */
     private static final Publication.Republish REPUBLISH = Publication.Republish.overwrite();
 
-    /**
-     * A publish is a multipart form around the source archive, so the request body is not the artifact and an edge
-     * screening it would assess the form while clients download the archive inside it - {@code RepositoryFormat}'s
-     * envelope clause. So this format screens at its own choke point, {@link #publish}, over the archive's own bytes.
-     */
+    /** A publish is a multipart form around the source archive, so an edge screening the body would assess the form
+     *  while clients download the archive - {@code RepositoryFormat}'s envelope clause. This format screens at
+     *  {@link #publish} over the archive's own bytes. */
     @Override
     public boolean screened() {
         return false;
     }
 
     /**
-     * 4.6, publish. A multipart body carrying the source archive and, optionally, the release metadata, the
+     * 4.6, publish: a multipart body carrying the source archive and, optionally, the release metadata, the
      * {@code Package.swift} and the archive's signature.
      *
-     * <p><b>The archive is what is screened.</b> The form is read whole first: the archive streams into the
-     * content-addressed store through the shared multipart reader - which bounds the form fields, so a body declaring
-     * a gigabyte-long field cannot be buffered whole - and the small parts are read against their limits. Only a form
-     * that is a release is offered to the screen: the archive is then read back from the store into the shared
-     * hosted-publish operation with the <em>discovered</em> interceptor chain and observers, under the descriptor of
-     * the archive's own download path and coordinate, so the bytes the chain assesses are the bytes a client
-     * downloads, and the after-commit notification fires once they serve. The digest the store computed becomes the
-     * {@code checksum} the release document publishes.
+     * <p><b>The archive is what is screened.</b> The archive streams into the store through the shared multipart
+     * reader, which bounds the form fields, and the small parts are read against their limits. Only a form that is a
+     * release is screened: the archive is read back into the shared hosted-publish operation with the discovered
+     * interceptor chain and observers, under its own download path and coordinate, so the chain assesses the bytes a
+     * client downloads. The store's digest becomes the release document's {@code checksum}.
      *
-     * <p><b>The signature is judged with the archive.</b> A signed form carries the archive's signature as a part of
-     * its own, so it is stored as the archive's sidecar <em>before</em> the screen runs, and the signature dimension
-     * reads it as the archive's evidence there - an untrusted or invalid signature decides the archive's own verdict,
-     * as an embedded one does for the formats that carry it inside the artifact, rather than being recorded after a
-     * publish nothing held. A release already standing at other bytes is refused before the sidecar is written, so a
-     * refused publish never leaves its signature beside the archive that stands.
+     * <p><b>The signature is judged with the archive.</b> It is stored as the archive's sidecar before the screen runs,
+     * so an untrusted or invalid signature decides the archive's own verdict. A release already standing at other bytes
+     * is refused before the sidecar is written.
      *
-     * <p><b>The commit point is the archive's pointer</b>, linked through {@link Blobs#linkRelease}, which decides
-     * inside the pointer's compare-and-set: of two first publishes racing with different archives one lands and the
-     * other is refused with {@code 409}, the specification's answer for a release that already exists, and a
-     * re-publish of the same form converges. The documents follow it, and the release list last; they are the
-     * release's own, so a re-publish of the same archive with other metadata, another manifest or another signature
-     * is refused with {@code 409} as well rather than rewriting what an immutable release says. Two first
-     * publishes of one version racing with different archives can each write their signature before either links;
-     * the sidecar then left beside the winner may be the loser's, which fails to verify over the winner's archive and
-     * reads as an invalid signature - never as a valid one, since what a signature vouches for is decided by the bytes
-     * it is checked against.
+     * <p><b>The commit point is the archive's pointer</b>, linked through {@link Blobs#linkRelease}: of two first
+     * publishes racing with different archives one lands and the other gets {@code 409}, and a re-publish of the same
+     * form converges. The documents follow, the release list last; a re-publish with other metadata, manifest or
+     * signature is refused with {@code 409} too. Two racing first publishes can each write their signature before
+     * either links, so the winner may carry the loser's signature - which fails to verify over the winner's archive,
+     * and so reads as invalid, never valid.
      *
-     * <p>A release the screen holds is laid out all the same, behind its withhold marker ({@link #held}), so its
-     * review release is the marker clear; one it rejects is answered {@code 422} with nothing linked.
-     *
-     * <p>The metadata part is parsed, and the release document is built from the parsed value: metadata that is not
-     * one JSON object is refused with {@code 400}, so a publisher cannot place a field of its own beside the
-     * {@code checksum} the store computed, nor store a document a client cannot read.
+     * <p>A held release is laid out behind its withhold marker ({@link #held}); a rejected one is answered {@code 422}
+     * with nothing linked. Metadata that is not one JSON object is refused with {@code 400}, so a publisher cannot
+     * place a field beside the store's {@code checksum}.
      */
     private void publish(FormatExchange exchange, Blobs blobs, String repo, String scope, String name,
                          String version) throws IOException {
@@ -618,8 +576,7 @@ public final class SwiftFormat implements RepositoryFormat, ArtifactLayout, Blob
         }
         String format = exchange.requestHeader("X-Swift-Package-Signature-Format");
         if (signature != null && format != null && !format.strip().equalsIgnoreCase(SIGNATURE_FORMAT)) {
-            // The specification defines one format; a signature in another is one nothing here could read, and
-            // storing it unread would let a package claim a signature no client or screen ever checked.
+            // One format is defined; a signature in another could never be checked, so it is not stored.
             exchange.respond(400);
             return;
         }
@@ -636,9 +593,9 @@ public final class SwiftFormat implements RepositoryFormat, ArtifactLayout, Blob
             try (InputStream stored = blobs.open(archive.hash())) {
                 commit = new Publication(blobs.store()).commit(release.described(), stored, REPUBLISH,
                         _ -> Publication.Visibility
-                                // The serving pointer, in this format's own namespace rather than publish/, so it is
-                                // declared through a Serving step. It goes first: it is where a release already
-                                // standing at other bytes refuses this one.
+                                // The serving pointer, in this format's namespace rather than publish/, so declared as
+                                // a Serving step. It goes first: it is where a release standing at other bytes refuses
+                                // this one.
                                 .through((hash, size, _) -> blobs.linkRelease(release.archiveKey(), hash, size))
                                 .andThrough((_, _, _) -> release.lay(blobs)));
             }
@@ -665,23 +622,17 @@ public final class SwiftFormat implements RepositoryFormat, ArtifactLayout, Blob
                 release.announceSignature(blobs);
                 exchange.respond(202);
             }
-            // Refused outright: nothing is linked, and the stored archive is the usual unreferenced
-            // content-addressed object a collection reclaims.
+            // Refused: nothing is linked, and the stored archive is collected.
             case REJECT -> exchange.respond(422);
         }
     }
 
-    /**
-     * Lay a <em>held</em> release out behind its withhold marker, so the review release that follows is the same
-     * marker clear a retroactive hold's release is - one hold-release mechanism for this format. The shared commit
-     * runs its accepted layout only on {@code ACCEPT}, so a screen-time {@code QUARANTINE} would otherwise store the
-     * archive and link nothing, and a release would materialise no version at all. The marker retracts the archive's
-     * hash before its pointer is linked, so at no instant is the held archive downloadable, its documents readable or
-     * its version listed.
-     */
+    /** Lay a held release out behind its withhold marker, so its review release is the same marker clear any hold's
+     *  release is. The shared commit runs its layout only on {@code ACCEPT}, so without this a screen-time
+     *  {@code QUARANTINE} would link nothing and a release would materialise no version. The marker retracts the
+     *  archive's hash before its pointer is linked, so the held archive is never downloadable, readable or listed. */
     private static void held(Release release, Blobs blobs, String hash) throws IOException {
-        // A hold never replaces a released archive nor what its release says: refused before the mark, so nothing is
-        // left held.
+        // A hold never replaces a released archive or what its release says: refused before the mark.
         blobs.refuseReplacement(release.archiveKey(), hash);
         release.refuseReplacement(blobs);
         Withheld.mark(blobs.store(), hash, release.described());
@@ -689,11 +640,8 @@ public final class SwiftFormat implements RepositoryFormat, ArtifactLayout, Blob
         release.lay(blobs);   // held: the release list keeps it out
     }
 
-    /**
-     * One release as its publish form named it: the stored archive and the parts beside it, and the documents they
-     * make. The accepted leg and the held leg lay it out through the same {@link #lay}, so the two can never write a
-     * different release for the same form.
-     */
+    /** One release as its publish form named it: the stored archive and the parts beside it. The accepted and held legs
+     *  both lay it out through {@link #lay}, so they cannot write different releases for one form. */
     private record Release(String repo, String scope, String name, String version, Blobs.Stored archive,
                            ObjectNode metadata, byte[] manifest, byte[] signature) {
 
@@ -711,12 +659,9 @@ public final class SwiftFormat implements RepositoryFormat, ArtifactLayout, Blob
                     null, -1L);
         }
 
-        /**
-         * Store the archive's signature as its sidecar, where the screen's sibling read finds it. Beside an archive
-         * that already stands it is part of that release and kept as it is ({@link Blobs#writeRelease}); with no
-         * archive standing it is this publish's own, and replaces whatever a publish that was refused or held off
-         * left there.
-         */
+        /** Store the archive's signature as its sidecar, where the screen's sibling read finds it. Beside an archive
+         *  that already stands it is that release's and kept ({@link Blobs#writeRelease}); with none standing it
+         *  replaces whatever a refused or held-off publish left. */
         void sign(Blobs blobs) throws IOException {
             if (signature == null) {
                 return;
@@ -728,10 +673,9 @@ public final class SwiftFormat implements RepositoryFormat, ArtifactLayout, Blob
             }
         }
 
-        /** Everything else the release serves beside its archive, written once the archive's pointer stands: the
-         *  manifest, the release document, the repository-URL index and, last, the release list. The manifest and
-         *  the document are the release's own, so a re-publish of its archive that would change either is refused
-         *  ({@link Blobs#writeRelease}). */
+        /** Everything the release serves beside its archive, written once the archive's pointer stands: the manifest,
+         *  the release document, the repository-URL index and, last, the release list. The manifest and document are
+         *  the release's own, so a re-publish that would change either is refused ({@link Blobs#writeRelease}). */
         void lay(Blobs blobs) throws IOException {
             if (manifest != null) {
                 blobs.writeRelease(SwiftListings.manifestKey(repo, scope, name, version, ""), manifest);
@@ -741,8 +685,8 @@ public final class SwiftFormat implements RepositoryFormat, ArtifactLayout, Blob
             new SwiftListings(blobs).refresh(repo, scope, name, version);
         }
 
-        /** Refuse, before anything of this publish is written, a manifest or document other than the one the
-         *  release that stands already has - what {@link #lay} would refuse once it ran. */
+        /** Refuse, before anything of this publish is written, a manifest or document other than the standing release's
+         *  - what {@link #lay} would refuse. */
         void refuseReplacement(Blobs blobs) throws IOException {
             if (manifest != null) {
                 blobs.refuseReplacement(SwiftListings.manifestKey(repo, scope, name, version, ""), manifest);
@@ -756,7 +700,7 @@ public final class SwiftFormat implements RepositoryFormat, ArtifactLayout, Blob
         }
 
         /** Announce the stored signature as its own publish once the archive is laid out, so the signature dimension
-         *  records the verdict on the archive's version - a held one's too, which no accepted screen records. */
+         *  records the verdict on the version - a held one's too. */
         void announceSignature(Blobs blobs) {
             if (signature != null) {
                 new Publication(blobs.store()).published(ArtifactDescriptor.at(ECOSYSTEM, path() + SIGNATURE));
@@ -764,7 +708,7 @@ public final class SwiftFormat implements RepositoryFormat, ArtifactLayout, Blob
         }
     }
 
-    /** The release document endpoint 4.2 answers, assembled once at publish from what the store just told us. */
+    /** The release document endpoint 4.2 answers, assembled at publish from the store's digest. */
     private static byte[] release(String scope, String name, String version, String hash, ObjectNode metadata) {
         ObjectNode release = MAPPER.createObjectNode();
         release.put("id", scope + "." + name);
@@ -777,8 +721,8 @@ public final class SwiftFormat implements RepositoryFormat, ArtifactLayout, Blob
         return MAPPER.writeValueAsBytes(release);
     }
 
-    /** The publisher's metadata part as one JSON object - an absent or blank part is an empty one - or empty when the
-     *  part is anything else: not JSON, another kind of value, or a value with more after it. */
+    /** The publisher's metadata part as one JSON object - an absent or blank part is an empty one - or empty when it is
+     *  not JSON, another kind of value, or a value with more after it. */
     private static Optional<ObjectNode> metadata(byte[] metadata) {
         if (new String(metadata, StandardCharsets.UTF_8).isBlank()) {
             return Optional.of(MAPPER.createObjectNode());
@@ -800,15 +744,14 @@ public final class SwiftFormat implements RepositoryFormat, ArtifactLayout, Blob
         exchange.respond(status, MAPPER.writeValueAsBytes(problem));
     }
 
-    /** Whether a package still offers anything - the screen {@link #identifiers} applies. A held release leaves
-     *  the release list, so a package with no entries left is one nothing may name. */
+    /** Whether a package still offers anything, the screen {@link #identifiers} applies: a held release leaves the
+     *  list, so a package with no entries is one nothing may name. */
     private static boolean servable(Blobs blobs, SwiftListings listings, String repo, String scope, String name)
             throws IOException {
         Optional<StoredListing.Header> header = StoredListing.header(blobs.store(),
                 SwiftListings.releases(repo, scope, name));
         if (header.isEmpty()) {
-            // Never materialised: read it through its spec, which generates it from the store and applies the same
-            // screen the write path does.
+            // Never materialised: read through its spec, which generates it with the write path's screen.
             return StoredListing.read(blobs.store(), listings.releasesSpec(repo, scope, name))
                     .map(document -> document.header().entries() > 0)
                     .orElse(false);
@@ -854,8 +797,7 @@ public final class SwiftFormat implements RepositoryFormat, ArtifactLayout, Blob
             exchange.respond(200, -1L).close();
             return;
         }
-        // Streamed rather than materialised: the document is the size of what it lists, so handing
-        // it over whole put the whole listing in heap on the request path.
+        // Streamed: the document is the size of what it lists.
         try (OutputStream out = exchange.respond(200, served.header().size())) {
             served.body().transferTo(out);
         }
@@ -889,9 +831,8 @@ public final class SwiftFormat implements RepositoryFormat, ArtifactLayout, Blob
                     path, "application/zip", false, null, -1L));
         }
         if (segments.length == 4 && !segments[3].isEmpty()) {
-            // The release itself - the path a publish PUTs and the release document is read from - is that version, and
-            // what it releases is the archive: so a publish is screened, held and forwarded under the version's
-            // coordinate, while the descriptor's path names the archive rather than claiming the document is one.
+            // The release path - which a publish PUTs and the release document is read from - describes that version,
+            // and the descriptor's path names the archive it releases.
             String version = strip(segments[3]);
             return Optional.of(new ArtifactDescriptor(ECOSYSTEM, segments[1] + "." + segments[2], version,
                     PREFIX + segments[0] + "/" + segments[1] + "/" + segments[2] + "/" + version + ".zip",
@@ -902,8 +843,8 @@ public final class SwiftFormat implements RepositoryFormat, ArtifactLayout, Blob
 
     @Override
     public List<String> paths(String coordinate, String version, ArtifactStore store) {
-        // A Swift release's pointer lives in the blobs namespace rather than under publish/, so the coordinate
-        // seam this format really has is BlobLayout's - see blobKeys below.
+        // A Swift release's pointer lives in the blobs namespace, so its coordinate seam is BlobLayout's (blobKeys
+        // below).
         return List.of();
     }
 
@@ -935,20 +876,10 @@ public final class SwiftFormat implements RepositoryFormat, ArtifactLayout, Blob
     /**
      * {@inheritDoc}
      *
-     * <p>This layout's pointer key <em>is</em> its served path without the leading slash - {@link #servedPaths}
-     * composes one from the other - so the request-path describer is already the parse, and writing a second one
-     * here would be two spellings of one grammar with nothing holding them together. The description is re-keyed to
-     * the pointer, because what a repair rebuilding the inventory row holds is the key, not the request path.
-     *
-     * <p><b>Only when the description actually names a version.</b> The two describers have different contracts:
-     * {@code describe} answers about any path this format serves and falls back to a coordinate-less descriptor for
-     * the indexes and checksums beside the artifacts, while this one must answer <em>empty</em> for those - a
-     * repair walking the blob root asks about every key it meets, and a present descriptor with no coordinate is
-     * an absence dressed as a claim. The filter is what keeps the delegation honest.
-     *
-     * <p>{@code BlobLayoutCoordinateSeamTest} drives this over keys this layout really wrote and over the folders
-     * above them, so both halves are checked rather than asserted: if the two shapes ever stop coinciding the round
-     * trip names the wrong coordinate, and if the filter goes the parent of a pointer is claimed as one.
+     * <p>This layout's pointer key is its served path without the leading slash, so the request-path describer is the
+     * parse, re-keyed to the pointer. It answers only when the description names a version: {@code describe} falls back
+     * to a coordinate-less descriptor for the documents beside an artifact, while a repair walking the blob root needs
+     * empty for those. {@code BlobLayoutCoordinateSeamTest} drives both halves over keys this layout wrote.
      */
     @Override
     public Optional<ArtifactDescriptor> describePointer(String key) {
@@ -966,13 +897,10 @@ public final class SwiftFormat implements RepositoryFormat, ArtifactLayout, Blob
         return paths;
     }
 
-    /**
-     * Each registry's release is published as SE-0391 has a client publish one: a multipart {@code PUT} to
-     * {@code <repo>/<scope>/<name>/<version>} carrying the source archive, the metadata it was published with, its
-     * {@code Package.swift} where one was sent, and its signature with the format header where it was signed. Asked for
-     * back at the archive's path, so a release already there - a registry answers a second publish {@code 409} - is
-     * not sent again.
-     */
+    /** Each registry's release is published as a client publishes one: a multipart {@code PUT} to
+     *  {@code <repo>/<scope>/<name>/<version>} with the source archive, its metadata, its {@code Package.swift} where
+     *  sent, and its signature with the format header where signed. Asked for at the archive's path first, so a release
+     *  already there is not sent again. */
     @Override
     public Exported export(ArtifactStore repository, String coordinate, String version, ExportTarget target)
             throws IOException {

@@ -10,12 +10,9 @@ import build.jenesis.repository.store.ListingObserver;
 import build.jenesis.repository.store.StoredListing;
 
 /**
- * Keeps the {@linkplain SwiftListings release list} in step with the transitions that happen off the publish path -
- * a hold and its release, a yank and its reversal, a removal - by re-deciding the one release's entry.
- *
- * <p>The two outcomes differ, which is why this cannot simply drop the entry: a hold removes it, and a yank
- * rewrites it as the specification's {@code problem} object. {@link SwiftListings#refresh} decides which, so this
- * only has to name the release.
+ * Keeps the {@linkplain SwiftListings release list} in step with transitions off the publish path - a hold and its
+ * release, a yank and its reversal, a removal - by re-deciding the one release's entry. A hold removes the entry and a
+ * yank rewrites it as a {@code problem} object; {@link SwiftListings#refresh} decides which.
  */
 public final class SwiftListingObserver implements ListingObserver {
 

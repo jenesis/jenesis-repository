@@ -8,17 +8,12 @@ import build.jenesis.repository.store.ArtifactDescriptor;
 import build.jenesis.repository.store.ArtifactStore;
 
 /**
- * Imports a Swift package registry laid out as Artifactory lays out a Swift repository -
- * {@code <scope>/<name>/<name>-<version>.zip} - replaying each source archive through {@link SwiftFormat}'s own
- * SE-0391 publish, a multipart {@code PUT} of the archive to {@code <scope>/<name>/<version>}, so a release is
- * screened, indexed and made immutable exactly as a client's publish is.
- *
- * <p>Only the archives migrate. The release document, the manifests and the identifier lookup are derived from what
- * a publish stores, and every other asset has no release to file under. The name is the directory the archive sits
- * in, and the file must be that name, a hyphen, the version and {@code .zip} - which is what makes a name that itself
- * carries hyphens split in the one place it can.
- *
- * <p>All releases migrate into a single {@code /swift/swift/...} registry, the flat migration the other importers use.
+ * Imports a Swift registry laid out as Artifactory lays one out - {@code <scope>/<name>/<name>-<version>.zip} -
+ * replaying each archive through {@link SwiftFormat}'s own publish, so a release is screened, indexed and made
+ * immutable as a client's is. Only the archives migrate; the documents, manifests and identifier lookup derive from
+ * what a publish stores. The name is the archive's directory, and the file must be that name, a hyphen, the version and
+ * {@code .zip}, which splits a hyphenated name in the one place it can. All releases land in one
+ * {@code /swift/swift/...} registry.
  */
 public final class SwiftImporter implements RepositoryImporter {
 
@@ -51,8 +46,8 @@ public final class SwiftImporter implements RepositoryImporter {
         }
     }
 
-    /** The release path {@code /swift/swift/<scope>/<name>/<version>} an archive's source path names, or empty for a
-     *  path that is not {@code <scope>/<name>/<name>-<version>.zip}. */
+    /** The release path {@code /swift/swift/<scope>/<name>/<version>} an archive's source path names, or empty for any
+     *  other path. */
     private static Optional<String> release(String path) {
         String[] segments = RepositoryImporter.importablePath(path, "swift").split("/");
         if (segments.length < 3) {
