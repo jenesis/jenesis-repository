@@ -10,42 +10,29 @@ import build.jenesis.repository.format.ProxyFormat;
 import build.jenesis.repository.store.Durations;
 
 /**
- * The upstream fetch over HTTP: request headers are forwarded; the status and response headers are returned.
- * {@link ProxyFormat.Fetcher#download} is overridden to stream a download's body straight through rather than
- * buffer it, so a large artifact (a proxied blob or an import) copies from the network to storage without
- * materializing it; the caller acts on the status and closes the stream. {@link ProxyFormat.Fetcher#head} is
- * likewise overridden to issue a real HTTP {@code HEAD}, so a size/metadata probe of an uncached large artifact
- * never opens its body ({@link ProxyFormat.Fetcher.Buffered} would fall back to a body-opening {@code download}).
+ * The upstream fetch over HTTP: request headers are forwarded, the status and response headers returned.
+ * {@link ProxyFormat.Fetcher#download} streams a body straight through, so a large artifact copies from network to
+ * storage without materialising, and {@link ProxyFormat.Fetcher#head} issues a real HTTP {@code HEAD}, so probing an
+ * uncached artifact never opens its body.
  *
- * <p>Every request is bounded by a per-request timeout on top of the connect timeout, so a stalled upstream - one
- * that accepts the connection but never sends a response - cannot hang a proxy read or an import forever. Every way
- * the upstream can fail to answer at all - a timeout, a refused connection, an unresolvable host, a dead route - is
- * reported as the contract's transport failure (an empty result) rather than as an exception, so a proxy leg reaches
- * clause 2's classification and an import is refused rather than a {@code 5xx} escaping. The timeout bounds the
- * arrival of the response, for a buffered {@link #fetch} (a small mutable index) and a streaming {@link #download}
- * alike; a large artifact's body transfer is not clipped by it, and a body that ends short of its declared
- * {@code Content-Length} surfaces as an {@link IOException} on the read (buffered) or on the stream the caller copies
- * into the store (streamed), so a truncated response is never written as a complete cached artifact. The timeout
- * defaults to a minute and is overridable with the {@code jenrepo.proxy.request-timeout} system property, a duration
- * in the deployment's one grammar ({@code PT30S} or {@code 30s}).
+ * <p>Every request is bounded by a per-request timeout on top of the connect timeout, so an upstream that accepts and
+ * never answers cannot hang a proxy read or an import. Every way the upstream fails to answer - a timeout, a refused
+ * connection, an unresolvable host, a dead route - is the contract's transport failure (an empty result), so a proxy
+ * leg reaches clause 2's classification and an import is refused rather than a {@code 5xx} escaping. The timeout bounds
+ * the response's arrival, not a large body's transfer; a body ending short of its {@code Content-Length} throws on the
+ * read, so a truncated response is never cached as complete. One minute by default, or
+ * {@code jenrepo.proxy.request-timeout} ({@code PT30S}, {@code 30s}).
  *
- * <p>Redirects are followed manually rather than by the JDK client's automatic {@code NORMAL} policy, because that
- * policy re-sends every request header - including {@code Authorization} - to the redirect target even across a
- * change of host. An importer download (a Nexus, Artifactory or Jenesis asset URL taken off a listing) or a proxy
- * fetch may legitimately redirect to a different origin - a presigned object-store URL, a CDN - and the operator's
- * credentials must not travel there. So a redirect that leaves the original origin drops the sensitive headers, the
- * same way a browser or {@code docker} does; a same-origin redirect keeps them.
+ * <p>Redirects are followed by hand rather than by the JDK's {@code NORMAL} policy, which re-sends
+ * {@code Authorization} across a change of host: an import or proxy fetch may redirect to a presigned object-store URL
+ * or a CDN, and the operator's credentials must not travel there. A redirect leaving the origin drops the sensitive
+ * headers, as a browser or {@code docker} does.
  *
- * <p>Following redirects by hand is also where the SSRF screen belongs. The import trigger already refuses an
- * operator-supplied URL to a private host up front, but that check is worthless if a public URL can 30x-redirect the
- * fetch onward to {@code 169.254.169.254} or a loopback control plane - the redirect target is chosen by the
- * upstream, not the operator. So every redirect target is re-judged by the shared {@link PrivateHosts} screen before
- * it is followed, and a redirect to a private, loopback, link-local, site-local, CGNAT, multicast or IPv6
- * unique-local host is refused with an {@link IOException} rather than fetched: the request never reaches that host,
- * and the caller sees a visible failure rather than a silently proxied internal response. The initial URL is not
- * re-judged here - that is the trigger's job for an import, and a proxy upstream is operator-configured - so only the
- * upstream-chosen hops are screened. Every hop is fetched through the product's HTTP client, which connects a host a
- * screen admitted only at a public address, so a name that rebinds after the screen is refused rather than fetched.
+ * <p>Each upstream-chosen hop is also re-judged by the shared {@link PrivateHosts} screen, since a public URL could
+ * otherwise redirect to {@code 169.254.169.254} or a loopback control plane: a hop to a private, loopback, link-local,
+ * site-local, CGNAT, multicast or unique-local host fails with an {@link IOException} rather than being fetched. The
+ * initial URL is the trigger's or the operator's to judge. Every hop goes through the product's HTTP client, which
+ * holds an admitted host to public addresses, so a rebinding name is refused.
  */
 public final class HttpFetcher implements ProxyFormat.Fetcher {
 
@@ -56,13 +43,10 @@ public final class HttpFetcher implements ProxyFormat.Fetcher {
     /** A bound on the redirect chain, so a redirect loop cannot spin an import or a proxy fetch forever. */
     private static final int MAX_REDIRECTS = 5;
 
-    /** A ceiling on a BUFFERED {@link #fetch} body. {@code fetch} is the small-mutable-index path (a packument,
-     *  maven-metadata, an OCI manifest, a catalog/tags page, a bearer-token JSON) and buffers the response whole; a
-     *  hostile, compromised or MITM-substituted upstream (operator-configured, so a trust-boundary defence rather than
-     *  an unauthenticated one) could otherwise return a multi-GB "index" and OOM the proxy before anything caps it
-     *  (RevalidatingFetcher's cache cap only gates what is stored, after the body is already in heap). 64 MiB is far
-     *  above any legitimate index yet bounds the buffer; the streaming {@link #download} path stays uncapped by design
-     *  (it copies network-to-store without buffering). */
+    /** A ceiling on a buffered {@link #fetch} body - the small mutable index path (a packument, maven-metadata, an OCI
+     *  manifest, a tags page, a token document) - so a hostile or substituted upstream cannot return a multi-GB "index"
+     *  and exhaust the heap before any cache cap applies. Far above any legitimate index; the streaming
+     *  {@link #download} path copies network-to-store unbuffered and is uncapped. */
     private static final int MAX_FETCH_BODY = 64 * 1024 * 1024;
 
     private final HttpClient client = ScreenedHttpClient.newBuilder()
@@ -72,9 +56,9 @@ public final class HttpFetcher implements ProxyFormat.Fetcher {
             .deadline(HttpFetcher::deadline)
             .build();
     private final Duration requestTimeout;
-    /** The SSRF screen applied to each redirect target's host: {@code true} refuses the hop. The shipped screen is
-     *  {@link PrivateHosts#resolvesToPrivate}; a test injects a permissive one to drive redirect behaviour against a
-     *  loopback fixture. */
+    /** The SSRF screen applied to each redirect target's host; {@code true} refuses the hop.
+     *  {@link PrivateHosts#resolvesToPrivate} in a deployment; a test injects a permissive one to drive redirects
+     *  against a loopback fixture. */
     private final Predicate<String> blockedRedirectHost;
 
     /** The default fetcher: a per-request timeout from {@code jenrepo.proxy.request-timeout}, or one minute. */
@@ -82,14 +66,14 @@ public final class HttpFetcher implements ProxyFormat.Fetcher {
         this(requestTimeout());
     }
 
-    /** A fetcher with an explicit per-request timeout (the seam a test uses to drive a stalled upstream quickly),
-     *  screening redirect targets against the shipped {@link PrivateHosts} private-range guard. */
+    /** A fetcher with an explicit per-request timeout (a test's seam for a stalled upstream), screening redirect
+     *  targets with {@link PrivateHosts}. */
     public HttpFetcher(Duration requestTimeout) {
         this(requestTimeout, PrivateHosts::resolvesToPrivate);
     }
 
-    /** A fetcher with an explicit per-request timeout and redirect-host screen - the seam a test uses to exercise the
-     *  redirect chain against a loopback fixture (a permissive screen) or to drive the private-host refusal. */
+    /** A fetcher with an explicit timeout and redirect-host screen - a test's seam for redirects against a loopback
+     *  fixture or for the private-host refusal. */
     public HttpFetcher(Duration requestTimeout, Predicate<String> blockedRedirectHost) {
         this.requestTimeout = requestTimeout;
         this.blockedRedirectHost = blockedRedirectHost;
@@ -98,10 +82,9 @@ public final class HttpFetcher implements ProxyFormat.Fetcher {
     @Override
     public Optional<ProxyFormat.Fetched> fetch(URI url, Map<String, String> requestHeaders) throws IOException {
         try {
-            // Stream the buffered index body through a bounded read rather than ofByteArray(), so a hostile/oversized
-            // upstream response is refused at MAX_FETCH_BODY instead of materialising a multi-GB byte[] on the heap.
-            // Only the exchange is folded to the empty answer: a body that ends short of its declared length still
-            // surfaces from the read below, so a truncated response is never mistaken for an upstream that was down.
+            // A bounded read rather than ofByteArray(), refusing an oversized body at MAX_FETCH_BODY. Only establishing
+            // the exchange folds to the empty answer; a body ending short of its declared length still throws from the
+            // read.
             Optional<HttpResponse<InputStream>> response = connect(url, requestHeaders, "GET",
                     HttpResponse.BodyHandlers.ofInputStream());
             if (response.isEmpty()) {
@@ -133,14 +116,9 @@ public final class HttpFetcher implements ProxyFormat.Fetcher {
         }
     }
 
-    /**
-     * A genuine HTTP {@code HEAD}: the upstream is asked for a {@code GET}'s status and response headers with no body,
-     * so an uncached large artifact's {@code HEAD} costs a header exchange and never opens - let alone reads - its
-     * body, unlike a derived one that would fall back to a body-opening {@link #download}. Redirects are followed
-     * by the same manual chain as {@link #fetch} / {@link #download} - the credential-dropping on a cross-origin hop
-     * included - reissuing {@code HEAD} at each hop; the {@link HttpResponse.BodyHandlers#discarding() discarding}
-     * handler means no body is buffered even should the upstream answer a {@code HEAD} with one.
-     */
+    /** A real HTTP {@code HEAD}: status and headers without a body, so an uncached large artifact costs a header
+     *  exchange. Redirects follow the same manual chain, credentials dropped on a cross-origin hop, reissuing
+     *  {@code HEAD} at each; the discarding handler buffers nothing even if an upstream sends a body. */
     @Override
     public Optional<ProxyFormat.Head> head(URI url, Map<String, String> requestHeaders) throws IOException {
         try {
@@ -154,21 +132,14 @@ public final class HttpFetcher implements ProxyFormat.Fetcher {
 
     /**
      * Open the exchange, reporting every way the upstream can fail to answer as the contract's transport failure -
-     * clause 6's empty {@link Optional} - rather than as an exception.
+     * clause 6's empty {@link Optional} - rather than an exception. A refused connection, an unresolvable host or a
+     * dead route as a raw {@link IOException} would be indistinguishable from a malformed index, and would bypass
+     * clause 2's classification and {@code ProxyRelay}'s enumeration-versus-pinned split - serving a module whose
+     * mirror refused the connection as one with no versions.
      *
-     * <p>A timeout is not the only such failure. A refused connection, an unresolvable host and a dead route are the
-     * three commonest ways a public mirror is down, and as a raw {@link IOException} each is indistinguishable at a
-     * catch site from "this index is malformed" - the one shape the contract asks every adapter to classify. Clause
-     * 2's whole apparatus, and {@code ProxyRelay}'s enumeration-versus-pinned split with it, keys on the empty
-     * answer; a transport that hands out an exception instead routes around all of it, and a module whose mirror
-     * refused the connection would be served as one with no versions.
-     *
-     * <p>Deliberately narrow. It folds the failures of <em>establishing the exchange</em>, so a body that dies
-     * mid-transfer still throws from the caller's read and a truncated response is never cached as a whole one. A TLS
-     * handshake that will not complete is left to propagate too: that is a misconfiguration an operator must see, not
-     * a mirror having a bad afternoon. And the manual redirect chain's private-host refusal is a plain
-     * {@link IOException} by construction, so screening a hop to a loopback control plane stays visible rather than
-     * being quietly rendered as "the upstream did not answer".
+     * <p>Deliberately narrow: only establishing the exchange folds. A body dying mid-transfer still throws, a TLS
+     * handshake that will not complete propagates as the misconfiguration it is, and the redirect chain's private-host
+     * refusal stays a visible {@link IOException}.
      */
     private <T> Optional<HttpResponse<T>> connect(URI url, Map<String, String> requestHeaders, String method,
                                                   HttpResponse.BodyHandler<T> handler)
@@ -180,11 +151,9 @@ public final class HttpFetcher implements ProxyFormat.Fetcher {
         }
     }
 
-    /** Issue the request with the given {@code method} ({@code GET} or {@code HEAD}) and follow redirects by hand,
-     *  dropping the {@link #SENSITIVE} headers the moment the chain leaves the original origin so a caller credential
-     *  never travels to a redirect target on another host. The method is carried unchanged across every hop, so a
-     *  redirected {@code HEAD} stays a {@code HEAD}. An intermediate redirect's body is closed before the next hop;
-     *  the final response is returned with its body intact for the caller. */
+    /** Issue the request with {@code method} ({@code GET} or {@code HEAD}) and follow redirects by hand, dropping the
+     *  {@link #SENSITIVE} headers once the chain leaves the original origin; the method is kept across hops. An
+     *  intermediate redirect's body is closed; the final response returns with its body intact. */
     private <T> HttpResponse<T> send(URI url, Map<String, String> requestHeaders, String method,
                                      HttpResponse.BodyHandler<T> handler)
             throws IOException, InterruptedException {
@@ -206,12 +175,10 @@ public final class HttpFetcher implements ProxyFormat.Fetcher {
                 body.close(); // release the intermediate redirect's connection before the next hop
             }
             current = current.resolve(location.get());
-            // The scheme first, because the host screen cannot speak for a URI that has no host. An upstream
-            // answering `Location: file:///etc/passwd` resolves to a URI whose getHost() is null, which the private-
-            // host classifier admits - correctly, since a null host is not a private address - and the next hop then
-            // hands a non-http(s) URI to HttpRequest.newBuilder, which throws IllegalArgumentException. That is
-            // unchecked and uncaught through fetch/download/head, so an upstream-controlled Location header turned a
-            // proxy read into a 500. A redirect off http(s) is never something to follow in any case.
+            // The scheme first, since the host screen cannot judge a URI without a host: `Location: file:///etc/passwd`
+            // has a null host, which the classifier admits, and a non-http(s) URI would make HttpRequest.newBuilder
+            // throw an unchecked IllegalArgumentException, turning an upstream's header into a 500. A redirect off
+            // http(s) is never followed.
             String scheme = current.getScheme();
             if (scheme == null || !("http".equalsIgnoreCase(scheme) || "https".equalsIgnoreCase(scheme))) {
                 throw new IOException("refusing to follow a redirect off http(s), which is not a scheme an upstream "
@@ -234,9 +201,8 @@ public final class HttpFetcher implements ProxyFormat.Fetcher {
         return status == 301 || status == 302 || status == 303 || status == 307 || status == 308;
     }
 
-    /** The throughput floor an upstream fetch is held to, as the operator set it now: {@link
-     *  ProxySettingsContributor#FLOOR_KEY}, else the client's own; a value that does not parse, or is negative, is the
-     *  client's own rather than none. */
+    /** The throughput floor an upstream fetch is held to, read now: {@link ProxySettingsContributor#FLOOR_KEY}, else
+     *  the client's; an unparseable or negative value is the client's, not none. */
     static long throughputFloor() {
         String configured = Features.lookup().apply("jenrepo." + ProxySettingsContributor.FLOOR_KEY);
         if (configured == null || configured.isBlank()) {
@@ -250,8 +216,8 @@ public final class HttpFetcher implements ProxyFormat.Fetcher {
         }
     }
 
-    /** The deadline on one upstream fetch, as the operator set it now: {@link ProxySettingsContributor#DEADLINE_KEY},
-     *  else none; a value that does not parse is none, as the default is, rather than a guess at what was meant. */
+    /** The deadline on one upstream fetch, read now: {@link ProxySettingsContributor#DEADLINE_KEY}, else none; an
+     *  unparseable value is none, as the default is. */
     static Duration deadline() {
         String configured = Features.lookup().apply("jenrepo." + ProxySettingsContributor.DEADLINE_KEY);
         if (configured == null || configured.isBlank()) {
@@ -264,7 +230,7 @@ public final class HttpFetcher implements ProxyFormat.Fetcher {
         }
     }
 
-    /** The configured per-request timeout: {@code jenrepo.proxy.request-timeout} ({@code PT30S}, {@code 30s}), or a
+    /** The configured per-request timeout, {@code jenrepo.proxy.request-timeout} ({@code PT30S}, {@code 30s}), or a
      *  minute. */
     private static Duration requestTimeout() {
         String value = System.getProperty("jenrepo.proxy.request-timeout");

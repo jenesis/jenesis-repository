@@ -1,13 +1,9 @@
 /**
- * The upstream HTTP connectivity as a plugin module: it {@code provides} a
- * {@link build.jenesis.repository.format.FetcherProvider} answering to {@code http}, composing the real HTTP
- * fetcher with index revalidation and negative caching of upstream misses - the machinery behind pull-through
- * proxying and repository imports. The dispatcher discovers it with {@code ServiceLoader} and names no transport;
- * a deployment without this module serves local content only (a proxy upstream is never consulted, an import is
- * refused). The composed caches are their own {@code ObservabilitySource}s reporting their bounded {@code
- * jenrepo.proxy.*} used-vs-available signals, so it {@code requires} the equally minimal, registry-free
- * {@code build.jenesis.repository.observation} SPI beside the format SPI and {@code java.net.http}, and the settings
- * SPI for the one dial it reads, the upstream throughput floor.
+ * Upstream HTTP connectivity: a {@link build.jenesis.repository.format.FetcherProvider} answering to {@code http}, the
+ * real HTTP fetcher composed with index revalidation and negative caching of misses - the machinery behind pull-through
+ * proxying and imports. Discovered with {@code ServiceLoader}; without it a deployment serves local content only. The
+ * caches report bounded {@code jenrepo.proxy.*} signals through the registry-free observation SPI, and the settings SPI
+ * carries the throughput floor and deadline dials.
  *
  * @jenesis.release 25
  * @jenesis.bom pin-repository.properties

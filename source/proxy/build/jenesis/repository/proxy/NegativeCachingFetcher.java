@@ -8,25 +8,17 @@ import build.jenesis.repository.observation.ObservabilitySource;
 import build.jenesis.repository.observation.TaskStatus;
 
 /**
- * A {@link ProxyFormat.Fetcher} decorator that remembers an upstream {@code 404} for a short window, so the flood of
- * probes a build tool makes for artifacts that are not there upstream - a version range, a missing {@code SNAPSHOT},
- * an optional classifier, a {@code .sha256} a client guesses at - is answered from memory rather than re-hitting the
- * upstream every time, which otherwise multiplies load and risks the upstream's rate limit. Only a definite
- * {@code 404} is cached: a transport failure (empty result) or an auth challenge ({@code 401}/{@code 403}) is not,
- * being transient or resolvable, and any success passes through untouched. An entry expires after the configured
- * time-to-live, so a genuinely published artifact is seen within that window. It decorates {@link #fetch},
- * {@link #download} and {@link #head} - Maven proxies through {@code download}, npm and the rest through
- * {@code fetch} - keyed by URL and safe for concurrent use, with a bounded map swept of expired entries when it
- * fills and cleared wholesale if a flood of still-live misses would otherwise push it past the bound, so the map
- * can never exceed its cap.
+ * A {@link ProxyFormat.Fetcher} decorator that remembers an upstream {@code 404} for a short window, so a build tool's
+ * probes for what is not upstream - a version range, a missing {@code SNAPSHOT}, an optional classifier, a guessed
+ * {@code .sha256} - are answered from memory instead of multiplying upstream load and risking its rate limit. Only a
+ * definite {@code 404} is cached; transport failures and {@code 401}/{@code 403} are transient or resolvable, and a
+ * success passes through. An entry expires after the ttl, so a newly published artifact is seen within it. It decorates
+ * {@link #fetch}, {@link #download} and {@link #head}, keyed by URL, concurrent-safe, in a map that is swept of expired
+ * entries when full and cleared outright if still full, so it never exceeds its cap.
  *
- * <p>It is its own {@link ObservabilitySource}: the live fetcher the distribution holds reports {@code
- * jenrepo.proxy.negativecache.entries} - the upstream misses currently remembered, as a <em>bounded</em> gauge
- * against the map bound past which a fresh miss triggers an eviction sweep, so the overview shows <em>data used vs
- * available</em> and how close the cache is to that bound (the same memory-exhaustion vector a shared bucket would
- * cap) without pre-computing a percentage - plus a {@code jenrepo.proxy.negativecache} health check that the cache
- * is installed and remembering misses. There is no background task (expired entries are swept lazily on the record
- * path), so {@link #taskStatuses()} stays empty.
+ * <p>It is its own {@link ObservabilitySource}: {@code jenrepo.proxy.negativecache.entries}, a bounded gauge against
+ * the map's cap, and a {@code jenrepo.proxy.negativecache} health check. Expiry is swept lazily on the record path, so
+ * {@link #taskStatuses()} is empty.
  */
 public final class NegativeCachingFetcher implements ProxyFormat.Fetcher, ObservabilitySource {
 
@@ -41,7 +33,7 @@ public final class NegativeCachingFetcher implements ProxyFormat.Fetcher, Observ
         this(delegate, ttl, Clock.systemUTC());
     }
 
-    /** The {@link Clock} seam lets a test advance time to assert an entry expires without sleeping. */
+    /** With a {@link Clock}, so a test can advance time past an entry's expiry without sleeping. */
     public NegativeCachingFetcher(ProxyFormat.Fetcher delegate, Duration ttl, Clock clock) {
         this.delegate = delegate;
         this.ttl = ttl;
@@ -74,9 +66,8 @@ public final class NegativeCachingFetcher implements ProxyFormat.Fetcher, Observ
 
     @Override
     public Optional<ProxyFormat.Head> head(URI url, Map<String, String> requestHeaders) throws IOException {
-        // A HEAD probes the same URL a fetch/download would, so a remembered upstream 404 answers it from memory too;
-        // otherwise the delegate's real HTTP HEAD runs and a definite 404 is remembered, keeping the negative cache
-        // consistent across all three verbs.
+        // A HEAD probes the same URL a fetch would, so a remembered 404 answers it too, and a definite 404 from the
+        // delegate's HEAD is remembered - one cache across all three verbs.
         if (cached(url)) {
             return Optional.of(new ProxyFormat.Head(404, Map.of()));
         }
@@ -87,8 +78,8 @@ public final class NegativeCachingFetcher implements ProxyFormat.Fetcher, Observ
         return head;
     }
 
-    /** This cache's signals and the fetcher's it wraps: the context holds only the outermost fetcher, so what the
-     *  chain beneath it reports is reported through it. */
+    /** This cache's signals and those of the fetchers it wraps: the context holds only the outermost fetcher, so the
+     *  chain beneath reports through it. */
     @Override
     public List<Metric> metrics() {
         return Stream.concat(Stream.of(Metric.bounded("jenrepo.proxy.negativecache.entries",
@@ -132,10 +123,8 @@ public final class NegativeCachingFetcher implements ProxyFormat.Fetcher, Observ
             Instant now = clock.instant();
             misses.values().removeIf(recordedAt -> !now.isBefore(recordedAt.plus(ttl)));
             if (misses.size() >= MAX_ENTRIES) {
-                // A flood of distinct, still-live upstream 404s has filled the map and none could be expired away, so
-                // sweeping freed nothing. Rather than grow past the bound (the memory-exhaustion vector the cap exists
-                // to close), drop the whole map - the same clear-on-still-full guard the sibling feed cache uses. The
-                // negative cache is a best-effort optimisation, so forgetting remembered misses only costs a re-probe.
+                // Still-live misses fill the map and nothing expired: drop the whole map rather than grow past the cap.
+                // Forgetting misses only costs re-probes.
                 misses.clear();
             }
         }

@@ -6,10 +6,10 @@ import build.jenesis.repository.format.ProxyFormat;
 import build.jenesis.repository.store.Durations;
 
 /**
- * Discovers the HTTP upstream fetcher, composed with the proxy's caching behaviour: index revalidation is always
- * on (it never serves stale bytes, only saves the transfer), and a definite upstream {@code 404} is remembered for
- * {@code proxy-miss-ttl} (default a minute; {@code 0} disables the negative cache). Without this module a
- * deployment has no upstream connectivity at all - no pull-through proxying, no imports.
+ * Discovers the HTTP upstream fetcher, composed with the proxy's caches: index revalidation always on (it never serves
+ * stale bytes, it only saves the transfer), and a definite upstream {@code 404} remembered for {@code proxy-miss-ttl}
+ * (a minute by default, {@code 0} disabling it). Without this module there is no upstream connectivity - no
+ * pull-through, no imports.
  */
 public final class HttpFetcherProvider implements FetcherProvider {
 
@@ -28,8 +28,8 @@ public final class HttpFetcherProvider implements FetcherProvider {
         return Optional.of(revalidating);
     }
 
-    /** The negative-cache window: a minute when unset, {@code 0} or {@code off} for no negative cache at all, and
-     *  otherwise a duration in the deployment's one grammar ({@code PT90S}, {@code 90s}, {@code 5m}). */
+    /** The negative-cache window: a minute when unset, none for {@code 0} or {@code off}, else a duration in the
+     *  deployment's grammar ({@code PT90S}, {@code 90s}, {@code 5m}). */
     private static Duration missTtl(String value) {
         if (value == null || value.isBlank()) {
             return Duration.ofSeconds(60);

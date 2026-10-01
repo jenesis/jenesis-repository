@@ -5,8 +5,7 @@ import build.jenesis.repository.net.http.ScreenedHttpClient;
 import build.jenesis.repository.settings.Setting;
 import build.jenesis.repository.settings.SettingsContributor;
 
-/** Describes the upstream fetch's throughput floor and deadline, read live by the {@link HttpFetcher} that applies
- *  them. */
+/** Describes the upstream fetch's throughput floor and deadline, read live by the {@link HttpFetcher}. */
 public final class ProxySettingsContributor implements SettingsContributor {
 
     /** The throughput floor's key. */

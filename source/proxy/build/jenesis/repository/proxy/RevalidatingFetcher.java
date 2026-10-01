@@ -7,24 +7,17 @@ import build.jenesis.repository.observation.Metric;
 import build.jenesis.repository.observation.ObservabilitySource;
 
 /**
- * A {@link ProxyFormat.Fetcher} decorator that revalidates a proxied mutable index against the upstream rather than
- * re-downloading it every time: it remembers a fetched body with its {@code ETag} / {@code Last-Modified} validator,
- * and on the next fetch of the same URL sends a conditional request ({@code If-None-Match} / {@code If-Modified-Since});
- * a {@code 304 Not Modified} serves the remembered body without its bytes crossing the wire again, and a {@code 200}
- * refreshes the entry. It never serves a stale body - the upstream is still asked every time, only the transfer is
- * saved - so it is safe without a freshness lifetime. Only a {@link #fetch} (a small, mutable index - a packument, a
- * metadata document, a version list) is revalidated; an immutable artifact is fetched through {@link #download} once
- * and then served from the local store, so {@code download} passes straight through and is never re-fetched. Keyed by
- * URL, bounded, and safe for concurrent use.
+ * A {@link ProxyFormat.Fetcher} decorator that revalidates a proxied mutable index instead of re-downloading it: it
+ * keeps a fetched body with its {@code ETag} / {@code Last-Modified}, sends the next fetch of the URL conditionally,
+ * serves the kept body on {@code 304} and refreshes on {@code 200}. The upstream is asked every time - only the
+ * transfer is saved - so nothing stale is served and no freshness lifetime is needed. Only {@link #fetch} is
+ * revalidated; an immutable artifact is downloaded once and served from the store, so {@code download} passes through.
+ * Keyed by URL, bounded, concurrent-safe.
  *
- * <p>It is its own {@link ObservabilitySource}: the live fetcher the distribution holds reports {@code
- * jenrepo.proxy.revalidation.bytes} - the cached index body bytes held, as a <em>bounded</em> gauge against the byte
- * ceiling past which the oldest entries are evicted, so the overview shows <em>data used vs available</em> and how
- * close the cache is to that ceiling without pre-computing a percentage - alongside {@code
- * jenrepo.proxy.revalidation.entries} (the indexes currently remembered, bounded by the byte ceiling rather than a
- * fixed count) and a {@code jenrepo.proxy.revalidation} health check that the cache is installed and saving
- * transfers. There is no background task (eviction happens lazily on the store path), so {@link #taskStatuses()}
- * stays empty.
+ * <p>It is its own {@link ObservabilitySource}: {@code jenrepo.proxy.revalidation.bytes}, a bounded gauge against the
+ * byte ceiling past which the oldest entries go, {@code jenrepo.proxy.revalidation.entries}, and a
+ * {@code jenrepo.proxy.revalidation} health check. Eviction is lazy on the store path, so {@link #taskStatuses()} is
+ * empty.
  */
 public final class RevalidatingFetcher implements ProxyFormat.Fetcher, ObservabilitySource {
 
@@ -37,9 +30,7 @@ public final class RevalidatingFetcher implements ProxyFormat.Fetcher, Observabi
     private final ProxyFormat.Fetcher delegate;
     private final ConcurrentMap<URI, Cached> cache = new ConcurrentHashMap<>();
     private final AtomicLong bytes = new AtomicLong();
-    // A monotonic stamp assigned to each entry as it is (re)fetched, so eviction can order by age: a ConcurrentHashMap
-    // iterates its entrySet in hash-bucket order, which says nothing about which entry is oldest, so the sequence is
-    // what makes "evict the oldest first" actually oldest-first rather than an arbitrary bucket walk.
+    // A monotonic stamp per (re)fetch, so eviction is oldest-first: the map's iteration order says nothing about age.
     private final AtomicLong sequence = new AtomicLong();
 
     public RevalidatingFetcher(ProxyFormat.Fetcher delegate) {
@@ -64,9 +55,8 @@ public final class RevalidatingFetcher implements ProxyFormat.Fetcher, Observabi
                 store(url, new Cached(response.body(), response.headers(), etag, lastModified,
                         sequence.incrementAndGet()));
             } else {
-                // Drop any prior entry, subtracting its bytes from the running total: a bare cache.remove would leak
-                // the accounting so `bytes` drifts permanently high and the eviction loop later evicts every fresh
-                // entry, silently degrading revalidation to a pass-through.
+                // Drop any prior entry with its bytes subtracted; a bare remove would leave the total drifting high
+                // until the eviction loop evicted every fresh entry.
                 Cached previous = cache.remove(url);
                 if (previous != null) {
                     bytes.addAndGet(-previous.body().length);
@@ -83,8 +73,7 @@ public final class RevalidatingFetcher implements ProxyFormat.Fetcher, Observabi
 
     @Override
     public Optional<ProxyFormat.Head> head(URI url, Map<String, String> requestHeaders) throws IOException {
-        // A HEAD carries no body to revalidate - only fetch's small index bodies are remembered - so it passes
-        // straight through to the delegate exactly as download does, preserving the delegate's real HTTP HEAD.
+        // A HEAD carries no body to revalidate, so it passes through to the delegate's real HEAD, as download does.
         return delegate.head(url, requestHeaders);
     }
 
@@ -130,11 +119,8 @@ public final class RevalidatingFetcher implements ProxyFormat.Fetcher, Observabi
         if (total <= MAX_TOTAL) {
             return;
         }
-        // Evict oldest-first: order a snapshot of the entries by their fetch sequence (ascending, so the
-        // least-recently-refreshed lead) and drop from the front until the total is back under the ceiling. Iterating
-        // the ConcurrentHashMap directly would evict in hash-bucket order - an arbitrary victim, not the oldest the
-        // javadoc and the bytes gauge promise. The atomic remove(key, value) keeps the byte accounting exact even if
-        // two threads evict concurrently: only a removal that actually took effect subtracts its bytes.
+        // Evict oldest-first by fetch sequence until the total is under the ceiling. The atomic remove(key, value)
+        // keeps the byte accounting exact when two threads evict at once: only a removal that took effect subtracts.
         List<Map.Entry<URI, Cached>> entries = new ArrayList<>(cache.entrySet());
         entries.sort(Comparator.comparingLong(entry -> entry.getValue().sequence()));
         Iterator<Map.Entry<URI, Cached>> victims = entries.iterator();
