@@ -352,24 +352,32 @@ final class ComplianceCommands {
     static int quarantine(String[] args, Path home) throws Exception {
         if (args.length < 2) {
             throw new IllegalArgumentException(
-                    "Usage: quarantine <repo> | quarantine release|discard <repo> <path>");
+                    "Usage: quarantine <repo> | quarantine release|discard <repo> <path>...");
         }
         RepositoryClient client = CliSupport.client(home);
         switch (args[1]) {
             case "release" -> {
                 if (args.length < 4) {
-                    throw new IllegalArgumentException("Usage: quarantine release <repo> <path>");
+                    throw new IllegalArgumentException("Usage: quarantine release <repo> <path>...");
                 }
-                client.review().releaseQuarantine(args[2], args[3]);
-                System.out.println("Released " + args[3] + " into " + args[2] + ".");
+                List<String> paths = List.of(args).subList(3, args.length);
+                client.review().releaseQuarantine(args[2], paths);
+                System.out.println("Released " + String.join(", ", paths) + " into " + args[2] + ".");
                 return 0;
             }
             case "discard" -> {
                 if (args.length < 4) {
-                    throw new IllegalArgumentException("Usage: quarantine discard <repo> <path>");
+                    throw new IllegalArgumentException("Usage: quarantine discard <repo> <path>...");
                 }
-                client.review().discardQuarantine(args[2], args[3]);
-                System.out.println("Discarded " + args[3] + ".");
+                ReviewClient.Discarded answer =
+                        client.review().discardQuarantine(args[2], List.of(args).subList(3, args.length));
+                if (!answer.discarded().isEmpty()) {
+                    System.out.println("Discarded " + String.join(", ", answer.discarded()) + ".");
+                }
+                if (!answer.absent().isEmpty()) {
+                    System.out.println("Nothing was held at " + String.join(", ", answer.absent())
+                            + " - already released or discarded.");
+                }
                 return 0;
             }
             default -> {
@@ -378,11 +386,22 @@ final class ComplianceCommands {
                     System.out.println("Nothing is held for review.");
                     return 0;
                 }
+                // A version's files are reviewed together, as the console shows them: the version once, the reasons
+                // each file was held for under its path.
+                Map<String, List<ReviewClient.QuarantineEvent>> versions = new LinkedHashMap<>();
                 for (ReviewClient.QuarantineEvent event : events) {
-                    System.out.printf("%s  %-9s %s%n", event.when(), event.verdict(), event.path());
-                    if (event.reasons() != null) {
-                        for (String reason : event.reasons()) {
-                            System.out.println("    " + reason);
+                    versions.computeIfAbsent(event.coordinate() == null ? event.path() : event.coordinate(),
+                            _ -> new ArrayList<>()).add(event);
+                }
+                for (Map.Entry<String, List<ReviewClient.QuarantineEvent>> version : versions.entrySet()) {
+                    ReviewClient.QuarantineEvent first = version.getValue().getFirst();
+                    System.out.printf("%s  %-9s %s%n", first.when(), first.verdict(), version.getKey());
+                    for (ReviewClient.QuarantineEvent event : version.getValue()) {
+                        System.out.println("    " + event.path());
+                        if (event.reasons() != null) {
+                            for (String reason : event.reasons()) {
+                                System.out.println("        " + reason);
+                            }
                         }
                     }
                 }

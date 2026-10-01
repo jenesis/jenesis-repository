@@ -101,7 +101,9 @@ public class QuarantineController {
     private static final int MAX_PAGE = 1000;
 
     /**
-     * The tenant settings it consults come from the tenant's settings documents, read once per tenant into a cached
+     * Release a held path, or every held file of a version, into the layout.
+     *
+     * <p>The tenant settings it consults come from the tenant's settings documents, read once per tenant into a cached
      * snapshot: one object per module under a constant prefix, narrow by construction.
      */
     @PostMapping("/api/quarantine/release")
@@ -113,19 +115,23 @@ public class QuarantineController {
         if (tenant == null) {
             return;
         }
-        RepositoryRequests.rejectTraversal(request.path());
-        // Audit BEFORE the mutation, not after: a crash between the release and a trailing audit write would leave a
-        // privileged mutation unrecorded. The audit trail is best-effort (a failed write never fails the release), so
-        // recording first cannot block the release either - it only guarantees the release is never silently unaudited.
-        audit(tenant, key, AuditActions.QUARANTINE_RELEASE, repo + request.path());
-        new GatedRepository(repositories.writable(tenant, repo))
-                .release(repositories.formatPath(tenant, repo, request.path()));
+        List<String> paths = request.targets();
+        paths.forEach(RepositoryRequests::rejectTraversal);
+        GatedRepository gated = new GatedRepository(repositories.writable(tenant, repo));
+        for (String path : paths) {
+            // Audit BEFORE the mutation, not after: a crash between the release and a trailing audit write would leave
+            // a privileged mutation unrecorded. The audit trail is best-effort (a failed write never fails the
+            // release), so recording first cannot block the release either - it only guarantees the release is never
+            // silently unaudited.
+            audit(tenant, key, AuditActions.QUARANTINE_RELEASE, repo + path);
+            gated.release(repositories.formatPath(tenant, repo, path));
+        }
         response.setStatus(200);
     }
 
-    /** Discard a held path. Answers whether anything was actually held - the same answer the console reports - so a
-     *  reviewer who discarded the wrong row, or raced another reviewer, is told nothing happened rather than that the
-     *  discard happened; a stale discard strips nothing and is not an error.
+    /** Discard a held path, or every held file of a version. Answers which were actually held - the same answer the
+     *  console reports - so a reviewer who discarded the wrong row, or raced another reviewer, is told nothing happened
+     *  rather than that the discard happened; a stale discard strips nothing and is not an error.
      *
      * <p>The tenant settings it consults come from the tenant's settings documents, read once per tenant into a cached
      * snapshot: one object per module under a constant prefix, narrow by construction.
@@ -140,14 +146,19 @@ public class QuarantineController {
         if (tenant == null) {
             return null;
         }
-        RepositoryRequests.rejectTraversal(request.path());
-        // Audit before the mutation for the same reason as release above: never let a crash end a privileged discard
-        // unrecorded; the best-effort trail cannot block the discard.
-        audit(tenant, key, AuditActions.QUARANTINE_DISCARD, repo + request.path());
-        boolean discarded = new GatedRepository(repositories.writable(tenant, repo))
-                .discard(repositories.formatPath(tenant, repo, request.path()));
+        List<String> paths = request.targets();
+        paths.forEach(RepositoryRequests::rejectTraversal);
+        GatedRepository gated = new GatedRepository(repositories.writable(tenant, repo));
+        List<String> discarded = new ArrayList<>();
+        List<String> absent = new ArrayList<>();
+        for (String path : paths) {
+            // Audit before the mutation for the same reason as release above: never let a crash end a privileged
+            // discard unrecorded; the best-effort trail cannot block the discard.
+            audit(tenant, key, AuditActions.QUARANTINE_DISCARD, repo + path);
+            (gated.discard(repositories.formatPath(tenant, repo, path)) ? discarded : absent).add(path);
+        }
         response.setStatus(200);
-        return new Discarded(request.path(), discarded);
+        return new Discarded(discarded, absent);
     }
 
     /** A traversal-unsafe repository, tenant or path name is a {@code 400} - the same mapping the sibling
@@ -173,10 +184,27 @@ public class QuarantineController {
     public record QuarantineView(List<ReviewQueue.Row> events, List<ReviewQueue.Row> refusals, String next) {
     }
 
-    /** A discard's answer: whether anything was held at the path. */
-    public record Discarded(String path, boolean discarded) {
+    /** A discard's answer: the paths it dropped held bytes at, and those at which nothing was held any more - already
+     *  released or discarded, perhaps by another reviewer. */
+    public record Discarded(List<String> discarded, List<String> absent) {
     }
 
-    public record QuarantineRequest(String path) {
+    /** What a release or a discard acts on: one held {@code path}, or the {@code paths} of a version's held files -
+     *  a version is released or discarded whole. Naming neither is a {@code 400}. */
+    public record QuarantineRequest(String path, List<String> paths) {
+
+        List<String> targets() {
+            List<String> targets = new ArrayList<>();
+            if (path != null) {
+                targets.add(path);
+            }
+            if (paths != null) {
+                targets.addAll(paths);
+            }
+            if (targets.isEmpty()) {
+                throw new IllegalArgumentException("a release or a discard names a path or paths");
+            }
+            return List.copyOf(targets);
+        }
     }
 }

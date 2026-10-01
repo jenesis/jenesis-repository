@@ -1,6 +1,7 @@
 package build.jenesis.repository.compliance.web;
 
 import java.io.IOException;
+import java.util.List;
 
 import static build.jenesis.repository.compliance.web.ComplianceConsoleConfig.QUALIFIER;
 import org.springframework.stereotype.Controller;
@@ -177,7 +178,7 @@ public class ComplianceScreenController {
         // The review queue, one page at a time, paged by pointer key.
         ComplianceReview.QuarantinePage page = compliance.quarantine(repo, after, QUARANTINE_PAGE);
         model.addAttribute("repo", repo);
-        model.addAttribute("quarantine", page.holds());
+        model.addAttribute("quarantine", page.versions());
         model.addAttribute("next", page.next());
         model.addAttribute("pageSize", QUARANTINE_PAGE);
         return QUALIFIER + "/quarantine";
@@ -218,24 +219,44 @@ public class ComplianceScreenController {
         return QUALIFIER + "/signer";
     }
 
+    /** Release the held files of one version - each {@code path} the queue's row names - into the layout. */
     @PostMapping("/ui/repositories/{repo}/quarantine/release")
     public String releaseQuarantined(@PathVariable("repo") String repo,
-                                     @RequestParam("path") String path,
+                                     @RequestParam("path") List<String> paths,
+                                     @RequestParam(name = "coordinate", defaultValue = "") String coordinate,
                                      RedirectAttributes redirect) throws IOException {
-        compliance.releaseQuarantined(repo, path);
-        redirect.addFlashAttribute("message", "Released " + path + " into the layout.");
+        for (String path : paths) {
+            compliance.releaseQuarantined(repo, path);
+        }
+        redirect.addFlashAttribute("message", "Released " + subject(paths, coordinate) + " into the layout.");
         return "redirect:/ui/repositories/" + repo + "/quarantine";
     }
 
+    /** Discard the held files of one version, saying which were still held - a reviewer who raced another, or
+     *  discarded the wrong row, is told nothing happened rather than that the discard did. */
     @PostMapping("/ui/repositories/{repo}/quarantine/discard")
     public String discardQuarantined(@PathVariable("repo") String repo,
-                                     @RequestParam("path") String path,
+                                     @RequestParam("path") List<String> paths,
+                                     @RequestParam(name = "coordinate", defaultValue = "") String coordinate,
                                      RedirectAttributes redirect) throws IOException {
-        boolean discarded = compliance.discardQuarantined(repo, path);
-        redirect.addFlashAttribute("message", discarded
-                ? "Discarded " + path + "."
-                : "Nothing is held at " + path + " - it was already released or discarded.");
+        int discarded = 0;
+        for (String path : paths) {
+            discarded += compliance.discardQuarantined(repo, path) ? 1 : 0;
+        }
+        redirect.addFlashAttribute("message", discarded > 0
+                ? "Discarded " + subject(paths, coordinate) + "."
+                : "Nothing of " + subject(paths, coordinate) + " is held - it was already released or discarded.");
         return "redirect:/ui/repositories/" + repo + "/quarantine";
+    }
+
+    /** What a release or a discard acted on, as its confirmation names it: the one path, or the version and how many
+     *  of its files. */
+    private static String subject(List<String> paths, String coordinate) {
+        if (paths.size() == 1) {
+            return paths.getFirst();
+        }
+        String files = paths.size() + " files";
+        return coordinate.isBlank() ? files : coordinate + " (" + files + ")";
     }
 
 

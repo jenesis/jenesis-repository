@@ -88,7 +88,7 @@ public class CliRegistryTest {
     @Test
     void a_command_answers_its_own_help_flag() throws Exception {
         String out = capture(() -> assertThat(Cli.run(new String[] {"quarantine", "--help"})).isZero());
-        assertThat(out).contains("quarantine release <repo> <path>");
+        assertThat(out).contains("quarantine release <repo> <path>...");
     }
 
     @Test

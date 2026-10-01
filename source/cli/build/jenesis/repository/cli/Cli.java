@@ -298,7 +298,7 @@ public final class Cli {
 
                 WHERE THE DANGER IS
                   Most commands read. These write, and two of them delete data that is not recoverable:
-                    quarantine discard   drops a held artifact
+                    quarantine discard   drops held files
                     purge --delete       reclaims a removed module's stored data
                   'purge' without --delete and 'cleanup plan' are dry runs that report what would happen. Prefer
                   them first.""");

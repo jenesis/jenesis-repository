@@ -714,11 +714,22 @@ hgroup.app-page-header__heading > h1.app-page-header__title {
 .app-list__date {
     white-space: nowrap;
 }
-/* A row's actions: one cell at the row's end, holding one `.app-actions` group, right-aligned on every table. */
+/* A row's actions: one cell at the row's end, holding one `.app-actions` group, right-aligned on every table. They are
+   the row's, so they are sized to its line - side by side, a size down - rather than to a form's. */
 .app-list__actions > .app-actions {
+    flex-wrap: nowrap;
     justify-content: flex-end;
     gap: var(--app-space-2);
     white-space: nowrap;
+}
+.app-list__actions button {
+    padding: var(--app-space-1) var(--app-space-3);
+    font-size: var(--app-font-size-sm);
+    line-height: 1.25;
+}
+.app-list__actions .app-actions__danger {
+    margin-left: 0;
+    padding-left: var(--app-space-2);
 }
 /* An action that opens a form of its own inside the cell - a resume asking for credentials - wraps its text. */
 .app-list__actions details {

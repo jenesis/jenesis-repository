@@ -236,6 +236,9 @@ public class RepositoryClientTest {
                 .willReturn(aResponse().withStatus(404)));
         server.stubFor(post(urlPathEqualTo("/api/repository/import"))
                 .willReturn(aResponse().withStatus(202).withBody(IMPORT_JOB)));
+        server.stubFor(post(urlPathEqualTo("/api/quarantine/discard"))
+                .willReturn(aResponse().withStatus(200)
+                        .withBody("{\"discarded\":[\"/maven/org/acme/lib/1.0/lib-1.0.jar\"],\"absent\":[]}")));
         // A framework-rendered JSON error body: it starts with '{' but is not a batch manifest.
         server.stubFor(put(urlPathMatching(".*/errorbody/.*")).atPriority(1)
                 .withHeader("Jenesis-Explode", matching(".*"))
@@ -493,15 +496,20 @@ public class RepositoryClientTest {
             assertThat(event.reasons()).containsExactly("unsigned", "license unknown");
         });
 
-        client.review().releaseQuarantine("releases", "/maven/org/acme/lib/1.0/lib-1.0.jar");
+        client.review().releaseQuarantine("releases",
+                List.of("/maven/org/acme/lib/1.0/lib-1.0.jar", "/maven/org/acme/lib/1.0/lib-1.0.pom"));
         assertThat(lastMethod).isEqualTo("POST");
         assertThat(lastPath).isEqualTo("/api/quarantine/release");
-        assertThat(lastQuery).as("the repo rides the query, the path the body").contains("repo=releases");
-        assertThat(lastBody).isEqualTo("{\"path\":\"/maven/org/acme/lib/1.0/lib-1.0.jar\"}");
+        assertThat(lastQuery).as("the repo rides the query, the paths the body").contains("repo=releases");
+        assertThat(lastBody).as("a version's files in one request")
+                .isEqualTo("{\"paths\":[\"/maven/org/acme/lib/1.0/lib-1.0.jar\",\"/maven/org/acme/lib/1.0/lib-1.0.pom\"]}");
         assertThat(lastKey).isEqualTo("jenk_acme.secret");
 
-        client.review().discardQuarantine("releases", "/maven/org/acme/lib/1.0/lib-1.0.jar");
+        ReviewClient.Discarded discarded =
+                client.review().discardQuarantine("releases", List.of("/maven/org/acme/lib/1.0/lib-1.0.jar"));
         assertThat(lastPath).isEqualTo("/api/quarantine/discard");
+        assertThat(discarded.discarded()).containsExactly("/maven/org/acme/lib/1.0/lib-1.0.jar");
+        assertThat(discarded.absent()).isEmpty();
     }
 
     @Test

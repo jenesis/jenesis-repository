@@ -117,10 +117,10 @@ public class CliRequestShapeTest {
 
             // Review
             action("quarantine <repo>", "quarantine releases", get("/api/quarantine", "repo")),
-            action("quarantine release <repo> <path>", "quarantine release releases /a/b.jar",
-                    post("/api/quarantine/release", "repo").body("path")),
-            action("quarantine discard <repo> <path>", "quarantine discard releases /a/b.jar",
-                    post("/api/quarantine/discard", "repo").body("path")),
+            action("quarantine release <repo> <path>...", "quarantine release releases /a/b.jar /a/b.pom",
+                    post("/api/quarantine/release", "repo").body("paths")),
+            action("quarantine discard <repo> <path>...", "quarantine discard releases /a/b.jar /a/b.pom",
+                    post("/api/quarantine/discard", "repo").body("paths")),
             action("ai-review <repo>", "ai-review releases", get("/api/findings", "repo", "kind")),
 
             // Risk

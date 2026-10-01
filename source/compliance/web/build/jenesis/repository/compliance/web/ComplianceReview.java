@@ -184,7 +184,7 @@ public class ComplianceReview extends TenantScope {
      *  invisible. The log stays the audit trail, never the index. The queue clears itself as each hold is released or
      *  discarded (the pointer goes), newest first with any log-less holds last. */
     public List<QuarantineView> quarantine(String repository) throws IOException {
-        return quarantine(repository, null, Integer.MAX_VALUE - 1).holds();
+        return views(repository, ReviewQueue.page(scope(repository), null, Integer.MAX_VALUE - 1));
     }
 
     /**
@@ -193,8 +193,15 @@ public class ComplianceReview extends TenantScope {
      * which the API serves as it is, drawn here with a mark per hold kind.
      */
     public QuarantinePage quarantine(String repository, String after, int limit) throws IOException {
-        // The gate composes the page - the same rows the API serves - and this surface only draws each kind as a mark.
+        // The gate composes the page - the same rows the API serves - and this surface only draws each kind as a mark
+        // and reviews a version's files together.
         ReviewQueue.Page page = ReviewQueue.page(scope(repository), after, limit);
+        return new QuarantinePage(QuarantineVersion.of(views(repository, page)), page.next());
+    }
+
+    /** The rows of a review-queue page as the console draws them: each hold kind as a mark, and the coordinate page
+     *  the path's layout places it on. */
+    private List<QuarantineView> views(String repository, ReviewQueue.Page page) throws IOException {
         StoreRepositoryInventory inventory = inventory(repository);
         List<QuarantineView> views = new ArrayList<>();
         for (ReviewQueue.Row row : page.rows()) {
@@ -204,11 +211,67 @@ public class ComplianceReview extends TenantScope {
                     placed.map(ArtifactDescriptor::ecosystem).orElse(null),
                     placed.map(ArtifactDescriptor::coordinate).orElse(null)));
         }
-        return new QuarantinePage(List.copyOf(views), page.next());
+        return List.copyOf(views);
     }
 
     /** A page of the review queue and the pointer key the next page starts after ({@code null} on the last). */
-    public record QuarantinePage(List<QuarantineView> holds, String next) {
+    public record QuarantinePage(List<QuarantineVersion> versions, String next) {
+    }
+
+    /**
+     * The held files of one version, reviewed together: what is released or discarded is the version, since a jar is
+     * no use released without its POM. A file's rows are grouped by the coordinate the gate recorded for it, in the
+     * order the page lists them; one whose log row was lost names only its own path, so it stands alone. The reasons
+     * every file carries are said once, and each file keeps those that are its own - a missing signature names the
+     * file it is missing for.
+     */
+    public record QuarantineVersion(String coordinate, List<String> verdicts, List<String> reasons, List<Mark> holds,
+                                    List<HeldFile> files, String ecosystem, String bareCoordinate) {
+
+        /** One held file of the version: its path and the reasons only it was held for. */
+        public record HeldFile(String path, List<String> reasons) {
+        }
+
+        /** Whether the version names a coordinate the console can open. */
+        public boolean placed() {
+            return ecosystem != null && bareCoordinate != null;
+        }
+
+        /** The paths a release or a discard of the version acts on. */
+        public List<String> paths() {
+            return files.stream().map(HeldFile::path).toList();
+        }
+
+        static List<QuarantineVersion> of(List<QuarantineView> views) {
+            Map<String, List<QuarantineView>> grouped = new LinkedHashMap<>();
+            for (QuarantineView view : views) {
+                grouped.computeIfAbsent(view.coordinate(), _ -> new ArrayList<>()).add(view);
+            }
+            List<QuarantineVersion> versions = new ArrayList<>();
+            for (List<QuarantineView> files : grouped.values()) {
+                List<String> shared = new ArrayList<>(files.getFirst().reasons());
+                files.forEach(file -> shared.retainAll(file.reasons()));
+                Set<String> verdicts = new LinkedHashSet<>();
+                Map<String, Mark> holds = new LinkedHashMap<>();
+                String ecosystem = null;
+                String bare = null;
+                List<HeldFile> held = new ArrayList<>();
+                for (QuarantineView file : files) {
+                    verdicts.add(file.verdict());
+                    file.holds().forEach(mark -> holds.putIfAbsent(mark.name(), mark));
+                    if (ecosystem == null && file.placed()) {
+                        ecosystem = file.ecosystem();
+                        bare = file.bareCoordinate();
+                    }
+                    held.add(new HeldFile(file.path(),
+                            file.reasons().stream().filter(reason -> !shared.contains(reason)).toList()));
+                }
+                held.sort(Comparator.comparing(HeldFile::path));
+                versions.add(new QuarantineVersion(files.getFirst().coordinate(), List.copyOf(verdicts),
+                        List.copyOf(shared), List.copyOf(holds.values()), List.copyOf(held), ecosystem, bare));
+            }
+            return List.copyOf(versions);
+        }
     }
 
     /** A signer seen on the repository's accepted versions: the wire identity, its short form, the hash the index

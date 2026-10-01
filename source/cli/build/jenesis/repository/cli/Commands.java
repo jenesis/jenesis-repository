@@ -90,8 +90,9 @@ public final class Commands {
                     noun("quarantine", "what the compliance gate held for review",
                             ComplianceCommands::quarantine,
                             act("quarantine <repo>", "the review queue"),
-                            act("quarantine release <repo> <path>", "release a held artifact into the layout"),
-                            act("quarantine discard <repo> <path>", "discard a held artifact")),
+                            act("quarantine release <repo> <path>...",
+                                    "release held files - every file of a version - into the layout"),
+                            act("quarantine discard <repo> <path>...", "discard held files")),
                     noun("ai-review", "the findings a code audit proposed, waiting for a person to confirm or dismiss "
                                     + "them", ComplianceCommands::aiReview,
                             act("ai-review <repo>", "the proposed findings, as the findings ledger records them")))),

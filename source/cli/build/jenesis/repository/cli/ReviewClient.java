@@ -24,16 +24,22 @@ public final class ReviewClient extends ClientCalls {
         return JSON.readValue(response.body(), QuarantineView.class).events();
     }
 
-    /** Release a held artifact into the repository's layout. */
-    public void releaseQuarantine(String repo, String path) throws IOException, InterruptedException {
-        require(send("POST", "/api/quarantine/release?repo=" + enc(repo), body(Map.of("path", path)),
-                "application/json"), 200, "release " + path);
+    /** Release held files - one, or every file of a version - into the repository's layout. */
+    public void releaseQuarantine(String repo, List<String> paths) throws IOException, InterruptedException {
+        require(send("POST", "/api/quarantine/release?repo=" + enc(repo), body(Map.of("paths", paths)),
+                "application/json"), 200, "release " + String.join(", ", paths));
     }
 
-    /** Discard a held artifact so it is never served. */
-    public void discardQuarantine(String repo, String path) throws IOException, InterruptedException {
-        require(send("POST", "/api/quarantine/discard?repo=" + enc(repo), body(Map.of("path", path)),
-                "application/json"), 200, "discard " + path);
+    /** Discard held files so they are never served, and say which were still held. */
+    public Discarded discardQuarantine(String repo, List<String> paths) throws IOException, InterruptedException {
+        HttpResponse<String> response = send("POST", "/api/quarantine/discard?repo=" + enc(repo),
+                body(Map.of("paths", paths)), "application/json");
+        require(response, 200, "discard " + String.join(", ", paths));
+        return JSON.readValue(response.body(), Discarded.class);
+    }
+
+    /** A discard's answer: the paths whose held bytes it dropped, and those at which nothing was held any more. */
+    public record Discarded(List<String> discarded, List<String> absent) {
     }
 
     /** One quarantine hold: when it was recorded, the path within the repository and coordinate, the gate verdict and the reasons. */
