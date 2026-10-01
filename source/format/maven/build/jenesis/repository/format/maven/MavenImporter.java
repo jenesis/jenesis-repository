@@ -6,12 +6,9 @@ import build.jenesis.repository.store.ArtifactDescriptor;
 import build.jenesis.repository.store.ArtifactStore;
 
 /**
- * Imports a Maven repository (Nexus {@code maven2}, Artifactory {@code maven}) from an incumbent manager: each asset
- * path is a Maven coordinate, so it is published under {@code /maven/...} exactly as a deploy would - storing the blob
- * content-addressed through {@link MavenFormat#layout} and, for a jar that carries a module name, cross-publishing
- * its module view. {@code maven-metadata.xml} and its checksums are skipped: the repository generates them from the
- * imported version folders under an opt-in setting ({@link MavenMetadata}), so importing the source's copies would
- * only shadow the generated ones.
+ * Imports a Maven repository from an incumbent manager: each asset path is a coordinate, published under
+ * {@code /maven/...} as a deploy would be through {@link MavenFormat#layout}. {@code maven-metadata.xml} and its
+ * checksums are skipped, since the repository computes them under an opt-in setting ({@link MavenMetadata}).
  */
 public final class MavenImporter implements RepositoryImporter {
 
@@ -22,15 +19,11 @@ public final class MavenImporter implements RepositoryImporter {
 
     @Override
     public Optional<ArtifactDescriptor> importTarget(String sourcePath) {
-        // RepositoryImporter clause 4. MavenFormat.describe falls through to ArtifactDescriptor.at(ECOSYSTEM, path) for
-        // a path that is not a full coordinate, so without this screen a "/../x" asset would describe to the
-        // traversal-shaped "/maven/../x" - the coordinate the edge screens against and an edition records. Screened
-        // here rather than in describe(): describe() answers for a REQUEST path, which MavenFormat.handle has already
-        // refused, while this composes a /maven/ path out of a foreign source path.
+        // RepositoryImporter clause 4: a traversal-shaped source path is refused by name here, since describe() falls
+        // back to the raw path for one that is not a full coordinate.
         String relative = RepositoryImporter.importablePath(sourcePath, "maven");
-        // The coordinate-enriched descriptor MavenFormat parses from the /maven/ path an asset lands on, so the edge
-        // screens against the real Maven coordinate/version. Empty for a generated maven-metadata.xml (which the import
-        // walk then streams straight to importArtifact, where it is skipped) - the format owns that rule in one place.
+        // The descriptor MavenFormat parses from the /maven/ path the asset lands on; empty for a maven-metadata.xml,
+        // which importArtifact skips.
         return new MavenFormat().describe("/maven/" + relative);
     }
 
@@ -41,8 +34,7 @@ public final class MavenImporter implements RepositoryImporter {
         if (name.startsWith("maven-metadata.xml")) {
             return;
         }
-        // A modular jar is cross-published into the module layout, which needs the jar's module name; layout streams
-        // the content to storage and reads the module name back from there, so the importer never buffers it.
+        // layout streams the content to storage and reads a modular jar's module name back from there.
         MavenFormat.layout(store, "/maven/" + relative, content);
     }
 }

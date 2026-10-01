@@ -15,37 +15,29 @@ import javax.xml.stream.XMLStreamException;
 import javax.xml.stream.XMLStreamWriter;
 
 /**
- * Generates the artifact-level {@code maven-metadata.xml} on read, from the version folders published under a
- * coordinate, instead of persisting and rewriting a single mutable object. Because the version list is derived
- * from per-version pointers (distinct, append-only keys) rather than a read-modify-write monolith, two nodes
- * publishing different versions never touch the same object - which is what lets a content-addressed store
- * replicate write-anywhere across regions without losing a version from the index.
+ * Computes a coordinate's artifact-level {@code maven-metadata.xml} from its version folders, under the opt-in
+ * {@link #COMPUTE_SETTING}. The version list is derived from per-version pointers, distinct append-only keys, so two
+ * nodes publishing different versions never write the same object. {@code <release>} is the highest non-snapshot
+ * version and {@code <latest>} the highest overall in Maven version order; {@code <lastUpdated>} is omitted so the
+ * bytes are a pure function of the version set and a cached checksum still matches. The {@code .sha1} and {@code .md5}
+ * are computed from the same bytes.
  *
- * The {@code <release>} is the highest non-snapshot version and {@code <latest>} the highest overall, ordered by
- * a Maven-style version comparison; {@code <lastUpdated>} is intentionally omitted so the rendered bytes are a
- * pure function of the version set and the checksum a client cached still matches a re-fetch. The matching
- * {@code .sha1} / {@code .md5} are computed from those same bytes.
- *
- * <p>Deriving is not the default: a {@code maven-metadata.xml} a client publishes is stored verbatim
- * like any artifact and served back byte-for-byte, so a publisher-authored document round-trips untouched. The
- * derivation above is the opt-in {@link #COMPUTE_SETTING} computation instead - {@link #computed} reconciles a stored
- * document's version list against the folders (leaving every other field verbatim) and falls back to a full
- * {@link #serve derivation} only for a coordinate no client ever uploaded (the importer / batch case).
+ * <p>A publisher's own document is kept: {@link #computed} reconciles its {@code <versions>} against the folders,
+ * leaving every other field verbatim, and derives a whole document ({@link #serve}) only for a coordinate no client
+ * uploaded one for. The served document is the stored listing {@link MavenMetadataListing} the uploads maintain.
  */
 public final class MavenMetadata {
 
-    // Reused across renders rather than rebuilt per metadata: newInstance() runs the full JAXP provider lookup, and the
-    // factory is safe to share for creating writers once configured (only the per-render writer is not shared).
+    // Shared across renders: newInstance() runs the JAXP provider lookup, and a configured factory is safe to share.
     private static final XMLOutputFactory XML_OUTPUT = XMLOutputFactory.newInstance();
 
-    /** The bare setting key (under {@code jenrepo.}) that opts a deployment into computing the served
-     *  artifact-level {@code maven-metadata.xml} rather than serving the stored bytes verbatim - default off, read
-     *  off the exchange so the format needs no settings dependency. */
+    /** The setting key (under {@code jenrepo.}) that opts a deployment into computing {@code maven-metadata.xml};
+     *  default off, read off the exchange. */
     public static final String COMPUTE_SETTING = "maven-metadata-compute";
 
-    /** How many stored children of one coordinate a metadata render may examine. Far above any real release history
-     *  (the widest public Maven coordinates hold a few thousand versions) and far below the work an attacker-shaped
-     *  coordinate could otherwise force out of one GET. Reaching it fails the render - see {@link #versions}. */
+    /** How many children of one coordinate a render may examine: far above any real release history (a few thousand
+     *  versions) and far below what an attacker-shaped coordinate could force from one GET. Reaching it fails the
+     *  render ({@link #versions}). */
     private static final int VERSION_SCAN = 50_000;
 
     private final ArtifactStore store;
@@ -62,23 +54,9 @@ public final class MavenMetadata {
                 || requestPath.endsWith("/maven-metadata.xml.md5"));
     }
 
-    /**
-     * The bytes for a metadata request under the opt-in {@link #COMPUTE_SETTING} computation, or empty when the
-     * default verbatim serve should stand (the caller then streams the stored pointer, a 404 when none). For the
-     * {@code maven-metadata.xml} itself: a stored document has only its {@code <versions>} list reconciled against the
-     * stored version folders - every other field the publisher wrote (latest, release, lastUpdated, plugin prefixes,
-     * snapshot sections) is preserved verbatim, and a document with no {@code <versions>} list (a version-level
-     * SNAPSHOT document) passes through untouched; a coordinate with no stored document falls back to the full
-     * {@link #serve derivation} (the importer / batch case). A checksum is computed from the served bytes <em>only</em>
-     * when the document was authored here (a reconciled or derived document); an unchanged pass-through returns empty
-     * so the caller serves the publisher's own stored checksum byte-for-byte.
-     */
-    /**
-     * The bytes for a metadata request under the opt-in {@link #COMPUTE_SETTING}, from the coordinate's stored
-     * listing ({@link MavenMetadataListing}) - the document every upload maintains, materialised from
-     * {@link #computed} the first time a coordinate is read. A checksum is served from its derived twin when the
-     * listing authored the document, else empty so the caller serves the publisher's own stored checksum.
-     */
+    /** The bytes for a metadata request under the opt-in {@link #COMPUTE_SETTING}, from the coordinate's stored listing
+     *  ({@link MavenMetadataListing}), materialised from {@link #computed} on first read. A checksum is served from its
+     *  derived twin when the listing authored the document, else empty so the caller serves the publisher's own. */
     public Optional<byte[]> served(String requestPath) throws IOException {
         if (!isMetadataRequest(requestPath)) {
             return Optional.empty();
@@ -123,6 +101,13 @@ public final class MavenMetadata {
         }
     }
 
+    /**
+     * The bytes for a metadata request under the computation, reconciled from the stored document: only its
+     * {@code <versions>} is reconciled against the folders and every other field is kept, a document without one
+     * passes through, and a coordinate with no stored document falls back to the full {@link #serve derivation}. A
+     * checksum is computed only for a document authored here; for an unchanged one this is empty, so the publisher's
+     * own checksum serves.
+     */
     public Optional<byte[]> computed(String requestPath) throws IOException {
         if (!isMetadataRequest(requestPath)) {
             return Optional.empty();
@@ -144,9 +129,8 @@ public final class MavenMetadata {
         return computedDocument(requestPath);
     }
 
-    /** The served artifact-level document under the computation flag: a stored document with its versions reconciled
-     *  (or unchanged when it carries none or lists them all), else the full derivation for a coordinate that never had
-     *  one uploaded. Empty when neither a stored document nor any published version exists (a 404). */
+    /** The artifact-level document under the computation: a stored document with its versions reconciled, else the full
+     *  derivation; empty when neither a document nor a version exists. */
     private Optional<byte[]> computedDocument(String documentPath) throws IOException {
         Optional<byte[]> stored = storedBytes(documentPath);
         if (stored.isPresent()) {
@@ -166,13 +150,9 @@ public final class MavenMetadata {
         return Optional.of(buffer.toByteArray());
     }
 
-    /**
-     * Reconcile a stored document's {@code <versions>} list against the coordinate's stored version folders, leaving
-     * every byte outside {@code <versions>...</versions>} exactly as the publisher wrote it. A document with no
-     * {@code <versions>} element (a version-level SNAPSHOT document, whose versions live under
-     * {@code <snapshotVersions>}) is returned untouched, and so is one that already lists every stored folder - only a
-     * genuinely missing version rewrites the element, adding it in Maven version order.
-     */
+    /** Reconcile a stored document's {@code <versions>} against the coordinate's version folders, leaving every byte
+     *  outside the element as written. A document with no {@code <versions>} (a version-level SNAPSHOT document) or one
+     *  already listing every folder is returned untouched. */
     private byte[] reconcileVersions(String documentPath, byte[] storedXml) throws IOException {
         String xml = new String(storedXml, StandardCharsets.UTF_8);
         int open = xml.indexOf("<versions>");
@@ -198,18 +178,11 @@ public final class MavenMetadata {
         String coordinatePath = coordinatePath(documentPath);
         List<String> folders = versions(coordinatePath);
         List<String> listed = listedVersions(xml.substring(contentStart, contentEnd));
-        // Screen the versions the STORED document itself lists, not only the folders: a version withheld after
-        // the publisher authored the document must vanish from the reconciled <versions> too - its name must not
-        // survive in the served bytes - so reconcile can now REMOVE a held version, not only add a newly published
-        // folder. The screen stats no blob (HIDE_WITHHELD), so a fake-hash / no-blob / non-jar version the publisher
-        // listed is kept exactly as before; only a held one is dropped.
+        // The versions the stored document lists are screened too, so a version held after the document was written
+        // drops out of it. The screen stats no blob, so only a held version is dropped.
         ServableNames servableNames = new ServableNames(store);
-        // An operator's YANKED mark drops a version from <versions> as well, for a different reason than a hold. A
-        // Maven release is immutable and never disappears, so the ecosystem has no yank of its own - but this
-        // document is what a range, a LATEST and a dependency-update scan resolve against, so a version gone from it
-        // is one no new resolution picks while a build that pins it still fetches the jar by exact path. The hold
-        // above 404s the bytes too; a yank deliberately does not. Only YANKED: Maven has no deprecation signal, and
-        // rendering one as a retraction would overstate the operator.
+        // A YANKED mark drops a version as well: this document is what ranges, LATEST and update scans resolve against,
+        // while a pinned build still fetches the jar by path. Only YANKED, since Maven has no deprecation signal.
         SortedMap<String, Lifecycle.Flag> marks = Lifecycle.versions(store, mavenCoordinate(coordinatePath));
         SequencedSet<String> union = new LinkedHashSet<>();
         boolean withheldAny = false;
@@ -219,9 +192,7 @@ public final class MavenMetadata {
             } else if (servableNames.disclosableVersionFolder("/maven/" + coordinatePath + "/" + version)) {
                 union.add(version);
             } else {
-                // A version the publisher's stored document lists has since been withheld: it drops from the
-                // reconciled <versions>, and its name must also not survive in <latest>/<release>, which the
-                // stored document preserves verbatim. Re-derive those below over the screened set only.
+                // A withheld listed version: <latest>/<release> are re-derived below over the screened set.
                 withheldAny = true;
             }
         }
@@ -230,12 +201,8 @@ public final class MavenMetadata {
                 union.add(folder);
             }
         }
-        // Screen the currently-named <latest>/<release> value DIRECTLY (disclosure Finding 2): a version named there but
-        // ABSENT from <versions> is never seen by the loop above, so a hold on it would otherwise survive verbatim in
-        // the served document (the loop's withheldAny stays false, the document is returned untouched, and the held
-        // name leaks in <latest>/<release>). Screening the named value through the same HIDE_WITHHELD seam catches that
-        // edge independently of whether the version is listed. Only a withheld named value trips this; when nothing is
-        // withheld the stored latest/release are preserved exactly.
+        // The named <latest>/<release> are screened directly, since a version named there may be absent from
+        // <versions>.
         String latestNamed = element(xml, "latest");
         String releaseNamed = element(xml, "release");
         boolean latestWithheld = latestNamed != null && !latestNamed.isEmpty()
@@ -247,8 +214,7 @@ public final class MavenMetadata {
         boolean namedWithheld = latestWithheld || releaseWithheld;
         boolean versionsChanged = !union.equals(new LinkedHashSet<>(listed));
         if (!versionsChanged && !namedWithheld) {
-            // Nothing to add, nothing withheld to drop, and the named latest/release are both servable - preserve the
-            // publisher's document byte-for-byte.
+            // Nothing added or withheld: the publisher's document byte-for-byte.
             return storedXml;
         }
         List<String> reconciled = new ArrayList<>(union);
@@ -259,10 +225,7 @@ public final class MavenMetadata {
             StringBuilder rebuilt = new StringBuilder(xml.length() + reconciled.size() * 32);
             rebuilt.append(xml, 0, open).append("<versions>");
             for (String version : reconciled) {
-                // Escape the version text exactly as the StAX derivation path does (element() -> writeCharacters): a
-                // version is a published folder name off store.list, so it is attacker-controlled and may legitimately
-                // carry an ampersand (a valid path/filename char) or an angle bracket. Appended raw it would emit
-                // malformed XML - a bare '&' breaks every fetching client's metadata parse - or inject markup.
+                // A version is a folder name and may carry & or <, so it is escaped as the StAX derivation escapes it.
                 rebuilt.append('\n').append(baseIndent).append("  <version>").append(xmlText(version))
                         .append("</version>");
             }
@@ -270,18 +233,13 @@ public final class MavenMetadata {
             rebuilt.append(xml, selfClosed ? contentStart : contentEnd + "</versions>".length(), xml.length());
             reconciledXml = rebuilt.toString();
         } else {
-            // Only the named latest/release is withheld; the <versions> block is unchanged, so leave it byte-for-byte and
-            // rewrite just the offending name element(s) below.
+            // Only a named value is withheld: <versions> stays byte-for-byte.
             reconciledXml = xml;
         }
         if (withheldAny || namedWithheld) {
-            // A withheld version's name must never survive in <latest>/<release> (the reconcile's own invariant). The
-            // stored document preserves them verbatim, so re-derive both from the SCREENED set exactly as the sibling
-            // derivation path metadata() does: latest = newest screened version, release = newest screened
-            // non-SNAPSHOT (Maven semantics). Only touched when a version was actually withheld, so an add-only
-            // reconcile leaves the publisher's latest/release exactly as before. An element the publisher did not
-            // write stays absent (a withheld name cannot leak through a field that is not there); a null re-derivation
-            // (screened set empty, or no non-SNAPSHOT for release) removes the element rather than name a held version.
+            // Re-derive <latest>/<release> from the screened set as metadata() does, only when something was withheld.
+            // An element the publisher did not write stays absent, and an empty re-derivation removes the element
+            // rather than name a held version.
             String latest = reconciled.isEmpty() ? null : reconciled.getLast();
             String release = null;
             for (String version : reconciled) {
@@ -295,11 +253,9 @@ public final class MavenMetadata {
         return reconciledXml.getBytes(StandardCharsets.UTF_8);
     }
 
-    /** Re-derive a single {@code <name>...</name>} element the reconcile must not leave naming a withheld version:
-     *  replace its text with {@code value} (XML-escaped as the derivation path escapes it), or remove the whole element
-     *  when {@code value} is null so no held name survives. A document that does not carry the element is returned
-     *  unchanged - a name cannot leak through a field the publisher never wrote. Only the first occurrence is rewritten;
-     *  {@code <latest>}/{@code <release>} are single-valued in a well-formed {@code maven-metadata.xml}. */
+    /** Replace a single {@code <name>...</name>} element's text with {@code value} (escaped as the derivation escapes
+     *  it), or remove the element when {@code value} is null. A document without the element is unchanged; only the
+     *  first occurrence is rewritten, these elements being single-valued. */
     static String rederiveElement(String xml, String name, String value) {
         String openTag = "<" + name + ">";
         String closeTag = "</" + name + ">";
@@ -315,8 +271,7 @@ public final class MavenMetadata {
         if (value != null) {
             return xml.substring(0, open) + openTag + xmlText(value) + closeTag + xml.substring(end);
         }
-        // Remove the element together with the whitespace-only run leading up to it on its own line, so dropping a
-        // release whose value went away leaves no dangling blank line in the reconciled document.
+        // The element goes with its line's leading whitespace, leaving no blank line.
         int lineStart = xml.lastIndexOf('\n', open);
         if (lineStart >= 0 && xml.substring(lineStart + 1, open).isBlank()) {
             return xml.substring(0, lineStart) + xml.substring(end);
@@ -324,10 +279,8 @@ public final class MavenMetadata {
         return xml.substring(0, open) + xml.substring(end);
     }
 
-    /** The raw text of a single-valued {@code <name>...</name>} element, decoded from its character-data escapes to the
-     *  same form a version folder name off {@code store.list} takes (so it screens through the same seam), or null when
-     *  the element is absent or self-closed. Only the first occurrence is read; {@code <latest>}/{@code <release>} are
-     *  single-valued in a well-formed {@code maven-metadata.xml}. */
+    /** The text of a single-valued {@code <name>...</name>} element, unescaped to the raw form of a folder name, or
+     *  null when absent or self-closed. Only the first occurrence is read. */
     static String element(String xml, String name) {
         String openTag = "<" + name + ">";
         int open = xml.indexOf(openTag);
@@ -341,16 +294,13 @@ public final class MavenMetadata {
         return xmlUnescape(xml.substring(open + openTag.length(), close).trim());
     }
 
-    /** Escape a text node for the hand-built reconcile document - the character-data escapes {@code XMLStreamWriter
-     *  .writeCharacters} applies on the derivation path, so both paths treat a version folder name identically. */
+    /** Escape a text node for the hand-built reconcile document as {@code XMLStreamWriter.writeCharacters} does. */
     static String xmlText(String text) {
         return text.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;");
     }
 
-    /** Reverse of {@link #xmlText} - decode the character-data escapes so a version parsed out of the stored document
-     *  is compared and re-emitted in the same raw form as a folder name off {@code store.list}. Without this, a stored
-     *  {@code &amp;} would fail to dedupe against its raw folder twin (listing it twice) and would be double-escaped
-     *  ({@code &amp;amp;}) on re-emit. {@code &amp;} is decoded last so an escaped entity never decodes twice. */
+    /** Reverse of {@link #xmlText}, so a parsed version compares and re-emits as the raw folder name. {@code &amp;} is
+     *  decoded last so an entity never decodes twice. */
     private static String xmlUnescape(String text) {
         return text.replace("&lt;", "<").replace("&gt;", ">").replace("&amp;", "&");
     }
@@ -361,8 +311,8 @@ public final class MavenMetadata {
         return flag != null && flag.state() == Lifecycle.State.YANKED;
     }
 
-    /** The {@code group:artifact} coordinate a {@code group/path/artifact} folder names - what {@code describe}
-     *  reports, and therefore the coordinate an operator marks through the API. */
+    /** The {@code group:artifact} coordinate a {@code group/path/artifact} folder names: what {@code describe} reports,
+     *  and so what an operator marks. */
     static String mavenCoordinate(String coordinatePath) {
         int slash = coordinatePath.lastIndexOf('/');
         return slash < 0
@@ -370,8 +320,8 @@ public final class MavenMetadata {
                 : coordinatePath.substring(0, slash).replace('/', '.') + ":" + coordinatePath.substring(slash + 1);
     }
 
-    /** The {@code <version>} texts a {@code <versions>} block already lists, in document order, decoded to their raw
-     *  form so they line up with the folder names {@link #versions} returns. */
+    /** The {@code <version>} texts a {@code <versions>} block lists, in document order, unescaped to folder-name
+     *  form. */
     static List<String> listedVersions(String inner) {
         List<String> listed = new ArrayList<>();
         int cursor = 0;
@@ -389,8 +339,7 @@ public final class MavenMetadata {
         }
     }
 
-    /** The whitespace indentation of the line the element at {@code index} sits on, or empty when it does not start a
-     *  line (so a reconciled block is indented consistently with the document). */
+    /** The indentation of the line the element at {@code index} starts, or empty when it does not start a line. */
     static String indentBefore(String xml, int index) {
         int lineStart = xml.lastIndexOf('\n', index) + 1;
         String indent = xml.substring(lineStart, index);
@@ -402,10 +351,8 @@ public final class MavenMetadata {
         return body.substring(0, body.lastIndexOf("/maven-metadata.xml"));
     }
 
-    /**
-     * The bytes for a metadata request - the XML derived from the coordinate's published version folders, or its
-     * SHA-1 / MD5 checksum - or empty if the path is not a metadata request or the coordinate has no versions.
-     */
+    /** The bytes for a metadata request derived from the coordinate's version folders, or its SHA-1 / MD5, or empty
+     *  when the path is no metadata request or the coordinate has no versions. */
     public Optional<byte[]> serve(String requestPath) throws IOException {
         if (!isMetadataRequest(requestPath)) {
             return Optional.empty();
@@ -433,20 +380,13 @@ public final class MavenMetadata {
     }
 
     /**
-     * The coordinate's disclosable version folders, in Maven version order.
+     * The coordinate's disclosable version folders, in Maven version order, through
+     * {@link ScreenedNames#versionFolders}: the folder is the unit of disclosure, so a withheld version's name never
+     * appears in the document. No blob is statted, so only a held version is dropped, and a hostile folder name is
+     * contained in the seam.
      *
-     * <p>Listed and screened in one call through the shared {@link ScreenedNames} enumeration face
-     * ({@link ScreenedNames#versionFolders}): the version FOLDER is the unit of disclosure, so a withheld version's
-     * name never appears in the served or reconciled {@code <versions>}/{@code <latest>}/{@code <release>}. The face
-     * stats NO blob, so a fake-hash / no-blob / non-jar-packaging version keeps listing - only a version a hold
-     * retracts (a quarantine review pointer, or the interceptor chain) is dropped - and a hostile / non-ASCII folder
-     * name is contained inside the seam, never an {@code InvalidPathException} out of metadata generation. Packaging-
-     * neutral: no extension heuristic, the whole folder is judged.
-     *
-     * <p>The enumeration is bounded ({@value #VERSION_SCAN} folders per coordinate, the shared primitive's cursor
-     * proving the rest). A coordinate wider than that is a pathological write pattern, not a release history: the
-     * document is refused rather than rendered from a silently truncated version list, since a metadata document that
-     * omits versions is what a resolver reads as "that version does not exist".
+     * <p>Bounded at {@value #VERSION_SCAN} folders. A wider coordinate is refused rather than rendered from a truncated
+     * list, which a resolver would read as versions that do not exist.
      */
     private List<String> versions(String coordinatePath) throws IOException {
         List<String> versions = new ArrayList<>();
@@ -454,10 +394,8 @@ public final class MavenMetadata {
         Traversal.Result scanned = ScreenedNames.versionFolders(new ServableNames(store))
                 .scanning(BoundedChildren.bounded().entries(VERSION_SCAN).page(BoundedChildren.DRAIN_PAGE))
                 .scan(store, prefix, (child, _) -> {
-                    // The coordinate directory holds version folders alongside the artifact-level maven-metadata.xml
-                    // and its sidecars. Skip the document and every sidecar it can carry - not just the .sha1/.md5/.asc
-                    // the publisher writes, but the .sha256/.sha512 a client or the proxy's checksum cache may deposit
-                    // here (MavenFormat.isChecksum accepts those) - or a stray checksum sibling is a "version".
+                    // Skip the document and every sidecar the directory can hold, .sha256 and .sha512 included, or a
+                    // checksum would read as a version.
                     if (child.equals("maven-metadata.xml") || child.startsWith("maven-metadata.xml.")
                             || child.endsWith(".sha1") || child.endsWith(".md5") || child.endsWith(".sha256")
                             || child.endsWith(".sha512") || child.endsWith(".asc")
@@ -514,7 +452,8 @@ public final class MavenMetadata {
         writer.writeEndElement();
     }
 
-    /** A Maven-style version order: numeric runs compared as numbers, qualifiers ranked (alpha &lt; ... &lt; snapshot &lt; release &lt; sp). */
+    /** A Maven-style version order: numeric runs compared as numbers, qualifiers ranked (alpha &lt; ... &lt; snapshot
+     *  &lt; release &lt; sp). */
     static int compareVersions(String left, String right) {
         List<String> a = tokenize(left);
         List<String> b = tokenize(right);
@@ -583,8 +522,7 @@ public final class MavenMetadata {
     private static boolean isNumeric(String token) {
         for (int index = 0; index < token.length(); index++) {
             char character = token.charAt(index);
-            // ASCII digits only: a numeric token is parsed with new BigInteger, which rejects the non-ASCII digits
-            // Character.isDigit would accept (an Arabic-Indic version folder would then throw a 500 out of serve).
+            // ASCII digits only: new BigInteger rejects the non-ASCII digits Character.isDigit accepts.
             if (character < '0' || character > '9') {
                 return false;
             }

@@ -10,27 +10,21 @@ import build.jenesis.repository.store.StoredListing;
 
 /**
  * The computed {@code maven-metadata.xml} of a coordinate as a stored listing, under the opt-in
- * {@link MavenMetadata#COMPUTE_SETTING}: the entries are the listed versions, and the one entry keyed {@code ""} is the
- * document's template - the publisher's own document with its {@code <versions>} block hollowed out - so every byte
- * outside the block is served as the publisher wrote it, and the block is rendered from the entries on every join.
- * {@code <latest>} and {@code <release>} stay as written; only when a hold or a yank removes the version one of them
- * names is that name re-derived from the versions that remain, as the on-read reconciliation did. A coordinate whose publisher never uploaded a
- * document has no template and is rendered whole. A version is listed exactly when its folder is disclosable and it
- * is not yanked - the screen the on-read reconciliation applied.
+ * {@link MavenMetadata#COMPUTE_SETTING}. The entries are the listed versions, and the entry keyed {@code ""} is the
+ * template - the publisher's document with its {@code <versions>} hollowed out - so every byte outside the block serves
+ * as written. {@code <latest>} and {@code <release>} stay as written unless a hold or yank removes the version they
+ * name, when the name is re-derived from the versions that remain. A coordinate with no uploaded document has no
+ * template and is rendered whole. A version is listed when its folder is disclosable and it is not yanked.
  *
- * <p>An artifact upload adds its version; a metadata upload resets the template and the versions from the uploaded
- * document; a hold or a yank removes its version; {@code .sha1}/{@code .md5} twins are derived on every write.
+ * <p>An artifact upload adds its version; a metadata upload resets the listing from the document; a hold or yank
+ * removes its version; the {@code .sha1}/{@code .md5} twins are derived on every write.
  */
 final class MavenMetadataListing {
 
     private static final String TEMPLATE = "";
 
-    /**
-     * The places the template keeps for the sections a write substitutes. A control character delimits them because
-     * no Maven metadata document can contain one, so a hole cannot be spelled by the content it stands in for. They
-     * are written as escapes deliberately - as raw bytes they made this file {@code data} rather than text, which
-     * silently excluded it from every recursive search of the tree.
-     */
+    /** The holes the template keeps for the sections a write substitutes, delimited by a control character no Maven
+     *  metadata document can contain. Written as escapes so this file stays text to every search of the tree. */
     private static final String VERSIONS_HOLE = "\u0001versions\u0001";
     private static final String LATEST_HOLE = "\u0001latest\u0001";
     private static final String RELEASE_HOLE = "\u0001release\u0001";
@@ -56,20 +50,10 @@ final class MavenMetadataListing {
                 return entries;
             }
 
-            /**
-             * <b>This one collects, and no appender can replace it.</b>
-             *
-             * <p>Two reasons, either of which would be enough. The document lists versions in <em>semantic</em>
-             * order ({@link MavenMetadata#compareVersions}), which is not the ascending id order a {@code Sink}
-             * delivers, so the order is a function of every entry and unknown until the last arrives. And the
-             * surrounding XML is itself an entry - {@link #TEMPLATE}, carrying the document with a hole where the
-             * versions go - so the frame is not known when the first version is written either.
-             *
-             * <p>{@code StoredListing.spooling} does not rescue this: a spool defers the opening bytes, it does
-             * not reorder the body. The document is one coordinate's versions, so what is held is bounded by a
-             * coordinate rather than by the repository - which is why this is acceptable and why it is written
-             * down, since a codec silently lacking an appender makes a streaming generator write into a buffer.
-             */
+            /** <b>This one collects, and no appender can replace it.</b> Versions are listed in Maven order
+             *  ({@link MavenMetadata#compareVersions}), not the ascending order a {@code Sink} delivers, and the frame
+             *  is itself an entry ({@link #TEMPLATE}), so neither is known before the last entry arrives. What is held
+             *  is one coordinate's versions. */
             @Override
             public byte[] join(SortedMap<String, byte[]> entries) {
                 List<String> versions = new ArrayList<>(entries.keySet());
@@ -119,8 +103,7 @@ final class MavenMetadataListing {
                 });
     }
 
-    /** The reconciled document, split into its entries - the first materialisation and the
-     *  reset a metadata upload makes. */
+    /** The reconciled document split into entries: the first materialisation, and the reset a metadata upload makes. */
     private SortedMap<String, byte[]> generate(String coordinatePath, StoredListing.Codec codec) throws IOException {
         Optional<byte[]> computed = metadata.computed("/maven/" + coordinatePath + "/maven-metadata.xml");
         return computed.isEmpty() ? new TreeMap<>() : codec.split(computed.get());
@@ -144,8 +127,7 @@ final class MavenMetadataListing {
         StoredListing.rebuild(store, spec(coordinatePath));
     }
 
-    /** Re-decide one version's membership from the store's current state - after an upload, a hold, a release or a
-     *  mark. */
+    /** Re-decide one version's membership from the store's current state. */
     void refresh(String coordinatePath, String version) throws IOException {
         StoredListing.Spec spec = spec(coordinatePath);
         if (Lifecycle.read(store, MavenMetadata.mavenCoordinate(coordinatePath), version)
@@ -155,8 +137,8 @@ final class MavenMetadataListing {
             return;
         }
         StoredListing.Changes changes = new StoredListing.Changes().remove(version);
-        // A held or yanked version must not survive in <latest>/<release> either: when the template names it, the
-        // name is re-derived from the versions that remain (the rule of the on-read reconciliation).
+        // A held or yanked version named by <latest>/<release> in the template is re-derived from the versions that
+        // remain.
         Optional<StoredListing.Document> current = StoredListing.read(store, spec);
         if (current.isPresent()) {
             SortedMap<String, byte[]> entries = spec.codec().split(current.get().body());

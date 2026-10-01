@@ -10,50 +10,32 @@ import build.jenesis.repository.walk.RebuildPass;
 import build.jenesis.repository.walk.WalkConsumer;
 
 /**
- * The repair half of the Maven format's cross-publish: it re-derives the {@code /module/} view of every published
- * modular jar from the durable store, so a cross-publish that never completed is finished by a later pass instead of
- * being left as a documented partial state.
+ * The repair half of the Maven cross-publish: re-derives the {@code /module/} view of every published modular jar from
+ * the store, so a cross-publish that never completed is finished by a later pass.
  *
- * <p><b>What it repairs.</b> {@link MavenFormat#layout(ArtifactStore, String, String)} links the {@code /maven/}
- * coordinate first and derives the module views from it afterwards, because that is the only order whose residue can be
- * repaired at all (the coordinate carries the blob the module name is read out of; a stray {@code /module/} view
- * carries no coordinate). Every crash window that ordering leaves - a store read that failed between the two, a view
- * provider that threw, a process that died after the coordinate landed - is a published Maven jar whose module view is
- * missing, and that is exactly what this consumer re-derives. It is also the back-fill for the capability being
- * switched on late: a repository that carries modular jars published before any {@code ModuleView} provider was on the
- * module path gains their views on the first pass, with no re-import.
+ * <p><b>What it repairs.</b> {@link MavenFormat#layout(ArtifactStore, String, String)} links the coordinate first and
+ * derives the views after, so every crash window - a failed read between the two, a view provider that threw, a process
+ * that died - is a published jar whose view is missing. It is also the back-fill when a {@code ModuleView} provider
+ * joins the module path late.
  *
- * <p><b>What it deliberately does not repair.</b> Only the version-addressed view, through
- * {@link ModuleView#rebuild} - never the "latest" pointer, which records which version was published last and is
- * therefore not a function of stored state. A pass re-linking it would move {@code /module/<name>/<name>.jar} to
- * whichever version the walk happened to reach last, which is the walk inventing a fact rather than restoring one. And
- * it never removes anything: a {@code /module/} pointer with no Maven jar behind it is not evidence of a failed
- * cross-publish, because the Jenesis format publishes into that namespace first-hand, so a deletion here would be an
- * orphan purge over another format's artifacts. Both exclusions are the SPI's "where a surface genuinely cannot be
- * re-derived, name it and degrade" clause taken literally.
+ * <p><b>What it does not repair.</b> Only the version-addressed view ({@link ModuleView#rebuild}): the "latest" pointer
+ * records which version was published last, which is not a function of stored state. It never removes anything, since
+ * the Jenesis format publishes into {@code /module/} first-hand and a view with no Maven jar behind it is no evidence
+ * of failure.
  *
- * <p><b>Delivery.</b> Per-item durable: the view write completes inside {@link #onRetained} before it returns, and it
- * is an idempotent compare-and-set on a key derived from the delivered pointer, so a re-delivered stride after a
- * crash-resume re-lands identical bytes and a second full pass leaves the store exactly as the first did. The consumer
- * holds no state between deliveries or passes.
+ * <p><b>Delivery.</b> Per-item durable: the view write completes inside {@link #onRetained} and is an idempotent
+ * compare-and-set on a key derived from the pointer, so a re-delivered stride re-lands identical bytes. No state is
+ * held between deliveries.
  *
- * <p><b>What drives it.</b> It is discovered like any other consumer and driven by whatever runs the shared pass
- * on a cadence - the server's {@code RebuildScheduler} (daily unless {@code jenrepo.rebuild.interval} says
- * otherwise), the downstream {@code RebuildTask}, or an embedder calling {@code RebuildPass.run} itself; a republish
- * of the same bytes still re-runs the whole layout sequence, which is the other repair and needs no scheduler. So
- * the residue is repairable and is repaired unattended on the cadence; between two passes it stands until the next
- * one.
- *
- * <p>It writes into the {@code publish/module/} keys the view provider owns rather than a key space of its own,
- * because the pointer it repairs is that provider's pointer - it goes through the same bridge the publish path uses,
- * so the two can never derive different paths. Those writes land under the {@code publish} root the pass is
- * enumerating; that is ordinary (a publish during a walk does the same) and delivers the repaired view to the pass's
- * other consumers exactly as a publish would.
+ * <p>Driven by whatever runs the shared rebuild pass on its cadence; a republish of the same bytes re-runs the whole
+ * layout and repairs too. It writes the view provider's own {@code publish/module/} keys through the bridge the publish
+ * path uses, so both derive the same paths; those writes land under the root the pass enumerates, as a publish during a
+ * walk does.
  */
 public final class ModuleViewRebuild implements WalkConsumer {
 
-    /** The bridge's one discovered list, the same instances {@link MavenFormat} publishes through, so a repaired view
-     *  is byte-identical to a published one. */
+    /** The bridge's discovered list, the instances {@link MavenFormat} publishes through, so a repaired view is
+     *  identical to a published one. */
     private static final List<ModuleView> MODULE_VIEWS = ModuleView.installed();
 
     @Override
@@ -67,16 +49,9 @@ public final class ModuleViewRebuild implements WalkConsumer {
                 + "completed; reads each pointer the walk hands it and the jar's descriptor when the view is missing.";
     }
 
-    /**
-     * Re-derive the version-addressed {@code /module/} view of one delivered pointer, when it is a Maven jar that
-     * declares a module name.
-     *
-     * <p>Everything else is skipped without a store round trip: a pointer outside {@code /maven/}, a path that is not a
-     * jar or not a full coordinate, and - the one case worth naming - a pointer whose blob is gone, which
-     * {@link RebuildPass} delivers with a size of {@code -1} rather than dropping it, so a reconcile consumer can see
-     * the torn state. A torn pointer is not this consumer's to repair: there is no jar to read a module name out of,
-     * and guessing one from the coordinate would link a view over content the store does not hold.
-     */
+    /** Re-derive the version-addressed {@code /module/} view of one delivered pointer that is a Maven jar declaring a
+     *  module name. Anything else is skipped without a store round trip, including a pointer whose blob is gone, which
+     *  {@link RebuildPass} delivers with size {@code -1}: there is no jar to read a module name from. */
     @Override
     public void onRetained(ArtifactDescriptor artifact, ArtifactStore store) throws IOException {
         String path = artifact.path();
@@ -95,9 +70,7 @@ public final class ModuleViewRebuild implements WalkConsumer {
         for (ModuleView view : MODULE_VIEWS) {
             view.rebuild(module, coordinate[2], classifier.get(), artifact.hash(), store, path);
         }
-        // The version's descriptor joins the view with its own jar, not on a walk of every POM: a POM beside a jar
-        // that is no module has no view to join, and asking would cost every walked POM two reads in a repository
-        // with no module in it. The "latest" descriptor is a publish's to move, as the latest jar is.
+        // The version's descriptor joins the view with its own jar; the "latest" descriptor is a publish's to move.
         if (classifier.get().isEmpty()) {
             String pomPath = JavaLayout.attachment(path, ".pom");
             Optional<String> pom = new Publication(store).blob(pomPath);

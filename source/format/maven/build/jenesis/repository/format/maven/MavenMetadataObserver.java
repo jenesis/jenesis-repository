@@ -8,10 +8,9 @@ import build.jenesis.repository.store.PublicationObserver;
 import build.jenesis.repository.store.StoredListing;
 
 /**
- * Keeps a coordinate's computed {@code maven-metadata.xml} ({@link MavenMetadataListing}) in step with the
- * transitions that happen off the upload path - a hold on a version and its release, a yank and its reversal, a
- * removal - by re-deciding the one version's membership. Only a coordinate whose listing exists is touched: the
- * computation is opt-in, and a listing exists exactly when the setting is on and the coordinate was read or written.
+ * Keeps a coordinate's computed {@code maven-metadata.xml} ({@link MavenMetadataListing}) in step with transitions off
+ * the upload path - a hold and its release, a yank and its reversal, a removal - by re-deciding the one version. Only a
+ * coordinate whose listing exists is touched, which is exactly when the setting is on and it was read or written.
  */
 public final class MavenMetadataObserver implements PublicationObserver, StoredListing.Rebuilder {
 

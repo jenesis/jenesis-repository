@@ -19,29 +19,23 @@ import build.jenesis.repository.format.PublishedExport;
 
 
 /**
- * The Maven layout ({@code /maven/...}): a {@code PUT} stores the blob content-addressed through the shared
- * {@link Publication} store - including a {@code maven-metadata.xml} and its checksum siblings, stored verbatim like
- * any artifact - and a {@code GET} serves the stored bytes byte-for-byte, an absent one a 404. Deriving
- * {@code maven-metadata.xml} on read is not the default: it is the opt-in {@link MavenMetadata#COMPUTE_SETTING}
- * computation, read off the exchange, which reconciles a stored document's version list (or derives one for a
- * coordinate no client uploaded). When the uploaded artifact is a
- * modular jar, it is cross-published into the Jenesis module layout: this format reads the module name and hands it to
- * the {@link ModuleView} the Jenesis format provides (discovered with {@link ServiceLoader}), so a client resolving by
- * module name reaches the same blob - the bridge between the two layouts, exposed only between them and never on the
- * public SPI. Discovered like any other format; the core knows nothing of it.
+ * The Maven layout ({@code /maven/...}): a {@code PUT} stores the body content-addressed through {@link Publication} -
+ * a {@code maven-metadata.xml} and its checksums verbatim like any artifact - and a {@code GET} serves the stored
+ * bytes, an absent one a 404. Computing {@code maven-metadata.xml} is the opt-in {@link MavenMetadata#COMPUTE_SETTING},
+ * read off the exchange. A modular jar is cross-published into the Jenesis module layout: its module name is handed to
+ * the discovered {@link ModuleView} ({@link ServiceLoader}), so a client resolving by module name reaches the same
+ * blob.
  */
 public final class MavenFormat implements RepositoryFormat, ProxyFormat, ArtifactLayout, ArtifactSignatures,
         RepositoryImporter, RepositoryExporter {
 
     private static final List<ModuleView> MODULE_VIEWS = ModuleView.installed();
 
-    /** The migration-import capability, delegated to the layout-only {@link MavenImporter} - the format
-     *  IS the discovered importer now (an {@code instanceof} capability), and the importer class stays as its delegate. */
+    /** The migration-import capability, delegated to {@link MavenImporter}. */
     private final MavenImporter importer = new MavenImporter();
 
-    /** The package-ecosystem name the neutral descriptor carries - the OSV name "Maven" that advisory feeds and
-     *  quality inspectors key on - distinct from {@link #name()} "maven", the format id that routes the {@code /maven/}
-     *  paths. Any consumer of a Maven artifact reports the same ecosystem, whichever edition it runs in. */
+    /** The ecosystem name the descriptor carries, OSV's "Maven", distinct from {@link #name()}, the format id routing
+     *  {@code /maven/}. */
     public static final String ECOSYSTEM = "Maven";
 
     @Override
@@ -55,11 +49,9 @@ public final class MavenFormat implements RepositoryFormat, ProxyFormat, Artifac
         return true;
     }
 
-    /**
-     * Maven's paths keep their {@code /maven/} segment inside a repository - {@code /repository/<name>/maven/...} -
-     * where most formats drop theirs. That is what lets a Maven repository become a {@code java} one, which serves the
-     * Jenesis module layout beside it from the same blobs, with every URL a client already has unchanged.
-     */
+    /** Maven's paths keep their {@code /maven/} segment inside a repository ({@code /repository/<name>/maven/...}), so
+     *  a Maven repository can become a {@code java} one, serving the module layout beside it from the same blobs with
+     *  every client URL unchanged. */
     @Override
     public String mount() {
         return "";
@@ -82,25 +74,16 @@ public final class MavenFormat implements RepositoryFormat, ProxyFormat, Artifac
     }
 
     /**
-     * Maven's inbound signature story, two sidecars beside one artifact. A detached OpenPGP signature at
-     * {@code <artifact>.asc}, covering the artifact's own bytes, and <em>expected</em> rather than optional - the
-     * upstream this layout mirrors has demanded one on every release since the early 2010s. And a Sigstore bundle at
-     * {@code <artifact>.sigstore.json}, the file the sigstore-maven-plugin writes for each file it publishes and
-     * Central has copied and validated beside the {@code .asc} since 2025, <em>optional</em> because Central does not
-     * require it and few artifacts carry one. The bundle is
-     * keyless - it names a certificate identity under an OIDC issuer rather than a key - so a bundle that verifies is
-     * VALID only where an operator's pin names that identity, and otherwise UNTRUSTED under the same dial a
-     * signature by an unknown key falls under; holding the Sigstore root vouches for nobody.
+     * Maven's inbound signatures, two sidecars beside one artifact: a detached OpenPGP signature at
+     * {@code <artifact>.asc} over the artifact's bytes, expected since the upstream this layout mirrors demands one on
+     * every release; and a Sigstore bundle at {@code <artifact>.sigstore.json}, optional since few artifacts carry one.
+     * The bundle is keyless, so one that verifies is VALID only where an operator's pin names its identity, and
+     * otherwise UNTRUSTED.
      *
-     * <p>Both are sidecars of the artifact: neither is signable itself, both are excluded from the listings, and
-     * both inherit the artifact's hold, which is why each suffix is in {@link #isChecksum} and in the served-name
-     * sidecar family. One format answers for both, because the completion observer that re-derives a verdict when a
-     * sidecar lands takes the first format whose {@code covers} answers.
-     *
-     * <p>{@code maven-metadata.xml} is excluded because no publisher signs it: it is a listing the repository
-     * reconciles rather than a release artifact, so demanding a signature for it would report every well-signed
-     * deployment as partly unsigned. The checksum and signature siblings are excluded because a sidecar carries no
-     * sidecar of its own.
+     * <p>Both are sidecars: neither is signable, both are left out of listings and inherit the artifact's hold, which
+     * is why each suffix is in {@link #isChecksum}. One format answers for both, since the completion observer takes
+     * the first format whose {@code covers} answers. {@code maven-metadata.xml} is excluded because no publisher signs
+     * it, and the checksum and signature siblings because a sidecar carries no sidecar.
      */
     private static final ArtifactSignatures SIGNATURES = ArtifactSignatures.composed(ECOSYSTEM,
             ArtifactSignatures.detachedSidecar(ECOSYSTEM, ".asc", ArtifactSignatures.Scheme.OPENPGP_DETACHED,
@@ -108,14 +91,8 @@ public final class MavenFormat implements RepositoryFormat, ProxyFormat, Artifac
             ArtifactSignatures.detachedSidecar(ECOSYSTEM, ".sigstore.json", ArtifactSignatures.Scheme.SIGSTORE_BUNDLE,
                     MavenFormat::signable, ArtifactSignatures.Coverage.OPTIONAL));
 
-    /**
-     * Whether a request path names a released artifact a publisher's signature would cover.
-     *
-     * <p>Only the {@code /maven/} tree. The {@code /module/} mirror this format cross-publishes for a modular jar
-     * points at the <em>same blob</em> as its coordinate does, so the bytes are already checked under the canonical
-     * path; claiming both would report one artifact's signature twice and, where it is missing, hold one artifact
-     * under two names.
-     */
+    /** Whether a request path names a released artifact a publisher's signature covers: only the {@code /maven/} tree,
+     *  since the {@code /module/} mirror points at the same blob and claiming both would judge one artifact twice. */
     private static boolean signable(String path) {
         return path.startsWith("/maven/")
                 && !isChecksum(path)
@@ -151,11 +128,8 @@ public final class MavenFormat implements RepositoryFormat, ProxyFormat, Artifac
             return List.of();
         }
         String artifact = coordinate.substring(colon + 1);
-        // ArtifactLayout clause 3: a coordinate is as client-supplied as a request path, and these paths are handed to
-        // eviction, which unpublishes and DELETES under them. A groupId's dots become separators, so its components are
-        // screened one by one; the artifactId and the version are single segments. A part that is not addressable maps
-        // nowhere - the empty list this method already documents for a coordinate that maps nowhere - rather than
-        // composing "/maven/g/../1.0" and aiming an eviction delete at a neighbouring key space.
+        // ArtifactLayout clause 3: these paths are handed to eviction, which deletes under them, so each groupId
+        // component, the artifactId and the version are screened; a part that is not addressable maps nowhere.
         String[] group = coordinate.substring(0, colon).split("\\.", -1);
         if (!ArtifactLayout.addressable(group) || !ArtifactLayout.addressable(artifact, version)) {
             return List.of();
@@ -173,22 +147,12 @@ public final class MavenFormat implements RepositoryFormat, ProxyFormat, Artifac
         String artifact = coordinate.substring(colon + 1);
         String mavenDir = primary.getFirst();
         List<String> paths = new ArrayList<>(primary);
-        // Also the module view this format cross-published for a modular jar: read the module name back from the
-        // stored jar (the same read publish did), so a cleanup that unpublishes this version removes its /module/
-        // mirror too and the shared blob becomes unreferenced. Best-effort: no jar, no module, no mirror. This is the
-        // one store read, and it is why a read path (a console search) must call the store-free overload instead.
+        // Also the /module/ view of a modular jar, its module name read back from the stored jar, so cleanup removes
+        // the mirror too. Best-effort, and the one store read, which is why a read path calls the store-free overload.
         //
-        // The pointer is resolved through blob(), NOT located(): this method answers "which request paths does this
-        // version OCCUPY", which is a fact about stored state, and located() answers "which of them would a GET
-        // serve", which is a fact about the current hold. Asking the serving question here would make the mirror
-        // vanish from every caller the moment the jar was held - and the callers are the retroactive holds' own
-        // converge pass, eviction, reconciliation and the release path's cross-alias exclusion set: a hold that
-        // crashed between the coordinate pointer and the mirror pointer could never converge, because the re-run
-        // would not see the path it had not yet held; an eviction of a held version would leave the mirror pointing
-        // at a blob it had just reclaimed; and a release of the coordinate could not lift the content-addressed
-        // marker, because the version's OWN mirror - missing from the exclusion set - would read as a foreign alias
-        // still holding those bytes. The blob stat keeps the "no jar, no mirror" degrade for a torn pointer, since a
-        // module name cannot be read out of content the store does not hold.
+        // Resolved through blob(), not located(): this answers which paths the version occupies, not which a GET would
+        // serve. Otherwise the mirror would vanish once the jar was held, and a hold's converge pass, eviction and the
+        // release's cross-alias exclusion set would all miss it.
         try {
             Publication publication = new Publication(store);
             Optional<String> hash = publication.blob(mavenDir + "/" + artifact + "-" + version + ".jar");
@@ -196,20 +160,9 @@ public final class MavenFormat implements RepositoryFormat, ProxyFormat, Artifac
                 String module = moduleName(store, hash.get());
                 if (module != null) {
                     paths.add("/module/" + module + "/" + version);
-                    // And the module's "latest" pointer, but ONLY while it names this version. It is the one
-                    // cross-published path that is not version-addressed, so it belongs to whichever version it
-                    // currently points at and to no other - which is exactly what the store can answer here, by
-                    // comparing what the pointer resolves to against this version's own jar.
-                    //
-                    // Omitting it made this method under-reach in both directions it is used. An eviction of the
-                    // version the pointer names removed the blob and left the pointer aimed at it, so the module's
-                    // latest view 404'd until someone republished, instead of falling back to the newest survivor.
-                    // And a release could not lift the content-addressed marker, because the version's own latest
-                    // alias - missing from the exclusion set - read as a foreign alias still holding those bytes,
-                    // which left a reviewer's released artifact permanently unreachable under its module name.
-                    // Reporting it by resolution rather than by construction also settles the opposite error one
-                    // layout over, where every version claimed the pointer and a first-version eviction destroyed
-                    // a live pointer naming a later one.
+                    // And the module's "latest" pointer, only while it resolves to this version's jar: the one path not
+                    // version-addressed, so it belongs to the version it names. Without it an eviction would leave the
+                    // pointer aimed at a reclaimed blob, and a release could not lift the marker its own alias holds.
                     paths.add(JavaLayout.ARTIFACT_ROUTE + module + "/" + version);
                     for (String latest : List.of(JavaLayout.latestModule(module),
                             JavaLayout.latestArtifact(module, "jar"))) {
@@ -225,14 +178,14 @@ public final class MavenFormat implements RepositoryFormat, ProxyFormat, Artifac
                 }
             }
         } catch (IOException _) {
-            // best-effort; the /maven/ pointers still evict and the blob is reclaimed if now unreferenced
+            // Best-effort: the /maven/ pointers still evict.
         }
         return paths;
     }
 
-    /** The neutral descriptor of a {@code /maven/...} path, or empty for generated metadata (nothing to describe): a
-     *  full coordinate maps to {@code group:artifact} + version, and this is the one place the {@code -SNAPSHOT}
-     *  prerelease rule lives; a path that is not a full coordinate (a checksum root) carries the ecosystem only. */
+    /** The neutral descriptor of a {@code /maven/...} path, or empty for generated metadata: a full coordinate maps to
+     *  {@code group:artifact} and version, with the {@code -SNAPSHOT} prerelease rule here; a path that is not a full
+     *  coordinate carries the ecosystem only. */
     private static Optional<ArtifactDescriptor> descriptor(String path) {
         if (MavenMetadata.isMetadataRequest(path)) {
             return Optional.empty();
@@ -249,28 +202,24 @@ public final class MavenFormat implements RepositoryFormat, ProxyFormat, Artifac
     public void serve(FormatExchange exchange, ArtifactStore store) throws IOException {
         String path = exchange.path();
         if (exchange.method().equals("PUT")) {
-            // (1): a maven-metadata.xml (and its checksum siblings) is stored verbatim like any artifact rather
-            // than dropped, so a publisher-authored document round-trips even when the server does not derive one.
-            // Screening rides the ingress edge: this branch only lays the body out and responds 201 -
-            // the body reaching here has already been screened to ACCEPT, so verdicts are not the format's call.
+            // A maven-metadata.xml is stored verbatim like any artifact. The body was already screened at the ingress
+            // edge.
             layout(store, path, exchange.requestStream());
             if (metadataCompute(exchange)) {
-                // The computed maven-metadata.xml is a stored listing the upload maintains, not a read-time
-                // reconciliation: a version's artifact adds its version, a metadata upload resets the document.
+                // The computed document is a stored listing the upload maintains: an artifact adds its version, a
+                // metadata upload resets it.
                 new MavenMetadata(store).uploaded(path);
             }
             exchange.respond(201);
             return;
         }
         boolean head = exchange.method().equals("HEAD");
-        // (3): with the opt-in computation on, an artifact-level document has its version list reconciled (or is
-        // derived for a coordinate no client uploaded); a checksum is served from the authored bytes. Empty means the
-        // default verbatim serve stands.
+        // With the computation on, an artifact-level document is served from its listing; empty leaves the verbatim
+        // serve.
         if (MavenMetadata.isMetadataRequest(path) && metadataCompute(exchange)) {
             Optional<byte[]> computed = new MavenMetadata(store).served(path);
             if (computed.isPresent()) {
-                // A HEAD answers from the computed document's length (Content-Length only, no body), the way OCI/Raw
-                // answer a HEAD from metadata instead of writing the whole document out.
+                // HEAD answers from the computed document's length.
                 if (head) {
                     exchange.setResponseHeader("Content-Length", Long.toString(computed.get().length));
                     exchange.respond(200);
@@ -280,8 +229,7 @@ public final class MavenFormat implements RepositoryFormat, ProxyFormat, Artifac
                 return;
             }
         }
-        // (2): the default - serve the stored metadata (and its stored checksums) byte-for-byte, a 404 when
-        // absent; a normal artifact is streamed from its content-addressed blob.
+        // The default: the stored bytes, a 404 when absent.
         Optional<Publication.Located> located = new Publication(store).locate(path);
         if (located.isEmpty()) {
             exchange.respond(404);
@@ -290,19 +238,15 @@ public final class MavenFormat implements RepositoryFormat, ProxyFormat, Artifac
         String key = located.get().key();
         long size = located.get().size();
         if (head) {
-            // A HEAD is answered from the pointer's recorded size (Content-Length), 200 with no body, without
-            // touching the blob - the read-first HEAD-from-metadata contract OciFormat/RawFormat already follow, so a
-            // HEAD never streams the whole artifact just to discard it, and since the length rides the pointer it
-            // probes nothing at all.
+            // HEAD answers from the pointer's recorded size, touching no blob.
             if (size >= 0) {
                 exchange.setResponseHeader("Content-Length", Long.toString(size));
             }
             exchange.respond(200);
             return;
         }
-        // Opened BEFORE the response is committed, so the open is the existence check: a pointer whose blob is
-        // gone - a torn write the reconcile has not reached, the collector's two-pass grace mid-way - answers a
-        // clean 404 here rather than a 200 whose body ends after the headers.
+        // Opened before the response is committed, so a pointer whose blob is gone answers a clean 404 rather than a
+        // 200 with no body.
         InputStream in;
         try {
             in = store.open(key, exchange.from(size));
@@ -315,57 +259,43 @@ public final class MavenFormat implements RepositoryFormat, ProxyFormat, Artifac
         }
     }
 
-    /** Whether this deployment opts into computing {@code maven-metadata.xml} on read (default off), read off the
-     *  exchange so this format consults the setting without depending on any settings layer. */
+    /** Whether this deployment opts into computing {@code maven-metadata.xml} (default off), read off the exchange so
+     *  this format needs no settings layer. */
     private static boolean metadataCompute(FormatExchange exchange) {
         return Boolean.parseBoolean(exchange.setting(MavenMetadata.COMPUTE_SETTING));
     }
 
-    /** Lay an already-screened body out into the Maven namespace: store it content-addressed ({@link
-     *  Publication#storeBlob}, streamed straight to storage, never buffered whole) and then run the layout sequence
-     *  below over the stored blob. Screening does not happen here: the ingress edge screens the body to
-     *  ACCEPT and restreams the stored blob into this layout, so a body reaching {@code layout} is already accepted and
-     *  there is no verdict to map - only the essential link (what {@link Publication#located} serves over) is made. The
-     *  restreamed body dedupes to the same {@code blobs/<hash>}, so reading
-     *  the module name back is identical to before. Returns the content-addressed blob hash. */
+    /** Lay an already-screened body out into the Maven namespace: store it content-addressed, streamed
+     *  ({@link Publication#storeBlob}), then run the layout sequence over the stored blob. Returns the blob hash. */
     public static String layout(ArtifactStore store, String path, InputStream body) throws IOException {
         Publication.Blob blob = new Publication(store).stored(body);
         return layout(store, path, blob.hash(), blob.size());
     }
 
     /**
-     * The layout sequence over an <em>already-stored</em> blob, and the one place this format makes an artifact
-     * reachable. It is stated here because it is the format's only multi-step visibility write, and because a caller
-     * that has a reason to store the bytes before deciding to serve them (the proxy leg, which must hold the fetched
-     * bytes to their upstream checksum first) links through this overload rather than re-deriving the sequence.
+     * The layout sequence over an already-stored blob, the one place this format makes an artifact reachable; the proxy
+     * leg, which holds fetched bytes to their checksum first, links through it too.
      *
      * <p><b>The sequence, and what is true after a failure at each step.</b>
      * <ol>
-     *   <li><b>The {@code /maven/} pointer is linked.</b> This is the commit point: before it nothing serves and the
-     *       stored blob is an unreferenced object a garbage collection reclaims; after it the artifact serves under
-     *       its coordinate. A failure here fails the caller with nothing servable.</li>
-     *   <li><b>The module name is read back from the stored blob.</b> A failure here (a store read that could not be
-     *       served) leaves the artifact serving under its coordinate with no {@code /module/} view.</li>
-     *   <li><b>Each discovered {@link ModuleView} links the module's views.</b> A failure at the n-th view leaves the
-     *       coordinate serving, the first n-1 views linked and the rest absent.</li>
+     *   <li><b>The {@code /maven/} pointer is linked.</b> The commit point: before it the blob is unreferenced; after
+     *       it the artifact serves under its coordinate.</li>
+     *   <li><b>The module name is read back from the stored blob.</b> A failure leaves the artifact serving with no
+     *       {@code /module/} view.</li>
+     *   <li><b>Each discovered {@link ModuleView} links the module's views.</b> A failure at the n-th leaves the first
+     *       n-1 linked.</li>
      * </ol>
      *
-     * <p><b>Why the coordinate goes first, given that it is the step that exposes the artifact.</b> Because it is the
-     * only order whose residue converges. The {@code /module/} view is <em>derived</em> from the Maven coordinate -
-     * the module name is read out of the very blob the coordinate points at - so every partial state above is one a
-     * later pass can finish from what survived: {@code ModuleViewRebuild} re-derives the version-addressed view for
-     * every published Maven jar on each rebuild pass, and a byte-identical republish re-runs the whole sequence. The
-     * reverse order (views first, coordinate last) leaves a residue nothing can repair: a {@code /module/} view names
-     * a module and a version and no Maven coordinate, so no pass can re-derive the coordinate from it, and deleting
-     * the stray view instead would be an orphan purge over a namespace the Jenesis format also publishes into
-     * first-hand. The exposure the first step buys is the exposure a successful publish buys anyway, one moment later.
+     * <p>The coordinate goes first because only that order's residue converges: the module view is derived from the
+     * blob the coordinate points at, so {@link ModuleViewRebuild} or a republish finishes any partial state. A stray
+     * view names no coordinate, so the reverse order would leave a residue nothing could repair.
      */
     public static String layout(ArtifactStore store, String path, String hash) throws IOException {
         return layout(store, path, hash, -1L);
     }
 
-    /** {@link #layout(ArtifactStore, String, String)} with the blob's length in hand, so the pointer records it
-     *  without the stat the length-less form pays to learn it ({@link Publication#link(String, String, long)}). */
+    /** {@link #layout(ArtifactStore, String, String)} with the blob's length in hand, so the pointer records it without
+     *  a stat. */
     public static String layout(ArtifactStore store, String path, String hash, long size) throws IOException {
         Publication publication = new Publication(store);
         publication.link(path, hash, size);
@@ -375,8 +305,8 @@ public final class MavenFormat implements RepositoryFormat, ProxyFormat, Artifac
         }
         String pom = JavaLayout.attachment(path, ".pom");
         if (path.equals(pom)) {
-            // The descriptor of a version whose jar may already have been published - Maven deploys the jar first -
-            // so it joins that module's view now, as the latest one when the module's latest jar is this version's.
+            // Maven deploys the jar before the POM, so the descriptor joins the jar's module view now, as the latest
+            // one when the latest jar is this version's.
             String jar = JavaLayout.attachment(path, ".jar");
             Optional<String> jarHash = publication.blob(jar);
             String module = jarHash.isEmpty() ? null : moduleName(store, jarHash.get());
@@ -399,7 +329,7 @@ public final class MavenFormat implements RepositoryFormat, ProxyFormat, Artifac
         for (ModuleView view : MODULE_VIEWS) {
             view.publish(module, coordinate[2], classifier.get(), hash, store, path);
         }
-        // And the descriptor, when it arrived first - the latest one when this version's jar took the latest view.
+        // And the descriptor, when it arrived first.
         Optional<String> pomHash = classifier.get().isEmpty() ? publication.blob(pom) : Optional.empty();
         if (pomHash.isPresent()) {
             boolean latest = publication.blob(JavaLayout.latestModule(module)).equals(Optional.of(hash));
@@ -410,23 +340,15 @@ public final class MavenFormat implements RepositoryFormat, ProxyFormat, Artifac
         return hash;
     }
 
-    /** The reverse index the module name is recorded under, by blob hash ({@code by/module/<hash>}): one small object
-     *  beside the jar, written when the name is first read - at publish by the cross-link, or by the first rebuild
-     *  pass over a repository from before the record - so a pass reads it rather than opening every jar in the
-     *  repository. {@code by/} is the space for reverse indexes by content hash; a collected blob's record
-     *  is left behind, a few bytes that cost nothing to keep and a listing to find. */
+    /** The reverse index of a jar's module name by blob hash ({@code by/module/<hash>}), written when the name is first
+     *  read, so a pass reads it rather than opening every jar. A collected blob's record is left behind; it costs a few
+     *  bytes. */
     public static final String MODULE_INDEX = "by/module";
 
-    /**
-     * The module name the content-addressed blob {@code hash} declares, or null when the blob is gone or the jar is
-     * non-modular - the single read the layout cross-link and its rebuild share, so both act on the same module.
-     *
-     * <p>Read from {@link #MODULE_INDEX} when it has been recorded, else out of the jar and then recorded, an empty
-     * body standing for a non-modular jar so it is not opened again either. Without the record the rebuild pass would
-     * open every Maven jar in the repository on every pass for this one string - a full GET of the artifact bytes per
-     * jar per day. A store that refuses the record (read-only) still answers the name; it just pays the jar again next
-     * time.
-     */
+    /** The module name the blob {@code hash} declares, or null when the blob is gone or the jar is non-modular; the one
+     *  read the layout and its rebuild share. Read from {@link #MODULE_INDEX} when recorded, else out of the jar and
+     *  then recorded, an empty body standing for non-modular; without the record every rebuild pass would download
+     *  every jar. A store that refuses the record still answers. */
     static String moduleName(ArtifactStore store, String hash) throws IOException {
         Optional<ArtifactStore.Versioned> recorded = store.readVersioned(MODULE_INDEX + "/" + hash);
         if (recorded.isPresent()) {
@@ -441,7 +363,7 @@ public final class MavenFormat implements RepositoryFormat, ProxyFormat, Artifac
             store.write(MODULE_INDEX + "/" + hash,
                     new ByteArrayInputStream((name == null ? "" : name).getBytes(StandardCharsets.UTF_8)));
         } catch (IOException | RuntimeException unrecordable) {
-            // A read-only store, or a store that refused the small write: the name is still the jar's, only unrecorded.
+            // A store that refused the small write: the name is still the jar's.
         }
         return name;
     }
@@ -451,15 +373,9 @@ public final class MavenFormat implements RepositoryFormat, ProxyFormat, Artifac
         return Optional.of(URI.create("https://repo1.maven.org/maven2/"));
     }
 
-    /**
-     * Demo-mode suggestions: a Log4Shell-era {@code log4j-core 2.14.1} (its POM and jar) and a
-     * {@code commons-collections 3.2.1} (the classic deserialization coordinate), deliberately old,
-     * benign-but-vulnerable releases so a fresh repository's vulnerability and quarantine surfaces light up at once -
-     * the coordinates are what the OSV / GHSA / KEV / EPSS feeds and a demo gate config key on (a version floor
-     * quarantines the old log4j-core, a deny-list rejects commons-collections), and the bytes themselves are ordinary,
-     * harmless libraries. The seeder pulls these through this format's own upstream ({@link #defaultUpstream() Maven
-     * Central}); nothing malicious is ever fetched.
-     */
+    /** Demo-mode suggestions: {@code log4j-core 2.14.1} (POM and jar) and {@code commons-collections 3.2.1}, old,
+     *  benign-but-vulnerable releases so a fresh repository's vulnerability and quarantine surfaces have something to
+     *  show. They are pulled through this format's own upstream ({@link #defaultUpstream() Maven Central}). */
     @Override
     public List<String> demoArtifacts() {
         return List.of(
@@ -469,24 +385,19 @@ public final class MavenFormat implements RepositoryFormat, ProxyFormat, Artifac
     }
 
     /**
-     * Proxy a {@code /maven/} miss to the upstream Maven repository (Maven Central). Artifacts (jars, poms and their
-     * checksums) are immutable and cached, and a cached modular jar is cross-published like a local one;
-     * {@code maven-metadata.xml} is a mutable index, so it is proxied fresh from upstream on each miss - never
-     * derived locally or cached - the way every other format's index is, so a later upstream publish shows through.
+     * Proxy a {@code /maven/} miss to the upstream Maven repository. Artifacts are immutable and cached, a modular jar
+     * cross-published like a local one; {@code maven-metadata.xml} is mutable and proxied fresh on each miss, never
+     * cached.
      *
-     * <p>A cached artifact is held to the upstream's {@code .sha1} <em>before</em> it is laid out, so a fill this leg
-     * refuses (a mismatch, or a sibling this repository could not read -) never becomes reachable under any
-     * coordinate: the fetched bytes are stored content-addressed as they stream, and the {@link #layout(ArtifactStore,
-     * String, String) layout sequence} runs only once the bytes have been held to the checksum. Nothing is retracted
-     * because nothing was linked.
+     * <p>A cached artifact is held to the upstream's {@code .sha1} before it is laid out: the bytes are stored
+     * content-addressed as they stream and the {@link #layout(ArtifactStore, String, String) layout sequence} runs only
+     * on a match, so a refused fill is never reachable and nothing needs retracting.
      */
     @Override
     public boolean proxy(FormatExchange exchange, ArtifactStore store, URI upstream, ProxyFormat.Fetcher fetcher)
             throws IOException {
         String path = exchange.path();
-        // The proxy leg carries the same clause-6 screen as the request seam: a traversal-shaped path
-        // is no proxy target either, so it never reaches the upstream and never lays a fetched body out
-        // under a path the store refuses.
+        // Clause 6: a traversal-shaped path is no proxy target.
         if (!path.startsWith("/maven/") || !ArtifactStore.traversalFree(path)) {
             return false;
         }
@@ -494,19 +405,11 @@ public final class MavenFormat implements RepositoryFormat, ProxyFormat, Artifac
         String root = upstream.toString();
         String prefix = root.endsWith("/") ? root : root + "/";
         if (MavenMetadata.isMetadataRequest(path)) {
-            // A mutable index: fetch it fresh (the small buffered fetch, not a cached download) and stream it straight
-            // to the client, leaving nothing cached, so the repository never serves a stale metadata document.
+            // A mutable index: fetched fresh and streamed to the client, nothing cached.
             Optional<ProxyFormat.Fetched> index = fetcher.fetch(URI.create(prefix + rest), Map.of());
-            // Clause 2's split. The maven-metadata.xml document itself is an ENUMERATION - it IS the <versions> list a
-            // range or a LATEST/RELEASE marker resolves against, and a SNAPSHOT document is the timestamped build a
-            // resolver picks - so a 404 here is not "not cached here, re-pull", it is the answer that the coordinate
-            // has no versions. Serving a fetch that never landed as that answer breaks a build with a wrong fact it
-            // cannot tell from the truth (on the Go leg's @v/list). Only an upstream that ANSWERED 404/410 may
-            // reach the client as one; a transport failure or any other status refuses visibly instead.
-            //
-            // Its .sha1/.md5 siblings deliberately keep the plain decline: a checksum answers "what digest", not "what
-            // exists", nothing resolves against its absence, and Maven already treats an unavailable checksum as a
-            // warning rather than as a fact about the repository.
+            // Clause 2: maven-metadata.xml is an enumeration a range or LATEST/RELEASE resolves against, so a 404 means
+            // "no versions"; only an upstream that answered 404/410 may reach the client as one, and anything else
+            // refuses visibly. Its checksums keep the plain decline, since nothing resolves against their absence.
             if (rest.endsWith("/maven-metadata.xml")) {
                 if (index.isEmpty()) {
                     return unanswered(prefix + rest, exchange, "the upstream could not be reached");
@@ -529,9 +432,7 @@ public final class MavenFormat implements RepositoryFormat, ProxyFormat, Artifac
         }
         try (ProxyFormat.Download download = fetched.get()) {
             if (download.status() != 200) {
-                // An upstream 404/410 for a descriptor IS the answer that the component publishes none, so it passes
-                // through as the plain decline. Any other status is this repository failing to read what the upstream
-                // has, which is not that answer.
+                // An upstream 404/410 for a descriptor is the answer that none is published; any other status is not.
                 if (resolvedAgainstAbsence(rest) && download.status() != 404 && download.status() != 410) {
                     return undecided(prefix + rest, exchange, "the upstream answered " + download.status());
                 }
@@ -540,30 +441,18 @@ public final class MavenFormat implements RepositoryFormat, ProxyFormat, Artifac
             if (isChecksum(rest)) {
                 layout(store, path, download.body());
             } else {
-                // Verify a proxied artifact against the upstream-published SHA-1, so a body corrupted or tampered
-                // between the upstream and here is never left cached and served. The digest is computed as the blob
-                // streams to storage; the tiny checksum sibling is fetched afterwards, so it never delays the artifact.
-                //
-                // The bytes are STORED here and laid out only below, once they have been held to the checksum: the
-                // blob is inert until a pointer references it, so a fill that fails verification links nothing and
-                // needs no retraction - the same order the OCI leg holds a mismatched digest to (a layer lands only
-                // under its own true hash, so the requested key is never created). Storing first is what lets the
-                // digest be computed while the body streams, without buffering it; the unreferenced blob a
-                // refused fill leaves behind is exactly the object garbage collection exists to reclaim.
+                // Verified against the upstream's SHA-1, computed as the blob streams to storage. The bytes are stored
+                // here and laid out below only once they match, so a refused fill links nothing; its unreferenced blob
+                // is the collector's.
                 MessageDigest sha1 = sha1();
                 Publication.Blob stored = new Publication(store).stored(new DigestInputStream(download.body(), sha1));
                 String hash = stored.hash();
                 URI sibling = URI.create(prefix + rest + ".sha1");
                 Sha1 expected = upstreamSha1(fetcher, sibling);
                 if (expected.unreadable() != null) {
-                    // Clause 5's split. "The upstream publishes no .sha1 for this artifact" is a fact about
-                    // Maven repositories that is true often enough to be documented, and it is the ONLY thing that may
-                    // downgrade a fill to unverified. A .sha1 fetch that never landed, or one answered by a 429 under a
-                    // shared egress IP, is not that fact - it is this repository having failed to read what the
-                    // upstream published, and treating it as the fact means anyone who can drop one sidecar request
-                    // turns verification off for that pull. So the fill is refused exactly as a mismatch is: nothing
-                    // linked, nothing served, the local 404 standing so a later pull re-hits the upstream and reads
-                    // the sibling again.
+                    // Clause 5: only an upstream that publishes no .sha1 may downgrade a fill to unverified. A sibling
+                    // that could not be read is refused like a mismatch, or anyone able to drop one request could
+                    // switch verification off.
                     LOGGER.warn("Refusing to cache the proxied artifact {} unverified: {}. Nothing was cached or served; "
                             + "the local 404 stands so a later pull re-hits the upstream.", prefix + rest,
                             expected.unreadable());
@@ -572,10 +461,7 @@ public final class MavenFormat implements RepositoryFormat, ProxyFormat, Artifac
                             : false;
                 }
                 if (expected.hex() != null && !expected.hex().equalsIgnoreCase(HexFormat.of().formatHex(sha1.digest()))) {
-                    // A body that does not hash to what the upstream published for it. Refused with a line of its own:
-                    // this is the one outcome on this leg that says something happened to the bytes between the
-                    // upstream and here, and a silent `false` (which is all a resolver sees - the local 404) would
-                    // leave an operator with no way to tell a tampered mirror from an artifact nobody published.
+                    // A mismatch is logged on its own, since it says the bytes changed between the upstream and here.
                     LOGGER.warn("Refusing to cache the proxied artifact {}: it does not match the SHA-1 {} the upstream "
                             + "publishes for it. Nothing was cached or served; the local 404 stands.", prefix + rest,
                             expected.hex());
@@ -590,12 +476,9 @@ public final class MavenFormat implements RepositoryFormat, ProxyFormat, Artifac
         return true;
     }
 
-    /**
-     * What Central publishes beside a released file and a client never asks for: its {@code .asc} and, where the
-     * publisher signed with Sigstore, its {@code .sigstore.json}. Both are fetched on a fill so the proxy screen
-     * judges a proxied artifact by the signature its upstream publishes rather than by what an earlier client request
-     * happened to leave here; a listing, a checksum or a signature itself has none.
-     */
+    /** What Central publishes beside a released file and a client never asks for: its {@code .asc} and, where present,
+     *  its {@code .sigstore.json}, fetched on a fill so the proxy screen judges the signature the upstream publishes. A
+     *  listing, checksum or signature has none. */
     @Override
     public List<ProxyFormat.Companion> companions(FormatExchange exchange, URI upstream) {
         String path = exchange.path();
@@ -608,17 +491,10 @@ public final class MavenFormat implements RepositoryFormat, ProxyFormat, Artifac
                 new ProxyFormat.Companion(path + ".sigstore.json", URI.create(target + ".sigstore.json")));
     }
 
-    /**
-     * Answer a {@code maven-metadata.xml} request this repository could not put to its upstream - a transport failure,
-     * or an upstream that answered something other than the document - with a {@code 502} rather than the local
-     * {@code 404}, and say in the log which target failed and how.
-     *
-     * <p>It returns {@code true} because the leg <em>did</em> serve a response: {@link ProxyFormat}'s {@code false}
-     * means "let the local {@code 404} stand", and on this one document the local {@code 404} is a lie. A resolver
-     * reads a {@code 502} as a repository error and stops; it reads a {@code 404} as "this coordinate has no versions"
-     * and fails the build with a wrong reason, or - worse, under a mirror list - moves on to the next repository as
-     * though this one had genuinely answered. Clause 2 states the rule and why it is only this shape.
-     */
+    /** Answer a {@code maven-metadata.xml} request that could not be put to the upstream with a {@code 502} rather than
+     *  the local {@code 404}, logging which target failed and how. It returns {@code true} because a response was
+     *  served: a resolver reads a {@code 404} here as "no versions" and fails with a wrong reason or moves to the next
+     *  mirror (clause 2). */
     private static boolean unanswered(String target, FormatExchange exchange, String reason) throws IOException {
         LOGGER.warn("Refusing to answer the Maven metadata request {} as an empty version list: {}. Nothing was served; "
                 + "the local 404 would have been read by the resolver as the upstream's own answer.", target, reason);
@@ -626,28 +502,14 @@ public final class MavenFormat implements RepositoryFormat, ProxyFormat, Artifac
         return true;
     }
 
-    /**
-     * Whether this path is one a client <em>resolves against the absence of</em> - so answering a refusal as a miss
-     * would not be quiet, it would be wrong.
-     *
-     * <p>A 404 normally means "we do not have it", and for a jar or a POM that is a loud answer: the build fails and
-     * an operator goes looking. Gradle Module Metadata is the case where it is not, because the overwhelming majority
-     * of coordinates publish no {@code .module} at all. A 404 there is the <b>legal and expected</b> answer, and
-     * Gradle acts on it - it falls back to the POM, picks a variant by the old rules and reports
-     * {@code BUILD SUCCESSFUL}. So spelling a refusal as a 404 does not withhold the descriptor, it substitutes a
-     * different resolution for it, silently, and the operator sees a green build over a repository that detected a
-     * problem and said nothing.
-     *
-     * <p>This is the same split the {@code maven-metadata.xml} leg above makes for the same reason, and it is
-     * deliberately narrow: {@code .sha1}/{@code .md5} siblings keep the plain decline, because a checksum answers
-     * "what digest", not "what exists", and nothing resolves against its absence.
-     */
+    /** Whether a client resolves against this path's absence, so answering a refusal as a miss would be wrong. Most
+     *  coordinates publish no Gradle {@code .module}, and Gradle reads a 404 as "use the POM" and builds green, so a
+     *  refusal spelled as a 404 silently substitutes another resolution. Checksums keep the plain decline. */
     private static boolean resolvedAgainstAbsence(String rest) {
         return rest.endsWith(".module");
     }
 
-    /** Refuse visibly on a path whose absence is itself an answer: the client is told this repository could not
-     *  decide, rather than being handed a miss it would read as the upstream's own answer. */
+    /** Refuse visibly on a path whose absence is itself an answer. */
     private static boolean undecided(String target, FormatExchange exchange, String reason) throws IOException {
         LOGGER.warn("Refusing to answer the proxied descriptor {} as an absent descriptor: {}. Nothing was served; the "
                 + "local 404 would have been read by the client as \"this component publishes no module metadata\", "
@@ -658,9 +520,8 @@ public final class MavenFormat implements RepositoryFormat, ProxyFormat, Artifac
 
     private static final Logger LOGGER = LoggerFactory.getLogger(MavenFormat.class);
 
-    /** A Maven checksum or signature sibling - itself the integrity token, so it is proxied as-is, not re-verified,
-     *  and never asked to carry a signature of its own. The Sigstore bundle is one: Central publishes no {@code .sha1}
-     *  for it, and a proxied bundle held to one would never serve. */
+    /** A Maven checksum or signature sibling: proxied as-is, not re-verified, and carrying no signature of its own. The
+     *  Sigstore bundle is one, since Central publishes no {@code .sha1} for it. */
     private static boolean isChecksum(String rest) {
         return rest.endsWith(".sha1") || rest.endsWith(".md5") || rest.endsWith(".sha256")
                 || rest.endsWith(".sha512") || rest.endsWith(".asc") || rest.endsWith(".sigstore.json");
@@ -675,22 +536,20 @@ public final class MavenFormat implements RepositoryFormat, ProxyFormat, Artifac
     }
 
     /**
-     * What the upstream's {@code .sha1} sibling says about an artifact this leg is caching - three states, because
-     * clause 5 licenses the fall-back for exactly one of them.
+     * What the upstream's {@code .sha1} sibling says about an artifact being cached: three states, since clause 5
+     * licenses the fall-back for one.
      *
-     * @param hex        the 40-hex digest the sibling publishes, or {@code null} when the upstream <em>answered</em>
-     *                   that it publishes none for this artifact; that artifact is then proxied unverified, which is
-     *                   the documented behaviour for a repository that carries no checksums
-     * @param unreadable why the sibling could not be read at all, or {@code null} when it was read. Never a fall-back:
-     *                   the fill is refused, because "we could not ask" is not "the upstream publishes nothing"
+     * @param hex the 40-hex digest, or {@code null} when the upstream answered that it publishes none, and the artifact
+     *     is proxied unverified
+     * @param unreadable why the sibling could not be read, or {@code null} when it was; never a fall-back, the fill is
+     *     refused
      */
     private record Sha1(String hex, String unreadable) {
     }
 
-    /** The upstream SHA-1 for an artifact, read from its {@code .sha1} sibling (the 40-hex digest, optionally followed
-     *  by a filename). The upstream <em>answering</em> {@code 404}/{@code 410}, or answering with a body that is not a
-     *  40-hex digest, publishes none - the artifact is proxied unverified rather than refused. A transport failure or
-     *  any other status could not be read, and is refused instead. */
+    /** The upstream SHA-1 for an artifact from its {@code .sha1} sibling (40 hex, optionally followed by a filename).
+     *  An upstream answering {@code 404}/{@code 410}, or a body that is no digest, publishes none; a transport failure
+     *  or other status is unreadable. */
     private static Sha1 upstreamSha1(ProxyFormat.Fetcher fetcher, URI sha1) throws IOException {
         Optional<ProxyFormat.Fetched> response = fetcher.fetch(sha1, Map.of());
         if (response.isEmpty()) {
@@ -710,8 +569,8 @@ public final class MavenFormat implements RepositoryFormat, ProxyFormat, Artifac
                 null);
     }
 
-    // --- RepositoryImporter capability: delegated to MavenImporter. importTarget avoids the erasure
-    //     clash with this format's ArtifactLayout.describe(String); imports avoids the clash with handles(String). ---
+    // RepositoryImporter, delegated to MavenImporter; importTarget and imports avoid clashing with describe(String) and
+    // handles(String).
 
     @Override
     public boolean imports(String sourceFormat) {
@@ -728,9 +587,8 @@ public final class MavenFormat implements RepositoryFormat, ProxyFormat, Artifac
         importer.importArtifact(path, content, store);
     }
 
-    /** A version's folder, each file put at its path under the client's {@code .../maven/} URL - the primary folder
-     *  only: the {@code /module/} view is this product's cross-publish of a modular jar, which a target that offers one
-     *  derives from the jar itself. */
+    /** A version's folder, each file put under the client's {@code .../maven/} URL; the {@code /module/} view is left
+     *  to a target that derives it from the jar. */
     @Override
     public Exported export(ArtifactStore repository, String coordinate, String version, ExportTarget target)
             throws IOException {
@@ -746,7 +604,7 @@ public final class MavenFormat implements RepositoryFormat, ProxyFormat, Artifac
     private static final String CLIENT_PATH = "/maven/";
 
     /** The coordinate's {@code maven-metadata.xml} and its checksums, after its last version, as {@code mvn deploy}
-     *  sends them after the version it adds. */
+     *  sends them. */
     @Override
     public void exported(ArtifactStore repository, String coordinate, ExportTarget target) throws IOException {
         int colon = coordinate.indexOf(':');

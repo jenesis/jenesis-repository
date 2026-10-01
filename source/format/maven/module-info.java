@@ -1,14 +1,9 @@
 /**
- * The Maven layout as a plugin module ({@code /maven/...}): it provides
- * {@link build.jenesis.repository.format.RepositoryFormat} and builds on the shared Java-layout module
- * ({@code JavaLayout}) and the store module's format-neutral {@code Publication}. When a modular jar is published, it
- * cross-publishes the jar's module view into the Jenesis layout over the bridge the shared module exports to just these
- * two: it {@code uses} the {@code ModuleView} the Jenesis format provides. This is the one required cross-publish, and
- * it goes one way - Maven into the module layout, never a module back to Maven. Because the cross-view is derived from
- * the Maven coordinate rather than published beside it, this module also {@code provides} the {@code WalkConsumer}
- * ({@code ModuleViewRebuild}) that re-derives it from the durable store, which is what makes a cross-publish
- * interrupted half way a repairable state rather than a permanent one. {@code MavenMetadata} is computed here under
- * an opt-in setting. Discovered through {@code provides}, so the layout plugs in like any other format.
+ * The Maven layout as a plugin module ({@code /maven/...}): a {@link build.jenesis.repository.format.RepositoryFormat}
+ * over the shared Java-layout module and the store's {@code Publication}. A published modular jar is cross-published
+ * into the Jenesis module layout through the {@code ModuleView} bridge, one way only; the {@code WalkConsumer}
+ * {@code ModuleViewRebuild} re-derives that view from the store, so an interrupted cross-publish is repairable.
+ * {@code maven-metadata.xml} is computed here under an opt-in setting.
  *
  * @jenesis.release 25
  * @jenesis.bom pin-repository.properties
@@ -21,8 +16,7 @@ module build.jenesis.repository.format.maven {
     requires build.jenesis.repository.walk;
     requires build.jenesis.repository.format.java;
     requires java.xml;
-    // The metadata leg's clause-2 refusal says in the log which upstream target could not be asked and how,
-    // beside the 502 it answers the resolver - the operator-visible half a status code alone cannot carry.
+    // The metadata leg logs which upstream target could not be asked beside the 502 it answers.
     requires org.slf4j;
     exports build.jenesis.repository.format.maven;
     provides build.jenesis.repository.format.RepositoryFormat
