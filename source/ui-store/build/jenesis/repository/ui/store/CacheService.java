@@ -1,6 +1,7 @@
 package build.jenesis.repository.ui.store;
 
 import module java.base;
+import build.jenesis.repository.store.Retries;
 
 import build.jenesis.repository.ui.CurrentTenant;
 import build.jenesis.repository.cache.storage.CacheStorage;
@@ -159,20 +160,28 @@ public class CacheService {
     }
 
     /** Mark the project running {@code action}, unless a pass younger than {@link #STALE_PASS} already is; whether
-     *  this call is the one that started. */
+     *  this call is the one that started. The mark is a compare-and-set against the stats file's version, read before
+     *  its body, so of two nodes asked at once one starts the pass and the other finds it running. */
     private boolean begin(String name, String action) throws IOException {
-        Properties stored = storage.readConfig(name, STATS_FILE);
-        if (Boolean.parseBoolean(stored.getProperty("running", "false"))) {
-            String started = stored.getProperty("started", "");
-            if (!started.isBlank() && Instant.parse(started).isAfter(Instant.now().minus(STALE_PASS))) {
-                return false;
+        String path = name + "/" + STATS_FILE;
+        for (int tries = 0; tries < Retries.COMPARE_AND_SET; tries++) {
+            Object version = storage.fileVersion(path);
+            Properties stored = storage.readFile(path);
+            if (Boolean.parseBoolean(stored.getProperty("running", "false"))) {
+                String started = stored.getProperty("started", "");
+                if (!started.isBlank() && Instant.parse(started).isAfter(Instant.now().minus(STALE_PASS))) {
+                    return false;
+                }
             }
+            stored.setProperty("running", "true");
+            stored.setProperty("started", Instant.now().toString());
+            stored.setProperty("last-action", action);
+            if (storage.writeFileVersioned(path, stored, version)) {
+                return true;
+            }
+            Retries.backoff(tries);
         }
-        stored.setProperty("running", "true");
-        stored.setProperty("started", Instant.now().toString());
-        stored.setProperty("last-action", action);
-        storage.writeConfig(name, STATS_FILE, stored);
-        return true;
+        throw new Retries.Contended(path);
     }
 
     /**

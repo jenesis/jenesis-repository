@@ -60,6 +60,39 @@ class CacheStatsTest {
     }
 
     @Test
+    void of_two_nodes_asked_at_once_one_starts_the_pass_and_the_other_finds_it_running() throws Exception {
+        // The passes are held rather than run, so the first one stays running for as long as the others ask.
+        List<Runnable> held = new CopyOnWriteArrayList<>();
+        List<CacheService> nodes = List.of(
+                new CacheService(CacheStorages.filesystem(cacheRoot), AuditTrail.none(), () -> "acme", () -> "octo",
+                        settings(), (name, pass) -> held.add(pass)),
+                new CacheService(CacheStorages.filesystem(cacheRoot), AuditTrail.none(), () -> "acme", () -> "octo",
+                        settings(), (name, pass) -> held.add(pass)));
+        CountDownLatch start = new CountDownLatch(1);
+        AtomicInteger started = new AtomicInteger();
+        List<Thread> askers = new ArrayList<>();
+        for (int index = 0; index < 16; index++) {
+            CacheService node = nodes.get(index % 2);
+            askers.add(Thread.ofVirtual().start(() -> {
+                try {
+                    start.await();
+                    if (node.recount("libs")) {
+                        started.incrementAndGet();
+                    }
+                } catch (Exception failed) {
+                    throw new IllegalStateException(failed);
+                }
+            }));
+        }
+        start.countDown();
+        for (Thread asker : askers) {
+            asker.join();
+        }
+        assertThat(started.get()).as("one pass started, whichever node asked first").isEqualTo(1);
+        assertThat(held).hasSize(1);
+    }
+
+    @Test
     void an_eviction_runs_in_the_background_and_leaves_its_outcome_and_the_count_behind() throws Exception {
         storage.store(new CacheStorage.Entry("libs", "aa", "01"),
                 new ByteArrayInputStream("abc".getBytes(StandardCharsets.UTF_8)));
