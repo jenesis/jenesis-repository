@@ -8,17 +8,12 @@ import build.jenesis.repository.store.ArchiveWalk;
 
 /**
  * The primitives the Maven layout needs to cross-publish into the Jenesis module layout: reading the module name a jar
- * declares, and parsing a Maven request path into its coordinate. These live in the shared Java-layout module so the
- * module-descriptor reading and the coordinate convention sit in one place rather than in the core.
+ * declares and parsing a Maven request path into its coordinate.
  */
 public final class JavaLayout {
 
-    /**
-     * The package-ecosystem name a Jenesis module reports - distinct from the {@code jenesis} format id that routes
-     * the paths. It lives here rather than on the format because the name is part of the <em>grammar</em>: anything
-     * that describes a module artifact reports it, including describers that must not take an edge to the layout
-     * implementation.
-     */
+    /** The ecosystem name a Jenesis module reports, distinct from the {@code jenesis} format id that routes paths. It
+     *  belongs to the grammar, so describers that may not depend on the layout implementation report it too. */
     public static final String MODULE_ECOSYSTEM = "Jenesis";
 
     /** The request-path prefix every Jenesis module view is served under. */
@@ -27,14 +22,9 @@ public final class JavaLayout {
     private JavaLayout() {
     }
 
-    /**
-     * The {@code [moduleName, version]} a {@code /module/<name>/<version>/<file>.jar} request path names, or null when
-     * the path is not that shape or either segment is one a store must not address.
-     *
-     * <p>Null rather than an exception, and both refusals fold into it deliberately: a caller here is deciding
-     * whether it recognises a path, not validating a request, so "not a module coordinate" and "not one I would
-     * store" are the same answer - it does not handle the path either way.
-     */
+    /** The {@code [moduleName, version]} a {@code /module/<name>/<version>/<file>.jar} path names, or null when the
+     *  path is not that shape or a segment is one a store must not address. A caller here decides whether it recognises
+     *  a path, so both refusals are the same answer. */
     public static String[] moduleCoordinate(String requestPath) {
         if (requestPath == null || !requestPath.startsWith(MODULE_ROUTE)) {
             return null;
@@ -56,12 +46,10 @@ public final class JavaLayout {
         return MODULE_ROUTE + moduleName + "/" + moduleName + ".jar";
     }
 
-    /**
-     * The request-path prefix a module's Maven view is served under: its POM and its jars, addressed by module name.
-     * The build tool resolves a project's {@code requires} here - {@code /artifact/<module>/<version>/<module>.pom},
-     * or the version-less {@code /artifact/<module>/<module>.pom} for the latest - and then fetches the jar through its
-     * Maven repository by the coordinate that POM names.
-     */
+    /** The prefix a module's Maven view is served under: its POM and jars by module name. The build tool resolves a
+     *  {@code requires} here - {@code /artifact/<module>/<version>/<module>.pom}, or
+     *  {@code /artifact/<module>/<module>.pom} for the latest - then fetches the jar by the coordinate that POM
+     *  names. */
     public static final String ARTIFACT_ROUTE = "/artifact/";
 
     /** The version-addressed view of one of a module's jars: its own when {@code classifier} is empty, else the one
@@ -87,11 +75,9 @@ public final class JavaLayout {
     /** A snapshot's timestamped build, as Maven names a file of one: {@code <yyyyMMdd.HHmmss>-<build number>}. */
     private static final Pattern SNAPSHOT_BUILD = Pattern.compile("\\d{8}\\.\\d{6}-\\d+(?:-(.+))?");
 
-    /**
-     * The classifier of a {@code /maven/...} jar: empty for the artifact's own jar, {@code <classifier>} for
-     * {@code <artifact>-<version>-<classifier>.jar}, read the same way from a snapshot's timestamped file name - or
-     * empty-optional when the file name is none of those shapes and so says nothing about which jar it is.
-     */
+    /** The classifier of a {@code /maven/...} jar: empty for the artifact's own jar, {@code <classifier>} for
+     *  {@code <artifact>-<version>-<classifier>.jar}, likewise for a snapshot's timestamped name - or an empty optional
+     *  when the file name is none of those shapes. */
     public static Optional<String> mavenClassifier(String requestPath) {
         String[] coordinate = mavenCoordinate(requestPath);
         if (coordinate == null || !requestPath.endsWith(".jar")) {
@@ -116,14 +102,11 @@ public final class JavaLayout {
     }
 
     /**
-     * A file published <em>beside</em> a Maven coordinate: {@code <dir>/<artifact>-<version><suffix>}.
-     *
-     * <p>This is the one grammar a describing consumer keeps re-deriving - the sibling POM, the CycloneDX attachment
-     * a build publishes next to the jar - and each re-derivation is a chance to get the directory or the separator
-     * subtly wrong against a layout that owns the answer.
+     * A file published beside a Maven coordinate: {@code <dir>/<artifact>-<version><suffix>} - the sibling POM, the
+     * CycloneDX attachment - stated here so no consumer re-derives the directory or separator.
      *
      * @param requestPath a {@code /maven/...} path whose directory the sibling shares
-     * @param suffix      what follows the version, including its separator - {@code ".pom"}, {@code "-cyclonedx.json"}
+     * @param suffix what follows the version, including its separator - {@code ".pom"}, {@code "-cyclonedx.json"}
      * @return the sibling's request path, or null when {@code requestPath} names no full coordinate
      */
     public static String attachment(String requestPath, String suffix) {
@@ -135,16 +118,12 @@ public final class JavaLayout {
         return requestPath.substring(0, slash + 1) + coordinate[1] + "-" + coordinate[2] + suffix;
     }
 
-    /** The module name a jar declares - its {@code module-info} name, or its {@code Automatic-Module-Name} - or null
-     *  when it carries neither (a plain jar, not a module). The jar is walked as a stream (typically opened back from
-     *  storage after the blob was streamed in), so the artifact is never buffered whole in memory, and both of the
-     *  product's archive bounds apply: the walk itself runs under {@link ArchiveWalk}, so a jar cannot be made to
-     *  spend an unbounded amount of this thread's time on entries it streams past, and the only entries read into heap
-     *  - the manifest and {@code module-info.class} - go through {@link ArchiveInflation}, so a decompression bomb in
-     *  either cannot inflate unbounded. A module name is an optional declaration (a plain jar simply is not a module
-     *  and publishes fine), so both bounds take the degrading accessor ({@link ArchiveWalk.Found#orNull()},
-     *  {@link ArchiveInflation.Entry#orNull()}) and read as "declares no module" rather than failing the publish -
-     *  a lost module name can only under-declare, never admit anything unscreened. */
+    /** The module name a jar declares - its {@code module-info} name or {@code Automatic-Module-Name} - or null for a
+     *  plain jar. The jar is streamed, never buffered, under both archive bounds: the walk runs under
+     *  {@link ArchiveWalk}, and the only entries read into heap (the manifest, {@code module-info.class}) go through
+     *  {@link ArchiveInflation}. A module name is an optional declaration, so both bounds degrade
+     *  ({@link ArchiveWalk.Found#orNull()}, {@link ArchiveInflation.Entry#orNull()}) to "declares no module" - which
+     *  can only under-declare. */
     public static String moduleName(InputStream jar) {
         try {
             return ArchiveWalk.walk(jar, JavaLayout::declaredModule).orNull();
@@ -171,22 +150,19 @@ public final class JavaLayout {
                     }
                 }
             }
-            // A module-info name is JVM-validated by read(); an Automatic-Module-Name is a raw manifest string that
-            // becomes a /module/<name>/ store key, so validate it is a legal module name first - a crafted value (a
-            // '/'- or '..'-laced or empty name) is treated as no module rather than reaching a pointer key.
+            // An Automatic-Module-Name is a raw manifest string that becomes a /module/<name>/ key, so it must be a
+            // legal module name first; a crafted value is treated as no module.
             return automatic == null ? null : validModuleName(automatic);
         }
     }
 
-    /** The current zip entry's decompressed bytes, or null once they exceed the shared archive-inflation bound - so a
-     *  high-ratio decompression bomb is abandoned at the ceiling instead of inflated whole into heap, and a
-     *  bound-stopped entry declares nothing rather than declaring a prefix. */
+    /** The current entry's bytes, or null past the shared inflation bound, so a decompression bomb declares nothing
+     *  rather than a prefix. */
     private static byte[] bounded(InputStream in) throws IOException {
         return ArchiveInflation.entry(in).orNull();
     }
 
-    /** The name if it is a legal Java module name (dot-separated Java identifiers), else null. Uses the JDK's own
-     *  module-name validation so the rule matches exactly what a real module name may contain. */
+    /** The name if it is a legal Java module name, by the JDK's own validation, else null. */
     private static String validModuleName(String name) {
         try {
             ModuleDescriptor.newAutomaticModule(name);
@@ -200,11 +176,8 @@ public final class JavaLayout {
     public static final String MAVEN_ROUTE = "/maven/";
 
     /** The {@code [groupId, artifactId, version]} of a {@code /maven/...} request path, or null when it is not a full
-     *  coordinate (a group directory, a checksum root) or not on the Maven route at all.
-     *
-     *  <p>The route check is part of the grammar rather than the caller's job: without it this returns a mangled
-     *  coordinate for any path that happens to be long enough, which is a silently wrong answer rather than a
-     *  refusal. Callers that had their own copy of this split guarded it; the shared one now does. */
+     *  coordinate (a group directory, a checksum root) or not on the Maven route - which is part of the grammar, so a
+     *  long path elsewhere is refused rather than mangled into a coordinate. */
     public static String[] mavenCoordinate(String requestPath) {
         if (requestPath == null || !requestPath.startsWith(MAVEN_ROUTE)) {
             return null;

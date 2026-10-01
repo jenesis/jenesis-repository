@@ -4,146 +4,105 @@ import module java.base;
 import build.jenesis.repository.store.ArtifactStore;
 
 /**
- * The Jenesis-layout side of cross-publishing: provided by the Jenesis format, used by the Maven format. Given the
- * content {@code hash} the Maven format already stored a modular jar under, it points the jar's {@code /module/} view
- * at that same content-addressed blob, so a client resolving by module name reaches the artifact a Maven client
- * published by coordinate - a pointer, not a re-upload. This is not part of the public {@code RepositoryFormat} SPI -
- * it is a bridge exposed (through a qualified export from the shared Java-layout module) only between the Maven and
- * Jenesis layout modules, the only two formats that cross-publish.
+ * The Jenesis-layout side of cross-publishing, provided by the Jenesis format and used by the Maven format: given the
+ * content {@code hash} the Maven format stored a modular jar under, it points the jar's {@code /module/} view at that
+ * same blob - a pointer, not a re-upload. Not part of the public {@code RepositoryFormat} SPI: a qualified export
+ * reaches only the two formats that cross-publish.
  *
- * <p>It has two methods and both write; there is deliberately no removal direction. A cross-view is removed by the
- * same eviction that removes the Maven version it mirrors (through {@code ArtifactLayout.paths}), and the proxy leg
- * never has to un-link a view by hand for an artifact that failed its upstream checksum, because that leg verifies
- * before it links anything at all.
+ * <p>Both methods write; there is no removal direction. A cross-view goes with the eviction of the Maven version it
+ * mirrors ({@code ArtifactLayout.paths}), and the proxy leg verifies before it links anything.
  *
  * <h2>Contract</h2>
  * <ol>
- *   <li><b>Thread-safety.</b> The bridge discovers the views once into a static list ({@link #installed()}) and holds
- *       them for the process, so one instance serves every publishing request thread and both methods may run concurrently
- *       for different artifacts - and, since {@link #rebuild} is driven from a background rebuild pass, concurrently
- *       with a publish of another version of the same module. An implementation must be stateless and keep no per-call
- *       state in fields.</li>
- *   <li><b>Idempotency / replay.</b> Both methods converge on repetition. {@link #publish} points the view keys at an
- *       already-stored content-addressed blob, so a byte-identical republish re-lands the identical pointer body and a
- *       replayed publish repairs one that crashed half way; {@link #rebuild} is the same write narrowed to the
- *       version-addressed keys, so running it over a view that is already complete leaves the store byte-identical.
- *       Neither method may count, mint or append - a cross-view is a derived pointer, and re-deriving it must be
- *       free.</li>
- *   <li><b>Absence sentinel.</b> Both methods are void. Absence is expressed by the module: with no provider on the
- *       graph the consumer's discovered list is empty and a modular jar simply gains no {@code /module/} view, while
- *       still serving under its Maven coordinate. No argument is ever {@code null}, and a view that declines to publish
- *       does so silently rather than by raising.</li>
- *   <li><b>Selection failure.</b> There is nothing to select. The bridge is additive over a <em>qualified</em> export
- *       to exactly two modules, has no {@code name()}, no selection key and no {@code Features} toggle, so the
- *       "explicitly selected but unavailable" case cannot arise; {@link #installed()} is therefore the plain
- *       discovered list, unvalidated because there is no name to validate by, and a module registered twice would
- *       publish the same view twice - harmless only because the writes are idempotent (clause 2).</li>
- *   <li><b>Streaming.</b> Neither method takes or returns artifact bytes: {@link #publish} is handed the
- *       {@code hash} of a blob the caller already stored, so a cross-publish is a pointer write and never a re-upload,
- *       a second buffering of the jar, or a second pass over its bytes.</li>
- *   <li><b>Tenant scoping.</b> The {@link ArtifactStore} is the same doubly-scoped (tenant/repository) store
- *       the Maven publish routed through, so the {@code /module/} view lands in exactly the space the coordinate did.
- *       A view must not resolve a store of its own; a cross-published artifact never crosses a tenant.</li>
- *   <li><b>Error visibility.</b> Both methods <b>propagate</b> - the Maven format calls them inline and does
- *       not contain them, so an {@link IOException} fails the publish (or the rebuild pass's segment) rather than being
- *       logged away. The one partial state this leaves is stated in clause 12 and named at the call site: the Maven
- *       coordinate is linked <em>before</em> the views, so a failure here fails the publish while the artifact already
- *       serves under its coordinate and carries no {@code /module/} view yet. That partial state is not merely
- *       documented - it is the one a later pass can finish, which is why the ordering is what it is.</li>
- *   <li><b>Read purity.</b> Not applicable: this is a write seam only. It performs no external I/O of any kind - every
- *       write goes through the scoped store - and it never reads or serves.</li>
- *   <li><b>Lifecycle / ownership.</b> This SPI owns the lifecycle: instances are
- *       {@link java.util.ServiceLoader}-created from a public no-arg constructor once, at the bridge's own load, and
- *       cached for the life of the process; the two consumers - the Maven format's publish path and its rebuild
- *       consumer - share that one list. There is no close hook, so an implementation owns no thread, client or
- *       connection and must be a cheap, stateless writer.</li>
- *   <li><b>Ordering / concurrency.</b> Views are applied in discovery order, which is not stable across module-path
- *       arrangements; because every write is an idempotent compare-and-set on the view's own keys, the order is not
- *       observable and an implementation must not depend on another view having run, nor on being the only one. The
- *       view module owns every path it writes - the same module that derives a publish path derives the rebuild of
- *       that path - so the Maven format never hardcodes a parallel {@code /module/} path that could drift out of
- *       step.</li>
- *   <li><b>Bounded work / cancellation.</b> Each call is a fixed, small number of pointer writes derived from its
- *       arguments - no listing, no walk, no read of the blob - and no cancellation signal is passed, so neither method
- *       may block.</li>
- *   <li><b>Durability / delivery.</b> Each pointer write is durable when it lands, but a view is <em>not</em> atomic
- *       across the keys it writes (the versioned view and the "latest" view are two pointers), nor across the view and
- *       the Maven coordinate that triggered it. The sequence and its crash windows are stated once, at the call site
- *       ({@code MavenFormat.layout}), and are the reason this bridge has the shape it does:
- *       <ul>
- *         <li><b>The Maven coordinate is linked first, and it is the commit point.</b> A crash before it leaves an
- *             unreferenced blob and nothing servable; a crash after it leaves the artifact serving under its
- *             coordinate with some or none of its {@code /module/} views linked. Nothing is notified.</li>
- *         <li><b>That residue converges, which is what makes the order the right way round.</b> The coordinate is the
- *             durable record the view is <em>derived</em> from - the module name is read back out of the very blob the
- *             coordinate points at - so a later pass can finish the derivation from what survived. The reverse order
- *             cannot be repaired at all: a {@code /module/} view carries a module name and a version and no Maven
- *             coordinate, so nothing can re-derive the coordinate from it, and deleting it instead would be an
- *             orphan purge over a namespace the Jenesis format also publishes into first-hand.</li>
- *         <li><b>Two repairs, both idempotent.</b> A byte-identical republish re-runs the whole sequence, and the
- *             {@code module-view} {@code WalkConsumer} ({@code MavenFormat}'s {@code ModuleViewRebuild}) re-derives
- *             the version-addressed view for every published Maven jar on each rebuild pass - the walk half of the
- *             two-route contract, and the reason {@link #rebuild} exists as a seam of its own.</li>
- *         <li><b>The "latest" view is deliberately outside that repair.</b> It records which version was published
- *             last, which is an ordering fact about publications rather than a fact about stored state, so no walk can
- *             re-derive it: a pass re-linking it would move {@code /module/<name>/<name>.jar} to whichever version the
- *             walk happened to reach last. {@link #publish} owns it; {@link #rebuild} never touches it, and a latest
- *             view lost to a crash is restored by a republish and by nothing else.</li>
- *       </ul>
- *       The durable source of truth is the store, and the retraction direction is deliberately absent: a proxied
- *       artifact that fails its upstream checksum is now refused <em>before</em> the commit point (nothing is linked,
- *       so nothing needs unlinking), which is how the OCI leg has always held a mismatched digest.</li>
+ *   <li><b>Thread-safety.</b> The views are discovered once ({@link #installed()}) and held for the process, so both
+ *       methods run concurrently for different artifacts, and {@link #rebuild} from a background pass concurrently with
+ *       a publish of another version of the same module. An implementation is stateless.</li>
+ *   <li><b>Idempotency / replay.</b> Both converge: {@link #publish} points the view keys at an already-stored blob, so
+ *       a republish re-lands identical pointers and a replay repairs a half-done one; {@link #rebuild} is the same
+ *       write narrowed to the version-addressed keys. Neither counts, mints or appends.</li>
+ *   <li><b>Absence sentinel.</b> Both are void. With no provider installed a modular jar gains no {@code /module/} view
+ *       and still serves under its Maven coordinate. No argument is {@code null}; a view that declines does so
+ *       silently.</li>
+ *   <li><b>Selection failure.</b> Nothing is selected: additive, over a qualified export, with no name or toggle;
+ *       {@link #installed()} is the plain discovered list, and a duplicate registration is harmless because the writes
+ *       are idempotent.</li>
+ *   <li><b>Streaming.</b> No artifact bytes pass: {@link #publish} gets the hash of a stored blob.</li>
+ *   <li><b>Tenant scoping.</b> The store is the same tenant/repository-scoped store the Maven publish used, so the view
+ *       lands where the coordinate did; a view never resolves a store of its own.</li>
+ *   <li><b>Error visibility.</b> Both propagate: the Maven format calls them inline, so an {@link IOException} fails
+ *       the publish or the rebuild segment. The coordinate is linked first, so a failure here leaves the artifact
+ *       serving under its coordinate without a {@code /module/} view - the partial state a later pass finishes (clause
+ *       12).</li>
+ *   <li><b>Read purity.</b> A write seam only: no external I/O, no reads, no serving.</li>
+ *   <li><b>Lifecycle / ownership.</b> Instances are {@link java.util.ServiceLoader}-created once from a public no-arg
+ *       constructor and shared by the Maven publish path and its rebuild consumer; there is no close hook, so an
+ *       implementation owns no thread, client or connection.</li>
+ *   <li><b>Ordering / concurrency.</b> Views apply in discovery order, which is unstable; every write is an idempotent
+ *       compare-and-set on the view's own keys, so no view may depend on another having run. The view module owns every
+ *       path it writes, for publish and rebuild alike, so the Maven format never spells a {@code /module/} path.</li>
+ *   <li><b>Bounded work / cancellation.</b> A fixed, small number of pointer writes per call - no listing, walk or blob
+ *       read - so neither method blocks.</li>
+ *   <li><b>Durability / delivery.</b> Each pointer write is durable when it lands, but a view is not atomic across its
+ *       keys (the versioned and the "latest" pointer) nor with the Maven coordinate. The sequence and its crash windows
+ *       are stated at {@code MavenFormat.layout}:
+ * <ul>
+ *   <li><b>The Maven coordinate is linked first and is the commit point.</b> A crash before it leaves an unreferenced
+ *       blob; after it, the artifact serves under its coordinate with some or none of its views.</li>
+ *   <li><b>That residue converges.</b> The view is derived from the coordinate - the module name is read back out of
+ *       the blob it points at - so a later pass finishes it. The reverse could not be repaired: a view carries no Maven
+ *       coordinate to re-derive.</li>
+ *   <li><b>Two idempotent repairs.</b> A republish re-runs the whole sequence, and the {@code module-view}
+ *       {@code WalkConsumer} ({@code MavenFormat}'s {@code ModuleViewRebuild}) re-derives the version-addressed view of
+ *       every published Maven jar on each rebuild pass - why {@link #rebuild} is a seam of its own.</li>
+ *   <li><b>The "latest" view is outside that repair.</b> It records which version was published last, an ordering fact
+ *       no walk can recover; {@link #publish} owns it, {@link #rebuild} never touches it, and a lost latest view is
+ *       restored only by a republish.</li>
+ * </ul>
+ * There is no retraction direction: a proxied artifact failing its upstream checksum is refused before the commit
+ * point, so nothing needs unlinking.</li>
  * </ol>
  */
 public interface ModuleView {
 
-    /** Every view on the module path, discovered once from this SPI's home and cached for the process - the one
-     *  list the Maven format publishes through and its rebuild consumer repairs through, so a repaired view is
-     *  byte-identical to a published one and no consumer carries a discovery of its own. */
+    /** Every view on the module path, discovered once and held for the process - the one list the Maven format
+     *  publishes and repairs through, so a repaired view is byte-identical to a published one. */
     static List<ModuleView> installed() {
         return Views.ALL;
     }
 
     /**
-     * Give a published modular jar its whole {@code /module/} view: every pointer this layout addresses the module by,
-     * the version-addressed one(s) and the "latest" one, aimed at the content-addressed blob the Maven publish already
-     * stored. Called once per publish of a modular jar, after its Maven coordinate has been linked.
+     * Give a published modular jar its whole {@code /module/} view - the version-addressed pointers and the "latest"
+     * one - aimed at the blob the Maven publish stored. Called once per publish of a modular jar, after its coordinate
+     * is linked.
      *
-     * @param classifier empty for the module's own jar, else the classifier Maven published it under - a classified
-     *                   jar has version-addressed views of its own and never moves the "latest" one
-     * @param origin the served path the jar was published under - the Maven coordinate this view is a second name
-     *               for. An implementation records the relation ({@code ServedAliases}) so that whatever must treat
-     *               the names as one artifact can, a reviewer's release above all: neither content hash nor
-     *               coordinate version identifies an alias, so the fact exists only where it is created, here.
+     * @param classifier empty for the module's own jar, else the classifier Maven published it under - a classified jar
+     *     has version-addressed views of its own and never moves the "latest" one
+     * @param origin the served path the jar was published under, which this view is a second name for. An
+     *     implementation records the relation ({@code ServedAliases}) so the names can be treated as one artifact - a
+     *     reviewer's release above all; neither the hash nor the version identifies an alias, so the fact exists only
+     *     where it is created, here.
      */
     void publish(String moduleName, String version, String classifier, String hash, ArtifactStore store,
                  String origin) throws IOException;
 
     /**
-     * Re-derive only the <em>version-addressed</em> part of the view {@link #publish} would link - the half that is a
-     * function of stored state alone, so a repair pass can re-run it over an artifact it did not publish and be sure
-     * it is restoring rather than deciding. It is the same idempotent compare-and-set write, so a rebuild over an
-     * intact view leaves the store byte-identical.
+     * Re-derive only the version-addressed part of the view {@link #publish} links - the half that is a function of
+     * stored state, so a repair pass restores rather than decides. The same idempotent write, so a rebuild over an
+     * intact view changes nothing.
      *
-     * <p>This exists as a seam of its own because the two halves of a view have different truth. The version-addressed
-     * pointer is fully determined by "this module, at this version, is these bytes", which the walk re-reads from the
-     * stored jar; the "latest" pointer records which publish came last, which no walk can recover - re-linking it from
-     * a pass would silently move it to whatever the walk reached last. A view whose pointers are all version-addressed
-     * simply implements this exactly as {@link #publish}; a view that carries an ordering-dependent pointer must leave
-     * that pointer alone here.
+     * <p>The "latest" pointer records which publish came last, which no walk can recover; re-linking it from a pass
+     * would move it to whatever the walk reached last. A view with only version-addressed pointers implements this as
+     * {@link #publish}; one with an ordering-dependent pointer leaves it alone here.
      *
-     * @param origin as on {@link #publish} - a repair pass re-records the alias relation too, which is what recovers
-     *               a record lost to a crash between the pointer write and the record write.
+     * @param origin as on {@link #publish}; a repair re-records the alias relation too, recovering one lost to a crash
+     *     between the pointer write and the record write
      */
     void rebuild(String moduleName, String version, String classifier, String hash, ArtifactStore store,
                  String origin) throws IOException;
 
-    /**
-     * Give a modular jar's version its descriptor: the POM Maven published beside it, stored under {@code hash},
-     * aimed at by the module's Maven view. {@code latest} says whether this version is the one the module's "latest"
-     * view names, which only the caller can tell - it is an ordering fact, as {@link #rebuild} explains, and a
-     * rebuild passes {@code false}.
-     */
+    /** Give a modular jar's version its descriptor: the POM Maven published beside it, stored under {@code hash}, aimed
+     *  at by the module's Maven view. {@code latest} says whether this version is the one the "latest" view names - an
+     *  ordering fact only the caller knows, so a rebuild passes {@code false}. */
     void describe(String moduleName, String version, String hash, boolean latest, ArtifactStore store, String origin)
             throws IOException;
 }
