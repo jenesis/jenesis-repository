@@ -64,6 +64,9 @@ public final class RawFormat implements RepositoryFormat, ProxyFormat, Repositor
                 new RawListings(store).refresh(path);
                 exchange.respond(201);
             }
+            // A raw file is a path rather than a coordinate's version, so no pin names one and none is asked: the
+            // rule that a client's removal leaves a pinned version alone is about versions, which the registry's
+            // DELETE alone removes, and the key's delete right is what governs this one.
             case "DELETE" -> {
                 publication.unpublish(path);
                 new RawListings(store).refresh(path);
