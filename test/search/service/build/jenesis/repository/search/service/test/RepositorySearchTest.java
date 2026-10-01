@@ -10,6 +10,7 @@ import build.jenesis.repository.search.service.RepositorySearch;
 import build.jenesis.repository.store.ArtifactStore;
 import build.jenesis.repository.store.ArtifactStoreProvider;
 import build.jenesis.repository.store.Publication;
+import build.jenesis.repository.store.Withheld;
 import build.jenesis.repository.store.testkit.FaultInjectingStore;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -46,6 +47,14 @@ class RepositorySearchTest {
         new StoreRepositoryInventory(into).record(SearchTestFormat.ECOSYSTEM, coordinate, version, PUBLISHED);
     }
 
+    /** A file no coordinate names, as a raw upload is, published at {@code path}; answers its content hash. */
+    private String upload(ArtifactStore into, String path) throws IOException {
+        Publication publication = new Publication(into);
+        String hash = publication.storeBlob(new ByteArrayInputStream(path.getBytes(StandardCharsets.UTF_8)));
+        publication.link(path, hash);
+        return hash;
+    }
+
     private static List<String> displays(RepositorySearch.Answer answer) {
         return answer.hits().stream().map(SearchQuery.Hit::display).toList();
     }
@@ -70,6 +79,96 @@ class RepositorySearchTest {
         assertThat(answer.truncated()).isFalse();
         assertThat(displays(byName("", null, 10))).as("an empty query is every name").hasSize(4);
         assertThat(displays(byName("lib", null, 10))).as("the start of the name, not a word inside it").isEmpty();
+    }
+
+    @Test
+    void a_file_no_coordinate_names_is_found_by_the_start_of_its_path() throws IOException {
+        upload(store, "/files/installers/setup-1.0.bin");
+        upload(store, "/files/installers/setup-2.0.bin");
+        upload(store, "/files/installers/uninstall.bin");
+        upload(store, "/files/notes.txt");
+        publish(store, "org.acme.lib", "1.0");
+
+        assertThat(displays(byName("files/installers/setup", null, 10)))
+                .containsExactly("/files/installers/setup-1.0.bin", "/files/installers/setup-2.0.bin");
+        assertThat(displays(byName("installers/setup", null, 10)))
+                .as("as the repository's URL reads it, without the mount its format keeps the file under")
+                .containsExactly("/files/installers/setup-1.0.bin", "/files/installers/setup-2.0.bin");
+        assertThat(displays(byName("/files/installers/setup-2", null, 10))).as("with the leading slash as well")
+                .containsExactly("/files/installers/setup-2.0.bin");
+        assertThat(displays(byName("files/inst", null, 10))).as("a folder's start reaches every file under it")
+                .containsExactly("/files/installers/setup-1.0.bin", "/files/installers/setup-2.0.bin",
+                        "/files/installers/uninstall.bin");
+        assertThat(displays(byName("files/installers/", null, 10))).as("a folder named to its slash")
+                .containsExactly("/files/installers/setup-1.0.bin", "/files/installers/setup-2.0.bin",
+                        "/files/installers/uninstall.bin");
+        assertThat(displays(byName("files//installers", null, 10))).as("what names no stored file finds none")
+                .isEmpty();
+        assertThat(displays(byName("files/../files", null, 10))).isEmpty();
+        assertThat(displays(byName("test/org.acme", null, 10)))
+                .as("a file a coordinate names is found by the coordinate, never a second time by its path")
+                .isEmpty();
+        assertThat(displays(byName("", null, 10))).as("an empty query is every coordinate, then every such file")
+                .containsExactly("org.acme.lib:1.0", "/files/installers/setup-1.0.bin",
+                        "/files/installers/setup-2.0.bin", "/files/installers/uninstall.bin", "/files/notes.txt");
+    }
+
+    @Test
+    void a_held_file_is_no_more_findable_than_it_is_served() throws IOException {
+        upload(store, "/files/installers/setup-1.0.bin");
+        Withheld.mark(store, upload(store, "/files/installers/setup-2.0.bin"));
+
+        assertThat(displays(byName("files/installers", null, 10)))
+                .containsExactly("/files/installers/setup-1.0.bin");
+    }
+
+    @Test
+    void the_cursor_runs_on_from_the_coordinates_into_the_files_and_reaches_each_once() throws IOException {
+        publish(store, "files.lib", "1.0");
+        publish(store, "files.lib", "2.0");
+        for (int index = 0; index < 5; index++) {
+            upload(store, "/files/build-" + index + ".zip");
+        }
+
+        List<String> walked = new ArrayList<>();
+        RepositorySearch.Answer page = byName("files", null, 2);
+        walked.addAll(displays(page));
+        while (page.truncated()) {
+            page = byName("files", page.nextCursor(), 2);
+            assertThat(page.hits()).as("no page comes back empty").isNotEmpty();
+            walked.addAll(displays(page));
+        }
+        assertThat(walked).doesNotHaveDuplicates().containsExactly("files.lib:1.0", "files.lib:2.0",
+                "/files/build-0.zip", "/files/build-1.zip", "/files/build-2.zip", "/files/build-3.zip",
+                "/files/build-4.zip");
+    }
+
+    @Test
+    void a_path_lookup_costs_the_same_however_many_other_files_the_repository_holds() throws IOException {
+        // The two-size ratio again, for the path half: the files before the query's start are skipped by seeking to
+        // it and the ones after it end the scan, so a lookup in a folder of three hundred others reads as much as in
+        // a folder of ten.
+        long small = pathLookupCost("files-small", 10);
+        long large = pathLookupCost("files-large", 300);
+
+        assertThat(large).as("the path lookup's store operations do not grow with the folder").isEqualTo(small);
+    }
+
+    private long pathLookupCost(String repository, int others) throws IOException {
+        ArtifactStore scoped = ArtifactStoreProvider.resolve("filesystem",
+                key -> "jenrepo.filesystem.root".equals(key) ? root.toString() : null).scope("acme")
+                .scope(repository);
+        upload(scoped, "/files/installers/setup-1.0.bin");
+        for (int index = 0; index < others; index++) {
+            upload(scoped, String.format(Locale.ROOT, "/files/installers/a%04d.bin", index));
+            upload(scoped, String.format(Locale.ROOT, "/files/installers/z%04d.bin", index));
+        }
+        AtomicLong operations = new AtomicLong();
+        FaultInjectingStore counted = FaultInjectingStore.wrap(scoped).tracing((op, key) -> operations.incrementAndGet());
+        RepositorySearch.Answer answer = new RepositorySearch(Optional.empty())
+                .search(counted, "acme/" + repository, BY_NAME, "files/installers/setup", null, 10);
+        assertThat(displays(answer)).containsExactly("/files/installers/setup-1.0.bin");
+        return operations.get();
     }
 
     @Test

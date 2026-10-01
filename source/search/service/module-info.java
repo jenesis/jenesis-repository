@@ -13,6 +13,10 @@ module build.jenesis.repository.search.service {
     requires build.jenesis.repository.inventory;
     requires build.jenesis.repository.cleanup;
     requires build.jenesis.repository.settings;
+    requires build.jenesis.repository.blobs;
+    requires build.jenesis.repository.format;
+    requires build.jenesis.repository.store;
+    requires build.jenesis.repository.walk;
     exports build.jenesis.repository.search.service;
     provides build.jenesis.repository.settings.SettingsContributor
             with build.jenesis.repository.search.service.SearchModeSettingsContributor;

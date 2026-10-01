@@ -26,5 +26,6 @@ open module build.jenesis.repository.search.service.test {
     requires org.junit.jupiter;
     requires org.assertj.core;
     provides build.jenesis.repository.format.RepositoryFormat
-            with build.jenesis.repository.search.service.test.SearchTestFormat;
+            with build.jenesis.repository.search.service.test.SearchTestFormat,
+                    build.jenesis.repository.search.service.test.SearchFilesFormat;
 }

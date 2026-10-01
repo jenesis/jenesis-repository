@@ -14,7 +14,8 @@ import build.jenesis.repository.store.ServableNames;
  *
  * <p>The repository's {@link SearchMode} decides how. In {@link SearchMode#NAME}, the default, a query is the start of
  * a coordinate's name, looked up in what the repository already keeps sorted - a bounded page of point reads and a
- * cursor, with no index built or stored. In {@link SearchMode#FULL_TEXT} the installed index answers it; a repository
+ * cursor, with no index built or stored - and then the start of the path a file no coordinate names is served at, a
+ * raw upload, which follows the coordinates in the same pages. In {@link SearchMode#FULL_TEXT} the installed index answers it; a repository
  * whose index is not built yet, or a composition that carries no index, answers by name meanwhile and says so, rather
  * than rendering a false-empty page.
  *
@@ -69,7 +70,7 @@ public final class RepositorySearch {
         int rows = Math.min(Math.max(0, limit), SearchQuery.MAX_PAGE);
         Cursor from = Cursor.parse(cursor);
         StoreRepositoryInventory inventory = new StoreRepositoryInventory(store);
-        if (mode == SearchMode.FULL_TEXT && index.isPresent() && from.name() == null) {
+        if (mode == SearchMode.FULL_TEXT && index.isPresent() && from.name() == null && from.path() == null) {
             Optional<SearchQuery.Hits> page = index.get().over(store, scope).search(text, from.text(), rows);
             if (page.isPresent()) {
                 List<SearchQuery.Hit> hits = new ArrayList<>();
@@ -84,8 +85,18 @@ public final class RepositorySearch {
                 return new Answer(mode, true, hits, page.get().nextCursor().map(Cursor::text).orElse(null));
             }
         }
-        NameLookup.Page page = NameLookup.lookup(inventory, text, from.name(), rows);
-        return new Answer(mode, false, page.hits(), page.next() == null ? null : Cursor.name(page.next()));
+        if (from.path() == null) {
+            NameLookup.Page page = NameLookup.lookup(inventory, text, from.name(), rows);
+            if (page.next() != null) {
+                return new Answer(mode, false, page.hits(), Cursor.name(page.next()));
+            }
+            PathLookup.Page paths = PathLookup.lookup(store, inventory, text, null, rows - page.hits().size());
+            List<SearchQuery.Hit> hits = new ArrayList<>(page.hits());
+            hits.addAll(paths.hits());
+            return new Answer(mode, false, hits, paths.next() == null ? null : Cursor.path(paths.next()));
+        }
+        PathLookup.Page paths = PathLookup.lookup(store, inventory, text, from.path(), rows);
+        return new Answer(mode, false, paths.hits(), paths.next() == null ? null : Cursor.path(paths.next()));
     }
 
     /** A hit the index holds may since have been withheld, or have gone; screened as a listing screens it. */
@@ -115,29 +126,36 @@ public final class RepositorySearch {
     }
 
     /**
-     * An answer's cursor, which says which of the two answered it: a name lookup resumes by name even if the index has
-     * been built since, and an index page resumes in the index. Opaque to a caller, URL-safe, and refused when it is
-     * not one of these.
+     * An answer's cursor, which says what answered it: a name lookup resumes by name even if the index has been built
+     * since, its path half by path, and an index page resumes in the index. Opaque to a caller, URL-safe, and refused
+     * when it is not one of these.
      */
-    private record Cursor(NameLookup.Position name, String text) {
+    private record Cursor(NameLookup.Position name, String path, String text) {
 
         private static final String NAME = "n.";
+        private static final String PATH = "p.";
         private static final String TEXT = "t.";
         private static final String SEPARATOR = "\u001f";
 
         static Cursor parse(String cursor) {
             if (cursor == null || cursor.isBlank()) {
-                return new Cursor(null, null);
+                return new Cursor(null, null, null);
             }
             try {
                 if (cursor.startsWith(TEXT)) {
-                    return new Cursor(null, decode(cursor.substring(TEXT.length())));
+                    return new Cursor(null, null, decode(cursor.substring(TEXT.length())));
+                }
+                if (cursor.startsWith(PATH)) {
+                    String path = decode(cursor.substring(PATH.length()));
+                    if (path.isEmpty() || path.startsWith("/")) {
+                        return new Cursor(null, path, null);
+                    }
                 }
                 if (cursor.startsWith(NAME)) {
                     String[] parts = decode(cursor.substring(NAME.length())).split(SEPARATOR, -1);
                     if (parts.length == 3 && !parts[0].isEmpty() && !parts[1].isEmpty()) {
                         return new Cursor(new NameLookup.Position(parts[0], parts[1],
-                                parts[2].isEmpty() ? null : parts[2]), null);
+                                parts[2].isEmpty() ? null : parts[2]), null, null);
                     }
                 }
             } catch (IllegalArgumentException _) {
@@ -149,6 +167,11 @@ public final class RepositorySearch {
         static String name(NameLookup.Position position) {
             return NAME + encode(position.ecosystem() + SEPARATOR + position.coordinate() + SEPARATOR
                     + (position.version() == null ? "" : position.version()));
+        }
+
+        /** Resume the path half strictly after {@code path}, or from its first path for the empty string. */
+        static String path(String path) {
+            return PATH + encode(path);
         }
 
         static String text(String cursor) {
