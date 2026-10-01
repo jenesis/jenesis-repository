@@ -1,20 +1,12 @@
 /**
- * OCI's on-store conventions, taught to the store-backed inventory: a capability-only {@code RepositoryFormat} +
- * {@link build.jenesis.repository.blobs.BlobLayout} ({@link build.jenesis.repository.format.oci.inventory.OciBlobLayout})
- * that lets a retroactive KEV/license hold correctly withhold and re-serve an OCI image. {@code OciFormat} implements
- * neither layout SPI, so without this module an OCI image whose CVE landed after push keeps serving by
- * digest while the "held" gauge reads clean. This layout's {@code handles()} is ALWAYS false - it never
- * wins format dispatch, never proxies, never imports; it exists only to answer the inventory's capability lookups
- * ({@code describe}/{@code servedPaths}/{@code blobKeys}/{@code blobHashes}) reached through the non-handling-BlobLayout
- * fallback seams. It re-reads the documented store-key conventions ({@code blobs/<hex>}, {@code oci/<name>/tags/<tag>}
- * at {@code sha256:<hex>}) rather than reaching into {@code OciFormat}, which exports its package only to its own
- * test; the manifest <em>document</em>'s dialect is not re-read at all - the config, layer and sub-manifest digests
- * come from the {@code BlobReferences} seam, resolved at call time, which is why this module requires no JSON parser
- * of its own.
- * <p>It carries no walk consumer of its own: recording the {@code published} inventory record for tagged images is
- * the layout's parse - {@code BlobLayout.describePointer}, which {@code OciBlobLayout} answers from the same
- * {@code tagPointer} grammar - and one {@code InventoryBackfillConsumer} walks the pointers once for every format
- * that can name its own keys.
+ * OCI's on-store conventions, taught to the store-backed inventory: a capability-only {@code RepositoryFormat} and
+ * {@link build.jenesis.repository.blobs.BlobLayout}
+ * ({@link build.jenesis.repository.format.oci.inventory.OciBlobLayout}) that lets a retroactive KEV or licence hold
+ * withhold and re-serve an OCI image. It never dispatches; it answers the inventory's capability lookups through the
+ * non-handling {@code BlobLayout} fallbacks, from the store-key conventions ({@code blobs/<hex>},
+ * {@code oci/<name>/tags/<tag>} holding {@code sha256:<hex>}). The manifest's own digests come from the
+ * {@code BlobReferences} seam at call time, so this module needs no JSON parser. Its tagged images reach the shared
+ * inventory back-fill through {@code BlobLayout.describePointer}.
  *
  * @jenesis.release 25
  * @jenesis.bom pin-repository.properties
@@ -28,7 +20,7 @@ module build.jenesis.repository.format.oci.inventory {
     requires build.jenesis.repository.settings;
     requires org.slf4j;
     exports build.jenesis.repository.format.oci.inventory to build.jenesis.repository.server.kernel.test,
-            // The walk-consumer census and OciInventoryBackfillFixture, which names this module's consumer.
+            // Test modules only.
             build.jenesis.repository.server.principles.test,
             build.jenesis.repository.server.kernel.contract.test;
     provides build.jenesis.repository.format.RepositoryFormat

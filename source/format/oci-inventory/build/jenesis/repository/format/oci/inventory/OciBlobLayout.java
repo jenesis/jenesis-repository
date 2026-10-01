@@ -14,84 +14,54 @@ import build.jenesis.repository.format.OciTagIndex;
 import build.jenesis.repository.format.Checksums;
 
 /**
- * The OCI inventory layout: a capability-only {@link RepositoryFormat} + {@link BlobLayout} that teaches the
- * store-backed inventory OCI's on-store conventions, so a retroactive KEV/license hold on an OCI image withholds every
- * served face (manifest by tag and digest, config, layers) and releases cleanly. Without it, the free
- * {@code OciFormat} implements neither {@code ArtifactLayout} nor {@code BlobLayout}, so {@code inventory.paths("oci",…)}
- * / {@code blobHashes("oci",…)} were empty and every hold/release seam no-oped on OCI.
+ * The OCI inventory layout: a capability-only {@link RepositoryFormat} and {@link BlobLayout} that teaches the
+ * store-backed inventory OCI's on-store conventions, so a retroactive KEV or licence hold on an image withholds every
+ * served face (manifest by tag and digest, config, layers) and releases cleanly. {@code OciFormat} implements neither
+ * layout SPI itself.
  *
- * <p><b>Never dispatches.</b> {@link #handles} is ALWAYS {@code false}: {@code FormatDispatcher} (and the redirect/
- * staging first-match idioms) serve the FIRST format whose {@code handles} matches in unspecified {@code ServiceLoader}
- * order, so a layout that claimed {@code /v2/} could steal live serving from the real, proxy-capable {@code OciFormat}.
- * This provider is inert on every serving path and exists only to answer the inventory's capability lookups
- * ({@link #describe} / {@link #servedPaths} / {@link #blobKeys} / {@link #blobHashes}), reached through the
- * inventory's non-handling-{@code BlobLayout} fallback seams. {@link #handle} is therefore unreachable and throws.
+ * <p><b>Never dispatches.</b> {@link #handles} is always {@code false}: {@code FormatDispatcher} and the first-match
+ * idioms serve the first format whose {@code handles} matches in unspecified discovery order, so a layout claiming
+ * {@code /v2/} could steal serving from {@code OciFormat}. This provider only answers the inventory's capability
+ * lookups ({@link #describe}, {@link #servedPaths}, {@link #blobKeys}, {@link #blobHashes}) through its non-handling
+ * {@code BlobLayout} fallbacks; {@link #handle} is unreachable and throws.
  *
- * <p><b>Re-reads the conventions, never reaches into {@code OciFormat}'s module</b> (which exports its package only to
- * its own test): a manifest, config or layer blob is content-addressed at {@code blobs/<hex>}; a tag pointer is
- * {@code oci/<name>/tags/<tag>} whose body is {@code "sha256:" + hex} (NOT bare hex); a manifest's config/layer digests
- * live inside the manifest JSON. The precedent is {@code HoldLifecycle.releaseOci}, which already duplicates these keys.
- * The free <em>SPI</em> is a different matter and is used directly: the reference-scan seam this layout declares is the
- * free {@code BlobReferences}, inherited through {@code BlobRoots} rather than restated.
+ * <p><b>Store-key conventions, not {@code OciFormat}'s module</b> (which exports only to its own test): a manifest,
+ * config or layer blob is at {@code blobs/<hex>}; a tag pointer is {@code oci/<name>/tags/<tag>} whose body is
+ * {@code "sha256:" + hex}; a manifest's config and layer digests live inside the manifest JSON, which this class never
+ * parses - the free {@code BlobReferences} seam, inherited through {@code BlobRoots}, answers for it.
  *
- * <p><b>Cross-alias &amp; tag-mutability landmines.</b> {@link #blobHashes} marks every referenced digest,
- * the correct egress invariant (the bytes are what is held) - so a KEV hold on one image 404s a shared base layer for
- * every image referencing it while those images' manifests keep serving (a partly-pullable image). On release the
- * cross-alias guard ({@code HoldLifecycle.withheldByAnotherAlias}) consults each still-held sibling's FULL
- * {@link #blobHashes} set - not just its {@code /quarantine} pointer BODY, which for OCI is a manifest digest that never
- * carries a shared LAYER hash - so releasing image A KEEPS a layer marker a concurrently-held image B
- * still needs; the shared layer stays withheld (for A too, the content-addressed cost) until B releases, closing the
- * prior cross-alias disclosure where B's held layer briefly served. A version keyed by a tag resolves its digest set at
- * sweep/release time, so a corrected re-push to a held tag serves the new bytes until the next converge pass re-marks
- * the tag's current resolution (the {@code /quarantine} review pointer meanwhile keeps the accept path from clearing the
- * hold).
+ * <p><b>Cross-alias and tag mutability.</b> {@link #blobHashes} marks every referenced digest, because the bytes are
+ * what is held - so a hold on one image withholds a shared base layer for every image using it while their manifests
+ * keep serving. On release the cross-alias guard ({@code HoldLifecycle.withheldByAnotherAlias}) consults each
+ * still-held sibling's full {@link #blobHashes} set, not its {@code /quarantine} pointer body (a manifest digest that
+ * never carries a shared layer hash), so releasing image A keeps a layer marker held image B still needs. A version
+ * keyed by a tag resolves its digests at sweep and release time, so a re-push to a held tag serves the new bytes until
+ * the next pass re-marks it; the {@code /quarantine} review pointer meanwhile keeps the hold open.
  *
- * <p><b>How an OCI blob is kept alive, and how it is let go - the mechanism, so this paragraph survives the next
- * change to it.</b> Garbage collection is a cycle with two independent halves, and <em>neither of them is this class's
- * {@link #blobHashes}</em>, which serves the hold side alone.
+ * <p><b>How an OCI blob is kept alive and let go.</b> Collection has two halves, and neither is {@link #blobHashes},
+ * which serves holds alone.
  * <ul>
- *   <li><b>Mark - what a key says is still in use.</b> The neutral mark phase reads a leaf's pointer <em>body</em>
- *       through {@code ServableNames.hash}, which is the seam that owns the two dialects a body may carry; that is why
- *       the {@code sha256:}-prefixed body of an {@code oci/<name>/tags/<tag>} pointer names its manifest blob into the
- *       reference set and a tagged manifest is never condemned. That is <em>all</em> a body-reading scan can
- *       see of OCI: a config or layer digest lives inside the manifest JSON behind no store key at all, and a manifest
- *       pulled only by digest carries no tag pointer, so a scan that reads bodies alone condemns and then deletes a
- *       live image's layers. Closing that needs the mark phase to <em>ask the format that owns the visited key's root
- *       what else that key keeps alive</em> - the {@code BlobReferences} seam, which resolves the manifest
- *       from either key that names one (the tag pointer, or the {@code oci/.types/<hex>} media-type sidecar
- *       {@code OciManifests.ingest} writes for EVERY accepted manifest, tagged or not) and lends back the manifest's
- *       own hash, an index's sub-manifests and each one's config, layer and legacy {@code fsLayers} digests. The
- *       collector still parses no format's document; it unions what the format lends into the same shards under the
- *       same bare-hex predicate.</li>
- *   <li><b>Sweep - what an eviction takes away.</b> {@link #blobKeys} is the handle, and it names the
- *       {@code oci/.types/<hex>} sidecar as well as the tag pointer, guarded so a sibling tag on the same digest keeps
- *       it. That is what makes the two halves a cycle rather than a ratchet: without it the sidecar outlives the image
- *       and keeps lending its blobs for ever, so an evicted image is <em>retained</em> rather than reclaimed - the safe
- *       direction, but unbounded storage growth.</li>
+ *   <li><b>Mark.</b> The mark phase reads a pointer's body through {@code ServableNames.hash}, so a tag pointer's
+ *       {@code sha256:} body names its manifest blob. A config or layer digest sits inside the manifest behind no key,
+ *       and a manifest pulled by digest has no tag pointer, so a body-only scan would delete a live image's layers. The
+ *       mark phase therefore asks the format owning the visited key's root what it keeps alive -
+ *       {@code BlobReferences}, which resolves the manifest from either key naming it (the tag pointer, or the
+ *       {@code oci/.types/<hex>} media-type sidecar {@code OciManifests.ingest} writes for every accepted manifest) and
+ *       lends the manifest, an index's sub-manifests and each one's config, layer and legacy {@code fsLayers}
+ *       digests.</li>
+ *   <li><b>Sweep.</b> {@link #blobKeys} names the sidecar as well as the tag pointer, guarded so a sibling tag on the
+ *       same digest keeps it; otherwise the sidecar would keep lending an evicted image's blobs for ever.</li>
  * </ul>
- * The two halves meet at one key: the sidecar the mark phase resolves an image from is the object the sweep destroys
- * last. That is the whole invariant, and it holds in one direction only - a sidecar may outlive its image (storage,
- * recoverable) but an image must never outlive its sidecar (its layers, deleted).
+ * The halves meet at one key, and the invariant runs one way: a sidecar may outlive its image (storage, recoverable),
+ * but an image must never outlive its sidecar (its layers, deleted). Whether the installed core lends OCI's references
+ * is a property of the deployment's module graph, asserted by a real mark-and-sweep over a real store.
  *
- * <p><b>Why nothing here names a pinned version any more.</b> This paragraph was rewritten three times, each
- * time describing whichever gap happened to be open on the day - the pre-blanket exposure, then "configs and
- * layers remain outside the reference set", then "the pinned core predates the lending seam" - and each rewrite
- * went stale at the next bump, in both directions. A version number is the one fact a comment cannot keep. So the
- * mechanism above is stated as an invariant of the seams and the pin state is not stated at all: whether the installed
- * free core actually lends OCI's references is a <em>runtime</em> property of the deployment's module graph, not of
- * this file, and it is asserted where it can fail - {@code OciReclamationTest} drives a real mark-and-sweep over a real
- * store and fails if a live image's config or layer is collected, or if an evicted one is not. Read that suite, not
- * this sentence, for what today's core does.
- *
- * <p><b>What retention does not cover, deliberately.</b> A manifest that only ever existed by digest has no eviction
- * handle: a digest reference resolves no pointer key, so {@link #blobKeys} is empty for it and no retention pass
- * evicts it - it may be one platform of an index a live tag serves. Only a client's own {@code DELETE} of that digest
- * retires it, through {@link #removalKeys}; a collection pass deleting it otherwise is the defect rather than a
- * reclamation route to restore. GC is not switched off for OCI either way: a blob
- * no manifest names (an abandoned upload, an orphaned layer) is still condemned and collected. And {@link #blobHashes}
- * stays the hold side's <em>posture</em> alone, never consulted by the collector - it asks the seam the same
- * question the mark phase does and then degrades where the collector refuses, because under-enforcing a hold is
- * safe while under-reporting to a deleter destroys served bytes.
+ * <p><b>What retention does not cover.</b> A manifest that only ever existed by digest has no eviction handle -
+ * {@link #blobKeys} is empty for it, since it may be one platform of an index a live tag serves. Only a client's own
+ * {@code DELETE} retires it, through {@link #removalKeys}. A blob no manifest names (an abandoned upload, an orphaned
+ * layer) is still collected. {@link #blobHashes} is never consulted by the collector: it asks the same seam but
+ * degrades where the collector refuses, because under-enforcing a hold is safe while under-reporting to a deleter
+ * destroys bytes.
  */
 public final class OciBlobLayout implements RepositoryFormat, BlobLayout {
 
@@ -99,8 +69,8 @@ public final class OciBlobLayout implements RepositoryFormat, BlobLayout {
 
     @Override
     public String name() {
-        // Distinct from the format's "oci" so RepositoryFormat.installed("oci") and the format toggle/listing
-        // surfaces stay unambiguous; this provider is never looked up by name.
+        // Distinct from the format's "oci", so RepositoryFormat.installed("oci") and the format toggles stay
+        // unambiguous.
         return "oci-layout";
     }
 
@@ -111,9 +81,7 @@ public final class OciBlobLayout implements RepositoryFormat, BlobLayout {
 
     @Override
     public boolean handles(String path) {
-        // ALWAYS false - never wins format dispatch, never proxies, never imports (see the class javadoc). A future
-        // change to claim /v2/ here re-opens the first-match dispatch race with the real OciFormat; OciBlobLayoutTest
-        // pins this to false.
+        // Always false: never dispatches, proxies or imports (see the class javadoc); OciBlobLayoutTest pins it.
         return false;
     }
 
@@ -125,32 +93,22 @@ public final class OciBlobLayout implements RepositoryFormat, BlobLayout {
 
     @Override
     public String ecosystem() {
-        // The ecosystem OciManifests.ingest stamps its descriptor with, so the published/oci/... rows, the holds/kev/oci
-        // records and this layout all key on one ecosystem string.
+        // The ecosystem OciManifests.ingest stamps its descriptor with, so inventory rows, hold records and this layout
+        // share one key.
         return "oci";
     }
 
     /**
      * The store-key root this format keeps its pointers and documents under, so the reference scan walks it.
      *
-     * <p><b>Load-bearing, never decorative.</b> It is the sole entry point through which OCI content reaches the mark
-     * phase, and the mark phase's whole answer
-     * for a visited key is derived from it: the blob that key's own body names (the tag-pointer dialect, read through
-     * {@code ServableNames.hash} -), plus whatever the format that owns the key lends back for it through the
-     * free {@code BlobReferences} seam - the config, layer and sub-manifest digests that live inside the manifest JSON
-     * and that no store key names. Dropping this root does not cost "the tagged manifests": it makes every OCI
-     * blob the deployment serves unreachable to the scan, because a key the walk never visits is a key no lender is
-     * ever asked about.
+     * <p><b>Load-bearing.</b> It is the only way OCI content reaches the mark phase: a visited key's answer is the blob
+     * its own body names plus whatever the owning format lends through {@code BlobReferences} - the config, layer and
+     * sub-manifest digests no store key names. Without this root no OCI blob is reachable to the scan, because a key
+     * the walk never visits is one no lender is asked about.
      *
-     * <p><b>The declaration is the shared seam's, inherited rather than restated</b> ({@code BlobRoots extends
-     * BlobReferences}), so the roots the reference scan reads and the roots the collector offers a visited key
-     * under are one list by construction, not two lists that agree today. This layout lends nothing itself -
-     * {@code OciFormat} owns the manifest dialect and answers for every {@code oci/} key -
-     * and the inherited empty default is the correct answer for a format that is not the document's owner.
-     *
-     * <p>The reference scan never consults {@link #blobHashes}, which is the hold side's derivation and carries the
-     * opposite degrade. The sweep half of the cycle is {@link #blobKeys}, which retires a manifest by destroying its
-     * last tag pointer and its {@code oci/.types/<hex>} sidecar together.
+     * <p>The declaration is inherited ({@code BlobRoots extends BlobReferences}), so the roots the scan reads and the
+     * roots the collector offers a key under are one list. This layout lends nothing itself: {@code OciFormat} owns the
+     * manifest dialect and answers for every {@code oci/} key.
      */
     @Override
     public List<String> blobRoots() {
@@ -158,36 +116,25 @@ public final class OciBlobLayout implements RepositoryFormat, BlobLayout {
     }
 
     /**
-     * The store keys an eviction or discard of one image version deletes - the tag pointer, and the manifest's
-     * {@code oci/.types/<hex>} media-type sidecar when this version is the last live tag holding it.
+     * The store keys an eviction or discard of one image version deletes: the tag pointer, and the manifest's
+     * {@code oci/.types/<hex>} sidecar when this version is the last live tag holding it. A digest reference names no
+     * pointer (one {@code withheld/<hex>} marker retracts it, which {@code discardBlobs} never lifts), so it is empty;
+     * a client's {@code DELETE} by digest goes through {@link #removalKeys}.
      *
-     * <p>A tag reference maps to its {@code oci/<name>/tags/<tag>} pointer; a digest reference names no pointer key at
-     * all (content-addressed - one {@code withheld/<hex>} marker retracts it, which {@code discardBlobs} deliberately
-     * never lifts), so it stays empty and a digest-only manifest has no eviction handle; a client's {@code DELETE} by
-     * digest reaches it through {@link #removalKeys} instead.
+     * <p><b>Why the sidecar is an eviction key.</b> {@code BlobReferences} lends the scan an image's blobs from either
+     * key naming its manifest - the tag pointer or the sidecar, a digest-only image's only durable record. An evicted
+     * image whose sidecar stayed would keep its blobs marked for ever, so deleting the tag pointer alone is not an
+     * eviction. The pull path also reads the sidecar for a manifest's media type, which is the second reason for the
+     * guard below.
      *
-     * <p><b>Why the sidecar is an eviction key at all.</b> The {@code BlobReferences} seam lends the reference
-     * scan the blobs an image keeps alive, resolved from either of the two keys that name a manifest: the tag pointer,
-     * and {@code oci/.types/<hex>} - the sidecar {@code OciManifests.ingest} writes for EVERY accepted manifest, which
-     * is a digest-only image's only durable record. That closes a live-data-loss hole - a pass condemning and
-     * then deleting a live image's config and layers
-     * - but opens a storage one at the other end unless something retires the sidecar: an evicted image would stay
-     * marked for ever by a sidecar whose image no longer exists, <em>retained</em> rather than reclaimed, and OCI
-     * storage would grow without bound. Deleting the tag pointer alone is therefore not an eviction. The sidecar is
-     * also what the pull path reads to answer a manifest's media type verbatim, which is the second reason the guard
-     * below is not decoration - and the one that already bites at the pinned core.
+     * <p><b>The sibling-tag guard.</b> Two tags may resolve to one manifest digest, and the sidecar is keyed by the
+     * digest alone, so it is returned only when no other live tag pointer under {@code oci/} resolves to the same hex -
+     * the shape of {@code HoldLifecycle.withheldByAnotherAlias}. It fails closed: anything unreadable keeps the
+     * sidecar, because keeping it wastes one small object while deleting it early un-marks a live sibling's layers and
+     * strips its media type.
      *
-     * <p><b>The sibling-tag guard.</b> Two tags legitimately resolve to one manifest digest ({@code :1.4.2} and
-     * {@code :latest} after a re-tag, or the same image pushed under a second name), and the sidecar is keyed by that
-     * digest alone - one object shared by every alias. So the sidecar is returned only when NO other live tag pointer,
-     * anywhere under {@code oci/}, resolves to the same hex. This is {@code HoldLifecycle.withheldByAnotherAlias}'s
-     * shape one seam over: an alias-scoped scan that keeps a shared object standing until the last holder goes, and
-     * that fails <em>closed</em> - anything it cannot read leaves the sidecar in place, because retaining it wastes one
-     * small object while deleting it early un-marks a live sibling image's layers and strips its served media type.
-     *
-     * <p><b>Cost.</b> Proving a manifest unaliased reads the digest-to-tags index and the pointer of each tag it
-     * names - the manifest's own tags, whatever else the repository holds. The two cheap decisions still come first: a
-     * digest reference and a dead tag pointer both answer before the index, and a manifest with no sidecar at all
+     * <p><b>Cost.</b> The digest-to-tags index and each named tag's pointer - the manifest's own tags, not the
+     * repository's. A digest reference and a dead tag pointer answer before the index, and a manifest with no sidecar
      * costs one {@code exists}.
      */
     @Override
@@ -210,19 +157,11 @@ public final class OciBlobLayout implements RepositoryFormat, BlobLayout {
         return List.of(key, "oci/.types/" + hex);
     }
 
-    /**
-     * {@link #blobKeys}, and for a digest reference the manifest's {@code oci/.types/<hex>} sidecar - the record this
-     * registry serves a manifest through - when no live tag pointer anywhere in the repository still names it.
-     *
-     * <p>A client that deletes a manifest by digest has already had every tag of the image naming it removed, and
-     * what it asks to go is the manifest itself; the sidecar is the one key that says it is one. A retention
-     * eviction of the same row takes nothing ({@link #blobKeys} answers empty for a digest), and must not: a manifest
-     * pushed by digest is typically one platform's entry in an image index a live tag serves, and retiring its record
-     * would stop that index resolving.
-     *
-     * <p>The sibling guard is the tag eviction's, fail-closed the same way; it witnesses its own descent by the
-     * sidecar it is deciding about, which it knows is there.
-     */
+    /** {@link #blobKeys}, plus, for a digest reference, the manifest's {@code oci/.types/<hex>} sidecar when no live
+     *  tag pointer still names it. A client deleting a manifest by digest has already removed the tags naming it, and
+     *  asks for the manifest itself; a retention eviction of the same row takes nothing, since a digest-pushed manifest
+     *  is typically one platform of an index a live tag serves. The sibling guard is the tag eviction's, witnessed by
+     *  the sidecar itself. */
     @Override
     public List<String> removalKeys(String coordinate, String version, ArtifactStore store) throws IOException {
         if (!version.startsWith("sha256:")) {
@@ -240,23 +179,17 @@ public final class OciBlobLayout implements RepositoryFormat, BlobLayout {
     }
 
     /**
-     * Whether a live tag pointer other than {@code witness} resolves to the manifest {@code hex} - the cross-alias
-     * guard that keeps {@code oci/.types/<hex>} standing while any sibling tag still serves that manifest.
-     * {@code witness} is a key the caller has just read and knows is there: the tag pointer being evicted, or the
-     * sidecar itself when a manifest is removed by digest.
+     * Whether a live tag pointer other than {@code witness} resolves to the manifest {@code hex} - the guard that keeps
+     * {@code oci/.types/<hex>} while any sibling tag serves the manifest. {@code witness} is a key the caller just
+     * read: the tag pointer being evicted, or the sidecar when a manifest is removed by digest.
      *
-     * <p>The answer is read from the digest-to-tags index ({@link OciTagIndex}): the tags ever linked at {@code hex},
-     * each confirmed by a read of its pointer - so the guard costs the manifest's own tags, never a walk of the
-     * repository's. The index is a superset of the live tags by its write order, which is what lets a removal decide
-     * from it.
+     * <p>The answer comes from the digest-to-tags index ({@link OciTagIndex}), each tag confirmed by reading its
+     * pointer; the index is a superset of the live tags by its write order.
      *
-     * <p><b>Fail-closed, and self-checking.</b> A store failure answers {@code true}: the guard could not <em>prove</em>
-     * the sidecar unshared, and the mandated direction is to mark more and delete less. It is deliberately not a throw
-     * - the rest of the eviction (destroying the tag pointer, which is what stops this version serving) must still
-     * happen, and leaving one small sidecar behind is inert storage the next eviction of a sibling re-evaluates. And
-     * when {@code witness} is a tag pointer the index must hold its entry: a tag linked before the index existed is
-     * not in it, and neither might its siblings be, so its absence keeps the sidecar rather than reading "no other
-     * tag" from an index that never heard of them.
+     * <p><b>Fail-closed, and self-checking.</b> A store failure answers {@code true} - the sidecar could not be proved
+     * unshared - rather than throwing, so the rest of the eviction (the tag pointer that stops serving) still happens.
+     * A tag-pointer witness must appear in the index: a tag linked before the index existed is missing from it, as its
+     * siblings may be, so its absence keeps the sidecar.
      */
     private static boolean sharedByAnotherTag(String witness, String hex, ArtifactStore store) {
         try {
@@ -277,8 +210,8 @@ public final class OciBlobLayout implements RepositoryFormat, BlobLayout {
         }
     }
 
-    /** Keep the sidecar and say why - the one place the guard's fail-closed degrade is recorded, so "retained rather
-     *  than reclaimed" is never a silent outcome. Always answers {@code true} ("treat as shared"). */
+    /** Keep the sidecar and log why, so "retained rather than reclaimed" is never silent. Always answers
+     *  {@code true}. */
     private static boolean withheld(String own, String hex, String why) {
         LOGGER.warn("Could not prove the OCI manifest sidecar oci/.types/{} unshared while evicting {}, so it is kept: {}. "
                 + "Reclamation of that manifest is deferred to the next eviction of one of its tags; nothing that "
@@ -286,14 +219,9 @@ public final class OciBlobLayout implements RepositoryFormat, BlobLayout {
         return true;
     }
 
-    /**
-     * The request path this image version currently occupies - deliberately ONE review handle per version (the tagged or
-     * digest-referenced manifest path), when the version is live (its manifest blob is stored). Serving retraction for
-     * every alias (the tag, the digest, each layer) comes from the content-addressed {@code withheld/<hex>} markers, not
-     * from per-path pointers - one marker retracts every alias - so the review pointer's only jobs are queue visibility
-     * and the cross-alias guard, and one handle per held version keeps the review queue and
-     * {@code othersStillHeld}/{@code withheldByAnotherAlias} semantics simple.
-     */
+    /** The request path this image version occupies - one review handle per live version, the tagged or digest manifest
+     *  path. Serving retraction for every alias comes from the content-addressed {@code withheld/<hex>} markers, so the
+     *  review pointer only provides queue visibility and the cross-alias guard. */
     @Override
     public List<String> servedPaths(String coordinate, String version, ArtifactStore store) throws IOException {
         if (!BlobLayout.addressable(coordinate, version)) {
@@ -306,13 +234,9 @@ public final class OciBlobLayout implements RepositoryFormat, BlobLayout {
         return List.of("/v2/" + coordinate + "/manifests/" + version);
     }
 
-    /**
-     * The format-neutral coordinate a manifest request path carries: {@code /v2/<name>/manifests/<ref>} maps to
-     * {@code ("oci", name, ref)} with the same image-name / tag / digest-hex validation the format applies. Every
-     * other {@code /v2/} path - a blob, {@code _catalog}, {@code tags/list}, an upload - names no version and returns
-     * empty (the honest degrade the {@link BlobLayout#describe} contract prescribes). This is what the
-     * inventory's non-handling-{@code BlobLayout} fallback consults for an OCI hold's describe-dependent seams.
-     */
+    /** The coordinate a manifest request path carries: {@code /v2/<name>/manifests/<ref>} maps to
+     *  {@code ("oci", name, ref)} under the format's image-name, tag and digest validation. Every other {@code /v2/}
+     *  path names no version and is empty, as the {@link BlobLayout#describe} contract prescribes. */
     @Override
     public Optional<ArtifactDescriptor> describe(String path) {
         if (!path.startsWith("/v2/")) {
@@ -335,50 +259,30 @@ public final class OciBlobLayout implements RepositoryFormat, BlobLayout {
     }
 
     /**
-     * The content hashes an OCI image version serves from {@code blobs/} - the set a retroactive withhold marks and a
-     * name-enumeration screen probes. OCI cannot express this through {@link #blobKeys} (its tag pointer body is
-     * {@code sha256:<hex>}, not bare hex, and its config/layer digests live inside the manifest JSON behind no pointer
-     * key), so this overrides the {@link BlobLayout#blobHashes} default to derive the set from the manifest itself,
-     * collecting, in order:
+     * The content hashes an OCI image version serves from {@code blobs/} - what a retroactive withhold marks and a
+     * name-enumeration screen probes. A tag pointer's body is {@code sha256:<hex>} and the config and layer digests sit
+     * inside the manifest, so this derives the set from the manifest, in order:
      * <ol>
-     *   <li>the manifest hex FIRST - it becomes {@code blobHashes().getFirst()}, the {@code /quarantine} review handle's
-     *       link target, so the pointer body is the per-image manifest digest and {@code withheldByAnotherAlias} stays
-     *       meaningful;</li>
-     *   <li>for an image index, each sub-manifest digest, recursed with an explicit work-list and an emitted set (never
-     *       recursion - a hostile nested index must not overflow the sweep's stack), each sub-manifest then contributing
-     *       its own config/layers;</li>
-     *   <li>the config digest, each layer digest and each legacy {@code fsLayers} blobSum - bare hex, validated.</li>
+     *   <li>the manifest hex first - {@code blobHashes().getFirst()} is the {@code /quarantine} review handle's link
+     *       target, which keeps {@code withheldByAnotherAlias} meaningful;</li>
+     *   <li>for an image index, each sub-manifest digest and its config and layers, expanded with a work-list so a
+     *       hostile nested index cannot overflow the stack;</li>
+     *   <li>the config digest, each layer digest and each legacy {@code fsLayers} blobSum.</li>
      * </ol>
-     * <p><b>One derivation, not two</b>. This does not walk the manifest JSON itself - a second work-list expansion of
-     * indexes, a second digest validator, a second hard-coded manifest cap - beside the free
-     * {@code OciFormat.references}, which answers the identical question from the identical stored bytes for the
-     * collector. Two homes for one answer is the shape that produces a data-loss bug the day they disagree: a hash the
-     * hold knows and the scan does not is a live blob the next pass deletes out from under a held image, and one the
-     * scan knows and the hold does not is a layer serving through a hold that reports itself enforced. So the manifest
-     * dialect stays with the format that owns it and this method only resolves the image's manifest hex and hands the
-     * free seam the {@code oci/.types/<hex>} key that names it - the sidecar {@code OciManifests.ingest} writes for
-     * every accepted manifest, which is a key the seam answers for whether or not the image is tagged.
+     * <p><b>One derivation.</b> The manifest is not parsed here: the free {@code OciFormat.references} answers the same
+     * question from the same bytes for the collector, and two derivations that disagree either delete a held image's
+     * live blob or serve a layer through a hold. This resolves the manifest hex and hands the seam the
+     * {@code oci/.types/<hex>} key, which names the manifest tagged or not.
      *
-     * <p><b>What the delegation costs.</b> The two sides carry <b>opposite failure
-     * postures by design</b>: a present-but-unenumerable manifest makes the seam THROW (its contract clause 3 - a
-     * short list handed to a deleter is data loss), while the callers here are a console browse, a KEV sweep and a
-     * release path, where a throw turns one corrupt stored manifest into a repository whose whole enforcement pass
-     * fails. Catching {@link IOException} would convert every store hiccup into a silently under-enforced hold, so
-     * this catches exactly the seam's named refusal, {@link BlobReferences.Unresolvable} - "these bytes will never
-     * parse", no retry changes it - degrades to the manifest hex it is sure of and WARNs so an operator can
-     * {@code discard} it, and lets a plain {@link IOException} (the store failing) propagate.
+     * <p><b>Opposite failure postures.</b> The seam throws for a present but unenumerable manifest (its clause 3: a
+     * short list handed to a deleter is data loss), while the callers here - a console browse, a KEV sweep, a release -
+     * would let one corrupt manifest fail a whole pass. So this catches exactly {@link BlobReferences.Unresolvable},
+     * degrades to the manifest hex and logs a warning naming {@code discard}, and lets a plain {@link IOException}
+     * propagate rather than silently under-enforce. A degraded sub-manifest stays silent, since an index entry may
+     * legitimately point at a layer.
      *
-     * <p><b>The degrade is symmetric.</b> The seam raises {@code Unresolvable} for the root of either key - a tag
-     * pointer's target and the sidecar's target are both contractually a manifest, since ingest wrote it - so both
-     * WARN. A degraded SUB-manifest of an index still stays silent on both sides (a hostile index entry may
-     * legitimately point at a layer blob, which has no children to lose).
-     *
-     * <p><b>No installed OCI format is the same degrade.</b> This layout deliberately does not {@code require} the free
-     * {@code format.oci} module - it is a capability-only provider that must load in a deployment that ships no OCI
-     * serving at all - so the lender is resolved at call time through {@link #lender()}. When none is installed the
-     * answer is the manifest hex alone, WARNed: "no lender installed" and "the lender cannot enumerate this document"
-     * have identical consequences for the hold side (the layers are not enumerable, so the hold marks the manifest and
-     * they keep serving by digest), and saying so is what keeps either from being silent.
+     * <p><b>No installed OCI format</b> degrades the same way: this module does not require {@code format.oci}, so it
+     * loads without OCI serving, and {@link #lender()} resolves the lender per call.
      */
     @Override
     public List<String> blobHashes(String coordinate, String version, ArtifactStore store) throws IOException {
@@ -394,42 +298,31 @@ public final class OciBlobLayout implements RepositoryFormat, BlobLayout {
         }
         List<String> references;
         try {
-            // The sidecar key rather than the tag pointer: it names this manifest whether or not the image is tagged,
-            // and the seam resolves the hex straight out of the key without a second store read.
+            // The sidecar key names this manifest tagged or not, and the seam reads the hex off the key.
             references = lender.references("oci/.types/" + hex, store);
         } catch (BlobReferences.Unresolvable unenumerable) {
-            // Exactly this one, never a bare IOException: a store outage must keep propagating rather than becoming a
-            // silently under-enforced hold. Alarm and degrade - blobHashes runs in the streamed sweep loop, and
-            // throwing would DoS the whole repository pass.
+            // Only this refusal: a store outage keeps propagating. Throwing would fail the whole streamed sweep.
             return degraded(coordinate, version, hex, unenumerable.getMessage());
         }
-        // Empty is not an answer this key can honestly have - it names a manifest by digest - so it reads as the same
-        // "cannot enumerate" the two degrades above report, and never as an image that keeps no blob alive.
+        // A key naming a manifest by digest cannot honestly lend nothing, so empty is the same "cannot enumerate".
         return references.isEmpty()
                 ? degraded(coordinate, version, hex, "the installed OCI format lends nothing for that manifest's "
                         + "sidecar key, so its config and layer digests are not enumerable here")
                 : references;
     }
 
-    /** The manifest-only answer plus the WARN that keeps it from being silent - the one degrade
-     *  {@link #blobHashes} has, whichever of its three causes produced it. It under-enforces a hold (the layers keep
-     *  serving by digest), which is the safe direction for this side and exactly why it is not a throw. */
+    /** The manifest-only answer plus the warning that keeps it from being silent - {@link #blobHashes}' one degrade,
+     *  whatever its cause. It under-enforces a hold, the safe direction here. */
     private static List<String> degraded(String coordinate, String version, String hex, String why) {
         LOGGER.warn("OCI hold/enumeration for {}:{} degraded to manifest-only ({}): {} - consider discard",
                 coordinate, version, hex, why);
         return List.of(hex);
     }
 
-    /**
-     * The installed format that owns the {@code oci/} manifest dialect, or {@code null} when the deployment
-     * ships none - resolved through {@link BlobReferences#installed()}, the same static the collector's mark phase
-     * resolves its lenders with, so the hold side asks the object the collector really asks.
-     *
-     * <p>A blob layout is generally a lender too ({@link BlobRoots} extends the seam) and this one declares
-     * the {@code oci/} root itself, so the inventory side is filtered out by its type: it lends nothing, because
-     * {@code OciFormat} owns the document's dialect. Resolved per call rather than latched, so a format an operator switched
-     * off ({@code jenrepo.oci=false}) stops lending immediately, exactly as it stops serving.
-     */
+    /** The installed format owning the {@code oci/} manifest dialect, or {@code null} when none is installed - resolved
+     *  through {@link BlobReferences#installed()}, as the collector's mark phase resolves its lenders. This layout is a
+     *  lender too ({@link BlobRoots} extends the seam) but lends nothing, so it is filtered out by type. Resolved per
+     *  call, so a format switched off ({@code jenrepo.oci=false}) stops lending at once. */
     private static BlobReferences lender() {
         for (BlobReferences lender : BlobReferences.installed()) {
             if (!(lender instanceof BlobRoots) && lender.blobRoots().contains("oci")) {
@@ -439,9 +332,9 @@ public final class OciBlobLayout implements RepositoryFormat, BlobLayout {
         return null;
     }
 
-    /** Resolve an image reference to the manifest hex: a digest reference is the hex itself; a tag reference reads the
-     *  {@code oci/<name>/tags/<tag>} pointer and strips its {@code sha256:} prefix (the {@code OciFormat.linkTag}
-     *  shape). Empty when the reference is malformed or the tag pointer is absent / does not resolve to a real digest. */
+    /** Resolve an image reference to the manifest hex: a digest reference is the hex; a tag reference reads the
+     *  {@code oci/<name>/tags/<tag>} pointer and strips {@code sha256:}. Empty when malformed or the pointer is absent
+     *  or does not name a real digest. */
     private static Optional<String> manifestHex(String coordinate, String version, ArtifactStore store)
             throws IOException {
         if (version.startsWith("sha256:")) {
@@ -457,14 +350,9 @@ public final class OciBlobLayout implements RepositoryFormat, BlobLayout {
         return Optional.ofNullable(hex(new String(pointer.get().content(), StandardCharsets.UTF_8).trim()));
     }
 
-    /** The bare lower-case 64-hex digest of a {@code sha256:<hex>} (or already-bare) reference, or {@code null} when it
-     *  is not a real sha256 digest - so a tag typo or a {@code ..}-laced reference never becomes a hash. */
-    /**
-     * The {@code blobs/<hex>} key a manifest or blob request path serves from: a digest reference names it outright,
-     * a tag reference through its pointer. This is what lets the signature screen read an image's cosign signature
-     * artifact beside the manifest it judges - the {@code sha256-<hex>.sig} manifest by its tag, then each payload
-     * blob by digest - through the same key resolution a pull performs.
-     */
+    /** The {@code blobs/<hex>} key a manifest or blob request path serves from: a digest reference names it, a tag
+     *  reference through its pointer. The signature screen reads an image's cosign signature artifact through it - the
+     *  {@code sha256-<hex>.sig} manifest by tag, then each payload blob by digest. */
     @Override
     public Optional<String> servingKey(String requestPath, ArtifactStore store) throws IOException {
         if (!requestPath.startsWith("/v2/")) {
@@ -487,6 +375,8 @@ public final class OciBlobLayout implements RepositoryFormat, BlobLayout {
                 .map(hex -> "blobs/" + hex);
     }
 
+    /** The bare lower-case 64-hex digest of a {@code sha256:<hex>} or bare reference, or {@code null} when it is not
+     *  a real sha256 digest - so a tag typo or a {@code ..}-laced reference never becomes a hash. */
     private static String hex(String digest) {
         if (digest == null) {
             return null;
@@ -496,32 +386,9 @@ public final class OciBlobLayout implements RepositoryFormat, BlobLayout {
         return Checksums.isSha256Hex(hex) ? hex : null;
     }
 
-    /**
-     * The {@code (image name, tag)} a stored {@code oci/} key names when that key is a tag pointer, or {@code null}
-     * when it is not one - the store-key half of this format's conventions, held here beside {@link #isImageName} and
-     * {@link OciTags#isTag} because a tag pointer's shape is layout knowledge and every traversal of the
-     * {@code oci/} tree needs exactly this decision.
-     *
-     * <p>A tag pointer is {@code oci/<name>/tags/<tag>}: the FIRST {@code tags} segment ends the image name, and
-     * exactly one segment may follow it - a deeper key under a tag is not a pointer. The format's own spaces under
-     * {@code oci/} begin with a dot, which no image name may, so they are never image names, and both derived parts are
-     * screened through the
-     * same Distribution grammar the serving path applies, so a hostile key can never be decoded into a coordinate this
-     * format would not itself have written.
-     */
-    /**
-     * The image and tag a stored pointer names - this format's answer to the one direction {@link BlobLayout} did
-     * not have, and the first implementation of it.
-     *
-     * <p>It is exactly {@link #tagPointer}, which the OCI back-fill has judged deliveries by since it was written:
-     * the same grammar, the same refusal of a key deeper than {@code oci/<name>/tags/<tag>}, and the same screening
-     * of both derived parts, so a hostile key cannot decode into a coordinate this format would not have written.
-     * Promoting it to the seam is what lets one repair serve every format that can answer, instead of one repair
-     * per format that parses its own keys.
-     *
-     * <p>The descriptor carries the coordinate and nothing measured: a pointer's size and hash belong to the blob
-     * it names, and this derives from the key alone.
-     */
+    /** The image and tag a stored pointer names, from {@link #tagPointer}'s grammar, so the shared inventory back-fill
+     *  can record a tagged image. The descriptor carries the coordinate only: a pointer's size and hash belong to the
+     *  blob it names. */
     @Override
     public Optional<ArtifactDescriptor> describePointer(String key) {
         String[] tagged = tagPointer(key);
@@ -530,6 +397,13 @@ public final class OciBlobLayout implements RepositoryFormat, BlobLayout {
                 : Optional.of(new ArtifactDescriptor("oci", tagged[0], tagged[1], key, null, false, null, 0L));
     }
 
+    /**
+     * The {@code (image name, tag)} a stored {@code oci/} key names when it is a tag pointer, or {@code null}. A tag
+     * pointer is {@code oci/<name>/tags/<tag>}: the first {@code tags} segment ends the name and exactly one segment
+     * follows. The format's own spaces under {@code oci/} begin with a dot, which no image name may, and both parts are
+     * screened by the serving path's Distribution grammar, so a hostile key never decodes into a coordinate this format
+     * would not have written.
+     */
     static String[] tagPointer(String key) {
         if (!key.startsWith("oci/")) {
             return null;                        // the root itself, were it ever a stored key, names no image
@@ -554,15 +428,11 @@ public final class OciBlobLayout implements RepositoryFormat, BlobLayout {
 
     /**
      * Whether an image name may address an {@code oci/<name>/...} store key: the store's own path rule, plus the
-     * one thing that rule allows on purpose and the Distribution grammar does not - an empty segment. The same screen
-     * the {@code OciFormat} applies at the request door, stated the same way so the two cannot answer differently
-     * about one name.
+     * Distribution grammar's refusal of an empty segment - the screen {@code OciFormat} applies at the request door.
      *
-     * <p>It asks for the rule rather than restating it: a restatement that fell a character behind would let a
-     * control-bearing name pass, and {@link #blobKeys} would compose a live pointer key out of it. That key is handed
-     * to <b>eviction, which deletes</b>, and {@code delete} is not screened by {@link ArtifactStore#key} the way a
-     * write is, so this is the one seam that has to refuse the name. Two copies of a security rule drift, and this is
-     * what it costs when they do.
+     * <p>It asks the store for its rule rather than restating it: {@link #blobKeys} composes keys handed to eviction,
+     * which deletes, and {@code delete} is not screened by {@link ArtifactStore#key} as a write is, so this is the seam
+     * that must refuse a control-bearing name.
      */
     private static boolean isImageName(String name) {
         if (name.isEmpty() || !ArtifactStore.traversalFree(name)) {
