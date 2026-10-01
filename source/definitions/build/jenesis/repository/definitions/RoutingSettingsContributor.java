@@ -5,15 +5,14 @@ import build.jenesis.repository.settings.Setting;
 import build.jenesis.repository.settings.SettingsContributor;
 
 /**
- * A repository's routing as a repository setting: whether it accepts uploads and where it fetches what it lacks, in
- * the clause grammar {@link RepositoryDefinition#parse} reads. It lives in the repository's own settings document, so
- * the repository wizard asks it and the repository's settings screen edits it with every other repository setting.
+ * A repository's routing as a repository setting: whether it accepts uploads and where it fetches what it lacks, in the
+ * clause grammar {@link RepositoryDefinition#parse} reads, kept in the repository's own settings document so the wizard
+ * asks it and the settings screen edits it.
  *
- * <p>It is {@link Setting#localOnly() local} - a tenant or deployment default would route every repository, of every
- * format, through one upstream - and {@link Setting#operatorOnly() the operator's}: it names the upstreams a
- * repository fetches from, with the deployment's per-host credential attached. A repository that sets none routes as
- * the deployment's by-name definition ({@code repositories.<name>}, over {@code jenrepo.repositories.<name>}) says,
- * and with neither it is hosted.
+ * <p>{@link Setting#localOnly() Local}, since a tenant or deployment default would route every repository of every
+ * format through one upstream, and {@link Setting#operatorOnly() operator-only}, since it names upstreams fetched with
+ * the deployment's per-host credential. A repository that sets none routes as the deployment's by-name definition
+ * ({@code repositories.<name>}, over {@code jenrepo.repositories.<name>}) says, and with neither it is hosted.
  */
 public final class RoutingSettingsContributor implements SettingsContributor {
 
@@ -29,8 +28,8 @@ public final class RoutingSettingsContributor implements SettingsContributor {
                 Setting.Kind.STRING, "", true, Setting.Scope.REPOSITORY).local().operator().essential());
     }
 
-    /** A definition the parser refuses, or one naming an upstream this deployment must not pull from - the same
-     *  refusals the boot sweep and every write surface make. */
+    /** A definition the parser refuses, or one naming an upstream this deployment must not pull from - the refusals the
+     *  boot sweep and every write surface make. */
     @Override
     public Optional<String> refusal(Setting setting, String value, UnaryOperator<String> deployment) {
         RepositoryDefinition definition;
