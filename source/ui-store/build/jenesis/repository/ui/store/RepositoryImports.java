@@ -35,9 +35,8 @@ public class RepositoryImports extends TenantScope {
         this.settings = editor.settings();
     }
 
-    /** Start a background migration of another manager's repository into this one, returning the job id to
-     *  watch. The migration runs in the console over the tenant-and-repository store, the same one the repository
-     *  server serves from; its format coverage is the importers on this deployment's module path. */
+    /** Starts a background migration of another manager's repository into this one, over the store the server serves,
+     *  with the installed importers; returns the job id. */
     public String startImport(String repository, String source, String url, String sourceRepository, String format,
                               String username, String password, String resume) throws IOException {
         return observe("import", repository, observation -> {
@@ -45,12 +44,7 @@ public class RepositoryImports extends TenantScope {
             ImportJobs jobs = new ImportJobs();
             ImportJobs.Snapshot prior = resume == null || resume.isBlank()
                     ? null : jobs.snapshot(store, resume).orElse(null);
-            // Secure by default: a migration URL is fetched server-side, so an unrestricted one turns the console
-            // into an SSRF vector against cloud metadata or an internal service. Route the enable decision through the
-            // one ImportHostGuard both import legs share so the console and the API leg cannot drift: the stored
-            // block-private-import-hosts setting, read as the API leg reads it, else fail-closed to block. The console has no RepositoryProperties
-            // env-field, so it passes null for that layer; an operator sets block-private-import-hosts=false to allow
-            // an internal mirror.
+            // The guard both import legs share; the console has no deployment property to pass.
             boolean blockPrivateHosts = ImportHostGuard.blockPrivateHosts(
                     ImportHostGuard.stored(settings.getOrDefault("block-private-import-hosts", null)), null);
             ImportSource importSource = importSource(source, url, sourceRepository, format, username, password,
@@ -62,9 +56,7 @@ public class RepositoryImports extends TenantScope {
             String jobId = prior == null ? ImportJobs.newId() : resume;
             writeSource(store, jobId, source, url, sourceRepository, format);
             jobs.submit(store, importSource, jobId, prior);
-            // Audit the migration trigger with the same repository.import event the /api ImportController emits, once
-            // the job is actually submitted - a bulk migration is a privileged mutation that routes writes into the
-            // hosted store.
+            // Audited once submitted, as the API's import is.
             audit(AuditActions.REPOSITORY_IMPORT, repository + " from " + (source == null || source.isBlank() ? "none" : source));
             observation.lowCardinalityKeyValue("source", source == null || source.isBlank() ? "none" : source)
                     .highCardinalityKeyValue("job", jobId);
@@ -72,9 +64,8 @@ public class RepositoryImports extends TenantScope {
         });
     }
 
-    /** Forget a migration job (and its remembered source), once it has finished or failed, so the list does not grow
-     *  without bound. A running job is left alone, its background writer undisturbed; returns whether it was
-     *  dismissed. */
+    /** Forgets a finished or failed migration job and its remembered source; a running one is left alone. Returns
+     *  whether it was dismissed. */
     public boolean dismiss(String repository, String jobId) throws IOException {
         ArtifactStore store = scope(repository);
         Optional<ImportJobs.Snapshot> snapshot = new ImportJobs().snapshot(store, jobId);
@@ -87,11 +78,11 @@ public class RepositoryImports extends TenantScope {
         return true;
     }
 
-    /** The migration jobs recorded for a repository - running, completed and failed - each with the source it walked
-     *  (minus credentials), so the console can watch them and pre-fill a resume of one that did not finish. */
     /** The migrations one page of the screen lists. */
     public static final int PAGE = 50;
 
+    /** The first page of a repository's migration jobs, each with the source it walked (no credentials), so a resume
+     *  can be pre-filled. */
     public List<JobView> imports(String repository) throws IOException {
         return imports(repository, null, PAGE).jobs();
     }
@@ -130,9 +121,7 @@ public class RepositoryImports extends TenantScope {
         if (url == null || url.isBlank() || sourceRepository == null || sourceRepository.isBlank()) {
             return null;
         }
-        // One screen, shared with the API import leg through ImportHostGuard: the transport must be https AND the
-        // host must not resolve internally, both under the single block-private-import-hosts dial. The reason is
-        // carried through so the panel names the half that actually refused.
+        // The panel names the half of the guard that refused.
         String refusal = ImportHostGuard.refusalReason(url, blockPrivateHosts);
         if (refusal != null) {
             throw new IllegalArgumentException("The migration URL is refused: " + refusal + ". A migration is fetched "
@@ -184,10 +173,8 @@ public class RepositoryImports extends TenantScope {
         return properties;
     }
 
-    /** A migration job as the console lists it: its id, state, running counts (including {@code held} and
-     *  {@code rejected} - the assets the import edge screened to quarantine and rejection), the resume cursor and
-     *  error, and the source it walked (kind, URL, source repository, format - no credentials) so a resume can pre-fill
-     *  the form. */
+    /** A migration job as the console lists it: state, counts ({@code held} and {@code rejected} by the import edge),
+     *  resume cursor, error, and the source it walked, without credentials. */
     public record JobView(String id, String state, int imported, int skipped, int held, int rejected, int dropped,
                           String cursor, String asset, String error, String source, String url,
                           String sourceRepository, String format) {

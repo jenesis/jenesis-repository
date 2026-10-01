@@ -13,16 +13,8 @@ import build.jenesis.repository.store.ServableNames;
 import io.micrometer.observation.ObservationRegistry;
 
 /**
- * The console's listing of the artifact repository, scoped to the signed-in user's tenant: the tenant's named
- * repositories and, per repository, its storage namespaces and what it holds. The browse, search and
- * compliance-review families it once also held now live in sibling services in this package - {@link RepositoryBrowse}
- * (the browse tree, artifact detail, search, license inventory and published-index card) and {@code ComplianceReview}
- * (quarantine review, the vulnerability and findings panels, the license blast radius and dependents) - alongside the
- * write and lifecycle families - {@link TenantLimits} (quota and rate limit), {@link RepositoryLifecycle} (staging,
- * retention, pins, cleanup and forwarding retry) and {@link RepositoryImports} (migration jobs) - all over the same
- * {@link TenantScope} confinement to the repository {@link ArtifactStore} scoped to {@code <tenant>/<repo>}. The
- * console's own per-tenant role model authorizes these calls (see SecurityConfig); the repository's key-based
- * authorization is the path for programmatic clients.
+ * The console's listing of the signed-in tenant's repositories: their names, documents, storage namespaces and recent
+ * holdings, over the {@link TenantScope} confinement. The console's role model authorizes these calls.
  */
 public class RepositoryAdmin extends TenantScope {
 
@@ -41,17 +33,13 @@ public class RepositoryAdmin extends TenantScope {
         return repositories;
     }
 
-    /** The top-level storage namespaces of a repository - the first key segment its stored objects sit under. A
-     *  format writes its layout under its own request prefix, which is the top-level key its content occupies
-     *  ({@code npm/...}, {@code pypi/...}, the Maven layout under {@code publish/...}, content-addressed bytes
-     *  under {@code blobs/...}), so the console maps a namespace a format claims to that format's icon and leaves
-     *  the bookkeeping namespaces unmarked. A single prefix listing, never a tree scan. */
+    /** The top-level storage namespaces of a repository, one prefix listing, which the console marks with the format
+     *  claiming each. */
     public List<String> namespaces(String repository) {
         return scope(repository).list("").stream().filter(name -> !name.equals(Scopes.REPOSITORY)).toList();
     }
 
-    /** A repository's own document - its format, when it was created, its description - or empty for one that has
-     *  none: created before repositories held a format, or being deleted. Read through the node's cache. */
+    /** A repository's own document, through the node's cache, or empty for one holding no format or being deleted. */
     public Optional<RepositoryDocument> document(String repository) throws IOException {
         return RepositoryDocument.cached(root, tenant(), repository);
     }
@@ -61,17 +49,15 @@ public class RepositoryAdmin extends TenantScope {
         return RepositoryRemoval.removing(scope(repository));
     }
 
-    /** The format a repository holds, or empty for one created before repositories held a format - which answers
-     *  no request until it is given one. Read through the node's cache, so a listing of every repository costs no
-     *  store read in the steady state. */
+    /** The format a repository holds, through the node's cache, or empty for one holding none, which answers no
+     *  request. */
     public Optional<String> format(String repository) throws IOException {
         return RepositoryDocument.cached(root, tenant(), repository).map(RepositoryDocument::format);
     }
 
     /**
-     * What a repository's pages say about it first: the format it holds and the URL a client reaches it at -
-     * {@code /repository/<tenant>/<repository>/}, or {@code /v2/<tenant>/<repository>/} for a type the OCI registry
-     * mounts. Empty for a repository that holds no format, which answers no URL.
+     * A repository's format and client URL ({@code /repository/<tenant>/<repository>/}, or {@code /v2/...} for an OCI
+     * type); empty for one holding no format.
      */
     public Optional<Identity> identity(String repository) throws IOException {
         Optional<String> format = format(repository);
@@ -94,11 +80,8 @@ public class RepositoryAdmin extends TenantScope {
     }
 
     /**
-     * The versions a repository most recently took in (up to {@code limit}, newest first): the releases published
-     * into it and the copies it cached from its upstreams, each read from its own newest-first index a window at a
-     * time and merged by when it arrived. Two bounded windows rather than a walk, so the detail hub renders a recent
-     * slice of a repository of any size - the full, paged list is the browse page and a coordinate's own page - and
-     * {@code more} says when either index held more than the slice shows.
+     * The versions a repository most recently took in, up to {@code limit}, newest first: two bounded windows over the
+     * newest-first indexes of releases and cached copies, merged by arrival; {@code more} says either held more.
      */
     public Held recentHoldings(String repository, int limit) throws IOException {
         StoreRepositoryInventory inventory = inventory(repository);
@@ -116,9 +99,8 @@ public class RepositoryAdmin extends TenantScope {
         return new Held(List.copyOf(merged.subList(0, Math.min(limit, merged.size()))), more);
     }
 
-    /** One index's newest-first window: at most {@code limit} holdings still served, and whether the index held more.
-     *  The index is read a page at a time and screened as it goes - a row whose version has since been held or
-     *  removed is skipped - and the next page is asked for only while the window is not yet full. */
+    /** One index's newest-first window of at most {@code limit} holdings still served, read a page at a time while
+     *  the window is not full. */
     private static Window window(StoreRepositoryInventory inventory, int limit, Pages pages) throws IOException {
         List<StoreRepositoryInventory.Holding> shown = new ArrayList<>();
         String after = null;

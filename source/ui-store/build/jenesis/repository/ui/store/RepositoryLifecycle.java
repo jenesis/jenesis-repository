@@ -37,8 +37,8 @@ public class RepositoryLifecycle extends TenantScope {
 
     private final SettingsAdmin settings;
 
-    /** {@code settings} is how a repository's retention rules are resolved - its own over its tenant's over the
-     *  deployment's - which is the policy a preview, a cleanup and the scheduled sweep all judge by. */
+    /** {@code settings} resolves a repository's retention rules, the policy a preview, a cleanup and the scheduled
+     *  sweep all judge by. */
     public RepositoryLifecycle(ArtifactStore repositoryStore, CurrentTenant current, ObservationRegistry observations,
                                AuditTrail audit, ConsoleActor actor, SettingsAdmin settings) {
         super(repositoryStore, current, observations, audit, actor);
@@ -46,10 +46,9 @@ public class RepositoryLifecycle extends TenantScope {
     }
 
     /**
-     * Make a repository in the signed-in tenant hold the type {@code format}, through the one creation every surface
-     * makes ({@link RepositoryType#create}): a repository that holds none - or content but no format - is given it,
-     * and one whose type the requested one holds everything of ({@code maven} asked to be {@code java}) is given the
-     * requested one.
+     * Makes a repository of the signed-in tenant hold the type {@code format}, through the one creation every surface
+     * makes ({@link RepositoryType#create}): one holding no format is given it, and one whose type the requested one
+     * contains ({@code maven} asked to be {@code java}) is moved to it.
      *
      * @return what the creation did; {@link RepositoryType.Creation#CONFLICT} leaves the repository as it was.
      * @throws IllegalArgumentException when the name is not a repository name or the type is not one a repository
@@ -60,9 +59,8 @@ public class RepositoryLifecycle extends TenantScope {
     }
 
     /**
-     * {@link #create(String, String)}, and give a repository that now holds the type {@code description} when one is
-     * given. A repository being deleted is refused: creating it again would bring back a name whose objects are still
-     * going.
+     * {@link #create(String, String)} with a description. A repository being deleted is refused, since its objects are
+     * still going.
      *
      * @throws IllegalArgumentException when the name, the type or the description is refused.
      */
@@ -71,12 +69,10 @@ public class RepositoryLifecycle extends TenantScope {
     }
 
     /**
-     * Create a new repository with {@code values} as its own settings - the one creation the repository wizard
-     * completes with, and only ever a creation. Every value is validated through the catalogue first and a refusal
-     * writes nothing; the settings are then stored before the document that makes the repository exist
-     * ({@link RepositoryType#create(ArtifactStore, String, String, RepositoryType.Configuration)}), and a repository
-     * that exists already - one {@link #create(String, String, String)} would retype - is answered
-     * {@link RepositoryType.Creation#EXISTS}, unchanged.
+     * Creates a new repository with {@code values} as its own settings, as the repository wizard completes. Every value
+     * is validated first and a refusal writes nothing; the settings are stored before the document that makes the
+     * repository exist ({@link RepositoryType#create(ArtifactStore, String, String, RepositoryType.Configuration)}). An
+     * existing repository is answered {@link RepositoryType.Creation#EXISTS}, unchanged.
      *
      * @param operator whether the session is the deployment operator's, who alone sets an operator-only setting.
      * @throws IllegalArgumentException when the name, the type, the description or any value is refused - naming
@@ -119,10 +115,8 @@ public class RepositoryLifecycle extends TenantScope {
     }
 
     /**
-     * What refuses a new repository's name, format or description, by field ({@code name}, {@code format},
-     * {@code description}) - empty when a creation would be accepted: a name that is no repository name, is taken, or
-     * is still being deleted; a type no repository can hold here; a description longer than a repository takes. The
-     * repository wizard asks this when its first step is left; the creation itself decides again.
+     * What refuses a new repository's name, format or description, by field; empty when a creation would be accepted.
+     * The wizard asks on leaving its first step, and the creation decides again.
      */
     public Map<String, String> identityRefusals(String repository, String format, String description)
             throws IOException {
@@ -164,9 +158,8 @@ public class RepositoryLifecycle extends TenantScope {
     }
 
     /**
-     * Delete a repository and everything it holds: it stops answering at once ({@link RepositoryRemoval#begin}) and
-     * its objects are removed on a thread of their own, so the request returns before a large repository is gone. A
-     * repository already being deleted - one a node stopped part way - is resumed.
+     * Deletes a repository: it stops answering at once ({@link RepositoryRemoval#begin}) and its objects are removed on
+     * a thread of their own. A deletion a node stopped part way is resumed.
      *
      * @return what beginning the removal found; {@link RepositoryRemoval.Begun#ABSENT} deletes nothing.
      */
@@ -187,8 +180,8 @@ public class RepositoryLifecycle extends TenantScope {
         return StagingProvider.resolve(_ -> null).isPresent();
     }
 
-    /** The first {@code limit} staging repositories and whether more exist, each with its staged-path count capped
-     *  at {@link #STAGED_COUNT_CAP} - the hub panel's window, never the whole history. */
+    /** The first {@code limit} staging repositories and whether more exist, each counted up to
+     *  {@link #STAGED_COUNT_CAP}. */
     public StagingWindow stagingWindow(String repository, int limit) throws IOException {
         Optional<Staging> staging = stagingFor(repository);
         if (staging.isEmpty()) {
@@ -210,8 +203,7 @@ public class RepositoryLifecycle extends TenantScope {
     }
 
     public void promote(String repository, String id) throws IOException {
-        // Matches the /api StagingController's staging.promote event (action and repo/id target) so console and API
-        // staging promotions audit identically.
+        // Recorded as the API's staging promotion is.
         audit("staging.promote", repository + "/" + id);
         observe("promote", repository, _ -> {
             staged(repository).promote(id);
@@ -232,21 +224,15 @@ public class RepositoryLifecycle extends TenantScope {
                 .orElseThrow(() -> new IllegalStateException("Staging is not installed on this deployment."));
     }
 
-    /** The ecosystems this repository durably records that no installed format can place - what stands between the
-     *  repository and its collector, named so the hub can offer the explicit way out. Empty on a healthy deployment. */
+    /** The ecosystems this repository records that no installed format can place, which hold up its collector. */
     public SortedSet<String> unplaceableEcosystems(String repository) throws IOException {
         return StoreRepositoryInventory.unplaceableEcosystems(scope(repository));
     }
 
-    /** Forget one unplaceable ecosystem's records - the hub's explicit retirement of an absent format's data, the
-     *  same primitive and audit event the {@code /api/repository/forget-ecosystem} API verb drives. */
+    /** Starts retiring one unplaceable ecosystem's records, as {@code /api/repository/forget-ecosystem} does. */
     public boolean forgetEcosystem(String repository, String ecosystem) throws IOException {
-        // Off the request thread. The primitive deletes in pages of 500 across five key-space roots until each is
-        // empty, so its cost is however much that ecosystem published - unbounded from here, and paid a round trip
-        // at a time against the object store - no request may be held open for that.
-        //
-        // The refusal is deliberately still raised here rather than inside the pass: an ecosystem an installed
-        // format still places must be refused to the operator's face, not reported as a failed background job.
+        // The deletion runs off the request, as its cost is whatever the ecosystem published; the refusal of a placeable
+        // ecosystem is raised here, to the operator.
         StoreRepositoryInventory inventory = inventory(repository);
         inventory.refuseIfPlaceable(ecosystem);
         audit(AuditActions.REPOSITORY_FORGET_ECOSYSTEM, repository + " " + ecosystem);
@@ -267,8 +253,7 @@ public class RepositoryLifecycle extends TenantScope {
         return StoredReport.read(scope(repository), forgetReport(ecosystem));
     }
 
-    /** The retention policy a repository runs under: each rule resolved through the repository's own settings over
-     *  its tenant's over the deployment's - the chain the scheduled sweep and the API read too. */
+    /** The retention policy a repository runs under, resolved as the scheduled sweep resolves it. */
     public RetentionPolicy retention(String repository) throws IOException {
         return RetentionPolicy.fromConfig(settings.repositoryConfig(tenant(), repository));
     }
@@ -281,8 +266,7 @@ public class RepositoryLifecycle extends TenantScope {
     /** The ecosystems this repository's inventory already names, suggested (not enforced) by the pin form. */
     public SortedSet<String> ecosystems(String repository) throws IOException {
         StoreRepositoryInventory inventory = inventory(repository);
-        // The first level of the publish facts names the ecosystems - a handful of names, never a walk of the
-        // coordinates beneath them; the pins are a small namespace of their own.
+        // The first level of the publish facts, never a walk of the coordinates.
         SortedSet<String> ecosystems = new TreeSet<>(inventory.ecosystems());
         for (StoreRepositoryInventory.Pin pin : inventory.pinned()) {
             ecosystems.add(pin.ecosystem());
@@ -291,7 +275,6 @@ public class RepositoryLifecycle extends TenantScope {
     }
 
     public void pin(String repository, String ecosystem, String coordinate, String version) throws IOException {
-        // Matches MaintenanceController's repository.pin event and its coordinate target shape.
         audit(AuditActions.REPOSITORY_PIN, repository + " " + ecosystem + ":" + coordinate + ":" + version);
         observe("pin", repository, _ -> {
             inventory(repository).pin(ecosystem, coordinate, version);
@@ -313,9 +296,7 @@ public class RepositoryLifecycle extends TenantScope {
         return RetentionProvider.resolve(_ -> null).isPresent();
     }
 
-    /** The stored cleanup preview - what retention would have evicted when it was last computed - or empty when
-     *  none was computed yet. A preview is a pass over every release, so the screen reads the stored result and
-     *  {@linkplain #previewCleanup starts} a fresh one rather than computing on the request. */
+    /** The stored cleanup preview, or empty before one ran; {@link #previewCleanup} starts a fresh one. */
     public Optional<StoredReport.Report> plan(String repository) throws IOException {
         return StoredReport.read(scope(repository), PREVIEW_REPORT);
     }
@@ -348,16 +329,10 @@ public class RepositoryLifecycle extends TenantScope {
     private static final String PREVIEW_REPORT = "cleanup-preview";
     private static final String CLEANUP_REPORT = "cleanup";
 
-    /** Run the repository's retention, then let the discovered garbage collector reclaim now-unreferenced blobs;
-     *  the stored report records the blobs reclaimed. With no collector resolved (the module absent, or configured
-     *  off) the sweep still evicts but reclaims nothing - the GC SPI's no-op-by-absence default; the console's
-     *  cleanup screen says garbage collection is off ({@code CapabilityService}). The collector reads its settings
-     *  from the stored deployment configuration, the same document the settings screens edit. */
     /**
-     * Start the repository's retention sweep and the garbage collection behind it, in the background; the result -
-     * what was evicted and how many blobs were reclaimed - is stored as the last cleanup report the hub shows.
-     * Answers whether a sweep was started; one already under way is left alone. The sweep walks every release, which
-     * is why the request that asks for it never waits for it.
+     * Starts the repository's retention sweep and the garbage collection behind it in the background, storing what was
+     * evicted and reclaimed as the last cleanup report; answers whether it started. Without a collector the sweep
+     * evicts but reclaims nothing.
      */
     public boolean cleanup(String repository) throws IOException {
         RetentionSweeper sweeper = sweeper();
@@ -389,13 +364,11 @@ public class RepositoryLifecycle extends TenantScope {
     }
 
     private RetentionSweeper sweeper() {
-        // The retention engine is a discovered plugin; the cleaner provider ignores configuration.
         return RetentionProvider.resolve(_ -> null)
                 .orElseThrow(() -> new IllegalStateException("Retention is not installed on this deployment."));
     }
 
     private Optional<Staging> stagingFor(String repository) {
-        // Staging is a discovered plugin; the store-backed provider ignores configuration, so no lookup is needed.
         return StagingProvider.resolve(_ -> null).map(factory -> factory.over(scope(repository)));
     }
 

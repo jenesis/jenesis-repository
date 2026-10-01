@@ -12,12 +12,9 @@ import build.jenesis.repository.audit.AuditTrail;
 import build.jenesis.repository.walk.Traversal;
 
 /**
- * Orchestrates the project operations the controllers need on top of the {@link CacheStorage} SPI.
- * The injected storage is the primary {@code tenantStorage} view, already confined to the session's
- * selected tenant, so this service simply lists projects with their stats, creates a project, edits
- * its policy settings (size cap, sweep order, unused-entry lifetime), and runs per-project eviction - all within that
- * one tenant. Access control is not per project: credentials live under {@code .users/} and grant projects
- * by role. Cross-tenant disk reclaim is a super-admin concern and lives in {@link VolumeReclaim}.
+ * The build-cache project operations over a {@link CacheStorage} view confined to the session's tenant: listing with
+ * stats, creating, editing a project's settings and per-project eviction. Credentials grant projects by role;
+ * cross-tenant reclaim is {@link VolumeReclaim}'s.
  */
 public class CacheService {
 
@@ -29,20 +26,8 @@ public class CacheService {
     private final SettingsAdmin settings;
 
     /**
-     * How a background pass is started.
-     *
-     * <p>An eviction returns as soon as it has marked the project running, and finishes on another thread - which
-     * is deliberate, and {@code CacheStatsTest} has it as a subject. It is also a hazard for any fixture that owns
-     * the directory the pass writes into: a test that asserts something the pass does <em>not</em> produce (the
-     * audit event, written before the pass starts) has no reason to wait for it, ends, and JUnit then deletes a
-     * {@code @TempDir} the pass is still writing to. That surfaces as
-     * {@code Failed to delete temp directory ... DirectoryNotEmptyException} attributed to whichever test method
-     * happened to be last - a fixture failure that names neither the pass nor the race, and that only appears
-     * under load, because on an idle machine the pass wins.
-     *
-     * <p>So the choice is a seam rather than a hard-coded thread: a caller that wants the real behaviour takes
-     * {@link #BACKGROUND}, and one that owns the directory takes {@link #CALLING_THREAD} and is deterministic by
-     * construction instead of by polling.
+     * How a background pass is started: {@link #BACKGROUND} as a running console does, or {@link #CALLING_THREAD} for a
+     * caller that owns the directory the pass writes into and must not end before it does.
      */
     @FunctionalInterface
     public interface Passes {
@@ -62,8 +47,7 @@ public class CacheService {
         this(storage, audit, current, actor, settings, Passes.BACKGROUND);
     }
 
-    /** {@code settings} reads and writes a project's policy - its project settings, validated through the settings
-     *  catalogue - which is what a size cap or expiry sweep started here applies. */
+    /** {@code settings} reads and writes a project's settings, the policy a sweep started here applies. */
     public CacheService(CacheStorage storage, AuditTrail audit, CurrentTenant current, ConsoleActor actor,
                         SettingsAdmin settings, Passes passes) {
         this.settings = settings;
@@ -74,16 +58,13 @@ public class CacheService {
         this.actor = actor;
     }
 
-    /** Record a privileged cache-eviction mutation on the shared audit trail under the selected tenant, attributed to
-     *  the acting member - the console peer of the domain-layer audit seams ({@code TenantScope#audit},
-     *  {@code AdminController}); best-effort, so a failed write never fails the eviction it audits. */
+    /** Records a privileged cache mutation under the selected tenant, attributed to the member; best-effort. */
     private void audit(String action, String project) {
         audit.record(current.name(), actor.name(), action, project);
     }
 
-    /** A project's stored count: how many entries and bytes the last pass found and when ({@code countedAt} null
-     *  when no pass has run), whether a pass is running, and what the last eviction did. Read from one small file the
-     *  passes write - a render never sweeps the cache to count it. */
+    /** A project's stored count from the file the passes write: entries and bytes the last pass found and when
+     *  ({@code null} before any), whether a pass runs, and what the last eviction did. */
     public record Stats(long entryCount, long totalBytes, Instant countedAt, boolean counting, String lastAction,
                         String lastOutcome) {
 
@@ -159,9 +140,8 @@ public class CacheService {
         return true;
     }
 
-    /** Mark the project running {@code action}, unless a pass younger than {@link #STALE_PASS} already is; whether
-     *  this call is the one that started. The mark is a compare-and-set against the stats file's version, read before
-     *  its body, so of two nodes asked at once one starts the pass and the other finds it running. */
+    /** Marks the project running {@code action} unless a pass younger than {@link #STALE_PASS} is; compare-and-set on
+     *  the stats file, so of two nodes one starts. */
     private boolean begin(String name, String action) throws IOException {
         String path = name + "/" + STATS_FILE;
         for (int tries = 0; tries < Retries.COMPARE_AND_SET; tries++) {
@@ -185,17 +165,10 @@ public class CacheService {
     }
 
     /**
-     * Delete the project - its entries, its cache settings and its stored figures - in the background, since removing
-     * them walks every entry; whether this call started it. Audited before the deletion starts, as the sweeps are.
-     *
-     * <p>It shares the sweeps' guard and is refused while one runs, because a sweep writes its figures back into the
-     * project when it lands and would bring the project back; for the same reason the deletion writes nothing back
-     * when it succeeds, and says only on failure what it left. The store deletes page by page, so a failed deletion
-     * leaves a project that a second one finishes.
-     *
-     * <p>What names the project elsewhere stays: a credential's grant outlives the project it names, and reaches one
-     * created again under that name. So does a build still writing to it, since a project exists while anything is
-     * under it - the grants are what keep a build out.
+     * Deletes the project - entries, settings and figures - in the background, audited first; answers whether this call
+     * started it. Refused while a sweep runs, whose figures written back would revive the project; it writes nothing
+     * back on success, and a failed deletion is finished by another. A credential's grant naming the project outlives
+     * it.
      */
     public boolean deleteProject(String name) throws IOException {
         requireProject(name);
@@ -222,15 +195,9 @@ public class CacheService {
     }
 
     /**
-     * Every project of the selected tenant, with its policy and its live entry counts, for the console listing.
-     *
-     * <p>The projects enumeration is paged and its remainder is <em>followed</em> to exhaustion rather than reported
-     * as a bound, and that is a decision rather than an oversight: a project is created by an operator through this
-     * very screen, so the set is provisioned and not client-inflatable, and the screen is a listing of all of them -
-     * offering a truncated one with no way to page it would be a worse answer than the round-trips cost. What is
-     * bounded is what sits <em>inside</em> each project: {@link Eviction#stats} streams a
-     * project's entries page by page instead of enumerating them into a list, so this screen's footprint is the
-     * project set, never the cached-entry set behind it.
+     * Every project of the selected tenant with its policy and counts. The project enumeration is followed to
+     * exhaustion, since projects are provisioned by operators rather than inflated by clients; their entries are never
+     * enumerated here.
      */
     public List<ProjectSummary> listProjects() {
         List<ProjectSummary> summaries = new ArrayList<>();
@@ -267,8 +234,7 @@ public class CacheService {
         return value == null ? "" : value.trim();
     }
 
-    /** A read of the settings a render cannot recover from - an unreadable store - raised unchecked, as the storage
-     *  reads beside it are. */
+    /** A settings read whose failure is raised unchecked, as the storage reads beside it are. */
     private static <T> T unchecked(Read<T> read) {
         try {
             return read.get();
@@ -282,19 +248,15 @@ public class CacheService {
         T get() throws IOException;
     }
 
-    /** Create a project (no access is granted here - see credentials); its policy is whatever its tenant's and the
-     *  deployment's project settings say until it is given its own. */
+    /** Creates a project, granting no access; it inherits its policy until given its own. */
     public void createProject(String name) throws IOException {
         createProject(name, Map.of());
     }
 
     /**
-     * Create a project with {@code values} as its own settings - what the project wizard and
-     * {@code POST /api/cache/projects} complete with. Every value is validated through the catalogue first and a
-     * refusal writes nothing; the settings are stored before the provisioning marker, and a project exists as soon as
-     * anything is stored under it, so it is in force as configured from the moment it exists. A creation that stops
-     * between the two leaves the project existing with its settings and without its creation stamp, which is how a
-     * project a build brought into being is listed too.
+     * Creates a project with {@code values} as its own settings, as the wizard and {@code POST /api/cache/projects} do.
+     * Every value is validated first; the settings are stored before the provisioning marker, so a project exists
+     * configured, and one stopped between the two lists as a build-made project does.
      *
      * @throws IllegalArgumentException when the name or any value is refused, or the project exists already.
      */
@@ -313,8 +275,7 @@ public class CacheService {
         storage.createProject(validated);
     }
 
-    /** What refuses a new project's name - empty when a creation would be accepted: a name that is no project name,
-     *  or one taken already. The project wizard asks this when its first step is left; the creation decides again. */
+    /** What refuses a new project's name, empty when a creation would be accepted; the creation decides again. */
     public Optional<String> nameRefusal(String name) {
         if (name == null || name.isBlank()) {
             return Optional.of("A project needs a name.");
@@ -340,10 +301,8 @@ public class CacheService {
         settings.saveProject(current.name(), name, Map.of(key, value));
     }
 
-    /** Start the size-cap sweep in the background; whether it was started (not while another pass runs). Audited
-     *  before the mutation (crash-safe ordering, as the quarantine release/discard) with the project as target, so a
-     *  crash mid-eviction still records that a privileged eviction was driven. The sweep walks every entry of the
-     *  project, so it never runs on the request. */
+    /** Starts the size-cap sweep in the background, audited before it runs so a crash still records it; answers
+     *  whether it started. */
     public boolean enforceSizeCap(String name) throws IOException {
         requireProject(name);
         audit("cache.evict.size", name);

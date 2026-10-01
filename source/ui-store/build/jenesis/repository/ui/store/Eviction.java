@@ -6,18 +6,12 @@ import build.jenesis.repository.cache.storage.CacheStorage.Stored;
 import build.jenesis.repository.walk.Traversal;
 
 /**
- * The cache server's eviction policy, run by the ui through the {@link CacheStorage} SPI so it works
- * against whichever backend is configured (filesystem, S3, Azure Blob, GCS) - the same recency-ordered
- * sweeps the server applies, expressed over enumerated {@link Stored} entries. A vanished entry is
- * simply a cache miss for the running server, so these sweeps are race-safe.
+ * The cache's eviction policy over the {@link CacheStorage} SPI, so it works on any backend: the server's
+ * recency-ordered sweeps over enumerated {@link Stored} entries. A vanished entry is a cache miss, so the sweeps are
+ * race-safe.
  *
- * <p><strong>Every sweep here streams; none of them holds a project.</strong> The SPI's enumerations are paged and
- * resumable, and this class is where that matters most: a size cap that enumerated a project into one list and
- * sorted it would allocate in proportion to whatever a build had cached, on the exact code path an operator reaches
- * when the volume is already tight. Each sweep drives {@link CacheStorage#entries} page by page to exhaustion -
- * the remainder is always followed, never dropped, because a half-swept project would report a total the console
- * shows as fact and would leave a cap unenforced - and the only thing that outlives one page is a bounded
- * {@link #BATCH}-wide selection of what to delete.
+ * <p>Every sweep streams {@link CacheStorage#entries} page by page to exhaustion, since a partial sweep would report a
+ * wrong total or leave a cap unenforced; only a {@link #BATCH}-wide selection outlives a page.
  */
 public final class Eviction {
 
@@ -30,22 +24,12 @@ public final class Eviction {
     public record Stats(long entryCount, long totalBytes) {
     }
 
-    /** How many of the coldest (or warmest) entries one selection pass picks before it deletes and re-scans - the
-     *  bound on every sweep's in-heap footprint, so a low-disk node reclaims in batches rather than sorting a store. */
+    /** How many entries one selection picks before it deletes and re-scans: every sweep's heap bound. */
     private static final int BATCH = 1024;
 
     /**
-     * Drive one project's paged entry enumeration to exhaustion, handing every entry to {@code action}.
-     *
-     * <p>The remainder is followed rather than reported, and that is the deliberate choice here: a sweep's answer is a
-     * total or a deletion set, and a <em>prefix</em> of either is worse than useless - a truncated total is a number
-     * the console prints as the project's size, and a truncated ttl pass reports the project expired while leaving the
-     * oldest entries in place. What paging buys the sweep is not a short answer, it is a bounded working set: the
-     * enumeration holds one page, and nothing accumulates across pages except the counters and the bounded selection.
-     *
-     * <p>Deleting from inside the sweep (the ttl and clear passes do) is safe because a cursor is a key, not an index:
-     * it names the last delivered entry, and every entry deleted is one already behind it, so a resume continues from
-     * a boundary whose disappearance changes nothing about what sorts after it.
+     * Drives one project's paged entry enumeration to exhaustion, handing every entry to {@code action}. Deleting inside
+     * the sweep is safe: a cursor names the last delivered entry, and every deleted entry is behind it.
      */
     private static void sweep(CacheStorage storage, String project, Consumer<Stored> action) {
         String cursor = null;
@@ -81,12 +65,8 @@ public final class Eviction {
     }
 
     /**
-     * Delete least- (or most-) recently-used entries until the project total is within {@code limit}.
-     *
-     * <p>Two bounded passes rather than one unbounded one: the total is counted by streaming, and then each round
-     * selects only the {@link #BATCH} coldest (or warmest) entries through a bounded heap, deletes what it needs and
-     * re-scans for the next batch. The peak footprint is one batch whatever the project holds - where enumerating the
-     * project into a list and sorting it, which is what this did, allocated one record per cached entry.
+     * Deletes least- (or most-) recently-used entries until the project total is within {@code limit}: the total is
+     * streamed, then each round selects a {@link #BATCH} through a bounded heap, deletes and re-scans.
      */
     public static Result enforceSizeCap(CacheStorage storage, String project, long limit, boolean lru) {
         if (limit <= 0) {
@@ -151,12 +131,8 @@ public final class Eviction {
     }
 
     /**
-     * Global least-recently-used sweep across all projects until the free-space target is met. A low-disk node must
-     * never build an in-heap list of the WHOLE store's entries and sort it (an OOM exactly when it is already
-     * disk-degraded), so each pass streams the entries a project at a time - through the projects' own paged
-     * enumeration and each project's - into one bounded selection, deletes the coldest until the
-     * target is met, and re-scans for the next batch; the peak footprint is one batch. The SPI deliberately offers no
-     * whole-store sweep to shortcut this with: the union across projects is the caller's to compose, exactly here.
+     * A least-recently-used sweep across all projects until the free-space target is met: each round streams every
+     * project's entries into one bounded selection, deletes the coldest and re-scans, so the footprint is one batch.
      */
     public static Result reclaim(CacheStorage storage, long minFree, int minFreePercent) {
         long deleted = 0, freed = 0;
@@ -184,9 +160,7 @@ public final class Eviction {
         return new Result(deleted, freed);
     }
 
-    /** The up-to-{@code k} coldest (least-recently-used) entries {@code entries} yields, chosen in one streaming pass
-     *  through a bounded max-heap that never retains more than {@code k} - so a free-space reclaim picks what to drop
-     *  without ever materialising or sorting the whole store's entry set in heap. Returned coldest-first. */
+    /** The up-to-{@code k} coldest entries, chosen in one streaming pass through a bounded heap, coldest first. */
     public static List<Stored> coldest(Iterable<Stored> entries, int k) {
         Selection selection = new Selection(k, true);
         entries.forEach(selection);
@@ -194,14 +168,8 @@ public final class Eviction {
     }
 
     /**
-     * The bounded selection every sweep here drives: the {@code k} entries that sort first under the eviction order -
-     * coldest for a least-recently-used policy, warmest for the most-recently-used one - accumulated in one streaming
-     * pass through a heap that never holds more than {@code k}.
-     *
-     * <p>It is a {@link Consumer} rather than a function over a collection precisely so it can be handed straight to
-     * the SPI's paged enumeration: the entries arrive one at a time, page by page, and are never anywhere else at
-     * once. Selecting across several projects is then just driving one selection through several enumerations, which
-     * is what the global reclaim does.
+     * The {@code k} entries that sort first under the eviction order, accumulated through a heap of at most {@code k}. A
+     * {@link Consumer}, so it takes the paged enumeration directly, across one project or several.
      */
     private static final class Selection implements Consumer<Stored> {
 

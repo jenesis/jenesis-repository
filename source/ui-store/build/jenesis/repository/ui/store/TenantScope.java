@@ -14,12 +14,9 @@ import io.micrometer.observation.Observation;
 import io.micrometer.observation.ObservationRegistry;
 
 /**
- * The tenant-and-repository confinement the console's repository services share: it names the signed-in tenant, scopes
- * the artifact {@link ArtifactStore} to {@code <tenant>/<repo>} (never a reserved sibling key-space), reads the
- * deployment settings and times an admin action, so each sibling service ({@link RepositoryAdmin}, {@link
- * RepositoryBrowse}, {@code ComplianceReview}, {@link RepositoryImports}, {@link RepositoryLifecycle}, {@link
- * TenantLimits}) works on one repository without re-deriving the scoping or forking the {@code
- * validRepository}/traversal guards.
+ * The tenant-and-repository confinement the console's repository services share: the signed-in tenant, the
+ * {@link ArtifactStore} scoped to {@code <tenant>/<repo>} behind the name guards, the deployment settings and the
+ * timing of an admin action.
  */
 public abstract class TenantScope {
 
@@ -32,9 +29,7 @@ public abstract class TenantScope {
     protected final AuditTrail audit;
     protected final ConsoleActor actor;
 
-    /** A read-only console service that records no audit events: the audit seam stands in as the no-op trail and a
-     *  neutral actor, so a browse/listing service need not carry collaborators it never uses. A mutating service uses
-     *  the five-argument constructor below and calls {@link #audit(String, String)}. */
+    /** A read-only service that records no audit events. */
     protected TenantScope(ArtifactStore root, CurrentTenant current, ObservationRegistry observations) {
         this(root, current, observations, AuditTrail.none(), () -> "console");
     }
@@ -49,22 +44,14 @@ public abstract class TenantScope {
     }
 
     /**
-     * Record a privileged console mutation on the shared audit trail, attributing it to the acting member and the
-     * signed-in tenant - the same seam {@link CredentialService} uses. Best-effort by the trail's contract: a
-     * failed write never fails the mutation it audits.
-     *
-     * <p>The console and its {@code /api} twin audit a privileged mutation under the same {@code action}.
-     * Asserting that in prose is worth exactly what any restated rule is worth: two separate literals in separate
-     * modules would diverge with nothing failing. They are single values on
-     * {@link build.jenesis.repository.audit.AuditActions}, and the build fails a module that spells one out for
-     * itself, so the property is held by the code rather than by this sentence.
+     * Records a privileged mutation under the signed-in tenant, attributed to the member; best-effort. The action is an
+     * {@link build.jenesis.repository.audit.AuditActions} value, shared with the API.
      */
     protected final void audit(String action, String target) {
         audit.record(tenant(), actor.name(), action, target);
     }
 
-    /** The repository {@link ArtifactStore} scoped to {@code <tenant>/<repo>} - the confinement every per-repository op
-     *  works within, refusing a reserved sibling key-space or a traversal-carrying name up front. */
+    /** The {@link ArtifactStore} scoped to {@code <tenant>/<repo>}, refusing a reserved or traversal-carrying name. */
     protected final ArtifactStore scope(String repository) {
         if (!validRepository(repository)) {
             throw new IllegalArgumentException("Invalid repository name: " + repository);
@@ -86,19 +73,16 @@ public abstract class TenantScope {
     }
 
     /**
-     * {@code pass} bound to the tenant of the request that starts it, for a pass that runs on another thread. The
-     * console's tenant is the session's, and a session is not on the thread a stored report runs on, so a pass that
-     * scoped a repository there asked for a tenant and found none.
+     * {@code pass} bound to the tenant of the request that starts it, for a pass on another thread, where no session
+     * names one.
      */
     protected final StoredReport.Pass forThisTenant(StoredReport.Pass pass) {
         String tenant = tenant();
         return () -> ScopedValue.where(HANDED_OFF, tenant).call(pass::run);
     }
 
-    /** Time and trace a console admin action through the canonical {@link Observations} wrapper, tagging it with the
-     *  low-cardinality {@code action} plus the repository and tenant, so the one instrumentation point feeds metrics,
-     *  logging and tracing together. The tenant is read null-tolerantly (the wrapper records {@code none} when no
-     *  tenant is selected) rather than through the throwing {@link #tenant()} accessor the store scoping uses. */
+    /** Times and traces an admin action through {@link Observations}, tagged with the action, repository and tenant
+     *  ({@code none} when no tenant is selected). */
     final <T> T observe(String action, String repository, AdminCall<T> call) throws IOException {
         return Observations.observe(observations, "jenrepo.ui.admin", repository, current.name(), observation -> {
             observation.lowCardinalityKeyValue("action", action);
@@ -114,12 +98,8 @@ public abstract class TenantScope {
         return tenant;
     }
 
-    /** Whether {@code name} is a usable repository name: the shared {@link Scopes#valid} rule - a traversal-free
-     *  segment that is not a reserved store namespace - which is the same predicate the server's
-     *  {@code Repositories.valid} applies on the routing/publish path and the same one every tenant and repository
-     *  enumeration filters by. Once a tenant saves a setting ({@code <tenant>/config/...}) or a quota is written
-     *  ({@code <tenant>/quota/used}), those siblings must never surface as phantom repositories the console lists, nor
-     *  let an admin op (retention, cleanup, import, pin) scope into a reserved namespace. */
+    /** Whether {@code name} is a repository name by the shared {@link Scopes#valid} rule, so a reserved space beside the
+     *  repositories is never listed or scoped into. */
     protected static boolean validRepository(String name) {
         return Scopes.valid(name);
     }

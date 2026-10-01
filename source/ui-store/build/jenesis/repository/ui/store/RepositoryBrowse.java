@@ -46,24 +46,16 @@ import io.micrometer.observation.ObservationRegistry;
  */
 public class RepositoryBrowse extends TenantScope {
 
-    /** The reserved top-level subtree under {@code publish/} that holds the artifacts the compliance gate is
-     *  withholding for review: a GET does not serve them and the {@code /assets} export never walks them, so the
-     *  console's browse hides it too. Mirrors the {@code ServableNames.QUARANTINE} confinement, kept in step so
-     *  the paid console discloses exactly the paths a GET would - never the held-artifact review subtree. */
+    /** The reserved subtree under {@code publish/} holding what the gate withholds for review, hidden from the browse
+     *  as a GET hides it ({@code ServableNames.QUARANTINE}). */
     private static final String QUARANTINE = "quarantine";
 
-    /** The store key the {@code index} module commits its published-index descriptor to (compare-and-set, so replicas
-     *  converge). The console reads only this one small line-oriented object for the read-only index card - never a
-     *  chunk and never an artifact blob - so it summarises the index without requiring the heavy {@code index} module
-     *  (which carries the zstd chunk codec); a deployment without that module never wrote this object, so the card
-     *  degrades to "no index published yet". */
-    /** The published index's descriptor key, from the module both the writer and this reader can see. A
-     *  literal here would render "no index published yet" if the writer ever moved it - wrong, and quiet. */
+    /** The published index's descriptor key, from the module writer and reader share. The index card reads only this
+     *  small object, so the console needs no index module; without one the card says no index is published. */
     private static final String INDEX_DESCRIPTOR = PublishedIndexKeys.DESCRIPTOR;
 
-    /** The most immediate children a single browse level pages through the store, so a coordinate with an enormous
-     *  fan-out (hundreds of thousands of timestamped versions) is navigated into, not materialised whole in heap per
-     *  browse request - the same bound the console tree and {@code /api/browse} apply. */
+    /** The most children one browse level shows, as {@code /api/browse} bounds it, so a huge fan-out is navigated into
+     *  rather than materialised. */
     private static final int MAX_CHILDREN = 1000;
 
     /** The repository's one search, resolved once so the index's per-repository searchers survive across requests. */
@@ -73,9 +65,7 @@ public class RepositoryBrowse extends TenantScope {
         this(repositoryStore, current, observations, SearchQueryProvider.installed());
     }
 
-    /** Embedding/test seam: bind an explicit full-text index provider (empty for none) rather than discovering it
-     *  through {@link SearchQueryProvider#installed()}, so a caller can drive both modes without a ServiceLoader
-     *  registration. */
+    /** With an explicit full-text index provider (empty for none) rather than {@link SearchQueryProvider#installed()}. */
     public RepositoryBrowse(ArtifactStore repositoryStore, CurrentTenant current, ObservationRegistry observations,
                             Optional<SearchQueryProvider> index) {
         super(repositoryStore, current, observations);
@@ -87,26 +77,15 @@ public class RepositoryBrowse extends TenantScope {
         return inventory(repository).children(prefix);
     }
 
-    /** One entry in the generic browse tree: an immediate child under a prefix, classified folder-vs-artifact and
-     *  sized. A folder carries its cached rolled-up subtree size (the sum of the blob sizes published beneath it,
-     *  read from the one small roll-up object, never by walking the tree); an artifact leaf carries its stored
-     *  blob's recorded size - read from the small pointer, never the artifact body. {@code bytes} is the raw count the
-     *  browse sorts the Size column on ({@code -1} when unknown - a folder with no roll-up computed yet, or a pointer
-     *  naming no present blob); {@code size} is that count rendered human-readable ({@code "—"} when unknown). */
+    /** One entry of the browse tree: a folder with its cached roll-up size, or an artifact with its blob's recorded size.
+     *  {@code bytes} is the raw count the Size column sorts on ({@code -1} when unknown), {@code size} its rendering. */
     public record BrowseEntry(String name, String path, boolean folder, long bytes, String size) {
     }
 
-    /** The console's artifact detail, generic across formats: the request path and whether a blob is currently
-     *  published there, the content-addressed SHA-256 the blob is stored under (its checksum - read from the small
-     *  pointer, never the artifact body) and its stored size (human-readable, plus the raw byte count for a machine
-     *  reader), the format-neutral ecosystem/coordinate/version the owning format's {@code ArtifactLayout} describes
-     *  for the path (blank when the path carries no coordinate - a checksum, generated metadata, a raw file), when
-     *  that coordinate version was published, the other versions of the coordinate this repository holds, any
-     *  compliance gate verdict recorded against the path ({@code null} when the gate never held it), and whether a
-     *  provenance attestation can be served for it. */
-    /** {@code versions} holds the coordinate's first {@link #VERSIONS_PAGE} versions by name, shown newest first
-     *  (the current one always among them); {@code moreVersions} says the coordinate has more, which its own page
-     *  lists by cursor. */
+    /** The artifact detail, generic across formats: whether a blob is published at the path, its SHA-256 and size, the
+     *  coordinate the owning format describes (blank for none), its publish time, any gate verdict ({@code null} when
+     *  never held) and whether provenance can be served. {@code versions} holds the coordinate's first
+     *  {@link #VERSIONS_PAGE} versions, the current one among them; {@code moreVersions} says its own page lists more. */
     public record ArtifactDetail(String path, boolean present, String hash, long sizeBytes, String size,
                                  String ecosystem, String coordinate, String version, String published,
                                  List<VersionRow> versions, boolean moreVersions, VerdictRow quarantine,
@@ -115,14 +94,9 @@ public class RepositoryBrowse extends TenantScope {
     }
 
     /**
-     * What a publisher's signature on this version turned out to be: the outcome, who signed it, the quality grade,
-     * and where the material sat. {@code null} when the version carries no recorded signature at all - a version
-     * published before signatures were checked, or a format that has none - which the page states rather than
-     * rendering as a failure.
-     *
-     * <p>Read from the stored summary, never re-derived: the page does not re-verify anything, because a screen that
-     * ran cryptography on render would cost more the more it is looked at and would disagree with the gate the moment
-     * a key changed.
+     * What a publisher's signature on this version turned out to be: the outcome, the signer, the grade and where the
+     * material sat, from the stored summary rather than re-verified, so the page agrees with the gate. A version with
+     * no recorded signature has none, which the page states.
      */
     public record SignatureRow(String outcome, String signer, String grade, String location, String source,
                                String admittedBy, String issuer, String subject, String link, String logIndex,
@@ -153,10 +127,8 @@ public class RepositoryBrowse extends TenantScope {
     /** The versions one page of a coordinate lists. */
     public static final int VERSIONS_PAGE = 100;
 
-    /** The quality-inspection subsection's scoped error state: a {@link Finding.Kind#INSPECTION} finding recorded
-     *  against this coordinate when its quality inspector could not parse the artifact, so the detail view renders a
-     *  scoped "could not fully screen this - not fully screened" panel for just this subsection while every other
-     *  panel renders normally. {@code null} when the coordinate carries no such finding (the ordinary case). */
+    /** An {@link Finding.Kind#INSPECTION} finding against the coordinate, rendered as a scoped "not fully screened"
+     *  panel; {@code null} without one. */
     public record InspectionRow(String reason, String when) {
     }
 
@@ -167,24 +139,18 @@ public class RepositoryBrowse extends TenantScope {
     }
 
     /**
-     * One coordinate of one ecosystem and every version of it this repository holds: the screen a coordinate has of
-     * its own, whichever way its format stores. A format under the published tree reaches it from the browse tree
-     * as well; a format in a blobs namespace of its own - npm, PyPI, NuGet and their kind - has no folder in that
-     * tree, so this is where a search hit or a release row for it lands. {@code location} is the browse folder where
-     * a tree format lays the coordinate's newest version out, empty for a blobs-namespace format.
+     * One page of a coordinate's versions, newest first within the page, for the coordinate's own screen, which a
+     * blobs-namespace format (npm, PyPI, NuGet) reaches from a search hit since it has no browse folder.
+     * {@code location} is the browse folder of a tree format's newest version, empty otherwise; {@code next} resumes
+     * in name order, {@code null} on the last page.
      */
-    /** One page of a coordinate's versions, newest first within the page; {@code next} resumes after it in name
-     *  order, null on the last page. */
     public record CoordinateDetail(String ecosystem, String coordinate, String location,
                                    List<CoordinateVersion> versions, String next) {
     }
 
     /**
-     * One version of a coordinate: when it was published - or, for a copy cached from an upstream, first cached, with
-     * the upstream it came from - whether it is pinned, whether it is currently served (a held or evicted version is
-     * listed, greyed, so the history reads whole), and the request paths it is served at - for a tree format each
-     * links to its artifact page, for a blobs-namespace format they are the paths a client fetches. A cached copy is
-     * never pinned: a pin is a retention decision, and retention keeps to releases.
+     * One version of a coordinate: when it was published, or first cached and from which upstream; whether it is pinned
+     * (never a cached copy) and served (a held or evicted one is listed greyed); and the request paths it is served at.
      */
     public record CoordinateVersion(String version, String published, boolean pinned, boolean served,
                                     List<String> paths, boolean browsable, Long downloads, String lastDownloaded,
@@ -202,18 +168,15 @@ public class RepositoryBrowse extends TenantScope {
     }
 
     /**
-     * What the findings ledger holds against one version: how many findings still stand, and the worst severity among
-     * them - which a version's row shows as its state and links to. {@code worst} is empty when none stands; the whole
-     * state is {@link #NONE} where no ledger is installed or it cannot be read, which a row shows as nothing at all
-     * rather than as a clean bill.
+     * How many findings stand against one version and the worst severity among them; {@link #NONE} where no ledger is
+     * installed or readable, which a row shows as nothing rather than clean.
      */
     public record FindingsState(boolean known, int count, String worst) {
 
         /** No ledger to ask. */
         public static final FindingsState NONE = new FindingsState(false, 0, "");
 
-        /** The badge kind the worst severity is drawn in: danger from HIGH up, and for a severity no scorer could
-         *  read, which the gate treats the same; a caution for MEDIUM; otherwise muted. */
+        /** The badge kind: danger from HIGH up and for an unscored severity, caution for MEDIUM, otherwise muted. */
         public String badge() {
             return switch (worst) {
                 case "CRITICAL", "HIGH", "UNKNOWN" -> "app-badge--danger";
@@ -244,8 +207,7 @@ public class RepositoryBrowse extends TenantScope {
         }
     }
 
-    /** The folder every path lies in, ending in {@code /} - the longest prefix they share, cut back to a folder - or
-     *  the empty string when they share none below the root, so a version names it once instead of per file. */
+    /** The folder every path lies in, ending in {@code /}, or empty when they share none below the root. */
     static String folder(List<String> paths) {
         if (paths.isEmpty()) {
             return "";
@@ -279,13 +241,9 @@ public class RepositoryBrowse extends TenantScope {
     }
 
     /**
-     * One {@code origin} acquisition row rendered on the artifact detail and returned by the origin API (over the
-     * {@link OriginSection}): where <em>this</em> deployment's bytes for the coordinate version came
-     * from - a {@code local-upload} (a hand upload through the publish path) or a {@code fallback} fetch (bytes fetched
-     * from an ordered upstream fallback, for both a store and a no-store fallback). A fallback row carries which
-     * repository and fallback it arrived through, the upstream {@code target} URL, whether it was {@code stored} (cached
-     * vs pass-through), its {@code screening} strength, and the no-copy {@code serves}/{@code lastServed} counters. All
-     * fields are rendered strings (an absent instant blank), so the neutral display renders straight from the section.
+     * One {@link OriginSection} acquisition row: where this deployment's bytes came from, a {@code local-upload} or a
+     * {@code fallback} fetch, which carries its repository and fallback, upstream {@code target}, whether it was
+     * {@code stored}, its {@code screening} and its {@code serves}/{@code lastServed} counters.
      */
     public record OriginRow(String source, String repository, int fallbackIndex, String target, String at,
                             String sha256, boolean stored, String screening, String lastServed, long serves) {
@@ -295,7 +253,7 @@ public class RepositoryBrowse extends TenantScope {
             return OriginSection.LOCAL_UPLOAD.equals(source);
         }
 
-        /** Whether this row is a fallback fetch (uploaded vs via which fallback - the browse-row provenance). */
+        /** Whether this row is a fallback fetch. */
         public boolean fallback() {
             return OriginSection.FALLBACK.equals(source);
         }
@@ -306,22 +264,14 @@ public class RepositoryBrowse extends TenantScope {
     public record VerdictRow(String verdict, List<String> reasons, String when) {
     }
 
-    /** The browse level under a prefix in the default order (child name, ascending) - the overload the plain page and
-     *  the lazy-children fragment call when no explicit sort is chosen. */
+    /** The browse level under a prefix by child name, ascending. */
     public List<BrowseEntry> browseTree(String repository, String prefix) throws IOException {
         return browseTree(repository, prefix, "name", false);
     }
 
-    /** The immediate children under a browse prefix, each classified folder-vs-artifact with a size and ordered by the
-     *  chosen column - the one lazy level of the console's breadcrumbed tree (the caller re-invokes this per navigation
-     *  or expand, so a browse never scans or buffers a whole tree). A folder's size is its cached rolled-up subtree
-     *  total (a single small roll-up read, populated by the retention sweep, {@code "—"} until then); an
-     *  artifact leaf's is its stored blob's recorded size. Reads only the {@code publish/} pointer tree, a folder's
-     *  roll-up object and a referenced blob's recorded size, never an artifact blob. {@code sort} is one of
-     *  {@code name}/{@code type}/{@code size} and {@code descending} the direction - so the Size column sorts on the
-     *  raw byte count, not the rendered string. The prefix is {@link #safePrefix traversal-guarded} so a
-     *  request can never escape the {@code publish/} subtree to enumerate the content-addressed {@code blobs/}
-     *  bucket. */
+    /** One lazy level of the browse tree under a {@link #safePrefix traversal-guarded} prefix, ordered by {@code sort}
+     *  ({@code name}, {@code type} or {@code size}). A folder's size is its roll-up, written by the retention sweep;
+     *  a leaf's its blob's recorded size. */
     public List<BrowseEntry> browseTree(String repository, String prefix, String sort, boolean descending)
             throws IOException {
         return browseLevel(repository, prefix, sort, descending).entries();
@@ -346,16 +296,9 @@ public class RepositoryBrowse extends TenantScope {
     }
 
     /**
-     * One window of the immediate children under {@code safe} - a {@link #safePrefix traversal-guarded} layout prefix
-     * of the repository {@code store} - resumed strictly after the child named {@code after}, each classified
-     * folder-vs-artifact with its size. The one implementation behind the console's folder screen and its
-     * {@code /api/browse/children} twin, so the two answer the same children for one folder.
-     *
-     * <p>It goes through the servable-name seam's paged, screened child listing: that pages one bounded level,
-     * forwards folder children unconditionally, suppresses the reserved quarantine review subtree at the root, and
-     * drops any non-folder leaf a GET would 404 (withheld, retracted, or a blob a garbage collection reclaimed) - the
-     * serve-parity screen, so a browse discloses exactly the paths a GET would. Per child it reads a one-entry folder
-     * probe and either a folder's cached roll-up or a leaf's recorded size, never an artifact body.
+     * One window of the children under the {@link #safePrefix traversal-guarded} prefix {@code safe}, strictly after
+     * {@code after}, behind the folder screen and {@code /api/browse/children} alike. The servable-name listing hides the
+     * quarantine subtree and any leaf a GET would 404, so a browse discloses exactly what a GET would.
      */
     public static BrowsePage page(ArtifactStore store, String safe, String after, int limit) throws IOException {
         StoreRepositoryInventory inventory = new StoreRepositoryInventory(store);
@@ -370,8 +313,7 @@ public class RepositoryBrowse extends TenantScope {
             if (folder) {
                 bytes = inventory.subtreeSize(path).orElse(-1L);      // a folder is a listing, kept unconditionally
             } else {
-                // The leaf survived the screen, so a GET would serve it: read its recorded size from the small
-                // pointer (never the artifact body); a torn pointer that raced the screen degrades to unknown, not a 500.
+                // A pointer torn since the screen reads as unknown size, not a 500.
                 Optional<String> located = publication.located(path);
                 bytes = located.isPresent() ? store.size(located.get()) : -1L;
             }
@@ -381,17 +323,13 @@ public class RepositoryBrowse extends TenantScope {
     }
 
     /**
-     * A coordinate's own screen: every version of it this repository holds - published here or cached from an
-     * upstream - newest first, with the paths each is served at. Reads the version documents and the tiny pointers
-     * only, never an artifact blob.
+     * The first page of a coordinate's versions, published or cached, with the paths each is served at.
      */
     public CoordinateDetail coordinate(String repository, String ecosystem, String coordinate) throws IOException {
         return coordinate(repository, ecosystem, coordinate, null, VERSIONS_PAGE);
     }
 
-    /** One page of the coordinate's versions - the page is cut in name order from {@code after} and shown newest
-     *  first; {@code location} is the browse folder holding the coordinate's versions - the one above the page's most
-     *  recently published browsable version's - or empty where the format keeps no folder tree. */
+    /** One page of the coordinate's versions, cut in name order from {@code after}. */
     public CoordinateDetail coordinate(String repository, String ecosystem, String coordinate, String after,
                                        int limit) throws IOException {
         ArtifactStore store = scope(repository);
@@ -427,11 +365,8 @@ public class RepositoryBrowse extends TenantScope {
     public static final int DEPENDENCIES_SHOWN = 200;
 
     /**
-     * Everything this repository records about one version, for its own page: when it was published or cached and
-     * from where, whether it is served, pinned or a prerelease, its downloads, what its manifest says about it, the
-     * licences it declares, its signature and provenance, what it depends on and the files it is served as. One read
-     * of the version's document and of its served pointers - never an artifact body - and empty for a version this
-     * repository holds no document for.
+     * Everything this repository records about one version, for its own page, from one read of its document and served
+     * pointers; empty for a version with no document.
      */
     public Optional<VersionDetail> version(String repository, String ecosystem, String coordinate, String version)
             throws IOException {
@@ -497,16 +432,9 @@ public class RepositoryBrowse extends TenantScope {
     }
 
     /**
-     * The detail of one published artifact path, generic across every format. Reads only small objects - the
-     * {@code publish/} pointer (whose value is the artifact's content-addressed SHA-256 checksum), the referenced
-     * blob's recorded size, the format-neutral coordinate the owning format's {@code ArtifactLayout} describes for
-     * the path, the publish-time sidecars, and the quarantine log - never the artifact blob itself, so a browse into
-     * an arbitrarily large artifact's detail costs the same bounded read. The {@code path} is
-     * {@link #safePrefix traversal-guarded} so a request can never escape the {@code publish/} subtree to name a raw
-     * content-addressed blob. Coordinate, version, the other versions of the coordinate and the publish date are
-     * present only for a path a descriptive format claims (a raw file resolves to its checksum and size alone); the
-     * quarantine verdict is the most recent gate decision recorded against the path, and the provenance flag reports
-     * whether a signer is configured to attest it.
+     * The detail of one artifact path at a {@link #safePrefix traversal-guarded} {@code path}, from small objects only:
+     * the pointer, the blob's recorded size, the coordinate, the version document and the latest gate verdict. A raw
+     * file resolves to its checksum and size alone.
      */
     public ArtifactDetail artifact(String repository, String path) throws IOException {
         String safe = safePrefix(path);
@@ -526,8 +454,7 @@ public class RepositoryBrowse extends TenantScope {
         List<VersionRow> versions = new ArrayList<>();
         boolean moreVersions = false;
         if (!coordinate.isEmpty()) {
-            // The sibling versions are one page of this coordinate's own version folder, never a walk of every
-            // release; the current version is read by itself when the page does not reach it.
+            // One page of versions; the current one is read by itself when the page misses it.
             StoreRepositoryInventory.ReleasePage page = inventory.versions(ecosystem, coordinate, null, VERSIONS_PAGE);
             moreVersions = page.next() != null;
             boolean seen = false;
@@ -555,7 +482,6 @@ public class RepositoryBrowse extends TenantScope {
             }
             versions.sort(Comparator.comparing(VersionRow::published).reversed());
         }
-        // The quarantine verdict is a point lookup of the latest-verdict-by-path index, not a scan of the whole log.
         VerdictRow quarantine = new QuarantineLog(store).latest(safe)
                 .map(event -> new VerdictRow(event.verdict().name(), event.reasons(), event.when().toString()))
                 .orElse(null);
@@ -568,33 +494,23 @@ public class RepositoryBrowse extends TenantScope {
     }
 
     /**
-     * The {@code origin} acquisition rows for a published artifact path, read from the coordinate
-     * version's consolidated metadata document's {@code origin} section ({@link OriginSection}) - a small,
-     * bounded read of the one section, never the artifact body. Rows render on the artifact detail and are returned
-     * by the origin API, both the neutral display the gate does not consume. Best-effort render-what-you-have: a
-     * path with no coordinate/version or a read failure yields an empty list (the panel then states there is no
-     * recorded origin), never a failed detail view. The path is {@link #safePrefix traversal-guarded} exactly as
-     * {@link #artifact} is.
+     * The origin rows of an artifact path at a {@link #safePrefix traversal-guarded} {@code path}
+     * ({@link #originOf}).
      */
     public List<OriginRow> origin(String repository, String path) throws IOException {
         return originOf(scope(repository), safePrefix(path));
     }
 
     /**
-     * The merged {@code origin} acquisition rows over one repository-scoped store for an already-{@link #safePrefix
-     * traversal-guarded} path - the reusable read behind both the console origin panel/API and the
-     * {@code /api/origin} audit-export endpoint, so the two surfaces share one merge rather than diverging. Reads only
-     * the two small {@code origin} sections, never the artifact body; best-effort render-what-you-have:
-     * anything missing or unreadable yields an empty list, never a thrown error.
+     * The merged {@link OriginSection} rows of a guarded path in a repository's store, behind the console panel and
+     * {@code /api/origin} alike. Best-effort: anything missing or unreadable yields an empty list.
      */
     public static List<OriginRow> originOf(ArtifactStore store, String safe) {
         MetadataStore metadata = MetadataProvider.installed().over(store);
         List<OriginRow> rows = new ArrayList<>();
         Set<String> seen = new LinkedHashSet<>();
         try {
-            // (1) The format-coordinate document: a hand upload records its local-upload origin here, keyed by the
-            // coordinate the owning format describes for the path - the key the published/licenses sections and
-            // browse.artifact resolve the path to.
+            // (1) The document of the coordinate the owning format describes, where a hand upload records its origin.
             Optional<ArtifactDescriptor> descriptor = new StoreRepositoryInventory(store).describe(safe);
             String ecosystem = descriptor.map(ArtifactDescriptor::ecosystem).filter(Objects::nonNull).orElse("");
             String coordinate = descriptor.map(ArtifactDescriptor::coordinate).filter(Objects::nonNull).orElse("");
@@ -602,12 +518,9 @@ public class RepositoryBrowse extends TenantScope {
             if (!coordinate.isEmpty() && !version.isEmpty()) {
                 collectOrigin(metadata.section(ecosystem, coordinate, version, OriginSection.TAG), rows, seen);
             }
-            // (2) The path-derived document. A fallback fetch does not record its origin here (one artifact, one
-            // origin document, and it is the format-coordinate one above). Still read,
-            // for the two cases where it is the only key there is: a path no installed format describes - where
-            // HardenedScreen.originCoordinate falls back to this same derivation, so this IS where the row is - and a
-            // no-store fallback's row, which survives durably beside transient bytes that never landed.
-            // Deduped when the two derivations coincide, which they do for exactly those paths.
+            // (2) The path-derived document, the only key for a path no installed format describes
+            // (HardenedScreen.originCoordinate falls back to it) and for a no-store fallback's row; deduplicated when
+            // the two derivations coincide.
             HardenedScreen.Coordinate viaPath = HardenedScreen.coordinate(safe);
             if (!(viaPath.ecosystem().equals(ecosystem) && viaPath.coordinate().equals(coordinate)
                     && viaPath.version().equals(version))) {
@@ -616,15 +529,12 @@ public class RepositoryBrowse extends TenantScope {
             }
             return List.copyOf(rows);
         } catch (IOException | RuntimeException _) {
-            // Render-what-you-have: a metadata read failure degrades the origin panel to empty rather than failing the
-            // whole artifact detail view, the same posture the quarantine/inspection subsections take.
+            // A read failure empties the origin panel rather than failing the detail view.
             return List.of();
         }
     }
 
-    /** Append the acquisition rows of one origin section as {@link OriginRow}s, skipping a row already collected from a
-     *  sibling document keyed under a different coordinate derivation (the {@code (source, sha256, repository, target)}
-     *  identity), so the merged audit view never double-lists the same acquisition. */
+    /** Appends one section's rows, skipping a {@code (source, sha256, repository, target)} already collected. */
     private static void collectOrigin(Optional<Section> section, List<OriginRow> rows, Set<String> seen) {
         for (OriginSection.Acquisition row : OriginSection.acquisitions(section)) {
             String identity = row.source() + '|' + row.sha256() + '|' + row.repository() + '|' + row.target();
@@ -639,22 +549,8 @@ public class RepositoryBrowse extends TenantScope {
         }
     }
 
-    /** The quality-inspection subsection's scoped error state for a coordinate: the newest active
-     *  {@link Finding.Kind#INSPECTION} finding, recorded when the compliance screen could not parse the artifact (so it
-     *  was screened only from its path coordinate). A point lookup of this coordinate's findings - the same bounded
-     *  read the quarantine verdict above is - not a ledger scan. Best-effort (render what you have): a
-     *  coordinate with no version, an uninstalled findings module, or a read failure yields {@code null}, so the rest
-     *  of the detail
-     *  view still renders rather than the whole page failing on one subsection's derive. */
-    /**
-     * The signature summary recorded for this coordinate version, or {@code null} when none was.
-     *
-     * <p>One bounded point read of the version document's own section - no artifact body, no store walk, no
-     * cryptography - so the panel costs the same on a repository holding ten million versions as on one holding ten.
-     * Best-effort in the render-what-you-have sense: a read that fails yields no row and the page says there is none,
-     * never a failed detail view.
-     */
-    /** The console's view of the signature, over the one read every surface takes. */
+    /** The signature summary recorded for this coordinate version, one point read, or {@code null} when none was or the
+     *  read failed. */
     private static SignatureRow signatureOf(ArtifactStore store, String ecosystem, String coordinate,
                                             String version) {
         return SignatureSummaries.of(store, ecosystem, coordinate, version)
@@ -676,6 +572,8 @@ public class RepositoryBrowse extends TenantScope {
         }
     }
 
+    /** The newest active {@link Finding.Kind#INSPECTION} finding of a coordinate version, one point lookup of its
+     *  findings; {@code null} without a version, a findings module, or on a read failure. */
     private static InspectionRow inspectionFailure(ArtifactStore store, String ecosystem, String coordinate,
                                                    String version) {
         if (coordinate.isEmpty() || version.isEmpty()) {
@@ -697,19 +595,15 @@ public class RepositoryBrowse extends TenantScope {
             return latest == null ? null
                     : new InspectionRow(latest.description(), latest.lastSeen().toString());
         } catch (IOException | RuntimeException _) {
-            // Render-what-you-have: a findings read failure degrades this one subsection to no panel rather than
-            // failing the whole artifact detail view.
+            // A read failure drops this subsection rather than failing the detail view.
             return null;
         }
     }
 
     /**
-     * Drop every unsafe segment so a browse prefix stays strictly within a repository's {@code publish/} pointer
-     * tree: an empty, {@code .} or {@code ..} segment, or one carrying a backslash, is removed rather than allowed to
-     * walk up out of the subtree into the content-addressed {@code blobs/} bucket or another key space (the store
-     * normalises {@code publish/../blobs} to {@code blobs}, so this guard - not the store - is what keeps the browse
-     * confined). The result is a leading-slash path (or {@code ""} for the root), the convention the inventory's
-     * {@code children} expects. Domain-owned so both the page and the lazy-children fragment inherit it.
+     * Drops every unsafe segment - empty, {@code .}, {@code ..}, or carrying a backslash - so a browse prefix stays in
+     * the {@code publish/} tree: the store normalises {@code publish/../blobs} to {@code blobs}, so this guard is what
+     * confines the browse. Answers a leading-slash path, or {@code ""} for the root.
      */
     public static String safePrefix(String prefix) {
         if (prefix == null || prefix.isEmpty()) {
@@ -721,9 +615,8 @@ public class RepositoryBrowse extends TenantScope {
                 continue;
             }
             if (safe.length() == 0 && segment.equals(QUARANTINE)) {
-                // A leading "quarantine" segment would navigate into the withheld-artifact review subtree, whose paths
-                // and sizes a GET does not serve; drop it (a deeper "quarantine" is a legitimate artifact-path segment
-                // and is kept), so a crafted prefix/path cannot enumerate or open held artifacts through the browse.
+                // A leading "quarantine" would open the held-artifact review subtree; a deeper one is an ordinary
+                // segment.
                 continue;
             }
             safe.append('/').append(segment);
@@ -731,11 +624,8 @@ public class RepositoryBrowse extends TenantScope {
         return safe.toString();
     }
 
-    /** The order the browse rows are presented in: by {@code name} (default), {@code type}
-     *  (artifact-then-folder) or {@code size} - the raw byte count, so a small artifact sorts below a large one rather
-     *  than by a lexical compare of the rendered string, and an unknown size ({@code -1}) sorts lowest - ascending
-     *  unless {@code descending}, with the child name the deterministic tiebreak. Kept in the domain so neither the
-     *  controller nor the template carries sort logic. */
+    /** The browse order: by {@code name} (default), {@code type} (artifact then folder) or {@code size} (the raw count,
+     *  unknown lowest), with the name as tiebreak. */
     private static Comparator<BrowseEntry> browseOrder(String sort, boolean descending) {
         Comparator<BrowseEntry> primary = switch (sort == null ? "" : sort) {
             case "size" -> Comparator.comparingLong(BrowseEntry::bytes);
@@ -763,17 +653,14 @@ public class RepositoryBrowse extends TenantScope {
         return String.format(Locale.ROOT, "%.1f %s", value, units[unit]);
     }
 
-    /** One search hit rendered in the same generic list as the browse: what a person reads for it - a
-     *  {@code coordinate:version}, or the path of an artifact with no coordinate - its parts, and the browse folder it
-     *  occupies, so the row links into the tree there. The location is blank when no installed format can place the
-     *  coordinate, in which case the console links the hit to its coordinate's own page, or shows it inert. */
+    /** One search hit: its {@code coordinate:version} or path, its parts, and its browse folder, blank when no installed
+     *  format places it. */
     public record SearchResult(String display, String coordinate, String version, String ecosystem,
                                String location) {
     }
 
-    /** One page of a search as the search bar shows it: the mode the repository answers in, whether its full-text
-     *  index answered this page, the hits, and the cursor to the next page - {@code null} when nothing remains, so
-     *  a clamped page never reads as the whole match set. */
+    /** One page of a search: the repository's mode, whether the full-text index answered, the hits, and the next
+     *  cursor, {@code null} when nothing remains. */
     public record SearchPage(SearchMode mode, boolean indexed, List<SearchResult> results, String nextCursor) {
 
         public SearchPage {
@@ -786,9 +673,8 @@ public class RepositoryBrowse extends TenantScope {
         }
     }
 
-    /** One page of the repository's search - see {@link RepositorySearch} - with each hit placed in the browse tree.
-     *  {@code config} is the repository's effective configuration, which decides whether it answers by name or from
-     *  its full-text index; {@code cursor} is a previous page's, or {@code null}. */
+    /** One page of the repository's {@link RepositorySearch}, each hit placed in the browse tree; {@code config} decides
+     *  the mode, {@code cursor} is a previous page's or {@code null}. */
     public SearchPage search(String repository, UnaryOperator<String> config, String query, String cursor)
             throws IOException {
         RepositorySearch.Answer answer = search.search(scope(repository), tenant() + '/' + repository, config, query,
@@ -808,9 +694,8 @@ public class RepositoryBrowse extends TenantScope {
         return new SearchPage(answer.mode(), answer.indexed(), results, answer.nextCursor());
     }
 
-    /** The licence inventory of a repository as its last count left it - the stored report
-     *  {@code GET /api/licenses} answers from, read by the same {@link LicenseReport}, so the screen and the API
-     *  cannot disagree. One point read; the count itself never runs here. */
+    /** The repository's licence inventory as its last count left it, the {@link LicenseReport}
+     *  {@code GET /api/licenses} reads; one point read. */
     public LicenseReport.Inventory licenses(String repository) throws IOException {
         return LicenseReport.read(scope(repository));
     }
@@ -821,13 +706,9 @@ public class RepositoryBrowse extends TenantScope {
         return LicenseReport.start(scope(repository));
     }
 
-    /** The read-only summary of a repository's published index for the console card: the current generation, the
-     *  durable high-water mark incremental passes advance, and the chain's chunk count, total record count and total
-     *  compressed size - the same facts {@code /api/index} serves, read straight from the descriptor object the
-     *  {@code index} pass commits. Reports {@code published=false} when no descriptor has been written yet (the module
-     *  absent, or its first pass has not run), so the card states it plainly rather than showing a false empty index.
-     *  The descriptor is a small, line-oriented document (see {@code IndexDescriptor}); this reads only its summary
-     *  fields, mirroring that stable format so the console need not require the index module and its native codec. */
+    /** The published index's summary for the console card - generation, watermark, chunk, record and compressed totals,
+     *  as {@code /api/index} serves them - read from the line-oriented descriptor ({@code IndexDescriptor});
+     *  {@code published=false} before one exists. */
     public PublishedIndexView publishedIndex(String repository) throws IOException {
         Optional<ArtifactStore.Versioned> descriptor = scope(repository).readVersioned(INDEX_DESCRIPTOR);
         if (descriptor.isEmpty()) {
@@ -854,9 +735,7 @@ public class RepositoryBrowse extends TenantScope {
                     }
                     case "chunk" -> {
                         if (token.length >= 5) {
-                            // Parse both counters before mutating any total, so a chunk line garbled after its
-                            // compressed size does not half-count the chunk (increment the count and compressed but
-                            // drop its records).
+                            // Both counters parse before any total moves, so a garbled line counts nothing.
                             long chunkCompressed = Long.parseLong(token[3]);
                             long chunkRecords = Long.parseLong(token[4]);
                             chunks++;
@@ -867,17 +746,13 @@ public class RepositoryBrowse extends TenantScope {
                     default -> { }
                 }
             } catch (NumberFormatException malformed) {
-                // A torn or garbled descriptor line degrades to no contribution rather than throwing out of the whole
-                // read-only card - the same total parse the /api/index reader (IndexDescriptor.parse) carries, so one
-                // partially-written descriptor reads as "no usable index" here too instead of a 500, and the next
-                // index pass rewrites it.
+                // A torn line contributes nothing, as IndexDescriptor.parse treats it; the next pass rewrites it.
             }
         }
         return new PublishedIndexView(true, generation, watermark, chunks, records, humanSize(compressed));
     }
 
-    /** The read-only published-index summary the console card renders: whether an index has been published at all, and
-     *  when it has, the generation, watermark and the chain's chunk / record / compressed-size totals. */
+    /** The published-index summary the console card renders. */
     public record PublishedIndexView(boolean published, int generation, String watermark, int chunks, long records,
                                      String compressed) {
     }

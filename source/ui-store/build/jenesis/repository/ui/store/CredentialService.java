@@ -12,16 +12,10 @@ import build.jenesis.repository.server.spi.CredentialLifetimes;
 import build.jenesis.repository.server.spi.OidcTrusts;
 
 /**
- * Manages access credentials within the current tenant through the shared {@link Authorization}: a credential
- * lives under {@code auth/<tenant>/<sha256hex(key)>/} (over the console's root artifact store) holding its
- * grants ({@code scope -> tokens}, where {@code scope} is a project, {@code *} the all-projects wildcard, and a
- * token is a {@code <surface>:<verb>} right) and its metadata (label, created, optional expiry, optional last-used).
- * The grantable tokens are discovered from the {@link GrantableRights} beans on the context rather than hard-coded,
- * so a new surface needs no change here. The minted key carries its tenant in its {@code jenk_<tenant>.<secret><checksum>}
- * form, so the cache server resolves the tenant from the key alone; only the key's hash is stored, so the plaintext key
- * is shown once at creation and never again. A credential expires by default (see {@link CredentialLifetimes#mintExpiry});
- * the cache and the artifact repository authorize against this same store, so a credential granted here is honoured by
- * every surface.
+ * Manages the current tenant's credentials through the shared {@link Authorization}, which every surface authorizes
+ * against: grants of {@code <surface>:<verb>} tokens per scope (a project, or {@code *}) and metadata. The grantable
+ * tokens come from the {@link GrantableRights} beans. A minted key ({@code jenk_<tenant>.<secret><checksum>}) is shown
+ * once, since only its hash is stored, and expires by default ({@link CredentialLifetimes#mintExpiry}).
  */
 public class CredentialService {
 
@@ -72,15 +66,14 @@ public class CredentialService {
         return list(null, PAGE).credentials();
     }
 
-    /** One page of the tenant's credentials ({@code next} resumes after it, null on the last page), shown by label
-     *  within the page: a tenant that has minted keys for years is a listing to page through, never to render. */
+    /** One page of the tenant's credentials, by label within the page; {@code next} resumes, {@code null} on the
+     *  last. */
     public record Page(List<Credential> credentials, String next) {
     }
 
     public Page list(String after, int limit) throws IOException {
         String tenant = tenant();
-        // The tenant's named roles are the same for every credential in the list, so read them once here rather than
-        // re-reading the roles document from the store on each per-credential load (an N+1 store read on the page).
+        // The tenant's roles, read once for the page.
         Map<String, String> roles = authorization.roles().of(tenant);
         List<Credential> credentials = new ArrayList<>();
         Authorization.CredentialPage page = authorization.credentials(tenant, after, Math.clamp(limit, 1, PAGE));

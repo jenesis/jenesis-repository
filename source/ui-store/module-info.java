@@ -1,17 +1,8 @@
 /**
- * The console's application-service layer as its own module - the domain the admin console drives, lifted out of
- * the Spring Boot web module so any surface (the web console today, a command-line client tomorrow) binds it
- * directly rather than over the HTTP API. It holds the tenant-scoped gateways to the two products: credentials
- * ({@code CredentialService}), the artifact repository ({@code RepositoryAdmin}), the cache projects
- * ({@code CacheService}), deployment settings ({@code SettingsAdmin}) and tenant lifecycle ({@code TenantService}),
- * plus the small value types they share.
- *
- * <p>It is deliberately Spring-free: it depends only on the storage / repository SPIs and utility libraries, never
- * on Spring or the servlet API, so it carries no web coupling. The two request-scoped concerns it needs - which
- * tenant a call runs in ({@code CurrentTenant}) and who a mutation is attributed to ({@code ConsoleActor}) - are
- * named as interfaces here and implemented by whichever surface binds the layer; the web console wires these and
- * the services as beans in its own {@code DomainConfig}. The module is {@code open} only so a view technology may
- * read its record accessors reflectively.
+ * The console's application-service layer: the tenant-scoped services the admin console drives in process -
+ * credentials, repositories, cache projects, settings, tenants. Spring-free; the request-scoped concerns
+ * ({@code CurrentTenant}, {@code ConsoleActor}) are interfaces the binding surface implements. Open so a view technology
+ * may read its record accessors.
  *
  * @jenesis.release 25
  * @jenesis.bom pin-repository.properties

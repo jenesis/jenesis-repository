@@ -33,51 +33,28 @@ import build.jenesis.repository.server.kernel.SettingsEditor;
 
 /**
  * The console's view of the runtime settings - the deployment's, a tenant's, a repository's and a project's - and its
- * way to change them. Every change goes through the one settings editor ({@link SettingsEditor}) the
- * {@code /api/settings} endpoints and so the CLI change settings through, called here in process: the same refusals,
- * pins, secret sealing, epoch and audit whichever surface asked. What a screen renders is read by that same editor
- * ({@link SettingsEditor#rows}) - the rows {@code /api/settings} answers. The running repository nodes apply a live
- * setting on their next scheduled re-read - at once on a node the console is composed into - and a restart-only
- * setting on their next boot (the screen says which is which).
- *
- * <p>The catalogue is the discovered {@code SettingsContributor} list, not a hand-inlined copy: the neutral core
- * dogfoods the SPI ({@code CoreSettingsContributor} in the settings module) exactly as its plugin modules do, so the
- * console and the {@code /api/settings} adapter share one source of truth for the core dials rather than each carrying
- * a byte-for-byte duplicate. The screen therefore lists exactly the settings of the modules installed on this
- * deployment, the core included.
+ * way to change them, through the one {@link SettingsEditor} the {@code /api/settings} endpoints use, in process: the
+ * same refusals, pins, secret sealing, epoch and audit, and the same rows ({@link SettingsEditor#rows}). Nodes apply a
+ * live setting on their next re-read and a restart-only one on their next boot. The catalogue is
+ * {@link SettingsContributor#all()}.
  */
 public class SettingsAdmin {
 
     private static final Pattern HOST = Pattern.compile("[A-Za-z0-9.-]+");
 
-    /** How long a computed orphaned-data snapshot is reused before the multi-tenant store walk is repeated. The
-     *  diagnostic's walk scans every tenant's declared key-spaces for each not-installed module (potentially the
-     *  whole store), so repeating it on every modules-screen render would make the reader pay a deployment-wide scan
-     *  (read-first: the reader pays for nothing a sweep could pre-do). The diagnostic tolerates a short staleness by
-     *  its own contract - it only counts,
-     *  never acts, and reclaiming is an explicit operator purge - so the snapshot is memoised for this window and the
-     *  walk runs at most once per window however often the screen is rendered. */
+    /** How long the orphaned-data snapshot is reused. Its walk can span the whole store, and the diagnostic only counts,
+     *  so it tolerates this staleness; the walk runs at most once per window. */
     private static final Duration ORPHAN_TTL = Duration.ofSeconds(60);
 
     /**
-     * How long a collected {@link CollectedPosture} is reused before the effective-settings read behind it is
-     * repeated. The header badge and the Security-posture screen read <em>the same collected report</em>
-     * rather than two differently-derived numbers, which means the collection rides <em>every</em> console view -
-     * and a per-view read of the deployment's and the tenant's settings documents is exactly the cost
-     * that must be kept off a reader. So it is collected at most once per tenant per window however often a page
-     * renders,
-     * and the window is short (versus {@link #ORPHAN_TTL}'s minute) because this one is not a store walk but a
-     * handful of small documents, and because posture is what an operator watches while changing settings.
-     *
-     * <p>A change made through <em>this</em> console drops the memo outright, so an operator never waits out the
-     * window for their own edit; the window only covers a change made elsewhere (the API, the CLI, another node),
-     * and {@link CollectedPosture#collectedAt()} is rendered so that staleness is stated rather than hidden.
+     * How long a {@link CollectedPosture} is reused: the badge rides every console view, so it is collected at most once
+     * per tenant per window. Short, as posture is watched while settings change; a change through this console drops
+     * the memo, and {@link CollectedPosture#collectedAt()} states the staleness of one made elsewhere.
      */
     private static final Duration POSTURE_TTL = Duration.ofSeconds(10);
 
-    /** How many tenants' collected posture reports are memoised at once. A console session selects real tenants, so
-     *  this is generous; it exists because the map is keyed by an outside-supplied name and a cache must be bounded.
-     *  Past the cap it is cleared outright - it is only a cache, and a cleared entry merely re-collects. */
+    /** How many tenants' posture reports are memoised, since the key is an outside-supplied name; past it the memo is
+     *  cleared. */
     private static final int POSTURE_TENANTS = 64;
 
     private final ArtifactStore root;
@@ -91,21 +68,16 @@ public class SettingsAdmin {
     private final CurrentTenant current;
     private final ConsoleActor actor;
 
-    /** The memoised orphaned-data snapshot and its expiry, guarding the deployment-wide diagnostic walk against
-     *  per-render recomputation. Read and refreshed under {@link #orphanLock}; the snapshot is deployment-global
-     *  (the scan spans every tenant and this super-admin screen shows the same view to all), so caching it on this
-     *  shared instance is correct rather than tenant-leaking. */
+    /** The memoised orphaned-data snapshot, guarded by {@link #orphanLock}; deployment-global, for a super-admin
+     *  screen. */
     private final Object orphanLock = new Object();
     private Map<String, StorageNamespaces.Report> orphanSnapshot;
     private Instant orphanExpiry = Instant.MIN;
-    /** When the current memoised snapshot was actually walked (not the cache's expiry), so the modules screen shows how
-     *  fresh its orphaned-data diagnostic is (staleness is visible). {@code null} until the first walk. */
+    /** When the memoised snapshot was walked, which the modules screen shows; {@code null} until the first walk. */
     private Instant orphanScannedAt;
 
-    /** The memoised collected posture per tenant (the empty string being the tenant-less, deployment-wide view), so
-     *  the header badge and the Security-posture screen are served one collection rather than each performing their
-     *  own - which is what makes them unable to disagree. Dropped whole on any settings write through this
-     *  instance. */
+    /** The memoised posture per tenant (empty for the deployment-wide view), served to the badge and the screen alike;
+     *  dropped on any settings write through this instance. */
     private final ConcurrentMap<String, MemoisedPosture> postureSnapshots = new ConcurrentHashMap<>();
 
     /** One memoised collection and the instant it stops being reused. */
@@ -123,8 +95,7 @@ public class SettingsAdmin {
         this(repositoryStore, pins, List::of);
     }
 
-    /** A fixture constructor that records no audit events (the no-op trail, no bound tenant, a neutral actor). The
-     *  console binds the constructor taking the deployment's settings editor. */
+    /** A fixture that records no audit events. */
     public SettingsAdmin(ArtifactStore repositoryStore, Function<String, Optional<PinnedSettings.Pin>> pins,
                          Supplier<List<String>> tenants) {
         this(repositoryStore, pins, tenants, AuditTrail.none(), () -> null, () -> "console");
@@ -147,24 +118,18 @@ public class SettingsAdmin {
     }
 
     /**
-     * The console-bound constructor. {@code editor} is the one place a setting is changed, on every surface - the
-     * console calls it in process as the API's handlers do - and its pin probe is what the screens grey a pinned knob
-     * by. {@code tenants} is the deployment's tenant directory, the scopes the orphaned-data diagnostic scans. What is
-     * not a setting - an upstream credential, a purge - is recorded through {@code audit}, attributed to the
-     * {@code actor} under the {@code current} tenant, and a settings change the editor records the same way.
-     * {@code credentialConfig} is what the upstream-credential source reads its deploy-time bootstrap keys from -
-     * notably {@code secrets-key} ({@code JENREPO_SECRETS_KEY}), the master key that envelope-encrypts a stored
-     * credential at rest - so a credential set through the console is encrypted under the same key as through the
-     * API. A fixture that passes no config resolves an unconfigured cipher, so any credential write it makes is
-     * refused - as at rest it must be.
+     * The console-bound constructor. {@code editor} changes every setting and its pin probe greys a pinned knob;
+     * {@code tenants} are the scopes the orphaned-data diagnostic scans; what is not a setting (an upstream credential,
+     * a purge) is recorded on {@code audit}. {@code credentialConfig} supplies deploy-time keys such as
+     * {@code JENREPO_SECRETS_KEY}, so a credential is sealed under the API's key; without it every credential write is
+     * refused.
      */
     public SettingsAdmin(ArtifactStore repositoryStore, SettingsEditor editor, Supplier<List<String>> tenants,
                          AuditTrail audit, CurrentTenant current, ConsoleActor actor,
                          UnaryOperator<String> credentialConfig) {
         this.editor = editor;
         this.root = repositoryStore;
-        // The console manages upstream credentials through the same discovered source as the server; NONE when
-        // the module is absent, and the card is hidden through the capability flag.
+        // The server's discovered source; NONE when the module is absent.
         this.upstreamCredentials = UpstreamCredentialSourceProvider.resolve(repositoryStore, credentialConfig);
         this.pins = editor::pinned;
         this.tenants = tenants;
@@ -173,9 +138,7 @@ public class SettingsAdmin {
         this.actor = actor;
     }
 
-    /** Record a privileged settings mutation on the shared audit trail under the console's selected tenant, attributed
-     *  to the acting member - the same seam the repository services and {@code CredentialService} use. Best-effort:
-     *  a failed audit write never fails the settings mutation it records. */
+    /** Records a privileged mutation under the selected tenant, attributed to the member; best-effort. */
     private void audit(String action, String target) {
         audit.record(current.name(), actor.name(), action, target);
     }
@@ -192,11 +155,7 @@ public class SettingsAdmin {
         return values;
     }
 
-    /** The deployment's settings grouped for the settings screen, from the rows the settings editor reads for every
-     *  surface ({@link SettingsEditor#rows}) - the ones {@code GET /api/settings} answers: each with its documentation,
-     *  its value kind and choices, its effective value, its default, whether an override is in force, whether a change
-     *  applies live or only on the repository's next restart, and whether it is a high-impact policy knob a change
-     *  should be confirmed on. */
+    /** The deployment's settings grouped for the settings screen, from the rows {@code GET /api/settings} answers. */
     public List<Group> groups() throws IOException {
         return levelGroups(editor.rows(Setting.Scope.GLOBAL, null, null), true);
     }
@@ -213,9 +172,8 @@ public class SettingsAdmin {
         return editor.effective(tenant, key, fallback);
     }
 
-    /** Build one setting's view: its effective value against {@code baseline} (the product default globally, the global
-     *  effective value in a tenant view), whether an override is in force, its live/restart and pin state, and the JPMS
-     *  module that contributes it (so both the settings screen and the modules screen attribute it). */
+    /** One setting's view: its effective value against {@code baseline} (the default globally, the deployment value in
+     *  a tenant view), override, live and pin state, and contributing module. */
     private SettingView view(Setting setting, String effective, String baseline, boolean overridden,
                              Optional<PinnedSettings.Pin> pin, String module) {
         return new SettingView(setting.key(), setting.group(), setting.label(), setting.description(),
@@ -230,13 +188,8 @@ public class SettingsAdmin {
         return attribution.getOrDefault(key, SettingsDocuments.NEUTRAL);
     }
 
-    /** The installed/enabled state of every discovered module, each with its contributed settings beneath it and its
-     *  enable/disable toggle where it declares an enablement gate - the modules console. Enumerated from the settings
-     *  contributors and the stored documents, not a maintained table: a module named only by a leftover stored document
-     *  (this image was not built with it) renders not-installed. The effective value that decides a gate's enabled state
-     *  follows the same chain the screen shows - an operator's pin over the stored value over the product default.
-     *  A not-installed module whose persisted storage manifest still holds data carries the orphaned-data counts - a
-     *  diagnostic only; reclaiming it is the operator's explicit purge command, never a screen side effect. */
+    /** The modules console's rows: every discovered module's state, settings and toggle, plus a not-installed row for a
+     *  module named only by a stored document or a storage manifest, carrying its orphaned-data counts. */
     public List<ModuleView> modules() throws IOException {
         Properties stored = read();
         Map<String, String> attribution = SettingsContributor.attribution();
@@ -262,19 +215,15 @@ public class SettingsAdmin {
                     orphan == null ? 0 : orphan.objects(), orphan == null ? 0 : orphan.bytes(),
                     orphan == null ? List.of() : kept(orphan)));
         }
-        // A removed module may be named only by its persisted storage manifest (no stored settings document, no
-        // contributor) - it still deserves a row, so the operator sees its orphaned data at all.
+        // A module named only by its storage manifest still gets a row.
         orphans.forEach((module, orphan) -> views.add(new ModuleView(module, false, false, false, null, false,
                 false, List.of(), orphan.objects(), orphan.bytes(), kept(orphan))));
         views.sort(Comparator.comparing(ModuleView::module));
         return views;
     }
 
-    /** The plug-in surface grouped by SPI - every discovered contract this deployment carries and the installed
-     *  implementations that provide it, each with its declaring module's enabled state and contributed settings. The
-     *  per-SPI view over the same {@link ModuleCapability} model {@link #modules()} lists per module, decided by the
-     *  same effective-value chain the screens show (an operator's pin over the stored value over the product default),
-     *  so the SPI catalogue and the modules screen agree on what is on. Super-admin, alongside the modules screen. */
+    /** The plug-in surface grouped by SPI, over the same {@link ModuleCapability} model {@link #modules()} lists per
+     *  module, so the two agree on what is on. */
     public List<SpiCatalog> catalog() throws IOException {
         Properties stored = read();
         UnaryOperator<String> effective = key -> {
@@ -286,41 +235,12 @@ public class SettingsAdmin {
     }
 
 
-    /** The security-posture screen's model for a named tenant: every potentially-unsafe configuration a
-     *  {@code ServiceLoader}-discovered {@code SafetyAdvisor} raises against the effective configuration, each naming
-     *  <em>why</em> it is unsafe, the exact {@code jenrepo.*} key/value that fixes it and a docs link, severity-sorted
-     *  (critical first) and split by {@link ScopedPosture} into what this tenant's view may see.
-     *
-     *  <p>The effective configuration is the one that tenant's deployment would actually run with - the same chain
-     *  {@link #groups(String)} shows and the repository server's live configuration resolves: an operator
-     *  <em>pin</em> over that tenant's document (for a {@link SettingsScopes#tenantOverridable} key only, so a
-     *  deployment-wide dial can never pick up a tenant's value) over the deployment document over the
-     *  {@code deployment} lookup the caller hands in ({@code environment::getProperty} from the console's Spring
-     *  layer). A non-{@code jenrepo.} key ({@code spring.profiles.active}) is read straight off the deployment.
-     *
-     *  <p>Exactly one tenant's document is consulted, so a report collected here can carry a tenant-scoped row only
-     *  about {@code tenant} - and {@link ScopedPosture} then renders only that tenant's rows, so the two scoping
-     *  layers are independent. The tenant reaches the advisors through the reserved {@link TenantPosture#scoped}
-     *  context key rather than the environment, so an ambient value cannot re-attribute a report.
-     *
-     *  <p>Read-only - observing posture never mutates it - and it names the risk, never a secret value. A clean
-     *  deployment reports nothing, the healthy state. Super-admin, alongside the modules and SPI catalogue screens.
-     *  A {@code null} or blank {@code tenant} - a session that has selected none - degrades to the deployment-wide
-     *  half alone rather than guessing one; the console is always a tenant view, implicitly so on a single-tenant
-     *  deployment where the session selects the one accessible tenant.
-     *
-     *  <p><b>One collection, two surfaces.</b> This is also what the console header's posture badge counts.
-     *  A badge collecting its own report over the raw Spring environment while this screen read the stored chain
-     *  would count as zero an advisory raised by a <em>stored</em> dial that is listed here, and would miss the
-     *  screen's tenant rows. Both read the value this method
-     *  returns, for the same session-selected tenant, so they cannot disagree about the chain, about the tenant, or
-     *  about an advisory: the badge counts exactly the rows the screen it links to renders. The result is memoised
-     *  for {@link #POSTURE_TTL} because the badge rides every view; the collection instant travels with it
-     *  so the screen can say how fresh it is, and a settings write through this console drops the memo at once.
-     *
-     *  <p>{@code deployment} is the caller's own environment lookup and is <em>not</em> part of the memo key: every
-     *  call site is the console's single Spring {@code Environment}, so one collection answers them all. A surface
-     *  that layered a different deployment lookup under the same store would need its own instance. */
+    /** The posture for a tenant, which the screen renders and the header badge counts: every discovered
+     *  {@code SafetyAdvisor}'s advisories against the effective configuration - a pin, over the tenant's document for a
+     *  {@link SettingsScopes#tenantOverridable} key, over the deployment document, over the {@code deployment} lookup -
+     *  split by {@link ScopedPosture}. The tenant reaches the advisors through {@link TenantPosture#scoped}; a blank one
+     *  yields the deployment-wide half. Memoised for {@link #POSTURE_TTL}, keyed by tenant alone, since every caller
+     *  passes the console's one environment. */
     public CollectedPosture posture(String tenant, UnaryOperator<String> deployment) throws IOException {
         String selected = tenant == null ? "" : tenant.strip();
         Instant now = Instant.now();
@@ -336,10 +256,7 @@ public class SettingsAdmin {
         return collected;
     }
 
-    /** Drop every memoised posture collection, so the next read of the badge or the screen re-collects. Called from
-     *  each settings write this console performs: an operator who has just changed a dial must see the advisory it
-     *  raises (or clears) immediately, never at the end of a window. A change made on another surface or node is
-     *  picked up when the window lapses instead. */
+    /** Drops every memoised posture, on each settings write through this console, so its effect shows at once. */
     private void invalidatePosture() {
         postureSnapshots.clear();
     }
@@ -351,9 +268,7 @@ public class SettingsAdmin {
         Properties stored = read();
         Properties overrides = selected.isEmpty() ? new Properties() : read(selected);
         Configuration base = Configuration.of(fullKey -> {
-            // The advisor asks by full key (jenrepo.auth); the store is keyed by the bare key, so strip the
-            // prefix and walk the effective chain, falling back to the deployment lookup - and read a
-            // non-jenrepo. key (spring.profiles.active) straight off the deployment.
+            // The store is keyed by the bare key; any other key is read off the deployment.
             if (fullKey.startsWith(prefix)) {
                 String key = fullKey.substring(prefix.length());
                 Optional<PinnedSettings.Pin> pin = pins.apply(key);
@@ -376,17 +291,13 @@ public class SettingsAdmin {
         return ScopedPosture.of(PostureReport.discover(TenantPosture.scoped(selected, base)), selected);
     }
 
-    /** The orphaned-data reports keyed by module: a persisted storage-manifest entry whose declaring module is not
-     *  installed yet whose key-spaces still hold data. Empty when this surface has no tenant directory to scan. A
-     *  fresh mutable copy of the memoised snapshot each call, so {@link #modules()} may consume it (it removes each
-     *  matched module and folds the rest into rows) without disturbing the cache. */
+    /** The orphaned-data reports by module, as a mutable copy of the snapshot {@link #modules()} consumes. */
     private Map<String, StorageNamespaces.Report> orphanedData() throws IOException {
         return new LinkedHashMap<>(orphanSnapshot());
     }
 
-    /** The current orphaned-data snapshot, recomputing the deployment-wide walk only when the memoised one has
-     *  expired (or was never taken). The walk runs outside {@link #orphanLock} so a slow multi-tenant scan never
-     *  serialises concurrent modules-screen renders; a race past the expiry simply recomputes an idempotent result. */
+    /** The orphaned-data snapshot, re-walked once expired. The walk runs outside {@link #orphanLock}, and a race past the
+     *  expiry recomputes an idempotent result. */
     private Map<String, StorageNamespaces.Report> orphanSnapshot() throws IOException {
         synchronized (orphanLock) {
             if (orphanSnapshot != null && Instant.now().isBefore(orphanExpiry)) {
@@ -403,11 +314,8 @@ public class SettingsAdmin {
         }
     }
 
-    /** The instant the orphaned-data diagnostic snapshot the modules screen renders was last walked - the
-     *  staleness line for that deployment-wide derived view, so an operator knows a just-purged module may linger in
-     *  the counts for up to the {@code ORPHAN_TTL} window rather than reading a stale count as current. {@code null}
-     *  before the first walk. Reflects the memoised snapshot's actual walk time, not the cache expiry, and is refreshed
-     *  in lock-step with {@link #orphanSnapshot()} - so a caller reads it right after {@link #modules()}. */
+    /** When the snapshot {@link #modules()} rendered was walked, the screen's staleness line; {@code null} before the
+     *  first walk. Read right after {@link #modules()}. */
     public Instant orphanScannedAt() {
         synchronized (orphanLock) {
             return orphanScannedAt;
@@ -415,10 +323,8 @@ public class SettingsAdmin {
     }
 
     /**
-     * Purge the named module's declared key-spaces across every tenant - the console's explicit reclamation of the
-     * orphaned data the modules screen names, the same primitive {@code POST /api/admin/purge} drives and audited
-     * the same way. The memoised orphan snapshot is dropped so the next render reads the post-purge store rather
-     * than the stale counts. Empty when no manifest entry names the module.
+     * Purges the named module's declared key-spaces across every tenant, the primitive {@code POST /api/admin/purge}
+     * drives, audited the same way, and drops the snapshot. Empty when no manifest entry names the module.
      */
     public Optional<StorageNamespaces.Report> purgeOrphanedData(String module) throws IOException {
         Optional<StorageNamespaces.Report> report = new StorageNamespaces(root).purge(module, tenants.get());
@@ -433,8 +339,7 @@ public class SettingsAdmin {
         return report;
     }
 
-    /** The uncached diagnostic walk: for every not-installed manifest entry, the count of what its key-spaces still
-     *  hold across every tenant scope. Empty when this surface has no tenant directory to scan. */
+    /** The uncached walk: what every not-installed manifest entry's key-spaces hold across the tenants. */
     private Map<String, StorageNamespaces.Report> scanOrphanedData() throws IOException {
         List<String> scopes = tenants.get();
         if (scopes.isEmpty()) {
@@ -447,70 +352,55 @@ public class SettingsAdmin {
         return orphans;
     }
 
-    /** Whether a setting gates how artifacts are admitted, so the console confirms before applying a change. That is
-     *  the compliance area's verdict knobs (a REJECT | QUARANTINE | ALLOW / severity {@code CHOICE}) and its deny
-     *  lists - a change here can start rejecting or admitting packages, unlike an endpoint URL or a feed toggle. */
+    /** Whether a setting gates admission (the compliance verdict knobs and deny lists), so a change is confirmed. */
     private static boolean highImpact(Setting setting) {
         return "Compliance".equals(setting.group())
                 && (setting.kind() == Setting.Kind.CHOICE
                         || setting.key().toLowerCase(Locale.ROOT).contains("deny"));
     }
 
-    /** Set ({@code value} non-blank) or clear ({@code null}/blank) one deployment-wide override, through the one
-     *  settings editor every surface changes settings with ({@link SettingsEditor#deployment}). */
+    /** Sets, or with a blank value clears, one deployment-wide override ({@link SettingsEditor#deployment}). */
     public void save(String key, String value) throws IOException {
         editor.deployment(one(key, value), actor());
         invalidatePosture();
     }
 
-    /** The stored settings as one JSON bundle for the console's download - the one export the {@code /api/settings/export}
-     *  endpoint and the CLI emit ({@link Settings#exportBundle}), credential-free by construction. */
+    /** The stored settings as the secret-free bundle {@code /api/settings/export} emits ({@link Settings#exportBundle}). */
     public byte[] exportBundle() throws IOException {
         return SettingsDocuments.serializeBundle(editor.settings().exportBundle());
     }
 
-    /** Restore an uploaded settings bundle (module name to that module's stored overrides, parsed by the console's web
-     *  layer with a real JSON reader) through the settings editor ({@link SettingsEditor#importBundle}): refused whole,
-     *  before anything is written, when it would not resolve, carries a value its setting refuses or sets a pinned
-     *  key. */
+    /** Restores a settings bundle ({@link SettingsEditor#importBundle}), refused whole before any write when a value is
+     *  refused or a key pinned. */
     public void importBundle(Map<String, ? extends Map<String, String>> bundle) throws IOException {
         editor.importBundle(bundle, actor());
         invalidatePosture();
     }
 
-    /** A tenant's settings grouped for its settings screen, from the rows the settings editor reads for every surface
-     *  ({@link SettingsEditor#rows}) - the ones {@code GET /api/settings?tenant=} answers: only the keys a tenant may
-     *  hold, each with its tenant-effective value, the deployment's value as its baseline, and whether this tenant set
-     *  its own. */
+    /** A tenant's settings grouped for its screen, from the rows {@code GET /api/settings?tenant=} answers. */
     public List<Group> groups(String tenant) throws IOException {
         return levelGroups(editor.rows(Setting.Scope.TENANT, tenant, null), true);
     }
 
-    /** Set or clear one of a tenant's overrides through the settings editor ({@link SettingsEditor#tenant}), layered
-     *  over the deployment-wide value: a key a tenant cannot hold, a pinned one, or a value the tenant's gate would
-     *  not resolve with is refused, and nothing is written. */
+    /** Sets or clears one of a tenant's overrides ({@link SettingsEditor#tenant}). */
     public void save(String tenant, String key, String value) throws IOException {
         editor.tenant(tenant, one(key, value), true, actor());
         invalidatePosture();
     }
 
-    /** Restore one tenant's slice from an uploaded bundle through the settings editor
-     *  ({@link SettingsEditor#importTenant}), leaving the global settings and other tenants untouched. */
+    /** Restores one tenant's slice from a bundle ({@link SettingsEditor#importTenant}). */
     public void importTenant(String tenant, Map<String, ? extends Map<String, String>> bundle) throws IOException {
         editor.importTenant(tenant, bundle, actor());
         invalidatePosture();
     }
 
-    /** The repositories defined at runtime (name to routing spec) - the same {@code repositories.<name>} entries the
-     *  API and CLI manage; they add to or override the deployment's file-configured repositories. */
+    /** The runtime repository definitions (name to routing specification), the {@code repositories.<name>} entries. */
     public Map<String, String> repositories() throws IOException {
         return entries(SettingsScopes.REPOSITORY_PREFIX);
     }
 
-    /** Whether a definition has a hardened upstream fallback ({@code fallback <url> harden}): an untrusted-upstream leg
-     *  that spools and fully screens every fetched body before releasing a byte. The console badges such repositories
-     *  and gates the hardened verdict panel on it. A malformed specification degrades to not hardened rather than
-     *  throwing out of a list render. */
+    /** Whether a definition has a hardened upstream ({@code fallback <url> harden}), which screens every fetched body in
+     *  full before releasing a byte; a malformed specification reads as not hardened. */
     public static boolean hardenedDefinition(String specification) {
         if (specification == null || specification.isBlank()) {
             return false;
@@ -523,15 +413,8 @@ public class SettingsAdmin {
     }
 
     /**
-     * The parsed <em>shape</em> of a repository's definition for the console badges: whether it accepts uploads
-     * ({@code writable}) and, per fallback, an upstream's copy ({@code store}) and screen strength or an
-     * inner-repository reference - rendered from the one {@link RepositoryDefinition} the router routes on, so the
-     * badges never drift from what actually serves. The caller has read the {@code specification} once - the listing
-     * for every row, {@link #routing} for one - so this reads nothing. An unconfigured repository is the default shape
-     * - writable, with no fallbacks - and a malformed specification degrades to that same neutral shape rather than
-     * throwing out of a render (render what you have). {@link RepositoryShape#warnings} carries the valid-but-risky
-     * flags (mixed screening strength, an unscreened or plaintext upstream) the parse logs loudly - surfaced by the
-     * console as a non-blocking notice, not a refusal.
+     * A repository definition's shape for the badges, parsed by the {@link RepositoryDefinition} the router routes on,
+     * reading nothing. Unconfigured or malformed reads as the default: writable, no fallbacks.
      */
     public RepositoryShape shape(String name, String specification) {
         if (specification == null || specification.isBlank()) {
@@ -552,9 +435,7 @@ public class SettingsAdmin {
                 case RepositoryDefinition.Source.Repository repository ->
                         fallbacks.add(new FallbackBadge(false, repository.name(), false, "", repository.name()));
                 case RepositoryDefinition.Source.DnsDirectory dns ->
-                        // The DNS directory leg (a `fallback dns redirect`) - the upstream is resolved
-                        // per request by the DNS walk, so the badge names the `dns` source, stores nothing, and is not a
-                        // repository-name view.
+                        // A `fallback dns redirect` resolves its upstream per request and stores nothing.
                         fallbacks.add(new FallbackBadge(false, "dns", false,
                                 screeningLabel(fallback.screening()), null));
             }
@@ -563,11 +444,9 @@ public class SettingsAdmin {
                 warnings(definition, specification));
     }
 
-    /** The valid-but-risky warnings a parsed definition carries: the mixed-strength flag (a
-     *  hardened upstream beside a weaker one, via the {@link RepositoryDefinition#mixedStrength}
-     *  classifier), an {@code unscreened} upstream, and a plaintext ({@code http://}) upstream (via the 
-     *  {@link RepositoryDefinition#plaintextUpstream} classifier). Each is a non-blocking notice - the same loud
-     *  ⚑ the parse logs - never a refusal. */
+    /** A parsed definition's valid but risky traits, each a notice rather than a refusal: mixed screening strength
+     *  ({@link RepositoryDefinition#mixedStrength}), an unscreened upstream, a plaintext one
+     *  ({@link RepositoryDefinition#plaintextUpstream}). */
     private static List<String> warnings(RepositoryDefinition definition, String specification) {
         List<String> warnings = new ArrayList<>();
         if (RepositoryDefinition.mixedStrength(definition.fallbacks())) {
@@ -601,10 +480,8 @@ public class SettingsAdmin {
         };
     }
 
-    /** A repository's parsed shape for the console: whether the definition is configured at runtime at
-     *  all ({@code configured}; an unconfigured or malformed one is the neutral default), whether it accepts uploads
-     *  ({@code writable}), its ordered per-fallback badges, and any valid-but-risky {@code warnings} the console
-     *  surfaces as a non-blocking notice. A {@code writable} repository with fallbacks is the host+proxy hybrid. */
+    /** A repository's parsed shape: whether it is configured, accepts uploads, its ordered fallback badges and its
+     *  warnings. */
     public record RepositoryShape(boolean configured, boolean writable, List<FallbackBadge> fallbacks,
                                   List<String> warnings) {
         public RepositoryShape {
@@ -624,10 +501,8 @@ public class SettingsAdmin {
         }
     }
 
-    /** One fallback's console badge: an {@code upstream} carries its URL {@code source}, its
-     *  {@code store} (cached vs pass-through) and its {@code screening} strength ({@code default}/{@code harden}/
-     *  {@code unscreened}); a repository-name fallback ({@code upstream=false}) carries its inner {@code repository}
-     *  reference and no store/screen policy (the inner repository owns its own). */
+    /** One fallback's badge: an upstream's {@code source}, {@code store} and {@code screening}, or a repository-name
+     *  fallback's inner {@code repository}, which owns its own policy. */
     public record FallbackBadge(boolean upstream, String source, boolean store, String screening, String repository) {
     }
 
@@ -645,14 +520,12 @@ public class SettingsAdmin {
     public record Routing(String specification, Layer layer, RepositoryShape shape) {
     }
 
-    /** A repository's routing: its own {@code routing} setting where it has one, else the deployment's runtime
-     *  definition of its name. The one read of the repository's own is a point read of the document that holds it. */
+    /** A repository's routing: its own {@code routing} setting, one point read, else the deployment's definition. */
     public Routing routing(String tenant, String name) throws IOException {
         return routing(tenant, name, repositories());
     }
 
-    /** {@link #routing(String, String)} against the deployment's definitions already read, for a list of every
-     *  repository that reads them once rather than per row. */
+    /** {@link #routing(String, String)} against definitions already read, for a list. */
     public Routing routing(String tenant, String name, Map<String, String> deploymentDefinitions) throws IOException {
         if (tenant != null && Scopes.valid(name)) {
             String own = StoredSettings.value(StoredSettings.repository(root, tenant, name),
@@ -667,10 +540,8 @@ public class SettingsAdmin {
                 : new Routing(deployment, Layer.DEPLOYMENT, shape(name, deployment));
     }
 
-    /** Store the deployment's definition of a repository name through the settings editor
-     *  ({@link SettingsEditor#definition}); it routes every tenant's repository of that name that sets no routing of
-     *  its own. {@code tenant} must be {@code null}: a tenant's repository is routed by its own {@code routing}
-     *  setting ({@link #saveRepository}). */
+    /** Stores the deployment's definition of a repository name ({@link SettingsEditor#definition}), routing every
+     *  tenant's repository of that name without its own; {@code tenant} must be {@code null}. */
     public void setRepository(String tenant, String name, String specification) throws IOException {
         if (tenant != null) {
             throw new IllegalArgumentException("A tenant's repository is routed by its own routing setting, not by a "
@@ -704,9 +575,8 @@ public class SettingsAdmin {
             .collect(Collectors.toMap(Map.Entry::getKey, Map.Entry::getValue, (first, _) -> first, TreeMap::new));
 
     /**
-     * The public registries of the installed formats that have no upstream named yet - what the console offers to
-     * name in one click. A format fetches nothing from its public registry until someone does, so this is the whole
-     * of the distance between an installed format and one that pulls through.
+     * The public registries of the installed formats with no upstream named yet, which the console offers in one click,
+     * since a format fetches nothing until one is named.
      */
     public Map<String, String> suggestedUpstreams() throws IOException {
         Map<String, String> named = upstreams();
@@ -715,9 +585,8 @@ public class SettingsAdmin {
         return suggested;
     }
 
-    /** A format's upstream: the deployment's, or with a {@code tenant} that tenant's own, which its repositories pull
-     *  through instead - through the settings editor ({@link SettingsEditor#upstream}), screened as every outbound
-     *  target is. */
+    /** Sets a format's upstream, the deployment's or a tenant's ({@link SettingsEditor#upstream}), screened as every
+     *  outbound target is. */
     public void setUpstream(String tenant, String format, String url) throws IOException {
         editor.upstream(tenant, format, url, actor());
         invalidatePosture();
@@ -752,8 +621,7 @@ public class SettingsAdmin {
         return entries;
     }
 
-    /** The upstream hosts that carry a proxy credential for a private registry; only the hosts are returned, never
-     *  the credential (it is write-only, kept out of the readable settings). */
+    /** The upstream hosts carrying a write-only proxy credential; only the hosts. */
     public SortedSet<String> upstreamCredentialHosts() throws IOException {
         return upstreamCredentials.hosts();
     }
@@ -794,9 +662,8 @@ public class SettingsAdmin {
     }
 
     /**
-     * Set each of {@code values} deployment-wide in one batch - the first-boot wizard's Complete - through the settings
-     * editor ({@link SettingsEditor#deployment}): one refused value writes none, and the refusals are thrown together.
-     * A blank value clears.
+     * Sets each of {@code values} deployment-wide in one batch ({@link SettingsEditor#deployment}); one refused value
+     * writes none. A blank value clears.
      */
     public void saveAll(Map<String, String> values) throws IOException {
         editor.deployment(values, actor());
@@ -804,17 +671,16 @@ public class SettingsAdmin {
     }
 
     /**
-     * Why each of {@code values} cannot be stored at {@code level}, keyed by setting - the settings editor's
-     * {@link SettingsEditor#refusals}, which every change asks first. What a wizard asks on leaving a step.
+     * Why each of {@code values} cannot be stored at {@code level} ({@link SettingsEditor#refusals}), asked by a wizard
+     * on leaving a step.
      */
     public SortedMap<String, String> refusals(Setting.Scope level, Map<String, String> values, boolean operator) {
         return editor.refusals(level, values, operator);
     }
 
     /**
-     * A repository's effective configuration, as the settings editor resolves it for every surface
-     * ({@link SettingsEditor#config}) - the chain the server resolves too, so a preview here judges by the policy a
-     * sweep runs.
+     * A repository's effective configuration ({@link SettingsEditor#config}), the chain the server resolves, so a preview
+     * judges by a sweep's policy.
      */
     public UnaryOperator<String> repositoryConfig(String tenant, String repository) throws IOException {
         return editor.config(Setting.Scope.REPOSITORY, tenant, repository);
@@ -825,8 +691,7 @@ public class SettingsAdmin {
         return editor.config(Setting.Scope.PROJECT, tenant, project);
     }
 
-    /** Each of a tenant's projects' effective configuration - a project's own documents read by name, over the
-     *  tenant's and the deployment's cached snapshots - for a list of every project. */
+    /** Each of a tenant's projects' effective configuration, for a list. */
     public ProjectConfigs projectConfigs(String tenant) {
         return project -> editor.config(Setting.Scope.PROJECT, tenant, project);
     }
@@ -838,11 +703,8 @@ public class SettingsAdmin {
     }
 
     /**
-     * A repository's settings, grouped for its settings screen, from the rows the settings editor reads for every
-     * surface ({@link SettingsEditor#rows}): every repository setting with the repository's effective value, what it
-     * would inherit without its own ({@code baseline}), and whether it set one. An {@link Setting#operatorOnly()
-     * operator-only} setting is shown to a session that is not the operator as fixed, naming who sets it, rather than
-     * as a control it cannot use.
+     * A repository's settings grouped for its screen ({@link SettingsEditor#rows}). An
+     * {@link Setting#operatorOnly() operator-only} setting is shown fixed to a session that is not the operator.
      */
     public List<Group> repositoryGroups(String tenant, String repository, boolean operator) throws IOException {
         return levelGroups(editor.rows(Setting.Scope.REPOSITORY, tenant, repository), operator);
@@ -854,10 +716,8 @@ public class SettingsAdmin {
     }
 
     /**
-     * The settings {@code wizard} asks, as its steps show them, keyed by setting: for the first boot the deployment's
-     * rows; for a new repository or project the rows its tenant's and the deployment's values give one that sets
-     * nothing of its own - what it inherits until it does. An {@link Setting#operatorOnly() operator-only} setting is
-     * shown to a session that is not the operator as fixed, naming who sets it, as on the level's settings screen.
+     * The settings {@code wizard} asks, keyed by setting: the deployment's rows for the first boot, and for a new
+     * repository or project what it would inherit. An operator-only setting is shown fixed to anyone else.
      */
     public Map<String, SettingView> wizardViews(Wizard wizard, String tenant, boolean operator) throws IOException {
         List<Group> groups = switch (wizard) {
@@ -896,9 +756,8 @@ public class SettingsAdmin {
     }
 
     /**
-     * Set each non-blank value and clear each blank one in a repository's own documents, through the settings editor
-     * ({@link SettingsEditor#repository}) - refused whole, naming every refusal, when any value is refused.
-     * {@code operator} is whether the acting session is the deployment's operator.
+     * Sets each non-blank and clears each blank value in a repository's own documents ({@link SettingsEditor#repository}),
+     * refused whole when any value is. {@code operator} is whether the session is the deployment's operator.
      */
     public void saveRepository(String tenant, String repository, Map<String, String> values, boolean operator)
             throws IOException {
@@ -910,10 +769,7 @@ public class SettingsAdmin {
         editor.project(tenant, project, values, actor());
     }
 
-    /** The editable-settings catalogue: the neutral core dogfoods the same {@code SettingsContributor} SPI its plugin
-     *  modules use ({@code CoreSettingsContributor}), so this is just {@link SettingsContributor#all()} - the core is
-     *  described once (in the settings module) rather than inlined here and again in the {@code /api/settings} adapter,
-     *  and the console lists exactly the settings of the modules installed on this deployment. */
+    /** The editable-settings catalogue. */
     private List<Setting> catalogue() {
         return SettingsContributor.all();
     }
@@ -938,11 +794,7 @@ public class SettingsAdmin {
     }
 
     /**
-     * One collected security-posture view and the instant it was collected - what both the Security-posture screen
-     * renders and the header badge counts, handed out as one value so the two can never be reading different
-     * collections. {@code collectedAt} is the report's own as-of: the collection is memoised for
-     * {@link #POSTURE_TTL} so the badge does not make every console view pay a settings read, and a derived view
-     * states its freshness rather than pass a memoised number off as a live one.
+     * One collected posture and its as-of instant, handed to the screen and the badge alike.
      */
     public record CollectedPosture(ScopedPosture posture, Instant collectedAt) {
 
@@ -952,14 +804,8 @@ public class SettingsAdmin {
         }
     }
 
-    /** One module's row on the modules console: its JPMS name, whether it is {@code installed} (on the module path) and
-     *  {@code enabled} (its enablement gate resolves on), whether it declares a {@code gated} enable flag at all and
-     *  that flag's {@code enableKey}, whether flipping it applies {@code live} (on the next scheduled re-read) or only
-     *  on the next restart, whether the gate is a plain boolean the screen renders as a {@code toggleable} switch (a
-     *  numeric ceiling is edited as a value beneath instead), and the settings it contributes for the list beneath the
-     *  row. A not-installed module (named only by a leftover stored document) carries no settings. A not-installed
-     *  module whose declared key-spaces still hold data carries the {@code orphanObjects}/{@code orphanBytes} counts -
-     *  the diagnostic that informs, while reclaiming stays an explicit operator purge, never a screen action. */
+    /** One module's row on the modules console, as {@link ModuleCapability} resolves it, with the orphaned-data counts
+     *  of a not-installed module whose key-spaces still hold data. */
     public record ModuleView(String module, boolean installed, boolean enabled, boolean gated, String enableKey,
                              boolean live, boolean toggleable, List<SettingView> settings,
                              long orphanObjects, long orphanBytes, List<String> orphanKept) {
@@ -969,9 +815,7 @@ public class SettingsAdmin {
             orphanKept = List.copyOf(orphanKept);
         }
 
-        /** Whether an enabled/disabled toggle here applies only on the next restart, so the row shows the honest
-         *  {@code restart} badge - a gated module whose gate is not live (a tracker or the audit lifecycle owns a
-         *  client/thread and is seeded once at boot). */
+        /** Whether a toggle applies only on restart, shown as a {@code restart} badge. */
         public boolean restart() {
             return gated && !live;
         }
@@ -995,15 +839,9 @@ public class SettingsAdmin {
                 .toList();
     }
 
-    /** One setting rendered for the config page: its key and human label, its inline documentation, its value kind
-     *  and choice list (so the form renders the right control with inline validation), its effective value and its
-     *  default (so the page shows effective-vs-default), whether an override is in force, whether a change takes
-     *  effect live (otherwise on the repository's next restart), whether it is a high-impact policy knob to confirm
-     *  on save, whether it is pinned from above the store (with the phrase naming what pins it) - a pinned knob
-     *  renders greyed and inert - and the JPMS module that contributes it ({@link SettingsDocuments#NEUTRAL the neutral
-     *  core} for a core dial), so the settings screen attributes each knob to its module and the modules screen groups
-     *  by it - and whether it is {@link Setting.Tier#ADVANCED tuning}, which the screen folds away. The presentation
-     *  helpers keep the mapping out of the template so a view holds no logic. */
+    /** One setting as the settings screens render it: documentation, kind and choices, effective and default value,
+     *  override, live, high-impact and pin state, contributing module and tier. The helpers keep the template free of
+     *  logic. */
     public record SettingView(String key, String group, String label, String description,
                               String kind, List<String> choices, String value, String defaultValue,
                               boolean overridden, boolean live, boolean highImpact,
@@ -1019,8 +857,7 @@ public class SettingsAdmin {
             return "CHOICE".equals(kind);
         }
 
-        /** A BOOLEAN renders as a switch showing its effective value, which saves the opposite value in one click -
-         *  a select of {@code true} and {@code false} beside a Save button asked for two actions to state one bit. */
+        /** A BOOLEAN renders as a switch showing its effective value, saving the opposite in one click. */
         public boolean toggle() {
             return "BOOLEAN".equals(kind);
         }
@@ -1069,16 +906,13 @@ public class SettingsAdmin {
             return defaultValue.isBlank() ? "(unset)" : defaultValue;
         }
 
-        /** The value to prefill the edit control with - the current override so an operator edits it in place, but
-         *  <em>never the plaintext of a secret</em>: a masked field is masked only on screen, so emitting the value
-         *  into the {@code value=""} attribute would leak it into the page source / DOM. A secret prefills empty (the
-         *  operator re-enters it to change it), matching the masked {@link #effectiveDisplay()}. */
+        /** The edit control's prefill: the current override, but never a secret's, which a masked field would still
+         *  carry in the page source. */
         public String editValue() {
             return secret() || !overridden ? "" : value;
         }
 
-        /** The placeholder for the edit control: a secret shows only whether it is set (never its value or default,
-         *  which would defeat the masking); every other kind shows its default, or an unset-default hint. */
+        /** The edit control's placeholder: for a secret only whether it is set, otherwise the default. */
         public String editPlaceholder() {
             if (secret()) {
                 return overridden ? "(set — re-enter to change)" : "(unset)";

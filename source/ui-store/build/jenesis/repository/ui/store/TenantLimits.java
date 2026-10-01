@@ -9,10 +9,9 @@ import build.jenesis.repository.store.QuotaArtifactStore;
 import io.micrometer.observation.ObservationRegistry;
 
 /**
- * The signed-in tenant's usage ceilings for the console: the settings of the {@value #GROUP} group - its storage quota
- * and its request rate limit, tenant settings whose deployment value is every tenant's default - read and written
- * through the settings catalogue ({@link SettingsAdmin}), with the stored bytes recounted against the quota beside
- * them. A tenant administrator edits these and nothing else of the tenant's settings, which are the operator's.
+ * The signed-in tenant's usage ceilings: the {@value #GROUP} settings (storage quota, request rate limit) through
+ * {@link SettingsAdmin}, with the stored bytes beside the quota. A tenant administrator edits these and no other tenant
+ * setting.
  */
 public class TenantLimits extends TenantScope {
 
@@ -30,9 +29,7 @@ public class TenantLimits extends TenantScope {
         this.settings = settings;
     }
 
-    /** The signed-in tenant's storage quota: the effective byte ceiling ({@code 0} when unlimited) and the bytes
-     *  stored. The usage total is not recomputed here - that walks every blob of every repository the tenant owns -
-     *  so a newly set or lowered quota is judged against the count the scheduled cleanup last took. */
+    /** The tenant's quota ceiling ({@code 0} unlimited) and the bytes stored as the scheduled cleanup last counted. */
     public QuotaView quota() throws IOException {
         String ceiling = settings.effective(tenant(), QUOTA, "0");
         long maxBytes;

@@ -20,20 +20,15 @@ public final class ScimTokens {
         this.storage = storage;
     }
 
-    /** The generator, here rather than at a calling surface so every surface mints the same shape of token. */
+    /** The token generator. */
     private static final SecureRandom RANDOM = new SecureRandom();
 
-    /** How much entropy a token carries. 24 bytes is 192 bits, well past guessing for a long-lived bearer token. */
+    /** A token's entropy: 192 bits, for a long-lived bearer token. */
     private static final int SECRET_BYTES = 24;
 
     /**
-     * Mint this tenant's token, store its hash and return the secret - the only moment it exists in readable form,
-     * since {@link #set} keeps the hash alone.
-     *
-     * <p>It lives here because more than one surface issues one. The console minted it inline in its own
-     * controller, so an API twin would have had to generate a second token the same way and the two would have been
-     * one secret's shape written in two places, free to drift in length, alphabet or prefix - and a token that
-     * differs by surface is one an identity provider accepts from one and rejects from the other.
+     * Mints this tenant's token, stores its hash and returns the secret, its only readable moment; every surface mints
+     * through here, so the shape is one.
      */
     public String mint() throws IOException {
         byte[] secret = new byte[SECRET_BYTES];
