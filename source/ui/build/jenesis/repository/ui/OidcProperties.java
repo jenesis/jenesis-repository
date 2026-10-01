@@ -3,11 +3,9 @@ package build.jenesis.repository.ui;
 import org.springframework.boot.context.properties.ConfigurationProperties;
 
 /**
- * A generic OpenID Connect provider, bound from {@code jenrepo.ui.oidc.*} ({@code JENREPO_UI_OIDC_ISSUER_URI} /
- * {@code _CLIENT_ID} / {@code _CLIENT_SECRET} / {@code _NAME}). Configured by its issuer URI (the rest - authorization,
- * token and user-info endpoints, JWK set - is
- * discovered). When the issuer or client id is blank, OIDC login is disabled. Members are keyed
- * {@code oidc/<sub>}; {@code name} labels the button.
+ * An OpenID Connect provider, bound from {@code jenrepo.ui.oidc.*}: its issuer URI, from which the endpoints and key set
+ * are discovered, client id and secret, and the button's {@code name}. Disabled while the issuer or client id is blank.
+ * Members are keyed {@code oidc/<sub>}.
  */
 @ConfigurationProperties(prefix = "jenrepo.ui.oidc")
 public class OidcProperties {

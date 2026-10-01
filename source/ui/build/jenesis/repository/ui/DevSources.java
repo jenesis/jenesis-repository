@@ -16,17 +16,12 @@ import org.thymeleaf.templatemode.TemplateMode;
 
 /**
  * The console read from a source checkout, for working on its look: with the {@code dev} profile active and
- * {@code jenrepo.ui.sources} naming the root of a checkout, every template and every stylesheet, script, font and image
- * is read from the source tree on each request instead of from the module jars, so an edit shows on the next reload
- * of the page with no build, no restart and no test run. A change to Java still needs the modules rebuilt.
+ * {@code jenrepo.ui.sources} naming a checkout's root, templates and static files are read from the tree on each
+ * request, uncached, so an edit shows on the next reload without a build.
  *
- * <p>Templates are found under every module's template folder - {@code templates/} or {@code META-INF/templates/}
- * below {@code core/source} and {@code enterprise/source} - in a resolver ordered ahead of the modules' own, so a
- * template the tree carries is read from the tree and one it does not falls through to the jar. Static files are
- * served from the shell module's {@code META-INF/resources}. Nothing is cached in either case.
- *
- * <p>It is inert without the profile, and the profile itself refuses a non-loopback bind, so a deployment can never
- * be pointed at files on its host this way.
+ * <p>Templates come from every module's {@code templates/} folder, in a resolver ordered ahead of the modules' own, so
+ * a template the tree lacks falls through to the jar; static files from the shell module's {@code META-INF/resources}.
+ * Inert without the profile, which refuses a non-loopback bind.
  */
 @Configuration(proxyBeanMethods = false)
 @Profile("dev")
@@ -106,8 +101,7 @@ public class DevSources implements WebMvcConfigurer {
                     break;
                 }
             }
-            // A name no folder carries resolves to a file that does not exist, which the existence check turns into
-            // "not mine" - so the modules' own resolvers answer it.
+            // A name no folder carries resolves to an absent file, so the modules' own resolvers answer it.
             Path resource = found != null ? found : roots.isEmpty() ? Path.of(template + ".html")
                     : roots.getFirst().resolve(".absent").resolve(template + ".html");
             return new FileTemplateResource(resource.toString(), characterEncoding);

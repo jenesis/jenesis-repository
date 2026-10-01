@@ -3,25 +3,19 @@ package build.jenesis.repository.ui;
 import module java.base;
 
 /**
- * One console page a module contributes through {@link ConsoleModuleProvider#navEntries()}: its {@code label}, the
- * {@code path} it addresses, the minimum {@link Access} a user needs to see it, the {@link Group} the shell files it
- * under, and the capability it {@code requires}, if any. The shell renders the visible entries rather than a
- * hardcoded list, so a removable console module adds its own page by being installed - its provider is discovered
- * only when the module is on the path, which is itself the capability gate - and the shell names no module's screens.
+ * One console page a module contributes through {@link ConsoleModuleProvider#navEntries()}: its label, path, minimum
+ * {@link Access}, {@link Group} and required capability. The shell renders the visible entries, so a module adds its
+ * page by being installed and the shell names no module's screens.
  *
- * <p><strong>{@code path} means one thing: an application-root-relative path</strong> ({@code /walks},
- * {@code /settings/modules}), unique across installed modules. The shell links it and matches the request against it
- * to decide which page, and so which group, is current: the entry whose path is the longest prefix of the request
- * path, on a segment boundary, is the one a reader is on.
+ * <p>{@code path} is an application-root-relative path ({@code /walks}), unique across modules. The current page is the
+ * entry whose path is the longest segment-boundary prefix of the request path.
  *
- * <p>Access is a coarse role floor, resolved server-side against the current tenant so the template carries no
- * per-entry condition: {@link Access#USER} shows to any signed-in console user, {@link Access#ADMIN} to a tenant admin
- * (or a super-admin, who is admin everywhere), {@link Access#SUPERADMIN} only to the deployment super-admin.
+ * <p>Access is a coarse role floor resolved server-side against the current tenant: {@link Access#USER} for any
+ * signed-in user, {@link Access#ADMIN} for a tenant admin or super-admin, {@link Access#SUPERADMIN} for the deployment
+ * super-admin alone.
  *
- * @param requires the capability the page needs beyond its module being installed - a name the console's capability
- *                 service answers, such as {@code audit} - or the empty string when the module's presence is enough.
- *                 It exists for the page whose module is present while the thing it renders is not: the audit
- *                 trail's screen is the console's own, and whether there is a trail to show is another module's.
+ * @param requires a capability the console answers, such as {@code audit}, that the page needs beyond its module, or
+ *                 empty: the audit screen is the console's own, while whether there is a trail is another module's
  */
 public record NavEntry(String label, String path, Access access, Group group, String requires) {
 
@@ -44,15 +38,8 @@ public record NavEntry(String label, String path, Access access, Group group, St
     }
 
     /**
-     * The first navigation level: what a page is about, which is the choice a reader makes before choosing a page.
-     *
-     * <p>A module says which group its page belongs to and the shell decides everything else - the order of the
-     * groups, which of them a reader sees, and where each one leads. A group is shown only when it holds a page the
-     * reader may open, and it leads to the first of them, so a group can never be a link to nothing.
-     *
-     * <p>They were two sections before - a bar of daily objects and an "Administration" dropdown of everything else -
-     * and the dropdown was where most pages lived: nine of them, reached by opening a menu that closed again on every
-     * page. Five groups a reader can see at once replace it, each with its pages beside the content.
+     * The first navigation level: what a page is about. A module names its group and the shell decides the rest; a
+     * group is shown only when it holds a page the reader may open, and leads to the first of them.
      */
     public enum Group {
 

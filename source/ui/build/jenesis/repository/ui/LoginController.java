@@ -11,14 +11,8 @@ import org.springframework.ui.Model;
 import org.springframework.web.bind.annotation.GetMapping;
 
 /**
- * The sign-in page: the choices the installed mechanism modules offer, each linking into the URL space that mechanism
- * owns, and with none installed a notice saying so rather than an empty page. An already-authenticated visitor is
- * sent to the console.
- *
- * <p>It reads {@link LoginOptions}, which is what every console does. Enumerating Spring Security's
- * {@code ClientRegistrationRepository} itself would show only OAuth2 and OIDC: a mechanism that is not an OAuth2
- * client would appear on one console's sign-in page and not on the other's. Whether a mechanism can be signed in
- * with is the mechanism's statement, not a console's guess at what kind it is.
+ * The sign-in page: the {@link LoginOptions} the installed mechanisms offer, each linking into its own URL space, or a
+ * notice when none is installed. An authenticated visitor is sent to the console.
  */
 @Controller
 @ConsoleScreen
@@ -46,16 +40,13 @@ public class LoginController {
         return "console/login";
     }
 
-    /** One button, with its mark resolved: the mechanism's own drawing where it ships one, and otherwise the figure
-     *  computed from its id - the same resolution every other console surface makes, so a sign-in button is marked
-     *  the way the rest of the console is rather than being the one bare list. */
+    /** One button, with its mark resolved as everywhere else in the console. */
     private static Choice choice(LoginOptions.LoginOption option) {
         Mark mark = Marks.of(option);
         return new Choice(option.label(), option.href(), mark.svg(), mark.title(), ConsoleMarks.tint(mark));
     }
 
-    /** What the template renders per button. The mark is resolved here rather than in the template for the same
-     *  reason it is everywhere else: a template cannot call {@code Marks} and must not learn how a mark is chosen. */
+    /** What the template renders per button, the mark already resolved. */
     public record Choice(String label, String href, String markSvg, String markTitle, String markTint) {
     }
 

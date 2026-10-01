@@ -7,38 +7,17 @@ import build.jenesis.repository.server.spi.Authorization;
 import build.jenesis.repository.store.ArtifactStore;
 
 /**
- * Who administers this deployment - one reader, over grants rather than over a setting.
+ * Who administers this deployment, read from grants rather than from a setting: {@code jenrepo.ui.admins} has one
+ * reader, and what it answers is a grant in the same store as a minted key's, matched by the same code.
  *
- * <h2>One key, three readers, three meanings</h2>
- * {@code jenrepo.ui.admins} read in three places - the console, the downstream super-admin set and the security
- * advisory - could mean three things. A shared parse settles what was <em>written</em>; this settles what it
- * <em>grants</em>: there is one reader, and what it answers is a grant - the same thing a minted key holds, in the
- * same store, matched by the same code.
+ * <p>The setting is a seed: on every boot each named id is granted every right at the deployment scope, as
+ * {@code jenrepo.bootstrap-key} is re-provisioned. Removing an id does not revoke the grant, since a reconciling seed
+ * would undo every grant made through the console; and an administrator granted through the API is as real as a
+ * seeded one.
  *
- * <h2>The setting is a seed, not the source of truth</h2>
- * At construction - every boot, before the console serves anything - each named id is granted every right at the
- * deployment scope, exactly as {@code jenrepo.bootstrap-key} is re-provisioned on every boot for as long as it is
- * set. Two consequences an operator has to know, and both are the price of a seed rather than a mirror:
- *
- * <ul>
- *   <li><b>Removing an id from the list does not remove their admin.</b> The grant stands until it is revoked
- *       through the API, because nothing here deletes what it did not just write - a seed that reconciled would
- *       silently undo every grant made through the console, which is the surface an operator is told to use.</li>
- *   <li><b>An administrator granted through the API is a real administrator</b>, listed and revocable, whether or
- *       not the setting ever mentioned them. That is the point of the model: the answer lives somewhere an
- *       operator can read it back.</li>
- * </ul>
- *
- * <h2>A read-only deployment that names an administrator refuses to boot</h2>
- * Seeding is a store write, so under {@code jenrepo.read-only=true} it is refused and the console does not start -
- * naming the id it could not grant. That is the same answer {@code jenrepo.bootstrap-key} already gives, and for
- * the same reason: a named administrator who holds nothing is the failure that reports success in both directions
- * at once, with the operator believing they granted something. A read-only deployment that leaves the setting
- * empty starts normally and reads back whatever grants the store already holds.
- *
- * <h2>No wildcard</h2>
- * {@code *} is refused before this can be asked - see {@link ConsoleAdmins#refusal()}. An administrator is a holder
- * of rights, and the wildcard names no holder.
+ * <p>Seeding writes, so a read-only deployment ({@code jenrepo.read-only=true}) that names an administrator refuses to
+ * boot, naming the id, rather than report a grant it could not make. The wildcard {@code *} names no holder and is
+ * refused ({@link ConsoleAdmins#refusal()}).
  */
 public class ConsoleAdministrators {
 
@@ -50,33 +29,23 @@ public class ConsoleAdministrators {
     private final Authorization authorization;
 
     /**
-     * Over {@code store}, seeded from a configured {@code jenrepo.ui.admins} value.
-     *
-     * <p>It takes the <em>value</em> rather than a properties object on purpose. The two consoles bind that prefix
-     * with their own configuration types - disjoint keys, deliberately not merged - so a shared reader that named
-     * one of them would either drag a console's config surface into the other or quietly bind the wrong one. The
-     * value is the only thing they agree on, so the value is what crosses the seam.
+     * Over {@code store}, seeded from a configured {@code jenrepo.ui.admins} value. It takes the value rather than a
+     * properties object because the two consoles bind that prefix with their own, disjoint configuration types.
      */
     public ConsoleAdministrators(ArtifactStore store, String configuredAdmins) {
         this(Authorization.enforcing(store), ConsoleAdmins.parse(configuredAdmins));
     }
 
     /**
-     * Over an {@link Authorization} a composition already holds, seeded from a configured {@code jenrepo.ui.admins}
-     * value.
-     *
-     * <p>The one to take where the deployment has an authorization bean of its own: a second instance over the same
-     * store would carry a second cache, and two caches over one set of grants disagree for as long as the shorter
-     * of their windows.
+     * Over an {@link Authorization} the composition already holds, so its grants are read through one cache rather than
+     * two that disagree for a window.
      */
     public ConsoleAdministrators(Authorization authorization, String configuredAdmins) {
         this(authorization, ConsoleAdmins.parse(configuredAdmins));
     }
 
     /**
-     * For a caller that has already parsed the value - and for a test that wants to say what was seeded without
-     * going through a properties object. The seeding and the refusal are the same either way: this is the
-     * constructor the other two delegate to.
+     * Over an already parsed value; the constructor the other two delegate to.
      */
     public ConsoleAdministrators(Authorization authorization, Set<String> seeded) {
         this.authorization = authorization;
@@ -87,8 +56,7 @@ public class ConsoleAdministrators {
     }
 
     /**
-     * Write the configured ids as deployment-wide grants. Idempotent, so re-applying on every boot writes the same
-     * rows; a failure names the id rather than leaving the deployment half-seeded and silent about which half.
+     * Writes the configured ids as deployment-wide grants, idempotently. A failure names the id.
      */
     private void seed(Set<String> ids) {
         for (String id : ids) {
@@ -96,9 +64,7 @@ public class ConsoleAdministrators {
                 authorization.setGrant(Authorization.DEPLOYMENT,
                         Authorization.Subject.principal(id), EVERYTHING, EVERYTHING);
             } catch (IOException | RuntimeException failed) {
-                // Including the unchecked ones: a read-only store answers ReadOnlyException, and that is precisely
-                // the case this message exists for - the refusal has to name the id it could not grant, or an
-                // operator reads a bare "writes are refused" with no way to tell which setting caused it.
+                // Unchecked too: a read-only store answers ReadOnlyException, which must name the id it refused.
                 throw new IllegalStateException("jenrepo.ui.admins names '" + id + "', which could not be granted "
                         + "administration of this deployment: " + failed.getMessage(), failed);
             }
@@ -112,11 +78,8 @@ public class ConsoleAdministrators {
     }
 
     /**
-     * Whether this provider-qualified id administers the deployment.
-     *
-     * <p>A point read of that principal's deployment-wide grant, so it costs one small object however many
-     * administrators there are - and it sees a grant made through the API since boot, which reading a setting
-     * never could.
+     * Whether this provider-qualified id administers the deployment: a point read of its deployment-wide grant, which
+     * sees a grant made through the API since boot.
      */
     public boolean is(String id) {
         if (id == null || id.isBlank()) {

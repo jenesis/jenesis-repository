@@ -6,25 +6,14 @@ import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.config.annotation.web.configurers.AuthorizeHttpRequestsConfigurer;
 
 /**
- * What an edition supplies to the one development sign-in chain: the URL space that chain guards, and the
- * authorization matrix it applies. Nothing else.
- *
- * <p>A dev chain per console drifts in exactly the way two copies do: form login pointed at {@code /login} - a page
- * that lists mechanisms and carries no credential form - so dev sign-in does not work; a fall-back to Spring
- * Security's <em>generated</em> login page, a second sign-in page nobody designed and no console styling reaches; and
- * the loopback guard that exists because a dev profile enables an in-memory backdoor present on one and not the
- * other, though both enable one.
- *
- * <p>Every one of those differences is in the mechanism, and the only real differences between the two consoles
- * are the two things named here - which is the test for whether a pair should be merged: they differ in policy, so
- * the mechanism is shared and the policy is the seam.
+ * What a console supplies to the one development sign-in chain ({@link DevConsoleSecurity}): the URL space it guards
+ * and the authorization matrix it applies, the only things in which the consoles differ.
  */
 public interface DevConsolePolicy {
 
     /** The paths the dev chain guards - this console's own URL space. */
     List<String> space();
 
-    /** The authorization matrix, which must be the same one this console's production chain applies: a dev chain
-     *  that has quietly relaxed a rule proves a topology nothing ships. */
+    /** The authorization matrix, the same one this console's production chain applies. */
     void rules(AuthorizeHttpRequestsConfigurer<HttpSecurity>.AuthorizationManagerRequestMatcherRegistry auth);
 }

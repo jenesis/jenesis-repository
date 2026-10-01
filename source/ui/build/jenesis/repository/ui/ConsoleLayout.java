@@ -3,23 +3,13 @@ package build.jenesis.repository.ui;
 import java.util.Set;
 
 /**
- * The shared console layout, and the fragments a console built on it may plug into.
+ * The shared console layout and the fragments a console built on it may plug into. A console extending it through
+ * Thymeleaf ({@code th:replace="~{base :: ...}"}) references {@link #TEMPLATE} and these names and provides an
+ * {@link Extension}, so its dependency on this module is a Java edge the compiler checks rather than a template path
+ * that fails only at render time.
  *
- * <p>It exists to make an edge visible that the language could not see. The admin console extends this console
- * entirely through Thymeleaf: all of its templates {@code th:replace="~{base :: ...}"} against {@code base.html}, and
- * {@code requires build.jenesis.repository.ui} is what puts that file on the module path. Nothing in Java crossed the
- * boundary - no import and no type at all - so the dependency was real, load-bearing, and invisible to a
- * module-graph tool and to a reader. Deleting the {@code requires} broke nothing a compiler could report; it broke
- * every page at render time.
- *
- * <p>So the layout declares its extension points here, and a console that builds on it {@linkplain Extension declares
- * which it fills}. The edge becomes a Java one: an extending console references {@link #TEMPLATE} and these fragment
- * names, so removing the module dependency now fails to compile, and a third console joins by providing an
- * {@link Extension} rather than by knowing a filename.
- *
- * <p><b>These are the fragments that are extension points, not every fragment {@code base.html} defines.</b> A
- * fragment used only within the console's own pages is that console's business and may change with it; the set
- * below is the part other consoles may build on, and is therefore the part that may not change silently.
+ * <p>These are the extension points, not every fragment {@code base.html} defines; a fragment used only by this
+ * console's own pages may change with it.
  */
 public final class ConsoleLayout {
 
@@ -81,9 +71,8 @@ public final class ConsoleLayout {
     /** The browse's up-one-level row, taking where it goes. */
     public static final String BROWSE_UP = "browseUp";
 
-    /** A notice that work is running off the request path, taking what to say about it - and carrying the marker
-     *  that makes the page keep itself current until it finishes. A screen never blocks and never waits for the
-     *  work; it renders what is known and refreshes itself, and this is the one place that interval lives. */
+    /** A notice that work is running off the request path, taking what to say, and carrying the marker that makes the
+     *  page refresh itself until it finishes: the one place that interval lives. */
     public static final String RUNNING = "running";
 
     /** The heading every page about one repository opens with, taking the title and an optional page between the
@@ -116,11 +105,8 @@ public final class ConsoleLayout {
     }
 
     /**
-     * A console built on {@link ConsoleLayout}, declaring which fragments it plugs into.
-     *
-     * <p>Providing one is what turns a template-only dependency into a declared, discoverable edge. It carries no
-     * rendering behaviour on purpose - Thymeleaf still resolves the fragments - and exists so that the relationship
-     * is stated in the module graph rather than inferred from a resource path.
+     * A console built on {@link ConsoleLayout}, declaring which fragments it plugs into. It carries no rendering
+     * behaviour; Thymeleaf resolves the fragments.
      */
     public interface Extension {
 
@@ -128,10 +114,8 @@ public final class ConsoleLayout {
         String name();
 
         /**
-         * The fragments this console plugs into - each one of {@link #FRAGMENTS}.
-         *
-         * <p>Declaring a name the layout does not offer is a fail-loud error rather than a page that renders empty at
-         * request time, which is the failure mode this whole seam replaces.
+         * The fragments this console plugs into, each one of {@link #FRAGMENTS}; any other name is an error rather than
+         * a page that renders empty.
          */
         Set<String> fragments();
     }

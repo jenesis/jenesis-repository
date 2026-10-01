@@ -3,9 +3,8 @@ package build.jenesis.repository.ui;
 import module java.base;
 
 /**
- * How a console screen shows an instant: to the second, in UTC, and saying so - rather than the nanosecond ISO-8601
- * form an {@link Instant}'s {@code toString} carries, which a record passes through as text. Every screen reaches it
- * as the {@code instants} model attribute.
+ * How a console screen shows an instant: to the second, in UTC, and saying so, rather than {@link Instant}'s nanosecond
+ * {@code toString}. Screens reach it as the {@code instants} model attribute.
  */
 public final class Instants {
 

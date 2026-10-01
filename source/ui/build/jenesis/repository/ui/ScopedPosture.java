@@ -8,26 +8,13 @@ import build.jenesis.repository.posture.SecurityAdvisory;
 import build.jenesis.repository.posture.Severity;
 
 /**
- * One collected {@link PostureReport} as a <em>single tenant's view</em> of it - the model the console's
- * Security-posture screen renders, and the containment boundary that makes
- * {@link PostureReport#forTenant} leg load-bearing rather than decorative.
+ * One {@link PostureReport} as a single tenant's view, the model the Security-posture screen renders. An advisor may
+ * raise a {@code TENANT}-scoped row naming any tenant, so the view takes only this tenant's rows
+ * ({@link PostureReport#forTenant}) and the deployment-wide ones ({@link PostureReport#scoped}), and counts over what it
+ * renders, so another tenant's advisory cannot leak even as a number.
  *
- * <p>A report is a fan-out over every discovered {@code SafetyAdvisor}, and an advisory names the tenant it concerns
- * itself. Nothing in the SPI stops a provider - a third-party one, or a shipped one after a refactor - from raising a
- * {@code TENANT}-scoped row naming a tenant other than the one being viewed. So the screen does not render the rows
- * it happens to receive: it asks the report for <b>this tenant's</b> rows through {@link PostureReport#forTenant},
- * and for the deployment-wide rows through {@link PostureReport#scoped}. Anything else - a row for another tenant -
- * appears in neither list, and, because the tallies are computed over what is actually rendered rather than over
- * {@code report.count()}, not in the counts either: a foreign advisory cannot leak even as a number.
- *
- * <p>Both halves are shown, because a tenant's operator needs both and they are not interchangeable: a deployment-wide
- * row (authorization off, the dev profile active) is the operator's to fix and applies to every tenant, while a
- * tenant-scoped row is this tenant's own admission policy and affects nobody else. They are rendered as two labelled
- * groups and every tenant row carries its tenant, so which is which is never inferred from position.
- *
- * <p>With no tenant selected {@link #tenant()} is blank and {@link #own()} is empty: the screen degrades to the
- * deployment-wide view it was before, rather than guessing a tenant. A single-tenant deployment is not a special case
- * here - its one tenant is selected implicitly by the session, so it simply always has a tenant.
+ * <p>The two halves render as labelled groups: a deployment-wide row is the operator's to fix, a tenant row is this
+ * tenant's own admission policy. With no tenant selected, {@link #own()} is empty.
  */
 public record ScopedPosture(String tenant, List<SecurityAdvisory> own, List<SecurityAdvisory> deployment) {
 
@@ -67,15 +54,13 @@ public record ScopedPosture(String tenant, List<SecurityAdvisory> own, List<Secu
         return own.size() + deployment.size();
     }
 
-    /** How many of the rendered advisories are at {@code severity} - counted over the two halves, so a row this view
-     *  does not show is not counted into a number this view does. */
+    /** How many of the rendered advisories are at {@code severity}. */
     public long count(Severity severity) {
         return Stream.concat(own.stream(), deployment.stream())
                 .filter(advisory -> advisory.severity() == severity).count();
     }
 
-    /** The per-severity tallies the screen's summary line shows, kept here so the template needs no static
-     *  {@link Severity} reference (it is not on a view layer's module path in a modular graph). */
+    /** The per-severity tallies of the summary line, so the template needs no static {@link Severity} reference. */
     public long critical() {
         return count(Severity.CRITICAL);
     }

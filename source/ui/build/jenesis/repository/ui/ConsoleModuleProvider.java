@@ -7,63 +7,41 @@ import build.jenesis.repository.icon.IconContributor;
 
 /**
  * One removable console module, discovered with {@link java.util.ServiceLoader}: it names the Spring
- * {@code @Configuration} class that wires the module - its controllers, security chains, contributors and
- * properties - into the console context, imported by {@link ConsoleModuleImports} exactly like a Boot
- * auto-configuration. So a console capability (a sign-in mechanism, the SCIM provisioning API) is a drop-in
- * module the console never names, and its screens gate on whether the module is installed.
+ * {@code @Configuration} class that wires the module's controllers, security chains and contributors into the console
+ * context, imported by {@link ConsoleModuleImports} like a Boot auto-configuration. A console capability is a module
+ * the console never names, and its screens gate on whether it is installed.
  *
  * <h2>Contract</h2>
  * <ol>
  * <li><b>Thread-safety.</b> {@link #name()}, {@link #configuration()}, {@link #navEntries()} and
- *     {@link #repositoryPages()} are pure declarations
- *     the console may call from any thread, including concurrently. A provider holds no mutable state and opens
- *     nothing: it is constructed during context refresh, before any of its own beans exist.</li>
- * <li><b>Idempotency / replay.</b> All four are constant functions of what is installed, not of when they are called
- *     or of what is stored: two calls in one JVM return the same name, the same class literal and an equal nav list.
- *     The nav is discovered once at startup and rendered per request, so a list that varied by call would show a
- *     different shell to two users of one deployment.</li>
- * <li><b>Absence sentinel.</b> {@code null} is never a legal return. A module with no user-facing screen (a sign-in
- *     mechanism, the machine-facing SCIM API) returns the empty {@link #navEntries()} and {@link #repositoryPages()}
- *     lists, never {@code null} and
- *     never a placeholder entry. Absence of a capability is expressed by the module being absent from the path -
- *     which is itself the capability gate the shell reads.</li>
- * <li><b>Selection failure.</b> This is an {@code ALL} SPI: every installed module contributes and there is
- *     nothing to select. A <em>collision</em> is still a packaging error: two providers answering to one
- *     {@link #name()}, or one provider class registered twice, make {@link #installed()} and {@link #enabled} throw
- *     naming the colliding classes rather than letting module-path order pick a winner - two modules on one name
- *     share the single {@code jenrepo.<name>} toggle, so switching one off switches both off. Two
- *     providers naming one {@link #configuration()} class is equally a packaging error, refused by the contract suite
- *     because the configuration class is this SPI's own concept rather than the shared discovery primitive's.</li>
- * <li><b>Tenant scoping.</b> A provider carries no tenant and is resolved once per JVM: it declares a
- *     deployment's installed console surface, not a tenant's. Its {@link NavEntry#access()} floor is a coarse role
- *     gate the shell resolves server-side against the current tenant per request; a finer, per-tenant capability
- *     stays the screen's own concern behind the link.</li>
- * <li><b>Error visibility.</b> Nothing here is best-effort. An exception from any of the four methods, or
- *     a {@link #configuration()} class that cannot be loaded or instantiated, fails the context refresh rather than
- *     dropping one module quietly out of a console that then renders a screen-less shell.</li>
- * <li><b>Read purity.</b> None of the four performs I/O. They are declarations read during context
- *     refresh and at nav-discovery time; a provider that reached the store or the network to decide its name or its
- *     links would make the rendered shell depend on something else being up.</li>
- * <li><b>Lifecycle / ownership.</b> {@code ServiceLoader} instances are created by {@link #installed()} and
- *     {@link #enabled} - which do not cache, so each call re-instantiates every provider - and own no threads or
- *     clients and are never closed, so a provider must be cheap to build and must open nothing. A caller that asks
- *     on a repeated path holds the answer itself rather than asking again: the console's shell discovers the nav
- *     once when its advice is built, which is what makes the last sentence of this clause true. The {@link #configuration()} class is owned by Spring, which
- *     instantiates it once per context; the provider never instantiates it. The discovered nav is computed once at
- *     startup - a module's providers are static for a JVM - and never re-discovered on the request path.</li>
- * <li><b>Ordering / determinism.</b> Import and nav order never depend on module-path order: both statics sort
- *     providers by name, and a module's own {@link #navEntries()} order is the render order of its links among
- *     themselves. A module must not depend on being imported before or after a peer.</li>
- * <li><b>Nav-entry shape.</b> An entry's {@link NavEntry#label()} is non-blank display text and its
- *     {@link NavEntry#path()} is an <em>application-root-relative path</em> such as {@code /walks} - never a bare
- *     screen id - and unique across installed modules so two modules never render two links to one place. A
- *     {@link RepositoryPage#path()} is the same thing below {@code /repositories/<name>}, unique among the pages of a
- *     repository. The shell links a path and matches the request against it to decide where the reader is. Nothing
- *     sanitises a label beyond the template's own escaping, so a module is answering for its own text. A
- *     {@code requires} names a capability the console answers; one it does not know is a packaging error, and the
- *     module's pages are withheld with a warning rather than linked to a screen that cannot say what is missing.</li>
- * <li><b>Bounded work / cancellation.</b> Work is bounded by the number of installed modules: each provider is
- *     instantiated once and asked for its declarations once per pass. Nothing blocks and no timeout applies.</li>
+ *     {@link #repositoryPages()} are pure declarations, callable concurrently. A provider holds no mutable state and
+ *     opens nothing: it is constructed during context refresh, before its beans exist.</li>
+ * <li><b>Idempotency / replay.</b> All four are constant functions of what is installed, since the nav is discovered
+ *     once and rendered per request.</li>
+ * <li><b>Absence sentinel.</b> {@code null} is never legal. A module with no screen (a sign-in mechanism, the SCIM
+ *     API) returns empty lists, never a placeholder.</li>
+ * <li><b>Selection failure.</b> An {@code ALL} SPI with nothing to select, but two providers on one {@link #name()},
+ *     or one class registered twice, make {@link #installed()} and {@link #enabled} throw naming them, since they
+ *     would share one {@code jenrepo.<name>} toggle. Two providers naming one {@link #configuration()} class are
+ *     refused by the contract suite.</li>
+ * <li><b>Tenant scoping.</b> A provider carries no tenant and declares the deployment's console surface. Its
+ *     {@link NavEntry#access()} floor is a coarse role gate the shell resolves per request against the current tenant;
+ *     a finer capability is the screen's own concern.</li>
+ * <li><b>Error visibility.</b> An exception from any of the four, or a {@link #configuration()} class that cannot be
+ *     loaded, fails the context refresh rather than dropping one module quietly.</li>
+ * <li><b>Read purity.</b> None of the four performs I/O, so the rendered shell depends on nothing else being up.</li>
+ * <li><b>Lifecycle / ownership.</b> {@link #installed()} and {@link #enabled} re-instantiate every provider per call;
+ *     a provider is cheap to build, owns nothing and is never closed. The shell discovers the nav once at startup. The
+ *     {@link #configuration()} class is Spring's to instantiate.</li>
+ * <li><b>Ordering / determinism.</b> Both statics sort providers by name; a module's own {@link #navEntries()} order is
+ *     the render order of its links, and no module depends on being imported before a peer.</li>
+ * <li><b>Nav-entry shape.</b> A {@link NavEntry#label()} is non-blank text, escaped only by the template; a
+ *     {@link NavEntry#path()} is an application-root-relative path ({@code /walks}), unique across modules, and a
+ *     {@link RepositoryPage#path()} the same below {@code /repositories/<name>}, unique within a repository. A
+ *     {@code requires} the console does not know is a packaging error: the module's pages are withheld with a
+ *     warning.</li>
+ * <li><b>Bounded work / cancellation.</b> Bounded by the installed modules: each is instantiated and asked once per
+ *     pass.</li>
  * </ol>
  */
 public interface ConsoleModuleProvider extends IconContributor {
@@ -71,38 +49,27 @@ public interface ConsoleModuleProvider extends IconContributor {
     /** The SPI's selection key, the {@code <spi>} every diagnostic points at. */
     String SPI = "console-module";
 
-    /** The module name this provider answers to, e.g. {@code oidc}, {@code scim}. It is also the module's
-     *  {@code jenrepo.<name>} toggle key (the {@link Features} convention), so it is lowercase and
-     *  dotted/hyphenated like any other settings key - and where the module catalogues its own enablement gate
-     *  through a {@code SettingsContributor}, that gate's key is this same spelling. */
+    /** The module name, e.g. {@code oidc}: also its {@code jenrepo.<name>} toggle key ({@link Features}), spelled like
+     *  any settings key and equal to its catalogued enablement gate's key. */
     String name();
 
     /** The module's {@code @Configuration} class, given full configuration-class treatment when imported. */
     Class<?> configuration();
 
-    /** The navigation links this module adds to the console shell, rendered by {@code th:each} beside the core links
-     *  rather than hardcoded per-screen in the template. Empty by default (a module with no user-facing screen, like a
-     *  sign-in mechanism or the machine-facing SCIM API, contributes none); a module with a screen names its own link
-     *  here, and it appears exactly when the module is installed. */
+    /** The navigation links this module adds to the console shell, shown exactly while it is installed. */
     default List<NavEntry> navEntries() {
         return List.of();
     }
 
-    /** The pages this module adds to every repository, listed beside the content whenever a reader is inside one.
-     *  Empty by default; a module with a repository-scoped screen names it here, and it appears exactly when the
-     *  module is installed and the reader's role and the page's {@code requires} allow. */
+    /** The pages this module adds to every repository, shown while it is installed and the reader's role and the
+     *  page's {@code requires} allow. */
     default List<RepositoryPage> repositoryPages() {
         return List.of();
     }
 
     /**
-     * Every console module installed on this deployment, whatever its configuration, name-sorted - the discovery seam
-     * the shell's capability signal and its nav assembly read.
-     *
-     * <p>It is the shared {@link Providers#all ALL-policy primitive}, not a copy of it: console modules are additive,
-     * so there is no selection to miss, but a <em>duplicate</em> provider name or class is still a packaging error
-     * (clause 4). It is deliberately not a second discovery pipeline - the {@code uses} clause and the
-     * {@link ServiceLoader} call stay in this one module beside the contract.
+     * Every installed console module, whatever its configuration, name-sorted, through {@link Providers#all}, which
+     * refuses a duplicate name or class.
      */
     static List<ConsoleModuleProvider> installed() {
         return Providers.all(SPI,
@@ -113,10 +80,9 @@ public interface ConsoleModuleProvider extends IconContributor {
     }
 
     /**
-     * The installed modules {@code config} leaves switched on, name-sorted - what {@link ConsoleModuleImports} turns
-     * into a configuration-class list. A module configured off by its provider name
-     * ({@code jenrepo.<name>=false}, the {@link Features} convention) is not imported, so its screens
-     * degrade exactly as if the module were absent from the image; unset means enabled.
+     * The installed modules {@code config} leaves on, name-sorted, which {@link ConsoleModuleImports} imports. A module
+     * switched off ({@code jenrepo.<name>=false}) is not imported, as if absent; unset means
+     * {@link #enabledByDefault()}.
      */
     static List<ConsoleModuleProvider> enabled(UnaryOperator<String> config) {
         Objects.requireNonNull(config, "config");
@@ -128,14 +94,8 @@ public interface ConsoleModuleProvider extends IconContributor {
     }
 
     /**
-     * This module's posture when its key is <em>unset</em> - on for all but a few.
-     *
-     * <p>A module states its own default rather than the reader assuming one, because the reader governs every
-     * console module and the exceptions are per module: the manual upload screen writes into repositories and
-     * ships off - reading such a module through the ordinary on-unless-off rule would make the code answer ENABLED on
-     * a deployment that had never stored the key while the console rendered it off. Declaring
-     * it here keeps the code's answer and the catalogue's {@code defaultValue} in one place per module instead of
-     * two places that can disagree silently.
+     * This module's posture when its key is unset: on for all but a few, such as the manual upload screen, which writes
+     * into repositories and ships off. Its catalogue entry's {@code defaultValue} reads the same answer.
      */
     default boolean enabledByDefault() {
         return true;

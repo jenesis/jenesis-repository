@@ -3,15 +3,10 @@ package build.jenesis.repository.ui;
 import module java.base;
 
 /**
- * Provider-agnostic derivation of a console principal from an OAuth2/OIDC user.
- *
- * <p>The stable id is the provider's user-name attribute - the numeric {@code id} for GitHub, the {@code sub} claim
- * for OIDC - qualified by the registration it came from, so principals live under {@code <provider>/<id>} whichever
- * provider signed them in. Qualifying matters: two providers can hand out the same raw id, and an unqualified one
- * would let a principal from one become a principal from the other.
- *
- * <p>A display name is picked from the first of a few common attributes that is present. It is for member lists and
- * error messages and never for identity, because a provider lets a user change it.
+ * Derives a console principal from an OAuth2/OIDC user. The stable id is the provider's user-name attribute (GitHub's
+ * numeric {@code id}, OIDC's {@code sub}) qualified by its registration as {@code <provider>/<id>}, since two providers
+ * can issue the same raw id. The display name, from the first common attribute present, is never identity, since a
+ * user can change it.
  */
 public final class ProviderPrincipal {
 

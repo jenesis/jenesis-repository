@@ -6,16 +6,10 @@ import build.jenesis.repository.posture.Configuration;
 import build.jenesis.repository.posture.PostureReport;
 
 /**
- * Where the security-posture screen gets its report, and when it was taken.
- *
- * <p>The report is always {@link PostureReport#discover}'s; what varies is the <em>effective configuration</em> it
- * is discovered against. A deployment whose settings live only in its environment answers from that; one that keeps
- * stored settings answers from those layered over it, and a tenant's own settings when a tenant is named. That is a
- * difference in where configuration comes from, not in what a posture report is, so it is a seam rather than a
- * second screen.
- *
- * <p>The collection time travels with the report because the screen says when it was taken: a posture read is a
- * snapshot of configuration, and one presented without a time reads as current when it may not be.
+ * Where the security-posture screen gets its report, and when it was taken. The report is always
+ * {@link PostureReport#discover}'s; what varies is the effective configuration it is discovered against: the
+ * environment alone, or stored settings layered over it, a named tenant's included. The time is shown, since a report
+ * is a snapshot.
  */
 @FunctionalInterface
 public interface PostureSource {

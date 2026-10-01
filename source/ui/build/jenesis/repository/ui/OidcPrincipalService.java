@@ -10,13 +10,8 @@ import org.springframework.security.oauth2.core.OAuth2AuthenticationException;
 import org.springframework.security.oauth2.core.oidc.user.OidcUser;
 
 /**
- * Turns an OpenID Connect sign-in into a console principal: the {@code sub} claim, qualified by the registration it
- * came from, with the authorities the deployment's {@link LoginAuthorities} policy grants it.
- *
- * <p>The policy is the only part that varies between deployments - one grants from a configured list of admins,
- * another from stored tenant memberships and refuses a principal that belongs to none - so it is the only part
- * injected. Everything here (load the user, derive the qualified id, carry it on the principal) is the same wherever
- * the console runs, which is why it is written once.
+ * Turns an OpenID Connect sign-in into a console principal: the qualified {@code sub} claim, with the authorities the
+ * deployment's {@link LoginAuthorities} policy grants, the one part injected.
  */
 public class OidcPrincipalService extends OidcUserService {
 

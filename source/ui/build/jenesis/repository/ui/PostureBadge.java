@@ -1,13 +1,9 @@
 package build.jenesis.repository.ui;
 
 /**
- * The security-posture indicator the console header carries: how many unsafe-configuration advisories this view
- * raises, or that the report could not be collected at all.
- *
- * <p>The two are deliberately different states. A deployment with no advisories is clean and shows nothing; one
- * whose report could not be read is <em>unknown</em>, and saying "0" there would report a clean posture nobody
- * established. {@link #visible} is true for both an unknown report and a non-empty one, so the header falls silent
- * only when there is genuinely nothing to say.
+ * The security-posture indicator in the console header: how many advisories this view raises, or that the report
+ * could not be collected, which is shown rather than read as a clean zero. {@link #visible} is false only for a
+ * collected report with no advisories.
  */
 public record PostureBadge(boolean known, int count) {
 
@@ -32,9 +28,7 @@ public record PostureBadge(boolean known, int count) {
     }
 
     public String label() {
-        // No glyph here. The badge's kind draws its own mark in CSS, so a character typed into the label is a
-        // second one beside it - and this label was carrying a warning sign onto a badge the shell renders as
-        // danger, which would have put a cross and a triangle side by side saying the same thing differently.
+        // No glyph: the badge's kind draws its own mark in CSS.
         return known ? count + " posture" : "posture unknown";
     }
 

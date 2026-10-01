@@ -26,10 +26,9 @@ public record Navigation(List<Link> groups, Sidebar sidebar) {
     }
 
     /**
-     * Whether this page's navigation links to {@code href} - in the header, the sidebar or its way back. A screen
-     * that points at another one asks this first, so a link never leads to a page this reader cannot open or this
-     * composition does not carry. It answers for the links this page renders: the sidebar lists the reader's current
-     * group, so a page asks about a sibling in its own group.
+     * Whether this page's navigation links to {@code href}, in the header, the sidebar or its way back. A screen asks
+     * before linking another, so a link never leads to a page this reader cannot open. The sidebar lists only the
+     * current group.
      */
     public boolean offers(String href) {
         return groups.stream().anyMatch(link -> link.href().equals(href))
@@ -57,9 +56,7 @@ public record Navigation(List<Link> groups, Sidebar sidebar) {
     }
 
     /**
-     * The sidebar: its sections, each under the heading that names it, and a {@code back} link out of what it lists
-     * when there is one. Every sidebar is headed the same way, so what a group's sidebar lists and what a repository's
-     * does read alike.
+     * The sidebar: its headed sections, and a {@code back} link out of what it lists when there is one.
      */
     public record Sidebar(Link back, List<Section> sections) {
 

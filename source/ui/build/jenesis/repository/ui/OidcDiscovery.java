@@ -13,34 +13,17 @@ import tools.jackson.databind.json.JsonMapper;
 
 /**
  * OpenID Connect / RFC 8414 provider discovery: fetch the issuer's configuration document and turn it into a
- * {@link ClientRegistration.Builder}.
+ * {@link ClientRegistration.Builder}. Every OIDC login in the product discovers through this.
  *
- * <p><b>Why this exists rather than {@code ClientRegistrations.fromIssuerLocation}.</b> That helper is the ONLY
- * reason {@code com.nimbusds:oauth2-oidc-sdk} and its five transitives are on the graph at all - and it
- * uses the SDK as nothing more than a spec-aware JSON parser. Jackson is already aboard, so the document is a
- * record and a builder. Spring has had "Consider removing com.nimbusds:oauth2-oidc-sdk dependency" open since
- * December 2023, labelled as breaking passivity; it was assigned to 7.0.x, the dependency was updated rather than
- * removed, and 7.1.0 still ships it. Waiting is not a plan.
- *
- * <p>This lives in the console because that is the root: a downstream OIDC module calls it rather than
- * carrying a second copy, and fixing only that module would change nothing, since {@code source/ui} keeps
- * pulling the same jars into both bundles.
- *
- * <p><b>The issuer check is not optional.</b> A discovery document names the issuer it belongs to, and it must be
- * the issuer that was asked for. Without that check a hostile or merely misconfigured discovery endpoint can hand
- * back somebody else's authorisation server, and every token this deployment then accepts was minted by whoever
- * that is - so dropping it would be a real security regression wearing the clothes of a dependency cleanup. It is
- * required by OpenID Connect Discovery 1.0 §4.3 and by RFC 8414 §3.3 for exactly this reason.
+ * <p>The document's {@code issuer} must equal the issuer asked for (OpenID Connect Discovery 1.0 §4.3, RFC 8414 §3.3):
+ * otherwise a hostile or misconfigured endpoint could hand back another authorisation server, and this deployment
+ * would accept tokens it minted.
  */
 public final class OidcDiscovery {
 
     private static final JsonMapper JSON = JsonMapper.builder().build();
 
-    /**
-     * Generous, and deliberately so. A discovery fetch is one incidental round trip on a path whose real work is
-     * elsewhere: under load, even a discovery against localhost can lose a race with Spring's default read timeout and
-     * read as an "infrastructure failure". A slow provider should make a login slow, not make it fail.
-     */
+    /** Generous, so a slow provider or a loaded machine makes a login slow rather than failed. */
     private static final Duration TIMEOUT = Duration.ofSeconds(30);
 
     /** The most of a discovery document read: a provider's is a few kilobytes of endpoints and supported values. */
@@ -50,11 +33,9 @@ public final class OidcDiscovery {
     }
 
     /**
-     * The builder for {@code issuer}, discovered.
-     *
-     * <p>Three locations are tried, in the order Spring tried them, because real providers differ on which they
-     * serve: the OIDC suffix form, then the two RFC 8414 forms that insert the well-known segment BEFORE the
-     * issuer's path. An issuer with no path collapses all three onto two URLs, which is the common case.
+     * The builder for {@code issuer}, discovered from the first of three locations that answers, since providers differ
+     * on which they serve: the OIDC suffix form, then the two RFC 8414 forms that insert the well-known segment before
+     * the issuer's path.
      */
     public static ClientRegistration.Builder fromIssuerLocation(String issuer) {
         String trimmed = Objects.requireNonNull(issuer, "issuer").trim();
@@ -112,9 +93,6 @@ public final class OidcDiscovery {
     private static ClientRegistration.Builder build(String issuer, JsonNode document) {
         String declared = text(document, "issuer");
         if (declared == null || !declared.equals(issuer)) {
-            // See the class comment: this is the whole defence against a discovery endpoint handing back another
-            // provider's authorisation server, and it is a requirement of both specifications rather than a
-            // hardening extra.
             throw new IllegalStateException("The OIDC provider at " + issuer + " returned a document for issuer "
                     + declared + "; the two must be identical, so this document is not this provider's");
         }
@@ -137,18 +115,15 @@ public final class OidcDiscovery {
         if (userInfo != null) {
             builder.userInfoUri(userInfo);
         }
-        // openid is what marks this an OIDC login rather than a plain OAuth2 one - it selects the id-token flow and
-        // the qualified principal, and a spec-compliant provider requires it before UserInfo will answer. A caller
-        // that wants more says so; this is the floor, not the set.
+        // openid selects the id-token flow and the qualified principal, and a compliant provider requires it before
+        // UserInfo answers. A caller adds more.
         builder.scope("openid");
         return builder;
     }
 
     /**
-     * The client authentication method the provider advertises.
-     *
-     * <p>{@code client_secret_basic} is the specification's default and what is assumed when the document says
-     * nothing, so a provider that omits the field is treated as every client library treats it.
+     * The client authentication method the provider advertises, {@code client_secret_basic} (the specification's
+     * default) when the document says nothing.
      */
     private static ClientAuthenticationMethod authentication(JsonNode document) {
         Set<String> supported = new LinkedHashSet<>();
@@ -176,15 +151,9 @@ public final class OidcDiscovery {
     }
 
     /**
-     * One metadata value as a plain JDK type. Every JSON shape has to be handled, including the ones this product
-     * never reads: the whole document is carried through to {@code ClientRegistration.providerConfigurationMetadata},
-     * so a shape that falls through here fails the entire discovery rather than the one field. A real provider's
-     * document contains nested objects - Keycloak publishes {@code mtls_endpoint_aliases} - and an object reaching
-     * the string branch is a coercion failure that takes the login with it.
-     *
-     * <p>The collections are wrapped rather than copied for the same reason: JSON null maps to a null value, and
-     * {@code List.copyOf}/{@code Map.copyOf} reject those, so a document with an explicit null would have failed the
-     * same way for a different reason.
+     * One metadata value as a plain JDK type. Every JSON shape is handled, nested objects included (Keycloak's
+     * {@code mtls_endpoint_aliases}), since an unhandled one fails the whole discovery. Collections are wrapped rather
+     * than copied, because a JSON null maps to a null element the copying factories reject.
      */
     private static Object plain(JsonNode node) {
         if (node.isArray()) {

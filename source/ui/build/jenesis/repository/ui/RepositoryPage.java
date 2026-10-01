@@ -3,14 +3,9 @@ package build.jenesis.repository.ui;
 import module java.base;
 
 /**
- * One page about a single repository, contributed through {@link ConsoleModuleProvider#repositoryPages()}.
- *
- * <p>A repository is where most of the console's pages live - its contents, what the gate held, what its advisories
- * say, who signed it - and those pages come from several modules. The shell lists them beside the content whenever a
- * reader is inside a repository, under the {@link Topic} each declares, so a module adds a page to every repository
- * by being installed rather than by core naming it in a template. That is the seam the repository screen lacked: it
- * was a row of buttons written into core's markup, each behind a flag core read on the module's behalf, and a button
- * whose module was switched off was a link to a path nothing had mapped.
+ * One page about a single repository, contributed through {@link ConsoleModuleProvider#repositoryPages()}. The shell
+ * lists the installed modules' pages beside the content under each page's {@link Topic}, so a module adds a page to
+ * every repository by being installed.
  *
  * @param label    the page's name in the sidebar
  * @param path     the page's path below the repository, starting with a slash ({@code /vulnerabilities}), or the
@@ -50,8 +45,7 @@ public record RepositoryPage(String label, String path, NavEntry.Access access, 
         /** What the repository holds, and the ways to put more in. */
         CONTENTS("Contents"),
 
-        /** The queues that wait for a person's decision - what the gate held, what it refused, what an analysis
-         *  proposes - so the work to do is listed apart from the reports about what is there. */
+        /** The queues waiting for a person's decision: what the gate held or refused, what an analysis proposes. */
         REVIEW("Review"),
 
         /** What the feeds, the ledgers and the policies say about what it holds. */

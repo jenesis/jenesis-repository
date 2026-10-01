@@ -6,22 +6,10 @@ import org.springframework.security.config.oauth2.client.CommonOAuth2Provider;
 import org.springframework.security.oauth2.client.registration.ClientRegistration;
 
 /**
- * Builds the console's OAuth2/OIDC client registrations from configuration values.
- *
- * <p>Two providers, and each is present only when it has been configured: the built-in GitHub provider once a client
- * id is set, and a generic OpenID Connect provider once an issuer and a client id are set. The OIDC one is
- * discovered through {@link OidcDiscovery}, so the endpoints come from the issuer's own document rather than from
- * configuration a deployment would have to keep in step with it.
- *
- * <p><b>Why this takes values rather than a properties object.</b> The registrations are the same wherever the
- * console runs, but where the values come from is not - one deployment binds them under one prefix, another under
- * per-provider prefixes with a different principal model behind them. Passing the values in keeps the part that is
- * genuinely shared in one place while leaving each console free to bind its own configuration, rather than a copy of
- * the builder per console drifting on the requested scopes.
- *
- * <p>The scopes are a parameter for that reason. {@code openid} is already set by discovery and is what marks the
- * login OIDC rather than plain OAuth2; a console that also renders display names asks for {@code profile} and
- * {@code email} on top, and a console that does not, does not.
+ * Builds the console's OAuth2/OIDC client registrations from configuration values: GitHub once a client id is set,
+ * and an OpenID Connect provider, discovered through {@link OidcDiscovery}, once an issuer and a client id are set. It
+ * takes values rather than a properties object so each console binds its own configuration, and the scopes beyond
+ * discovery's {@code openid} as a parameter.
  */
 public final class ConsoleClientRegistrations {
 
@@ -42,9 +30,8 @@ public final class ConsoleClientRegistrations {
     }
 
     /**
-     * A generic OpenID Connect provider discovered from its issuer, or empty when the issuer or the client id is
-     * unconfigured - both are needed, since discovery has nowhere to look without the first and nothing to identify
-     * itself with without the second.
+     * An OpenID Connect provider discovered from its issuer, or empty unless both the issuer and the client id are
+     * configured.
      */
     public static Optional<ClientRegistration> oidc(String issuerUri, String clientId, String clientSecret,
                                                     String clientName, List<String> scopes) {

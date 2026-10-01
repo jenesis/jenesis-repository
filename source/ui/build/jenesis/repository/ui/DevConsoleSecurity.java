@@ -12,22 +12,11 @@ import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.web.SecurityFilterChain;
 
 /**
- * The development profile's sign-in, for every console: a credential form at {@code /login/dev}, HTTP basic beside
- * it, and a chain scoped and authorized by the edition's own {@link DevConsolePolicy}. Active only under the
- * {@code dev} profile; the production chains are {@code @Profile("!dev")} and are untouched by this.
- *
- * <h2>One chain, because two drift</h2>
- *
- * <p>A chain per console would drift where nobody sees it, because the differences are all in the dev profile: form
- * login pointed at a page with no form on it, or at Spring Security's generated page, and the loopback guard on one
- * of them only. The guard is the sharp one - a dev profile enables in-memory accounts with known passwords, and both
- * consoles do, so binding either to a routable interface is the same mistake.
- *
- * <h2>The form is a mechanism, not a special case</h2>
- *
- * <p>The shared sign-in page lists what the installed mechanisms offer and links into the URL space each owns. So
- * the dev credential form gets its own page and its own {@link LoginOptions} entry, exactly as key login does,
- * rather than a form spliced into a page whose job is to be neutral between mechanisms.
+ * The development profile's sign-in, one chain for every console: a credential form at {@link #PATH}, HTTP basic
+ * beside it, scoped and authorized by the console's own {@link DevConsolePolicy}, and a guard refusing a routable bind,
+ * since the profile enables in-memory accounts with known passwords. Active only under {@code dev}; the production
+ * chains are {@code @Profile("!dev")}. The form is a sign-in mechanism with its own page and {@link LoginOptions}
+ * entry, like any other.
  */
 @Configuration
 @Profile("dev")
@@ -74,12 +63,8 @@ public class DevConsoleSecurity {
     }
 
     /**
-     * Fail the boot fast if the dev profile is asked to bind a non-loopback address. This chain enables in-memory
-     * accounts with published passwords, so it must never be network-reachable. A dev boot defaults
-     * {@code server.address} to loopback; this refuses to start if that default is overridden to a routable
-     * interface - the operator ran the dev profile where only the production chain belongs. The bean is a non-lazy
-     * singleton, so it is constructed during context refresh before the embedded web server binds its port, and the
-     * throw aborts the boot pre-bind. An empty {@code server.address} is left to the loopback default.
+     * Fails the boot when the dev profile is asked to bind a non-loopback {@code server.address}; empty keeps the
+     * loopback default. A non-lazy singleton, so it runs during context refresh, before the web server binds.
      */
     @Bean
     public DevLoopbackGuard devLoopbackGuard(Environment environment) throws UnknownHostException {

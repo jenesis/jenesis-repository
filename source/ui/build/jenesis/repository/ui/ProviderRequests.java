@@ -11,12 +11,9 @@ import org.springframework.web.client.RestClient;
 import org.springframework.web.client.RestTemplate;
 
 /**
- * The HTTP a sign-in makes to its identity provider - the token exchange, the user-info read and the fetch of the
- * key set an id token is checked against - over the product's own client. Spring Security makes each of these with a
- * client of its own choosing when nobody names one, and each of those announces the runtime it runs on
- * ({@code Java/<version>} from a URL connection, {@code Jetty/<version>} from Jetty's client); these carry the
- * product's {@code User-Agent} and nothing else. Each is configured exactly as Spring Security configures its own
- * default, bar the request factory.
+ * The HTTP a sign-in makes to its identity provider - the token exchange, the user-info read and the key-set fetch -
+ * over the product's own client, so it carries the product's {@code User-Agent} rather than the runtime's. Each is
+ * configured as Spring Security configures its default, bar the request factory.
  */
 final class ProviderRequests {
 

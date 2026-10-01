@@ -1,22 +1,10 @@
 /**
- * The web console: a Spring Boot admin front for the repository, built on a mainstream Spring stack
- * (Spring Boot on embedded Jetty, Thymeleaf views, Spring Security with OAuth2/OIDC login) so a downstream distribution
- * extends this shell rather than forking it. It is an open module (Spring needs reflective access) and requires the
- * Spring modules its code compiles against plus the Spring Boot starters that root the runtime closure (embedded
- * Jetty, Thymeleaf, Jackson, Security, OAuth2 client). A screen is contributed through
- * {@code ConsoleModuleProvider}, the one GUI extension seam, discovered with ServiceLoader and bridged into Spring,
- * so a capability is added by putting its module on the graph rather than by forking the console. A contribution
- * names the Thymeleaf fragment its body renders through and prepares the value that fragment reads, so nothing
- * contributed here produces markup. Login mechanisms plug in the same way through the
- * {@code LoginContributor} bean seam.
- *
- * <p>There is no second registration SPI beside it: a second way to add to the GUI reads as a choice.
- *
- * <p>It requires the format SPI for one reason: the browse card marks each published namespace with the mark of the
- * format that owns it, resolved through the shared {@code Marks} every contributing plug-in family renders through,
- * so a namespace no installed format claims is shown as the orphan it is rather than as an ordinary row. That is an
- * SPI dependency, not a plugin one - the console still requires no concrete format and discovers them all through
- * the SPI's own lookup.
+ * The web console: Spring Boot on embedded Jetty, Thymeleaf views and Spring Security with OAuth2/OIDC login, an open
+ * module for Spring's reflection. A screen is contributed through {@code ConsoleModuleProvider}, the one GUI extension
+ * seam, so a capability is added by putting its module on the graph; a contribution names the fragment its body renders
+ * through and prepares its model, so nothing contributed produces markup. Login mechanisms plug in through the
+ * {@code LoginContributor} bean seam. The format SPI is required so the browse can mark each namespace with its
+ * format's mark, or as an orphan.
  *
  * @jenesis.release 25
  * @jenesis.exclude spring.boot.starter.jetty org.apache.tomcat.embed/tomcat-embed-el
@@ -29,8 +17,7 @@ open module build.jenesis.repository.ui {
     requires build.jenesis.repository.net.http;
     requires build.jenesis.repository.format;
     requires build.jenesis.repository.store;
-    // The console's authority model is grants now, and a grant is an Authorization. A small closure: this
-    // module is java.base plus the store, which the console already requires.
+    // The console's authority model is grants, read through Authorization.
     requires build.jenesis.repository.server.spi;
     requires build.jenesis.repository.walk;
     requires build.jenesis.repository.observation;
@@ -63,8 +50,6 @@ open module build.jenesis.repository.ui {
     exports build.jenesis.repository.ui;
     uses build.jenesis.repository.ui.ConsoleModuleProvider;
     uses build.jenesis.repository.ui.ConsoleLayout.Extension;
-    // The family extends IconContributor, so every implementation gains the optional mark seam and
-    // the console resolves one answer for all of them. Transitive: an implementation overriding
-    // icon() names IconResource in its own signature.
+    // Transitive: a provider overriding IconContributor.icon() names IconResource in its signature.
     requires transitive build.jenesis.repository.icon;
 }

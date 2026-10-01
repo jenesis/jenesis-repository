@@ -5,21 +5,10 @@ import module java.base;
 import build.jenesis.repository.server.spi.Authorization;
 
 /**
- * The single-tenant answer to {@link ConsoleAccess}: a principal holds something here if it administers the
- * deployment, or if it holds a grant in the tenant this console acts in.
- *
- * <p>{@code repository:read} is the right asked for because it is the floor every console read sits on - a screen
- * of this console shows the repository's contents, so a principal that may not read the repository may not read the
- * console either. A principal with more than that passes on the same read, since {@code authorize} answers about
- * what a grant <em>allows</em> rather than what it exactly equals; a principal with a grant that does not reach
- * reading holds nothing a screen could show, which is the honest answer.
- *
- * <p>Deployment administration is checked first and separately, because an administrator of a deployment with no
- * tenant-scoped grant of their own is still an administrator - that is what {@code jenrepo.ui.admins} seeds, and it
- * is the grant that lets a fresh deployment be administered at all.
- *
- * <p>An unreadable store answers by throwing rather than by allowing: a console that opened because it could not
- * read its own grants is the failure this whole seam exists to prevent.
+ * The single-tenant answer to {@link ConsoleAccess}: a principal holds something if it administers the deployment
+ * (checked first, as {@code jenrepo.ui.admins} seeds it with no tenant grant), or may {@code repository:read} in the
+ * tenant this console acts in, the floor every console screen sits on. An unreadable store throws rather than
+ * allowing.
  */
 public class GrantedConsoleAccess implements ConsoleAccess {
 

@@ -10,13 +10,9 @@ import org.springframework.security.oauth2.core.user.DefaultOAuth2User;
 import org.springframework.security.oauth2.core.user.OAuth2User;
 
 /**
- * Turns a plain OAuth2 sign-in - GitHub, which is not OIDC - into a console principal: the provider's user-name
- * attribute, qualified by the registration it came from, with the authorities the deployment's
- * {@link LoginAuthorities} policy grants it.
- *
- * <p>The qualified id is put into the attributes and made the name attribute, so the principal reports the same
- * identity the policy was asked about. Without that the name would be the provider's raw id, which is unique only
- * within that provider and is not what any grant is keyed by.
+ * Turns a plain OAuth2 sign-in (GitHub) into a console principal with the authorities the deployment's
+ * {@link LoginAuthorities} grants. The qualified id is made the name attribute, so the principal reports the identity
+ * grants are keyed by rather than the provider's raw id.
  */
 public class OAuth2PrincipalService extends DefaultOAuth2UserService {
 

@@ -26,24 +26,16 @@ import org.springframework.security.oauth2.client.registration.InMemoryClientReg
 import org.springframework.security.oauth2.core.user.OAuth2User;
 
 /**
- * Builds the OAuth2/OIDC client registrations from configuration: the built-in GitHub provider when
- * {@code jenrepo.ui.github.client-id} is set, and a generic OpenID Connect provider - its endpoints and JWK set
- * discovered from {@code jenrepo.ui.oidc.issuer-uri} - when that issuer and a client id are set (so any OIDC identity
- * provider, e.g. Google, Keycloak, Okta, Azure AD, works). Every bean here exists only when at least one provider is
- * configured, so the app still starts with login disabled rather than failing - the sign-in page says so itself,
- * from the {@link LoginOptions} the installed mechanisms contribute, which is where that notice belongs: a
- * deployment that installed no mechanism cannot be signed into, and a page with no buttons and no explanation is
- * the one thing it must not be. Spring Boot's property auto-configuration, which rejects a blank client id, is
- * avoided for the same reason. Discovery makes a network
- * call to the issuer at startup. The login is contributed to the chain as a {@link LoginContributor}, mapping the
- * signed-in user to authorities through {@link LoginAuthorities} - the seam whose policy is the only thing that
- * ever differed, which is why one wiring serves whatever authority model a deployment installs.
+ * Builds the OAuth2/OIDC client registrations from configuration: GitHub when {@code jenrepo.ui.github.client-id} is
+ * set, and any OpenID Connect provider, discovered from {@code jenrepo.ui.oidc.issuer-uri}, when that issuer and a
+ * client id are set. Every bean exists only when a provider is configured, so the console starts with login disabled
+ * rather than failing, and the sign-in page says so from the {@link LoginOptions} the installed mechanisms contribute;
+ * Spring Boot's property auto-configuration, which rejects a blank client id, is avoided for the same reason.
+ * Discovery calls the issuer at startup. The login is a {@link LoginContributor} mapping the user to authorities
+ * through {@link LoginAuthorities}, the seam that carries a deployment's authority model.
  *
- * <p>This existed twice, once here and once as a downstream module, with the condition and the contributor
- * byte-identical and the rest differing only in which properties class bound {@code jenrepo.ui.github.*} and
- * {@code jenrepo.ui.oidc.*} - two bindings of one documented key, with identical fields and identical defaults.
- * A console that wants the mechanism optional imports this through its module seam; one that always carries it
- * component-scans it. Both get the same beans.
+ * <p>A console that wants the mechanism optional imports this through its module seam; one that always carries it
+ * component-scans it.
  */
 @Configuration(proxyBeanMethods = false)
 @EnableConfigurationProperties({GithubProperties.class, OidcProperties.class})
@@ -125,12 +117,8 @@ public class OAuth2ClientConfig {
     @Bean
     @Conditional(AnyProviderConfigured.class)
     public ClientRegistrationRepository clientRegistrationRepository(GithubProperties github, OidcProperties oidc) {
-        // The standard OpenID Connect scopes. openid marks this an OIDC (not plain OAuth2) login so the id-token
-        // flow and the qualified oidc/<sub> principal are used, and it is what a spec-compliant provider (e.g.
-        // Keycloak) requires before its UserInfo endpoint will answer; profile and email are what a console renders
-        // a display name and a member list from. This console asked for openid alone while the admin console asked
-        // for all three, on the argument that it rendered no name - which was true only because it read
-        // Authentication.getName() and showed a qualified id where the other showed a person.
+        // openid selects the id-token flow and the qualified oidc/<sub> principal and is required before UserInfo
+        // answers; profile and email give the display name and member list.
         return new InMemoryClientRegistrationRepository(Stream.of(
                         ConsoleClientRegistrations.github(github.getClientId(), github.getClientSecret()),
                         ConsoleClientRegistrations.oidc(oidc.getIssuerUri(), oidc.getClientId(),
@@ -149,8 +137,7 @@ public class OAuth2ClientConfig {
             if (registrations instanceof Iterable<?> available) {
                 for (Object entry : available) {
                     ClientRegistration registration = (ClientRegistration) entry;
-                    // No mark: the registration id is chosen by whoever configured the client, so there is
-                    // nothing here to look a drawing up by. The figure computed from that id is the honest answer.
+                    // No mark: the registration id is operator-chosen, so the figure is generated from it.
                     options.add(new LoginOptions.LoginOption(registration.getRegistrationId(),
                             registration.getClientName(),
                             "/oauth2/authorization/" + registration.getRegistrationId(),
@@ -161,9 +148,8 @@ public class OAuth2ClientConfig {
         };
     }
 
-    /** The display name for an OAuth2/OIDC principal, so a layout greets the user without importing any OAuth2
-     *  type. Unconditional: it answers empty for a principal of any other kind, which is what makes it safe to
-     *  install beside a mechanism that is not configured. */
+    /** The display name of an OAuth2/OIDC principal, so a layout needs no OAuth2 type. Unconditional, since it answers
+     *  empty for any other principal. */
     @Bean
     public PrincipalNameResolver oauth2PrincipalNameResolver() {
         return authentication -> authentication.getPrincipal() instanceof OAuth2User user
