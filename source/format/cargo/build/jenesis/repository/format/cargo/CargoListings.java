@@ -9,9 +9,8 @@ import build.jenesis.repository.store.StoredListing;
 import tools.jackson.databind.node.ObjectNode;
 
 /**
- * A crate's sparse-index file as a stored listing: one stored index line per version, keyed by version, each
- * carrying its {@code yanked} flag from the lifecycle mark. A version is listed exactly when its crate pointer is not
- * withheld - the screen the on-read generation applied per version, applied here to the one version a write touches.
+ * A crate's sparse-index file as a stored listing: one index line per version, keyed by version, carrying
+ * {@code yanked} from the lifecycle mark. A version is listed exactly when its crate pointer is not withheld.
  */
 final class CargoListings {
 

@@ -8,10 +8,9 @@ import build.jenesis.repository.store.ArtifactDescriptor;
 import build.jenesis.repository.store.ArtifactStore;
 
 /**
- * Keeps the Cargo {@linkplain CargoListings stored sparse index} in step with the transitions that happen off the
- * publish path - a hold on a published version and its release, a yank and its reversal, a removal - by
- * re-deciding the one version's line. A transition whose subject names neither a download path nor a coordinate is
- * mapped to no line, so every index is regenerated in place.
+ * Keeps the Cargo {@linkplain CargoListings stored sparse index} in step with transitions off the publish path - a hold
+ * and its release, a yank and its reversal, a removal - by re-deciding the one version's line. A subject naming neither
+ * a download path nor a coordinate regenerates every index in place.
  */
 public final class CargoListingObserver extends BlobsListingObserver {
 

@@ -29,45 +29,31 @@ import build.jenesis.repository.store.Withheld;
 
 /**
  * The Cargo registry format (the sparse-index protocol), so {@code cargo publish} and {@code cargo build} resolve Rust
- * crates over the shared store. It owns {@code /cargo/...}, where the first path segment is a registry: a crate is
- * pushed with {@code PUT /cargo/<repo>/api/v1/crates/new} (Cargo's length-prefixed publish frame - a little-endian
- * {@code u32} JSON-metadata length, the metadata, a {@code u32} {@code .crate} length, then the {@code .crate} bytes)
- * and downloaded from {@code /cargo/<repo>/api/v1/crates/<name>/<version>/download}. The sparse index a client reads
- * ({@code /cargo/<repo>/config.json} and the per-crate index file at Cargo's name-sharded path, e.g.
- * {@code /cargo/<repo>/se/rd/serde}) is generated on read ({@code config.json}) or streamed from a stored listing
- * the publish maintains.
+ * crates over the shared store. It owns {@code /cargo/<repo>/...}: a crate is pushed with
+ * {@code PUT /cargo/<repo>/api/v1/crates/new} (Cargo's frame - a little-endian {@code u32} metadata length, the JSON
+ * metadata, a {@code u32} {@code .crate} length, the {@code .crate}) and downloaded from
+ * {@code /cargo/<repo>/api/v1/crates/<name>/<version>/download}. The {@code config.json} is generated on read; the
+ * per-crate index file at Cargo's name-sharded path ({@code /cargo/<repo>/se/rd/serde}) is a stored listing the publish
+ * maintains.
  *
- * <p><b>Streaming publish, unwrapped at the choke point.</b> Only the JSON metadata at the front of the publish frame
- * is materialised (the small, bounded index parse the streaming principle allows); the (arbitrarily large)
- * {@code .crate} archive that follows it is handed to the shared hosted-publish operation as the accepted body, so it
- * streams hash-on-write into the content-addressed store and is never buffered. Because the frame is unwrapped
- * <em>before</em> the artifact reaches the screen, the bytes the interceptor chain hashes and assesses are the crate's
- * own - not the frame that carried it ({@link #screened()}). The SHA-256 the operation returns is both the
- * crate pointer's blob hash and the {@code cksum} Cargo's index records, so the archive is read once. A precomputed
- * index line is stored per version, exactly as the Debian and RPM formats store a per-package stanza, so the publish
- * joins the stored lines into the crate's index file and a read streams it rather than reopening every {@code .crate}
- * (read-first).
+ * <p><b>Streaming publish.</b> Only the bounded JSON metadata is materialised; the {@code .crate} that follows streams
+ * hash-on-write into the store as the accepted body, so the bytes the interceptor chain assesses are the crate's own,
+ * not the frame's ({@link #screened()}). The returned SHA-256 is both the crate pointer's hash and the index's
+ * {@code cksum}, and a precomputed index line is stored per version, so a read never reopens a {@code .crate}.
  *
- * <p><b>Pull-through proxy.</b> The same layout is also a {@link ProxyFormat}: a local miss on a proxy registry is
- * served from an upstream sparse-index registry (crates.io by default, {@link #defaultUpstream()}). A per-crate index
- * file is mutable, so it streams through fresh on every read (never cached, and it needs no rewrite - the sparse index
- * carries no download URLs; a client builds those from the {@code config.json} this registry generates, which points
- * downloads back through here). A {@code .crate} archive is immutable, so it streams from upstream straight into the
- * CAS and is cached (a later read is a local hit). The upstream download URL is resolved by reading the upstream's
- * {@code config.json} {@code dl} template (Cargo's {@code {crate}}/{@code {version}}/{@code {prefix}} markers, or the
- * {@code /{crate}/{version}/download} default), so the proxy honours whatever download layout the upstream declares.
- * The local {@code config.json} is always generated (never proxied), so the client fetches every crate through here.
+ * <p><b>Pull-through proxy.</b> A miss on a proxy registry is served from an upstream sparse-index registry (crates.io
+ * by default). A per-crate index file is mutable and streams through fresh; it carries no download URLs, since a client
+ * builds them from the locally generated {@code config.json}, which points downloads back through here. A
+ * {@code .crate} is immutable, so it is cached; its upstream URL comes from the upstream's {@code config.json}
+ * {@code dl} template.
  *
- * <p>The layout declares its ecosystem ({@code "crates.io"}, the OSV package-ecosystem name for Rust crates) so a
- * compliance inspector, the console and download tracking key on it; {@link #describe} resolves a crate download path
- * to its {@code name}/{@code version} coordinate. Crate pointers live in the shared {@code Blobs} namespace like the
- * other language formats, so the {@code publish/}-namespace eviction ({@link #paths}) stays empty; coordinate-scoped
- * enforcement runs through the {@code BlobLayout} seam ({@link #blobKeys}/{@link #servedPaths}) instead.
+ * <p>The ecosystem is {@code "crates.io"}, the OSV name. Crate pointers live in the shared {@code Blobs} namespace, so
+ * {@link #paths} is empty and coordinate-scoped enforcement runs through {@link #blobKeys}/{@link #servedPaths}.
  */
 public final class CargoFormat implements RepositoryFormat, ArtifactLayout, ProxyLeg, BlobLayout, RepositoryImporter,
         RepositoryExporter {
 
-    /** The OSV package-ecosystem name this format's artifacts report (distinct from {@link #name()}, the routing id). */
+    /** The OSV ecosystem name this format's artifacts report (distinct from {@link #name()}, the routing id). */
     public static final String ECOSYSTEM = "crates.io";
 
     static final ObjectMapper MAPPER = new ObjectMapper();
@@ -80,12 +66,12 @@ public final class CargoFormat implements RepositoryFormat, ArtifactLayout, Prox
     private static final String UNYANK = "/unyank";
     private static final String CONFIG = "config.json";
 
-    /** Cargo's publish response - the empty warning envelope every registry returns on a successful upload. */
+    /** Cargo's publish response - the empty warning envelope a registry returns on a successful upload. */
     private static final byte[] WARNINGS =
             "{\"warnings\":{\"invalid_categories\":[],\"invalid_badges\":[],\"other\":[]}}"
                     .getBytes(StandardCharsets.UTF_8);
 
-    /** A hostile publish frame cannot force a large metadata allocation: the JSON crate metadata is small and bounded. */
+    /** The largest JSON metadata a publish frame may declare, so a hostile frame cannot force a large allocation. */
     private static final int MAX_METADATA = 32 * 1024 * 1024;
 
     @Override
@@ -153,20 +139,6 @@ public final class CargoFormat implements RepositoryFormat, ArtifactLayout, Prox
         }
     }
 
-    /**
-     * Cargo's publish protocol wraps its artifact, so this format is <b>not</b> edge-screened: a
-     * {@code PUT /cargo/<repo>/api/v1/crates/new} body is a length-prefixed <em>frame</em>
-     * ({@code [u32 json-len][json][u32 crate-len][.crate]}), not the {@code .crate} itself. Gating that frame at the
-     * shared single-body edge would hash and assess the envelope while the bytes that later serve are the
-     * {@code .crate} inside it - a second content-addressed object under a hash no interceptor ever saw, which is
-     * {@code RepositoryFormat} clause 14's fail-open direction. The shared edge ({@code ScreenedDispatch}) takes the
-     * request body verbatim and offers no seam to unwrap one, so this format is in the {@code screened() == false}
-     * case the clause names and screens at its own documented choke point: {@link #publish} unwraps the frame while
-     * it streams and drives the shared {@code Publication.commit} - with the <em>discovered</em> interceptor chain and
-     * observers - over the {@code .crate}'s own bytes, under the crate's own download path. There is exactly one
-     * choke point (this endpoint is the only way a crate is hosted-published here), so declaring {@code false} does
-     * not leave the format unscreened.
-     */
     /** A failure in Cargo's registry error document, {@code {"errors":[{"detail":...}]}}, which cargo prints. */
     @Override
     public void failed(FormatExchange exchange, String sentence) throws IOException {
@@ -176,38 +148,37 @@ public final class CargoFormat implements RepositoryFormat, ArtifactLayout, Prox
         exchange.respond(500, MAPPER.writeValueAsBytes(error));
     }
 
+    /**
+     * Not edge-screened: a publish body is a frame ({@code [u32 json-len][json][u32 crate-len][.crate]}), and gating
+     * it at the shared edge would assess the envelope while the {@code .crate} inside is what serves - a hash no
+     * interceptor saw, {@code RepositoryFormat} clause 14's fail-open direction. {@link #publish} is the one choke
+     * point instead: it unwraps the frame and drives {@code Publication.commit} with the discovered chain over the
+     * crate's own bytes, under its own download path.
+     */
     @Override
     public boolean screened() {
         return false;
     }
 
-    /**
-     * The republish policy handed to the hosted-publish operation, which evaluates it before the layout runs:
-     * {@code OVERWRITE}, the refusal being taken at the link instead. crates.io refuses a version already uploaded, and
-     * so does this: the crate pointer is linked through {@link Blobs#linkOnce}, which decides inside its
-     * compare-and-set, and the refusal is answered as crates.io answers it ({@link #alreadyUploaded}). A re-publish
-     * of the identical crate converges.
-     */
+    /** The republish policy: {@code OVERWRITE} at the operation, the refusal being taken at the link. Like crates.io
+     *  this registry refuses a version already uploaded - the crate pointer is linked through {@link Blobs#linkOnce},
+     *  which decides inside its compare-and-set - and answers as crates.io does ({@link #alreadyUploaded}).
+     *  Re-publishing the identical crate converges. */
     private static final Publication.Republish REPUBLISH = Publication.Republish.overwrite();
 
     /**
-     * Unwrap the publish frame and run the {@code .crate} it carries through the one shared hosted-publish
-     * choreography ({@code Publication.commit}). The frame is {@code [u32 json-len][json][u32 crate-len][.crate]};
-     * only the small, bounded JSON metadata at the front is materialised, and the {@code .crate} that follows it is
-     * handed to the operation as the accepted body, so it streams hash-on-write into the content-addressed store and
-     * <b>the hash the chain assesses is the hash the download later serves</b>. It matters because storing the crate
-     * with a raw {@link ArtifactStore#writeBlob} while the edge gated the surrounding frame would publish an artifact
-     * whose <em>content</em> a screen would refuse.
+     * Unwrap the publish frame and run the {@code .crate} it carries through the shared {@code Publication.commit}.
+     * Only the bounded JSON metadata is materialised; the {@code .crate} streams hash-on-write as the accepted body, so
+     * <b>the hash the chain assesses is the hash the download serves</b>.
      *
-     * <p>The metadata is read <em>before</em> the crate, so unlike NuGet this format knows its coordinate up front:
-     * the descriptor carries the real {@code name}/{@code vers} and the crate's own download path, which is what a
-     * deny-list keys on, what a {@code /quarantine} hold pointer is linked at, and what an inspector's artifact leg
-     * parses.
+     * <p>The metadata precedes the crate, so the coordinate is known up front: the descriptor carries the real
+     * {@code name}/{@code vers} and the crate's download path, which a deny-list keys on, a {@code /quarantine} hold is
+     * linked at and an inspector parses.
      *
-     * <p>Pointer-last, and the ordering is the operation's rather than hand-written: the precomputed sparse-index line - which needs the accepted hash as its {@code cksum} - is
-     * content-addressed inside the layout, before anything serves, and the two visibility writes are declared so the
-     * crate pointer lands first and the index line that advertises it only after. A crash between them leaves a
-     * downloadable crate no index lists, never an indexed crate with no bytes.
+     * <p>Pointer-last: the sparse-index line, which needs the accepted hash as its {@code cksum}, is content-addressed
+     * inside the layout before anything serves, and the visibility steps link the crate pointer before the index line
+     * that advertises it. A crash between them leaves a downloadable crate no index lists, never an indexed crate with
+     * no bytes.
      */
     private void publish(String repo, FormatExchange exchange, ArtifactStore store) throws IOException {
         InputStream in = exchange.requestStream();
@@ -230,6 +201,8 @@ public final class CargoFormat implements RepositoryFormat, ArtifactLayout, Prox
         }
         String name = text(metadata, "name");
         String version = text(metadata, "vers");
+        // Name and version become store-key segments, so a traversal-shaped one could steer a write into a sibling
+        // registry or format; real crate names and semver versions are never refused.
         if (name == null || version == null || Keys.unsafe(name) || Keys.unsafe(version)) {
             exchange.respond(400);
             return;
@@ -252,39 +225,33 @@ public final class CargoFormat implements RepositoryFormat, ArtifactLayout, Prox
                     crate, REPUBLISH,
                     accepted -> {
                         if (crate.remaining() > 0) {
-                            // The body ended before the declared crate-length bytes arrived (a short or chunked frame):
-                            // the store hashed only the truncated bytes, which is self-consistent but not the crate the
-                            // client meant to publish. Declare nothing rather than serve a silently truncated crate
-                            // under a 200 (the orphan blob is unreferenced and GC'd), the way RpmHeader.readInto throws
-                            // on a short read. This is checked inside the layout, which is the first moment the body has
-                            // been read to its end AND nothing servable has been written yet.
+                            // The body ended before the declared crate length arrived: the store hashed truncated
+                            // bytes, which are not the crate the client meant. Declare nothing (the orphan blob is
+                            // collected) rather than serve it under a 200. This is the first point where the body has
+                            // been read to its end and nothing servable has been written.
                             return Publication.Visibility.declined();
                         }
-                        // The precomputed sparse-index line, content-addressed before any pointer exists. Its cksum is
-                        // the accepted hash, so the index vouches for exactly the bytes the chain assessed and the
-                        // download serves. Written through Blobs rather than the operation's sidecar seam because a
-                        // blobs-namespace format stores its derived documents in the same pointer -> blob representation
-                        // as its artifacts (the index read resolves them with blobs.read); the ordering guarantee is the
-                        // same, since this runs inside the layout, strictly before any declared visibility step.
+                        // The sparse-index line, content-addressed before any pointer exists; its cksum is the accepted
+                        // hash. Written through Blobs because a blobs-namespace format stores derived documents as
+                        // pointer -> blob like its artifacts, and it still runs strictly before any declared visibility
+                        // step.
                         String line = blobs.store(new ByteArrayInputStream(
                                 indexLine(metadata, name, version, accepted.hash())
                                         .getBytes(StandardCharsets.UTF_8)));
                         return Publication.Visibility
-                                // The crate pointer, in this format's own namespace rather than publish/ - so it is
-                                // declared through a Serving step, not named with at(). Routed through Blobs.link (not a
-                                // bare writeVersioned): besides the compare-and-set retry, link clears any
-                                // gc/condemned/<hash> marker a collector set, so republishing a crate byte-identical to
-                                // a condemned one un-condemns it before the sweep deletes it.
+                                // The crate pointer, in this format's namespace rather than publish/, so declared as a
+                                // Serving step. Blobs.link retries its compare-and-set and clears a collector's
+                                // gc/condemned/<hash> marker, so republishing bytes identical to a condemned crate
+                                // un-condemns them.
                                 .through((hash, size, _) -> blobs.linkRelease(crateKey(repo, canonical, version), hash,
                                         size))
-                                // The index line that advertises it, after it - never before, so a crash never leaves a
-                                // sparse index naming a crate no download can serve. It is the release's own record
-                                // of its dependencies and features, so a re-publish of the same crate with other
-                                // metadata is refused rather than rewriting what a resolver reads for it.
+                                // The index line after the crate, so a crash never indexes a crate nothing serves. It
+                                // records the release's dependencies and features, so a re-publish with other metadata
+                                // is refused.
                                 .andThrough((_, _, _) -> blobs.linkRelease(indexKey(repo, canonical, version), line,
                                         -1L))
-                                // The served sparse-index file is written here, on the publish: the version's line
-                                // joins the crate's stored index rather than being concatenated on every read.
+                                // The served index file joins the version's line here, on the publish, not on every
+                                // read.
                                 .andThrough((_, _, _) -> new CargoListings(blobs).refresh(repo, canonical, version));
                     });
             if (commit.disposition() == PublishInterceptor.Disposition.QUARANTINE) {
@@ -308,30 +275,23 @@ public final class CargoFormat implements RepositoryFormat, ArtifactLayout, Prox
                     exchange.respond(400);   // a truncated frame: nothing was declared and nothing serves
                 }
             }
-            // The chain HELD the crate. Its layout is written all the same, behind the withhold marker
-            // (see {@link #held}), so a review release is the marker clear rather than a replay of a publish whose
-            // envelope no longer exists.
+            // The chain held the crate: its layout is written behind the withhold marker (see held), so a review
+            // release is the marker clear rather than a replay of a publish whose envelope is gone.
             case QUARANTINE -> exchange.respond(202);
-            // Refused outright: nothing is linked and no marker is set, so the sparse index never names it and the
-            // stored blob is the usual unreferenced content-addressed object a collection reclaims. A refusal is never
-            // released, so it is never laid out.
+            // Refused: nothing is linked and no marker set, so the index never names it and the blob is collected.
             case REJECT -> exchange.respond(422);
         }
     }
 
     /**
-     * Lay a <em>held</em> crate out behind its withhold marker, so the review release that follows is the same
-     * marker clear a retroactive KEV/licence hold's release is - one hold-release mechanism for this format, not two.
-     * The shared commit operation runs its accepted layout only on {@code ACCEPT}, so a screen-time {@code QUARANTINE}
-     * would otherwise store the crate, link nothing and index nothing: {@code HoldLifecycle.release} would then resolve
-     * the hold and materialise no version at all.
+     * Lay a held crate out behind its withhold marker, so its review release is the same marker clear any other hold's
+     * release is. The shared commit runs its accepted layout only on {@code ACCEPT}, so without this a screen-time
+     * {@code QUARANTINE} would link and index nothing and {@code HoldLifecycle.release} would materialise no version.
      *
-     * <p>The order is the load-bearing part. The derived sparse-index line is content-addressed first (a blob, not a
-     * pointer - nothing serves it), then {@link Withheld#mark} retracts the crate's own hash, and only then are the two
-     * pointers linked - so at no instant is the held crate downloadable or its version listed. Cargo's sparse-index read
-     * screens every version on that same marker, exactly as the download does, so the held version is stored, reviewable
-     * and invisible until the release lifts it. A truncated frame lays out nothing, for the reason the accepted layout
-     * declines it: the store holds self-consistent but wrong bytes, and a release must never materialise those.
+     * <p>The order matters: the index line is content-addressed first (a blob nothing serves), then
+     * {@link Withheld#mark} retracts the crate's hash, and only then are the two pointers linked - so the held crate is
+     * never downloadable or listed. The sparse-index read screens every version on the same marker the download does. A
+     * truncated frame lays out nothing, as the accepted layout declines it.
      */
     private static void held(String repo, String canonical, String version, String name, JsonNode metadata,
                              Bounded crate, Blobs blobs, ArtifactStore store, String hash) throws IOException {
@@ -360,31 +320,25 @@ public final class CargoFormat implements RepositoryFormat, ArtifactLayout, Prox
         return MAPPER.writeValueAsBytes(errors);
     }
 
-    /** The request path a published crate downloads from - the artifact's own served path, which is the path the
-     *  screen assesses it under, the path {@link #describe} parses back, and the path a {@code /quarantine} review
-     *  handle is linked at. */
+    /** The path a published crate downloads from - the path the screen assesses it under, {@link #describe} parses back
+     *  and a {@code /quarantine} review handle is linked at. */
     private static String downloadPath(String repo, String canonical, String version) {
         return PREFIX + repo + "/" + API_CRATES + canonical + "/" + version + DOWNLOAD;
     }
 
     /**
-     * Import one migrated crate: stream its {@code .crate} archive into the content-addressed store and record the
-     * same crate pointer and sparse-index line a {@link #publish} performs, so the migrated registry serves and
-     * indexes the crate as its own rather than copying the source's index. The archive streams straight through
-     * {@link ArtifactStore#writeBlob} (never buffered, like the RPM importer and unlike the buffered {@code .gem} /
-     * {@code .nupkg} language importers), and the SHA-256 the store returns is the {@code cksum} the index line
-     * records. Called by {@link CargoImporter}; the caller owns and closes the stream.
+     * Import one migrated crate: stream its {@code .crate} into the store and record the same crate pointer and index
+     * line a {@link #publish} writes, so the registry indexes it as its own. The store's SHA-256 is the line's
+     * {@code cksum}. Called by {@link CargoImporter}, which owns the stream.
      *
-     * <p>The crate's dependency edges are not reconstructed here - that would mean parsing the crate's embedded
-     * {@code Cargo.toml}, and the pull-through proxy is the dependency-faithful route, mirroring the upstream index.
-     * The line is otherwise complete (name, version, checksum, empty deps and features), so a migrated crate
-     * resolves and downloads.
+     * <p>Dependency edges are not reconstructed - that would mean parsing the embedded {@code Cargo.toml}; the
+     * pull-through proxy is the dependency-faithful route. The line is otherwise complete (name, version, checksum,
+     * empty deps and features), so a migrated crate resolves and downloads.
      */
     void importCrate(String repo, String name, String version, InputStream crate, ArtifactStore store)
             throws IOException {
         if (Keys.unsafe(name) || Keys.unsafe(version)) {
-            // A crafted <name>-<version>.crate filename (e.g. `..-1.0.0.crate`) cannot key the crate outside its
-            // namespace: skip it rather than mis-file it, the way CargoImporter skips an unparseable filename.
+            // A crafted filename (`..-1.0.0.crate`) cannot key the crate outside its namespace: skip it.
             return;
         }
         String hash = store.writeBlob(crate);
@@ -394,13 +348,10 @@ public final class CargoFormat implements RepositoryFormat, ArtifactLayout, Prox
                 indexLine(MAPPER.createObjectNode(), name, version, hash).getBytes(StandardCharsets.UTF_8));
     }
 
-    /**
-     * The sparse-index {@code config.json}: where a client downloads crates ({@code dl}) and reaches the API
-     * ({@code api}), and whether the client must present its token on reads ({@code auth-required}). Cargo sends a
-     * registry token on index and download requests only when the registry says so; an enforcing deployment that
-     * grants keyless callers nothing therefore has to say so, or a read-only token is never presented and every
-     * read answers 401.
-     */
+    /** The sparse-index {@code config.json}: where a client downloads crates ({@code dl}), reaches the API
+     *  ({@code api}), and whether it must present its token on reads ({@code auth-required}). Cargo sends a token on
+     *  index and download requests only when told to, so an enforcing deployment that grants keyless callers nothing
+     *  has to say so, or every read answers 401. */
     private void config(String repo, FormatExchange exchange) throws IOException {
         String base = repoBase(repo, exchange);
         ObjectNode config = MAPPER.createObjectNode();
@@ -421,14 +372,12 @@ public final class CargoFormat implements RepositoryFormat, ArtifactLayout, Prox
         return (auth == null || !auth.equalsIgnoreCase("false")) && (anonymous == null || anonymous.isBlank());
     }
 
-    /**
-     * {@code cargo yank} ({@code DELETE api/v1/crates/<name>/<version>/yank}) and {@code cargo yank --undo}
-     * ({@code PUT .../unyank}): the product's own lifecycle mark, written and cleared through the one path the console
-     * and the API use ({@link Lifecycle#mark(FormatExchange, ArtifactStore, String, String, Lifecycle.Flag)}), so the
-     * index line a resolver reads carries {@code yanked} and {@code jenrepo lifecycle} shows it whichever surface set
-     * it. Both are idempotent, as crates.io's are: {@code {"ok":true}} for a version already in the asked state, and
-     * Cargo's error document with a {@code 404} for a version this registry does not hold.
-     */
+    /** {@code cargo yank} ({@code DELETE api/v1/crates/<name>/<version>/yank}) and {@code cargo yank --undo}
+     *  ({@code PUT .../unyank}): the product's lifecycle mark, set and cleared through the path the console and the API
+     *  use ({@link Lifecycle#mark(FormatExchange, ArtifactStore, String, String, Lifecycle.Flag)}), so the index line
+     *  carries {@code yanked} whichever surface set it. Idempotent like crates.io's: {@code {"ok":true}} for a version
+     *  already in the asked state, Cargo's error document with a {@code 404} for a version this registry does not
+     *  hold. */
     private static void yank(String repo, String middle, boolean yank, ArtifactStore store, FormatExchange exchange)
             throws IOException {
         int last = middle.lastIndexOf('/');
@@ -454,7 +403,7 @@ public final class CargoFormat implements RepositoryFormat, ArtifactLayout, Prox
         exchange.respond(200, MAPPER.writeValueAsBytes(Map.of("ok", true)));
     }
 
-    /** Serve a crate archive from the CAS. The path is {@code api/v1/crates/<name>/<version>/download}. */
+    /** Serve a crate archive. The path is {@code api/v1/crates/<name>/<version>/download}. */
     private void download(String repo, String sub, Blobs blobs, FormatExchange exchange) throws IOException {
         String middle = sub.substring(API_CRATES.length(), sub.length() - DOWNLOAD.length());
         int last = middle.lastIndexOf('/');
@@ -482,21 +431,15 @@ public final class CargoFormat implements RepositoryFormat, ArtifactLayout, Prox
         blobs.serve(located.get(), exchange);
     }
 
-    /** The canonical public sparse index this format mirrors when a deployment enables proxying without naming one. */
+    /** The public sparse index this format mirrors when proxying is enabled without naming one. */
     @Override
     public Optional<URI> defaultUpstream() {
         return Optional.of(URI.create("https://index.crates.io/"));
     }
 
-    /**
-     * Proxy a Cargo miss to an upstream sparse-index registry. A per-crate index file is mutable, so it streams
-     * through fresh on every read (never cached), and needs no rewrite - the sparse index carries no download URLs,
-     * so a client builds them from this registry's own {@code config.json} (served locally, pointing downloads back
-     * through here). A {@code .crate} archive is immutable, so it streams from upstream straight into the CAS
-     * ({@link ProxyRelay#fill}, never buffered) and is served, so a later read is a local hit. The
-     * upstream download URL is resolved from the upstream's {@code config.json} {@code dl} template, so the proxy
-     * honours whatever download layout the upstream declares rather than assuming crates.io's.
-     */
+    /** Proxy a Cargo miss to an upstream sparse-index registry: a per-crate index file streams through fresh and
+     *  unrewritten; a {@code .crate} streams into the store ({@link ProxyRelay#fill}) and is served from there, its URL
+     *  resolved from the upstream's {@code dl} template. */
     @Override
     public boolean pullThrough(FormatExchange exchange, ArtifactStore store, URI upstream,
                                ProxyFormat.Fetcher fetcher) throws IOException {
@@ -513,8 +456,7 @@ public final class CargoFormat implements RepositoryFormat, ArtifactLayout, Prox
             root += "/";
         }
         if (sub.equals(CONFIG)) {
-            // The local config.json is always generated (it points downloads back through here), so it never misses
-            // and is never proxied; declining lets the local response stand.
+            // The local config.json is always generated, so it never misses and is never proxied.
             return false;
         }
         if (sub.startsWith(API_CRATES) && sub.endsWith(DOWNLOAD)) {
@@ -523,8 +465,7 @@ public final class CargoFormat implements RepositoryFormat, ArtifactLayout, Prox
         return proxyIndex(root + sub, exchange, fetcher);
     }
 
-    /** Fetch, cache and serve an immutable {@code .crate}: resolve the upstream download URL from its {@code dl}
-     *  template, stream the archive into the CAS, then serve it from the local hit. */
+    /** Fetch, cache and serve an immutable {@code .crate} from the URL the upstream's {@code dl} template names. */
     private boolean proxyCrate(String repo, String sub, FormatExchange exchange, ArtifactStore store, String root,
                                ProxyFormat.Fetcher fetcher) throws IOException {
         String middle = sub.substring(API_CRATES.length(), sub.length() - DOWNLOAD.length());
@@ -539,19 +480,15 @@ public final class CargoFormat implements RepositoryFormat, ArtifactLayout, Prox
             return false;
         }
         if (!OutboundTargets.mayFollow(target, URI.create(root), ProxyLeg.allowInternalTargets(exchange))) {
-            // SSRF guard: the download URL is built from the upstream index's config.json `dl` template, which a
-            // compromised or third-party sparse index the operator added controls - and it is fetched as an INITIAL
-            // request the fetcher's redirect-only screen never inspects. A CROSS-ORIGIN target at a private/loopback/
-            // metadata host (169.254.169.254, an internal control plane) must not be reached server-side, and neither
-            // may a plaintext one: decline so the local 404 stands. A target on the operator's own upstream ORIGIN
-            // (where the index itself lives) is admitted - the same answer every proxy leg gives, by construction,
-            // because every one of them makes THIS call.
+            // The download URL comes from the upstream index's dl template, which the index's owner controls, and is
+            // fetched as an initial request the fetcher's redirect screen never inspects. A cross-origin private,
+            // loopback or metadata host, or a plaintext target, is declined so the local 404 stands; the upstream's own
+            // origin is admitted. Every proxy leg makes this call.
             return false;
         }
-        // Point-integrity: the sparse index publishes the .crate's SHA-256 as its `cksum`, so read that sibling line
-        // and verify the streamed archive against it, refusing a mismatch (the Maven proxy leg's checksum parity). The
-        // index is a SEPARATE document from the download - the target above comes from config.json's `dl` template -
-        // so an index this repository could not read is not "this registry publishes no cksum".
+        // The sparse index publishes the .crate's SHA-256 as its cksum, so the streamed archive is verified against it.
+        // The index is a separate document from the download, so an index that could not be read is not "no cksum
+        // published".
         ProxyRelay.Declared expected = crateChecksum(root, crate, version, fetcher);
         if (!expected.readable()) {
             return ProxyRelay.unverifiable(target, expected);
@@ -568,15 +505,15 @@ public final class CargoFormat implements RepositoryFormat, ArtifactLayout, Prox
         return true;
     }
 
-    /** The SHA-256 the upstream sparse index records as a version's {@code cksum} (Cargo's own {@code .crate} checksum),
-     *  read from the crate's name-sharded index file so a proxied archive can be verified against it. The index is a
-     *  small bounded metadata document (one line per version), fetched buffered and only on a crate miss.
+    /**
+     * The SHA-256 the upstream index records as a version's {@code cksum}, read from the crate's index file (a small
+     * document, fetched buffered on a crate miss).
      *
-     *  <p>{@link ProxyRelay.Declared#NONE} - cache without a point check, exactly as Maven serves a proxied jar whose
-     *  {@code .sha1} sibling is missing - when the index <em>answered</em> and declares nothing: a {@code 404}/
-     *  {@code 410} (no such crate here), no line for this version, or a line with no 64-hex {@code cksum}.
-     *  {@linkplain ProxyRelay.Declared#unreadable Unreadable} when the index could not be read at all, which is not
-     *  the same fact and must not downgrade the fill. */
+     * <p>{@link ProxyRelay.Declared#NONE} - cache without a point check - when the index answered and declares nothing:
+     * a {@code 404}/{@code 410}, no line for this version, or no 64-hex {@code cksum}.
+     * {@linkplain ProxyRelay.Declared#unreadable Unreadable} when the index could not be read, which must not downgrade
+     * the fill.
+     */
     private static ProxyRelay.Declared crateChecksum(String root, String crate, String version,
             ProxyFormat.Fetcher fetcher) throws IOException {
         ProxyRelay.Sidecar sidecar =
@@ -598,9 +535,8 @@ public final class CargoFormat implements RepositoryFormat, ArtifactLayout, Prox
         return ProxyRelay.Declared.NONE;
     }
 
-    /** Decode a lower/upper-case hex digest of exactly {@code bytes} bytes to its raw bytes, or {@code null} when it is
-     *  absent or not a well-formed digest of that length - so a malformed checksum falls back to plain caching rather
-     *  than refusing every fetch. */
+    /** Decode a hex digest of exactly {@code bytes} bytes, or {@code null} when absent or malformed - so a malformed
+     *  checksum falls back to plain caching. */
     static byte[] hex(String value, int bytes) {
         if (value == null || value.length() != bytes * 2) {
             return null;
@@ -612,26 +548,24 @@ public final class CargoFormat implements RepositoryFormat, ArtifactLayout, Prox
         }
     }
 
-    /** Stream a mutable upstream index file (or any other GET) through fresh, never cached - no rewrite is needed. The
-     *  client's conditional-request validators are forwarded and an upstream {@code 304}/validators relayed, so a
-     *  304-capable cargo is not forced to re-download an unchanged sparse index on every read.
+    /**
+     * Stream a mutable upstream index file through fresh, never cached, forwarding the client's validators and relaying
+     * a {@code 304}.
      *
-     *  <p>ENUMERATION: a sparse-index file is the crate's version list, one JSON line per version, and it is exactly
-     *  what {@code cargo update} resolves a dependency against - so its absence is an answer ("no such crate") and a
-     *  transport failure rendered as one would silently change a resolution. Only an upstream that ANSWERED
-     *  {@code 404}/{@code 410} reaches the client as one. This leg's other two shapes are classified where they
-     *  are routed: the generated {@code config.json} is never proxied, and a {@code .crate} download is PINNED. */
+     * <p>ENUMERATION: the index file is the crate's version list, which {@code cargo update} resolves against, so its
+     * absence is an answer and a transport failure must not render as one. Only an upstream that answered
+     * {@code 404}/{@code 410} reaches the client as one. The generated {@code config.json} is never proxied, and a
+     * {@code .crate} download is PINNED.
+     */
     private boolean proxyIndex(String target, FormatExchange exchange, ProxyFormat.Fetcher fetcher) throws IOException {
         return ProxyRelay.streamFresh(fetcher, URI.create(target), "text/plain; charset=utf-8", exchange,
                 ProxyRelay.Document.ENUMERATION);
     }
 
-    /** Resolve the upstream {@code .crate} URL by reading the upstream {@code config.json} {@code dl} template. Cargo's
-     *  markers ({@code {crate}}, {@code {version}}, {@code {prefix}}, {@code {lowerprefix}}) are substituted; a template
-     *  with none of them takes the {@code /{crate}/{version}/download} default. ({@code {sha256-checksum}} depends on the
-     *  index checksum this proxy does not retain and is unused by crates.io, so a template using it is left unresolved.)
-     *  The config.json is a small, bounded metadata read, so it is fetched buffered; it is only read on a crate miss,
-     *  which happens once per crate since the archive is then cached. */
+    /** Resolve the upstream {@code .crate} URL from the upstream {@code config.json} {@code dl} template, substituting
+     *  Cargo's markers ({@code {crate}}, {@code {version}}, {@code {prefix}}, {@code {lowerprefix}}); a template with
+     *  none of them takes the {@code /{crate}/{version}/download} default. Read buffered, once per crate, since the
+     *  archive is then cached. */
     private static URI downloadUrl(String root, String crate, String version, ProxyFormat.Fetcher fetcher)
             throws IOException {
         Optional<ProxyFormat.Fetched> config = fetcher.fetch(URI.create(root + CONFIG), Map.of());
@@ -644,10 +578,8 @@ public final class CargoFormat implements RepositoryFormat, ArtifactLayout, Prox
         }
         String url;
         if (dl.contains("{sha256-checksum}")) {
-            // This proxy does not retain the index checksum, so it cannot resolve Cargo's {sha256-checksum} download
-            // template. Decline (the local 404 then stands) rather than emit a URL with the literal marker left in -
-            // the substitution chain below never replaces it, so URI.create would throw an uncaught
-            // IllegalArgumentException on the leftover '{'.
+            // The proxy does not retain the index checksum, so a {sha256-checksum} template cannot be resolved:
+            // decline, so the local 404 stands, rather than build a URI with the marker left in.
             return null;
         }
         if (dl.contains("{crate}") || dl.contains("{version}") || dl.contains("{prefix}")
@@ -662,8 +594,8 @@ public final class CargoFormat implements RepositoryFormat, ArtifactLayout, Prox
         return URI.create(url);
     }
 
-    /** Cargo's index-path shard for a (lower-cased) crate name: {@code 1}/{@code 2}/{@code 3/x} for 1-3 chars, else
-     *  {@code xx/yy} from the first four characters - the {@code {prefix}} / {@code {lowerprefix}} download markers. */
+    /** Cargo's index-path shard for a lower-cased crate name: {@code 1}/{@code 2}/{@code 3/x} for one to three
+     *  characters, else {@code xx/yy} - also the {@code {prefix}} / {@code {lowerprefix}} download markers. */
     private static String prefix(String crate) {
         return switch (crate.length()) {
             case 0 -> "";
@@ -674,8 +606,8 @@ public final class CargoFormat implements RepositoryFormat, ArtifactLayout, Prox
         };
     }
 
-    /** The per-crate index file: the stored index lines for every published version, one JSON object per line. The
-     *  request path is Cargo's name-sharded index path, whose last segment is the (lower-cased) crate name. */
+    /** The per-crate index file: one stored JSON line per published version, at Cargo's name-sharded path whose last
+     *  segment is the lower-cased crate name. */
     private void index(String repo, String sub, ArtifactStore store, FormatExchange exchange) throws IOException {
         Blobs blobs = new Blobs(store);
         String crate = canonical(sub.substring(sub.lastIndexOf('/') + 1));
@@ -722,8 +654,7 @@ public final class CargoFormat implements RepositoryFormat, ArtifactLayout, Prox
 
     @Override
     public List<String> paths(String coordinate, String version, ArtifactStore store) {
-        // Cargo crate pointers live in the shared Blobs namespace (like npm/pypi/go/rpm), not the Publication
-        // namespace coordinate-based eviction walks - they are enumerated through BlobLayout below instead.
+        // Crate pointers live in the shared Blobs namespace, which BlobLayout below enumerates.
         return List.of();
     }
 
@@ -735,14 +666,12 @@ public final class CargoFormat implements RepositoryFormat, ArtifactLayout, Prox
     @Override
     public List<String> blobKeys(String coordinate, String version, ArtifactStore store) throws IOException {
         if (!BlobLayout.addressable(coordinate, version)) {
-            // A traversal-shaped coordinate or version maps nowhere: these keys are what an eviction DELETES, and
-            // ArtifactStore.delete is not screened. The shared per-part screen, so a legitimately
-            // multi-segment coordinate still resolves.
+            // A traversal-shaped coordinate or version maps nowhere: these keys are what an eviction deletes, and
+            // ArtifactStore.delete is not screened. The per-part screen still resolves a multi-segment coordinate.
             return List.of();
         }
-        // The .crate pointer and its precomputed sparse-index line, both keyed by the canonical (lower-cased) crate
-        // name the store uses; the <repo> registry segment is not derivable from the coordinate, so it is discovered
-        // by listing. The describe() coordinate is not canonicalised, so canonicalise here to match the stored keys.
+        // The .crate pointer and its index line, keyed by the lower-cased crate name; the <repo> segment is not
+        // derivable from the coordinate, so it is found by listing.
         String crate = canonical(coordinate);
         List<String> keys = new ArrayList<>();
         for (String repo : store.list("cargo")) {
@@ -758,13 +687,9 @@ public final class CargoFormat implements RepositoryFormat, ArtifactLayout, Prox
         return keys;
     }
 
-    /** The served download path the crate archive occupies for one coordinate version - the request that streams the
-     *  {@code .crate} blob {@link #blobKeys} resolves, so a retroactive hold retracts it (a {@code /quarantine} review
-     *  handle per path) exactly as {@code ArtifactLayout.paths} does for a {@code publish/}-namespace layout. The
-     *  {@code <repo>} registry segment is not derivable from the coordinate, so it is discovered by listing, the same
-     *  way {@link #blobKeys} finds the crate pointer; the download route canonicalises the crate name, so the served
-     *  path carries the coordinate as {@link #describe} reports it (the reverse of the download handler). Only the crate
-     *  archive is a served artifact - the sparse-index line is metadata and carries no {@code /quarantine} handle. */
+    /** The download path the crate archive occupies for one coordinate version, so a retroactive hold retracts it (a
+     *  {@code /quarantine} handle per path). The {@code <repo>} segment is found by listing, as in {@link #blobKeys}.
+     *  Only the archive is a served artifact; the index line is metadata and gets no handle. */
     @Override
     public List<String> servedPaths(String coordinate, String version, ArtifactStore store) throws IOException {
         if (!BlobLayout.addressable(coordinate, version)) {
@@ -780,9 +705,9 @@ public final class CargoFormat implements RepositoryFormat, ArtifactLayout, Prox
         return paths;
     }
 
-    /** One sparse-index line for a version, precomputed at publish from the publish metadata and the stored crate's
-     *  checksum. The publish {@code deps} shape ({@code version_req}, {@code explicit_name_in_toml}) is rewritten to the
-     *  index {@code deps} shape ({@code req}, {@code name}/{@code package}). */
+    /** One sparse-index line for a version, from the publish metadata and the crate's checksum. The publish
+     *  {@code deps} shape ({@code version_req}, {@code explicit_name_in_toml}) becomes the index shape ({@code req},
+     *  {@code name}/ {@code package}). */
     private static String indexLine(JsonNode metadata, String name, String version, String cksum) {
         ObjectNode entry = MAPPER.createObjectNode();
         entry.put("name", name);
@@ -840,7 +765,7 @@ public final class CargoFormat implements RepositoryFormat, ArtifactLayout, Prox
         return node == null ? null : node.path(field).asString(null);
     }
 
-    /** The external base URL of this registry ({@code <scheme>://<host><prefix>/cargo/<repo>}), for the config URLs. */
+    /** The external base URL of this registry, {@code <scheme>://<host><prefix>/cargo/<repo>}. */
     private static String repoBase(String repo, FormatExchange exchange) {
         return RequestBase.of(exchange) + exchange.external(PREFIX + repo);
     }
@@ -857,11 +782,9 @@ public final class CargoFormat implements RepositoryFormat, ArtifactLayout, Prox
                 | (bytes[3] & 0xFFL) << 24;
     }
 
-    /** A view of {@code in} that ends after {@code limit} bytes, so the crate streams into the CAS without buffering
-     *  and without reading past its frame (java.base has no public bounded stream, and this format is otherwise
-     *  library-backed - Jackson for the metadata). After the stream is drained, {@link #remaining()} reports how many of
-     *  the declared bytes never arrived, so a short/chunked frame that ended early is caught rather than stored as a
-     *  self-consistent truncated crate. */
+    /** A view of {@code in} that ends after {@code limit} bytes, so the crate streams into the store without reading
+     *  past its frame. After draining, {@link #remaining()} reports the declared bytes that never arrived, so a frame
+     *  that ended early is caught rather than stored truncated. */
     private static final class Bounded extends InputStream {
 
         private final InputStream in;
@@ -902,8 +825,7 @@ public final class CargoFormat implements RepositoryFormat, ArtifactLayout, Prox
             return read;
         }
 
-        // The underlying request stream is owned by the exchange, not this view (as the previous anonymous bounded
-        // stream left it), so closing the view does not close the request body.
+        // The request stream belongs to the exchange, so closing this view leaves it open.
         @Override
         public void close() {
         }
@@ -913,26 +835,10 @@ public final class CargoFormat implements RepositoryFormat, ArtifactLayout, Prox
         return name.toLowerCase(Locale.ROOT);
     }
 
-    /**
-     * A crate {@code name} and {@code vers} become store-key path segments (the crate pointer {@link #crateKey} and
-     * its sparse-index file {@link #indexKey}), and both come from the body-supplied publish frame (or, on import,
-     * from a source filename), so a value that is empty, carries a path separator or control character, or is a
-     * {@code .}/{@code ..} traversal segment could steer a write outside the crate's key space and is refused. Real
-     * Cargo crate names are {@code [A-Za-z0-9_-]} and versions are semver, so no legitimate value is rejected. The
-     * store's own root check confines a write to the tenant, but not to this format's {@code cargo/<repo>/} namespace
-     * within it, so this guard is what keeps a crafted name from poisoning a sibling registry or format.
-     */
-
-    /**
-     * The crate version a stored Cargo pointer serves - the backwards direction the inventory back-fill rebuilds a
-     * lost {@code published} record from.
-     *
-     * <p>Only the index key is decoded, {@code cargo/<repo>/index.d/<crate>/<version>}: every segment is in a fixed
-     * position and {@code index.d} is a literal this format writes, so the pair is read off the key rather than out
-     * of a filename. The {@code .crate} archive beside it spells the pair as {@code <crate>-<version>}, and a crate
-     * name may itself contain a hyphen, so that split is ambiguous and is not attempted. Every published version
-     * has an index entry, so nothing is lost by reading only the shape that cannot be misread.
-     */
+    /** The crate version a stored Cargo pointer serves, for the inventory back-fill. Only the index key
+     *  {@code cargo/<repo>/index.d/<crate>/<version>} is decoded: its segments are fixed, while the archive's
+     *  {@code <crate>-<version>} is ambiguous because a crate name may contain a hyphen. Every version has an index
+     *  entry. */
     @Override
     public Optional<ArtifactDescriptor> describePointer(String key) {
         String marker = "/index.d/";
@@ -964,8 +870,7 @@ public final class CargoFormat implements RepositoryFormat, ArtifactLayout, Prox
         return indexPrefix(repo, crate) + "/" + version;
     }
 
-    /** The migration-import capability, delegated to the layout-only {@link CargoImporter} - the format IS the
-     *  discovered importer now (an {@code instanceof} capability), and the importer class stays as its delegate. */
+    /** The migration-import capability, delegated to {@link CargoImporter}. */
     private final CargoImporter importer = new CargoImporter();
 
     @Override
@@ -983,14 +888,11 @@ public final class CargoFormat implements RepositoryFormat, ArtifactLayout, Prox
         importer.importArtifact(path, content, store);
     }
 
-    /**
-     * Each registry's crate of the version is published as {@code cargo publish} frames it - the little-endian
-     * length of the publish metadata, the metadata, the length of the {@code .crate}, the {@code .crate} - to that
-     * registry's {@code api/v1/crates/new}, with the token as the raw {@code Authorization} value Cargo sends. The
-     * metadata is rebuilt from the stored index line, which carries the name, version, dependencies and features a
-     * registry indexes; what it does not carry - the licence among it - a registry reads out of the {@code Cargo.toml}
-     * inside the crate, as this one does. Asked for back at its download path, so a crate already there is not sent.
-     */
+    /** Each registry's crate of the version is sent as {@code cargo publish} frames it to that registry's
+     *  {@code api/v1/crates/new}, with the token as the raw {@code Authorization} value Cargo sends. The metadata is
+     *  rebuilt from the stored index line (name, version, dependencies, features); what the line lacks, the licence
+     *  among it, a registry reads from the {@code Cargo.toml} inside the crate. Asked for back at its download path
+     *  first, so a crate already there is not sent. */
     @Override
     public Exported export(ArtifactStore repository, String coordinate, String version, ExportTarget target)
             throws IOException {
@@ -1008,8 +910,7 @@ public final class CargoFormat implements RepositoryFormat, ArtifactLayout, Prox
             }
             byte[] metadata = MAPPER.writeValueAsBytes(publishMetadata(MAPPER.readTree(line.toByteArray())));
             String hash = located.get().hash();
-            // The frame states the crate's length before its bytes, so a pointer written before lengths were recorded
-            // is sized from the blob.
+            // The frame states the crate's length first; a pointer that recorded none is sized from the blob.
             long size = located.get().size() >= 0 ? located.get().size() : blobs.size(crateKey(repo, crate, version));
             Map<String, String> headers = new LinkedHashMap<>();
             headers.put("Content-Type", "application/octet-stream");
