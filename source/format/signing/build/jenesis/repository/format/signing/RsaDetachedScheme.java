@@ -7,12 +7,10 @@ import build.jenesis.repository.compliance.SignerIdentity;
 import build.jenesis.repository.format.ArtifactSignatures;
 
 /**
- * The verifier for a bare RSA signature with no envelope, whose signer is the key file its member is named after
- * (an apk's {@code .SIGN.RSA256.<keyfile>}), as a discovered {@link SignatureScheme} over {@link RsaVerification}.
- * The facts are read from the evidence's location - the member name after the archive separator - since a bare
- * signature states nothing about itself. The trust source that speaks for it is the one whose public-key bundle
- * names that key file, else the first holding unnamed keys; the identity is the key file, the spelling the
- * ecosystem itself uses and a pin can name.
+ * The verifier for a bare RSA signature named after its signer's key file (an apk's {@code .SIGN.RSA256.<keyfile>}), as
+ * a discovered {@link SignatureScheme} over {@link RsaVerification}. The facts come from the member name in the
+ * evidence's location, since a bare signature states nothing. The trust source is the one whose key bundle names that
+ * file, else the first holding unnamed keys; the identity is the key file, as the ecosystem names it.
  */
 public final class RsaDetachedScheme implements SignatureScheme {
 

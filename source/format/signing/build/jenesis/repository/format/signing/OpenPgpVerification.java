@@ -22,22 +22,11 @@ import org.bouncycastle.openpgp.operator.jcajce.JcaPGPContentVerifierBuilderProv
 
 /**
  * The consumer's half of OpenPGP: reading what a detached signature states about itself, and checking it against a
- * keyring over a streamed body. It sits beside {@link OpenPgpSigner} for the reason that class already records - the
- * OpenPGP library lives in exactly one module here, because pulling Bouncy Castle's provider into a module that
- * already resolves the LTS one is a split package that fails the boot layer.
+ * keyring over a streamed body. Beside {@link OpenPgpSigner}, since the library may live in one module only.
  *
- * <h2>Two halves, because they need different things</h2>
- *
- * {@link #facts} needs <b>no key</b>. Everything a signature says about itself - which algorithm signed it, which
- * digest it was made over, when, and which key issued it - lives in the packet, and reading it is what lets an
- * artifact be described ("signed by 0x…BD0A with SHA-1") before anyone has decided whether that key is trusted. That
- * matters for grading, where the interesting findings are about the signature rather than the signer.
- *
- * <p>{@link #verify} needs the key and the bytes at once, and streams the bytes. An OpenPGP signature is a digest over
- * the signed data, so the body is fed through in bounded chunks and never held - which is what lets a multi-gigabyte
- * package be checked on a publish thread. The alternative, splitting the digest from the asymmetric check so a pure
- * policy could do the second half, would mean re-implementing the trailer handling and the PKCS#1 wrapping by hand:
- * a hand-rolled crypto primitive bought for an architectural symmetry, which is the wrong trade.
+ * <p>{@link #facts} needs no key: algorithm, digest, time and issuer live in the packet, so an artifact can be
+ * described and graded before anyone decides whether the key is trusted. {@link #verify} needs the key and streams the
+ * bytes in bounded chunks, so a multi-gigabyte package is checked on a publish thread.
  */
 public final class OpenPgpVerification {
 
@@ -58,12 +47,11 @@ public final class OpenPgpVerification {
     }
 
     /**
-     * What a signature states about itself, read with no key at all.
+     * What a signature states about itself, read with no key.
      *
-     * @param fingerprint the issuer's fingerprint as upper-case hex, or {@code null} when the packet carries only a
-     *                    key id - a v4 signature need not carry the issuer-fingerprint subpacket, though GnuPG has
-     *                    emitted it for years and every v6 signature has one
-     * @param keyId       the issuer's 64-bit key id, as sixteen upper-case hex digits
+     * @param fingerprint the issuer's fingerprint as upper-case hex, or {@code null} when the packet carries only a key
+     *     id, which a v4 signature may
+     * @param keyId the issuer's 64-bit key id, as sixteen upper-case hex digits
      */
     public record Facts(String fingerprint, String keyId, String keyAlgorithm, String hashAlgorithm,
                         Instant created) {
@@ -74,16 +62,15 @@ public final class OpenPgpVerification {
         }
     }
 
-    /** What the signing key itself states - the half of a grade that is about the key rather than the signature. */
+    /** What the signing key states, the half of a grade about the key rather than the signature. */
     public record KeyFacts(int bits, Instant expiry, boolean signingCapable) {
     }
 
     /**
-     * The facts the first signature in {@code signature} states about itself, or empty when the bytes are not an
-     * OpenPGP signature at all.
+     * The facts the first signature in {@code signature} states, or empty when the bytes are no OpenPGP signature.
      *
-     * @throws IOException never for material that is simply not a signature - that is the empty answer - but the
-     *                     decoder may still raise on a stream it cannot read at all
+     * @throws IOException never for material that is merely not a signature, but the decoder may raise on a stream it
+     *     cannot read at all
      */
     public static Optional<Facts> facts(byte[] signature) throws IOException {
         return first(signature).map(pgp -> {
@@ -105,13 +92,8 @@ public final class OpenPgpVerification {
         });
     }
 
-    /**
-     * Check the detached {@code signature} over the bytes {@code signed} opens, against the keys
-     * {@code armouredKeyring} carries.
-     *
-     * <p>The body is read in bounded chunks and never materialised, so the size of the artifact does not bound what
-     * can be verified. The caller's stream is opened once here and closed here.
-     */
+    /** Check the detached {@code signature} over the bytes {@code signed} opens, against the keys
+     *  {@code armouredKeyring} carries. The body is read in bounded chunks, opened and closed here. */
     public static Result verify(ArtifactSignatures.Signed signed, byte[] signature, byte[] armouredKeyring)
             throws IOException {
         Optional<PGPSignature> parsed = first(signature);
@@ -133,8 +115,8 @@ public final class OpenPgpVerification {
             }
             return pgp.verify() ? Result.VALID : Result.INVALID;
         } catch (PGPException unusable) {
-            // A key that cannot be used to check this signature (a mismatched algorithm, an unsupported curve) is an
-            // outcome, not a crash: the caller reports a signature it could not stand behind rather than a 500.
+            // A key that cannot check this signature (a mismatched algorithm, an unsupported curve) is an outcome, not
+            // a 500.
             return Result.INVALID;
         }
     }
@@ -149,8 +131,8 @@ public final class OpenPgpVerification {
         });
     }
 
-    /** The fingerprint of the key with this id in the keyring, upper-case hex - the identity a signature that carried
-     *  only a key id resolves to once the keyring is consulted. */
+    /** The fingerprint of the key with this id in the keyring, upper-case hex: what a signature carrying only a key id
+     *  resolves to. */
     public static Optional<String> fingerprint(String keyId, byte[] armouredKeyring) throws IOException {
         return key(Long.parseUnsignedLong(keyId, 16), armouredKeyring).map(key -> hex(key.getFingerprint()));
     }
@@ -172,22 +154,16 @@ public final class OpenPgpVerification {
                 CLEARSIGNED_HEADER, 0, CLEARSIGNED_HEADER.length);
     }
 
-    /**
-     * The text a clearsigned document signs, dash-unescaped and with each line's trailing whitespace dropped as the
-     * signature's canonical form has it, with lines joined by {@code \n}. Empty when the bytes are no clearsigned
-     * document. This is what a caller that wants to read the signed statement (Helm's provenance, apt's Release) gets;
-     * whether the statement was signed by anyone is {@link #verifyClearsigned}'s answer.
-     */
+    /** The text a clearsigned document signs, dash-unescaped, each line's trailing whitespace dropped as the canonical
+     *  form has it, joined by {@code \n}; empty for no clearsigned document. Whether anyone signed it is
+     *  {@link #verifyClearsigned}'s answer. */
     public static Optional<byte[]> cleartext(byte[] document) throws IOException {
         Optional<Parsed> parsed = parseClearsigned(document);
         return parsed.map(Parsed::cleartext);
     }
 
-    /**
-     * Verify a clearsigned document against a keyring: the signature it carries, over the canonical form of the text
-     * it carries. {@link Result#INVALID} for bytes that are no clearsigned document, as {@link #verify} answers for
-     * bytes that are no signature.
-     */
+    /** Verify a clearsigned document against a keyring, over the canonical form of its text. {@link Result#INVALID} for
+     *  bytes that are no clearsigned document, as {@link #verify} answers for no signature. */
     public static Result verifyClearsigned(byte[] document, byte[] armouredKeyring) throws IOException {
         Optional<Parsed> parsed = parseClearsigned(document);
         if (parsed.isEmpty()) {
@@ -214,13 +190,9 @@ public final class OpenPgpVerification {
         }
     }
 
-    /**
-     * Whether a Helm provenance statement names the covered bytes: the {@code .prov} cleartext carries the chart's
-     * {@code Chart.yaml} and then a {@code files:} map of {@code <chart>.tgz: sha256:<hex>}, which {@code helm verify}
-     * checks against the archive - so the digest is streamed once over the covered bytes and compared. The grammar is
-     * Helm's, the only clearsigned statement over an artifact carried today; a cleartext naming no digest names
-     * nothing.
-     */
+    /** Whether a Helm provenance statement names the covered bytes: the cleartext carries {@code Chart.yaml} and a
+     *  {@code files:} map of {@code <chart>.tgz: sha256:<hex>}, which {@code helm verify} checks, so the digest is
+     *  streamed over the covered bytes and compared. A cleartext naming no digest names nothing. */
     public static boolean provenanceNames(byte[] cleartext, ArtifactSignatures.Signed covered) throws IOException {
         Matcher digest = PROVENANCE_DIGEST.matcher(new String(cleartext, StandardCharsets.UTF_8));
         if (!digest.find()) {
@@ -267,8 +239,8 @@ public final class OpenPgpVerification {
             } else if (lookAhead != -1) {
                 lines.add(canonical(line.toByteArray()));
             }
-            // The armour reader hands the last line back once more when the signature block follows it directly;
-            // the canonical text ends at the last line that carried characters.
+            // The armour reader repeats the last line when the signature block follows it directly; the text ends at
+            // the last line carrying characters.
             while (!lines.isEmpty() && lines.getLast().length == 0) {
                 lines.removeLast();
             }
@@ -309,11 +281,9 @@ public final class OpenPgpVerification {
                     ? Optional.of(list.get(0))
                     : Optional.empty();
         } catch (RuntimeException unreadable) {
-            // Bouncy Castle raises unchecked on some malformed packet streams - an ArrayIndexOutOfBounds off a
-            // truncated length field, say - which means "not a signature we can read", never a crash on a publish
-            // thread. A malformed stream that raises IOException instead propagates, and the caller reports the same
-            // UNREADABLE from it: both say we could not conclude anything, which is the answer that must not be
-            // rounded down to "carries no signature".
+            // Bouncy Castle raises unchecked on some malformed packet streams, which means "not a signature we can
+            // read", never a crash. Like an IOException, it is reported as unreadable, never rounded down to "carries
+            // no signature".
             return Optional.empty();
         }
     }
@@ -322,9 +292,8 @@ public final class OpenPgpVerification {
         if (armouredKeyring == null || armouredKeyring.length == 0) {
             return Optional.empty();
         }
-        // A bundle is several armoured blocks pasted after one another - one per publisher an operator trusts, or
-        // per key a discovery fetched - and the armour decoder stops at the first block's end. So each block is
-        // read on its own; a bundle with no armour header at all (binary) is one block.
+        // A bundle is several armoured blocks one after another, and the decoder stops at the first block's end, so
+        // each is read on its own; a bundle without armour is one block.
         for (byte[] block : blocks(armouredKeyring)) {
             Optional<PGPPublicKey> found = keyIn(keyId, block);
             if (found.isPresent()) {
@@ -336,8 +305,8 @@ public final class OpenPgpVerification {
 
     private static final byte[] ARMOUR = "-----BEGIN PGP PUBLIC KEY BLOCK-----".getBytes(StandardCharsets.US_ASCII);
 
-    /** The armoured blocks of a bundle, each from its header to just before the next; the whole bundle when it
-     *  carries no armour header. */
+    /** The armoured blocks of a bundle, each from its header to the next; the whole bundle when it has no armour
+     *  header. */
     static List<byte[]> blocks(byte[] bundle) {
         List<Integer> starts = new ArrayList<>();
         for (int at = indexOf(bundle, 0); at >= 0; at = indexOf(bundle, at + ARMOUR.length)) {
@@ -363,11 +332,8 @@ public final class OpenPgpVerification {
         return -1;
     }
 
-    /**
-     * Public key material as one armoured block, whatever it arrived as: the Web Key Directory serves a binary
-     * transferable key while a keyserver and GitHub serve armour, and the discovered bundle is armoured text keys
-     * are appended to. Unreadable material - not OpenPGP keys at all - raises, since nothing can be kept of it.
-     */
+    /** Public key material as one armoured block, whatever it arrived as: the Web Key Directory serves binary, a
+     *  keyserver and GitHub armour, and the discovered bundle is armoured. Material that is no OpenPGP key raises. */
     public static byte[] armoured(byte[] material) throws IOException {
         try (InputStream in = PGPUtil.getDecoderStream(new ByteArrayInputStream(material))) {
             PGPPublicKeyRingCollection keys = new PGPPublicKeyRingCollection(in, new JcaKeyFingerprintCalculator());
@@ -393,8 +359,7 @@ public final class OpenPgpVerification {
             if (direct != null) {
                 return Optional.of(direct);
             }
-            // A subkey signs while the primary carries the expiry and the user ids, so a keyring that holds the
-            // primary and its signing subkey answers for either id; getPublicKey already walks both, and this fallback
+            // A subkey signs while the primary carries the expiry and user ids, so either id answers; this fallback
             // covers a ring whose subkey binding the collection did not index.
             for (PGPPublicKeyRing ring : keys) {
                 Iterator<PGPPublicKey> members = ring.getPublicKeys();
@@ -411,11 +376,8 @@ public final class OpenPgpVerification {
         }
     }
 
-    /**
-     * Whether a key declares it may sign data. A key carrying no key-flags subpacket at all is treated as capable,
-     * which is what apt and dnf do; {@link OpenPgpSigner#generate} records that Terraform's verifier is the strict
-     * one, and this reports the flag rather than deciding for a caller.
-     */
+    /** Whether a key declares it may sign data. A key with no key-flags subpacket is treated as capable, as apt and dnf
+     *  treat it; this reports the flag rather than deciding for a caller. */
     private static boolean signingCapable(PGPPublicKey key) {
         Iterator<PGPSignature> certifications = key.getSignatures();
         boolean sawFlags = false;

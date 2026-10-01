@@ -27,34 +27,24 @@ import java.security.interfaces.ECPublicKey;
 import java.security.interfaces.RSAPublicKey;
 
 /**
- * The PKCS#7 / CMS twin of {@link OpenPgpVerification}: what a {@code SignedData} structure states about itself with no
- * trust at all ({@link #facts}), and whether it verifies over the bytes it commits to by a signer whose chain reaches
- * an anchor the deployment holds ({@link #verify}). One verifier for every format that carries a CMS signature - NuGet's
- * {@code .signature.p7s} inside the package, Swift's detached archive signature - so that, as with OpenPGP, the format
- * supplies the evidence and knows nothing about certificates.
+ * The PKCS#7 / CMS twin of {@link OpenPgpVerification}: what a {@code SignedData} states about itself with no trust
+ * ({@link #facts}), and whether it verifies over the bytes it commits to by a signer whose chain reaches a deployment
+ * anchor ({@link #verify}). The format supplies the evidence and knows nothing about certificates.
  *
  * <h2>Two shapes of CMS, one reader</h2>
  *
- * <p>A CMS signature either <em>encapsulates</em> the content it signs (NuGet: a small statement naming the package's
- * hash) or is <em>detached</em> from it (Swift: the signature covers the archive bytes). {@link #verify} takes the
- * evidence's {@link ArtifactSignatures.Signed} as the covered bytes and reads them through
- * {@link CMSSignedDataParser}, which streams - the covered bytes are digested as they pass and never held - and when
- * the structure encapsulates its own content the caller passes {@code null} and reads that content back through
- * {@link Facts#encapsulated()}, since it is the thing to check next (the statement's hash against the artifact).
+ * <p>A CMS signature either encapsulates what it signs (NuGet: a statement naming the package's hash) or is detached
+ * (Swift: over the archive bytes). {@link #verify} reads the covered bytes through {@link CMSSignedDataParser},
+ * digesting them as they stream; for an encapsulating structure the caller passes {@code null} and reads the content
+ * back through {@link Facts#encapsulated()}.
  *
- * <h2>Trust is a chain to an anchor, and nothing here fetches anything</h2>
+ * <h2>Trust is a chain to an anchor, and nothing is fetched</h2>
  *
- * <p>An OpenPGP signer is trusted when its key is in the keyring; a CMS signer is trusted when its certificate chains
- * to one of the deployment's anchors ({@code signature-trusted-certificates}, a PEM bundle) through the certificates
- * the structure carries with it. That is a PKIX path build with revocation checking off: an OCSP or CRL fetch at
- * inspection time would make a publish depend on a third party answering, which no other dimension does, and a
- * revoked signing certificate is a continuity fact (the signer changed) rather than a validity one. Chain validity is
- * judged at the signature's own signing time when it carries one, so a signature made while its certificate was
- * valid stays valid after the certificate expires - the rule every package ecosystem with author signing applies,
- * because otherwise every release would go unsigned on its certificate's expiry day.
- *
- * <p>Nothing here is NuGet's or Swift's. The hash-statement format, the archive surgery a package needs before it can
- * be hashed, where the signature sits - each of those is the format's own, in its {@code ArtifactSignatures} leg.
+ * <p>A signer is trusted when its certificate chains, through those the structure carries, to one of the deployment's
+ * anchors ({@code signature-trusted-certificates}, a PEM bundle). Revocation checking is off: an OCSP or CRL fetch
+ * would make a publish depend on a third party, and a revoked certificate is a continuity fact. The chain is judged at
+ * the signature's signing time when it carries one, so a signature made while the certificate was valid stays valid
+ * after it expires.
  */
 public final class Pkcs7Verification {
 
@@ -69,19 +59,17 @@ public final class Pkcs7Verification {
     }
 
     /**
-     * What a CMS signature states about itself, read with no trust at all.
+     * What a CMS signature states about itself, read with no trust.
      *
-     * @param spkiSha256    the signing certificate's public key, as the lower-case hex SHA-256 of its encoded
-     *                      SubjectPublicKeyInfo - the identity a pin names ({@code x509:<hex>}), stable across a
-     *                      certificate's re-issue for the same key
-     * @param subject       the signing certificate's subject, for an operator reading a finding
-     * @param keyAlgorithm  {@code RSA}, {@code EC} or as the key names itself
-     * @param keyBits       the modulus size for RSA, the field size for EC, {@code 0} when neither
-     * @param hashAlgorithm the digest the signer used, in the JCA spelling ({@code SHA-256}), or the OID when the
-     *                      digest is one this reader does not name
-     * @param signingTime   the {@code signingTime} signed attribute when the signer included one, else {@code null}
-     * @param notAfter      the signing certificate's expiry
-     * @param encapsulated  the content the structure carries when it encapsulates what it signs, else empty
+     * @param spkiSha256 the signing certificate's public key, the lower-case hex SHA-256 of its SubjectPublicKeyInfo:
+     *     the identity a pin names ({@code x509:<hex>}), stable across a re-issue for the same key
+     * @param subject the signing certificate's subject
+     * @param keyAlgorithm {@code RSA}, {@code EC} or as the key names itself
+     * @param keyBits the modulus size for RSA, the field size for EC, {@code 0} when neither
+     * @param hashAlgorithm the digest in JCA spelling ({@code SHA-256}), or the OID when this reader does not name it
+     * @param signingTime the {@code signingTime} signed attribute when present, else {@code null}
+     * @param notAfter the signing certificate's expiry
+     * @param encapsulated the content the structure carries when it encapsulates what it signs, else empty
      */
     public record Facts(String spkiSha256, String subject, String keyAlgorithm, int keyBits, String hashAlgorithm,
                         Instant signingTime, Instant notAfter, Optional<byte[]> encapsulated) {
@@ -90,12 +78,8 @@ public final class Pkcs7Verification {
     private Pkcs7Verification() {
     }
 
-    /**
-     * Read what a CMS structure states about its signer and content. Empty when the bytes are not a CMS
-     * {@code SignedData}, when it names no signer, or when the signer's certificate is not carried within it - a
-     * structure that expects its reader to already hold the certificate cannot be identified without trust, and every
-     * package ecosystem's signatures carry their chain.
-     */
+    /** Read what a CMS structure states about its signer and content. Empty when the bytes are no {@code SignedData},
+     *  name no signer, or do not carry the signer's certificate, without which it cannot be identified. */
     public static Optional<Facts> facts(byte[] signature) throws IOException {
         if (signature == null || signature.length == 0) {
             return Optional.empty();
@@ -118,13 +102,13 @@ public final class Pkcs7Verification {
     }
 
     /**
-     * Verify a CMS signature over the bytes it covers, by a signer whose chain reaches one of the anchors.
+     * Verify a CMS signature over the bytes it covers, by a signer whose chain reaches an anchor.
      *
-     * @param covered   the bytes a detached signature commits to; {@code null} for a structure that encapsulates its
-     *                  own content, which is then verified over that content
+     * @param covered the bytes a detached signature commits to; {@code null} for a structure verified over its own
+     *     content
      * @param signature the CMS {@code SignedData}
-     * @param pemAnchors the deployment's trust anchors as concatenated PEM certificates; {@code null} or empty means
-     *                  the deployment holds none, so the outcome is {@link Result#NO_KEY} for a signature that verifies
+     * @param pemAnchors the deployment's anchors as concatenated PEM; {@code null} or empty means none, so a signature
+     *     that verifies is {@link Result#NO_KEY}
      */
     public static Result verify(ArtifactSignatures.Signed covered, byte[] signature, byte[] pemAnchors)
             throws IOException {
@@ -132,9 +116,8 @@ public final class Pkcs7Verification {
             CMSSignedDataParser parser = new CMSSignedDataParser(digests(), signature);
             CMSTypedStream encapsulated = parser.getSignedContent();
             if (encapsulated != null) {
-                // The structure signs content it carries. The signature is judged over that content, and when the
-                // caller also hands the bytes the content is ABOUT, the content must be a digest statement that names
-                // them - NuGet's shape, the one encapsulating scheme this verifier meets today.
+                // The structure signs content it carries; when the caller also hands the bytes that content is about,
+                // the content must be a digest statement naming them, as NuGet's is.
                 byte[] statement = encapsulated.getContentStream().readAllBytes();
                 Result signed = judge(parser, pemAnchors);
                 if (signed == Result.INVALID || covered == null) {
@@ -155,11 +138,9 @@ public final class Pkcs7Verification {
         }
     }
 
-    /**
-     * Whether a digest statement names the covered bytes. The grammar is NuGet's package-signature content -
-     * {@code Version:1}, a blank line, then {@code <digest OID>-Hash:<base64>} - and the digest is computed by streaming
-     * the covered bytes once. A statement in no grammar this reader knows names nothing.
-     */
+    /** Whether a digest statement names the covered bytes, in NuGet's grammar - {@code Version:1}, a blank line, then
+     *  {@code <digest OID>-Hash:<base64>} - computed by streaming the covered bytes once. Another grammar names
+     *  nothing. */
     static boolean statementNames(byte[] statement, ArtifactSignatures.Signed covered) throws IOException {
         String text = new String(statement, StandardCharsets.UTF_8);
         for (String line : text.split("\\r?\\n")) {
@@ -192,8 +173,8 @@ public final class Pkcs7Verification {
         return false;
     }
 
-    /** Whether any of the anchors is at the root of the chain a signature carries - the probe an inspector runs to pick
-     *  the trust source that speaks for this signer, without digesting anything. */
+    /** Whether an anchor is at the root of the signature's carried chain: the probe that picks the trust source,
+     *  digesting nothing. */
     public static boolean anchored(byte[] signature, byte[] pemAnchors) throws IOException {
         if (pemAnchors == null || pemAnchors.length == 0) {
             return false;

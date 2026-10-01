@@ -14,10 +14,9 @@ import java.security.cert.X509CertSelector;
 import java.security.cert.X509Certificate;
 
 /**
- * The one PKIX path build every X.509-signed scheme shares: from a signing certificate, through the intermediates
- * the artifact carries, to one of the anchors the deployment configured - revocation off (an OCSP or CRL fetch at
- * inspection time would make a publish depend on a third party answering), judged at the signature's own time when
- * it states one, so a signature made while its certificate was valid stays valid after the certificate expires.
+ * The PKIX path build every X.509-signed scheme shares: from a signing certificate, through the intermediates the
+ * artifact carries, to an anchor the deployment configured. Revocation is off, since a fetch would make a publish
+ * depend on a third party; the chain is judged at the signature's own time when it states one.
  */
 final class X509Chains {
 

@@ -7,13 +7,10 @@ import build.jenesis.repository.compliance.SignerIdentity;
 import build.jenesis.repository.format.ArtifactSignatures;
 
 /**
- * The verifier for a PKCS#7 (CMS) signed-data structure carrying its signer's chain - NuGet's
- * {@code .signature.p7s}, Swift's detached signature - as a discovered {@link SignatureScheme} over
- * {@link Pkcs7Verification}. The signer is identified from the certificate the structure carries, the trust source
- * that speaks for it is the one whose certificate bundle anchors its chain, and the covered bytes are streamed
- * through the verifier once. NuGet's structure encapsulates a hash statement and the format hands the package (less
- * its signature entry) as the covered bytes; Swift's is detached over the archive. The verifier tells the two apart,
- * so this scheme does not.
+ * The verifier for a PKCS#7 (CMS) signed-data structure carrying its signer's chain - NuGet's {@code .signature.p7s},
+ * Swift's detached signature - as a discovered {@link SignatureScheme} over {@link Pkcs7Verification}. The signer is
+ * identified from the carried certificate, the trust source is the one whose bundle anchors its chain, and the covered
+ * bytes are streamed once. The verifier tells encapsulated and detached structures apart.
  */
 public final class Pkcs7Scheme implements SignatureScheme {
 

@@ -7,33 +7,23 @@ import build.jenesis.repository.store.Retries;
 
 /**
  * The OpenPGP key a repository signs its own index with - RPM's {@code repomd.xml}, Debian's {@code Release}, a
- * Terraform registry's {@code SHA256SUMS} - and the public keyring a client verifies it against, kept as <b>one</b>
- * stored document so that every change to the pair is one compare-and-set.
+ * Terraform registry's {@code SHA256SUMS} - and the public keyring a client verifies against, kept as one stored
+ * document so every change to the pair is one compare-and-set.
  *
- * <h2>Why one document</h2>
- *
- * <p>The served keyring has to verify whatever the secret key signs, and a rotation changes both: a fresh secret key,
- * and the keyring with the fresh public key merged in beside the retiring one, which stays until it expires so a
- * client holding it still verifies what it signed during the overlap. Held as two objects, a rotation is two writes,
- * and a crash between them, or two nodes rotating at once, leaves a secret key whose signatures the served keyring
- * cannot verify. Held as one, a rotation lands whole or not at all, and of two nodes rotating at once the second
- * re-reads the first one's key, finds it no longer due, and signs with it.
+ * <p>A rotation changes both: a fresh secret key, and the keyring with the fresh public key merged beside the retiring
+ * one. As two objects, a crash between the writes or two nodes rotating at once would leave a secret whose signatures
+ * the served keyring cannot verify. As one, a rotation lands whole, and of two nodes rotating at once the second
+ * re-reads the first's key, finds it not due, and signs with it.
  *
  * <h2>Sealed at rest</h2>
  *
- * <p>The secret key is stored {@linkplain SecretCipher#sealed sealed} with the deployment's {@link SecretCipher} -
- * the envelope the upstream credentials are sealed with, under the {@value SecretCipher#ENV} master key - so the
- * store holds only ciphertext and a reader of the store alone cannot sign as the repository. A deployment with no
- * master key keeps the key in the clear, because a repository that cannot store its key cannot sign at all, and an
- * unsigned index is one a client reaches only by switching its verification off; it says so in its log the first
- * time it does. A key stored in the clear is sealed the first time a node holding a master key signs with it. An
- * envelope this node cannot open - a master key rotated away - fails the signing loudly rather than signing with
- * nothing.
+ * <p>The secret key is {@linkplain SecretCipher#sealed sealed} with the deployment's {@link SecretCipher}, under the
+ * {@value SecretCipher#ENV} master key, so the store holds only ciphertext. With no master key it is kept in the clear,
+ * since a repository that cannot store its key cannot sign, and the first such write is logged; a node holding a master
+ * key seals a clear key the first time it signs. An envelope this node cannot open fails the signing loudly.
  *
- * <h2>The document</h2>
- *
- * <p>A {@code java.util.Properties} document: {@code version=1}, {@code secret=} the sealed armoured secret key ring,
- * and {@code public=} the base64 of the armoured public keyring a client is served.
+ * <p>The document is {@code java.util.Properties}: {@code version=1}, {@code secret=} the sealed armoured secret key
+ * ring, {@code public=} the base64 of the armoured public keyring.
  */
 public final class SigningKeys {
 
@@ -41,7 +31,7 @@ public final class SigningKeys {
 
     private static final String VERSION = "1";
 
-    /** Whether this JVM has said that it stores a signing key in the clear - said once, not once per signature. */
+    /** Whether this JVM has logged that it stores a signing key in the clear: said once. */
     private static final AtomicBoolean UNSEALED_REPORTED = new AtomicBoolean();
 
     private final ArtifactStore store;
@@ -75,10 +65,8 @@ public final class SigningKeys {
         private static final SecretCipher CIPHER = SecretCipher.fromEnvironment();
     }
 
-    /**
-     * The signer - rotated first when it is due, and sealed first when it is stored in the clear and this node holds a
-     * master key; empty when no key has been provisioned, in which case the repository signs nothing.
-     */
+    /** The signer, rotated first when due and sealed first when stored in the clear and this node holds a master key;
+     *  empty when no key is provisioned, and the repository signs nothing. */
     public Optional<OpenPgpSigner> signer() throws IOException {
         Optional<ArtifactStore.Versioned> stored = store.readVersioned(key);
         if (stored.isEmpty()) {
@@ -109,8 +97,8 @@ public final class SigningKeys {
         }));
     }
 
-    /** The signer, generating the key when none is provisioned: exactly one caller's key is ever stored, and every
-     *  other caller signs with that one. */
+    /** The signer, generating the key when none is provisioned: exactly one caller's key is stored, and every other
+     *  caller signs with it. */
     public OpenPgpSigner provision() throws IOException {
         Retries.decide(store, key, read -> {
             if (read.isPresent()) {
@@ -122,16 +110,15 @@ public final class SigningKeys {
         return signer().orElseThrow(() -> new IOException("the signing key at " + key + " was not provisioned"));
     }
 
-    /** The public keyring a client verifies this repository's signatures with, or empty when no key is provisioned.
-     *  Read without opening the secret half, so a node that does not hold the master key still serves it. */
+    /** The public keyring a client verifies with, or empty when no key is provisioned. Read without opening the secret
+     *  half, so a node without the master key still serves it. */
     public Optional<byte[]> publicKeyring() throws IOException {
         Optional<ArtifactStore.Versioned> stored = store.readVersioned(key);
         return stored.isEmpty() ? Optional.empty()
                 : Optional.of(Base64.getDecoder().decode(properties(stored.get().content()).getProperty("public", "")));
     }
 
-    /** The long key id of the stored signing key, as OpenPGP writes it - read as it stands, rotating nothing, for a
-     *  read that names the key beside the keyring it serves; empty when no key is provisioned. */
+    /** The long key id of the stored key, read as it stands without rotating; empty when none is provisioned. */
     public Optional<String> keyId() throws IOException {
         Optional<ArtifactStore.Versioned> stored = store.readVersioned(key);
         return stored.isEmpty() ? Optional.empty()

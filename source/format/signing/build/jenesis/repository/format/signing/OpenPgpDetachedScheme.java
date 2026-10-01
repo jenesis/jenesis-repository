@@ -7,20 +7,17 @@ import build.jenesis.repository.compliance.SignerIdentity;
 import build.jenesis.repository.format.ArtifactSignatures;
 
 /**
- * The verifier for a detached OpenPGP signature over the artifact's bytes - a Maven {@code .asc} sidecar, a
- * {@code .deb}'s {@code _gpgorigin} member, a Terraform {@code SHA256SUMS.sig} - as a discovered
- * {@link SignatureScheme} over {@link OpenPgpVerification}.
+ * The verifier for a detached OpenPGP signature over the artifact's bytes - a Maven {@code .asc}, a {@code .deb}'s
+ * {@code _gpgorigin}, a Terraform {@code SHA256SUMS.sig} - as a discovered {@link SignatureScheme} over
+ * {@link OpenPgpVerification}.
  *
- * <p>The trust source that speaks for a signature is the one whose keyring holds its issuer, and the probe is the
- * verifier's own issuer resolution: {@link OpenPgpVerification#verify} resolves the key as {@code key(keyID,
- * keyring)} and {@link OpenPgpVerification#fingerprint} reaches the same call with the same value, so a source is
- * chosen if and only if verifying against it would not answer NO_KEY, and no signature a pooled keyring would have
- * verified is missed. It costs no artifact read - resolving a key id is a lookup, verifying is a digest over the
- * whole body - so the body is still streamed exactly once.
+ * <p>The trust source that speaks for a signature is the one whose keyring holds its issuer, probed through the
+ * verifier's own resolution ({@link OpenPgpVerification#fingerprint} calls what {@link OpenPgpVerification#verify}
+ * calls), so a source is chosen exactly when verifying against it would not answer NO_KEY. The probe reads no artifact,
+ * so the body is streamed once.
  *
- * <p>The signature names its issuer by key id and, on anything modern, by fingerprint. Where it named only the id
- * and the keyring carries the key, the fingerprint is resolved from there, so one signer is one identity whichever
- * spelling arrived rather than two rows on the signer index for the same key.
+ * <p>A signature naming its issuer only by key id is resolved to the fingerprint from the keyring, so one signer is one
+ * identity on the signer index whichever spelling arrived.
  */
 public final class OpenPgpDetachedScheme implements SignatureScheme {
 
@@ -44,8 +41,8 @@ public final class OpenPgpDetachedScheme implements SignatureScheme {
         return "not an OpenPGP signature";
     }
 
-    /** Whatever a keyserver, a Web Key Directory or GitHub served - binary transferable keys or armour - as the one
-     *  armoured block the discovered bundle appends; empty for bytes that hold no OpenPGP public key. */
+    /** Whatever a keyserver, a Web Key Directory or GitHub served, binary or armour, as one armoured block for the
+     *  discovered bundle; empty for bytes holding no OpenPGP public key. */
     @Override
     public Optional<byte[]> trustMaterial(byte[] served) {
         try {
@@ -55,8 +52,7 @@ public final class OpenPgpDetachedScheme implements SignatureScheme {
         }
     }
 
-    /** Whether the keyring holds a key by this id, by fingerprint lookup - the probe the key-discovery pass asks
-     *  before fetching and after. */
+    /** Whether the keyring holds a key by this id, the probe key discovery asks before fetching and after. */
     @Override
     public boolean holdsKey(String keyId, byte[] material) {
         if (material == null || material.length == 0) {
@@ -114,11 +110,8 @@ public final class OpenPgpDetachedScheme implements SignatureScheme {
         public Verification verify(ArtifactSignatures.Signed covered, byte[] material, Instant now)
                 throws IOException {
             if (material == null || material.length == 0) {
-                // The verifier resolves the issuer before it streams, so with no key material it would answer
-                // without ever opening the artifact. The artifact is read anyway: the inspector declares that it
-                // reads whole bodies, and a screen decides whether an artifact was seen whole from the inspection
-                // alone - it has no way to know that keys happened to be unconfigured. Reading through the same
-                // bound means an oversized artifact is still reported unverified rather than pinning the thread.
+                // With no key material the artifact is read anyway, through the same bound: a screen decides whether it
+                // was seen whole from the inspection alone, and an oversized artifact is still reported unverified.
                 drain(covered);
             }
             OpenPgpVerification.Result result = OpenPgpVerification.verify(covered, evidence.signature(), material);
@@ -126,14 +119,13 @@ public final class OpenPgpDetachedScheme implements SignatureScheme {
         }
     }
 
-    /** Read a stream to its end and discard it: what matters is that the artifact was pulled, not what it held. An
-     *  {@link IOException} the stream raises - the inspector's bound - rides out exactly as a verifying read's
-     *  would. */
+    /** Read a stream to its end and discard it; the inspector's bound rides out as an {@link IOException}, as for a
+     *  verifying read. */
     private static void drain(ArtifactSignatures.Signed covered) throws IOException {
         byte[] buffer = new byte[8192];
         try (InputStream in = covered.open()) {
             while (in.read(buffer) != -1) {
-                // discarded by design
+                // Discarded.
             }
         }
     }

@@ -9,12 +9,11 @@ import java.security.interfaces.ECPublicKey;
 import java.security.interfaces.RSAPublicKey;
 
 /**
- * The verifier for a bare signature whose signer's X.509 chain the artifact carries itself - a gem's
- * {@code data.tar.gz.sig} beside the {@code cert_chain} its gemspec lists, which {@code gem install --trust-policy}
- * checks the same way: the leaf's key verifies the signature over the member's bytes, and the chain must reach a
- * certificate the deployment trusts ({@code signature-trusted-certificates}, the same anchors a CMS signer chains
- * to). The digest is not named by the material, so SHA-256 (what RubyGems has written since 2.x) is tried first and
- * SHA-1 (what older gems carry) second; whichever verifies is the fact reported.
+ * The verifier for a bare signature whose signer's X.509 chain the artifact carries - a gem's {@code data.tar.gz.sig}
+ * beside its gemspec's {@code cert_chain}, as {@code gem install --trust-policy} checks it: the leaf's key verifies the
+ * signature over the member, and the chain must reach a deployment anchor ({@code signature-trusted-certificates}). The
+ * material names no digest, so SHA-256 is tried first and SHA-1, which older gems carry, second; whichever verifies is
+ * reported.
  */
 public final class X509Verification {
 

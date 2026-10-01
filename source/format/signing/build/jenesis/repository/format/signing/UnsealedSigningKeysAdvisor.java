@@ -8,10 +8,9 @@ import build.jenesis.repository.posture.Severity;
 import build.jenesis.repository.settings.SecretCipher;
 
 /**
- * Reports a deployment that signs repositories without a master key: {@link SigningKeys} then stores a repository's
- * secret signing key in the clear rather than refusing it, because a format that publishes signed indexes cannot
- * work unsigned, so anyone who can read the store can sign as the repository. It asks the question the signer asks -
- * whether {@value SecretCipher#ENV} names a key - and nothing else, so the report stands whatever the store holds.
+ * Reports a deployment that signs repositories without a master key: {@link SigningKeys} then stores secret signing
+ * keys in the clear, so anyone who can read the store can sign as the repository. It asks only whether
+ * {@value SecretCipher#ENV} names a key, so the report stands whatever the store holds.
  */
 public final class UnsealedSigningKeysAdvisor implements SafetyAdvisor {
 
@@ -24,7 +23,7 @@ public final class UnsealedSigningKeysAdvisor implements SafetyAdvisor {
         this(SecretCipher::fromEnvironment);
     }
 
-    /** The advisor over a given cipher - a test's, which cannot set the process environment. */
+    /** The advisor over a given cipher, since a test cannot set the process environment. */
     public UnsealedSigningKeysAdvisor(Supplier<SecretCipher> cipher) {
         this.cipher = cipher;
     }
@@ -35,7 +34,7 @@ public final class UnsealedSigningKeysAdvisor implements SafetyAdvisor {
         try {
             sealed = cipher.get().configured();
         } catch (RuntimeException malformed) {
-            // A malformed master key fails every signing loudly, which is its own report.
+            // A malformed master key fails every signing loudly, its own report.
             return List.of();
         }
         if (sealed) {

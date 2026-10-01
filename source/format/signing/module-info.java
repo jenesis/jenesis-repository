@@ -1,28 +1,15 @@
 /**
- * The repository's OpenPGP signing key, shared by every format that signs one of its own documents.
+ * The repository's OpenPGP signing key, shared by every format that signs one of its own documents - Debian's
+ * {@code Release}, RPM's {@code repomd.xml}, a Terraform registry's {@code SHA256SUMS}; which document and what the
+ * signature file is called stay with the format. A module rather than a class in one format, since a format plugin
+ * never depends on a sibling plugin.
  *
- * <p>Debian's {@code Release}, RPM's {@code repomd.xml} and a Terraform provider registry's {@code SHA256SUMS} are
- * all signed the same way, so the signing is one module rather than a near-identical copy per format. What differs
- * between them is which document is signed and what the
- * signature file is called, which is a statement about a protocol and stays with the format that speaks it.
- *
- * <p>It also carries the consumer half, {@code OpenPgpVerification}: reading what a third party's detached signature
- * states about itself, and checking it over a streamed body. Signing our own documents and checking someone else's are
- * opposite directions, but they are the same library and the same key handling, and this build may load Bouncy Castle
- * in exactly one module - a second would be a split package that fails the boot layer.
- *
- * <p>A module rather than a class in one of them, because a format plugin depends on its SPI and on shared helpers -
- * never on a sibling plugin, which would make the RPM format's graph depend on whether Debian is installed.
- *
- * <p>And it is where the verifiers are offered to the gate: each scheme this module can check is a
- * {@code SignatureScheme} it provides - detached and clearsigned OpenPGP, PKCS#7, the bare RSA member and the
- * bare signature beside a carried X.509 chain - so the one signature inspector dispatches by discovery and imports
- * no library. That is why this module requires the compliance contract: the scheme is its service, and a format
- * that signs its own documents through {@code OpenPgpSigner} sees nothing of it.
- *
- * <p>The key itself is kept here too, by {@code SigningKeys}: the secret key and the served keyring as one document,
- * the secret sealed with the deployment's master key - which is why this module requires the settings module, where
- * the cipher that seals every stored secret lives.
+ * <p>It also carries the consumer half - reading and checking third parties' signatures - because Bouncy Castle may be
+ * loaded in one module only; a second would split a package and fail the boot layer. Each scheme it can check is a
+ * {@code SignatureScheme} it provides - detached and clearsigned OpenPGP, PKCS#7, the bare RSA member and the bare
+ * signature beside a carried X.509 chain - so the signature inspector dispatches by discovery; hence the compliance
+ * contract. {@code SigningKeys} keeps the secret key sealed with the deployment's master key, whose cipher lives in the
+ * settings module.
  *
  * @jenesis.release 25
  * @jenesis.alias org.bouncycastle.pg org.bouncycastle/bcpg-jdk18on

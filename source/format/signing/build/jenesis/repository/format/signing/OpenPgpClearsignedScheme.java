@@ -6,15 +6,12 @@ import build.jenesis.repository.compliance.SignerIdentity;
 import build.jenesis.repository.format.ArtifactSignatures;
 
 /**
- * The verifier for an OpenPGP clearsigned document - Helm's {@code .prov} - as a discovered {@link SignatureScheme}:
- * the signature is verified over the canonical form of the text the document carries, and the covered bytes are
- * what that text must name. Helm's provenance names its chart by SHA-256, and a statement that names other bytes is
- * INVALID for the artifact exactly as a detached signature over other bytes is. The keyring is chosen by issuer as
- * for a detached signature, through {@link OpenPgpDetachedScheme}'s probe.
- *
- * <p>Covering evidence - a document that names its artifact through {@link ArtifactSignatures.Evidence#named} - is
- * compared by the inspector once for every covering scheme, so this verifier reads the covered bytes only for a
- * direct statement in Helm's grammar.
+ * The verifier for an OpenPGP clearsigned document, Helm's {@code .prov}, as a discovered {@link SignatureScheme}: the
+ * signature is verified over the canonical form of the carried text, and the covered bytes are what that text must
+ * name; a statement naming other bytes is INVALID. The keyring is chosen by issuer through
+ * {@link OpenPgpDetachedScheme}'s probe. Covering evidence ({@link ArtifactSignatures.Evidence#named}) is compared by
+ * the inspector for every covering scheme, so this reads the covered bytes only for a direct statement in Helm's
+ * grammar.
  */
 public final class OpenPgpClearsignedScheme implements SignatureScheme {
 
