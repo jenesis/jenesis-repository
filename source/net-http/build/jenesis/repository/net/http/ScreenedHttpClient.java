@@ -24,66 +24,48 @@ import org.eclipse.jetty.util.thread.Scheduler;
 import org.eclipse.jetty.util.thread.ScheduledExecutorScheduler;
 
 /**
- * A {@link HttpClient} whose connections are made by Jetty's client: every outbound call this product makes goes
- * through one, built by {@link #newBuilder()} in place of the JDK's {@code HttpClient.newBuilder()}, and the
- * caller's {@link HttpRequest}, {@link HttpResponse.BodyHandler} and {@link HttpRequest.BodyPublisher} are the JDK's
- * own, bridged onto Jetty's.
+ * A {@link HttpClient} whose connections Jetty's client makes: every outbound call goes through one, built by
+ * {@link #newBuilder()} in place of {@code HttpClient.newBuilder()}, with the caller's JDK {@link HttpRequest},
+ * {@link HttpResponse.BodyHandler} and {@link HttpRequest.BodyPublisher} bridged onto Jetty's.
  *
  * <p><b>What it changes about a call.</b>
  * <ul>
  *   <li>A host a private-address screen admitted as public is connected to only at a public address
- *       ({@link PrivateHosts#connectable}): a name that rebinds between the screen and the connect is refused with an
- *       {@link IOException} naming it, where the JDK's client would have resolved it again and gone. A host no screen
- *       admitted connects as it resolves.</li>
- *   <li>The request carries {@value #USER_AGENT} as its {@code User-Agent} unless the caller names one, and nothing
- *       about the runtime - no JDK version, no Jetty version, no {@code Accept-Encoding} it did not ask for, and no
- *       {@code HTTP2-Settings} upgrade offer on a cleartext request.</li>
- *   <li>A body is exchanged as sent: nothing is decompressed on the way in, so a proxy relays the upstream's bytes
- *       and their {@code Content-Encoding} together, and nothing names a {@code Content-Type} the caller did not -
- *       a store signing its requests signs the headers it set.</li>
- *   <li>A response is the caller's to read: an authentication challenge is not answered and a {@code 401} without
- *       one is a {@code 401}, as the JDK's client hands them over.</li>
- *   <li>{@link HttpClient.Redirect#NORMAL} follows a redirect as the JDK does - never from {@code https} to
- *       {@code http} - and drops {@code Authorization}, {@code Cookie} and the repository key header when a hop
- *       leaves the origin they were meant for, which the JDK's client does not.</li>
- *   <li>A followed redirect is screened before it is sent: a hop leaving the origin the call was made to for a host
- *       that resolves to a private, loopback or link-local address ({@link PrivateHosts#resolvesToPrivate}) is
- *       refused with {@link RedirectRefused}, unless the builder {@linkplain Builder#redirectsToPrivateHosts admits
- *       them}. The peer chooses where a redirect leads, so a public host could otherwise send the call to a cloud
- *       metadata service or an internal control plane that no screen admitted. A hop within the original origin
- *       reaches nothing the call was not already reaching, and passes; so does a hop from a private origin to another
- *       private host when the builder {@linkplain Builder#redirectsWithinPrivateNetwork says the calls go where an
- *       operator pointed them}, since such a call is already inside the network it would be redirected into.</li>
+ *       ({@link PrivateHosts#connectable}): a name that rebinds between screen and connect is refused, naming it. A
+ *       host no screen admitted connects as it resolves.</li>
+ *   <li>The request carries {@value #USER_AGENT} unless the caller names a {@code User-Agent}, and nothing about the
+ *       runtime - no versions, no unasked {@code Accept-Encoding}, no {@code HTTP2-Settings} upgrade offer.</li>
+ *   <li>A body is exchanged as sent: nothing is decompressed, so a proxy relays bytes and {@code Content-Encoding}
+ *       together, and no {@code Content-Type} is added - a store signing its requests signs the headers it set.</li>
+ *   <li>A response is the caller's to read: no challenge is answered, and a {@code 401} without one stays a
+ *       {@code 401}.</li>
+ *   <li>{@link HttpClient.Redirect#NORMAL} follows as the JDK does - never {@code https} to {@code http} - and drops
+ *       {@code Authorization}, {@code Cookie} and the repository key header when a hop leaves their origin.</li>
+ *   <li>A redirect leaving the call's origin for a host resolving to a private, loopback or link-local address
+ *       ({@link PrivateHosts#resolvesToPrivate}) is refused with {@link RedirectRefused} unless the builder
+ *       {@linkplain Builder#redirectsToPrivateHosts admits it}: the peer chooses where a redirect leads, and could
+ *       otherwise send the call to a metadata service. A hop within the origin passes, and so does one from a private
+ *       origin to another private host when the builder
+ *       {@linkplain Builder#redirectsWithinPrivateNetwork says so}.</li>
  * </ul>
  *
- * <p><b>No call waits without a bound.</b> The JDK's client waits for ever when a caller names no timeout, and every
- * outbound call - an upstream, an identity provider, the object stores' SDKs - goes through this one. A connect gives
- * up after {@link #CONNECT_TIMEOUT} unless the builder names another, answering
- * {@link HttpConnectTimeoutException}. And an exchange gives up once nothing has arrived or left for
- * {@link #IDLE_TIMEOUT} ({@link Builder#idleTimeout}, or the request's own {@linkplain HttpRequest#timeout() timeout}
- * when that is longer), answering {@link HttpTimeoutException} naming the address:
- * an upstream that accepts and never answers, or stops half way through a body, fails the call rather than holding
- * it. The bound is on silence rather than on the whole call, so an upload or a download that keeps moving is never
- * cut short however long it takes - which a total bound would do to a large blob written to an object store. What
- * silence cannot catch is a peer answering a byte at a time, which resets it with every byte: a download must also
- * move {@link #THROUGHPUT_FLOOR} bytes over each {@link #FLOOR_WINDOW} of reading ({@link Builder#throughputFloor}),
- * or it is abandoned the same way - a floor on the rate, so a large blob on a slow but steady link still lands.
- * A peer trickling just above the floor can still hold a call for as long as the body takes at that rate, and only a
- * bound on the whole call ends that: {@link Builder#deadline} names one, from the request to the last byte of the
- * body across every redirect, past which the call is abandoned with an {@link HttpTimeoutException} naming the
- * deadline. There is none unless it is named, since any fixed number either cuts short a legitimate large transfer
- * over a slow link or is too long to protect anything - the caller that knows what it fetches decides.
+ * <p><b>No call waits without a bound.</b> A connect gives up after {@link #CONNECT_TIMEOUT} unless the builder names
+ * another ({@link HttpConnectTimeoutException}). An exchange gives up after {@link #IDLE_TIMEOUT} with nothing sent or
+ * received ({@link Builder#idleTimeout}, or the request's {@linkplain HttpRequest#timeout() timeout} when longer),
+ * answering {@link HttpTimeoutException} naming the address - a bound on silence, so a transfer that keeps moving is
+ * never cut short. A peer answering a byte at a time defeats silence, so a download must also move
+ * {@link #THROUGHPUT_FLOOR} bytes per {@link #FLOOR_WINDOW} ({@link Builder#throughputFloor}). Only a whole-call bound
+ * ends a peer trickling just above the floor: {@link Builder#deadline} names one, from request to last byte across
+ * redirects, and there is none unless named, since any fixed number either cuts a legitimate slow transfer or protects
+ * nothing.
  *
- * <p>Everything else is the JDK's contract: {@link HttpRequest#timeout()} bounds the wait for the response's
- * headers from the moment the request is sent and answers {@link HttpTimeoutException}, and a body the handler reads
- * streams rather than being buffered. It speaks HTTP/1.1, over TLS where the URL says
- * so, verifying the host name against the default trust material or the {@link SSLContext} the builder is given.
- * A cookie handler, an authenticator and a proxy selector are refused at build time rather than ignored, since no
- * caller uses one and a silently ignored one is a security setting that does not hold.
+ * <p>Otherwise the JDK's contract holds: {@link HttpRequest#timeout()} bounds the wait for headers, and a handler's
+ * body streams. It speaks HTTP/1.1, over TLS where the URL says so, verifying the host against the default trust or the
+ * builder's {@link SSLContext}. A cookie handler, authenticator or proxy selector is refused at build time, since a
+ * silently ignored security setting would not hold.
  *
- * <p>Clients are cheap: every one built with the same connect timeout, trust and resolver shares one Jetty client
- * and its connection pool, which lives as long as the JVM, so {@link #close()} releases nothing and a caller need not
- * hold on to a client to avoid leaking one.
+ * <p>Clients built with the same connect timeout, trust and resolver share one Jetty client and pool for the life of
+ * the JVM, so {@link #close()} releases nothing and a caller need not hold a client to avoid a leak.
  */
 public final class ScreenedHttpClient extends HttpClient {
 
@@ -103,15 +85,14 @@ public final class ScreenedHttpClient extends HttpClient {
     /** How long a connect is waited for when the builder names no {@linkplain Builder#connectTimeout timeout}. */
     public static final Duration CONNECT_TIMEOUT = Duration.ofSeconds(10);
 
-    /** How long an exchange may go with nothing sent or received - the wait for a response's headers once the
-     *  request is sent, or for the next bytes of either body - when the builder names no
-     *  {@linkplain Builder#idleTimeout other}. */
+    /** How long an exchange may go with nothing sent or received - waiting for headers once sent, or for either body's
+     *  next bytes - unless the builder names {@linkplain Builder#idleTimeout another}. */
     public static final Duration IDLE_TIMEOUT = Duration.ofMinutes(1);
 
-    /** The least a response body must move over {@link #FLOOR_WINDOW} of reading, in bytes, when the builder names
-     *  no {@linkplain Builder#throughputFloor other}: sixteen kibibytes a minute, far below any link a download is
-     *  worth finishing over, and far above a peer that answers a byte at a time to keep the idle timeout from
-     *  firing. Spelled as text, since a settings catalogue publishes it as its default. */
+    /** The least a response body must move per {@link #FLOOR_WINDOW}, in bytes, unless the builder names
+     *  {@linkplain Builder#throughputFloor another}: sixteen kibibytes a minute, far below any link worth finishing a
+     *  download over and far above a byte-at-a-time peer. Text, since a settings catalogue publishes it as a
+     *  default. */
     public static final String THROUGHPUT_FLOOR_TEXT = "16384";
 
     /** {@link #THROUGHPUT_FLOOR_TEXT} as the number the client applies. */
@@ -120,8 +101,8 @@ public final class ScreenedHttpClient extends HttpClient {
     /** The span of reading a {@linkplain #THROUGHPUT_FLOOR throughput floor} is measured over. */
     public static final Duration FLOOR_WINDOW = Duration.ofMinutes(1);
 
-    /** The deadline on a whole call when the builder names no {@linkplain Builder#deadline other}: none, spelled as
-     *  the zero duration a settings catalogue publishes as its default. */
+    /** The whole-call deadline unless the builder names {@linkplain Builder#deadline another}: none, as the zero
+     *  duration a settings catalogue publishes. */
     public static final String DEADLINE_TEXT = "PT0S";
 
     private static final Map<Engine.Key, Engine> ENGINES = new ConcurrentHashMap<>();
@@ -150,8 +131,8 @@ public final class ScreenedHttpClient extends HttpClient {
         this.sslContext = sslContext;
     }
 
-    /** The least a body must move per window of reading, the bytes read afresh for each exchange so a live setting
-     *  behind them is honoured; {@code 0} bytes lifts it. */
+    /** The least a body must move per window of reading; the bytes are read afresh per exchange so a live setting is
+     *  honoured, and {@code 0} lifts the floor. */
     private record Floor(LongSupplier bytes, Duration window) {
     }
 
@@ -175,8 +156,7 @@ public final class ScreenedHttpClient extends HttpClient {
         List<InetAddress> resolve(String host) throws UnknownHostException;
     }
 
-    /** When one call must be done by, read once as it starts: {@code total} from the moment it was sent, or
-     *  {@link #NONE}. */
+    /** When one call must be done by, read as it starts: {@code total} from sending, or {@link #NONE}. */
     private record Deadline(Duration total, long due) {
 
         static final Deadline NONE = new Deadline(Duration.ZERO, 0);
@@ -200,7 +180,7 @@ public final class ScreenedHttpClient extends HttpClient {
         }
     }
 
-    /** A followed redirect refused because it leaves the call's origin for a private, loopback or link-local host. */
+    /** A followed redirect refused for leaving the call's origin for a private, loopback or link-local host. */
     public static final class RedirectRefused extends IOException {
 
         RedirectRefused(URI from, URI to) {
@@ -209,7 +189,7 @@ public final class ScreenedHttpClient extends HttpClient {
         }
     }
 
-    /** A connection refused because the host now resolves only to addresses a screen refused when it admitted it. */
+    /** A connection refused because the host now resolves only to addresses the admitting screen refused. */
     public static final class RebindingRefused extends IOException {
 
         RebindingRefused(String host) {
@@ -218,7 +198,7 @@ public final class ScreenedHttpClient extends HttpClient {
         }
     }
 
-    // ---- the JDK's accessors ----
+    // ---- the JDK's accessors
 
     @Override
     public Optional<CookieHandler> cookieHandler() {
@@ -265,7 +245,7 @@ public final class ScreenedHttpClient extends HttpClient {
         return Optional.empty();
     }
 
-    // ---- sending ----
+    // ---- sending
 
     @Override
     public <T> HttpResponse<T> send(HttpRequest request, HttpResponse.BodyHandler<T> handler)
@@ -287,7 +267,7 @@ public final class ScreenedHttpClient extends HttpClient {
                 return exchange.complete(current, handler, previous);
             }
             exchange.discard();
-            // The JDK hands a followed redirect back as a previous response without a body, and so does this.
+            // The JDK hands a followed redirect back as a body-less previous response, and so does this.
             previous = new Received<>(exchange.response.getStatus(), current, Optional.ofNullable(previous),
                     Exchange.headers(exchange.response), null, current.uri());
             current = next.get();
@@ -361,8 +341,8 @@ public final class ScreenedHttpClient extends HttpClient {
         return Optional.of(next.build());
     }
 
-    /** Send one request and wait for its response's headers, the body left to stream - all of it before {@code due},
-     *  when a deadline is set, or the exchange is aborted naming it. */
+    /** Send one request and wait for its headers, the body left to stream - all before {@code due} when a deadline is
+     *  set, or the exchange is aborted naming it. */
     private Exchange exchange(HttpRequest request, Deadline due) throws IOException, InterruptedException {
         // A request naming a longer wait for its headers than the idle timeout is waited for that long.
         Duration idle = request.timeout().filter(named -> named.compareTo(idleTimeout) > 0).orElse(idleTimeout);
@@ -387,15 +367,14 @@ public final class ScreenedHttpClient extends HttpClient {
             if (remaining <= 0) {
                 throw due.passed(request.uri());
             }
-            // The abort fails whatever is waiting on the exchange - the headers below, or the body being read -
-            // with the deadline's own exception, which the translations below hand on as it is.
+            // The abort fails whatever waits on the exchange - headers or body - with the deadline's own exception.
             Scheduler.Task task = engine.client.getScheduler().schedule(
                     () -> outbound.abort(due.passed(request.uri())), remaining, TimeUnit.NANOSECONDS);
             disarm = task::cancel;
         }
         outbound.send(listener);
         try {
-            // With no timeout named, the idle timeout is what ends a wait for headers that are not coming.
+            // With no timeout named, the idle timeout ends a wait for headers that are not coming.
             Response response = request.timeout().isPresent()
                     ? listener.get(request.timeout().get().toMillis(), TimeUnit.MILLISECONDS)
                     : listener.get(Long.MAX_VALUE, TimeUnit.NANOSECONDS);
@@ -460,8 +439,8 @@ public final class ScreenedHttpClient extends HttpClient {
         return new IOException("request to " + uri + " failed: " + cause, cause);
     }
 
-    /** The idle timeout Jetty ended an exchange with, as the timeout the JDK's client names, or {@code null} when
-     *  {@code cause} is some other failure. A connect that times out is a {@link SocketTimeoutException} instead. */
+    /** The idle timeout Jetty ended an exchange with, as the JDK client's timeout, or {@code null} for any other
+     *  failure. A connect timeout is a {@link SocketTimeoutException} instead. */
     private static HttpTimeoutException stalled(Throwable cause, URI uri, Duration idle) {
         for (Throwable failure = cause; failure != null; failure = failure.getCause()) {
             if (failure instanceof HttpTimeoutException timedOut) {
@@ -478,13 +457,13 @@ public final class ScreenedHttpClient extends HttpClient {
         return null;
     }
 
-    // ---- the exchange and its body ----
+    // ---- the exchange and its body
 
     /** A response whose headers have arrived and whose body is still to be read. */
     private record Exchange(Response response, InputStreamResponseListener listener, URI uri, Duration idle,
                             long floor, Duration window, Runnable disarm) {
 
-        /** Close the body unread: the response is a redirect the chain goes past, or one it refuses to follow. */
+        /** Close the body unread: a redirect the chain passes, or one it refuses. */
         void discard() throws IOException {
             disarm.run();
             listener.getInputStream().close();
@@ -533,14 +512,9 @@ public final class ScreenedHttpClient extends HttpClient {
         }
     }
 
-    /**
-     * A response body read off Jetty's stream and handed to the caller's subscriber as it asks for it.
-     *
-     * <p>It is read in whatever pieces arrive rather than in whole chunks, so the throughput floor is judged as the
-     * bytes come: a peer answering a byte at a time resets the idle timeout with every byte and would otherwise hold
-     * the read, and the thread, for as long as it chose. Only time spent waiting on the peer counts towards a window -
-     * a caller slow to ask for more is applying backpressure, not starving the read.
-     */
+    /** A response body read off Jetty's stream and handed to the caller's subscriber on demand, in whatever pieces
+     *  arrive, so the throughput floor is judged as bytes come. Only time waiting on the peer counts towards a window;
+     *  a caller slow to ask for more is applying backpressure. */
     private static final class Download implements Flow.Subscription, Runnable {
 
         private final InputStream in;
@@ -582,7 +556,7 @@ public final class ScreenedHttpClient extends HttpClient {
             try {
                 in.close();
             } catch (IOException _) {
-                // closing an abandoned body is best effort; the connection is discarded either way
+                // best effort; the connection is discarded either way
             }
         }
 
@@ -685,7 +659,7 @@ public final class ScreenedHttpClient extends HttpClient {
         }
     }
 
-    // ---- the Jetty client behind it ----
+    // ---- the Jetty client behind it
 
     /** One started Jetty client, shared by every {@link ScreenedHttpClient} built with the same settings. */
     private static final class Engine {
@@ -716,7 +690,7 @@ public final class ScreenedHttpClient extends HttpClient {
             client.setFollowRedirects(false);
             client.setUserAgentField(null);
             client.setMaxRequestsQueuedPerDestination(16_384);
-            // A body carries the Content-Type its caller names and none otherwise; Jetty would name one itself.
+            // A body carries the Content-Type its caller names and none otherwise.
             client.setDefaultRequestContentType(null);
             client.setSocketAddressResolver(new Screened(threads, key.resolver()));
             try {
@@ -724,9 +698,9 @@ public final class ScreenedHttpClient extends HttpClient {
             } catch (Exception failure) {
                 throw new IllegalStateException("the HTTP client could not start", failure);
             }
-            // The decoders are discovered as the client starts, so they go after it: a body is relayed as it was sent,
-            // and no Accept-Encoding is offered on a caller's behalf. And a response is the caller's to read as it
-            // came: Jetty would answer a challenge, follow a redirect and refuse a 401 that names no challenge.
+            // The decoders are discovered as the client starts, so they are cleared after it: bodies relay as sent and
+            // no Accept-Encoding is offered. Jetty would also answer challenges, follow redirects and refuse a bare
+            // 401.
             client.getContentDecoderFactories().clear();
             client.getProtocolHandlers().remove(WWWAuthenticationProtocolHandler.NAME);
             client.getProtocolHandlers().remove(ProxyAuthenticationProtocolHandler.NAME);
@@ -763,7 +737,7 @@ public final class ScreenedHttpClient extends HttpClient {
         }
     }
 
-    // ---- building ----
+    // ---- building
 
     /** The JDK's builder surface, for the settings this client honours. */
     public static final class Builder implements HttpClient.Builder {
@@ -792,9 +766,9 @@ public final class ScreenedHttpClient extends HttpClient {
             return this;
         }
 
-        /** How long an exchange may go with nothing sent or received before it is abandoned with an
-         *  {@link HttpTimeoutException}; {@link #IDLE_TIMEOUT} unless named. A caller whose peer is known to think
-         *  for longer before it answers - a storage service assembling a large object - names a longer one. */
+        /** How long an exchange may go with nothing sent or received before an {@link HttpTimeoutException};
+         *  {@link #IDLE_TIMEOUT} unless named. A caller whose peer thinks longer before answering - a storage service
+         *  assembling a large object - names a longer one. */
         public Builder idleTimeout(Duration duration) {
             if (duration.isNegative() || duration.isZero()) {
                 throw new IllegalArgumentException("an idle timeout is positive: " + duration);
@@ -803,12 +777,9 @@ public final class ScreenedHttpClient extends HttpClient {
             return this;
         }
 
-        /**
-         * The least a response body must move over {@code window} of reading before the call is abandoned with an
-         * {@link HttpTimeoutException}; {@link #THROUGHPUT_FLOOR} over {@link #FLOOR_WINDOW} unless named. The idle
-         * timeout ends a peer that goes silent; this ends one that answers slowly enough to keep it from firing. The
-         * bytes are read at the start of each exchange, so a caller may hand a live setting; {@code 0} lifts the floor.
-         */
+        /** The least a response body must move over {@code window} before the call is abandoned with an
+         *  {@link HttpTimeoutException}; {@link #THROUGHPUT_FLOOR} over {@link #FLOOR_WINDOW} unless named. The bytes
+         *  are read per exchange, so a live setting works; {@code 0} lifts the floor. */
         public Builder throughputFloor(LongSupplier bytes, Duration window) {
             if (window.isNegative() || window.isZero()) {
                 throw new IllegalArgumentException("a throughput window is positive: " + window);
@@ -817,37 +788,25 @@ public final class ScreenedHttpClient extends HttpClient {
             return this;
         }
 
-        /**
-         * The longest one call may take, from the moment it is sent to the last byte of its body and across every
-         * redirect it follows, before it is abandoned with an {@link HttpTimeoutException} naming the deadline; none
-         * unless named. The throughput floor ends a peer answering a byte at a time, but one trickling just above it
-         * holds the call for as long as the body takes at that rate, and this is what ends that - at the price of
-         * cutting short a legitimate transfer that takes longer, which is why the number is the caller's. It is read
-         * as each call starts, so a caller may hand a live setting; a zero or negative duration sets none.
-         */
+        /** The longest one call may take, from sending to its body's last byte across every redirect, before an
+         *  {@link HttpTimeoutException} naming the deadline; none unless named. It ends a peer trickling just above the
+         *  throughput floor, at the price of cutting a longer legitimate transfer, so the number is the caller's. Read
+         *  as each call starts; a zero or negative duration sets none. */
         public Builder deadline(Supplier<Duration> deadline) {
             this.deadline = Objects.requireNonNull(deadline, "deadline");
             return this;
         }
 
-        /**
-         * Whether a followed redirect may leave the call's origin for a host resolving to a private, loopback or
-         * link-local address; not unless named. A caller whose deployment has admitted internal targets - an operator
-         * who set the dial that lets an upstream sit on the internal network - hands that dial here, read as each
-         * redirect is judged.
-         */
+        /** Whether a followed redirect may leave the call's origin for a private, loopback or link-local host; not
+         *  unless named. A caller whose deployment admits internal targets hands that dial here, read per redirect. */
         public Builder redirectsToPrivateHosts(BooleanSupplier admitted) {
             this.privateRedirects = Objects.requireNonNull(admitted, "admitted");
             return this;
         }
 
-        /**
-         * The calls this client makes go to hosts an operator configured - an identity provider, a key server, a
-         * trust root - so a call made to a host that itself resolves to a private address may follow a redirect to
-         * another private host: an internal identity provider behind a load balancer answers that way, and the call
-         * was already inside the network the redirect leads into. A call made to a public host is still refused a
-         * private target, which is the redirect a peer uses to reach what no screen admitted.
-         */
+        /** The calls this client makes go to operator-configured hosts - an identity provider, a key server, a trust
+         *  root - so a call to a host resolving privately may follow a redirect to another private host (an internal
+         *  IdP behind a load balancer). A call to a public host is still refused a private target. */
         public Builder redirectsWithinPrivateNetwork() {
             this.withinPrivateNetwork = true;
             return this;
@@ -900,8 +859,7 @@ public final class ScreenedHttpClient extends HttpClient {
             throw new UnsupportedOperationException("this client sends the credentials its caller names");
         }
 
-        /** Resolve host names through {@code resolver} instead of the system - the seam a test names a rebinding
-         *  answer through. */
+        /** Resolve host names through {@code resolver} instead of the system - a test's seam for a rebinding answer. */
         public Builder resolver(Resolver resolver) {
             this.resolver = Objects.requireNonNull(resolver, "resolver");
             return this;

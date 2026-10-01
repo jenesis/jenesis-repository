@@ -5,18 +5,16 @@ import module java.net.http;
 
 /**
  * The body handlers an outbound call reads a whole response with, each bounded: past {@code limit} bytes the read is
- * abandoned and the call fails with {@link TooLarge}, naming the address and the bound, instead of growing the heap
- * for as long as the peer keeps sending.
+ * abandoned and the call fails with {@link TooLarge}, naming the address and the bound.
  *
- * <p>These stand in for {@code BodyHandlers.ofByteArray()} and {@code BodyHandlers.ofString()}, which buffer whatever
- * arrives. A document this product fetches whole - a key, an attestation, a trusted root, an identity provider's
- * discovery document - has a size its caller can state, and a peer answering past it is broken or hostile either
- * way, so every such read names its bound where it is made. A body declaring a {@code Content-Length} past the bound
- * is refused before any of it is read. A response too large to hold is not read whole at all: it streams through
- * {@code ofInputStream()} to wherever it is going.
+ * <p>They replace {@code BodyHandlers.ofByteArray()} and {@code ofString()}, which buffer whatever arrives. A document
+ * fetched whole - a key, an attestation, a trusted root, a discovery document - has a size its caller can state, and a
+ * peer answering past it is broken or hostile, so every such read names its bound. A declared {@code Content-Length}
+ * past the bound is refused before reading; a response too large to hold streams through {@code ofInputStream()}
+ * instead.
  *
- * <p>The text form decodes as UTF-8, the charset of every document these calls fetch; a peer naming another in its
- * {@code Content-Type} is not believed, so what is decoded does not depend on the peer's say-so.
+ * <p>Text decodes as UTF-8, the charset of every document these calls fetch, whatever the peer's {@code Content-Type}
+ * claims.
  */
 public final class BoundedBody {
 
