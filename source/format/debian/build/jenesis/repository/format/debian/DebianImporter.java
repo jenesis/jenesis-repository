@@ -7,14 +7,9 @@ import build.jenesis.repository.store.ArtifactDescriptor;
 import build.jenesis.repository.store.ArtifactStore;
 
 /**
- * Imports a Debian/apt repository (Nexus/Artifactory {@code apt}) from an incumbent manager. A {@code .deb} is
- * self-describing - its {@code control} stanza carries the package, version and architecture - so the importer replays
- * it as a push through {@link DebianFormat#handle}, which reads that stanza, stores the file in the pool and precomputes
- * the {@code Packages} stanza; the stored indexes follow on the push. A Nexus/Artifactory apt path is
- * {@code <...>/pool/<component>/<...>/<file>.deb}, so the component and filename carry over; the suite is a repo-layout
- * choice the {@code .deb} does not carry, so it defaults to {@code stable}. One of the format importers,
- * delegated to by {@link DebianFormat}, which carries the same {@code RepositoryImporter} capability the built-in
- * importers use.
+ * Imports a Debian/apt repository from an incumbent manager. A {@code .deb} is self-describing, so it is replayed as a
+ * push through {@link DebianFormat#handle}. The source path {@code <...>/pool/<component>/<...>/<file>.deb} carries the
+ * component and filename; the suite is not carried, so it defaults to {@code stable}.
  */
 public final class DebianImporter implements RepositoryImporter {
 
@@ -25,23 +20,18 @@ public final class DebianImporter implements RepositoryImporter {
 
     @Override
     public Optional<ArtifactDescriptor> importTarget(String path) {
-        // RepositoryImporter clause 4: a source path is as client-supplied as a request path, so a
-        // traversal-shaped one is refused by name rather than echoed into the descriptor the import edge
-        // screens and the trail records, as every importer does.
+        // RepositoryImporter clause 4: a traversal-shaped source path is refused by name.
         String relative = RepositoryImporter.importablePath(path, "debian");
         if (!relative.toLowerCase(Locale.ROOT).endsWith(".deb")) {
             return Optional.empty();
         }
-        // The .deb's target coordinate under /debian/stable/pool/<component>/<file>, the same pool path importArtifact
-        // lays it out at, so the edge screens the real Debian coordinate DebianFormat parses from the filename.
+        // The pool path importArtifact lays the file out at, so the edge screens the coordinate DebianFormat parses.
         return new DebianFormat().describe(publishPath(relative));
     }
 
     @Override
     public void importArtifact(String path, InputStream content, ArtifactStore store) throws IOException {
-        // RepositoryImporter clause 4: a source path is as client-supplied as a request path, so a
-        // traversal-shaped one is refused by name rather than echoed into the descriptor the import edge
-        // screens and the trail records, as every importer does.
+        // RepositoryImporter clause 4: a traversal-shaped source path is refused by name.
         String relative = RepositoryImporter.importablePath(path, "debian");
         if (!relative.toLowerCase(Locale.ROOT).endsWith(".deb")) {
             return;

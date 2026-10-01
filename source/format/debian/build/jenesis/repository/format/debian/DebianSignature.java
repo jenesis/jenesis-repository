@@ -14,12 +14,10 @@ import org.bouncycastle.openpgp.operator.jcajce.JcaKeyFingerprintCalculator;
 import org.bouncycastle.openpgp.operator.jcajce.JcaPGPContentVerifierBuilderProvider;
 
 /**
- * Verifies a {@code .deb}'s embedded OpenPGP signature against an operator-trusted keyring, so a hosted repository can
- * refuse a package that is unsigned, tampered, or signed by a key it does not trust. The signature is the debsig
- * {@code _gpgorigin} ({@code /_gpgbuilder} / {@code _gpgcheck}) {@code ar} member - a detached signature over the
- * concatenation of the archive's other members' contents ({@code debian-binary}, {@code control.tar.*},
- * {@code data.tar.*}), in archive order, which is what {@code debsigs --sign=origin} produces. A package may carry
- * more than one signature; it is {@link Result#VALID} as soon as one verifies against a trusted key.
+ * Verifies a {@code .deb}'s embedded OpenPGP signature against an operator-trusted keyring. The signature is the debsig
+ * {@code _gpgorigin} ({@code /_gpgbuilder} / {@code _gpgcheck}) {@code ar} member: a detached signature over the
+ * concatenation of the other members ({@code debian-binary}, {@code control.tar.*}, {@code data.tar.*}) in archive
+ * order, as {@code debsigs --sign=origin} produces. A package is {@link Result#VALID} once one signature verifies.
  */
 public final class DebianSignature {
 
@@ -32,9 +30,8 @@ public final class DebianSignature {
         UNSIGNED
     }
 
-    /** A reopenable {@code .deb} blob: {@link #open} yields a fresh stream over the same bytes each call, so the archive
-     *  can be read twice (once to lift the small signature members, once to stream the large signed members) without
-     *  ever holding the package in heap. The caller owns and closes each returned stream. */
+    /** A reopenable {@code .deb} blob: {@link #open} yields a fresh stream each call, so the archive can be read twice
+     *  without holding it in heap. The caller closes each stream. */
     @FunctionalInterface
     public interface Source {
         InputStream open() throws IOException;
@@ -42,14 +39,9 @@ public final class DebianSignature {
 
     private static final Set<String> SIGNATURE_MEMBERS = Set.of("_gpgorigin", "_gpgbuilder", "_gpgcheck");
 
-    /** The most a signature {@code ar} member is read into heap. A debsig detached signature ({@code _gpgorigin}) is a
-     *  few hundred bytes to a few kilobytes; a megabyte is generous (the same bound the sibling
-     *  {@code MAX_TRUSTED_KEY} debian cap uses). This is deliberately <em>not</em> the shared archive-inflation bound
-     *  ({@code ArchiveInflation}): an {@code ar} member is stored uncompressed, so its declared size is the transfer
-     *  the client already paid for and no ratio is the attacker's to choose - the concern that bound exists for.
-     *  Read through a bounded {@code readNBytes(MAX + 1)} so a hostile
-     *  {@code .deb} declaring a huge {@code _gpgorigin} member cannot OOM the verifier: the large {@code data.tar.*}
-     *  members are streamed in 8 KiB chunks, and this is the one member read whole. */
+    /** The most a signature {@code ar} member is read into heap, through a bounded {@code readNBytes(MAX + 1)}: a
+     *  debsig signature is a few kilobytes. Not the archive-inflation bound, since an {@code ar} member is stored
+     *  uncompressed and its size is what the client already sent. */
     private static final int MAX_SIGNATURE = 1024 * 1024;
 
     private DebianSignature() {
@@ -59,18 +51,10 @@ public final class DebianSignature {
         return verify(() -> new ByteArrayInputStream(deb), trustedKeyring);
     }
 
-    /**
-     * Verify a {@code .deb}'s embedded signature streaming, so a publish never holds the whole (unbounded) package -
-     * above all its {@code data.tar.*} member - in heap just to check the signature. Buffering every {@code ar}
-     * member (including {@code data.tar}) to form the signed data would be {@code ~2x} the package on the heap and
-     * could not even represent a package past the {@code byte[]} array limit. Instead the
-     * {@link Source reopenable} blob is read twice: the first pass lifts only the small
-     * {@code _gpgorigin} signature member(s) and builds a verifier for each that names a trusted key; the second pass
-     * re-reads the archive and feeds every non-signature member's bytes straight into those verifiers in bounded
-     * chunks. An OpenPGP signature is a digest over the signed data, so feeding the members chunk-by-chunk (in archive
-     * order, regardless of where the signature member sits) computes exactly that digest without materialising the
-     * bytes. A multi-gigabyte {@code .deb} therefore verifies in bounded heap.
-     */
+    /** Verify a {@code .deb}'s embedded signature in bounded heap. The blob is read twice: the first pass lifts the
+     *  small {@code _gpgorigin} members and builds a verifier for each that names a trusted key; the second feeds every
+     *  other member's bytes, in archive order, into those verifiers in chunks, which computes the signature's digest
+     *  without materialising the package. */
     public static Result verify(Source deb, byte[] trustedKeyring) throws IOException {
         PGPPublicKeyRingCollection trusted;
         try (InputStream in = PGPUtil.getDecoderStream(new ByteArrayInputStream(trustedKeyring))) {
@@ -79,8 +63,7 @@ public final class DebianSignature {
             throw new IOException("Could not read the trusted keyring", e);
         }
 
-        // First pass: lift the signature member(s) - each a small detached signature, safe to hold whole - and build a
-        // verifier for every one that names a key in the trusted ring. The unbounded members are skipped, never read.
+        // First pass: lift the small signature members and build a verifier for each naming a trusted key.
         boolean signed = false;
         List<PGPSignature> verifiers = new ArrayList<>();
         try (ArArchiveInputStream archive = new ArArchiveInputStream(deb.open())) {
@@ -89,11 +72,8 @@ public final class DebianSignature {
                     continue;   // getNextEntry() advances past this member's bytes; the large payload is never buffered
                 }
                 signed = true;
-                // Bounded read: a legitimate detached signature is tiny, so read at most MAX_SIGNATURE + 1 bytes. An
-                // over-cap member is a hostile/oversized signature, never a usable one - skip it (getNextEntry() below
-                // advances past its remaining bytes), so it can never yield a trusted verifier and the package stays
-                // UNTRUSTED (refused), never VALID. Read whole, a huge _gpgorigin would be an OOM vector, since .deb
-                // uploads are otherwise uncapped.
+                // An over-cap member is never a usable signature: skipped, so it yields no verifier and the package
+                // stays UNTRUSTED.
                 byte[] signatureMember = archive.readNBytes(MAX_SIGNATURE + 1);
                 if (signatureMember.length > MAX_SIGNATURE) {
                     continue;
@@ -131,26 +111,16 @@ public final class DebianSignature {
                     return Result.VALID;
                 }
             } catch (PGPException e) {
-                // a verifier that cannot finalise (a malformed signature) is simply not a valid one; try the next
+                // A verifier that cannot finalise is not a valid one; try the next.
             }
         }
         return Result.UNTRUSTED;
     }
 
-    /**
-     * The same material, handed to the format-general signature seam instead of being verified here: every signature
-     * member, each paired with a reopenable stream of exactly the bytes it commits to.
-     *
-     * <p>It is the same two passes {@link #verify} makes - lift the small signature members, then stream the large
-     * ones - split so that <em>checking</em> the signature belongs to the shared inspector rather than to this format.
-     * What stays here is the only part that is genuinely Debian's: that a {@code .deb}'s signature covers the
-     * concatenation of the archive's <em>other</em> members in archive order, rather than the file itself. A Maven
-     * {@code .asc} covers the file, an RPM header signature covers the header; one verifier reads all three because
-     * each format composes the stream and none of them owns the checking.
-     *
-     * <p>The composed stream is opened afresh per call and never materialised, so a multi-gigabyte package is verified
-     * in bounded heap exactly as it is here.
-     */
+    /** The same material handed to the format-general signature seam: every signature member, each with a reopenable
+     *  stream of exactly the bytes it commits to, the concatenation of the other members in archive order. Verifying
+     *  belongs to the shared inspector; composing the stream is Debian's. Opened afresh per call and never
+     *  materialised. */
     public static List<ArtifactSignatures.Evidence> evidence(Source deb) throws IOException {
         List<ArtifactSignatures.Evidence> evidence = new ArrayList<>();
         try (ArArchiveInputStream archive = new ArArchiveInputStream(deb.open())) {
@@ -158,8 +128,7 @@ public final class DebianSignature {
                 if (!SIGNATURE_MEMBERS.contains(entry.getName())) {
                     continue;   // getNextEntry() advances past this member's bytes; the large payload is never read
                 }
-                // The same bounded read verify() takes: an over-cap member is a hostile signature, never a usable one,
-                // and yielding no evidence for it leaves the package reported as carrying nothing this one could use.
+                // An over-cap member is never a usable signature and yields no evidence.
                 byte[] member = archive.readNBytes(MAX_SIGNATURE + 1);
                 if (member.length > MAX_SIGNATURE) {
                     continue;
@@ -171,11 +140,7 @@ public final class DebianSignature {
         return List.copyOf(evidence);
     }
 
-    /**
-     * A stream over the archive's non-signature members, concatenated in archive order - the bytes a debsig signature
-     * is made over. Reads one member at a time and holds none, so the package's size does not bound what can be
-     * verified.
-     */
+    /** The archive's non-signature members concatenated in archive order, one member at a time. */
     private static InputStream signedMembers(Source deb) throws IOException {
         ArArchiveInputStream archive = new ArArchiveInputStream(deb.open());
         return new InputStream() {
@@ -213,8 +178,8 @@ public final class DebianSignature {
         };
     }
 
-    /** Parse a detached signature member and, if it names a key in the trusted ring, return an initialised verifier
-     *  ready to be fed the signed data; {@code null} for a malformed signature or one signed by an untrusted key. */
+    /** Parse a detached signature member and return a verifier ready for the signed data if it names a trusted key;
+     *  {@code null} for a malformed or untrusted signature. */
     private static PGPSignature trustedVerifier(byte[] signatureMember, PGPPublicKeyRingCollection trusted)
             throws IOException {
         try (InputStream in = PGPUtil.getDecoderStream(new ByteArrayInputStream(signatureMember))) {

@@ -39,31 +39,27 @@ import build.jenesis.repository.walk.TraversalException;
 import build.jenesis.repository.walk.Trees;
 
 /**
- * The Debian/apt format, so {@code apt-get} installs and a {@code .deb} upload work over the same store. It owns
- * {@code /debian/...}. A push ({@code PUT /debian/<suite>/pool/<component>/<file>.deb}, the raw {@code .deb} as the
- * body) reads the package's {@code Package}, {@code Version} and {@code Architecture} from the {@code control} file
- * inside the {@code .deb} (an {@code ar} archive whose {@code control.tar[.gz|.xz|.zst]} is a compressed tar, both
- * read with Commons Compress), stores the file under {@code debian/<suite>/pool/<component>/<file>.deb} and a precomputed
- * {@code Packages} stanza - the control augmented with {@code Filename}, {@code Size} and checksums - under
- * {@code debian/<suite>/index/<component>/<arch>/<file>}. The binary {@code Packages}
- * ({@code GET /debian/dists/<suite>/<component>/binary-<arch>/Packages[.gz]}) and the {@code Release}
- * ({@code GET /debian/dists/<suite>/Release}) are stored listings the push maintains from those stanzas - never a
- * rewritten object - and a {@code .deb} is served from the pool. A hosted {@code Release} is OpenPGP-signed once a
- * signing key is provisioned; without one it is unsigned, {@code InRelease} and {@code Release.gpg} are absent and a
- * client trusts it with {@code [trusted=yes]}.
+ * The Debian/apt format: {@code apt-get} installs and {@code .deb} uploads over the same store, under
+ * {@code /debian/...}. A push ({@code PUT /debian/<suite>/pool/<component>/<file>.deb}) reads {@code Package},
+ * {@code Version} and {@code Architecture} from the {@code control} file inside the {@code .deb} (an {@code ar} archive
+ * whose {@code control.tar[.gz|.xz|.zst]} is a compressed tar), stores the file under
+ * {@code debian/<suite>/pool/<component>/<file>.deb} and a {@code Packages} stanza - the control plus {@code Filename},
+ * {@code Size} and checksums - under {@code debian/<suite>/index/<component>/<arch>/<file>}. The {@code Packages}
+ * ({@code GET /debian/dists/<suite>/<component>/binary-<arch>/Packages[.gz]}) and {@code Release}
+ * ({@code GET /debian/dists/<suite>/Release}) are stored listings the push maintains. A hosted {@code Release} is
+ * OpenPGP-signed once a signing key is provisioned; without one {@code InRelease} and {@code Release.gpg} are absent
+ * and a client trusts it with {@code [trusted=yes]}.
  *
- * As a proxy, an immutable {@code .deb} is fetched, cached and served; the mutable {@code Release}, {@code InRelease}
- * and {@code Packages} pass through from the upstream unchanged - the upstream's own signature stays valid because a
- * cached {@code .deb} is byte-for-byte the original, so a proxied Debian mirror verifies against Debian's key. What
- * the leg keeps of them is what lets this repository verify the same chain: the digest each {@code Packages}
- * declared for a package and the digest of that index as it went past, and the suite's {@code InRelease} whole
- * ({@link #indexCoverage}).
+ * <p>As a proxy, an immutable {@code .deb} is fetched, cached and served; {@code Release}, {@code InRelease} and
+ * {@code Packages} pass through unchanged, so a proxied mirror verifies against the upstream's key. The leg keeps the
+ * digest each {@code Packages} declared per package, the digest of that index as relayed, and the suite's
+ * {@code InRelease} whole, so this repository can verify the same chain ({@link #indexCoverage}).
  */
 public final class DebianFormat implements RepositoryFormat, ProxyLeg, BlobLayout, ArtifactSignatures,
         RepositoryImporter, RepositoryExporter {
 
-    /** How many per-package digests one relayed index may record - a bound on the work a hostile upstream can ask
-     *  for, well past any real suite (Debian main/amd64 carries some sixty thousand packages). */
+    /** How many per-package digests one relayed index may record: a bound on a hostile upstream, well past a real suite
+     *  (Debian main/amd64 carries some sixty thousand packages). */
     private static final int MAX_RECORDED_DIGESTS = 200_000;
 
     private static final String IDENTITY = "Jenesis Repository <repository@jenesis.build>";
@@ -89,29 +85,18 @@ public final class DebianFormat implements RepositoryFormat, ProxyLeg, BlobLayou
     }
 
     /**
-     * Debian's inbound signature story: the debsig {@code _gpgorigin} member embedded in a {@code .deb}, and
-     * <em>optional</em> rather than expected.
+     * Debian's inbound signature: the debsig {@code _gpgorigin} member embedded in a {@code .deb}, optional rather than
+     * expected, since apt's trust runs through the signed {@code Release}, which commits to each {@code Packages},
+     * which commits to each package; demanding one would report every well-run archive as unsigned.
      *
-     * <p>Optional is the honest answer, and it differs from Maven's deliberately. An apt client's trust runs through
-     * the signed {@code Release} index, which commits to the hashes of the {@code Packages} file, which commits to
-     * each package - so the ordinary Debian package carries no signature of its own and demanding one would report
-     * every well-run archive as unsigned. debsig exists, some publishers use it, and where it is present it is worth
-     * checking; that is exactly what {@code OPTIONAL} says.
-     *
-     * <p>What is Debian's alone is <em>what</em> the signature covers: the concatenation of the archive's other
-     * {@code ar} members in archive order, never the file. Composing that stream is this format's job; checking it is
-     * not, which is why the signature is handed over rather than verified here.
+     * <p>The signature covers the concatenation of the archive's other {@code ar} members in archive order, never the
+     * file. Composing that stream is this format's job; verifying it is the shared inspector's.
      */
     @Override
     public List<ArtifactSignatures.Expectation> expects(String path) {
-        // Required once trusted signers are provisioned, optional until then: apt's trust runs through the signed
-        // Release index, so an ordinary package carries no signature and reporting every well-run archive as
-        // unsigned would be worse than saying nothing - but a keyring of trusted signers (the keyring/trusted
-        // endpoint) is an operator saying per-package signatures are expected here, and from then on an unsigned
-        // package is a finding for signature-missing to decide. The declaration stays a pure function of the path;
-        // whether a keyring stands is the Debian keyring trust's answer, read by the inspector that holds it.
-        // And, optional, coverage by the mirror's signed index (indexCoverage): a proxied package may be named by a
-        // Packages index the archive's clearsigned InRelease commits to; a hosted one never is.
+        // Required once a trusted keyring is provisioned (the keyring/trusted endpoint), optional until then; whether
+        // one stands is the inspector's answer, so this stays a function of the path. A proxied package may also be
+        // covered by the mirror's signed index (indexCoverage); a hosted one never is.
         return path.endsWith(".deb")
                 ? List.of(ArtifactSignatures.Expectation.requiredWhenTrusted(ArtifactSignatures.Scheme.OPENPGP_DETACHED),
                           ArtifactSignatures.Expectation.optional(ArtifactSignatures.Scheme.OPENPGP_CLEARSIGNED))
@@ -131,22 +116,17 @@ public final class DebianFormat implements RepositoryFormat, ProxyLeg, BlobLayou
     }
 
     /**
-     * Coverage by the mirror's signed index, for a proxied {@code .deb}: apt's trust runs through the clearsigned
-     * {@code InRelease}, which commits to the digest of each {@code Packages} index, which commits to the digest of
-     * each package. Two hops, and the middle document is tens of megabytes - so nothing here reads it. The proxy leg
-     * took its digest as it streamed past and recorded, per pool path, the package digest its stanza declared
-     * ({@link #recordIndex}), and it kept the suite's {@code InRelease} whole, which is small enough to read under
-     * the signature bound. The evidence is that document, clearsigned by the archive, and its {@link
-     * ArtifactSignatures.Named} makes the second hop: the index the record came from must be named by the digest
-     * that streamed - a line {@code <sha256> <size> <component>/binary-<arch>/Packages[.gz|.xz]} - and then the
-     * digest the index declared for this package is what the document names for it. An {@code InRelease} that does
-     * not name the streamed index vouches for nothing here - the two were relayed either side of a mirror refresh -
-     * and yields no evidence rather than a mismatch, since nothing was tampered with.
+     * Coverage by the mirror's signed index, for a proxied {@code .deb}: the clearsigned {@code InRelease} commits to
+     * each {@code Packages} digest, which commits to each package's. The middle document is tens of megabytes, so
+     * nothing here reads it: the proxy leg recorded, per pool path, the digest its stanza declared and the digest of
+     * the index as it streamed ({@link #recordIndex}), and kept the suite's {@code InRelease} whole. The evidence is
+     * that document, and its {@link ArtifactSignatures.Named} makes the second hop: the document must name the streamed
+     * index's digest in a line {@code <sha256> <size> <component>/binary-<arch>/Packages[.gz|.xz]}. An
+     * {@code InRelease} that does not, relayed the other side of a mirror refresh, yields no evidence rather than a
+     * mismatch.
      *
-     * <p>The signer is the archive's, never the package's: the location says which index the coverage came through,
-     * and the outcome is judged against the trust the deployment holds for that key - the Debian keyring, or one it
-     * configured. Verified once per assessment of a package, off the request path (the hardened leg's screen, the
-     * rescreen pass), never on a serving read; the record it leaves is what a sweep re-judges.
+     * <p>The signer is the archive's, judged against the trust the deployment holds for that key. Verified off the
+     * request path, once per assessment; the record it leaves is what a sweep re-judges.
      */
     private static Optional<ArtifactSignatures.Evidence> indexCoverage(String path, ArtifactSignatures.Material material)
             throws IOException {
@@ -184,9 +164,8 @@ public final class DebianFormat implements RepositoryFormat, ProxyLeg, BlobLayou
                 document -> namesIndex(document, indexDigest) ? Optional.of(sha256) : Optional.empty()));
     }
 
-    /** Whether a clearsigned {@code InRelease} names an index by this digest: a {@code <sha256> <size> <path>} line
-     *  whose path is a {@code Packages} index, plain or compressed. Matched by digest rather than by name, since a
-     *  by-hash fetch carries only the digest; the armour and the signature block match no such line. */
+    /** Whether a clearsigned {@code InRelease} names a {@code Packages} index by this digest, plain or compressed.
+     *  Matched by digest, since a by-hash fetch carries only the digest. */
     static boolean namesIndex(byte[] inRelease, String digest) {
         Matcher line = INDEX_LINE.matcher(new String(inRelease, StandardCharsets.UTF_8));
         while (line.find()) {
@@ -209,18 +188,12 @@ public final class DebianFormat implements RepositoryFormat, ProxyLeg, BlobLayou
     }
 
     /**
-     * The package version a stored Debian pointer serves - the backwards direction the inventory back-fill rebuilds
-     * a lost {@code published} record from.
+     * The package version a stored Debian pointer serves, from which the inventory back-fill rebuilds a lost
+     * {@code published} record.
      *
-     * <p>Debian is the first format here whose pair lives in a <em>filename</em> rather than in path segments, and
-     * the only reason that is safe is a rule of the ecosystem rather than of this store: a {@code .deb} is named
-     * {@code <name>_<version>_<arch>.deb}, and Debian policy forbids an underscore in a package name or a version.
-     * So the split is exact where npm's {@code <shortName>-<version>.tgz} and Cargo's {@code <crate>-<version>}
-     * were not, and those are left undecoded for precisely the reason this one is decoded.
-     *
-     * <p>It is the same parse {@link #describe} performs on the request path, which is what makes the row this
-     * rebuilds match the row the accept path wrote - and what the shared round-trip property checks over a really
-     * published package.
+     * <p>A {@code .deb} is named {@code <name>_<version>_<arch>.deb} and Debian policy forbids an underscore in a
+     * package name or a version, so the split is exact. It is the parse {@link #describe} performs on the request path,
+     * so the row rebuilt matches the row the publish wrote.
      */
     @Override
     public Optional<ArtifactDescriptor> describePointer(String key) {
@@ -247,21 +220,17 @@ public final class DebianFormat implements RepositoryFormat, ProxyLeg, BlobLayou
 
     @Override
     public List<String> blobKeys(String coordinate, String version, ArtifactStore store) throws IOException {
-        // Debian keys each .deb on its request pool path (debian/<suite>/pool/<component>/.../<file>.deb), where the
-        // file is <package>_<version>_<arch>.deb and the filename version omits any epoch the control Version carries.
-        // Recover the coordinate-scoped keys by scanning each suite's pool tree for every .deb whose package and
-        // (epoch-stripped) version match - a version may sit under several suites, components or architectures, and all
-        // are the version's keys - so blobHashes/eviction/servedPaths reach a hosted Debian version. The suite level is
-        // the shared flat bounded enumeration and each pool subtree the shared bounded tree walk - one
-        // hardened iterative descent, never a hand-rolled stack and never self-recursion over an unpaged list().
+        // Each .deb is keyed on its pool path, its filename <package>_<version>_<arch>.deb without the control
+        // Version's epoch. A version may sit under several suites, components or architectures, and all are its keys,
+        // found through each suite's reverse index or the bounded pool walk.
         if (!BlobLayout.addressable(coordinate, version)) {
             return List.of();   // a traversal-shaped coordinate maps nowhere - these keys are what an eviction DELETES
         }
         String fileVersion = stripEpoch(version);
         List<String> keys = new ArrayList<>();
         SUITES.scan(store, "debian", suite -> {
-            // The reverse index a push writes answers without a walk; a suite from before it (no by/ container at
-            // all) is walked as before, until the rebuild pass has backfilled it.
+            // The reverse index a push writes answers without a walk; a suite without one is walked until the rebuild
+            // pass has written it.
             if (store.isEmpty("debian/" + suite + "/by")) {
                 collectDebs(store, "debian/" + suite + "/pool", coordinate, fileVersion, keys);
                 return;
@@ -283,16 +252,10 @@ public final class DebianFormat implements RepositoryFormat, ProxyLeg, BlobLayou
         return keys;
     }
 
-    /** Walk one suite's pool subtree through the shared bounded tree walk, adding every stored {@code .deb} leaf whose
-     *  {@code <package>_<version>_<arch>} filename matches the requested package and epoch-stripped version. The pool
-     *  nests components (and, in a full mirror, the first-letter/source dirs), so the descent is arbitrary-depth; the
-     *  primitive keeps it iterative (O(depth) frames, never a call stack an attacker-planted depth can overflow) and
-     *  pages every level, so an arbitrarily wide level streams page by page.
-     *
-     *  <p>The leaf test is a fact rather than an inference: calling a {@code .deb}-suffixed prefix that pages EMPTY a
-     *  pool pointer would collect a {@code .deb}-named directory left empty by a partial delete as a stored
-     *  {@code .deb} that eviction would then fail to find. {@link Trees} decides leaf-ness with
-     *  {@link ArtifactStore#exists}, so only a key that really holds bytes is matched. */
+    /** Walk one suite's pool subtree through the bounded tree walk, adding every {@code .deb} leaf whose filename
+     *  matches the package and epoch-stripped version. The descent is arbitrary-depth, iterative and paged. A leaf is a
+     *  key that {@link ArtifactStore#exists exists} ({@link Trees}), so a {@code .deb}-named directory emptied by a
+     *  partial delete is never collected for eviction to miss. */
     private static void collectDebs(ArtifactStore store, String root, String coordinate, String fileVersion,
                                     List<String> keys) throws IOException {
         POOL.walk(store, root, key -> {
@@ -307,35 +270,27 @@ public final class DebianFormat implements RepositoryFormat, ProxyLeg, BlobLayou
         });
     }
 
-    /** The suite level: an operator-configured, bounded set, but enumerated for a compliance read that must see EVERY
-     *  suite a version sits in - a suite silently dropped here is a hold that never marks that suite's {@code .deb}.
-     *  The entry cap is therefore off and the binding bound is the primitive's step budget (1000 page round-trips),
-     *  which THROWS rather than answering short. */
+    /** The suite level, enumerated for compliance reads that must see every suite a version sits in. The entry cap is
+     *  off; the step budget (1000 page round-trips) binds, and throws rather than answering short. */
     private static final BoundedChildren SUITES = BoundedChildren.bounded().entries(Integer.MAX_VALUE);
 
-    /** The pool descent's budget, spent one probe per opened node. {@code blobKeys} feeds holds, eviction and
-     *  {@code servedPaths}: a pool leaf it does not report is a KEV-listed {@code .deb} that keeps serving, so a
-     *  truncated answer is not a page of a right answer, it is a wrong one. The entry cap is therefore pinned to the
-     *  same number as the step budget so it can never bind first - what bounds this walk is the STEP cap, the one that
-     *  raises a named {@link TraversalException} instead of returning. Depth stays at the default
-     *  {@link ArtifactStore#MAX_SEGMENTS} ceiling, which every key the store would accept fits inside. */
+    /** The pool descent's budget, one probe per opened node. {@code blobKeys} feeds holds, eviction and
+     *  {@code servedPaths}, so a truncated answer is a wrong one: the entry cap equals the step budget so only the step
+     *  cap, which raises a {@link TraversalException}, can bind. Depth stays at {@link ArtifactStore#MAX_SEGMENTS}. */
     private static final int POOL_NODES = 1_000_000;
 
     private static final PagedTreeWalk POOL = PagedTreeWalk.bounded().steps(POOL_NODES).entries(POOL_NODES)
             .page(BoundedChildren.DRAIN_PAGE);
 
-    /** The filename version - the control {@code Version} with any {@code epoch:} prefix removed, the same token the
-     *  {@code <package>_<version>_<arch>.deb} filename (and {@link #describe}) carries, so a coordinate enumerated from
-     *  a filename matches the keys stored under it. */
+    /** The filename version: the control {@code Version} without its {@code epoch:} prefix, as the {@code .deb}
+     *  filename and {@link #describe} carry it. */
     private static String stripEpoch(String version) {
         int colon = version.indexOf(':');
         return colon < 0 ? version : version.substring(colon + 1);
     }
 
-    /** The request paths this package version serves at - its {@code .deb} pool key(s) mapped back to their request
-     *  path ({@code /debian/<suite>/pool/<component>/<file>.deb} = {@code /} + the store key), the inverse of
-     *  {@link #describe} - a retroactive hold links a {@code /quarantine} review handle at each. Derived from
-     *  {@link #blobKeys}, so it is non-empty exactly when the coordinate-scoped pool scan is wired. */
+    /** The request paths this package version serves: its pool keys from {@link #blobKeys} as request paths, where a
+     *  retroactive hold links its {@code /quarantine} handles. */
     @Override
     public List<String> servedPaths(String coordinate, String version, ArtifactStore store) throws IOException {
         List<String> paths = new ArrayList<>();
@@ -345,13 +300,10 @@ public final class DebianFormat implements RepositoryFormat, ProxyLeg, BlobLayou
         return paths;
     }
 
-    /** The coordinate a {@code .deb} request path carries, from the {@code <package>_<version>_<arch>.deb} filename
-     *  convention (Debian policy allows {@code _} in neither a package name nor a version, so the split is exact) -
-     *  the package name alone as the coordinate, the {@code Package} the Debian compliance inspector reads from the
-     *  control stanza. The filename version omits any epoch the control's {@code Version} carries, the one
-     *  path-underivable piece. Feeds the {@code published} record the retroactive enforcement sweeps enumerate the
-     *  version by. The generated {@code Release}/{@code Packages} indexes and the keyring endpoints name no package
-     *  and stay empty; a filename off the convention describes coordinate-less rather than guessing. */
+    /** The coordinate a {@code .deb} request path carries, from its {@code <package>_<version>_<arch>.deb} filename:
+     *  the package name, as the compliance inspector reads it from the control. The filename version lacks any epoch.
+     *  The generated indexes and the keyring endpoints name no package and stay empty, as does a filename off the
+     *  convention. */
     @Override
     public Optional<ArtifactDescriptor> describe(String path) {
         if (!path.startsWith("/debian/") || !path.endsWith(".deb")) {
@@ -366,7 +318,7 @@ public final class DebianFormat implements RepositoryFormat, ProxyLeg, BlobLayou
                 "application/vnd.debian.binary-package", false, null, -1L));
     }
 
-    // An original CC0 line glyph (a two-arc swirl) drawn for this project.
+    // An original CC0 line glyph (a two-arc swirl).
     private static final IconResource ICON = IconResource.svg("""
             <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round">
               <path d="M15 4.5a8 8 0 1 0 3 12.7"/><path d="M13 8.5a4 4 0 1 0 1.5 6.2"/>
@@ -414,47 +366,33 @@ public final class DebianFormat implements RepositoryFormat, ProxyLeg, BlobLayou
     }
 
     /**
-     * Whether a suite has anything left to show - the membership question {@code GET /debian/dists/} is actually
-     * asking, answered from the suite's own manifest where that manifest is current.
+     * Whether a suite has anything left to show, the membership question {@code GET /debian/dists/} asks.
      *
-     * <p>The screened enumeration cannot answer it. It probes {@code debian/<suite>/index} for a disclosable child,
-     * but the children there are component <em>containers</em>, not pointers, so there is no {@code withheld/<hash>}
-     * marker for the screen to find and the answer degrades to "does this suite carry an index at all". A suite whose
-     * every package is held would still list, and its own {@code Release} would then announce no components.
+     * <p>The screened enumeration cannot answer it: the children of {@code debian/<suite>/index} are component
+     * containers, not pointers, so a suite whose every package is held would still list. The suite manifest answers it
+     * exactly, since it holds a line only for an index with at least one servable package; an empty manifest means
+     * every package is held.
      *
-     * <p>The manifest answers it exactly, and for free: it holds one line per component/architecture index that
-     * carries <b>at least one servable package</b> - {@code generateManifest} skips an index whose {@code Packages}
-     * document is empty, and a hold empties one through {@code DebianListingObserver}. So an empty manifest is
-     * precisely "every package in this suite is held".
-     *
-     * <p><b>Only when it is current</b>, which is the part that makes this safe. The manifest is a deferred
-     * derivation, so a suite whose {@code Packages} landed a moment ago has none yet - and listing off a stale
-     * manifest would drop a freshly published suite from the autoindex, a failure the screened probe does not have.
-     * Inside that window this falls back to that probe; outside it the answer is exact. It deliberately does
-     * <em>not</em> call {@code announce} to catch the suite up the way a {@code Release} read may: that read is one
-     * suite, and doing it here is a write on a read fanned out over every suite in the repository.
+     * <p>Only while the manifest is current: it is a deferred derivation, and a stale one would drop a freshly
+     * published suite. Inside that window this falls back to the screened probe. It does not call {@code announce} to
+     * catch up, which would be a write on a read fanned out over every suite.
      */
     private static boolean disclosable(DebianListings listings, Blobs blobs, String suite) throws IOException {
-        // header(), not read(): read() is specified to MATERIALISE a listing that is absent, so asking it whether a
-        // manifest exists writes one - and on a suite whose indexes were never published through the listing path
-        // (a store seeded directly, which is a real shape in this product's own suites) the generated manifest is
-        // empty, which this method would then read as "every package is held" and hide a suite that serves. The
-        // stored header answers the question without generating anything.
+        // header(), not read(): read() materialises an absent listing, and a suite whose indexes were never published
+        // through the listing path would get an empty manifest and be hidden while it serves.
         if (listings.current(suite) && StoredListing.header(blobs.store(), DebianListings.manifest(suite)).isPresent()) {
             Optional<StoredListing.Document> manifest = StoredListing.read(blobs.store(), listings.manifestSpec(suite));
             if (manifest.isPresent()) {
                 return manifest.get().body().length > 0;
             }
         }
-        // No derivation has run for this suite yet (or it lags): fall back to the screened probe. Inside that window
-        // the answer is "does this suite carry an index".
+        // No derivation has run for this suite yet, or it lags: fall back to the screened probe.
         return ScreenedNames.keys(blobs.servableNames(), ServableNames.Policy.HIDE_WITHHELD)
                 .any(blobs.store(), "debian/" + suite + "/index");
     }
 
-    /** An autoindex of the hosted suites ({@code GET /debian/dists/}), each a link as a mirror's httpd would render
-     *  it - the page real apt mirrors expose and the one an enumeration (jenesis's own index walk included)
-     *  discovers suites from, since the apt protocol itself never lists them. */
+    /** An autoindex of the hosted suites ({@code GET /debian/dists/}), linked as a mirror's httpd renders it: the page
+     *  an enumeration discovers suites from, since apt never lists them. */
     private void suites(Blobs blobs, FormatExchange exchange) throws IOException {
         List<String> suites = new ArrayList<>();
         DebianListings listings = listings(blobs);
@@ -470,11 +408,8 @@ public final class DebianFormat implements RepositoryFormat, ProxyLeg, BlobLayou
         Collections.sort(suites);
         StringBuilder page = new StringBuilder("<html><body><h1>Index of /dists/</h1><a href=\"../\">../</a>");
         for (String suite : suites) {
-            // HTML-escape the suite in BOTH the href and the text: it is the first path segment of a publish
-            // (debian/<suite>/...), gated only by Keys.unsafe, which blocks '/' and control chars but permits < > " &.
-            // Concatenated raw into this text/html page it is a stored XSS (a suite like a"><img src=x onerror=...>
-            // executes in the gateway origin for anyone who opens /debian/dists/). Every sibling HTML index (PyPI, raw)
-            // escapes via XMLStreamWriter; this one must too.
+            // The suite is a publish path segment that may hold < > " &, so it is escaped in both the href and the
+            // text, or it would be stored cross-site scripting on this page.
             String escaped = htmlEscape(suite);
             page.append("<a href=\"").append(escaped).append("/\">").append(escaped).append("/</a>");
         }
@@ -482,14 +417,12 @@ public final class DebianFormat implements RepositoryFormat, ProxyLeg, BlobLayou
         exchange.respond(200, page.append("</body></html>").toString().getBytes(StandardCharsets.UTF_8));
     }
 
-    /** The index fields the server appends to a control to build the served {@code Packages} stanza; a source control
-     *  must not declare any of them (dpkg-scanpackages, not the packager, adds them), or the stanza would carry a
-     *  duplicate whose apt resolution is undefined. */
+    /** The index fields the server appends to a control to build the served stanza. A control must not declare any of
+     *  them, or the stanza would carry a duplicate whose apt resolution is undefined. */
     private static final Set<String> RESERVED_INDEX_FIELDS = Set.of("filename", "size", "md5sum", "sha1", "sha256");
 
-    /** Whether {@code control} declares one of the {@linkplain #RESERVED_INDEX_FIELDS reserved index fields}. A field
-     *  header starts a line (a folded continuation begins with a space or tab and is skipped) and is matched
-     *  case-insensitively, as Debian field names are. */
+    /** Whether {@code control} declares a {@linkplain #RESERVED_INDEX_FIELDS reserved index field}: a field header
+     *  starts a line (a folded continuation does not) and is matched case-insensitively. */
     private static boolean declaresReservedIndexField(String control) {
         return control.lines().anyMatch(line -> {
             int colon = line.indexOf(':');
@@ -500,8 +433,7 @@ public final class DebianFormat implements RepositoryFormat, ProxyLeg, BlobLayou
         });
     }
 
-    /** HTML-escape a value for safe inclusion in both an attribute and element text: the five characters that could
-     *  otherwise break out of the surrounding markup. */
+    /** HTML-escape a value for an attribute or element text. */
     private static String htmlEscape(String value) {
         return value.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
                 .replace("\"", "&quot;").replace("'", "&#39;");
@@ -514,12 +446,9 @@ public final class DebianFormat implements RepositoryFormat, ProxyLeg, BlobLayou
         return method.equals("POST") && (path.equals("/debian/keyring") || path.equals("/debian/keyring/trusted"));
     }
 
-    /**
-     * Ensure a signing key exists, generating one on the first call, and answer its public key at once
-     * ({@link #keys}). The signed {@code Release} twins are derived on index writes, so the suites indexed before the
-     * key existed are signed now rather than on their next push - on the node's derivation thread, a page of them at
-     * a time, so the answer costs one key and never a walk of every suite.
-     */
+    /** Ensure a signing key exists, generating one on the first call, and answer its public key ({@link #keys}). Suites
+     *  indexed before the key existed are re-signed on the node's derivation thread, a page at a time, so the answer
+     *  costs one key and never a walk. */
     private void provisionKey(Blobs blobs, FormatExchange exchange) throws IOException {
         if (keys(blobs).signer().isEmpty()) {
             keys(blobs).provision();
@@ -571,19 +500,14 @@ public final class DebianFormat implements RepositoryFormat, ProxyLeg, BlobLayou
         return new SigningKeys(blobs.store(), "debian/keyring/signing", IDENTITY, KEY_VALIDITY, ROTATION_WINDOW);
     }
 
-    /** The largest trusted-signers key upload accepted: an armored PGP public key (or a small bundle of them) is a few
-     *  kilobytes, so a megabyte is generous. The body is read through a bounded {@code readNBytes} so an oversize
-     *  upload is refused up front and never buffered whole in heap - the same cap every other format upload applies. */
+    /** The largest trusted-signers key upload, read through a bounded {@code readNBytes} so an oversize upload is
+     *  refused and never buffered; an armored key is a few kilobytes. */
     private static final int MAX_TRUSTED_KEY = 1024 * 1024;
 
-
-    /** Provision a trusted-signers key: an armored public key uploaded here is merged into the trusted keyring, and
-     *  from then on the signature dimension expects every pushed {@code .deb} to carry an embedded signature that
-     *  verifies against one of these keys - an unsigned package is a {@code signature-missing} finding, one signed
-     *  by another key {@code signature-untrusted}, a signature that does not stand {@code signature-invalid}, each
-     *  decided by its dial. This format itself judges nothing on push: a {@code 403} beside the dimension's verdict
-     *  would be two judgements of one upload that disagree in shape (a refusal stores nothing to review and nothing
-     *  to release), and the keyring this writes is what the dimension's Debian trust reads. */
+    /** Provision a trusted-signers key: an armored public key merged into the trusted keyring. From then on the
+     *  signature dimension expects every pushed {@code .deb} to carry an embedded signature verifying against one of
+     *  these keys, each outcome decided by its dial. This format judges nothing on push, so one upload never gets two
+     *  judgements. */
     private void addTrustedKey(Blobs blobs, FormatExchange exchange) throws IOException {
         byte[] key = exchange.requestStream().readNBytes(MAX_TRUSTED_KEY + 1);
         if (key.length > MAX_TRUSTED_KEY) {
@@ -600,9 +524,9 @@ public final class DebianFormat implements RepositoryFormat, ProxyLeg, BlobLayou
         exchange.respond(201);
     }
 
-    /** The current signer, or {@code null} when no key is provisioned. A near-expiry key rotates as it is asked
-     *  for, in the one write that also publishes its successor's public half beside the retiring one, so a client
-     *  that already trusts the retiring key still verifies an {@code InRelease} it signed during the overlap. */
+    /** The current signer, or {@code null} when none is provisioned. A near-expiry key rotates as it is asked for, in
+     *  the write that publishes its successor beside it, so a client trusting the retiring key still verifies during
+     *  the overlap. */
     private OpenPgpSigner signer(Blobs blobs) throws IOException {
         return keys(blobs).signer().orElse(null);
     }
@@ -613,21 +537,15 @@ public final class DebianFormat implements RepositoryFormat, ProxyLeg, BlobLayou
             exchange.respond(400);
             return;
         }
-        // Stream the .deb straight into the content-addressed store (hash-on-write), never buffering the whole
-        // (unbounded) package into heap; then reopen the stored blob to parse its control and digest it - the
-        // store-then-gate publish the gems/cocoapods formats use. The SHA-256 the store returns is the package's
-        // SHA256 checksum, so it is not recomputed. Its signature is not judged here: the edge ran the discovered
-        // interceptor chain over the body before this was called, and the signature dimension is where an embedded
-        // signature is verified against the trusted keyring and its absence decided (expects() says when).
+        // Streamed into the content-addressed store, then the stored blob is reopened to parse its control; the store's
+        // SHA-256 is the package's SHA256 checksum. The signature is judged by the signature dimension, not here.
         String hash = blobs.store(exchange.requestStream());
         String control;
         try (InputStream deb = blobs.open(hash)) {
             control = control(deb);
         } catch (RuntimeException | IOException malformed) {
-            // A control that cannot be read within the bounded scan (a decompression bomb the bound truncated, or an
-            // otherwise unreadable ar/tar) is a malformed upload, not a server error: fall through to the 400 below
-            // rather than let the parse exception escape handle() as a 500. The store-open IOException itself is rare;
-            // treating an unreadable .deb as a rejected publish is the safe outcome (nothing was indexed).
+            // An unreadable control - a bomb the bound truncated, a broken ar/tar - is a malformed upload: the 400
+            // below rather than a 500.
             control = null;
         }
         String architecture = control == null ? null : DebianListings.field(control, "Architecture");
@@ -636,37 +554,28 @@ public final class DebianFormat implements RepositoryFormat, ProxyLeg, BlobLayou
             return;
         }
         if (control.stripTrailing().lines().anyMatch(String::isBlank)) {
-            // A .deb's control is a SINGLE paragraph. The control blob is echoed verbatim into this package's stored
-            // stanza and later concatenated into the served Packages index, where a blank line separates stanzas - so a
-            // control carrying an internal blank line would splice a second, fully attacker-chosen stanza (a phantom
-            // package whose Filename: points at any blob) into the shared index: repository-wide apt poisoning that the
-            // single-line field()/Package-vs-filename checks do not catch. Refuse a multi-paragraph control outright.
-            // (Debian folded/continuation lines begin with a space or tab and are not blank, so a legitimate single
-            // stanza never trips this.)
+            // A control is a single paragraph. It is echoed into the served Packages, where a blank line separates
+            // stanzas, so an internal blank line would splice an attacker-chosen stanza into the shared index. Folded
+            // lines begin with a space or tab and are not blank.
             exchange.respond(400);
             return;
         }
         if (declaresReservedIndexField(control)) {
-            // The server appends the AUTHORITATIVE Filename/Size/MD5sum/SHA1/SHA256 to the control to build this
-            // package's Packages stanza. A control that already declares one of these would produce a stanza with a
-            // DUPLICATE field, and apt's resolution of a duplicate is undefined - an injected Filename could steer apt
-            // at a different blob path than the one published. These fields are never present in a source .deb control
-            // (dpkg-scanpackages adds them at index time), so refuse a control that carries one.
+            // The server appends the authoritative Filename, Size and checksums; a control declaring one would produce
+            // a duplicate field, which could steer apt at another blob. A source control never carries them.
             exchange.respond(400);
             return;
         }
         String suite = segments[0], component = segments[2], file = segments[segments.length - 1];
         if (Keys.unsafe(suite) || Keys.unsafe(component) || Keys.unsafe(architecture) || Keys.unsafe(file)
                 || component.startsWith("@")) {
-            // A control-supplied architecture (or a path segment) must not forge a pointer key, and a component
-            // beginning with @ would collide with the suite's stamp beside its component listings.
+            // A control-supplied architecture must not forge a pointer key, and a component beginning with @ would
+            // collide with the suite's stamp.
             exchange.respond(400);
             return;
         }
-        // The .deb filename deploys the package under <pkg>_<version>_<arch>.deb (the coordinate the importer screens
-        // on); the served Packages stanza's Package: comes from the embedded control. They MUST agree - otherwise a
-        // .deb screened under one package name would be served under the control's own name (a screen-label bypass),
-        // the way Composer/CocoaPods refuse a manifest that disagrees with the deploy path.
+        // The filename's package is the coordinate the edge screens, and the stanza's Package comes from the control.
+        // They must agree, or a package screened under one name would be served under another.
         String pathPackage = null;
         if (file.endsWith(".deb")) {
             String[] nameParts = file.substring(0, file.length() - ".deb".length()).split("_");
@@ -682,8 +591,7 @@ public final class DebianFormat implements RepositoryFormat, ProxyLeg, BlobLayou
         }
         long size = store.size("blobs/" + hash);
         String[] md5sha1 = digests(blobs, hash);
-        // Point the pool path at the stored blob through Blobs.link, which clears any gc/condemned marker on a blob a
-        // collector already judged unreferenced (re-pushing byte-identical content dedupes to that same blob).
+        // Blobs.link clears any gc/condemned marker on a blob a collector judged unreferenced.
         try {
             blobs.linkRelease("debian/" + rest, hash, -1L);
         } catch (Publication.RepublishConflict taken) {
@@ -699,14 +607,12 @@ public final class DebianFormat implements RepositoryFormat, ProxyLeg, BlobLayou
         blobs.write(DebianListings.stanzaKey(suite, component, architecture, file),
                 stanza.getBytes(StandardCharsets.UTF_8));
         if (pathPackage != null) {
-            // The reverse index a coordinate's pool keys are found through without walking the pool: the file's
-            // version is the filename's (epoch-less), the one describe() reports.
+            // The reverse index from a coordinate to its pool keys, by the filename's epoch-less version.
             String[] nameParts = file.substring(0, file.length() - ".deb".length()).split("_");
             blobs.note(DebianListings.reverseKey(suite, pathPackage, nameParts[1], file), rest);
         }
-        // The served index is written here, on the push, rather than generated on every read: the stanza joins the
-        // component/architecture Packages document (if the package is servable), which re-derives Packages.gz and
-        // the suite's Release family.
+        // The served index is maintained here, on the push: the stanza joins its Packages document if servable, which
+        // re-derives Packages.gz and the suite's Release family.
         listings(blobs).published(suite, component, architecture, file, stanza);
         exchange.respond(201);
     }
@@ -723,9 +629,7 @@ public final class DebianFormat implements RepositoryFormat, ProxyLeg, BlobLayou
         }
     }
 
-    /** The {@code MD5sum} and {@code SHA1} of a stored blob, computed in a single reopened streaming pass (apt's
-     *  {@code Packages} stanza carries both alongside the content-addressed SHA256), so the package is never buffered
-     *  whole to digest it. */
+    /** The {@code MD5sum} and {@code SHA1} of a stored blob, computed in one streaming pass. */
     private static String[] digests(Blobs blobs, String hash) throws IOException {
         try {
             MessageDigest md5 = MessageDigest.getInstance("MD5");
@@ -752,8 +656,7 @@ public final class DebianFormat implements RepositoryFormat, ProxyLeg, BlobLayou
         long size = located.get().size();
         exchange.setResponseHeader("Content-Type", "application/vnd.debian.binary-package");
         if (exchange.method().equals("HEAD")) {
-            // Answer HEAD from the stored blob size (Content-Length, 200, no body) rather than streaming the whole
-            // .deb just to discard it - apt issues HEADs to probe a package's size and existence.
+            // HEAD answers from the stored size; apt probes size and existence with it.
             if (size >= 0) {
                 exchange.setResponseHeader("Content-Length", Long.toString(size));
             }
@@ -769,10 +672,9 @@ public final class DebianFormat implements RepositoryFormat, ProxyLeg, BlobLayou
         if (segments.length == 3 && (segments[2].equals("Release") || segments[2].equals("InRelease")
                 || segments[2].equals("Release.gpg"))) {
             String suite = segments[1];
-            // The Release family is derived from the suite manifest off the index write. A read that finds it absent
-            // (a suite read before its listings were materialised, or inside the window of the deferred derivation)
-            // or behind the newest index write brings it up to the indexes itself, once, rather than serve a Release
-            // older than a Packages it names; a suite with no index at all stays a 404.
+            // The Release family is derived off the index write. A read that finds it absent or behind the newest index
+            // write derives it once, rather than serve a Release older than a Packages it names; a suite with no index
+            // stays a 404.
             Optional<StoredListing.Served> served = StoredListing.openDerived(blobs.store(),
                     DebianListings.release(suite, segments[2]));
             if ((served.isEmpty() && !blobs.isEmpty("debian/" + suite + "/index"))
@@ -806,8 +708,7 @@ public final class DebianFormat implements RepositoryFormat, ProxyLeg, BlobLayou
             Optional<StoredListing.Served> served;
             String contentType;
             if (segments[4].endsWith(".gz")) {
-                // The twin is derived off the index write; a read compares its sequence with the index's (one
-                // header read) and derives it itself, once, when it arrived inside that window.
+                // A twin read inside the derivation's lag window derives it once.
                 Optional<StoredListing.Header> index = StoredListing.header(blobs.store(), spec.listing());
                 served = StoredListing.openDerived(blobs.store(), spec.listing() + ".gz");
                 if (served.isEmpty() || index.isEmpty() || served.get().header().seq() < index.get().seq()) {
@@ -843,20 +744,16 @@ public final class DebianFormat implements RepositoryFormat, ProxyLeg, BlobLayou
         }
     }
 
-    /** Stream a stored listing, with the cheap revalidation apt's refresh path relies on: the ETag is the stored
-     *  document's digest, so a matching {@code If-None-Match} answers {@code 304} from the header alone, and a
-     *  {@code HEAD} answers from the stored length without streaming the body. */
+    /** Stream a stored listing with the revalidation apt relies on: the ETag is the document's digest, so a matching
+     *  {@code If-None-Match} answers {@code 304} from the header, and {@code HEAD} answers from the stored length. */
     private static void respondListing(FormatExchange exchange, StoredListing.Served served, String contentType)
             throws IOException {
         Listings.serve(exchange, served, contentType);
     }
 
-    /**
-     * Proxy a Debian miss to the upstream apt repository (deb.debian.org). A {@code .deb} is immutable, so it is
-     * fetched, cached and served; a {@code Release}, {@code InRelease} or {@code Packages} is mutable and is streamed
-     * through - the upstream's paths are relative to its root, which maps to this repository's {@code /debian/}, so
-     * the index needs no rewrite and the upstream's signature stays valid over byte-for-byte cached packages.
-     */
+    /** Proxy a Debian miss to the upstream apt repository. A {@code .deb} is immutable, so it is fetched, cached and
+     *  served; {@code Release}, {@code InRelease} and {@code Packages} are mutable and streamed through, needing no
+     *  rewrite since the upstream's root maps to this repository's {@code /debian/}. */
     @Override
     public boolean pullThrough(FormatExchange exchange, ArtifactStore store, URI upstream,
                                ProxyFormat.Fetcher fetcher) throws IOException {
@@ -867,28 +764,15 @@ public final class DebianFormat implements RepositoryFormat, ProxyLeg, BlobLayou
             root += "/";
         }
         if (rest.endsWith(".deb")) {
-            // The digest this leg could not name at fetch time, recorded when the INDEX went past (see indexDigests).
-            // A pool path is exactly the Filename a Packages stanza declares, so the one key the request DOES carry
-            // is the key the record was written under.
+            // The digest recorded when the index went past (recordDigests), under the pool path, which is the stanza's
+            // Filename.
             ProxyRelay.Declared declared = recordedDigest(rest, store);
-            // Point-integrity, by recording rather than locating. Debian publishes a per-.deb SHA256 only
-            // inside a `Packages` index, keyed by `Filename: pool/.../x.deb` under a particular
-            // `dists/<suite>/<component>/binary-<arch>/` path, while a `.deb` lives in a SHARED `pool/` tree that
-            // many suites reference - so at THIS moment, holding only a pool path, the declaring index cannot be
-            // named. It does not have to be: apt fetches the index before the package and the index streams through
-            // this same leg, so the digest is written down on the way past and read here by the one key the pool
-            // path does carry (see recordDigests / recordedDigest).
+            // Debian publishes a .deb's SHA256 only inside a Packages index, and a pool path cannot name its index; but
+            // apt fetches the index first and it streams through this leg, so the digest was recorded on the way past.
+            // A corrupted body is refused and not cached. With no record yet the fill declares NONE and serves
+            // unverified: no index has told us.
             //
-            // What that changes: a corrupted body is now refused and NOT cached, instead of being stored and served
-            // to every client until eviction. The client was already safe - the signed Release -> Packages chain is
-            // relayed byte for byte and apt verifies each .deb against it - but the cache was not, and neither was a
-            // consumer that fetches a pool URL without apt (a script, a container build step).
-            //
-            // Where no record exists yet, the fill still declares NONE and the bytes are served unverified, exactly
-            // as before. That is the third state stated out loud: not "the document declares no digest" and not
-            // "the document could not be read", but "no index has told us yet".
-            // A .deb is an immutable artifact of unbounded size: stream it from the network straight into the
-            // content-addressed store rather than buffering the whole body, then re-serve it locally.
+            // Streamed from the network into the content-addressed store, since a .deb is unbounded.
             URI target = URI.create(root + rest);
             try (ProxyFormat.Download download = fetcher.download(target, Map.of()).orElse(null)) {
                 if (download == null || download.status() != 200) {
@@ -901,30 +785,17 @@ public final class DebianFormat implements RepositoryFormat, ProxyLeg, BlobLayou
             handle(exchange, store);
             return true;
         }
-        // A non-.deb path is a mutable index (Release/InRelease/Packages) or a large index/source body (Contents-*.gz,
-        // *.orig.tar.gz): stream it through from upstream rather than buffering the whole body with fetch(). The bytes
-        // pass through unchanged, so the upstream's signature over a byte-for-byte body stays valid. Forward the
-        // client's conditional-request validators so a 304-capable apt's revalidation reaches the upstream, and relay
-        // the upstream's validators back so its next refresh can revalidate rather than re-pulling the whole index.
+        // Anything else is a mutable index or a large source body, streamed through unchanged so the upstream's
+        // signature stays valid, with conditional-request validators forwarded both ways so apt can revalidate.
         //
-        // The one streaming leg carries both classes of document - enumerations and pinned files - so it is split by
-        // the archive layout that separates them. Under dists/ live the documents apt RESOLVES against -
-        // InRelease/Release name the components and their index digests, Packages lists every package and version in a
-        // component, Contents-* lists their files - and there an absence is an answer ("this suite has no such
-        // component", "this component is empty") that apt acts on, so a fetch this repository could not make must not
-        // be rendered as one. Under pool/ live already-resolved bodies apt reached BY name out of one of those indexes
-        // (a source .orig.tar.gz, a .dsc, a .diff.gz), and there the contract's 404 keeps its "not cached here,
-        // re-pull" meaning exactly as it does for the .deb above.
+        // Under dists/ live the documents apt resolves against, where an absence is an answer, so a fetch that could
+        // not be made must not render as one; under pool/ live bodies reached by name, where a 404 means "re-pull".
         ProxyRelay.Document document = rest.startsWith("pool/")
                 ? ProxyRelay.Document.PINNED
                 : ProxyRelay.Document.ENUMERATION;
-        // A Packages index is the only place Debian publishes a per-.deb SHA256, and it goes past here on its way to
-        // apt. Read it as it streams - whichever of the plain, .gz, .xz or by-hash forms apt asked for, told apart
-        // by the bytes - and record what it declares, so the pool fetch above has a digest to hold the body to,
-        // with the digest of the index as relayed beside it. And keep the suite's InRelease, which is what commits
-        // to that digest: together they are what lets a proxied package be judged by the archive's signature
-        // (indexCoverage). A deployment whose client fetches neither records nothing and degrades to the unverified
-        // fill, which the fill states rather than hides.
+        // A Packages index - plain, .gz, .xz or by-hash, told apart by its bytes - is read as it streams and what it
+        // declares is recorded with its relayed digest, and the suite's InRelease is kept: together they let a proxied
+        // package be held to its digest and judged by the archive's signature (indexCoverage).
         ProxyRelay.Tap tap = null;
         if (packagesIndex(rest)) {
             tap = body -> recordIndex(body, store, rest);
@@ -939,8 +810,7 @@ public final class DebianFormat implements RepositoryFormat, ProxyLeg, BlobLayou
         return "debian/index-digest/" + poolPath;
     }
 
-    /** The store keys the digest of a relayed index, as its bytes went past, is recorded under - by the index's own
-     *  request path under {@code dists/}, which is what a package's record names as its source. */
+    /** The keys the digest of a relayed index is recorded under, by the index's request path under {@code dists/}. */
     private static final String INDEX_DIGESTS = "debian/index-sha256/";
 
     /** The store keys a suite's relayed {@code InRelease} is kept whole under, by suite. */
@@ -949,15 +819,9 @@ public final class DebianFormat implements RepositoryFormat, ProxyLeg, BlobLayou
     /** The most of a small record - a package's declaration, an index's digest - a reader takes back. */
     private static final int SMALL_RECORD = 4096;
 
-    /**
-     * What a relayed {@code Packages} index declared for the {@code .deb} at {@code poolPath}, as the fill's digest
-     * claim - or {@link ProxyRelay.Declared#NONE} when no index has passed through yet.
-     *
-     * <p>Absence is not a refusal. apt fetches the index before the package, so in the ordinary flow the record is
-     * there; a first-ever pool fetch by something that skipped the index (a script, a container build step) still
-     * gets the bytes, unverified. Refusing it instead would turn a cache miss
-     * into an outage for a client the registry has no complaint about.
-     */
+    /** What a relayed {@code Packages} index declared for the {@code .deb} at {@code poolPath}, or
+     *  {@link ProxyRelay.Declared#NONE} when no index has passed through yet. Absence is not a refusal: a client that
+     *  skipped the index still gets the bytes, unverified. */
     private static ProxyRelay.Declared recordedDigest(String poolPath, ArtifactStore store) {
         try {
             Optional<ArtifactStore.Versioned> recorded = store.readVersioned(digestKey(poolPath));
@@ -965,9 +829,8 @@ public final class DebianFormat implements RepositoryFormat, ProxyLeg, BlobLayou
                 return ProxyRelay.Declared.NONE;
             }
             String sha256 = properties(recorded.get().content()).getProperty("sha256");
-            // of(), not text(): a Packages index states the digest in hex, and the fill compares raw bytes.
-            // text() is the Go h1: shape, where the declaration IS a string and is compared as one - passing
-            // hex through it makes every body mismatch, which reads as a corrupted upstream.
+            // of(), not text(): Packages states hex and the fill compares bytes; text() is for a declaration compared
+            // as a string.
             return sha256 == null
                     ? ProxyRelay.Declared.NONE
                     : ProxyRelay.Declared.of("SHA-256", HexFormat.of().parseHex(sha256.trim()));
@@ -976,23 +839,18 @@ public final class DebianFormat implements RepositoryFormat, ProxyLeg, BlobLayou
         }
     }
 
-    /** A relayed {@code Packages} index under {@code dists/}: the plain document, its {@code .gz} and {@code .xz}
-     *  twins, or a by-hash fetch of one of them, which names no suffix. apt takes whichever the {@code Release}
-     *  advertises, and for years that has been a compressed one, by hash. */
+    /** A relayed {@code Packages} index under {@code dists/}: plain, {@code .gz}, {@code .xz}, or a by-hash fetch of
+     *  one, which names no suffix. */
     private static boolean packagesIndex(String rest) {
         return rest.startsWith("dists/") && (rest.endsWith("/Packages") || rest.endsWith("/Packages.gz")
                 || rest.endsWith("/Packages.xz")
                 || rest.matches("dists/[^/]+/[^/]+/binary-[^/]+/by-hash/SHA256/[0-9a-fA-F]{64}"));
     }
 
-    /**
-     * Read a relayed {@code Packages} index as it streams - plain, or decompressed by its leading bytes, since a
-     * by-hash fetch names no suffix - recording each stanza's {@code Filename} -> {@code SHA256} with the suite and
-     * the index it came from, and at the end the digest of the bytes exactly as they were relayed: the digest the
-     * suite's {@code InRelease} names for this index, which is how a package's coverage by that signed index is
-     * later established ({@link #indexCoverage}). Decompressing costs one pass over the index per refresh, and buys
-     * the point-integrity hold and the coverage for the index apt actually fetches, which is never the plain one.
-     */
+    /** Read a relayed {@code Packages} index as it streams, decompressed by its leading bytes, recording each stanza's
+     *  {@code Filename} -> {@code SHA256} with its suite and index, and at the end the digest of the bytes as relayed,
+     *  which the suite's {@code InRelease} names ({@link #indexCoverage}). Decompressing costs a pass per refresh and
+     *  covers the compressed index apt actually fetches. */
     private static void recordIndex(InputStream body, ArtifactStore store, String rest) throws IOException {
         String suite = rest.split("/")[1];
         MessageDigest sha256 = sha256();
@@ -1018,12 +876,9 @@ public final class DebianFormat implements RepositoryFormat, ProxyLeg, BlobLayou
         return peek;
     }
 
-    /**
-     * Keep a suite's clearsigned {@code InRelease} as it streams, whole, so a package proxied from the suite can be
-     * judged against the index the archive signed. Held to the signature bound, since that is what a verifier reads
-     * it under: one past the bound is not kept and a stale copy is dropped, so nothing vouches for a package on the
-     * strength of a document that cannot be verified.
-     */
+    /** Keep a suite's clearsigned {@code InRelease} whole as it streams. Held to the signature bound a verifier reads
+     *  it under: one past it is not kept and a stale copy is dropped, so nothing vouches on an unverifiable
+     *  document. */
     private static void keepInRelease(InputStream body, ArtifactStore store, String rest) throws IOException {
         String key = INDEX_COPIES + rest.split("/")[1] + "/InRelease";
         byte[] copy = body.readNBytes(ArtifactSignatures.Material.LARGEST_SIGNATURE + 1);
@@ -1037,13 +892,9 @@ public final class DebianFormat implements RepositoryFormat, ProxyLeg, BlobLayou
         writeRecord(store, key, copy);
     }
 
-    /**
-     * Read a {@code Packages} index as it streams and record each stanza's {@code Filename} -> {@code SHA256}.
-     *
-     * <p>Line by line, holding one stanza's two fields at a time: an index is tens of megabytes and this must not
-     * grow with it. A record is written only when it differs from what is already stored, so a daily index refresh
-     * over an unchanged suite writes nothing.
-     */
+    /** Record each stanza's {@code Filename} -> {@code SHA256} from a streaming {@code Packages} index, holding one
+     *  stanza's two fields at a time. A record is written only when it differs, so a refresh of an unchanged suite
+     *  writes nothing. */
     private static void recordDigests(InputStream body, ArtifactStore store, String suite, String index)
             throws IOException {
         BufferedReader lines = new BufferedReader(new InputStreamReader(body, StandardCharsets.UTF_8));
@@ -1061,17 +912,15 @@ public final class DebianFormat implements RepositoryFormat, ProxyLeg, BlobLayou
                 sha256 = line.substring("SHA256:".length()).trim();
             }
             if (recorded >= MAX_RECORDED_DIGESTS) {
-                // Stop rather than grow without bound. Past this the remaining packages proxy unverified, as a package
-                // with no recorded digest does - a cap degrades to that answer, it does not refuse.
+                // Past the cap the remaining packages proxy unverified, as an unrecorded package does.
                 return;
             }
         }
         record(filename, sha256, store, suite, index);   // an index whose last stanza has no trailing blank line
     }
 
-    /** Store one declaration - {@code sha256}, {@code suite} and {@code index}, a properties document written by
-     *  hand so an unchanged declaration compares equal and is not rewritten - or nothing when the stanza carried no
-     *  pair or the store already agrees. */
+    /** Store one declaration - {@code sha256}, {@code suite} and {@code index} as properties written so an unchanged
+     *  one compares equal - or nothing when the stanza carried no pair or the store already agrees. */
     private static int record(String filename, String sha256, ArtifactStore store, String suite, String index)
             throws IOException {
         if (filename == null || sha256 == null || Keys.unsafe(filename.replace("/", ""))) {
@@ -1081,9 +930,8 @@ public final class DebianFormat implements RepositoryFormat, ProxyLeg, BlobLayou
         return writeRecord(store, digestKey(filename), document.getBytes(StandardCharsets.UTF_8)) ? 1 : 0;
     }
 
-    /** Write a record unless the store already holds these bytes: compare-and-set on the token, since two nodes
-     *  relaying the same index refresh concurrently is ordinary and a lost race means the other node wrote the same
-     *  bytes. A refused write is not an error here. */
+    /** Write a record unless the store already holds these bytes, by compare-and-set: two nodes relaying the same
+     *  refresh write the same bytes, so a lost race is not an error. */
     private static boolean writeRecord(ArtifactStore store, String key, byte[] content) throws IOException {
         Optional<ArtifactStore.Versioned> current = store.readVersioned(key);
         if (current.isPresent() && Arrays.equals(current.get().content(), content)) {
@@ -1107,9 +955,8 @@ public final class DebianFormat implements RepositoryFormat, ProxyLeg, BlobLayou
         }
     }
 
-    /** Read the {@code control} stanza from a {@code .deb}: find the {@code control.tar[.gz|.xz|.zst]} member of the
-     *  {@code ar} archive, decompress it, and return the {@code ./control} entry of that tar - all via Commons
-     *  Compress rather than hand-parsed. */
+    /** Read the {@code control} stanza from a {@code .deb}: the {@code ./control} entry of the decompressed
+     *  {@code control.tar[.gz|.xz|.zst]} member of the {@code ar} archive. */
     private static String control(InputStream deb) throws IOException {
         try (ArArchiveInputStream archive = new ArArchiveInputStream(deb)) {
             for (ArArchiveEntry entry = archive.getNextEntry(); entry != null; entry = archive.getNextEntry()) {
@@ -1122,8 +969,7 @@ public final class DebianFormat implements RepositoryFormat, ProxyLeg, BlobLayou
         return null;
     }
 
-    /** The decompressed control tar for an {@code ar} member by name, or null when the member is not the control
-     *  archive (so iteration skips {@code debian-binary} and {@code data.tar.*}). */
+    /** The decompressed control tar for an {@code ar} member, or null when the member is not the control archive. */
     private static InputStream controlTar(String name, InputStream member) throws IOException {
         return switch (name) {
             case "control.tar.gz" -> new GzipCompressorInputStream(member);
@@ -1134,15 +980,10 @@ public final class DebianFormat implements RepositoryFormat, ProxyLeg, BlobLayou
         };
     }
 
-    // The decompressed control.tar is attacker-supplied, so its ./control member is read under the product's one
-    // archive-inflation ceiling, ArchiveInflation.largestEntry(), settable at jenrepo.archive.largest-entry - not
-    // under a private constant of this format's (RepositoryFormat contract clause 15).
 
-    // How far the decompressed control.tar is walked to reach ./control is the product's one archive-walk bound,
-    // ArchiveWalk.largestWalk(), settable at jenrepo.archive.largest-walk. It is a different bound from the inflation
-    // ceiling above and both are needed: capping only the stanza read does not bound the walk PAST a preceding entry,
-    // so a control.tar.gz whose first member is a giant run would inflate unbounded while getNextEntry() skips it.
-    // A bomb before ./control leaves it unfound - an unparsable control, a rejected publish.
+    // The control tar is attacker-supplied: the walk to ./control is bounded by ArchiveWalk.largestWalk() and the entry
+    // by ArchiveInflation.largestEntry() (RepositoryFormat clause 15). Both are needed, since bounding only the entry
+    // leaves a giant member before ./control to inflate while it is skipped; a bomb there leaves ./control unfound.
 
     private static String controlEntry(InputStream stream) throws IOException {
         return ArchiveWalk.walk(stream, DebianFormat::controlStanza).orNull();
@@ -1153,9 +994,8 @@ public final class DebianFormat implements RepositoryFormat, ProxyLeg, BlobLayou
         try (TarArchiveInputStream tar = new TarArchiveInputStream(stream, "UTF-8")) {
             for (TarArchiveEntry entry = tar.getNextEntry(); entry != null; entry = tar.getNextEntry()) {
                 if (entry.getName().equals("./control") || entry.getName().equals("control")) {
-                    // The stanza carries the .deb's coordinate and every field the generated Packages index echoes,
-                    // so a read the ceiling stopped fails closed (the caller's 400) and SAYS SO, rather than being
-                    // returned as the same null a .deb with no control member yields, which would conflate the two.
+                    // A read the ceiling stopped fails closed and says so, rather than returning the null a missing
+                    // member yields.
                     return new String(ArchiveInflation.entry(tar).required("Debian .deb", "./control stanza"),
                             StandardCharsets.UTF_8);
                 }
@@ -1164,8 +1004,7 @@ public final class DebianFormat implements RepositoryFormat, ProxyLeg, BlobLayou
         return null;
     }
 
-    /** The migration-import capability, delegated to the layout-only {@link DebianImporter} - the format IS the
-     *  discovered importer now (an {@code instanceof} capability), and the importer class stays as its delegate. */
+    /** The migration-import capability, delegated to {@link DebianImporter}. */
     private final DebianImporter importer = new DebianImporter();
 
     @Override

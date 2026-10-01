@@ -1,16 +1,10 @@
 /**
- * The Debian/apt format as a plugin module: it provides {@link build.jenesis.repository.format.RepositoryFormat}
- * for the {@code /debian/...} layout - a {@code .deb} upload ({@code PUT /debian/<suite>/pool/<component>/<file>.deb}),
- * the binary {@code Packages} and {@code Release} indexes, stored listings the push maintains, the pool downloads, plus
- * pull-through proxying of an upstream apt repository (deb.debian.org). The {@code .deb} {@code ar} archive and its
- * {@code control.tar} are read with Commons Compress ({@code org.apache.commons.compress}) rather than hand-parsed;
- * the control tar is decompressed as gzip, {@code org.tukaani.xz} for {@code .xz} (the modern Debian {@code dpkg}
- * default) or {@code com.github.luben.zstd_jni} for {@code .zst} (Ubuntu's default), all through Commons Compress's
- * compressor streams. A hosted {@code Release} is
- * OpenPGP-signed with Bouncy Castle ({@code org.bouncycastle.pg}) when a key
- * is provisioned, since the JDK has no OpenPGP (only the raw RSA and digest primitives), and is otherwise unsigned
- * (apt trusts it with {@code [trusted=yes]}). A proxied upstream keeps its own signed {@code InRelease}, passed
- * through unchanged. Discovered through {@code provides}.
+ * The Debian/apt format as a plugin module: a {@link build.jenesis.repository.format.RepositoryFormat} for
+ * {@code /debian/...} - {@code .deb} uploads ({@code PUT /debian/<suite>/pool/<component>/<file>.deb}), the stored
+ * {@code Packages} and {@code Release} indexes, pool downloads, and pull-through of an upstream apt repository. The
+ * {@code ar} archive and its {@code control.tar} are read with Commons Compress, with {@code org.tukaani.xz} for
+ * {@code .xz} and {@code com.github.luben.zstd_jni} for {@code .zst}. A hosted {@code Release} is OpenPGP-signed with
+ * Bouncy Castle when a key is provisioned.
  *
  * @jenesis.release 25
  *
@@ -30,9 +24,8 @@ module build.jenesis.repository.format.debian {
     requires org.tukaani.xz;
     requires org.apache.commons.compress;
     requires com.github.luben.zstd_jni;
-    // The keyring's store key and cache namespace, which anything verifying a Debian signature must spell
-    // the same way as the format that writes it. Unqualified, because agreeing on a key is not access to a
-    // format's implementation - and a clause naming its readers by name could not name one it does not carry.
+    // The keyring's store key and cache namespace, which a verifier must spell as the format does; agreeing on a key is
+    // not access to the implementation, so the export is unqualified.
     exports build.jenesis.repository.format.debian.keys;
     exports build.jenesis.repository.format.debian to
             build.jenesis.repository.gateway.test, build.jenesis.repository.gateway.census.test,

@@ -11,31 +11,25 @@ import build.jenesis.repository.format.signing.OpenPgpSigner;
 import build.jenesis.repository.store.OwnerOnly;
 
 /**
- * The Debian suite's served indexes as stored listings: one {@code Packages} document per component and
- * architecture, its {@code Packages.gz} twin, and the suite's {@code Release} (with {@code InRelease} and
- * {@code Release.gpg} when a signing key is provisioned) - every one of them written when a push, a hold, a release
- * from hold, a yank or a removal changes it, and streamed as stored bytes on every read.
+ * The Debian suite's served indexes as stored listings: a {@code Packages} document per component and architecture, its
+ * {@code Packages.gz} twin, and the suite's {@code Release} (with {@code InRelease} and {@code Release.gpg} when a
+ * signing key is provisioned), each written when a push, hold, release, yank or removal changes it and streamed as
+ * stored on every read.
  *
- * <p>A {@code Packages} write lands on the request; what follows it - the gzip of the twins, the suite manifest, the
- * {@code Release} and its two signatures - is {@linkplain StoredListing#later deferred} off the request, one unit
- * per suite, so a burst of pushes costs one derivation rather than one per push. The suite's {@linkplain #touched
- * stamp} records the newest {@code Packages} write and its {@linkplain #announced acknowledgement} the newest one
- * the derivation has folded; a read of the {@code Release} family compares the two (two small reads), a read of
- * {@code Packages.gz} its twin's sequence with the index's, and each derives on the spot only when it arrives
- * inside the lag window - so a client never sees a twin or a {@code Release} older than the index.
+ * <p>A {@code Packages} write lands on the request; the twins, the suite manifest and the {@code Release} family are
+ * {@linkplain StoredListing#later deferred}, one unit per suite, so a burst of pushes costs one derivation. The suite's
+ * {@linkplain #touched stamp} records the newest {@code Packages} write and its {@linkplain #announced acknowledgement}
+ * the newest one derived; a read of the {@code Release} family compares the two, a read of {@code Packages.gz} its
+ * twin's sequence with the index's, and each derives on the spot inside the lag window, so a client never sees a twin
+ * or {@code Release} older than its index.
  *
- * <p>A {@code Packages} document's entries are the package stanzas, keyed by the {@code .deb} file name the stanza's
- * {@code Filename} ends in; an entry exists exactly when the package is servable - its pool pointer not withheld, its
- * version not yanked - which is the screen the on-read generation applied per stanza and now the write path applies
- * to the one stanza it touches. The suite's {@code Release} lists the digests of every component/architecture index
- * that carries at least one servable package; it is derived from a per-suite <em>manifest</em> listing whose entries
- * are those indexes' digests, updated by every {@code Packages} write, so two writers of different indexes serialise
- * on the manifest and the last one's {@code Release} names both their documents.
+ * <p>A {@code Packages} entry is a package stanza keyed by its {@code Filename}'s file name, present exactly when the
+ * package is servable - pool pointer not withheld, version not yanked. The {@code Release} names the digests of every
+ * index with a servable package, derived from a per-suite manifest of those digests that every {@code Packages} write
+ * updates, so two writers of different indexes serialise on the manifest.
  *
- * <p>The pool pointers and the per-package stanzas under {@code debian/<suite>/index/...} stay the durable truth the
- * listings are generated from when absent (a repository from before stored listings, or a document forgotten for
- * repair), and the {@code by/} reverse index written beside them maps a package coordinate back to its pool keys
- * without walking the pool.
+ * <p>The pool pointers and the stanzas under {@code debian/<suite>/index/...} are the durable truth a missing listing
+ * is generated from, and the {@code by/} reverse index maps a coordinate to its pool keys without walking the pool.
  */
 final class DebianListings {
 
@@ -109,9 +103,8 @@ final class DebianListings {
 
     // ---- specs ----
 
-    /** The {@code Packages} index of one component/architecture. Its write stamps the suite and defers the rest -
-     *  the {@code .gz} twins, the suite manifest and through it the {@code Release} family - off the request,
-     *  coalesced per suite. */
+    /** The {@code Packages} index of one component and architecture. Its write stamps the suite and defers the twins,
+     *  the manifest and the {@code Release} family, coalesced per suite. */
     StoredListing.Spec packagesSpec(String suite, String component, String architecture) {
         return StoredListing.Spec.of(packages(suite, component, architecture), STANZAS,
                         sink -> generatePackages(suite, component, architecture, sink))
@@ -128,10 +121,9 @@ final class DebianListings {
                 });
     }
 
-    /** Bring the suite's announced state up to its indexes: every lagging {@code .gz} twin, the manifest and
-     *  through it the {@code Release} family - the deferred unit, and what a read inside the lag window runs
-     *  itself. Acknowledges the stamp it started from; a write landing meanwhile advances the stamp past it and
-     *  the next unit (or the next read) folds that one. */
+    /** Bring the suite's announced state up to its indexes: every lagging twin, the manifest and the {@code Release}
+     *  family. The deferred unit, and what a read inside the lag window runs. Acknowledges the stamp it started from,
+     *  so a write landing meanwhile is folded by the next unit or read. */
     void announce(String suite) throws IOException {
         Optional<StoredListing.Header> stamp = StoredListing.header(store, touched(suite));
         StoredListing.rebuild(store, manifestSpec(suite));
@@ -151,8 +143,8 @@ final class DebianListings {
         return acknowledged.isPresent() && acknowledged.get().seq() >= stamp.get().seq();
     }
 
-    /** The {@code Packages} index with only its {@code .gz} twin derived - what the manifest's own generation reads
-     *  the indexes through, since it is computing the manifest those writes would otherwise update. */
+    /** The {@code Packages} index with only its twin derived, which the manifest's generation reads the indexes
+     *  through. */
     private StoredListing.Spec indexOnly(String suite, String component, String architecture) {
         return StoredListing.Spec.of(packages(suite, component, architecture), STANZAS,
                         sink -> generatePackages(suite, component, architecture, sink))
@@ -160,13 +152,9 @@ final class DebianListings {
                 .deriving(document -> deriveCompressed(suite, component, architecture, document));
     }
 
-    /** Derive this index's {@code .gz} twin from its newest stored {@code Packages} - what a twin read inside the
-     *  lag window runs itself. */
+    /** Derive this index's {@code .gz} twin from its newest stored {@code Packages}. */
     void compress(String suite, String component, String architecture) throws IOException {
-        // Streamed from the stored index, never read whole: a Packages index is every package in the suite, and
-        // holding it to compress it was the whole heap of a server that sets none - the debian-gzip canary's
-        // finding at three hundred thousand stanzas under 512 MiB, on the read path of a Packages.gz that arrived
-        // inside the derivation's lag window.
+        // Streamed, never read whole: an index is every package in the suite, and holding it exhausts a small heap.
         Optional<StoredListing.Served> served = StoredListing.open(store, indexOnly(suite, component, architecture));
         if (served.isPresent()) {
             try (StoredListing.Served document = served.get()) {
@@ -175,15 +163,8 @@ final class DebianListings {
         }
     }
 
-    /**
-     * Derive the {@code .gz} twin; its header, digested once here, is what the manifest line names.
-     *
-     * <p>Through a temporary file, because a {@code Packages} index is every package in the suite and holding it in
-     * heap would mean <b>two</b> copies of it at once - the document, and the gzip of the document - on the write
-     * path of every publish. The bytes are compressed straight out of the source stream and digested as they are
-     * written,
-     * so the peak is a buffer and the twin's digests still come from one pass.
-     */
+    /** Derive the {@code .gz} twin; its header, digested here, is what the manifest names. Through a temporary file, so
+     *  the peak is a buffer rather than two copies of the index - the document and its gzip - on every publish. */
     private StoredListing.Header deriveCompressed(String suite, String component, String architecture,
                                                   StoredListing.Derived document) throws IOException {
         Path compressed = OwnerOnly.createTempFile("jenrepo-packages", ".gz");
@@ -228,14 +209,8 @@ final class DebianListings {
 
     // ---- generation (first materialisation and repair) ----
 
-    /**
-     * Emit an entry per package, in the order the scan yields them.
-     *
-     * <p>The index names every package it covers, so collecting them into a sorted map held that whole set. The
-     * scan's order is the sink's order - the store's lexicographic child order, which is where the sorted map's
-     * ordering came from and is what now supplies it. The key here is the child name itself, which is what makes
-     * that substitution sound: a key composed across nested scans would not be in scan order.
-     */
+    /** Emit an entry per package in the scan's order, the store's lexicographic child order, which is the order the
+     *  sink needs since the key is the child name itself. */
     private void generatePackages(String suite, String component, String architecture,
                                   StoredListing.Generator.Sink sink) throws IOException {
         String prefix = "debian/" + suite + "/index/" + component + "/" + architecture;
@@ -262,9 +237,8 @@ final class DebianListings {
                 Optional<StoredListing.Header> plain = StoredListing.header(store,
                         packages(suite, component, architecture));
                 if (plain.isEmpty()) {
-                    // Not materialised yet: generate it (and its .gz) now, without the manifest derivation this very
-                    // generation is producing - through the rebuild, which writes without holding the document and
-                    // hands back the header, rather than a whole read of what it just wrote.
+                    // Not materialised: rebuild it and its twin, without the manifest derivation this generation is
+                    // producing.
                     plain = Optional.of(StoredListing.rebuild(store, indexOnly(suite, component, architecture)));
                 }
                 if (plain.isEmpty() || plain.get().size() == 0) {
@@ -274,10 +248,8 @@ final class DebianListings {
                         packages(suite, component, architecture) + ".gz");
                 if (gz.isEmpty() || gz.get().seq() != plain.get().seq() || gz.get().md5().isEmpty()
                         || plain.get().md5().isEmpty()) {
-                    // The twin is missing, lags, or either header carries no MD5 (a document stored through a
-                    // spec without one): re-derive from the stored body before naming it - streamed, never held,
-                    // for the reason compress() gives; a body without an MD5 is rebuilt first, since the manifest
-                    // names both digests and the rebuild's header carries them.
+                    // The twin is missing or lags, or a header lacks an MD5: re-derive from the stored body, streamed,
+                    // rebuilding a body without an MD5 first, since the manifest names both digests.
                     if (plain.get().md5().isEmpty()) {
                         StoredListing.rebuild(store, indexOnly(suite, component, architecture));
                     }
@@ -308,8 +280,8 @@ final class DebianListings {
         }
     }
 
-    /** Re-derive the suite's {@code Release} family from the stored manifest - after a signing key is provisioned,
-     *  so the signed twins appear without waiting for the next push. */
+    /** Re-derive the suite's {@code Release} family from the stored manifest, so a newly provisioned key signs it at
+     *  once. */
     void rederiveRelease(String suite) throws IOException {
         Optional<StoredListing.Document> manifest = StoredListing.read(store, manifestSpec(suite));
         if (manifest.isPresent()) {
@@ -377,8 +349,8 @@ final class DebianListings {
         }
     }
 
-    /** Whether the stanza's package is served: its pool pointer is not withheld and its version is not yanked - the
-     *  same screen the pool download applies, so the index and the download agree. */
+    /** Whether the stanza's package is served: the pool pointer not withheld and the version not yanked, the screen the
+     *  download applies. */
     boolean servable(String stanza) throws IOException {
         String filename = field(stanza, "Filename");
         if (filename == null || blobs.withheld("debian/" + filename)) {
@@ -397,8 +369,7 @@ final class DebianListings {
                 .isPresent();
     }
 
-    /** The index containers (component, architecture) of a suite that carry a stanza of this file - the ones a hold or
-     *  a mark on the package must refresh. */
+    /** The index containers of a suite carrying a stanza of this file: those a hold or mark on it must refresh. */
     List<String[]> indexesOf(String suite, String component, String file) throws IOException {
         List<String[]> indexes = new ArrayList<>();
         for (String architecture : blobs.list("debian/" + suite + "/index/" + component)) {
@@ -442,11 +413,8 @@ final class DebianListings {
         return out.toByteArray();
     }
 
-    /** The stride the repository-wide index is enumerated in. It <b>drains</b>: the index names every package by
-     *  definition, so neither the names nor the round-trips that fetch them may cap it, and what is bounded is how
-     *  many names are in hand. Capping either one silently omits packages - or, once the entry cap alone was lifted, stopped
-     *  omitting them and started throwing instead, at exactly {@code steps x page} names. That is the ceiling the
-     *  OCI tag canary hit at a million: a generator that raises {@code TraversalException} does not answer short,
-     *  it never materialises the document at all. */
+    /** The stride the repository-wide index is enumerated in. It drains: the index names every package, so neither
+     *  names nor round-trips are capped - a cap would omit packages or throw and never materialise the document - and
+     *  only the names in hand are bounded. */
     private static final BoundedChildren ENTRIES = BoundedChildren.draining();
 }
