@@ -11,31 +11,26 @@ import build.jenesis.repository.inventory.StoreRepositoryInventory;
 import build.jenesis.repository.store.ArtifactStore;
 
 /**
- * The licence inventory of one repository: how many of its versions declare each licence category and each SPDX id,
- * counted on request by a pass over every version and read back as a {@link StoredReport}.
+ * The licence inventory of one repository: how many versions declare each licence category and each SPDX id, counted on
+ * request by a pass over every version and read back as a {@link StoredReport}.
  *
- * <p>This is the one implementation every surface reaches - {@code GET /api/licenses}, the console's Licenses screen
- * and {@code jenrepo licenses} through the API - so they cannot disagree about what was counted or how. A request
- * never counts: {@link #read} is one point read of the stored report (and, while it says it is running, one of the
- * lease its run holds), and {@link #start} records the count as running, starts it on a thread of its own and answers
- * at once whether this call started it or found one already under way. A surface shows what it read and polls while a
- * count runs; nothing here waits for one to finish.
+ * <p>Every surface reaches this one implementation - {@code GET /api/licenses}, the console's Licenses screen and
+ * {@code jenrepo licenses} - so they cannot disagree. A request never counts: {@link #read} is a point read of the
+ * stored report (and of its run's lease while running), and {@link #start} records the count as running, starts it on
+ * its own thread and answers at once whether it started one. A surface polls while a count runs.
  *
- * <p><b>What is counted.</b> Every version the repository holds, once: {@link LicenseDerivation#resolve} gives a
- * version's licences the way the gate recorded them, or re-derives them from its stored metadata where it recorded
- * none, and a version counts once towards each distinct category and each distinct SPDX id among them. A licence
- * nothing identifies counts towards the {@code unknown} category and towards no SPDX id, as does a version that
- * declares none, so every version is in at least one category. The unit is a version, not a coordinate: a library
- * published in ten versions under one licence counts ten.
+ * <p><b>What is counted.</b> Every version once: {@link LicenseDerivation#resolve} gives its licences, and it counts
+ * once towards each distinct category and SPDX id among them. An unidentified licence, or none declared, counts towards
+ * {@code unknown} and no SPDX id, so every version is in some category. The unit is a version: ten versions under one
+ * licence count ten.
  *
- * <p><b>What is stored.</b> One row per count, tab-separated: {@code versions} with an empty value and the number of
- * versions counted, then {@code category} rows and then {@code license} rows, each with its value and its count of
- * versions, most versions first. The report keeps the first {@link StoredReport#SAMPLE} rows and records how many
- * there were, so a repository declaring more distinct licences than that reads as cut short rather than complete -
- * the categories, a handful, always fit.
+ * <p><b>What is stored.</b> One tab-separated row per count: {@code versions} with the total, then {@code category}
+ * rows, then {@code license} rows, each with its value and count, most versions first. The first
+ * {@link StoredReport#SAMPLE} rows are kept with the total, so more distinct licences than that read as cut short; the
+ * handful of categories always fit.
  *
- * <p>It depends on nothing that indexes: the count is the same whether or not a repository's full-text search is on.
- * Only a drill-down from a count to the versions behind it needs the index, which is the surfaces' concern.
+ * <p>It needs no index: the count is the same with full-text search on or off. Only a drill-down to the versions behind
+ * a count needs the index.
  */
 public final class LicenseReport {
 
@@ -65,12 +60,10 @@ public final class LicenseReport {
     public record Count(String value, long versions) {
     }
 
-    /**
-     * The inventory as it is stored: its state, when the count started and when it finished ({@code null} until it
-     * has), why it failed if it did, how many versions it counted, the counts per category and per SPDX id, how many
-     * rows the count produced, whether some of them were left out of what was kept, and - while a count runs or
-     * after one failed - the {@code previous} finished count, which a surface keeps showing until a new one lands.
-     */
+    /** The inventory as stored: its state, start and finish ({@code null} until finished), why it failed, how many
+     *  versions it counted, the counts per category and SPDX id, how many rows the count produced, whether some were
+     *  left out, and - while running or after a failure - the {@code previous} finished count a surface keeps
+     *  showing. */
     public record Inventory(State state, Instant startedAt, Instant finishedAt, String failure, long versions,
                             List<Count> categories, List<Count> licenses, int rows, boolean truncated,
                             Inventory previous) {
@@ -101,9 +94,9 @@ public final class LicenseReport {
     }
 
     /**
-     * The repository's inventory as the last count left it, {@link State#NOT_COUNTED} when none was ever asked for.
-     * A report still saying it runs while no run holds its lease was left by a run that died - its node went away -
-     * and reads as failed, so a surface does not poll a count that will never finish.
+     * The repository's inventory as the last count left it, {@link State#NOT_COUNTED} when none was asked for. A report
+     * saying it runs while no run holds its lease was left by a run whose node went away, and reads as failed, so a
+     * surface does not poll it for ever.
      *
      * @param repository the repository's scoped store
      */
@@ -128,8 +121,8 @@ public final class LicenseReport {
     }
 
     /**
-     * Start a count of the repository's versions in the background, unless one is already running on any node.
-     * Answers whether this call started it; either way the count's progress is what {@link #read} answers next.
+     * Start a count of the repository's versions in the background unless one runs on any node; answers whether this
+     * call started it. Either way {@link #read} answers its progress.
      *
      * @param repository the repository's scoped store
      */
@@ -137,10 +130,8 @@ public final class LicenseReport {
         return StoredReport.compute(repository, NAME, new Tally(repository));
     }
 
-    /**
-     * Count the repository's versions now, on the calling thread, and answer the rows the report keeps - the pass
-     * {@link #start} runs, for a caller already off the request path.
-     */
+    /** Count the repository's versions now, on the calling thread, and answer the rows the report keeps -
+     *  {@link #start}'s pass, for a caller already off the request path. */
     public static StoredReport.Rows count(ArtifactStore repository) throws IOException {
         return new Tally(repository).run();
     }
@@ -173,11 +164,8 @@ public final class LicenseReport {
                 licenses, report.count(), report.count() > report.rows().size(), null);
     }
 
-    /**
-     * The pass: a stream of every version the repository holds, each resolved to its licences and folded into the
-     * tallies as it arrives, so nothing but the tallies is held. A named class rather than a lambda at the call site,
-     * because what {@link #start} hands over is work to run later, not work to do now.
-     */
+    /** The pass: every version streamed, resolved to its licences and folded into the tallies as it arrives, so only
+     *  the tallies are held. A named class because {@link #start} hands over work to run later. */
     private static final class Tally implements StoredReport.Pass, RepositoryInventory.ReleaseVisitor {
 
         private final ArtifactStore repository;
@@ -192,9 +180,8 @@ public final class LicenseReport {
 
         @Override
         public StoredReport.Rows run() throws IOException {
-            // The table is read here, on the count's own thread and off the request that asked for it, from the
-            // deployment's compliance settings - the licences an operator added are deployment-wide. A value that
-            // does not parse fails the count, naming the row.
+            // The table is read on the count's own thread from the deployment's compliance settings; a value that does
+            // not parse fails the count, naming the row.
             derivation = new LicenseDerivation(repository, LicenseTable.of(ComplianceSettings.lookup(repository)));
             new StoreRepositoryInventory(repository).releases(this);
             List<String> rows = new ArrayList<>();

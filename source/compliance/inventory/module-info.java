@@ -1,9 +1,7 @@
 /**
- * The licence inventory of a repository: how many of its versions declare each licence category and each SPDX id,
- * counted on request off the request path and read back as a stored report by the API, the console and the CLI
- * alike - and the resolution of one version's declared licences that the count and the full-text index's licence
- * fields share. It indexes nothing and needs no index: the inventory is the same whether or not a repository's
- * full-text search is on.
+ * The licence inventory of a repository - how many versions declare each licence category and SPDX id, counted off the
+ * request path and read back as a stored report by the API, the console and the CLI - and the resolution of a version's
+ * declared licences that the count and the search index's licence fields share. It needs no index.
  *
  * @jenesis.release 25
  * @jenesis.bom pin-repository.properties
