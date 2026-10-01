@@ -21,46 +21,35 @@ import build.jenesis.repository.store.StoredListing;
 import build.jenesis.repository.store.Publication;
 
 /**
- * The Windows Package Manager REST source protocol, so {@code winget search} and {@code winget install} resolve
- * against this repository once a client has added it with
- * {@code winget source add -n <name> -a <base>/winget/<repo> -t Microsoft.Rest}.
+ * The Windows Package Manager REST source protocol, so {@code winget search} and {@code winget install} resolve against
+ * this repository once a client has run {@code winget source add -n <name> -a <base>/winget/<repo> -t Microsoft.Rest}.
  *
  * <p><b>The three read routes are Microsoft's; the two write routes are ours.</b> {@code GET information} answers the
- * source identifier and the protocol versions spoken, {@code POST manifestSearch} answers a search, and
- * {@code GET packageManifests/<PackageIdentifier>} answers the manifest an install resolves. The specification defines
- * no way to put a package <i>into</i> a source - the community source is built from a git repository of YAML by pull
- * request - so this format adds {@code PUT manifests/<id>/<version>} for the manifest and
- * {@code PUT installers/<id>/<version>/<file>} for each installer's bytes, and serves those bytes back from the same
- * path. Splitting the two is what keeps the publish streaming: an installer is an {@code .exe}, {@code .msi} or
- * {@code .msix} that can run to gigabytes and goes straight into the content-addressed store, while only the small
- * JSON manifest is ever held in memory, under an explicit bound.
+ * source identifier and protocol versions, {@code POST manifestSearch} a search, and
+ * {@code GET packageManifests/<PackageIdentifier>} the manifest an install resolves. The specification defines no way
+ * to put a package into a source, so this format adds {@code PUT manifests/<id>/<version>} for the manifest and
+ * {@code PUT installers/<id>/<version>/<file>} for each installer, served back from the same path. The split keeps the
+ * publish streaming: an installer can run to gigabytes and goes straight into the store, while only the small manifest
+ * is held in memory, under a bound.
  *
- * <p><b>What is served is not quite what was published, and that is the point.</b> A winget manifest names each
- * installer by {@code InstallerUrl} and {@code InstallerSha256}, and the client verifies its download against that
- * digest. On read, each installer entry is rewritten: the URL is regenerated from the serving request so it routes
- * back to whatever host answers (nothing host-specific is stored, which is what lets an imported package resolve),
- * and the digest is restated from the hash the content-addressed store computed when the bytes landed. So the number
- * a client checks is the hash of the bytes this server will actually hand it, rather than one a publisher typed. An
- * installer entry whose bytes were never uploaded is dropped from the served manifest rather than advertising a
- * download that would 404.
+ * <p><b>What is served is rewritten.</b> The client verifies a download against the manifest's {@code InstallerSha256}.
+ * On read each installer entry's {@code InstallerUrl} is regenerated from the serving request (nothing host-specific is
+ * stored) and its digest restated from the hash the store computed, so the client checks the bytes this server hands
+ * it. An installer whose bytes were never uploaded is dropped from the served manifest.
  *
- * <p><b>Reads are bounded.</b> A search answers from one stored document - the repository index that each publish
- * re-derives - so it costs one read rather than a fold over every package. The index is filtered in memory, which is
- * a walk, so it carries an examined budget ({@link #EXAMINED_CAP}) and stops rather than running long on a repository
- * with a very large package count; a manifest read is a point lookup of the package's version list followed by a
- * point read per version served.
+ * <p><b>Reads are bounded.</b> A search reads one stored document, the repository index each publish re-derives, and
+ * filters it under an examined budget ({@link #EXAMINED_CAP}); a manifest read is a point lookup of the version list
+ * plus a point read per version.
  *
- * <p>Pointers live in the shared {@code Blobs} namespace as the other language formats do, so the {@code publish/}
- * namespace eviction ({@link #paths}) stays empty and coordinate-scoped enforcement runs through the
- * {@link BlobLayout} seam ({@link #blobKeys}/{@link #servedPaths}) instead. OSV publishes no winget advisory feed, so
- * vulnerability screening finds nothing while license and malicious-package screening still key on the coordinate.
+ * <p>Pointers live in the shared {@code Blobs} namespace, so {@link #paths} is empty and coordinate-scoped enforcement
+ * runs through {@link #blobKeys}/{@link #servedPaths}. OSV publishes no winget feed, so vulnerability screening finds
+ * nothing while licence and malicious-package screening still apply.
  */
 public final class WingetFormat implements RepositoryFormat, ArtifactLayout, BlobLayout, RepositoryImporter,
         RepositoryExporter {
 
-    /** The package-ecosystem name this format's artifacts report, distinct from {@link #name()}, the routing id.
-     *  Microsoft styles the product "WinGet" and the command {@code winget}; the ecosystem takes the product's
-     *  spelling, as {@code CocoaPods} and {@code RubyGems} do. */
+    /** The ecosystem name this format's artifacts report, distinct from {@link #name()}, the routing id: the product's
+     *  own spelling, as {@code CocoaPods} and {@code RubyGems} are. */
     public static final String ECOSYSTEM = "WinGet";
 
     private static final ObjectMapper MAPPER = new ObjectMapper();
@@ -73,21 +62,19 @@ public final class WingetFormat implements RepositoryFormat, ArtifactLayout, Blo
     private static final String INSTALLERS = "installers/";
     private static final String MANIFESTS = "manifests/";
 
-    /** The REST protocol versions this server implements, answered by {@code information}. A client picks the highest
-     *  it also speaks; 1.1.0 is the version that added the {@code Inclusions}/{@code Filters} search shape below. */
+    /** The REST protocol versions this server implements; 1.1.0 added the {@code Inclusions}/{@code Filters} search
+     *  shape. */
     private static final List<String> SUPPORTED_VERSIONS = List.of("1.0.0", "1.1.0");
 
-    /** A manifest is a small JSON document describing one version. The bound is explicit because this body is
-     *  materialised rather than streamed - it is the one place in this format where a publisher's bytes reach heap -
-     *  and a publisher who exceeds it is refused rather than served an OutOfMemoryError (contract clause 15). */
+    /** The largest manifest accepted. A manifest is the one publisher body this format holds in heap, so one over the
+     *  bound is refused rather than risking an OutOfMemoryError (contract clause 15). */
     private static final int LARGEST_MANIFEST = 512 * 1024;
 
     /** A search body is smaller still: a query, a match type and some filters. */
     private static final int LARGEST_SEARCH = 64 * 1024;
 
-    /** How many index entries one search may examine before answering with what it has. The index is a single stored
-     *  document and filtering it is a walk, so it gets a budget rather than an unbounded fold; a repository large
-     *  enough to hit this wants a real search index, which is a different change. */
+    /** How many index entries one search examines before answering with what it has: filtering the stored index is a
+     *  walk, so it has a budget. */
     private static final int EXAMINED_CAP = 5_000;
 
     /** The most results one response carries when the client asks for no limit of its own. */
@@ -167,13 +154,11 @@ public final class WingetFormat implements RepositoryFormat, ArtifactLayout, Blo
         }
     }
 
-    // ------------------------------------------------------------------ writes
+    // ---- writes
 
-    /**
-     * Store one version's manifest. The body is the version object a client will be served back - its
-     * {@code PackageVersion}, its {@code DefaultLocale} and its {@code Installers} - and it is validated against the
-     * path so a package cannot publish itself under another's coordinate.
-     */
+    /** Store one version's manifest: the version object a client is served back ({@code PackageVersion},
+     *  {@code DefaultLocale}, {@code Installers}), validated against the path so a package cannot publish under
+     *  another's coordinate. */
     private void publishManifest(String repo, String tail, FormatExchange exchange, Blobs blobs) throws IOException {
         String[] parts = tail.split("/", -1);
         if (parts.length != 2) {
@@ -207,14 +192,12 @@ public final class WingetFormat implements RepositoryFormat, ArtifactLayout, Blo
         String declaredVersion = text(manifest, "PackageVersion");
         if ((declaredIdentifier != null && !declaredIdentifier.equals(identifier))
                 || (declaredVersion != null && !declaredVersion.equals(version))) {
-            // The manifest claims a different identifier or version than the path it was deployed to: refuse rather
-            // than file it under a coordinate its own contents disown, the way the CocoaPods publish refuses a
-            // podspec that disagrees with its deploy path.
+            // The manifest names another identifier or version than its path: refuse rather than file it under a
+            // coordinate its own contents disown.
             exchange.respond(400);
             return;
         }
-        // Normalised onto the path, so the stored stanza is self-describing even when the publisher omitted either
-        // field, and so a later read never has to reconcile the two.
+        // Normalised onto the path, so the stored manifest is self-describing.
         manifest.put("PackageIdentifier", identifier);
         manifest.put("PackageVersion", version);
         blobs.write(manifestKey(repo, identifier, version), MAPPER.writeValueAsBytes(manifest));
@@ -222,11 +205,8 @@ public final class WingetFormat implements RepositoryFormat, ArtifactLayout, Blo
         exchange.respond(201);
     }
 
-    /**
-     * Stream one installer's bytes into the content-addressed store and record the pointer the served manifest's
-     * rewritten {@code InstallerUrl} and {@code InstallerSha256} are generated from. Nothing is buffered: an installer
-     * is the large half of a winget package.
-     */
+    /** Stream one installer's bytes into the store and record the pointer the served manifest's {@code InstallerUrl}
+     *  and {@code InstallerSha256} are generated from. Nothing is buffered. */
     private void publishInstaller(String repo, String tail, FormatExchange exchange, Blobs blobs) throws IOException {
         String[] parts = tail.split("/", -1);
         if (parts.length != 3) {
@@ -240,24 +220,16 @@ public final class WingetFormat implements RepositoryFormat, ArtifactLayout, Blo
             exchange.respond(400);
             return;
         }
-        // An installer belongs to a version, and a version exists only once its manifest has been accepted. Without
-        // this the two halves of a publish are screened independently and only one of them can be: the manifest
-        // carries the licence and the metadata a gate reads, an installer is opaque bytes. So a manifest refused
-        // for its licence, or held for review, would be followed by an installer PUT that answered 201 and stored
-        // the bytes anyway - at a path this format serves back, so they would be fetchable under a coordinate the
-        // manifest never established.
-        //
-        // A point read, taken BEFORE the body is consumed, so a refusal costs neither a stored blob nor a buffer.
-        // It does not undo the two-request split - that split is what lets an installer stream instead of reaching
-        // heap.
+        // An installer belongs to a version, which exists only once its manifest was accepted. The manifest carries
+        // what the gate reads and an installer is opaque bytes, so without this a manifest refused or held for review
+        // could be followed by an installer stored and served under a coordinate the manifest never established. A
+        // point read before the body is consumed, so a refusal costs neither a blob nor a buffer.
         if (!blobs.exists(manifestKey(repo, identifier, version))) {
             exchange.respond(404);
             return;
         }
         String hash = blobs.store(exchange.requestStream());
-        // Through Blobs.link rather than a bare write: besides the compare-and-set retry, link clears any
-        // gc/condemned/<hash> marker a collector set, so re-publishing bytes identical to a condemned blob
-        // un-condemns them before the sweep runs.
+        // linkRelease retries its compare-and-set and spares bytes a collector has condemned.
         try {
             blobs.linkRelease(installerKey(repo, identifier, version, file), hash, -1L);
         } catch (Publication.RepublishConflict taken) {
@@ -267,13 +239,13 @@ public final class WingetFormat implements RepositoryFormat, ArtifactLayout, Blo
         exchange.respond(201);
     }
 
-    // ------------------------------------------------------------------ reads
+    // ---- reads
 
-    /** The source's own description: who it is, and which versions of the protocol it speaks. */
+    /** The source's own description: who it is, and which protocol versions it speaks. */
     private void information(String repo, FormatExchange exchange) throws IOException {
         ObjectNode data = MAPPER.createObjectNode();
-        // Stable per repository and derived from its name: a client stores the identifier with the source it added,
-        // and one that changed between reads would read as a different source.
+        // Stable per repository: a client stores the identifier with the source, and a changed one reads as another
+        // source.
         data.put("SourceIdentifier", "JenesisRepository." + repo);
         ArrayNode versions = data.putArray("ServerSupportedVersions");
         SUPPORTED_VERSIONS.forEach(versions::add);
@@ -282,12 +254,9 @@ public final class WingetFormat implements RepositoryFormat, ArtifactLayout, Blo
         respondJson(exchange, 200, MAPPER.writeValueAsBytes(body));
     }
 
-    /**
-     * Answer a {@code winget search} from the repository's stored index. The client sends a free-text
-     * {@code Query.KeyWord} and/or field-scoped {@code Inclusions}/{@code Filters}; a package matches when every
-     * {@code Filters} entry matches and, where either is present, the keyword or some inclusion matches. Matching is
-     * over the identifier, the package name and the publisher, which are the fields the index line carries.
-     */
+    /** Answer a {@code winget search} from the stored index. A package matches when every {@code Filters} entry matches
+     *  and, where either is given, the {@code Query.KeyWord} or some {@code Inclusions} entry does - over the
+     *  identifier, name and publisher the index line carries. */
     private void search(String repo, FormatExchange exchange, Blobs blobs) throws IOException {
         byte[] body = bounded(exchange, LARGEST_SEARCH);
         if (body == null) {
@@ -308,10 +277,8 @@ public final class WingetFormat implements RepositoryFormat, ArtifactLayout, Blo
         String keyword = lower(text(request.path("Query"), "KeyWord"));
         List<String> inclusions = matchValues(request.path("Inclusions"));
         List<String> filters = matchValues(request.path("Filters"));
-        // One sequential pass over the index through the codec's streaming reader, keeping only the results and
-        // examining at most EXAMINED_CAP entries: the query never holds the index, whose size is the repository's.
-        // Reading the index whole and splitting every line into a map first would put the repository in heap per
-        // query, an OutOfMemoryError at scale.
+        // One streaming pass over the index, keeping only results and examining at most EXAMINED_CAP entries: a query
+        // never holds the index, whose size is the repository's.
         Optional<StoredListing.Served> index = StoredListing.open(blobs.store(),
                 new WingetListings(blobs).indexSpec(repo));
         ArrayNode data = MAPPER.createArrayNode();
@@ -347,10 +314,8 @@ public final class WingetFormat implements RepositoryFormat, ArtifactLayout, Blo
         respondJson(exchange, 200, MAPPER.writeValueAsBytes(response));
     }
 
-    /**
-     * Answer one package's manifests: every servable version, or the single one a {@code ?Version=} names. Each
-     * version is served with its installer entries rewritten onto this repository.
-     */
+    /** Answer one package's manifests: every servable version, or the one {@code ?Version=} names, each with its
+     *  installer entries rewritten onto this repository. */
     private void packageManifest(String repo, String identifier, FormatExchange exchange, Blobs blobs)
             throws IOException {
         if (identifier.isEmpty() || identifier.indexOf('/') >= 0 || Keys.unsafe(identifier)) {
@@ -412,7 +377,7 @@ public final class WingetFormat implements RepositoryFormat, ArtifactLayout, Blo
         blobs.serve(located.get(), exchange);
     }
 
-    // ------------------------------------------------------------------ layout
+    // ---- layout
 
     @Override
     public Optional<ArtifactDescriptor> describe(String path) {
@@ -426,9 +391,8 @@ public final class WingetFormat implements RepositoryFormat, ArtifactLayout, Blo
         }
         String sub = rest.substring(slash + 1);
         if (sub.startsWith(MANIFESTS)) {
-            // The manifest publish path, manifests/<id>/<version>: what a version is created at, and so the path
-            // the gate links a review pointer at when it holds one - which a release's cross-alias guard then asks
-            // to be placed. It carries the same coordinate the installers under it do.
+            // The manifest publish path is where a version is created, so the gate links its review pointer there; it
+            // carries the coordinate the installers under it do.
             String[] pushed = sub.substring(MANIFESTS.length()).split("/", -1);
             if (pushed.length == 2 && ArtifactLayout.addressable(pushed[0], pushed[1])) {
                 return Optional.of(new ArtifactDescriptor(ECOSYSTEM, pushed[0], pushed[1], path,
@@ -449,8 +413,7 @@ public final class WingetFormat implements RepositoryFormat, ArtifactLayout, Blo
 
     @Override
     public List<String> paths(String coordinate, String version, ArtifactStore store) {
-        // Winget pointers live in the shared Blobs namespace, not the Publication namespace a coordinate-based
-        // eviction walks, so nothing is enumerable from the coordinate alone; blobKeys/servedPaths carry it.
+        // Winget pointers live in the shared Blobs namespace; blobKeys/servedPaths carry the coordinate.
         return List.of();
     }
 
@@ -466,8 +429,8 @@ public final class WingetFormat implements RepositoryFormat, ArtifactLayout, Blo
         }
         Blobs blobs = new Blobs(store);
         List<String> keys = new ArrayList<>();
-        // The registry set is operator-configured and therefore bounded; within one, the manifest key is an exact
-        // lookup and the installer pointers are the one version's own children, never a listing of the pool.
+        // The registry set is operator-configured and bounded; within one, the manifest key is a point lookup and the
+        // installers are the version's own children.
         for (String repo : store.list("winget")) {
             String manifest = manifestKey(repo, coordinate, version);
             if (store.readVersioned(manifest).isPresent()) {
@@ -483,15 +446,11 @@ public final class WingetFormat implements RepositoryFormat, ArtifactLayout, Blo
     /**
      * {@inheritDoc}
      *
-     * <p>Both pointer shapes, because an eviction deletes both: the version's manifest at
+     * <p>Both pointer shapes, since an eviction deletes both: the manifest at
      * {@code winget/<repo>/manifest/<id>/<version>} and each installer at
-     * {@code winget/<repo>/blob/<id>/<version>/<file>}. Neither is the served path - an installer is served from
-     * {@code /winget/<repo>/installers/} - so the request-path describer is not the parse, and the segments above
-     * are constants used in both directions rather than two spellings of one grammar.
-     *
-     * <p>An identifier is a single segment here (a WinGet {@code Publisher.Package}, dotted rather than slashed),
-     * so the split is positional and needs no name-versus-version guessing: what follows the segment is the id,
-     * what follows that is the version, and anything after that is one installer's file name.
+     * {@code winget/<repo>/blob/<id>/<version>/<file>}. Neither is a served path, so the segments are constants used in
+     * both directions. An identifier is one dotted segment ({@code Publisher.Package}), so the split is positional: id,
+     * version, then an installer's file name.
      */
     @Override
     public Optional<ArtifactDescriptor> describePointer(String key) {
@@ -540,7 +499,7 @@ public final class WingetFormat implements RepositoryFormat, ArtifactLayout, Blo
         return paths;
     }
 
-    // ------------------------------------------------------------------ importer
+    // ---- importer
 
     @Override
     public boolean imports(String format) {
@@ -557,9 +516,9 @@ public final class WingetFormat implements RepositoryFormat, ArtifactLayout, Blo
         importer.importArtifact(path, content, store);
     }
 
-    // ------------------------------------------------------------------ keys and helpers
+    // ---- keys and helpers
 
-    /** The two key segments under a registry, named once because a pointer is now composed AND parsed here. */
+    /** The two key segments under a registry, composed and parsed here. */
     private static final String MANIFEST = "manifest";
 
     private static final String BLOB = "blob";
@@ -591,11 +550,8 @@ public final class WingetFormat implements RepositoryFormat, ArtifactLayout, Blo
         return blobs.read(key, out) ? Optional.of(out.toByteArray()) : Optional.empty();
     }
 
-    /**
-     * The repository index line for one package: {@code <identifier>\t<compact JSON>}, the JSON being exactly the
-     * object a search response carries, so answering a query is a filter over stored lines rather than a re-read of
-     * each matched package's manifest.
-     */
+    /** The repository index line for one package: {@code <identifier>\t<compact JSON>}, the JSON being the object a
+     *  search response carries, so a query filters stored lines rather than re-reading manifests. */
     static byte[] indexEntry(String identifier, byte[] manifest, List<String> versions) {
         ObjectNode entry = MAPPER.createObjectNode();
         entry.put("PackageIdentifier", identifier);
@@ -618,12 +574,9 @@ public final class WingetFormat implements RepositoryFormat, ArtifactLayout, Blo
         return line.getBytes(StandardCharsets.UTF_8);
     }
 
-    /**
-     * One version as it is served: the stored manifest with each installer entry's {@code InstallerUrl} regenerated
-     * onto this repository and its {@code InstallerSha256} restated from the digest of the bytes that will actually be
-     * streamed. An entry whose bytes were never uploaded is dropped, so the manifest never advertises a download that
-     * would 404; the version itself is still served, with the installers that do resolve.
-     */
+    /** One version as served: each installer entry's {@code InstallerUrl} regenerated onto this repository and its
+     *  {@code InstallerSha256} restated from the digest of the bytes that will be streamed. An entry whose bytes were
+     *  never uploaded is dropped; the version is still served with the installers that resolve. */
     private static Optional<ObjectNode> served(Blobs blobs, String repo, String identifier, String version,
                                                byte[] manifest, String base) throws IOException {
         JsonNode parsed;
@@ -653,8 +606,7 @@ public final class WingetFormat implements RepositoryFormat, ArtifactLayout, Blo
                 }
                 ObjectNode entry = ((ObjectNode) installer).deepCopy();
                 entry.put("InstallerUrl", base + "/" + INSTALLERS + identifier + "/" + version + "/" + file);
-                // Upper case: the canonical winget manifests state the digest that way, and a client compares
-                // case-insensitively, so this is presentation rather than a second encoding.
+                // Upper case, as the canonical manifests state it; clients compare case-insensitively.
                 entry.put("InstallerSha256", located.get().hash().toUpperCase(Locale.ROOT));
                 rewritten.add(entry);
             }
@@ -663,11 +615,8 @@ public final class WingetFormat implements RepositoryFormat, ArtifactLayout, Blo
         return Optional.of(object);
     }
 
-    /**
-     * The stored file name for an installer entry: the last segment of the {@code InstallerUrl} the publisher
-     * declared, which is the name the installer's own {@code PUT} used. A URL with no usable last segment names no
-     * file and its entry is dropped.
-     */
+    /** The stored file name for an installer entry: the last segment of the publisher's {@code InstallerUrl}, the name
+     *  its own {@code PUT} used. A URL with no usable last segment drops the entry. */
     private static String installerFile(JsonNode installer) {
         String url = text(installer, "InstallerUrl");
         if (url == null || url.isBlank()) {
@@ -726,7 +675,7 @@ public final class WingetFormat implements RepositoryFormat, ArtifactLayout, Blo
         return values;
     }
 
-    /** Read the whole request body, or {@code null} when it exceeds the bound - which is a refusal, never a truncation. */
+    /** Read the whole request body, or {@code null} when it exceeds the bound - a refusal, never a truncation. */
     private static byte[] bounded(FormatExchange exchange, int largest) throws IOException {
         try (InputStream in = exchange.requestStream()) {
             byte[] body = in.readNBytes(largest + 1);
@@ -763,12 +712,9 @@ public final class WingetFormat implements RepositoryFormat, ArtifactLayout, Blo
         return value == null || value.isBlank() ? null : value.toLowerCase(Locale.ROOT);
     }
 
-    /**
-     * Each registry's manifest of the version is put first, at {@code <repo>/manifests/<id>/<version>}, and then each
-     * installer at the path it is served from - the order the target insists on, since it refuses an installer whose
-     * version has no manifest. A manifest is served only inside its package's document, so it cannot be asked for back
-     * alone: it is sent whenever an installer is, and a version whose installers are all there is.
-     */
+    /** Each registry's manifest is put first, at {@code <repo>/manifests/<id>/<version>}, then each installer at its
+     *  served path - the target refuses an installer whose version has no manifest. A manifest cannot be asked for back
+     *  alone, so it is sent whenever an installer is. */
     @Override
     public Exported export(ArtifactStore repository, String coordinate, String version, ExportTarget target)
             throws IOException {

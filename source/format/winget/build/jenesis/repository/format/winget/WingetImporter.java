@@ -7,25 +7,17 @@ import build.jenesis.repository.store.ArtifactDescriptor;
 import build.jenesis.repository.store.ArtifactStore;
 
 /**
- * Imports a winget REST source from an incumbent manager, replaying each asset through {@link WingetFormat}'s own
- * publish paths so an exported repository round-trips.
+ * Imports a winget REST source, replaying each asset through {@link WingetFormat}'s own publish paths so an exported
+ * repository round-trips and an imported manifest is validated as a published one is.
  *
- * <p>Two kinds of asset carry, because a winget package is two things: the version manifest, which is stored, and the
- * installer bytes, which are streamed into the content-addressed store. Everything a client reads is derived - the
- * source {@code information} document, the search index and the assembled {@code packageManifests} response - and so
- * is regenerated rather than imported. A source path is mapped by its trailing
- * {@code .../manifests/<id>/<version>} or {@code .../installers/<id>/<version>/<file>} segments, which are the exact
- * shapes this format publishes and serves at; a winget {@code PackageIdentifier} and version contain no {@code /}, so
- * the segmentation is unambiguous.
- *
- * <p>All packages migrate into a single {@code /winget/winget/...} registry, the flat migration the RPM, Cargo, Conda
- * and Composer importers use, whose read documents are then derived by the format. SPI-only: the importer reuses the
- * format's own publish path rather than reimplementing it, so an imported manifest is validated against its
- * coordinate exactly as a published one is.
+ * <p>The version manifests and the installer bytes migrate; the {@code information} document, the search index and the
+ * assembled {@code packageManifests} answers are derived. A source path is mapped by its trailing
+ * {@code .../manifests/<id>/<version>} or {@code .../installers/<id>/<version>/<file>} segments; an identifier and a
+ * version contain no {@code /}, so this is unambiguous. All packages land in one {@code /winget/winget/...} registry.
  */
 public final class WingetImporter implements RepositoryImporter {
 
-    /** The single registry migrated packages land in, so the derived documents sit under one repo. */
+    /** The single registry migrated packages land in. */
     private static final String REPO = "winget";
 
     private static final String MANIFESTS = "manifests";
@@ -41,12 +33,10 @@ public final class WingetImporter implements RepositoryImporter {
 
     @Override
     public Optional<ArtifactDescriptor> importTarget(String path) {
-        // RepositoryImporter clause 4: a source path is as client-supplied as a request path, so a traversal-shaped
-        // one is refused by name rather than echoed into the descriptor the import edge screens.
+        // RepositoryImporter clause 4: a traversal-shaped source path is refused by name.
         String relative = RepositoryImporter.importablePath(path, REPO);
-        // Split on segments rather than searching for "/manifests/": an incumbent lays its assets at a bare
-        // manifests/... or installers/... with no leading slash, and matching the delimited form silently skipped
-        // exactly those - the shape the importer census feeds it.
+        // Split on segments, so a path that begins with manifests/... or installers/... matches as well as a nested
+        // one.
         String[] segments = relative.split("/", -1);
         for (int at = 0; at < segments.length; at++) {
             if (segments[at].equals(MANIFESTS) && segments.length - at == 3) {
@@ -76,12 +66,10 @@ public final class WingetImporter implements RepositoryImporter {
 
     @Override
     public void importArtifact(String path, InputStream content, ArtifactStore store) throws IOException {
-        // Replayed through the format's own publish routes, so an imported manifest is validated against its
-        // coordinate exactly as a published one is and an imported installer streams into the store the same way.
+        // Replayed through the format's own publish routes, validated and streamed as a client publish is.
         Optional<ArtifactDescriptor> target = importTarget(path);
         if (target.isEmpty()) {
-            // Everything a client reads - the information document, the search index, an assembled
-            // packageManifests answer - is derived and regenerated rather than imported.
+            // Not a manifest or an installer: nothing a client reads is imported.
             return;
         }
         new WingetFormat().handle(new ReplayExchange(target.get().path(), content), store);
