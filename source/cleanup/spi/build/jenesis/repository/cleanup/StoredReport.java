@@ -36,12 +36,24 @@ public final class StoredReport {
     public enum Status { RUNNING, DONE, FAILED }
 
     /** One stored report: its status, when the pass started and finished, how many rows it found, the first
-     *  {@link #SAMPLE} of them, and the failure that stopped it, if one did. */
+     *  {@link #SAMPLE} of them, the failure that stopped it, if one did, and - while a run is under way or after one
+     *  failed - the {@code previous} finished report, so a screen keeps showing the last result rather than nothing
+     *  until the next one lands. A finished report carries no previous one. */
     public record Report(Status status, Instant startedAt, Instant finishedAt, int count, List<String> rows,
-                         String failure) {
+                         String failure, Report previous) {
+
+        public Report(Status status, Instant startedAt, Instant finishedAt, int count, List<String> rows,
+                      String failure) {
+            this(status, startedAt, finishedAt, count, rows, failure, null);
+        }
 
         public boolean running() {
             return status == Status.RUNNING;
+        }
+
+        /** The last finished result: this report when it is done, otherwise the one it carries, if any. */
+        public Optional<Report> lastFinished() {
+            return status == Status.DONE ? Optional.of(this) : Optional.ofNullable(previous);
         }
     }
 
@@ -87,15 +99,18 @@ public final class StoredReport {
         if (!lease.acquire(lock, HOLDER, now)) {
             return false;                                   // running on some node, and younger than the lease
         }
+        // The last finished result rides along with the run, and with its failure, until a new one replaces it.
+        Report previous = read(store, name).flatMap(Report::lastFinished).orElse(null);
         store.write(ROOT + "/" + name, new ByteArrayInputStream(
-                serialize(new Report(Status.RUNNING, now, null, 0, List.of(), null))));
+                serialize(new Report(Status.RUNNING, now, null, 0, List.of(), null, previous))));
         Thread.ofVirtual().name("report-" + name).start(() -> {
             Report finished;
             try {
                 Rows rows = pass.run();
                 finished = new Report(Status.DONE, now, Instant.now(), rows.count(), rows.sample(), null);
             } catch (IOException | RuntimeException failure) {
-                finished = new Report(Status.FAILED, now, Instant.now(), 0, List.of(), String.valueOf(failure));
+                finished = new Report(Status.FAILED, now, Instant.now(), 0, List.of(), String.valueOf(failure),
+                        previous);
             }
             try {
                 store.write(ROOT + "/" + name, new ByteArrayInputStream(serialize(finished)));
@@ -147,6 +162,8 @@ public final class StoredReport {
      *  garbage. */
     private static final String MAGIC = "jenesis-report";
 
+    /** A report that carries a previous one is running or failed, so it has no rows of its own: the lines are the
+     *  previous report's, which its {@code previous.} fields describe. */
     private static byte[] serialize(Report report) {
         LineDocument.Builder document = LineDocument.of(MAGIC, 1)
                 .field("status", report.status())
@@ -154,7 +171,14 @@ public final class StoredReport {
                 .field("finished", report.finishedAt())
                 .field("count", report.count())
                 .field("failure", report.failure());
-        for (String row : report.rows()) {
+        List<String> lines = report.rows();
+        if (report.previous() != null) {
+            document.field("previous.started", report.previous().startedAt())
+                    .field("previous.finished", report.previous().finishedAt())
+                    .field("previous.count", report.previous().count());
+            lines = report.previous().rows();
+        }
+        for (String row : lines) {
             document.line(row);
         }
         return document.bytes();
@@ -179,8 +203,23 @@ public final class StoredReport {
             count = 0;
         }
         String failure = read.field("failure").orElse("");
+        Instant previousFinished = instant(read.field("previous.finished").orElse(""));
+        if (previousFinished != null) {
+            Report previous = new Report(Status.DONE, instant(read.field("previous.started").orElse("")),
+                    previousFinished, integer(read.field("previous.count").orElse("0")), read.lines(), null);
+            return new Report(status, instant(read.field("started").orElse("")), instant(read.field("finished").orElse("")),
+                    count, List.of(), failure.isEmpty() ? null : failure, previous);
+        }
         return new Report(status, instant(read.field("started").orElse("")), instant(read.field("finished").orElse("")),
                 count, read.lines(), failure.isEmpty() ? null : failure);
+    }
+
+    private static int integer(String text) {
+        try {
+            return Integer.parseInt(text.trim());
+        } catch (NumberFormatException _) {
+            return 0;
+        }
     }
 
     private static Instant instant(String text) {

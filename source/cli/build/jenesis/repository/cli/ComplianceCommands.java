@@ -248,6 +248,7 @@ final class ComplianceCommands {
             }
             case "running" -> {
                 System.out.println("A license count of " + repo + " is running, started " + view.startedAt() + ".");
+                previous(view);
                 return Refresh.Poll.State.running();
             }
             case "done" -> {
@@ -269,8 +270,17 @@ final class ComplianceCommands {
             default -> {
                 System.out.println("The last license count of " + repo + ", started " + view.startedAt()
                         + ", failed: " + view.failure());
+                previous(view);
                 return Refresh.Poll.State.done(1);
             }
+        }
+    }
+
+    /** The finished count a running or failed one leaves standing, in one line. */
+    private static void previous(RiskClient.LicensesView view) {
+        if (view.previous() != null) {
+            System.out.println("The last finished count, as of " + view.previous().finishedAt() + ", counted "
+                    + view.previous().versions() + " version(s).");
         }
     }
 

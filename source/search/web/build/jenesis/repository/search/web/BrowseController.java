@@ -194,17 +194,18 @@ public class BrowseController {
      * The licence inventory as stored: its {@code state} ({@code not-counted}, {@code running}, {@code done} or
      * {@code failed}), when the count started and finished ({@code null} until it has), why it failed, how many
      * versions it counted, the counts per category and per SPDX id - most versions first - how many rows the count
-     * produced, and whether the rows shown stop short of them.
+     * produced, whether the rows shown stop short of them, and - while a count runs or after one failed - the
+     * {@code previous} finished count, {@code null} when there was none.
      */
     public record LicensesView(String state, Instant startedAt, Instant finishedAt, String failure, long versions,
                                List<LicenseCount> categories, List<LicenseCount> licenses, int rows,
-                               boolean truncated) {
+                               boolean truncated, LicensesView previous) {
 
         static LicensesView of(LicenseReport.Inventory inventory) {
             return new LicensesView(inventory.state().name().toLowerCase(Locale.ROOT).replace('_', '-'),
                     inventory.startedAt(), inventory.finishedAt(), inventory.failure(), inventory.versions(),
                     counts(inventory.categories()), counts(inventory.licenses()), inventory.rows(),
-                    inventory.truncated());
+                    inventory.truncated(), inventory.previous() == null ? null : of(inventory.previous()));
         }
 
         private static List<LicenseCount> counts(List<LicenseReport.Count> counts) {

@@ -35,22 +35,25 @@
         <p th:replace="~{base :: alert(|The last count, started ${instants.display(inventory.startedAt())}, failed: ${inventory.failure()}|, 'danger')}"></p>
     </article>
 
-    <th:block th:if="${inventory.state().name() == 'DONE'}">
+    <!--/* The finished count: this one, or while a new count runs or after one failed, the last that finished. */-->
+    <th:block th:if="${inventory.shown() != null}" th:with="counted=${inventory.shown()}">
         <h2>
-            <span th:text="|${inventory.versions()} version(s) counted|">0 version(s) counted</span>
-            <small>(as of <span th:text="${instants.display(inventory.asOf())}">time</span>)</small>
+            <span th:text="|${counted.versions()} version(s) counted|">0 version(s) counted</span>
+            <small>(as of <span th:text="${instants.display(counted.asOf())}">time</span>)</small>
         </h2>
-        <p th:if="${inventory.truncated()}"><small>The count found more distinct licenses than are kept; showing the
-            first <span th:text="${inventory.licenses().size()}">0</span>, most versions first.</small></p>
+        <p th:if="${inventory.state().name() != 'DONE'}"><small>The last finished count, shown until the new one
+            lands.</small></p>
+        <p th:if="${counted.truncated()}"><small>The count found more distinct licenses than are kept; showing the
+            first <span th:text="${counted.licenses().size()}">0</span>, most versions first.</small></p>
         <p th:unless="${drillDown}"><small>Full-text search is off for this repository, so a count does not link to
             the versions behind it; switch it on in the repository's
             <a th:href="@{/ui/repositories/{repo}/settings(repo=${repo})}">settings</a> to follow one.</small></p>
 
-        <th:block th:if="${inventory.versions() == 0}">
+        <th:block th:if="${counted.versions() == 0}">
             <div th:replace="~{base :: empty('This repository holds no versions to count.')}"></div>
         </th:block>
 
-        <article th:unless="${inventory.categories().isEmpty()}">
+        <article th:unless="${counted.categories().isEmpty()}">
             <h2>By category</h2>
             <p><small>The coarse license class a version's declared licenses resolve to; a version declaring none, or
                 nothing identifiable, counts as unknown.</small></p>
@@ -63,7 +66,7 @@
                     </tr>
                     </thead>
                     <tbody>
-                    <tr th:each="c : ${inventory.categories()}">
+                    <tr th:each="c : ${counted.categories()}">
                         <td th:if="${drillDown}"><a th:href="@{/ui/repositories/{repo}/browse(repo=${repo},q='category:' + ${c.value()})}"
                                th:text="${c.value()}">permissive</a></td>
                         <td th:unless="${drillDown}" th:text="${c.value()}">permissive</td>
@@ -74,7 +77,7 @@
             </figure>
         </article>
 
-        <article th:unless="${inventory.licenses().isEmpty()}">
+        <article th:unless="${counted.licenses().isEmpty()}">
             <h2>By license</h2>
             <p><small>The SPDX id a version's declared license resolves to.</small></p>
             <figure>
@@ -86,7 +89,7 @@
                     </tr>
                     </thead>
                     <tbody>
-                    <tr th:each="l : ${inventory.licenses()}">
+                    <tr th:each="l : ${counted.licenses()}">
                         <td th:if="${drillDown}"><a th:href="@{/ui/repositories/{repo}/browse(repo=${repo},q='license:' + ${l.value()})}"
                                th:text="${l.value()}">Apache-2.0</a></td>
                         <td th:unless="${drillDown}" th:text="${l.value()}">Apache-2.0</td>

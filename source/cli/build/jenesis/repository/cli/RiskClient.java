@@ -296,10 +296,11 @@ public final class RiskClient extends ClientCalls {
 
     /** The license inventory: its {@code state} ({@code not-counted}, {@code running}, {@code done} or
      *  {@code failed}), when the count started and finished, why it failed, how many versions it counted, the counts
-     *  per category and per SPDX id, how many rows the count produced, and whether the rows shown stop short. */
+     *  per category and per SPDX id, how many rows the count produced, whether the rows shown stop short, and the
+     *  {@code previous} finished count while a new one runs or after one failed. */
     public record LicensesView(String state, String startedAt, String finishedAt, String failure, long versions,
                                List<LicenseCount> categories, List<LicenseCount> licenses, int rows,
-                               boolean truncated) {
+                               boolean truncated, LicensesView previous) {
     }
 
     /** One count: a category or an SPDX id, and how many versions carry it. */

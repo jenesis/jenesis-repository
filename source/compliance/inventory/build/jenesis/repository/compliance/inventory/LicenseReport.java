@@ -66,10 +66,12 @@ public final class LicenseReport {
     /**
      * The inventory as it is stored: its state, when the count started and when it finished ({@code null} until it
      * has), why it failed if it did, how many versions it counted, the counts per category and per SPDX id, how many
-     * rows the count produced, and whether some of them were left out of what was kept.
+     * rows the count produced, whether some of them were left out of what was kept, and - while a count runs or
+     * after one failed - the {@code previous} finished count, which a surface keeps showing until a new one lands.
      */
     public record Inventory(State state, Instant startedAt, Instant finishedAt, String failure, long versions,
-                            List<Count> categories, List<Count> licenses, int rows, boolean truncated) {
+                            List<Count> categories, List<Count> licenses, int rows, boolean truncated,
+                            Inventory previous) {
 
         public Inventory {
             categories = List.copyOf(categories);
@@ -77,7 +79,12 @@ public final class LicenseReport {
         }
 
         static Inventory notCounted() {
-            return new Inventory(State.NOT_COUNTED, null, null, null, 0, List.of(), List.of(), 0, false);
+            return new Inventory(State.NOT_COUNTED, null, null, null, 0, List.of(), List.of(), 0, false, null);
+        }
+
+        /** The finished count a surface shows: this one when it is done, otherwise the previous one, if any. */
+        public Inventory shown() {
+            return state == State.DONE ? this : previous;
         }
 
         /** Whether a count is under way, so a surface keeps polling. */
@@ -104,14 +111,16 @@ public final class LicenseReport {
             return Inventory.notCounted();
         }
         StoredReport.Report report = stored.get();
+        Inventory previous = report.previous() == null ? null : parse(report.previous());
         return switch (report.status()) {
             case RUNNING -> StoredReport.inFlight(repository, NAME)
-                    ? new Inventory(State.RUNNING, report.startedAt(), null, null, 0, List.of(), List.of(), 0, false)
+                    ? new Inventory(State.RUNNING, report.startedAt(), null, null, 0, List.of(), List.of(), 0, false,
+                            previous)
                     : new Inventory(State.FAILED, report.startedAt(), null,
                             "the count stopped before it finished: the node running it went away", 0, List.of(),
-                            List.of(), 0, false);
+                            List.of(), 0, false, previous);
             case FAILED -> new Inventory(State.FAILED, report.startedAt(), report.finishedAt(), report.failure(), 0,
-                    List.of(), List.of(), 0, false);
+                    List.of(), List.of(), 0, false, previous);
             case DONE -> parse(report);
         };
     }
@@ -159,7 +168,7 @@ public final class LicenseReport {
             }
         }
         return new Inventory(State.DONE, report.startedAt(), report.finishedAt(), null, versions, categories,
-                licenses, report.count(), report.count() > report.rows().size());
+                licenses, report.count(), report.count() > report.rows().size(), null);
     }
 
     /**
