@@ -7,11 +7,11 @@ import java.security.Signature;
 /**
  * The Dead Simple Signing Envelope as this build produces and admits it: an in-toto statement as the payload, the
  * pre-authentication encoding a signature is made over, and the sign and verify steps on the JDK's {@link Signature}.
- * The bare-key signer, the keyless signer and the admission verifier all use these lines, and an envelope one
- * of them writes only round-trips through another while all three agree - which holds by construction rather than
- * by keeping three copies in step. The encoding measures the type and the payload in bytes, as the specification
- * says; a derived encoding that measures the payload as a string agrees for ASCII and drifts on any statement
- * carrying other characters, which is why the encoding is spelled out here rather than taken from a library.
+ * Every signer and the admission verifier use these lines, and an envelope one of them writes only round-trips through
+ * another while they agree - which holds by construction rather than by keeping copies in step. The encoding measures
+ * the type and the payload in bytes, as the specification says; a derived encoding that measures the payload as a
+ * string agrees for ASCII and drifts on any statement carrying other characters, which is why the encoding is spelled
+ * out here rather than taken from a library.
  */
 public final class Dsse {
 

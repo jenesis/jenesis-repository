@@ -54,12 +54,9 @@ import module java.base;
  *     Reaching any of them is a <em>named failure</em>, never a shorter list: a plausible-but-incomplete answer is
  *     worse than an outage, because the gate cannot tell it from a clean package.</li>
  * <li><b>Read purity.</b> The intent is that {@link #advisories} renders what a refresh already stored, so
- *     a gate decision stands while the vendor is down. <b>No implementation meets this today</b>: every
- *     installed feed fetches on the query path - two of the eight feeds with no cache at all, the rest behind
- *     a process-local TTL cache that dies with the JVM - so an advisory answer currently depends on the vendor being
- *     reachable, and clause 4 is what keeps that honest rather than dangerous. Recorded here rather than left
- *     implicit, because an undocumented divergence on a shared concern is a defect; the clause becomes true once
- *     the feeds move onto the feed client's snapshot path.</li>
+ *     a gate decision stands while the vendor is down. A feed that fetches on the query path - with no cache, or
+ *     behind a process-local TTL cache that dies with the JVM - does not meet it: its advisory answer depends on the
+ *     vendor being reachable, and clause 4 is what keeps that honest rather than dangerous.</li>
  * <li><b>Staleness.</b> {@link SignalSource#freshness()} carries it, for this contract as for the whole family: a
  *     consumer reads the instant the advisories behind an answer were fetched, so an empty list beside a fetch
  *     instant is "screened, nothing found" and an empty list beside {@link Freshness#NEVER} is "this feed has never

@@ -21,8 +21,8 @@ import build.jenesis.repository.store.StoreBindings;
  *
  * <p><b>A store carrying no lookup answers the boot environment rather than nothing.</b> A composition that binds no
  * lookup still has the environment it started with, and a dial set there - a system property, an environment variable
- * - is what such a deployment means. Answering {@code null} for every key made every dial read as its default whatever
- * the process was started with, which is the quieter and worse failure.
+ * - is what such a deployment means. Answering {@code null} for every key would make every dial read as its default
+ * whatever the process was started with, which is the quieter and worse failure.
  */
 public final class ComplianceSettings {
 

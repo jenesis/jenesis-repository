@@ -7,8 +7,8 @@ import build.jenesis.repository.store.Providers;
 /**
  * A factory for a tenant's {@link Vex} gate view, discovered at runtime with {@link ServiceLoader} - so VEX
  * (Vulnerability Exploitability eXchange) suppression is a drop-in module that {@code provides} this interface, and the
- * neutral server names no {@code VexStore}. The heavy store-backed implementation (parsing and matching a tenant's
- * ingested OpenVEX / CSAF statements) rides the {@code vex} plugin; this contract stays thin, carrying only the tenant,
+ * neutral server names no VEX store. The heavy store-backed implementation (parsing and matching a tenant's
+ * ingested OpenVEX / CSAF statements) rides a VEX plugin module; this contract stays thin, carrying only the tenant,
  * its {@link ArtifactStore} and the effective-settings lookup the feature toggle is read through. Mirrors the other
  * discovered compliance capabilities ({@code GatePolicyProvider}, {@code ProvenanceSignerProvider}): the server
  * resolves it once through {@link #resolve()} and overlays the per-tenant {@link Vex} on its publish- and proxy-path
@@ -17,7 +17,7 @@ import build.jenesis.repository.store.Providers;
  * <p>Semantics fail toward screening: the provider yields {@link Vex#NONE} - suppressing nothing - when the VEX
  * feature is off or the store read fails, never toward silently hiding a vulnerability; and a deployment with no VEX
  * plugin at all resolves the {@link #resolve() fallback} provider, which yields {@link Vex#NONE} for every tenant so
- * the server still boots and screens exactly as before.
+ * the server still boots and screens with nothing suppressed.
  *
  * <h2>Contract</h2>
  * <ol>
@@ -63,7 +63,7 @@ public interface VexProvider {
 
     /** The single VEX provider discovered via {@link ServiceLoader}, resolved through the shared
      *  {@link Providers#optionalUnique} policy, or a {@link Vex#NONE}-yielding fallback when no VEX plugin is
-     *  installed - so a deployment without the {@code vex} module still boots and screens, its gate suppressing
+     *  installed - so a deployment without a VEX module still boots and screens, its gate suppressing
      *  nothing. A <em>second</em> installed plugin throws rather than letting module-path order decide whose
      *  statements suppress a vulnerability. */
     static VexProvider resolve() {

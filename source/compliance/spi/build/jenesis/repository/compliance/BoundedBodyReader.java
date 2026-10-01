@@ -9,7 +9,7 @@ import build.jenesis.repository.store.ArchiveInflation;
  * tiers those reads are bounded by.
  *
  * <h2>The manifest tier is not here</h2>
- * The manifest tier has one home, one operator key and one build guard: {@link ArchiveInflation}. Two shared
+ * The manifest tier has one home and one operator key: {@link ArchiveInflation}. Two shared
  * per-member readers with the same never-a-prefix doctrine would carry two different numbers, so the manifest tier
  * is {@link ArchiveInflation#largestEntry()}, settable at {@link ArchiveInflation#LARGEST_ENTRY_KEY}, and an inspector
  * that reads one archive member calls {@link ArchiveInflation#entry(InputStream)} directly. What is here is the
@@ -30,8 +30,8 @@ import build.jenesis.repository.store.ArchiveInflation;
  * </ul>
  * They are ordered, and the order is load-bearing rather than incidental - a declaration cannot outgrow the prefix
  * that carries it, and a whole-artifact read that stopped short of the bounded-prefix read would buy no reach at all.
- * {@code BoundedInspectionTest} asserts the order, now with the manifest tier read live off {@link ArchiveInflation}
- * so an operator who raises the archive key past the prefix tier is a visible failure rather than a silent inversion.
+ * {@code BoundedInspectionTest} asserts the order, with the manifest tier read live off {@link ArchiveInflation} so
+ * an operator who raises the archive key past the prefix tier is a visible failure rather than a silent inversion.
  *
  * <p>A limit that is genuinely format-specific (a gemspec that is allowed to be larger than a manifest, a binary
  * header's index/store sanity bounds) stays an explicit constant at its own call site and is passed to the
@@ -57,9 +57,8 @@ public final class BoundedBodyReader {
      *
      * <p>The two inspection legs hold an artifact differently - the bounded one has a {@code byte[]} that is at most
      * a front prefix, the streamed one a re-openable handle on the stored blob - and an inspector that reads the same
-     * thing on both needs one way to say "open it" that does not care which. Debian's licence walk and Maven's jar
-     * rungs both need it, and shared mechanism has one home: it is stated here once, beside the tiers it is read
-     * under.
+     * thing on both needs one way to say "open it" that does not care which. Shared mechanism has one home: it is
+     * stated here once, beside the tiers it is read under.
      *
      * <p>Deliberately NOT {@link QualityInspector.Content}, which is the streamed leg's own handle: that contract
      * promises {@link QualityInspector.Content#size()} is the artifact's full length, and a bounded leg holding a

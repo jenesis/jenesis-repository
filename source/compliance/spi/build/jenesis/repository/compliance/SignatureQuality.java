@@ -7,9 +7,8 @@ import module java.base;
  * signature packet and the signer's key already state - an algorithm, a bit length, a digest name, two instants - so
  * a grade is a fact rather than an opinion, and the reasons name the values they were computed from.
  *
- * <p>That distinction is the whole design. A check that fails a build on a judgement earns an ignore list, which is
- * the argument the console's accessibility check is already held to: contrast is arithmetic over computed colours, and
- * the judgement calls stay a review question. The same line is drawn here. "This signature's digest is SHA-1" and
+ * <p>That distinction is the whole design. A check that fails on a judgement earns an ignore list, so the judgement
+ * calls stay a review question. "This signature's digest is SHA-1" and
  * "this key is RSA-1024" are computable and actionable; "this maintainer seems trustworthy" is not, and nothing in
  * this type tries.
  *
@@ -147,13 +146,9 @@ public record SignatureQuality(Grade grade, List<String> reasons) {
             }
         }
 
-        // Signing time against PUBLISH time is deliberately not graded here, though it is the check this type would
-        // most like to make: a signature made long after the bytes were published is one made over something already
-        // in circulation, and one made long before is a signature carried across from other content. It needs the
-        // artifact's durable publish record, which an inspector does not have - and guessing "now" for it is wrong in
-        // the direction that matters, because a proxy fill of a decade-old artifact would then read as back-dated and
-        // every old release would grade down. It belongs with the stored per-version record rather than here, and is
-        // left out until that exists: a documented check that never runs is worse than an absent one.
+        // Signing time against PUBLISH time is not graded here: it needs the artifact's durable publish record, which
+        // an inspector does not have, and guessing "now" for it would make a proxy fill of a decade-old artifact read
+        // as back-dated and grade every old release down.
 
         return new SignatureQuality(grade, reasons);
     }

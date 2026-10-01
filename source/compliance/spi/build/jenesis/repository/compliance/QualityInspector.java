@@ -82,8 +82,8 @@ import build.jenesis.repository.store.Limits;
  * <li><b>Bounded work.</b> Every read an inspector makes is bounded, and the bounds are the shared tiers rather than
  * per-format inventions:
  * <ul>
- *   <li>the <b>manifest tier</b> {@link build.jenesis.repository.store.ArchiveInflation#largestEntry()} - the most of one embedded declaration
- *       that is materialised while a coordinate or licence is read off it;</li>
+ *   <li>the <b>manifest tier</b> {@link build.jenesis.repository.store.ArchiveInflation#largestEntry()} - the most
+ *       of one embedded declaration that is materialised while a coordinate or licence is read off it;</li>
  *   <li>the <b>prefix tier</b> {@link #PREFIX_INSPECTION_LIMIT} - the most of a body that reaches the {@code byte[]}
  *       legs;</li>
  *   <li>the <b>archive-walk tier</b> {@link build.jenesis.repository.store.ArchiveWalk#largestWalk()} - the most of
@@ -102,16 +102,17 @@ import build.jenesis.repository.store.Limits;
  * tier.
  * <p>A limit that is genuinely the format's own (a gemspec bigger than the manifest tier, a binary header's index and
  * store sanity bounds, a publish frame's length prefix) stays an explicit constant at its call site. Reaching a
- * bound is an outcome, never a shorter value: {@link build.jenesis.repository.store.ArchiveInflation#entry(InputStream, int)} yields no
- * value at all rather than a prefix that might still parse, and
+ * bound is an outcome, never a shorter value:
+ * {@link build.jenesis.repository.store.ArchiveInflation#entry(InputStream, int)} yields no value at all rather than
+ * a prefix that might still parse, and
  * {@link build.jenesis.repository.store.ArchiveWalk.Found#truncated()} says that a walk stopped early rather than
  * reporting it as an archive that declares nothing - and it carries no value at all when it does, so an archive cannot
  * plant a decoy declaration in front of the ceiling and have that read instead. Which of the two clause-7 dispositions
  * a bound then takes is spelt at the call site by the accessor it uses -
  * {@link build.jenesis.repository.store.ArchiveWalk.Found#orNull()} degrades an optional declaration,
  * {@link BoundedArchive#required(build.jenesis.repository.store.ArchiveWalk.Found, String, String)} refuses an
- * identity-bearing one - so an inspector picks a side rather than re-deriving one per format. There is no cancellation or timeout seam - boundedness, not
- * interruption, is what keeps an inspection from running away.
+ * identity-bearing one - so an inspector picks a side rather than re-deriving one per format. There is no
+ * cancellation or timeout seam - boundedness, not interruption, is what keeps an inspection from running away.
  * <p>Which tier an inspector reads at is decided by one thing and is <em>observable</em>: an inspector that does not
  * override {@link #inspectArtifact(String, Content, Lookup)} is a prefix-tier inspector and can never pull more than
  * {@link #PREFIX_INSPECTION_LIMIT} bytes off a body, because the default bridge is its only route to one; an
@@ -305,8 +306,7 @@ public interface QualityInspector {
      *
      * <p>A {@code String} rather than the enum constant because the settings catalogue is extracted from compiled
      * constants: {@code Oversized.STREAM.name()} is a method call, so a row keyed to it would render its default
-     * blank and the generated reference would describe a product nobody ships. {@code LicensePolicy.UNKNOWN_DEFAULT}
-     * is the same shape for the same reason.
+     * blank and the generated reference would describe a product nobody ships.
      */
     String OVERSIZED_DEFAULT = "STREAM";
 
@@ -343,10 +343,9 @@ public interface QualityInspector {
      * <p>{@code false} by default, and the default is not a hedge - it is what the bridge already does. An inspector
      * that has not overridden {@link #inspectArtifact(String, Content, Lookup)} reads the same front prefix whichever
      * leg calls it, so routing it through the streamed leg would buy nothing and cost something: the bridge answers
-     * {@code inspectArtifact}, while the byte[] leg a publish takes is {@code inspect}, and for at least one shipped
-     * inspector those differ (Maven's {@code inspect} also walks a POM's declared closure). Saying so here keeps a
-     * deployment's behaviour for a large artifact exactly what it was, except where an inspector really does reach
-     * further.
+     * {@code inspectArtifact}, while the byte[] leg a publish takes is {@code inspect}, and an inspector's two may
+     * differ (Maven's {@code inspect} also walks a POM's declared closure). Answering {@code false} keeps a large
+     * artifact on the leg it would take anyway, except where an inspector really does reach further.
      *
      * <p>So this is the same shape as {@link build.jenesis.repository.format.ArtifactSignatures#embedsEvidence}: the
      * SPI asks, and the work happens only where the answer yields something. An inspector that overrides the spooled
@@ -383,14 +382,13 @@ public interface QualityInspector {
      *
      * <p><b>Why the multiplier is 2.</b> A content scan is CPU-bound, not heap-bound: it streams, so the bound exists
      * to cap the <em>work</em> one artifact may demand of a publish or proxy thread, and the ceiling is whatever that
-     * work budget affords. On the maintained secret ruleset a scan costs on the order of 100 ms per MiB scanned, so
-     * this tier is about eight seconds of worst-case scan for an artifact deliberately shaped to reach it - the same
-     * order as the other bounds a single hostile artifact may already spend. Doubling again would double that. The
-     * value also lands exactly on the
-     * archive-walk tier ({@link build.jenesis.repository.store.ArchiveWalk#LARGEST_WALK}), the product's answer to "how much of one
-     * artifact may a screen chew through", so the four tiers span three numbers rather than four: a full-body scan that
-     * stopped earlier than a prefix-tier inspector's archive walk over the same body would be the same inversion one
-     * seam over.
+     * work budget affords. A content scan costs on the order of 100 ms per MiB scanned, so this tier is about eight
+     * seconds of worst-case scan for an artifact deliberately shaped to reach it - the same order as the other bounds a
+     * single hostile artifact may already spend. Doubling again would double that. The value also lands exactly on the
+     * archive-walk tier ({@link build.jenesis.repository.store.ArchiveWalk#LARGEST_WALK}), the product's answer to "how
+     * much of one artifact may a screen chew through", so the four tiers span three numbers rather than four: a
+     * full-body scan that stopped earlier than a prefix-tier inspector's archive walk over the same body would be the
+     * same inversion one seam over.
      */
     long FULL_BODY_INSPECTION_LIMIT = 2L * PREFIX_INSPECTION_LIMIT;
 
@@ -403,14 +401,14 @@ public interface QualityInspector {
      *
      * <p><b>Default-bridged.</b> The default reads a bounded {@link #PREFIX_INSPECTION_LIMIT} front prefix from the
      * spool and hands it to {@link #inspectArtifact(String, byte[], Lookup)}, so an inspector whose declaration sits at
-     * the front of the artifact (a POM, a {@code package.json}, a {@code .nuspec}) reads exactly what it read before and
-     * needs no change - the prefix carries its whole declaration while a pathologically large body is never pulled whole
-     * into heap. Only a full-body-tier inspector (the embedded-secret content scanner) overrides this to stream the
-     * whole body, bounded by {@link #FULL_BODY_INSPECTION_LIMIT} and by its own entry/finding/nesting ceilings so the
-     * streamed read stays bomb-bounded (full-body does NOT mean unbounded, and it does not mean a ceiling per inspector
-     * either - the byte ceiling is the shared tier, so it cannot be re-chosen below the prefix tier one implementation
-     * at a time). A {@link MalformedArtifactException} thrown here means the same as on the {@code byte[]} path - the
-     * inspector claimed the artifact but could not parse it - and the hardened leg refuses on it (fail-closed).
+     * the front of the artifact (a POM, a {@code package.json}, a {@code .nuspec}) needs nothing more - the prefix
+     * carries its whole declaration while a pathologically large body is never pulled whole into heap. Only a
+     * full-body-tier inspector (one that declares {@link #streams()}) overrides this to stream the whole body, bounded
+     * by {@link #FULL_BODY_INSPECTION_LIMIT} and by its own entry/finding/nesting ceilings so the streamed read stays
+     * bomb-bounded (full-body does NOT mean unbounded, and it does not mean a ceiling per inspector either - the byte
+     * ceiling is the shared tier, so it cannot be re-chosen below the prefix tier one implementation at a time). A
+     * {@link MalformedArtifactException} thrown here means the same as on the {@code byte[]} path - the inspector
+     * claimed the artifact but could not parse it - and the hardened leg refuses on it (fail-closed).
      *
      * <p><b>It answers an {@link Inspection}, not a bare list</b>, because this is the leg on which an empty answer is
      * ambiguous: the screen behind it has the whole body and believes it was screened whole, so an inspector that
@@ -434,7 +432,7 @@ public interface QualityInspector {
         List<ComplianceGate.Subject> subjects = inspectArtifact(path, BoundedBodyReader.readPrefix(body), watched);
         // The CONFIGURED tier, never the compiled constant: readPrefix above reads the configured one, so
         // comparing against the constant would answer about a different body than the one that was read -
-        // which is the trap prefixInspectionLimit() exists to close. An operator who LOWERED the key got a
+        // which is the trap prefixInspectionLimit() exists to close. An operator who LOWERED the key would get a
         // whole-body verdict over a truncated read out of it, which is the fail-open direction.
         return new Inspection(subjects, body.size() <= prefixInspectionLimit()
                 && !(incompleteOnTruncatedSibling() && watched.truncated()));
@@ -452,8 +450,8 @@ public interface QualityInspector {
      * <p>An inspector with a <em>designed</em> degrade for the same event is the other case and stays {@code false}:
      * {@code AttestationInspector} reads its artifact sibling under a bound and, when that comes back short,
      * records the digest as unknown and says so in its subjects. Its read did not fall short; it reached a
-     * documented conclusion. Reporting that as incomplete would feed a deliberate degrade to the fail-open
-     * machinery, which is a behaviour change nobody asked for.
+     * documented conclusion, and reporting it as incomplete would turn a deliberate degrade into an incomplete
+     * screening.
      *
      * <p>It is a declared property rather than an override of the bridge because overriding the streaming leg is
      * how this SPI's kit recognises a FULL-BODY-tier inspector, and an inspector wanting honest completeness about
@@ -503,15 +501,15 @@ public interface QualityInspector {
      * What one inspector answered about a fully-spooled body: the {@link #subjects()} it derived, and whether the read
      * behind them {@link #complete() ran to completion} or a bound stopped it first.
      *
-     * <p><b>Why the completeness rides with the subjects.</b> The two facts are one answer. An empty subject
-     * list means "I understood this artifact and it declares nothing to assess" only when the inspector saw everything
-     * it needed to; when a bound stopped the read, the very same empty list means "I could not look", and the screens
-     * are what turn the first into an {@code ALLOW}. Splitting them - a list here, a completeness question asked
-     * separately - would let a caller act on the list without ever asking, which is precisely how the screens came to
-     * infer completeness from the merged list being empty and so lose one inspector's bound-stopped read behind
-     * another's subject. A non-empty answer carries the flag too: finding <em>a</em> secret in the first 64 MiB of a
-     * 100 MiB artifact says nothing about the remaining 36, and a screen that records the verdict as a whole-body one
-     * would be recording something no inspector claimed.
+     * <p><b>Why the completeness rides with the subjects.</b> The two facts are one answer. An empty subject list means
+     * "I understood this artifact and it declares nothing to assess" only when the inspector saw everything it needed
+     * to; when a bound stopped the read, the very same empty list means "I could not look", and the screens are what
+     * turn the first into an {@code ALLOW}. Splitting them - a list here, a completeness question asked separately -
+     * would let a caller act on the list without ever asking, and a screen that infers completeness from the merged
+     * list being empty loses one inspector's bound-stopped read behind another's subject. A non-empty answer carries
+     * the flag too: finding <em>a</em> secret in the first 64 MiB of a 100 MiB artifact says nothing about the
+     * remaining 36, and a screen that records the verdict as a whole-body one would be recording something no inspector
+     * claimed.
      *
      * <p>{@code complete} is about the <em>read</em>, not about the findings: an inspector that read the whole body and
      * found nothing is complete, and one that stopped at its byte, entry, finding or nesting ceiling - or on a
@@ -575,8 +573,8 @@ public interface QualityInspector {
      *       has no use for a partial answer, so it carries the supplier's own ceiling and past it it <b>throws</b>. It
      *       never returns a prefix: handing back part of a document the caller believes is whole is the
      *       silently-incomplete answer that must never be served as whole, and reading with no ceiling at all turns
-     *       an inspector into an out-of-memory lever. Both shipped screens key that ceiling to the free
-     *       core's {@link build.jenesis.repository.store.PublishInterceptor.Content#LARGEST_SIBLING} rather than
+     *       an inspector into an out-of-memory lever. Both shipped screens key that ceiling to
+     *       {@link build.jenesis.repository.store.PublishInterceptor.Content#LARGEST_SIBLING} rather than
      *       restating a number, so the publish and proxy legs cannot drift on what "too large to read whole" means.</li>
      *   <li>{@link #fetchBounded(String, int)} is the <em>bounded-fact</em> read - give me at most this many bytes and
      *       tell me whether there were more, because the caller only needs a bounded fact off the companion (a digest,
@@ -612,7 +610,7 @@ public interface QualityInspector {
      *
      * <li><b>Streaming.</b> Neither leg may materialise more than its own bound. {@link #fetchBounded} in particular
      * caps at the <em>source</em>: reading the sibling whole and trimming afterwards allocates exactly the heap the
-     * bound exists to deny, and is the shape whose removal this seam is named for.</li>
+     * bound exists to deny, and is the shape this seam exists to rule out.</li>
      *
      * <li><b>Tenant scoping.</b> The lookup is already scoped to the publishing tenant and repository by the screen
      * that built it; an inspector passes request paths through it and can reach no other tenant's artifacts.</li>
@@ -748,8 +746,8 @@ public interface QualityInspector {
          * own publish. A publisher's signature is the case: "does a signature exist for this artifact" must be
          * answerable while the artifact is held - it is how a held artifact is released when its signature lands -
          * and asking the serving question there is self-referential, because the hold being decided is what hides
-         * the sidecar. The same confusion cost a deadlock on the release path before {@code heldContentOf} fixed it
-         * there; this is the same question one path earlier.
+         * the sidecar. The release path asks for held content through {@code heldContentOf} for the same reason;
+         * this is the same question one path earlier.
          *
          * <p>It is also two store reads cheaper per call, which on a probe every publish pays for a sidecar that is
          * usually absent is the difference between a fixed cost and a noticeable one.

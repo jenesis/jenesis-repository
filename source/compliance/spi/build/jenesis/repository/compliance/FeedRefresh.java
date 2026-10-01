@@ -6,9 +6,8 @@ import module java.base;
  * Refreshing every mirroring advisory feed, and saying which ones did not come back.
  *
  * <p>Two surfaces draw the feeds before they report on a repository - the console's rescan and the API's explicit
- * refresh. Two copies of the loop drift into opposite failure behaviour over the same SPI - one logging a warning
- * per feed it could not draw, the other catching the same exceptions into an empty block, so one surface says
- * nothing at all about a feed that never loaded. That is why this is one helper rather than a copy per surface.
+ * refresh. Both must report a feed they could not draw the same way, rather than one logging it and the other
+ * saying nothing at all, which is why this is one helper rather than a copy per surface.
  *
  * <p><b>The exception a draw throws is ours, not the vendor's.</b> {@link RefreshableSource#refresh} documents its
  * {@code IOException} as "a wiring or infrastructure fault, never a vendor outage, which is fail-soft and shows up
@@ -22,9 +21,9 @@ import module java.base;
  * meaning is that the emptiness confirms nothing. Both are worth a row for the same reason.
  *
  * <p><b>Why the answer is rows of text.</b> A caller puts them in a stored report, whose rows are free text, and
- * reads them back on a later request to render beside the result they qualify. So the two ends need one agreement about which rows are these rows, and {@link #WARNING} is it -
- * written by {@link #refreshAll} and recognised by {@link #warningsIn}, rather than the same literal typed at
- * both ends of two modules.
+ * reads them back on a later request to render beside the result they qualify. So the two ends need one agreement
+ * about which rows are these rows, and {@link #WARNING} is it - written by {@link #refreshAll} and recognised by
+ * {@link #warningsIn}, rather than the same literal typed at both ends of two modules.
  */
 public final class FeedRefresh {
 

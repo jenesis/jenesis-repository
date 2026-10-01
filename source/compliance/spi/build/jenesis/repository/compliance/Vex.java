@@ -8,7 +8,7 @@ import module java.base;
  * product? The {@link ComplianceGate} asks this once per advisory and, when a suppressing statement answers, downgrades
  * the finding the advisory would raise to an informational allow that records which statement cleared it, rather than
  * quarantining or rejecting on a vulnerability the operator has attested does not apply. A deployment with no VEX
- * module resolves {@link #NONE}, so the gate behaves exactly as before.
+ * module resolves {@link #NONE}, so no advisory is ever suppressed.
  *
  * <p>The seam is a pure query - the statements themselves are stored and served by the VEX module over the tenant's
  * store; here they are only matched. {@link #of(List)} builds the matcher: among every statement that both

@@ -5,11 +5,10 @@ import build.jenesis.repository.store.ArtifactStore;
 
 /**
  * The {@link ComplianceGate.Subject} shapes a {@link QualityInspector} hands the gate, assembled once instead of per
- * format. Sixteen inspectors read sixteen different artifact layouts, but they emit only a handful of subject
- * shapes, and each had re-spelled them: the coordinate-only subject a path-derived leg returns, the same subject
- * carrying the one SPDX-ish identifier the manifest declared (with the identical "absent or blank declares nothing"
- * trimming repeated verbatim in the Cargo, PyPI, RPM and Conda inspectors), the list form for a manifest that
- * declares several, and the content-scan subject the secret and attestation inspectors stamp their findings onto.
+ * format. The inspectors read many different artifact layouts but emit only a handful of subject shapes: the
+ * coordinate-only subject a path-derived leg returns, the same subject carrying the one SPDX-ish identifier the
+ * manifest declared (with "absent or blank declares nothing" trimming), the list form for a manifest that declares
+ * several, and the content-scan subject the secret and attestation inspectors stamp their findings onto.
  *
  * <p>The builder is immutable: every {@code license} call returns a new instance, and {@code subject} freezes the
  * result, so a shared inspector instance can build subjects on many request threads at once without a shared
@@ -17,9 +16,8 @@ import build.jenesis.repository.store.ArtifactStore;
  *
  * <h2>Coordinates are the format's own, and are guarded</h2>
  * The coordinate and version are the inspector's business - read from the request path or from a manifest - and this
- * class never invents them. What it does share is {@link #unsafeSegment(String)}: the guard four inspectors had
- * copied for rejecting a path segment the format itself would never have stored or served, so a screened coordinate
- * always equals a servable one.
+ * class never invents them. What it does share is {@link #unsafeSegment(String)}: the guard rejecting a path segment
+ * the format itself would never have stored or served, so a screened coordinate always equals a servable one.
  */
 public final class ManifestSubjectBuilder {
 

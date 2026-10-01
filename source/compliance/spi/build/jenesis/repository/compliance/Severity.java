@@ -27,10 +27,10 @@ public enum Severity {
     /**
      * The feed answered, and could not tell us how severe this is - a vector in a scheme the scorer does not read,
      * a vendor field it does not carry. Distinct from {@link #NONE}, which is the positive claim "nothing severe
-     * here", and the distinction is the point: they were one value, so an advisory scored only by a
-     * {@code CVSS:4.0} vector reported as {@code NONE} and a {@code reject #severityRank >= 4} floor admitted it.
-     * {@code AdvisorySource} clause 4 already forbids a source answering clean when it means unknown; this is the
-     * vocabulary that lets it comply.
+     * here", and the distinction is the point: were they one value, an advisory scored only by a vector the scorer
+     * does not read would report as {@code NONE} and a {@code reject #severityRank >= 4} floor would admit it.
+     * {@code AdvisorySource} clause 4 forbids a source answering clean when it means unknown; this is the vocabulary
+     * that lets it comply.
      *
      * <p><b>It sorts above {@link #CRITICAL}, and that is deliberate.</b> Every severity-floor comparison in the
      * product is an ordinal one - {@code severity().compareTo(floor) >= 0} - so a band placed below the floor is
@@ -49,7 +49,7 @@ public enum Severity {
      * <p>{@code UNKNOWN} is an <em>answer</em>, not a threshold. "Reject at or above unknown" is not a policy
      * anyone means, and a vendor vocabulary has no word for it, so a catalogue that offered it would hand an
      * operator a choice that does nothing. Every floor-shaped enumeration reads this rather than
-     * {@link #values()}, which stopped meaning "the selectable bands" the moment the unknown band existed.
+     * {@link #values()}, which includes the unknown band.
      */
     public static List<Severity> floors() {
         return Stream.of(values()).filter(band -> band != UNKNOWN).toList();

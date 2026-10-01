@@ -67,7 +67,7 @@ import build.jenesis.repository.store.Providers;
  * produces an assessment byte-identical to one it had nothing against, so the findings ledger, the quarantine review
  * log and every report lose the difference between "this deployment decided to let that through" and "there was
  * nothing to let through" - and an incident review cannot recover it. The cost is accepted deliberately: artifacts
- * that <em>pass</em> now carry informational findings. A dimension with no single verdict dial (the policy-as-code
+ * that <em>pass</em> carry informational findings. A dimension with no single verdict dial (the policy-as-code
  * one, whose verdict rides each rule) has no ALLOW to report under and is exempt by construction, which its contract
  * kit's census records rather than the dimension declaring it of itself.</li>
  *
@@ -191,7 +191,7 @@ public interface GatePolicyProvider {
      *
      * <p>The iterate-filter-create loop itself is the shared {@link Providers#all ALL-policy primitive}, not a copy of
      * it: dimensions are additive, so there is no selection to miss here, but a <em>duplicate</em> provider name is
-     * still a packaging error this family had been the last to tolerate. Two providers answering to one name share one
+     * still a packaging error. Two providers answering to one name share one
      * {@code jenrepo.<name>} toggle - switching one off switches both off, and the operator has no key that
      * names either - so the primitive throws, naming both classes and the name that collided, exactly as it does for
      * the unique and exclusive families. The same holds for one provider registered twice.

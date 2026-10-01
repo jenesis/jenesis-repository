@@ -23,8 +23,7 @@ public interface ProvenanceSigner {
      *
      * <p>It belongs to the contract rather than to an implementation because a consumer matches the id in an
      * envelope against the key it was handed, so two signers deriving it differently would publish two ids for one
-     * key and the match would fail for a reason nothing names. Both implementations had computed it privately with
-     * the same six lines, so they agreed - by coincidence rather than by construction, and only until one changed.
+     * key and the match would fail for a reason nothing names.
      */
     static String fingerprint(PublicKey publicKey) {
         try {

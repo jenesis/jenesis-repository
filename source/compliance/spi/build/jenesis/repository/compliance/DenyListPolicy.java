@@ -10,9 +10,9 @@ import module java.base;
  * a family of npm packages). A match yields {@code action} - {@link Verdict#REJECT} by default, the deterministic
  * "refuse this now" control - and can be softened to {@link Verdict#QUARANTINE}. An empty list passes everything.
  *
- * <p><b>{@link Verdict#ALLOW} evaluates and permits; it does not switch the dimension off</b> (the rule
- * already settled for the seven discovered {@link GatePolicyProvider} dimensions, which this core one was outside the
- * reach of - it is not a discovered provider, so no fixture and no census covered it). A coordinate an entry matches
+ * <p><b>{@link Verdict#ALLOW} evaluates and permits; it does not switch the dimension off</b>, as for every
+ * discovered {@link GatePolicyProvider} dimension; this one is built into the gate rather than discovered, so it
+ * holds the rule itself. A coordinate an entry matches
  * is still matched and still reported, as {@code Finding(ALLOW, "Deny-listed: <entry>")} - the shape
  * {@link ComplianceGate} already uses for a VEX-suppressed or waived advisory - so a reviewer can tell an operator's
  * deliberate "let this one through" from a coordinate no entry ever named. An <em>empty</em> list is the other thing

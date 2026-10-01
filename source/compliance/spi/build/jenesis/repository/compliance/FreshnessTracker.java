@@ -4,10 +4,10 @@ import module java.base;
 
 /**
  * A {@link SignalSource}'s reading of what it is currently able to answer, derived from the lookups it has actually
- * made - the one derivation the whole signal family answers {@link SignalSource#freshness()} from, rather than twelve
- * slightly different private booleans. A source records {@link #fetched(String) fetched(key)} when a lookup landed and
- * {@link #failed(String) failed(key)} when one produced no answer at all, and hands {@link #freshness()} straight out
- * of its accessor.
+ * made - the one derivation the whole signal family answers {@link SignalSource#freshness()} from, rather than a
+ * slightly different private boolean per source. A source records {@link #fetched(String) fetched(key)} when a lookup
+ * landed and {@link #failed(String) failed(key)} when one produced no answer at all, and hands {@link #freshness()}
+ * straight out of its accessor.
  *
  * <p><strong>The reading is keyed, because the lookups are</strong>. A last-writer flag - cleared by a failed
  * lookup and set again by the very next successful one, <em>of any other key</em> - would describe whichever lookup

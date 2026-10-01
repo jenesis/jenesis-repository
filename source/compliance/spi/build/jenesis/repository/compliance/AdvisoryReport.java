@@ -30,8 +30,8 @@ public final class AdvisoryReport {
     }
 
     /** Assemble the report lines with no reachability known - every coordinate is treated as merely-scored, so the
-     *  ordering falls back to the signal ranks then coordinate (the behaviour before build-graph reachability, kept
-     *  for a caller with no reverse-dependency index installed). */
+     *  ordering falls back to the signal ranks then coordinate, for a caller with no reverse-dependency index
+     *  installed. */
     public static List<Line> assemble(List<AdvisorySignal> signals,
                                       SequencedMap<String, List<AdvisorySource.Advisory>> findings) {
         return assemble(signals, findings, Set.of());
@@ -50,13 +50,11 @@ public final class AdvisoryReport {
         }
         List<List<AdvisorySignal.Value>> columns = new ArrayList<>();
         // Each signal's identity is read ONCE, here, before it is evaluated, and every later use - the shape refusal
-        // below and every cell of its column - reads that capture. Two reasons, and the first is the one that
-        // matters: the refusal below exists to name a signal that answered the wrong number of values, and asking
-        // that very signal what it is called there would let a signal broken enough to mis-answer and then throw from
-        // name() defeat the diagnostic written to report it - a guest's throw escaping, in the handler of the surface
-        // that renders /api/vulnerabilities and the console's compliance review. The second is arithmetic: read once
-        // per CELL, name() and label() would re-enter each signal 1200 times for a page of 200 advisories over 6
-        // signals to ask it two constants.
+        // below and every cell of its column - reads that capture. The refusal names a signal that answered the wrong
+        // number of values, and asking that very signal its name there would let one broken enough to mis-answer and
+        // then throw from name() defeat the diagnostic, escaping into the handler that renders /api/vulnerabilities
+        // and the console's compliance review. And read per cell, name() and label() would re-enter each signal once
+        // per advisory to ask it two constants.
         List<String> names = new ArrayList<>(signals.size());
         List<String> labels = new ArrayList<>(signals.size());
         for (AdvisorySignal signal : signals) {

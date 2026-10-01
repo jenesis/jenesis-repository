@@ -20,7 +20,7 @@ import module java.base;
  * <h2>A misconfiguration names its key</h2>
  * A dial is re-read on every settings rebuild and on every scheduled re-read of the deployment's effective config,
  * and a value that does not parse must throw so the writer rolls back and keeps the last good gate. Thrown out of
- * a bare {@code Verdict.valueOf} that says only <em>"No enum constant Verdict.MAYBE"</em>, that failure told an
+ * a bare {@code Verdict.valueOf} that says only <em>"No enum constant Verdict.MAYBE"</em>, that failure would tell an
  * operator nothing about <em>which</em> of the deployment's dials to fix - and on the boot / scheduled-re-read path
  * there is no settings-write context to add it back. Every read here therefore fails with the offending key in the
  * message. Reaching for a default instead is never an option: silently gating on
@@ -116,7 +116,7 @@ public final class GateDimension {
      * rather than a list: the known-exploited catalogue and the maintainer-health source each declare a singleton
      * "nothing is enabled" sentinel, and the dimension is carried exactly while {@code source} is not it. Compared by
      * identity, which is what the sentinels are documented to support - an equal-but-distinct empty source is a real
-     * source that happens to know nothing today, not an absent one.
+     * source that currently knows nothing, not an absent one.
      *
      * @param source the source the dimension resolved for this deployment
      * @param absent that source family's sentinel, e.g. {@code KnownExploitedSource.none()}
@@ -139,8 +139,8 @@ public final class GateDimension {
     }
 
     /** The comma-separated entries of {@code key}, stripped, with blanks between separators dropped; empty when the
-     *  key is unset or blank. Deliberately not named {@code list}: a settings dial is not a store namespace, and the
-     *  {@code .list(prefix)} idiom belongs to the enumeration the unbounded-listing ratchet polices. */
+     *  key is unset or blank. Deliberately not named {@code list}: a settings dial is not a store namespace, and
+     *  {@code .list(prefix)} is the store's enumeration idiom. */
     public List<String> entries(String key) {
         return each(key, Function.identity());
     }

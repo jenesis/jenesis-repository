@@ -63,9 +63,7 @@ public interface SignerTrustProvider {
      * declarations on every artifact, a per-request cost for what is a one-time answer.
      *
      * <p>That cost shows as a client giving up rather than as a wrong answer: a proxy too slow to serve a large index
-     * sees {@code bundle install} abandon the download with a {@code Broken pipe}. No verdict changes and no logic
-     * differs, which is why reading the code finds nothing: the difference is in what the path <em>costs</em>, not in
-     * what it decides.
+     * sees the client abandon the download with a {@code Broken pipe}, while no verdict differs.
      *
      * <p>Resolution happens on first use rather than at class-init so that a composition which never screens pays
      * nothing, and the list is immutable so callers cannot disturb it. A provider set is fixed for a JVM, so caching

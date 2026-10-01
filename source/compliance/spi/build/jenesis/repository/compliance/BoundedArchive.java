@@ -7,8 +7,8 @@ import build.jenesis.repository.store.ArchiveWalk;
 
 /**
  * The zip-entry walk a {@link QualityInspector} cracks an artifact with: open the archive, refuse a body that is not
- * the archive it claims to be, and pick the best-ranked manifest entry - the shape the NuGet, Composer, CocoaPods and
- * Conda inspectors share, held here once.
+ * the archive it claims to be, and pick the best-ranked manifest entry - the shape every inspector of a zip-packaged
+ * format shares, held here once.
  *
  * <h2>The bound is not this class's</h2>
  * The bound is {@link ArchiveWalk} - one number an operator can move at {@link ArchiveWalk#LARGEST_WALK_KEY}, one
@@ -21,8 +21,8 @@ import build.jenesis.repository.store.ArchiveWalk;
  *   <li><b>A truncated walk yields nothing at all.</b> Handing back the best entry found <em>with the truncation
  *       flag set</em> would let an archive place a decoy manifest early and the real one past the ceiling and choose
  *       what a screen saw. {@link ArchiveWalk.Found} makes that unrepresentable - a value exactly when the walk was
- *       not cut off - so the {@code orNull()} callers (Composer, CocoaPods, Conda, Maven licences) read "this
- *       artifact declares nothing" rather than an early find.</li>
+ *       not cut off - so an {@code orNull()} caller (an optional licence read) reads "this artifact declares
+ *       nothing" rather than an early find.</li>
  *   <li><b>A budget exactly spent is not a truncation.</b> Reporting capped the moment the ceiling is reached, even
  *       when the archive ends on that very byte, would make an artifact whose footprint is exactly the bound cry
  *       wolf. The screen looks one byte ahead before it decides.</li>
@@ -37,9 +37,9 @@ import build.jenesis.repository.store.ArchiveWalk;
  * A cut-off walk is degraded by one inspector and refused by another, and the criterion is what the entry being looked
  * for carries, exactly as {@link QualityInspector}'s error-visibility clause states it:
  * <ul>
- *   <li>an <b>optional declaration</b> - a licence beside a coordinate the request path already yields (Composer,
- *       CocoaPods, Conda, Maven) - takes {@link ArchiveWalk.Found#orNull()} and degrades to "declares nothing", because
- *       a cut-off scan can then only under-declare a licence, never hide a coordinate; and</li>
+ *   <li>an <b>optional declaration</b> - a licence beside a coordinate the request path already yields - takes
+ *       {@link ArchiveWalk.Found#orNull()} and degrades to "declares nothing", because a cut-off scan can then only
+ *       under-declare a licence, never hide a coordinate; and</li>
  *   <li>the artifact's <b>identity</b> - a coordinate that exists nowhere but inside the archive (NuGet's
  *       {@code .nuspec}, RubyGems' gemspec) - fails closed, saying which of the two happened.</li>
  * </ul>

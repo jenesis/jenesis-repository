@@ -19,9 +19,9 @@ import build.jenesis.repository.settings.CoreDefaults;
  * be one no deployment ever runs, described as the product's behaviour. A default belongs with the code that reads
  * it; {@code MalwareActionDefaultTest} holds the three places to one value.
  *
- * <p><b>{@link Verdict#ALLOW} evaluates and permits; it does not switch the dimension off</b> (the rule the
- * discovered {@link GatePolicyProvider} dimensions follow, stated here because this core one is not a discovered
- * provider, so no fixture and no census covers it). A flagged advisory is still
+ * <p><b>{@link Verdict#ALLOW} evaluates and permits; it does not switch the dimension off</b>, as for every
+ * discovered {@link GatePolicyProvider} dimension; this one is built into the gate rather than discovered, so it
+ * holds the rule itself. A flagged advisory is still
  * matched and still reported, as {@code Finding(ALLOW, "Malicious package: <id>")} - the shape
  * {@link ComplianceGate} already uses for a VEX-suppressed or waived advisory. Returning before looking at the
  * advisories would make a permitted package's assessment byte-identical to one no feed flagged, so the findings
@@ -33,9 +33,8 @@ public final class MaliciousPackagePolicy {
     private final Verdict action;
 
     public MaliciousPackagePolicy() {
-        // The one definition, not a third copy of it: this constructor and the RepositoryProperties field and the
-        // setting catalogue row all read CoreDefaults, so the value cannot be moved in one of them alone - which is
-        // how this class came to carry a verdict no shipped composition ever applied.
+        // The one definition: this constructor, the RepositoryProperties field and the setting catalogue row all read
+        // CoreDefaults, so the value cannot be moved in one of them alone.
         this(Verdict.valueOf(CoreDefaults.MALWARE_ACTION));
     }
 

@@ -8,7 +8,7 @@ import module java.base;
  * asks this once per advisory - after {@link Vex} has had its say - and, when a waiver answers, downgrades the finding
  * the advisory would raise to an informational allow that names the waiver and its expiry, rather than holding or
  * rejecting a risk the operator has explicitly and temporarily accepted. A deployment with no waivers (or with the
- * feature disabled) resolves {@link #NONE}, so the gate behaves exactly as before.
+ * feature disabled) resolves {@link #NONE}, so no advisory is ever downgraded.
  *
  * <p>The seam is a pure query - the waivers themselves are durably recorded as {@code accept-risk} annotations on the
  * findings ledger and only matched here. {@link #of(List)} builds the matcher over a set already filtered to the

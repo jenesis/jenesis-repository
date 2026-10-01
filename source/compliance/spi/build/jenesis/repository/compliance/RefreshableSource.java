@@ -10,9 +10,8 @@ import module java.base;
  * {@link SignalSourceProvider#signals()}, because it is not a kind of signal a consumer resolves for; it is how one
  * signal keeps its read path pure.
  *
- * <p>A source that does <em>not</em> implement this fetches from inside its own query, which is the position eleven of
- * the twelve shipped signals still hold: for them there is no refresh to drive, and the scheduled sweep that
- * drives this role simply passes them by.
+ * <p>A source that does <em>not</em> implement this fetches from inside its own query: for it there is no refresh to
+ * drive, and the scheduled sweep that drives this role simply passes it by.
  *
  * <h2>Contract</h2>
  * <ol>

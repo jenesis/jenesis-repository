@@ -21,7 +21,7 @@ import build.jenesis.repository.store.Providers;
  * {@link #requiredConfig()} is unset). Consumers resolve per contract through the contract's own statics
  * ({@link AdvisorySource#resolve}, {@link KnownExploitedSource#resolve}, {@link ExploitProbabilitySource#resolve},
  * {@link HealthSource#resolve}, {@link AdvisorySignal#resolve}), each keeping its own conservative merge and its
- * identity-comparable neutral element, exactly as when the five contracts carried five provider SPIs.
+ * identity-comparable neutral element.
  *
  * <h2>Contract</h2>
  * <ol>
@@ -102,7 +102,7 @@ import build.jenesis.repository.store.Providers;
  * <li><b>Vendor field mapping.</b> Every provider in this family exists to translate <em>one external vendor's
  *     document</em> - an OSV entry, a GitHub Security Advisory node, a CISA KEV row, an EPSS score line, a Snyk,
  *     Mend, VulnDB, VulnCheck, Socket or OpenSSF payload - into the shared signal records. That translation is
- *     correct only against the vendor's own published API, which lives outside both repositories, so <b>no contract
+ *     correct only against the vendor's own published API, which lives outside this product, so <b>no contract
  *     kit in this product can hold the reference</b>: a kit can drive a recorded payload and assert the answer is
  *     well-shaped, and that is exactly what {@code SignalContract} does, but it cannot tell a faithful mapping from a
  *     plausible one. This clause is therefore verified per provider by the principle checkup, against these
@@ -127,22 +127,20 @@ import build.jenesis.repository.store.Providers;
  *           matching.</li>
  *     </ul></li>
  * </ol>
-*
+ *
  * <p><b>The switch is read one way, and the default is stated rather than implied.</b> A source asks
  * {@link SignalContext#enabled} and passes its own default.
  *
- * <p>{@code Features} and {@code Boolean.parseBoolean} disagree on every value that is neither "true" nor "false" -
- * one reads {@code jenrepo.snyk=yes} as enabled where the other reads {@code jenrepo.osv=yes} as disabled - though the
- * settings surface documents {@code jenrepo.<name>=false} as the one thing that switches a source off. Asking the
- * context gives every source the one reading. It lives on the context because half the source modules do not
+ * <p>{@code Features} and {@code Boolean.parseBoolean} disagree on every value that is neither "true" nor "false",
+ * though the settings surface documents {@code jenrepo.<name>=false} as the one thing that switches a source off.
+ * Asking the context gives every source the one reading. It lives on the context because many source modules do not
  * require the store SPI, so the shared answer has to live on something they already hold.
  *
  * <p>The <em>defaults</em> differ on purpose, and are written at the call site rather than implied by the
  * idiom. A public no-credential feed defaults OFF, because an unconfigured deployment must consult no advisory API
- * - a contract with a test of its own - and the shipped boot module raises those five as part of its secure floor.
- * A licensed feed defaults on and disables itself when its credential is absent, reaching the same place by a
- * different route. Reading a default off whichever idiom a provider happened to copy is how two deliberate postures
- * came to look like one inconsistent one.
+ * - a contract with a test of its own. A licensed feed defaults on and disables itself when its credential is
+ * absent, reaching the same place by a different route. A default read off whichever idiom a provider copied would
+ * make two deliberate postures look like one inconsistent one.
  */
 public interface SignalSourceProvider extends IconContributor {
 

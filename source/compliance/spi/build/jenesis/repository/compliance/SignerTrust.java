@@ -171,11 +171,10 @@ public interface SignerTrust {
     /**
      * The union of several sources of trust, because trust legitimately arrives from more than one place.
      *
-     * <p>An operator's configured keyring is one. A format that carried its own operator-provisioned keyring before
-     * this dimension existed is another, and its keys have to keep working without becoming global - the Debian one
-     * is exactly that, admitted for {@code .deb} packages and for nothing else. Continuity, when it lands, is a
-     * third. Requiring a single provider would force those into one class that knew about all of them, which is the
-     * shape this codebase removes elsewhere.
+     * <p>An operator's configured keyring is one. A format's own operator-provisioned keyring is another, whose keys
+     * must work without becoming global - a distribution's archive keyring is admitted for its packages and for
+     * nothing else. What a coordinate's history established is a third. Requiring a single provider would force
+     * those into one class that knew about all of them.
      *
      * <p>The composition rules follow from what each answer means:
      *
@@ -185,8 +184,8 @@ public interface SignerTrust {
      *       source about the signer is how a composition widens trust, since each source answers on the assumption
      *       that the signer came from its own keys. A verifier walks {@link #parts()} instead.</li>
      *   <li><b>Trust is an OR over sources that each answer only for their own material.</b> That is not a weakening
-     *       when the caller keeps identification and decision together: the Debian keyring answers for Debian
-     *       coordinates and holds only the keys an operator put in it, so a union of scoped sources is still
+     *       when the caller keeps identification and decision together: a format's keyring answers for that
+     *       format's coordinates and holds only the keys an operator put in it, so a union of scoped sources is still
      *       scoped.</li>
      *   <li><b>Expectation takes the first answer</b>, so a source that knows a coordinate's history speaks before
      *       one that merely holds a key; an empty answer defers to the next.</li>

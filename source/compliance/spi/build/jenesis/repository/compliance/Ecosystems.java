@@ -11,7 +11,7 @@ import module java.base;
  * <h2>The canonical vocabulary</h2>
  * A coordinate's ecosystem travels through this product as the OSV package-ecosystem name ({@code "Maven"},
  * {@code "npm"}, {@code "PyPI"}, {@code "crates.io"}), which is what every format's {@code ecosystem()} declares and
- * every inspector screens on. The names are constants here rather than string literals scattered over a dozen feed
+ * every inspector screens on. The names are constants here rather than string literals scattered over the feed
  * modules because the failure mode of a misspelling is silent: a vendor map keyed on {@code "Pypi"} does not fail,
  * it merely never matches, and that ecosystem quietly stops being screened by that feed. {@link #vocabulary} refuses
  * a key outside {@link #canonical()} for the same reason - a typo becomes a loud construction failure instead of a
@@ -22,7 +22,7 @@ import module java.base;
  * {@code pip}, deps.dev calls it {@code pypi} and Mend's agent model calls it {@code PYTHON}, and which ecosystems a
  * vendor covers at all differs feed by feed. This class owns the shared half - the canonical keys, the lookup
  * discipline, and the "absent means do not query" sentinel - so those genuine divergences stay visible as data in the
- * feed that has them rather than as five subtly different lookups.
+ * feed that has them rather than as subtly different lookups per feed.
  *
  * <h2>Identifier case</h2>
  * A handful of package registries resolve a package identifier case-insensitively - a name is the same package

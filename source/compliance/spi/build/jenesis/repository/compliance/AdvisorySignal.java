@@ -29,10 +29,9 @@ import module java.base;
  * <li><b>Bounded work.</b> Evaluation is batch-shaped by design: a network-backed signal answers one
  *     query for the whole report rather than one per advisory, so a report of a thousand advisories costs a bounded
  *     number of upstream calls rather than a thousand.</li>
- * <li><b>Read purity.</b> The intent is that rendering a column reads stored state. <b>Met by the
- *     known-exploited column</b>, which renders the mirrored catalogue's committed snapshot; the EPSS column still
- *     evaluates by consulting its underlying feed, so re-rendering a report can re-query a vendor. Recorded rather
- *     than implied.</li>
+ * <li><b>Read purity.</b> The intent is that rendering a column reads stored state. A column over a mirrored
+ *     catalogue meets it by rendering the committed snapshot; a column that evaluates by consulting its underlying
+ *     feed does not, and re-rendering a report then re-queries a vendor.</li>
  * <li><b>Staleness.</b> {@link SignalSource#freshness()} carries it, and this is the contract that most needed it:
  *     a column of blanks is ambiguous between "nothing to report" and "the signal could not be consulted", which is
  *     exactly the ambiguity the staleness rule exists to remove. A report renders the column's freshness
@@ -73,11 +72,9 @@ public interface AdvisorySignal extends SignalSource {
 
     /** The signal names installed on this deployment, regardless of enablement.
      *
-     *  <p><b>No production surface reads this</b>, and this javadoc asserted that a console and an API gated their
-     *  surfaces on it for as long as neither did. It is superseded rather than missing:
-     *  {@code /api/capabilities} already serves the richer {@code signals} view, a name <em>and</em> label per
-     *  installed signal off the Spring-injected list, so a name-only set has no surface left to gate. Its reader is
-     *  the signal-consolidation suite, which drives every family through the one shared primitive. */
+     *  <p><b>No production surface reads this</b>: {@code /api/capabilities} serves the richer {@code signals} view,
+     *  a name <em>and</em> label per installed signal off the injected list, so a name-only set has no surface to
+     *  gate. */
     static Set<String> installed() {
         return SignalSourceProvider.installed(AdvisorySignal.class);
     }

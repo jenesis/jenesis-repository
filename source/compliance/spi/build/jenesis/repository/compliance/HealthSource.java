@@ -32,14 +32,13 @@ import module java.base;
  *     source could not evaluate is {@link Health#NOT_EVALUATED} and never a zero: zero is a finding, {@code -1} is a
  *     silence, and rendering the two the same would report a well-run project as unreviewed.</li>
  * <li><b>The neutral element, and what it deliberately cannot say.</b> This is the clause a consumer must
- *     read before it gates on anything. Absence covers <em>four</em> different facts - the ecosystem is one the
- *     source does not cover, the coordinate has no resolvable source repository, the repository exists but was never
- *     scored, and the source could not be reached - and the {@link Optional} alone distinguishes none of them,
- *     because a health signal fails <b>soft</b>: it is a ranking aid, so an outage must let a review rank on severity
- *     and reachability rather than blocking a publish the way a broken {@link AdvisorySource} does. The consequence
- *     is explicit rather than implied: <b>an absent score is not evidence of anything</b>, so a health floor may
- *     reject only what it has a score for, and a policy that treated absence as failing would fail every private
- *     coordinate and every vendor outage alike.
+ *     read before it gates on anything. Absence covers <em>four</em> different facts - the ecosystem is one the source
+ *     does not cover, the coordinate has no resolvable source repository, the repository exists but was never scored,
+ *     and the source could not be reached - and the {@link Optional} alone distinguishes none of them, because a health
+ *     signal fails <b>soft</b>: it is a ranking aid, so an outage must let a review rank on severity and reachability
+ *     rather than blocking a publish the way a broken {@link AdvisorySource} does. So <b>an absent score is not
+ *     evidence of anything</b>: a health floor may reject only what it has a score for, and a policy that treated
+ *     absence as failing would fail every private coordinate and every vendor outage alike.
  *     <p>The fourth fact - the source could not be reached - is the one a gate must be able to see, and
  *     {@link SignalSource#freshness()} is where it lives: with the source not
  *     {@link Freshness#authoritative() authoritative}, <em>every</em> coordinate reads unrated, so a health floor
@@ -49,19 +48,17 @@ import module java.base;
  *     dimension stands down for the pass and the other dimensions decide, exactly as when no health source is
  *     installed. The first three facts remain deliberately indistinguishable from each other, because all three mean
  *     "nobody scored this project" and a review treats them alike.</p></li>
- * <li><b>Bounded work / cancellation.</b> A network-backed source bounds every lookup: a per-request
- *     timeout, a whole-lookup deadline and a response byte cap, plus the length of any resolution <em>chain</em> it
- *     walks (the deps.dev implementation resolves a coordinate's default version, that version's source repository
- *     and only then its Scorecard - three separate bounded queries, and a fourth would be a fourth metered call per
- *     ranked coordinate). Reaching a bound degrades to absent under clause 4 rather than answering with a
- *     partially-resolved score, because a score drawn from an incomplete resolution ranks a project on evidence
- *     nobody gathered.</li>
+ * <li><b>Bounded work / cancellation.</b> A network-backed source bounds every lookup: a per-request timeout, a
+ *     whole-lookup deadline and a response byte cap, plus the length of any resolution <em>chain</em> it walks
+ *     (resolving a coordinate's default version, that version's source repository and only then its Scorecard is three
+ *     separate bounded queries, each a metered call per ranked coordinate). Reaching a bound degrades to absent under
+ *     clause 4 rather than answering with a partially-resolved score, because a score drawn from an incomplete
+ *     resolution ranks a project on evidence nobody gathered.</li>
  * <li><b>Read purity.</b> The intent is that {@link #health} renders what a refresh already stored, so a
- *     ranking stands while the source is down. <b>No implementation meets this today</b>: the one health source in
- *     the inventory fetches from inside the query and holds its answer in a process-local TTL cache, so a restarted
- *     deployment re-walks the resolution chain for every coordinate it ranks. Recorded here rather than left implicit,
- *     because an undocumented divergence on a shared concern is a defect; clause 4 is what keeps it
- *     harmless, since the worst outcome of the divergence is an unranked finding rather than a wrong verdict.</li>
+ *     ranking stands while the source is down. A source that fetches from inside the query and holds its answer in a
+ *     process-local TTL cache does not meet it: a restarted deployment re-walks the resolution chain for every
+ *     coordinate it ranks. Clause 4 is what keeps that harmless, since the worst outcome is an unranked finding
+ *     rather than a wrong verdict.</li>
  * <li><b>Staleness.</b> {@link SignalSource#freshness()} carries it, so a console showing a coordinate without a
  *     score can say when this source last answered at all - an empty health panel beside a fetch instant is "nothing
  *     scored as of then", and one beside {@link Freshness#NEVER} is "this source has never answered". A

@@ -29,11 +29,11 @@ import build.jenesis.repository.store.ArtifactStore;
  *
  * <p><strong>Why the clock is here and the transport is not.</strong> The clock is the same kind of thing as the
  * snapshot space - ambient deployment state a provider must be handed rather than reach for - and every durable
- * staleness stamp is taken from it, so a test crosses a refresh interval without sleeping (the CISA catalogue already
- * hand-rolls its own {@code LongSupplier} seam for exactly this). The HTTP transport is deliberately absent: it lives
- * in the {@code build.jenesis.repository.feed} support module, which carries {@code java.net.http}, and this is an
- * SPI contract module that stays {@code java.base}-light (plus the store contract the VEX seam already needs). A feed
- * builds its own transport in its own module, where the vendor's authentication, timeouts and decorators belong.
+ * staleness stamp is taken from it, so a test crosses a refresh interval without sleeping. The HTTP transport is
+ * deliberately absent: it lives in the {@code build.jenesis.repository.feed} support module, which carries
+ * {@code java.net.http}, and this is an SPI contract module that stays {@code java.base}-light (plus the store contract
+ * the VEX seam already needs). A feed builds its own transport in its own module, where the vendor's authentication,
+ * timeouts and decorators belong.
  *
  * @see SignalSourceProvider#create(SignalContext)
  */
@@ -41,11 +41,12 @@ public interface SignalContext {
 
     /**
      * The deployment-global store prefix every signal's snapshot space sits under, one sub-space per signal name:
-     * {@code config/signals/<signal>}. It sits under {@code config/} deliberately - that root and {@code auth/} are the
-     * only deployment-global spaces {@code StorageNamespace.SHARED_ROOTS} permits, and a signal mirror is deployment
-     * data by definition, so this reuses the reserved root rather than minting a third one. A module that begins
-     * persisting here declares {@code config/signals/<its name>} as its {@code StorageNamespace.sharedPrefixes()}, and
-     * the orphan diagnostic and the operator purge then see it like any other key-space.
+     * {@code .system/config/signals/<signal>}. It sits under the {@code config} space deliberately - that space and
+     * {@code auth} are the only deployment-global spaces {@code StorageNamespace.SHARED_ROOTS} permits, and a signal
+     * mirror is deployment data by definition, so this reuses the reserved space rather than minting a third one. A
+     * module that persists here declares {@code .system/config/signals/<its name>} as its
+     * {@code StorageNamespace.sharedPrefixes()}, and the orphan diagnostic and the operator purge then see it like any
+     * other key-space.
      */
     String SNAPSHOT_ROOT = Scopes.space(Scopes.CONFIG) + "/signals";
 
@@ -58,8 +59,23 @@ public interface SignalContext {
     String setting(String key);
 
     /**
+     * Whether this source is switched on, read the one way the settings surface documents:
+     * {@code jenrepo.<name>=false} switches a source off and nothing else does, an unset value takes
+     * {@code byDefault}, and the default a source passes is the one its own settings row declares.
+     *
+     * <p>It lives here because a source cannot reach {@code Features} for itself: many of them do not require the
+     * store SPI at all. A source reading the switch as {@code Boolean.parseBoolean(setting(name))} would disagree with
+     * {@code Features} on an unset value - off rather than on - and on every value that is neither "true" nor
+     * "false", so one source would read {@code yes} as on and another as off. Asking the context removes the
+     * choice.
+     */
+    default boolean enabled(String name, boolean byDefault) {
+        return Features.enabled(this::setting, name, byDefault);
+    }
+
+    /**
      * The durable space this one signal owns, deployment-global and already confined to
-     * {@code config/signals/}{@link #signal()}: an <em>already scoped</em> store, in the shape
+     * {@code .system/config/signals/}{@link #signal()}: an <em>already scoped</em> store, in the shape
      * {@code FeedSnapshots} asks for, which never scopes one itself. A whole-catalogue mirror commits its snapshot and
      * its staleness stamp here; a feed that queries per coordinate never touches it.
      *
@@ -67,21 +83,6 @@ public interface SignalContext {
      *                               which fails loudly here rather than letting a mirror write nowhere and read as an
      *                               empty catalogue. A provider that never persists never sees it.
      */
-    /**
-     * Whether this source is switched on, read the one way the settings surface documents:
-     * {@code jenrepo.<name>=false} switches a source off and nothing else does, an unset value takes
-     * {@code byDefault}, and the default a source passes is the one its own settings row declares.
-     *
-     * <p>It lives here because a source cannot reach {@code Features} for itself: half of them do not require the
-     * store SPI at all, which is exactly why half of them had reimplemented the switch as
-     * {@code Boolean.parseBoolean(setting(name))}. That disagrees with {@code Features} on an unset value - off
-     * rather than on - and on every value that is neither "true" nor "false", so {@code jenrepo.snyk=yes} enabled
-     * Snyk while {@code jenrepo.osv=yes} disabled OSV. Asking the context removes the choice.
-     */
-    default boolean enabled(String name, boolean byDefault) {
-        return Features.enabled(this::setting, name, byDefault);
-    }
-
     ArtifactStore snapshots();
 
     /** The deployment clock every staleness stamp and refresh deadline is taken from; {@link Clock#systemUTC()} until
@@ -99,11 +100,11 @@ public interface SignalContext {
 
     /**
      * Bind the deployment's <strong>root</strong> store and clock as the space every signal's snapshots live in - the
-     * one wiring point, made by the composition that owns the root store, closing which retires the binding (only if
-     * it is still the current one, so a second application context in the same JVM cannot unwire a live one). It is
-     * sound for the reason clause 6 gives: there is exactly one signal snapshot space per deployment, so there is
-     * exactly one thing to bind. A per-tenant capability could never be wired this way, which is precisely the
-     * distinction this SPI is making.
+     * one wiring point, made by the composition that owns the root store, closing which retires the binding (only if it
+     * is still the current one, so a second application context in the same JVM cannot unwire a live one). It is sound
+     * for the reason {@link SignalSourceProvider}'s tenant-scoping clause gives: there is exactly one signal snapshot
+     * space per deployment, so there is exactly one thing to bind. A per-tenant capability could never be wired this
+     * way, which is precisely the distinction this SPI is making.
      *
      * <p><b>Why it is held by the process rather than carried by a store.</b> A signal source is created from a
      * configuration lookup alone ({@link SignalSourceProvider#named}), at sites that hold no deployment and no store -

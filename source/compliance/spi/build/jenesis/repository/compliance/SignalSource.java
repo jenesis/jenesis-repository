@@ -33,10 +33,9 @@ public interface SignalSource {
      *
      * <p>It is abstract on purpose. A default would have to guess, and both guesses are wrong in the direction that
      * matters: a default of "authoritative" makes every source that forgot to answer claim its outage is a clean
-     * answer - the exact defect this accessor exists to remove, and one this family has already met once, where a
-     * created source wrapping a catalogue inherited {@code available() == true} and would have had a loosening
-     * consumer release every hold during a vendor outage - while a default of "never fetched" makes every fixed
-     * in-memory source read as an outage and any consumer gating on it refuse to act. A source that genuinely does
+     * answer - the defect this accessor exists to remove, which would have a loosening consumer release every hold
+     * during a vendor outage - while a default of "never fetched" makes every fixed in-memory source read as an
+     * outage and any consumer gating on it refuse to act. A source that genuinely does
      * not fetch says so with {@link Freshness#FIXED}; there is nothing left for a default to save.
      *
      * <p>The value is a fresh reading, not a stamp taken at construction: a source refreshed after its last query

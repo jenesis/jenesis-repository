@@ -6,21 +6,20 @@ import module org.slf4j;
 import build.jenesis.repository.store.SingleFlight;
 
 /**
- * The per-key TTL cache every metered (licensed, rate-limited) feed lookup sits behind - the KEV-style volatile-swap
- * idiom generalized to a keyed map, extracted from the Snyk reference implementation so each licensed sibling reuses
- * it instead of re-rolling it. A fresh entry answers without an upstream call, so a serve never pays for (or spends
+ * The per-key TTL cache every metered (licensed, rate-limited) feed lookup sits behind, so each feed reuses one
+ * instead of re-rolling it. A fresh entry answers without an upstream call, so a serve never pays for (or spends
  * quota on) a network query; refreshes are single-flight <em>per key</em>, so a cold-cache burst on one coordinate
  * collapses into a single upstream call, which is also the courtesy the vendor's rate limit asks for. The map is
  * capacity-bounded: past the cap the expired entries are dropped, and if every entry is still live the cache is
  * cleared outright - it is only a cache, a cleared entry merely re-queries.
  *
  * <h2>The single flight is per key, and that is the shape of an outage</h2>
- * The flight is keyed because the answers are: coordinate A's refresh has nothing to do with coordinate B's, and a
- * lock over the whole cache made B's cold lookup queue behind A's. That was merely slow until a failing refresh
- * stopped being cheap, when a fail-closed feed past its window began to <em>re-ask the vendor</em>: during an
- * outage every gate thread queued on one monitor and each paid the full feed policy budget in turn - three attempts and
- * up to a five-minute whole-fetch deadline, serially, for coordinates that had nothing to do with each other. An outage
- * that should cost one slow request per coordinate cost the whole gate.
+ * The flight is keyed because the answers are: coordinate A's refresh has nothing to do with coordinate B's. A lock
+ * over the whole cache would queue B's cold lookup behind A's, and a failing refresh is not cheap - a fail-closed feed
+ * past its window <em>re-asks the vendor</em> - so during an outage every gate thread would queue on one monitor and
+ * each pay the full feed policy budget in turn, retries and the whole-fetch deadline, serially, for coordinates that
+ * have nothing to do with each other. An outage that should cost one slow request per coordinate would cost the whole
+ * gate.
  *
  * <p>So a refresh registers a {@link CompletableFuture} under its key: the first caller for a key does the upstream
  * work, any concurrent caller <em>for that same key</em> waits on its result rather than issuing a second query, and a

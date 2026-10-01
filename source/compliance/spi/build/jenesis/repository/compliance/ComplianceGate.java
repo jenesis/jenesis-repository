@@ -17,7 +17,7 @@ import build.jenesis.repository.store.ArtifactStore;
  * findings explaining why. The same dimensions run on both the publish path and the proxy fetch path; a discovered
  * policy may soften itself for the proxy (see {@link GatePolicyProvider.Path}). The gate holds no state and does no
  * I/O of its own beyond reading the supplied jar; the advisory lookup is the source's concern. The malicious
- * dimension defaults on (quarantine); the deny-list and the discovered dimensions default empty.
+ * dimension defaults on (reject); the deny-list and the discovered dimensions default empty.
  */
 public final class ComplianceGate {
 
@@ -77,7 +77,7 @@ public final class ComplianceGate {
     /** This gate reading maintainer-health from {@code health} rather than each health-aware dimension's own source:
      *  the deployment overlays the durable health ledger here at screen time (the screen has the request's scoped store,
      *  the boot-built policy does not), so the health dimension scores off the persisted answer instead of a live
-     *  deps.dev probe (a read renders what is durably there; a never-scored coordinate resolves to the
+     *  probe (a read renders what is durably there; a never-scored coordinate resolves to the
      *  same safe default - no finding - the live probe produces for one it cannot resolve). Every discovered
      *  {@link HealthAware} dimension is rebound to {@code health}; a non-health dimension is untouched. Order-independent
      *  and idempotent, so it composes with {@link #vex}/{@link #waivers} in any order; {@link HealthSource#none()} (or a
@@ -434,8 +434,8 @@ public final class ComplianceGate {
             dependencies = dependencies == null ? null : List.copyOf(dependencies);
         }
 
-        /** The shape before a subject said what its package is for, kept so the callers that build a subject
-         *  without it need not restate a {@code null}. */
+        /** A subject that says nothing about what its package is for, so the callers that build one without it need
+         *  not restate a {@code null}. */
         public Subject(String ecosystem, String coordinate, String version, List<DeclaredLicense> licenses,
                        Reachability reachability, List<DetectedSecret> secrets, Attestation attestation,
                        List<Signature> signatures, List<Maintainer> maintainers, List<Dependency> dependencies) {
@@ -443,8 +443,8 @@ public final class ComplianceGate {
                     maintainers, dependencies, null);
         }
 
-        /** The shape before declared dependencies were a subject fact, kept so the callers that build a subject
-         *  without them need not restate an empty list. */
+        /** A subject whose inspector read no dependency list, so the callers that build one without it need not
+         *  restate a {@code null}. */
         public Subject(String ecosystem, String coordinate, String version, List<DeclaredLicense> licenses,
                        Reachability reachability, List<DetectedSecret> secrets, Attestation attestation,
                        List<Signature> signatures, List<Maintainer> maintainers) {
@@ -452,8 +452,8 @@ public final class ComplianceGate {
                     maintainers, null);
         }
 
-        /** The shape before maintainers were a subject fact, kept so the callers that build a subject without one
-         *  need not restate an empty list. */
+        /** A subject naming no maintainers, so the callers that build one without them need not restate an empty
+         *  list. */
         public Subject(String ecosystem, String coordinate, String version, List<DeclaredLicense> licenses,
                        Reachability reachability, List<DetectedSecret> secrets, Attestation attestation,
                        List<Signature> signatures) {
@@ -469,8 +469,8 @@ public final class ComplianceGate {
             this(ecosystem, coordinate, version, licenses, reachability, List.of(), null, List.of());
         }
 
-        /** The shape before inbound signatures were a subject fact, kept so the eighty-odd callers that build a
-         *  subject without one need not restate an empty list. */
+        /** A subject carrying no inbound signatures, so the callers that build one without them need not restate an
+         *  empty list. */
         public Subject(String ecosystem, String coordinate, String version, List<DeclaredLicense> licenses,
                        Reachability reachability, List<DetectedSecret> secrets, Attestation attestation) {
             this(ecosystem, coordinate, version, licenses, reachability, secrets, attestation, List.of());
@@ -521,11 +521,11 @@ public final class ComplianceGate {
         }
 
         /** Whether this is a <em>content-scan</em> subject - one an inspector derived from an artifact's bytes (an
-         *  embedded-secret detection, an inbound attestation, a publisher's signature) rather than from a package coordinate, so it declares no
-         *  licensable identity and carries only content findings. The screens sort it after the package subject
-         *  ({@code InspectionMerge}) and the license dimension skips it, so a content finding is not doubled with a
-         *  bogus "No license declared". A real package that merely declares no license carries neither, so it still
-         *  reaches the unknown-license branch. */
+         *  embedded-secret detection, an inbound attestation, a publisher's signature) rather than from a package
+         *  coordinate, so it declares no licensable identity and carries only content findings. The screens sort it
+         *  after the package subject ({@code InspectionMerge}) and the license dimension skips it, so a content finding
+         *  is not doubled with a bogus "No license declared". A real package that merely declares no license carries
+         *  neither, so it still reaches the unknown-license branch. */
         public boolean contentScan() {
             return licenses.isEmpty() && (!secrets.isEmpty() || attestation != null || !signatures.isEmpty());
         }
@@ -668,12 +668,13 @@ public final class ComplianceGate {
      * so an operator's {@code deny com.evil:*} still bites a raw/un-inspected coordinate instead of that being the exact
      * path an attacker uses to bypass it), plus the vulnerability and malicious feed dimensions for consistency (a
      * subject that names no version, such as an index or a packument, is asked of no feed) - and DELIBERATELY SKIPS the
-     * discovered {@link #policies} (the license, attestation, known-exploited and secret-scan dimensions). This skip is
-     * load-bearing: a path-derived subject declares no license and carries no content, so per {@link Subject#contentScan()}
-     * it reaches the license policy's unknown-license branch and would quarantine EVERY raw upload - over-quarantining
-     * ordinary unclaimed content - and none of the other discovered dimensions can meaningfully fire on a bare coordinate
-     * with no read content anyway. The advisory lookup and its VEX/waiver downgrade run exactly as in {@link #assess(Subject)}.
-     * Used by the publish and proxy screens to screen unclaimed content against the deny-list rather than admit it unscreened.
+     * discovered {@link #policies} (the license, attestation, known-exploited and secret-scan dimensions). This skip
+     * is load-bearing: a path-derived subject declares no license and carries no content, so per
+     * {@link Subject#contentScan()} it reaches the license policy's unknown-license branch and would quarantine EVERY
+     * raw upload - over-quarantining ordinary unclaimed content - and none of the other discovered dimensions can
+     * meaningfully fire on a bare coordinate with no read content anyway. The advisory lookup and its VEX/waiver
+     * downgrade run exactly as in {@link #assess(Subject)}. Used by the publish and proxy screens to screen unclaimed
+     * content against the deny-list rather than admit it unscreened.
      */
     public Assessment assessUnclaimed(Subject subject) {
         return assess(subject, false);
@@ -816,16 +817,15 @@ public final class ComplianceGate {
      * The jar's {@code Bundle-License} header as a declared license, or {@code null} if absent - the fallback a
      * caller adds to {@link Subject#licenses()} when a POM declares none.
      *
-     * <p>The manifest is walked to under {@link ArchiveInflation}'s sibling bound
-     * {@link ArchiveWalk#largestWalk()} and inflated at the shared manifest tier
-     * ({@link ArchiveInflation#entry(InputStream)}), so a {@code META-INF/MANIFEST.MF} that is a deflate bomb
-     * - a few compressed KiB claiming gigabytes of headers - is refused within the cap instead of inflated into a
-     * {@link Manifest} on the publish thread. (A plain {@code JarInputStream.getManifest()} would inflate it whole:
-     * the jar {@code byte[]} handed in is a bounded prefix, but nothing bounds what one entry inflates TO.) The
-     * manifest must still be the archive's first member, exactly as {@code JarInputStream} requires, so which jars
-     * carry a readable {@code Bundle-License} is unchanged; only the bomb is now stopped. A jar that is not a
-     * readable archive, or whose manifest exceeds the tier, declares nothing here - the caller's coordinate comes
-     * from the request path, so this is an optional declaration and losing it can only under-declare a licence.
+     * <p>The manifest is walked to under the archive-walk bound {@link ArchiveWalk#largestWalk()} and inflated at the
+     * shared manifest tier ({@link ArchiveInflation#entry(InputStream)}), so a {@code META-INF/MANIFEST.MF} that is a
+     * deflate bomb - a few compressed KiB claiming gigabytes of headers - is refused within the cap instead of inflated
+     * into a {@link Manifest} on the publish thread. (A plain {@code JarInputStream.getManifest()} would inflate it
+     * whole: the jar {@code byte[]} handed in is a bounded prefix, but nothing bounds what one entry inflates TO.) The
+     * manifest must still be the archive's first member, exactly as {@code JarInputStream} requires, so the bound
+     * changes which jars carry a readable {@code Bundle-License} only by stopping the bomb. A jar that is not a
+     * readable archive, or whose manifest exceeds the tier, declares nothing here - the caller's coordinate comes from
+     * the request path, so this is an optional declaration and losing it can only under-declare a licence.
      */
     public static DeclaredLicense bundleLicense(byte[] jar) {
         return bundleLicense(new ByteArrayInputStream(jar), ArchiveWalk.largestWalk());
