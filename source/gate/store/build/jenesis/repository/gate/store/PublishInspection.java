@@ -50,8 +50,8 @@ public final class PublishInspection {
      *  small archive by the inspectors' nature (a POM, a {@code package.json}, a {@code .nuspec}), whose declaration
      *  sits at the front - a jar's manifest, a wheel's METADATA - so a bounded prefix carries everything they read,
      *  while a pathologically large jar is never pulled whole into a {@code byte[]} to gate it (which a
-     *  {@code readAllBytes} would, materialising the entire artifact in heap on the publish path). Beyond the cap the
-     *  archive is truncated, and the zip/tar reader inside the inspector simply stops at the last complete entry.
+     *  {@code readAllBytes} would, materialising the entire artifact in heap on the publish path). An artifact past the
+     *  cap is streamed or refused as the deployment's oversized policy says ({@link #inspect}).
      *  <p>It is the SPI's prefix tier itself, not a screen-local copy of the same number: the {@code byte[]} legs are
      *  contractually handed at most that much, and {@link #inspect} decides whether the inspectors saw the artifact
      *  whole by comparing the body against this very bound - so a screen reading a different amount than the tier the
@@ -117,26 +117,6 @@ public final class PublishInspection {
             QualityInspector inspector = bound(claimed, content);
             subjects.addAll(contained(inspector, path, () -> inspector.inspect(path, metadata, siblings)));
         }
-        if (truncated && InspectionMerge.noPackageSubject(subjects)) {
-            // A claimed artifact whose declaration sat BEYOND the 32 MiB inspection prefix yields no subjects from the
-            // truncated head. That must NOT read as "nothing to gate" and silently ACCEPT - a padded archive with
-            // trailing metadata would then publish un-screened, with nothing logged. Fall back to a filename-derived
-            // coordinate subject so the deny-list and license dimensions still bite, and the incomplete screening is
-            // recorded (quarantined/rejected with a reason) rather than passed silently.
-            //
-            // The guard asks whether any PACKAGE subject came back, not whether the list is empty, and the two differ
-            // exactly when a second inspector claims the same path. A content-scan subject - a detected secret, an
-            // inbound attestation, a publisher's signature - satisfies "not empty" while carrying no licensable
-            // identity for the license and deny-list dimensions to bite on, so reading emptiness here would let any
-            // content inspector that found something in a truncated head silently switch this fallback off. The proxy
-            // leg asks the same question; stating it in one predicate is what stops the two drifting.
-            //
-            // The fallback is APPENDED rather than substituted, because substituting would drop the very content
-            // finding that made the list non-empty in order to add a coordinate.
-            List<ComplianceGate.Subject> withFallback = new ArrayList<>(subjects);
-            withFallback.add(pathDerivedSubject(artifact));
-            return InspectionMerge.order(withFallback);
-        }
         return InspectionMerge.order(subjects);
     }
 
@@ -158,9 +138,9 @@ public final class PublishInspection {
      * signature material each carries inside itself sits past the bound and an unreadable signature is scored with
      * the untrusted dial.
      *
-     * <p>The truncation fallback below is the byte[] leg's, on the honest predicate: an inspector that ran out of
-     * body or out of budget reports an incomplete inspection, and a claimed artifact that yielded no package subject
-     * still falls back to a path-derived one rather than reading as nothing to gate.
+     * <p>An inspector that ran out of body or out of budget reports an incomplete inspection, and a claimed artifact
+     * whose incomplete inspection yielded no package subject falls back to a path-derived one rather than reading as
+     * nothing to gate.
      */
     private List<ComplianceGate.Subject> streamed(ArtifactDescriptor artifact, Content content,
                                                          byte[] metadata, List<QualityInspector> claiming,
@@ -196,6 +176,17 @@ public final class PublishInspection {
             incomplete |= !inspection.complete();
         }
         if (incomplete && InspectionMerge.noPackageSubject(subjects)) {
+            // An incomplete inspection that yielded no package subject must NOT read as "nothing to gate" and silently
+            // ACCEPT - a padded archive with trailing metadata would then publish un-screened. A filename-derived
+            // coordinate subject keeps the deny-list and license dimensions biting, so the incomplete screening is
+            // recorded with a reason rather than passed silently.
+            //
+            // The guard asks whether any PACKAGE subject came back, not whether the list is empty: a content-scan
+            // subject - a detected secret, an inbound attestation, a publisher's signature - makes the list non-empty
+            // while carrying no licensable identity, so reading emptiness would let any content inspector that found
+            // something switch this fallback off. The proxy leg asks the same question through the same predicate.
+            //
+            // The fallback is APPENDED rather than substituted, so the content finding is kept.
             List<ComplianceGate.Subject> withFallback = new ArrayList<>(subjects);
             withFallback.add(pathDerivedSubject(artifact));
             return InspectionMerge.order(withFallback);
@@ -206,8 +197,8 @@ public final class PublishInspection {
     /** Trust is rebound per request, not per process: it is tenant state, and the screen is what knows which tenant
      *  this publish belongs to. An inspector that verifies nothing never implements the seam and is handed through
      *  untouched. Both inspection legs bind the same way, so they bind in one place. Trust is configuration, read
-     *  through {@link ComplianceSettings#lookup(ArtifactStore)} - the lookup the gate's dimensions are built from - since trust read
-     *  anywhere else would answer about a different deployment than the one the gate was built for. */
+     *  through {@link ComplianceSettings#lookup(ArtifactStore)} - the lookup the gate's dimensions are built from -
+     *  since trust read anywhere else would answer about a different deployment than the one the gate was built for. */
     private QualityInspector bound(QualityInspector claimed, Content content) {
         return claimed instanceof TrustAware aware && trustInstalled
                 ? aware.withTrust(SignerTrustProvider.trust(ComplianceSettings.lookup(content.store()), content.store()))
@@ -230,13 +221,12 @@ public final class PublishInspection {
      * handler. Every failure shape the SPI permits therefore leaves this named, and leaves it on the SAME fail-closed
      * leg: {@code QualityInspector.inspect} declares {@code throws IOException}, so a plain IOException (a
      * ZipException off a truncated central directory, an EOFException off a half-written body) is as legal an
-     * inspector failure as a RuntimeException - and it was the one shape that escaped the screen's containment,
-     * because the caller catches MalformedArtifactException and RuntimeException and nothing in between. That shape
-     * reached the publisher as a raw 500 with no hold, no recorded finding and no diagnostic, while the same
-     * inspector raising an IllegalStateException over the same bytes was held with a legible reason.
+     * inspector failure as a RuntimeException. The caller catches MalformedArtifactException and RuntimeException,
+     * so an IOException is re-raised as an {@link InspectionFault} and held with a legible reason rather than
+     * reaching the publisher as a raw 500 with no hold, no recorded finding and no diagnostic.
      *
-     * <p>The could-not-parse leg is kept exactly as it was - it is a distinct, contract-bearing answer the caller
-     * routes on - and only gains the name of the inspector that raised it.
+     * <p>The could-not-parse leg stays distinct - it is a contract-bearing answer the caller routes on - and gains the
+     * name of the inspector that raised it.
      */
     private static <T> T contained(QualityInspector inspector, String path, Inspecting<T> call) throws IOException {
         String identity = inspector.getClass().getName();
@@ -247,7 +237,7 @@ public final class PublishInspection {
                     + reason(malformed), malformed);
         } catch (IOException | RuntimeException failure) {
             // Both re-raised as the inspection-fault the caller already fails closed on, attributed to the
-            // inspector. A deployment carries seventeen of these; "a quality inspector threw" names none of them.
+            // inspector: a deployment carries many of these, and "a quality inspector threw" names none of them.
             throw new InspectionFault(identity + " threw inspecting " + path + ": " + reason(failure), failure);
         }
     }
@@ -255,8 +245,8 @@ public final class PublishInspection {
     /**
      * A discovered {@link QualityInspector} failed inspecting an upload, named. Unchecked so it lands on the screen's
      * existing inspection-fault leg (fail closed, hold the upload, record the reason) rather than needing a second
-     * one, and carrying the inspector's implementation class in its message because a deployment installs seventeen
-     * of them and "a quality inspector threw" names none. It exists to carry an attribution out of {@link #inspect},
+     * one, and carrying the inspector's implementation class in its message because a deployment installs many of
+     * them and "a quality inspector threw" names none. It exists to carry an attribution out of {@link #inspect},
      * never as an API - which is why it is package-private and why nothing catches it by type.
      */
     static final class InspectionFault extends IllegalStateException {
@@ -303,8 +293,8 @@ public final class PublishInspection {
 
             @Override
             public Optional<byte[]> fetch(String path) throws IOException {
-                // The whole-document read, delegated: it carries the publication seam's LARGEST_SIBLING ceiling and throws
-                // past it, which is what the compliance Lookup's own fetch clause promises.
+                // The whole-document read, delegated: it carries the publication seam's LARGEST_SIBLING ceiling and
+                // throws past it, which is what the compliance Lookup's own fetch clause promises.
                 Optional<byte[]> published = content.sibling(path);
                 return published.isPresent() ? published : owned(path, content.store());
             }
@@ -312,8 +302,9 @@ public final class PublishInspection {
             @Override
             public Optional<QualityInspector.Lookup.Bounded> fetchBounded(String path, int limit) throws IOException {
 
-                // The bounded-fact read, delegated to the publication seam's own bounded leg - capped at the store, honouring
-                // the CALLER's limit rather than LARGEST_SIBLING, and reporting the overflow instead of raising on it.
+                // The bounded-fact read, delegated to the publication seam's own bounded leg - capped at the store,
+                // honouring the CALLER's limit rather than LARGEST_SIBLING, and reporting the overflow instead of
+                // raising on it.
                 Optional<QualityInspector.Lookup.Bounded> published = content.sibling(path, limit)
                         .map(bounded -> new QualityInspector.Lookup.Bounded(bounded.content(), bounded.truncated()));
                 if (published.isPresent()) {
@@ -361,14 +352,13 @@ public final class PublishInspection {
      * rest of the blobs-namespace group.
      *
      * <p>The generic read above answers for every format that uses that pointer, and empty for every format that
-     * does not, however plainly the artifact is being served. That silence is what kept an inspector from reading
-     * the document beside the one it was handed: a Hugging Face model card is a sibling of the file it describes and
-     * was invisible from it, so a repository could not be gated on the licence it declares. A format that keeps its
-     * own key space now answers the same question through {@link BlobLayout#servingKey}, which resolves the way its
-     * serving does - the same revision rules, the same absence.
+     * does not, however plainly the artifact is being served. A format that keeps its own key space answers through
+     * {@link BlobLayout#servingKey} instead, which resolves the way its serving does - the same revision rules, the
+     * same absence - so an inspector can read a Hugging Face model card beside the file it describes and gate a
+     * repository on the licence it declares.
      *
-     * <p>Read whole under the publication seam's own sibling ceiling, so this path is bounded exactly like the one it backs
-     * up rather than becoming the way a large companion gets pulled into heap.
+     * <p>Read whole under the publication seam's own sibling ceiling, so this path is bounded exactly like the one it
+     * backs up rather than becoming the way a large companion gets pulled into heap.
      */
     private static Optional<byte[]> owned(String path, ArtifactStore store) throws IOException {
         return ownedPrefix(path, store, PublishInterceptor.Content.largestSibling());
@@ -429,9 +419,9 @@ public final class PublishInspection {
      *  claimed it but could not read it within the inspection window (a truncated archive), OR no inspector claimed it
      *  at all (raw / un-inspected content). Its own coordinate where the layout descriptor carries one, else its
      *  filename, so the deny-list still applies. It declares no license: the truncated-claimed path runs the full
-     *  {@link ComplianceGate#assess} so the unknown-license dimension holds it, while the unclaimed path runs {@link
-     *  ComplianceGate#assessUnclaimed}, which skips that dimension - a raw upload is screened for the deny-list without
-     *  being over-quarantined as unknown-license. */
+     *  {@link ComplianceGate#assess} so the unknown-license dimension holds it, while the unclaimed path runs
+     *  {@link ComplianceGate#assessUnclaimed}, which skips that dimension - a raw upload is screened for the deny-list
+     *  without being over-quarantined as unknown-license. */
     static ComplianceGate.Subject pathDerivedSubject(ArtifactDescriptor artifact) {
         String ecosystem = artifact.ecosystem() == null ? "" : artifact.ecosystem();
         String coordinate = artifact.coordinate() != null ? artifact.coordinate() : fileName(artifact.path());

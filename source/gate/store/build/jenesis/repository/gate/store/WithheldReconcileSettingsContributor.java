@@ -5,12 +5,10 @@ import build.jenesis.repository.settings.Setting;
 import build.jenesis.repository.settings.SettingsContributor;
 
 /**
- * Describes the withhold-reconcile settings, so they surface on the settings screens exactly when this module is
- * installed. Both are deployment-wide (a background sweep, not a per-repository dial) and take effect on the next
- * pass, so flipping one needs no restart.
- *
- * {@link WithheldReconcileConsumer#NAME} constant, so the catalogue and the consumer cannot drift.
- * {@code IntervalSetting} constant, so the catalogue and the code cannot drift.
+ * Describes the withhold-reconcile setting, so it surfaces on the settings screens exactly when this module is
+ * installed. It is deployment-wide (a background sweep, not a per-repository dial) and takes effect on the next
+ * pass, so flipping it needs no restart. Its key is the {@link WithheldReconcileConsumer#NAME} constant, so the
+ * catalogue and the consumer cannot drift.
  */
 public final class WithheldReconcileSettingsContributor implements SettingsContributor {
 

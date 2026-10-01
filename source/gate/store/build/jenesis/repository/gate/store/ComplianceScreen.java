@@ -337,7 +337,8 @@ public final class ComplianceScreen implements PublishInterceptor {
             private Builder() {
             }
 
-            /** The gate a publish assesses through, resolved on the publishing thread; a null answer screens nothing. */
+            /** The gate a publish assesses through, resolved on the publishing thread; a null answer screens nothing.
+             *  */
             public Builder gate(Supplier<ComplianceGate> gate) {
                 this.gate = Objects.requireNonNull(gate, "gate");
                 return this;
@@ -492,25 +493,22 @@ public final class ComplianceScreen implements PublishInterceptor {
             return screenMalformed(artifact, malformed, binding.unparseable);
         } catch (RuntimeException failure) {
             // An inspector threw a NON-Malformed runtime error parsing this upload - an unhandled edge over hostile
-            // content (an NPE, an index/arithmetic fault) that was not wrapped as a MalformedArtifactException. The gate
-            // never saw a derived coordinate, exactly as for the malformed case, so it fails closed and HOLDS it (could
-            // not fully screen ⇒ do not serve) rather than letting the raw error escape to the publisher as a 500 or
-            // admitting the unscreened bytes - the same discipline screenMalformed and screenFeedFailure apply.
+            // content (an NPE, an index/arithmetic fault) that was not wrapped as a MalformedArtifactException. The
+            // gate never saw a derived coordinate, exactly as for the malformed case, so it fails closed and HOLDS it
+            // (could not fully screen ⇒ do not serve) rather than letting the raw error escape to the publisher as a
+            // 500 or admitting the unscreened bytes - the same discipline screenMalformed and screenFeedFailure apply.
             return screenInspectorFailure(artifact, failure, binding.unparseable);
         }
         if (inspected.isEmpty()) {
             // Nothing derived a package subject, so no parsed coordinate ever reached the gate - screen the path's
             // own coordinate against the operator deny-list and the feeds rather than admitting the bytes unscreened.
             //
-            // Whether an inspector CLAIMED the path is deliberately no part of this, and reading it as one was a
-            // fail-open. A claim is a declaration of interest, not an assessment: an inspector claims a path it may
-            // have something to say about, and one that then derives nothing has screened exactly as much as an
-            // inspector that never looked. Taking "claimed and found nothing" for "already screened" is how an Ivy
-            // jar published with a CRITICAL advisory against its own coordinate - the signature inspector claims it,
-            // because the layout declares a sidecar convention and describes a coordinate, and derives no subject
-            // when the publisher signed nothing, while no layout inspector reads /ivy at all. The only screening that
-            // ran on that publish was on the jar's own .sha1, which nothing claims - and that checksum was REJECTED,
-            // on the very advisory the jar it names carried.
+            // Whether an inspector CLAIMED the path is deliberately no part of this. A claim is a declaration of
+            // interest, not an assessment: an inspector that claims a path and then derives nothing has screened
+            // exactly as much as one that never looked. The signature inspector claims an Ivy jar, because the layout
+            // declares a sidecar convention, and derives no subject when the publisher signed nothing - so taking
+            // "claimed and found nothing" for "already screened" would admit a jar carrying a CRITICAL advisory
+            // against its own coordinate.
             return screenFromPath(artifact, current);
         }
         if (InspectionMerge.noPackageSubject(inspected)) {
@@ -584,8 +582,8 @@ public final class ComplianceScreen implements PublishInterceptor {
         return overlaid;
     }
 
-    // No withheld(path, store) override: this screen holds through the /quarantine<path> review pointer, and the publication
-    // copies that hold onto the serving pointer (Publication.link writes the flag, unpublish lifts it, the
+    // No withheld(path, store) override: this screen holds through the /quarantine<path> review pointer, and the
+    // publication copies that hold onto the serving pointer (Publication.link writes the flag, unpublish lifts it, the
     // rebuild walk reconciles the two), so a serve reads it off the one pointer it reads anyway. An override probing
     // the review pointer here would pay a second key on every download - one of a download's four reads on every
     // backing - and the router's miss path, the one place that must tell a hold from an absence
@@ -658,8 +656,8 @@ public final class ComplianceScreen implements PublishInterceptor {
                     reasons.add("Could not fully screen the artifact " + artifact.path()
                             + " - " + FEED_FAILED_CLOSED + ": " + feedFailed);
                 }
-                // The path a reviewer will meet this hold at, which is not always the path the screen was handed
-                // A format whose coordinate lives INSIDE the artifact commits under the only descriptor it
+                // The path a reviewer will meet this hold at, which is not always the path the screen was handed. A
+                // format whose coordinate lives INSIDE the artifact commits under the only descriptor it
                 // can build before the bytes are down - its push endpoint, one path every push of that format shares
                 // - and re-keys the /quarantine review handle onto the package once the coordinate is readable. The
                 // audit row and the held-subject record follow the handle, or the reviewer's reasons and their handle
@@ -668,9 +666,9 @@ public final class ComplianceScreen implements PublishInterceptor {
                 // RubyGems) commits under one versionless push endpoint that every push of that format shares, so
                 // a REJECT logged under the raw artifact.path() reads as the same path for every refusal in the
                 // repository - and QuarantineLog.indexLatest keys the derived latest-verdict row by that path, so
-                // those refusals overwrite one another's index row. Re-keying is safe for a refusal because it
+                // those refusals would overwrite one another's index row. Re-keying is safe for a refusal because it
                 // derives a path or returns the screened one unchanged; a refusal has no review pointer to agree
-                // with, so the only thing at stake is whether its row is distinguishable, and it was not.
+                // with, so what is at stake is only that its row stays distinguishable.
                 String reviewPath = PublishHolds.reviewPath(artifact, inspected);
                 new QuarantineLog(store).record(Clocks.now(), reviewPath, PublishHolds.coordinate(artifact, inspected),
                         disposition == Disposition.QUARANTINE ? Verdict.QUARANTINE : Verdict.REJECT, reasons);
@@ -784,8 +782,8 @@ public final class ComplianceScreen implements PublishInterceptor {
     /** Fail closed when a quality inspector threw a non-{@link MalformedArtifactException} runtime error inspecting the
      *  upload (an unhandled edge over hostile content). The inspector failing to inspect is a could-not-fully-screen
      *  exactly like an unparseable body, so this holds the artifact in quarantine and records the inspection-failed
-     *  reason through the same marker {@link #screenMalformed} uses - never letting the raw error escape to the publisher
-     *  and never admitting the unscreened bytes. */
+     *  reason through the same marker {@link #screenMalformed} uses - never letting the raw error escape to the
+     *  publisher and never admitting the unscreened bytes. */
     private Disposition screenInspectorFailure(ArtifactDescriptor artifact, RuntimeException failure,
                                                UnparseableListener meter) {
         String format = artifact.ecosystem() == null ? "none" : artifact.ecosystem();
@@ -832,11 +830,11 @@ public final class ComplianceScreen implements PublishInterceptor {
      *  coordinate - so it must never read as a clean admit (no silent fallback on a correctness-bearing path). The
      *  upload is HELD in quarantine unconditionally, never admitted: "could not fully screen ⇒ do not serve". The hold
      *  is made visible rather than a silent reject - a WARNING naming the path is logged, the unparseable meter is
-     *  bumped ({@code jenrepo.gate.unparseable}, tagged by format), and the parse-failure reason is stashed so {@link
-     *  #committed} names it in the quarantine log (which artifact, which inspector's message, why) and records a
+     *  bumped ({@code jenrepo.gate.unparseable}, tagged by format), and the parse-failure reason is stashed so
+     *  {@link #committed} names it in the quarantine log (which artifact, which inspector's message, why) and records a
      *  distinct {@link Finding.Kind#INSPECTION} finding on the coordinate - so an operator sees a scoped reason for the
-     *  hold and can investigate or release it. A real artifact that trips a stricter parser is held by design (the owner
-     *  accepted this publish-rejection risk); the quarantine review/release flow is the operator's override. */
+     *  hold and can investigate or release it. A real artifact that trips a stricter parser is held by design; the
+     *  quarantine review/release flow is the operator's override. */
     private Disposition screenMalformed(ArtifactDescriptor artifact, MalformedArtifactException failure,
                                         UnparseableListener meter) {
         String format = artifact.ecosystem() == null ? "none" : artifact.ecosystem();
@@ -855,12 +853,12 @@ public final class ComplianceScreen implements PublishInterceptor {
         return Disposition.QUARANTINE;
     }
 
-    /** Fail closed when an advisory feed threw mid-assessment (a rate limit, a mirror outage): the gate assesses through
-     *  the feed, so its {@code assess} raised rather than returning a verdict. Could-not-fully-screen holds the upload in
-     *  quarantine with a legible, scoped reason (the same discipline {@link #screenMalformed} applies to an unparseable
-     *  body), never admitting the unscreened bytes as a silent clean and never letting the raw error escape to the
-     *  publisher. The inspected subjects (where the body parsed) name the coordinate the hold is on, so the quarantine
-     *  log still identifies the held artifact; a path-derived subject stands in when nothing parsed. */
+    /** Fail closed when an advisory feed threw mid-assessment (a rate limit, a mirror outage): the gate assesses
+     *  through the feed, so its {@code assess} raised rather than returning a verdict. Could-not-fully-screen holds the
+     *  upload in quarantine with a legible, scoped reason (the same discipline {@link #screenMalformed} applies to an
+     *  unparseable body), never admitting the unscreened bytes as a silent clean and never letting the raw error escape
+     *  to the publisher. The inspected subjects (where the body parsed) name the coordinate the hold is on, so the
+     *  quarantine log still identifies the held artifact; a path-derived subject stands in when nothing parsed. */
     private Disposition screenFeedFailure(ArtifactDescriptor artifact, List<ComplianceGate.Subject> inspected,
             RuntimeException failure) {
         Throwable cause = failure.getCause() != null ? failure.getCause() : failure;

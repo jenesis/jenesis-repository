@@ -28,9 +28,8 @@ import build.jenesis.repository.gate.QuarantineDispatch;
  */
 public final class OciHoldRecorder implements PublishInterceptor {
 
-    /** The neutral OCI ecosystem the manifest choke point stamps on its descriptor, and the manifest path marker the
-     *  Distribution API pins at the host root - the two facts that identify a held OCI manifest without re-parsing a
-     *  layout. */
+    /** The neutral OCI ecosystem the manifest choke point stamps on its descriptor - with the {@code /v2/} manifest
+     *  path, what identifies a held OCI manifest without re-parsing a layout. */
     private static final String OCI_ECOSYSTEM = "oci";
 
     /** Record the OCI manifest hold's replay context on a manifest {@code QUARANTINE}, and nothing otherwise. The
@@ -50,8 +49,8 @@ public final class OciHoldRecorder implements PublishInterceptor {
         Map<String, String> context = new LinkedHashMap<>();
         if (artifact.contentType() != null && !artifact.contentType().isBlank()) {
             // The one datum a release needs beyond the path and hash: the pushed manifest's media type, reproduced into
-            // the oci/.types/<hex> sidecar. Carried on the Content-Type key the deploy dispatch also frames from, so the
-            // stored descriptor stays the same shape; absent, the release defaults to the OCI image-manifest type.
+            // the oci/.types/<hex> sidecar. Carried on the Content-Type key the deploy dispatch also frames from, so
+            // the stored descriptor stays the same shape; absent, the release defaults to the OCI image-manifest type.
             context.put("Content-Type", artifact.contentType());
         }
         QuarantineDispatch.record(store, path, OCI_ECOSYSTEM, QuarantineDispatch.OCI, artifact.hash(), context);

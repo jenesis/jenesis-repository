@@ -2,25 +2,24 @@
  * The compliance gate as a discovered publication screen: it provides the
  * {@link build.jenesis.repository.store.PublishInterceptor}, so every artifact that publishes through the
  * {@link build.jenesis.repository.store.Publication} - a format's own deploy handling, a staging promotion, a
- * pull-through caching, an import - is assessed by the same {@link build.jenesis.repository.compliance.ComplianceGate}
- * a deploy controller once wired by hand, and a quarantined path is withheld from every serving surface
- * through the screen's read side. The gate itself stays behind the compliance SPI: this module inspects an upload
- * through the discovered {@link build.jenesis.repository.compliance.QualityInspector}s and routes the verdict; the
- * {@code compliance/*} modules are untouched behind it. The screen judges a publish by the binding its store carries
+ * pull-through caching, an import - is assessed by the same {@link build.jenesis.repository.compliance.ComplianceGate},
+ * and a quarantined path is withheld from every serving surface through the screen's read side. The gate itself stays
+ * behind the compliance SPI: this module inspects an upload through the discovered
+ * {@link build.jenesis.repository.compliance.QualityInspector}s and routes the verdict; the {@code compliance/*}
+ * modules are untouched behind it. The screen judges a publish by the binding its store carries
  * ({@code ComplianceScreen.Binding}), which a deployment hands the store it publishes through, so a plain module-path
  * presence never gates a test JVM by accident and two deployments in one process never judge each other's uploads.
- * Beside the
- * screen: the release and discard primitive every review surface delegates to ({@code HoldLifecycle}), the review
- * queue, the two hold-release observers of the KEV and licence kinds, the retention pass that keeps the quarantine
- * log from growing without bound, the withheld-marker reconcile and listing-rebuild walk consumers, and the
+ * Beside the screen: the release and discard primitive every review surface delegates to ({@code HoldLifecycle}), the
+ * review queue, the two hold-release observers of the KEV and licence kinds, the retention pass that keeps the
+ * quarantine log from growing without bound, the withheld-marker reconcile and listing-rebuild walk consumers, and the
  * settings for their dials.
  *
  * <p>The vocabulary these are written against - the two SPIs, the hold records and kinds, the quarantine log, the
  * dispatch context, the retroactive hold and the guarded clear - is {@code build.jenesis.repository.gate.spi}, the
  * contract half this module requires and never the reverse, so a module that only reacts to a hold requires that
- * and not this. This half keeps the module name the gate always had, on purpose: its settings contributors' dials
- * are stored under {@code config/settings/build.jenesis.repository.gate.json} and its namespace declaration is the
- * manifest entry of that name, and a rename would have stranded both on every deployment that upgraded.
+ * and not this. This module's name is load-bearing: its settings contributors' dials are stored under
+ * {@code config/settings/build.jenesis.repository.gate.json} and its namespace declaration is the manifest entry of
+ * that name, so a rename would strand both on every deployment.
  *
  * @jenesis.release 25
  * @jenesis.bom pin-repository.properties

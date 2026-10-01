@@ -259,15 +259,15 @@ final class PublishHolds {
      * {@code servedPaths} maps the coordinate version back to, and the stored content hash is one its
      * {@code blobHashes} resolves. A format whose {@code describe} emits a coordinate (so a retroactive KEV/license
      * sweep enumerates the version) but whose {@code blobKeys}/{@code servedPaths} resolve NOTHING back would hold
-     * un-retractably - the RPM/conda/conan class that shipped five times and surfaced only in a later audit. Caught
-     * here it fails on the FIRST publish. On a break: emit {@code jenrepo.publish.holdmapping.broken{eco}} + one WARN,
-     * and {@code throw} only when {@code jenrepo.strict-hold-mapping} is on (every test config sets it) - production
-     * stays alarm-not-abort, since a broken format must not DoS publishes (the {@code hold.unenforceable} gauge
-     * reasoning). Scoped strictly to the JUST-published path/hash, which the format just wrote, so an
-     * evicted-but-still- enumerated sibling version - which legitimately resolves to nothing at describe time - never
-     * false-positives. Only blobs-namespace ecosystems are checked: a {@code publish/}-namespace layout (Maven) or a
-     * non-blobs upload has no such reverse mapping to verify, and a path that names no versioned artifact (an index, a
-     * packument, a versionless envelope endpoint) is skipped exactly as the {@code published} record is.
+     * un-retractably; checked here, such a format fails on its first publish. On a break: emit
+     * {@code jenrepo.publish.holdmapping.broken{eco}} + one WARN, and {@code throw} only when
+     * {@code jenrepo.strict-hold-mapping} is on (every test config sets it) - production stays alarm-not-abort, since a
+     * broken format must not DoS publishes (the {@code hold.unenforceable} gauge reasoning). Scoped strictly to the
+     * JUST-published path/hash, which the format just wrote, so an evicted-but-still- enumerated sibling version -
+     * which legitimately resolves to nothing at describe time - never false-positives. Only blobs-namespace ecosystems
+     * are checked: a {@code publish/}-namespace layout (Maven) or a non-blobs upload has no such reverse mapping to
+     * verify, and a path that names no versioned artifact (an index, a packument, a versionless envelope endpoint) is
+     * skipped exactly as the {@code published} record is.
      */
     static void verifyHoldMapping(ArtifactDescriptor artifact, ArtifactStore store,
                                   ComplianceScreen.HoldMappingBrokenListener meter, BooleanSupplier strict)
@@ -313,11 +313,9 @@ final class PublishHolds {
      * Write the {@code holds/<kind>} record for every finding of the quarantining assessment that names a hold kind,
      * grouped by kind - the same record the kind's retroactive sweep writes before it links its hold pointers, so an
      * operator's release of this publish-time hold promotes the same subjects into the same sticky override and the
-     * sweep never re-holds a version a human has cleared. Before the finding carried its kind, a gate hold wrote no
-     * record and the KEV kind recovered the CVEs from the quarantine log's reason text by regular expression; a
-     * finding whose wording did not match left the release without an override, and the next sweep re-held it.
-     * Written inside the screen's pre-commit window like the held-subject record beside it, so a hold whose record
-     * could not be written fails the publish rather than standing without it.
+     * sweep never re-holds a version a human has cleared. Written inside the screen's pre-commit window like the
+     * held-subject record beside it, so a hold whose record could not be written fails the publish rather than standing
+     * without it.
      */
     private static void recordHolds(ArtifactStore store, StoreRepositoryInventory.Coordinate subject,
                                     ComplianceGate.Assessment assessment) throws IOException {
@@ -343,15 +341,13 @@ final class PublishHolds {
      *  record, never an edit here - and a kind whose module has been UNINSTALLED still counts, so
      *  uninstalling a compliance module cannot turn an ordinary re-upload into a laundering channel for the holds it
      *  had placed. A path a format DID place and that no sweep holds is not sweep-owned, so a plain publish-time gate
-     *  hold is cleared as before.
+     *  hold is cleared.
      *
-     *  <p><b>The one remaining way absence answered here is closed at this caller.</b> {@code anyHolds} keys
-     *  on the coordinate a request path resolves to, and that resolution needs the owning FORMAT installed - the one
-     *  dependence left standing and left open, for want of a durable path &rarr; coordinate record. With
-     *  that format's module gone the path resolves to nothing, every record read has no key to look under, and the
-     *  answer degrades to "not held" - so this leg would delete {@code publish/quarantine<path>}, the review queue's
-     *  only index of the hold, on an accepted upload to that path. The question here is not "is anything held" but
-     *  "may this screen clear a pointer it may not own", and unresolvable is not ownership: an unplaceable path
+     *  <p><b>Unresolvable is not ownership.</b> {@code anyHolds} keys on the coordinate a request path resolves to,
+     *  and that resolution needs the owning FORMAT installed. With that format's module gone the path resolves to
+     *  nothing, every record read has no key to look under, and the answer would degrade to "not held" - so this leg
+     *  would delete {@code publish/quarantine<path>}, the review queue's only index of the hold, on an accepted upload
+     *  to that path. The question here is "may this screen clear a pointer it may not own", so an unplaceable path
      *  answers sweep-owned and the pointer stays. The cost is a stale publish-time pointer left standing while the
      *  format is uninstalled - visible, and lifted by a review release - against a hold silently laundered. */
     private static boolean sweepHeld(ArtifactStore store, StoreRepositoryInventory inventory,

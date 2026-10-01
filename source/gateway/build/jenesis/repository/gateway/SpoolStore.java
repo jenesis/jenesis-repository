@@ -89,7 +89,8 @@ public final class SpoolStore implements ObservabilitySource {
     }
 
     /** Raised when a spool is refused because a {@link Budget} is exhausted; the message names which budget. An
-     *  {@link IOException} so it rides the store write path and the {@link RepositoryRouter} maps it to a {@code 503}. */
+     *  {@link IOException} so it rides the store write path and the {@link RepositoryRouter} maps it to a {@code 503}.
+     *  */
     public static final class BudgetExhausted extends IOException {
 
         private BudgetExhausted(String message) {
@@ -171,8 +172,8 @@ public final class SpoolStore implements ObservabilitySource {
         return new SpoolLease().root(bindings);
     }
 
-    /** Bytes currently spooled to temp files across every in-flight spool - the live {@code jenrepo.gateway.spool.bytes}
-     *  gauge value. */
+    /** Bytes currently spooled to temp files across every in-flight spool - the live
+     *  {@code jenrepo.gateway.spool.bytes} gauge value. */
     public long bytesInFlight() {
         return bytesInFlight.get();
     }
@@ -330,9 +331,9 @@ public final class SpoolStore implements ObservabilitySource {
     }
 
     /**
-     * One view of a {@link SpoolLease}'s scratch at a tenant/repository prefix - the {@link ArtifactStore} a format writes
-     * an untrusted body into and reads it back from. Every scoped view shares the one lease, so closing the root the
-     * router acquired reclaims the whole request's spool.
+     * One view of a {@link SpoolLease}'s scratch at a tenant/repository prefix - the {@link ArtifactStore} a format
+     * writes an untrusted body into and reads it back from. Every scoped view shares the one lease, so closing the root
+     * the router acquired reclaims the whole request's spool.
      */
     private static final class Spool implements ArtifactStore, AutoCloseable {
 
@@ -490,9 +491,8 @@ public final class SpoolStore implements ObservabilitySource {
          * publish in flight in memory until the lease commits, so there is nowhere to stream to.
          *
          * <p>Stated explicitly rather than inherited, because the inherited body does the same thing for a
-         * completely different reason. Three sibling decorators inherited it by accident and silently turned a
-         * streaming backend into a buffering one; a reader cannot tell the deliberate case from the accident
-         * unless the deliberate one says so.
+         * completely different reason: a decorator that inherits it turns a streaming backend into a buffering one,
+         * and a reader cannot tell the deliberate case from that accident unless the deliberate one says so.
          */
         @Override
         public boolean writeVersioned(String key, InputStream content, long length, Object expected)

@@ -7,10 +7,10 @@ import build.jenesis.repository.metadata.MetadataStore;
 import build.jenesis.repository.store.ArtifactStore;
 
 /**
- * The read-only console surface of the hardened proxy leg: what the now-invisible full-body screening
- * leg has durably decided, assembled for an operator without re-screening or re-fetching a single byte. It reads only
- * what the leg already persisted - the digest-pinned {@link VerdictSection verdict} record in the consolidated metadata
- * document ({@link HardenedScreen} writes it on every screen), the typed structural refusals in the durable
+ * The read-only console surface of the hardened proxy leg: what the full-body screening leg has durably decided,
+ * assembled for an operator without re-screening or re-fetching a single byte. It reads only what the leg already
+ * persisted - the digest-pinned {@link VerdictSection verdict} record in the consolidated metadata document
+ * ({@link HardenedScreen} writes it on every screen), the typed structural refusals in the durable
  * {@link QuarantineLog} (the leg records each {@link HardenedScreen.Refusal} as a {@code REJECT} row prefixed
  * {@link HardenedScreen#REFUSAL_REASON_PREFIX}), and the gateway-wide drift alarm counter
  * ({@link HardenedScreen#driftEvents()}, the same count {@link HardeningObservability} reports) - so the read stands
@@ -137,7 +137,8 @@ public final class HardeningVerdicts {
     public record Validator(String name, String version) {
     }
 
-    /** One recorded hardened structural refusal: when it happened, the coordinate refused, the verdict and the reasons. */
+    /** One recorded hardened structural refusal: when it happened, the coordinate refused, the verdict and the reasons.
+     *  */
     public record Refusal(String when, String path, String coordinate, String verdict, List<String> reasons) {
 
         public Refusal {
@@ -146,8 +147,8 @@ public final class HardeningVerdicts {
     }
 
     /** The gateway-wide upstream-drift alarm: the count of immutable-coordinate re-fetches refused because the bytes
-     *  changed under a pinned verdict (the {@code jenrepo.gateway.hardened.drift} counter {@link HardeningObservability}
-     *  reports). A non-zero count is a compromise indicator for the upstream. */
+     *  changed under a pinned verdict (the {@code jenrepo.gateway.hardened.drift} counter
+     *  {@link HardeningObservability} reports). A non-zero count is a compromise indicator for the upstream. */
     public record Drift(long alarms) {
 
         public boolean alarming() {

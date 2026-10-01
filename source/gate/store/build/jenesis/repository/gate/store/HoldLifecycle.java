@@ -48,8 +48,8 @@ public final class HoldLifecycle {
 
     private static final Logger LOGGER = LoggerFactory.getLogger(HoldLifecycle.class);
 
-    /** The media type an OCI release stamps into the {@code oci/.types/<hex>} sidecar when the held manifest recorded no
-     *  {@code Content-Type} - the same default the {@code OciManifests} accept path and serve path fall back to, so
+    /** The media type an OCI release stamps into the {@code oci/.types/<hex>} sidecar when the held manifest recorded
+     *  no {@code Content-Type} - the same default the {@code OciManifests} accept path and serve path fall back to, so
      *  a released manifest that was pushed without a content type serves as the OCI image manifest exactly as an
      *  accepted one would. */
     private static final String OCI_MANIFEST = "application/vnd.oci.image.manifest.v1+json";
@@ -90,12 +90,12 @@ public final class HoldLifecycle {
         Optional<HeldSubjects.Subject> fetched = HeldSubjects.read(store, path)
                 .filter(subject -> subject.upstream() != null && subject.versioned());
         // A release that can neither link a pointer nor prove it must not is refused, and refused here - before
-        // anything is mutated. With the owning format's module off the graph describe() answers nothing, the
-        // two-valued blobs-namespace question read that silence as "not blobs-namespace", and the release synthesized a
-        // publish/<path> pointer for a version whose format may never serve through one: a phantom entry no format
-        // serves, that retention's ArtifactLayout reverse-mapping never reclaims, and that corrupts the namespace
-        // classification a later KEV re-listing reads. The hold is a human's review item, so the honest answer is to
-        // keep it and say why, not to guess a namespace: reinstalling the format module makes the release exact.
+        // anything is mutated. With the owning format's module off the graph describe() answers nothing, and reading
+        // that silence as "not blobs-namespace" would synthesize a publish/<path> pointer for a version whose format
+        // may never serve through one: a phantom entry no format serves, that retention's ArtifactLayout
+        // reverse-mapping never reclaims, and that corrupts the namespace classification a later KEV re-listing reads.
+        // The hold is a human's review item, so the honest answer is to keep it and say why, not to guess a namespace:
+        // reinstalling the format module makes the release exact.
         if (dispatch.isEmpty() && current.isEmpty() && unplaceable(publishPointer(inventory, path))) {
             throw new IOException("Release of " + path + " is refused: no installed format claims that path, so this "
                     + "release cannot tell a publish/-namespace hold - whose release links a release pointer - from a "
@@ -115,9 +115,9 @@ public final class HoldLifecycle {
         // asking their question against a store where no alias holds anything, so neither needs a widened exclusion
         // set - and an alias whose clear FAILED still keeps the marker, which is the direction a release may err in.
         //
-        // The relation is read from the record the cross-publish wrote (ServedAliases), never inferred: same content
-        // hash and same coordinate version were both tried as the signal and both are unsound - distinct files of one
-        // version routinely share a hash, and a version's other files are not this file under another name.
+        // The relation is read from the record the cross-publish wrote (ServedAliases), never inferred: neither the
+        // same content hash nor the same coordinate version is a sound signal - distinct files of one version
+        // routinely share a hash, and a version's other files are not this file under another name.
         for (String alias : ServedAliases.group(store, path)) {
             if (!alias.equals(path)) {
                 releaseAlias(store, publication, path, alias, hooks);
@@ -148,11 +148,10 @@ public final class HoldLifecycle {
             // version). A blobs-namespace hold (npm/PyPI/NuGet/Cargo/RubyGems/Debian/Go) is deliberately NOT given a
             // publish/ pointer - those formats never use one; its served blobs resume purely by lifting the withhold
             // markers below, so synthesizing a pointer here would strand a phantom publish/ entry the format never
-            // serves. That is now the WHOLE release for those formats however the hold arose: a retroactive
-            // KEV/licence hold overlays a version that is already laid out, and a screen-time QUARANTINE is laid out by
-            // the format itself behind the same withheld/<hash> marker - so this primitive has one blobs-namespace
-            // release mechanism (lift the marker) rather than a second, format-specific replay beside it, and the
-            // release stays a pure retraction-lift, which is what makes a retried release converge by construction.
+            // serves. That is the WHOLE release for those formats however the hold arose: a retroactive KEV/licence
+            // hold overlays a version that is already laid out, and a screen-time QUARANTINE is laid out by the format
+            // itself behind the same withheld/<hash> marker - so the blobs-namespace release is one mechanism (lift the
+            // marker), a pure retraction-lift, which is what makes a retried release converge by construction.
             publication.link(path, held.get());
             if (fetched.isEmpty()) {
                 inventory.record(path, Instant.now());
@@ -167,12 +166,12 @@ public final class HoldLifecycle {
         // A present pointer is left alone: equal hash means it is already right; a different hash is a corrected
         // republish that must not be rolled back to the quarantined bytes - lifting the hold is all that remains.
         // Lift the content-addressed marker so the released bytes serve again from the blobs namespace too - but only
-        // when no OTHER coordinate sharing this hash is still held, or clearing it would un-withhold that byte-identical
-        // sibling (the blobs-namespace serve gate keys withheld on the marker, not the per-path pointer). Routed through
-        // the HoldClears owner: it re-runs the cross-alias guard after the clear and re-marks if a sibling was held in
-        // the window (the reconcile-vs-enforce race, cross-alias form). The excluded set is this coordinate's own
-        // served paths, so its
-        // own still-present /quarantine pointer (unpublished just below) never triggers a false re-mark.
+        // when no OTHER coordinate sharing this hash is still held, or clearing it would un-withhold that
+        // byte-identical sibling (the blobs-namespace serve gate keys withheld on the marker, not the per-path
+        // pointer). Routed through the HoldClears owner: it re-runs the cross-alias guard after the clear and re-marks
+        // if a sibling was held in the window (the reconcile-vs-enforce race, cross-alias form). The excluded set is
+        // this coordinate's own served paths, so its own still-present /quarantine pointer (unpublished just below)
+        // never triggers a false re-mark.
         HoldClears.clearReleased(store, held.get(), releasingCoordinatePaths(inventory, path), "hold-release " + path,
                 inventory.describe(path).orElse(ArtifactDescriptor.at(null, path)));
         publication.unpublish("/quarantine" + path);
@@ -216,8 +215,9 @@ public final class HoldLifecycle {
         for (String hash : inventory.blobHashes(described.get().ecosystem(), described.get().coordinate(),
                 described.get().version())) {
             // Same cross-alias guard as the release tail, routed through the HoldClears owner: a version-wide marker
-            // whose hash a DIFFERENT coordinate still holds under its own /quarantine pointer stays standing, or lifting
-            // it would un-withhold that sibling; and the owner re-marks if a sibling was held in the clear window.
+            // whose hash a DIFFERENT coordinate still holds under its own /quarantine pointer stays standing, or
+            // lifting it would un-withhold that sibling; and the owner re-marks if a sibling was held in the clear
+            // window.
             HoldClears.clearReleased(store, hash, ownPaths, "hold-release version-withhold", described.get());
         }
     }
@@ -244,17 +244,16 @@ public final class HoldLifecycle {
         // Resolve the coordinate for the resolution event BEFORE the reap below destroys the version's state; the
         // path stays the stable identifier if it no longer maps to a coordinate.
         Optional<ArtifactDescriptor> discarded = new StoreRepositoryInventory(store).describe(path);
-        // A discard is refused HERE too - before anything is mutated - for the reason an eviction is. A
-        // discard's destroy intent has two halves: clear the review handle, and stop the bytes serving. With the owning
-        // format's module off the graph the second half silently does nothing (discardBlobs is a no-op for an ecosystem
-        // no installed BlobLayout owns, and there is no publish/ pointer for a blobs-namespace version to unpublish)
-        // while the first ran unconditionally - so the review handle went and the known-exploited bytes kept serving,
-        // with nothing left to find them by. There is no "do the whole thing anyway" to choose: which keys the version
-        // serves under is layout knowledge. What the durable subject record adds is the ability to tell the two silences
-        // apart - a path that names no versioned artifact at all (a checksum, a raw upload: nothing to destroy, discard
-        // proceeds exactly as before) from a path whose hold was placed on a real coordinate this deployment can no
-        // longer place. The second is refused, loudly and reversibly: the hold stays exactly as it is, and reinstalling
-        // the format module makes the discard exact.
+        // A discard is refused HERE too - before anything is mutated - for the reason an eviction is. A discard's
+        // destroy intent has two halves: clear the review handle, and stop the bytes serving. With the owning format's
+        // module off the graph the second half would silently do nothing (discardBlobs is a no-op for an ecosystem no
+        // installed BlobLayout owns, and there is no publish/ pointer for a blobs-namespace version to unpublish)
+        // while the first ran - so the review handle would go and the known-exploited bytes keep serving, with nothing
+        // left to find them by. Which keys the version serves under is layout knowledge, so there is no "do the whole
+        // thing anyway". The durable subject record tells the two silences apart - a path that names no versioned
+        // artifact at all (a checksum, a raw upload: nothing to destroy, the discard proceeds) from a path whose hold
+        // was placed on a real coordinate this deployment can no longer place. The second is refused, loudly and
+        // reversibly: the hold stays exactly as it is, and reinstalling the format module makes the discard exact.
         if (discarded.isEmpty()) {
             Optional<HeldSubjects.Subject> subject = HeldSubjects.read(store, path);
             if (subject.isPresent() && subject.get().versioned()) {
@@ -315,8 +314,7 @@ public final class HoldLifecycle {
     }
 
     /**
-     * The {@code publish/} release pointer this hold's release must link - the question, asked as the
-     * three-valued thing it is rather than as a yes/no about one namespace with a third enum constant bolted on.
+     * The {@code publish/} release pointer this hold's release must link - a three-valued question.
      *
      * <ul>
      *   <li>{@link Known.Present} carries the request path to link: a publish-time, {@code publish/}-namespace hold
@@ -341,7 +339,7 @@ public final class HoldLifecycle {
                     + "belongs to - and therefore whether its release links a publish/ pointer - was never asked");
         }
         // A claiming format that describes the path WITHOUT a coordinate (a checksum, generated metadata) has answered:
-        // such a path is a publish/-namespace one and its release links the pointer, exactly as before.
+        // such a path is a publish/-namespace one and its release links the pointer.
         return described.get().coordinate() != null && described.get().version() != null
                 && inventory.servesFromBlobs(described.get().ecosystem())
                 ? Known.absent()
@@ -370,21 +368,22 @@ public final class HoldLifecycle {
     /**
      * Replay a screen-quarantined upload's format dispatch from its stored context, so the release materialises the
      * version the same way an accepted upload does. A hosted-deploy dispatch (a {@code PUT}/{@code POST}) looks the
-     * claiming {@link RepositoryFormat} up by the recorded name and drives its own {@link RepositoryFormat#handle handle}
-     * over a synthetic exchange that restreams the held blob at the recorded request path with the recorded method and
-     * headers - the identical seam the deploy edge drives on ACCEPT, never a forked publish path. An
-     * {@code IMPORT} dispatch (recorded by the import edge when a migrated asset screened to QUARANTINE) instead replays
-     * the matching {@link RepositoryImporter#importArtifact} from the stored blob (see {@link #replayImport}), the
-     * import analog of the accept path's restream-into-importer. An {@link QuarantineDispatch#OCI OCI} dispatch (recorded
-     * at the OCI manifest choke point's QUARANTINE leg) replays neither: an OCI push serves by digest straight from
-     * {@code blobs/<hex>} under the native {@code withheld/<hex>} marker, never through a {@code publish/} pointer, so
-     * its release completes the deferred OCI layout the QUARANTINE leg skipped (see {@link #releaseOci}) - the
-     * {@code oci/.types/<hex>} sidecar and the tag pointer - rather than re-driving a format. The screen is suppressed for
-     * the deploy/import replay ({@link ComplianceScreen#replaying}) so a format whose own handle re-publishes through
-     * {@code Publication} (Maven's does) does not re-quarantine the just-released bytes; the OCI completion writes no
-     * body through {@code Publication.screen}, so it needs no such suppression. When the format/importer is no longer
-     * installed the deploy/import release is <b>refused</b> ({@link #refusedReplay}) rather than degraded to linking
-     * the stored blob: the envelope is not the artifact, so a link materialises nothing and strands a pointer.
+     * claiming {@link RepositoryFormat} up by the recorded name and drives its own {@link RepositoryFormat#handle
+     * handle} over a synthetic exchange that restreams the held blob at the recorded request path with the recorded
+     * method and headers - the identical seam the deploy edge drives on ACCEPT, never a forked publish path. An
+     * {@code IMPORT} dispatch (recorded by the import edge when a migrated asset screened to QUARANTINE) instead
+     * replays the matching {@link RepositoryImporter#importArtifact} from the stored blob (see {@link #replayImport}),
+     * the import analog of the accept path's restream-into-importer. An {@link QuarantineDispatch#OCI OCI} dispatch
+     * (recorded at the OCI manifest choke point's QUARANTINE leg) replays neither: an OCI push serves by digest
+     * straight from {@code blobs/<hex>} under the native {@code withheld/<hex>} marker, never through a
+     * {@code publish/} pointer, so its release completes the deferred OCI layout the QUARANTINE leg skipped (see
+     * {@link #releaseOci}) - the {@code oci/.types/<hex>} sidecar and the tag pointer - rather than re-driving a
+     * format. The screen is suppressed for the deploy/import replay ({@link ComplianceScreen#replaying}) so a format
+     * whose own handle re-publishes through {@code Publication} (Maven's does) does not re-quarantine the just-released
+     * bytes; the OCI completion writes no body through {@code Publication.screen}, so it needs no such suppression.
+     * When the format/importer is no longer installed the deploy/import release is <b>refused</b>
+     * ({@link #refusedReplay}) rather than degraded to linking the stored blob: the envelope is not the artifact, so a
+     * link materialises nothing and strands a pointer.
      */
     private static void replay(ArtifactStore store, String path, String hash, QuarantineDispatch dispatch)
             throws IOException {
@@ -432,23 +431,23 @@ public final class HoldLifecycle {
 
     /**
      * Replay an import-quarantined asset into its layout-only importer from the stored blob, so a released migrated
-     * asset materialises the same way an ACCEPT import laid it out. The import edge recorded the target-layout ecosystem
-     * as the dispatch {@code format} (method {@code IMPORT}) and the walk's SOURCE path in the context map: the owning
-     * importer is the one whose {@link RepositoryImporter#importTarget importTarget} of that source path resolves to that
-     * ecosystem - the same describe-then-lay-out contract the walk selected it by, so exactly one importer matches. Its
-     * {@code importArtifact} is driven over the SOURCE path (not the target/held path - an importer keys its layout on
-     * the source path, e.g. Maven's {@code importArtifact} prepends {@code /maven/}, so the held target path would
-     * double-prefix) with the blob restreamed from the CAS, the identical seam the accept path drives, never a forked
-     * layout. When no such importer is installed the release is <b>refused</b> ({@link #refusedReplay}) rather than
-     * degraded to a link. The screen is suppressed during the replay, mirroring the deploy path, so a layout that touches
-     * {@code Publication} cannot re-quarantine the just-released bytes.
+     * asset materialises the same way an ACCEPT import laid it out. The import edge recorded the target-layout
+     * ecosystem as the dispatch {@code format} (method {@code IMPORT}) and the walk's SOURCE path in the context map:
+     * the owning importer is the one whose {@link RepositoryImporter#importTarget importTarget} of that source path
+     * resolves to that ecosystem - the same describe-then-lay-out contract the walk selected it by, so exactly one
+     * importer matches. Its {@code importArtifact} is driven over the SOURCE path (not the target/held path - an
+     * importer keys its layout on the source path, e.g. Maven's {@code importArtifact} prepends {@code /maven/}, so the
+     * held target path would double-prefix) with the blob restreamed from the CAS, the identical seam the accept path
+     * drives, never a forked layout. When no such importer is installed the release is <b>refused</b>
+     * ({@link #refusedReplay}) rather than degraded to a link. The screen is suppressed during the replay, mirroring
+     * the deploy path, so a layout that touches {@code Publication} cannot re-quarantine the just-released bytes.
      */
     private static void replayImport(ArtifactStore store, String path, String hash, QuarantineDispatch dispatch)
             throws IOException {
         String source = dispatch.headers().getOrDefault(QuarantineDispatch.IMPORT_SOURCE_PATH, path);
-        // The importer is a format capability now, not a second discovered service - discover the
-        // formats and filter by instanceof RepositoryImporter (mirroring RepositoryImport), so the
-        // owning importer is the format that both carries the capability and describes this source path.
+        // The importer is a format capability, so the formats are filtered by instanceof RepositoryImporter
+        // (mirroring RepositoryImport): the owning importer is the format that both carries the capability and
+        // describes this source path.
         Optional<RepositoryImporter> importer = RepositoryFormat.installed().stream()
                 .filter(format -> format instanceof RepositoryImporter)
                 .map(format -> (RepositoryImporter) format)
@@ -465,21 +464,22 @@ public final class HoldLifecycle {
     }
 
     /**
-     * Complete the deferred OCI layout for a released manifest hold, so a held image becomes pullable by tag AND digest.
-     * The OCI manifest choke point stored the manifest content-addressed at the serving key {@code blobs/<hash>} but, on
-     * QUARANTINE, laid out none of OCI's native metadata and set the {@code withheld/<hash>} marker instead; the shared
-     * release tail lifts that marker, and this writes the two things the accept path would have: the
-     * {@code oci/.types/<hash>} media-type sidecar the serve path returns verbatim, and - for a tag reference (never a
-     * {@code sha256:} digest reference, which already resolves by digest) - the {@code oci/<name>/tags/<tag>} pointer at
-     * {@code sha256:<hash>} <em>only when that tag is still absent</em> (see {@link #linkOciTag}), so a pull by tag
-     * resolves without rolling back a clean manifest re-pushed to the same tag during the hold. The image name and tag
-     * are read back off the recorded request
-     * path ({@code /v2/<name>/manifests/<reference>}); the media type rides the dispatch context's {@code Content-Type},
-     * falling back to the OCI image-manifest type exactly as the accept path does. A recorded path that is not the OCI
-     * manifest shape degrades to linking the stored blob so the hold still resolves rather than being silently dropped.
-     * That fallback is kept HERE and only here: it is a statement about the recorded path's <em>shape</em>, which no
-     * module absence can change, and the manifest blob at a non-manifest path is the artifact rather than an envelope -
-     * unlike the deploy/import replays, whose absent-module legs are now refused rather than degraded.
+     * Complete the deferred OCI layout for a released manifest hold, so a held image becomes pullable by tag AND
+     * digest. The OCI manifest choke point stored the manifest content-addressed at the serving key
+     * {@code blobs/<hash>} but, on QUARANTINE, laid out none of OCI's native metadata and set the
+     * {@code withheld/<hash>} marker instead; the shared release tail lifts that marker, and this writes the two things
+     * the accept path would have: the {@code oci/.types/<hash>} media-type sidecar the serve path returns verbatim, and
+     * - for a tag reference (never a {@code sha256:} digest reference, which already resolves by digest) - the
+     * {@code oci/<name>/tags/<tag>} pointer at {@code sha256:<hash>} <em>only when that tag is still absent</em> (see
+     * {@link #linkOciTag}), so a pull by tag resolves without rolling back a clean manifest re-pushed to the same tag
+     * during the hold. The image name and tag are read back off the recorded request
+     * path ({@code /v2/<name>/manifests/<reference>}); the media type rides the dispatch context's
+     * {@code Content-Type}, falling back to the OCI image-manifest type exactly as the accept path does. A recorded
+     * path that is not the OCI manifest shape degrades to linking the stored blob so the hold still resolves rather
+     * than being silently dropped. That fallback is kept HERE and only here: it is a statement about the recorded
+     * path's <em>shape</em>, which no module absence can change, and the manifest blob at a non-manifest path is the
+     * artifact rather than an envelope - unlike the deploy/import replays, whose absent-module legs are refused rather
+     * than degraded.
      */
     private static void releaseOci(ArtifactStore store, String path, String hash, QuarantineDispatch dispatch)
             throws IOException {
@@ -503,11 +503,12 @@ public final class HoldLifecycle {
     /** Point an OCI tag at a released manifest digest <em>only when the tag is absent</em> - the create-only mirror of
      *  the publish-path release guard ({@link #release}), never a last-writer-wins re-link. A tag that is already
      *  present is left untouched: an equal pointer means the release is already right (a crash-rerun re-drives this and
-     *  converges), and a <em>different</em> pointer is a clean manifest re-pushed to this tag <em>during</em> the hold -
-     *  rolling it back to the quarantined digest would silently un-do a corrected re-push. The released manifest still
-     *  becomes pullable BY DIGEST because the shared release tail lifts its {@code withheld/<hex>} marker; only the tag
-     *  is not stolen back. Absence is claimed with an expected-absent compare-and-set ({@code writeVersioned(key, …,
-     *  null)}); a lost race (a concurrent push linked the tag first) lands the same leave-alone branch on the re-read. */
+     *  converges), and a <em>different</em> pointer is a clean manifest re-pushed to this tag <em>during</em> the hold
+     *  - rolling it back to the quarantined digest would silently un-do a corrected re-push. The released manifest
+     *  still becomes pullable BY DIGEST because the shared release tail lifts its {@code withheld/<hex>} marker; only
+     *  the tag is not stolen back. Absence is claimed with an expected-absent compare-and-set
+     *  ({@code writeVersioned(key, …, null)}); a lost race (a concurrent push linked the tag first) lands the same
+     *  leave-alone branch on the re-read. */
     private static void linkOciTag(ArtifactStore store, String key, String digest) throws IOException {
         byte[] value = digest.getBytes(StandardCharsets.UTF_8);
         Optional<ArtifactStore.Versioned> present = store.readVersioned(key);
@@ -525,8 +526,9 @@ public final class HoldLifecycle {
     }
 
     /** Leave a present OCI tag pointer standing on release; log at INFO only when it has MOVED away from the released
-     *  digest (a corrected re-push during the hold), the operator's breadcrumb that the released manifest stays pullable
-     *  by digest while the tag now resolves the newer bytes. An equal pointer is the idempotent crash-rerun case - silent. */
+     *  digest (a corrected re-push during the hold), the operator's breadcrumb that the released manifest stays
+     *  pullable by digest while the tag now resolves the newer bytes. An equal pointer is the idempotent crash-rerun
+     *  case - silent. */
     private static void leaveOciTag(String key, String digest, ArtifactStore.Versioned present) {
         String pointer = new String(present.content(), StandardCharsets.UTF_8).trim();
         if (!pointer.equals(digest)) {
@@ -608,8 +610,9 @@ public final class HoldLifecycle {
     }
 
     /** The releasing coordinate/version's own served paths (plus {@code path} itself), the excluded set the cross-alias
-     *  guard reasons over at a release site - the same set {@link HeldElsewhere#othersStillHeld} treats as "this coordinate's own".
-     *  A path that maps to no coordinate contributes only itself, so a hold H is never treated as its own alias.
+     *  guard reasons over at a release site - the same set {@link HeldElsewhere#othersStillHeld} treats as "this
+     *  coordinate's own". A path that maps to no coordinate contributes only itself, so a hold H is never treated as
+     *  its own alias.
      *
      *  <p>A version whose paths cannot be enumerated at all contributes only {@code path} too, and the Unknown arm is
      *  written rather than collapsed because this is a release site: a NARROWER exclusion set can only make the

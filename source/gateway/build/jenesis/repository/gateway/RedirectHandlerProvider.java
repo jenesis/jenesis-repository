@@ -68,17 +68,13 @@ public interface RedirectHandlerProvider {
         Downloads NONE = (tenant, repository, descriptor) -> { };
     }
 
-    /** What the wiring layer hands every provider. */
     /**
      * A redirect target composed with the request's own path: {@code target ∘ residual-path}, reconciling a trailing
      * slash on the target with a leading slash on the path, so the fleet member serves the same layout the client
      * asked this repository for.
      *
-     * <p>It lives here because both planes reach it. It was two private statics with identical bodies - one in the
-     * static filter, one in the DNS handler - and the second's javadoc named the first as the rule it was following,
-     * which is a rule restated in prose beside a copy of its implementation. They agreed; the point is that nothing
-     * made them, and a pluggable layout turns them into two call sites that must resolve the same layout, where
-     * fixing one diverges the other in silence.
+     * <p>It lives here because both planes reach it - the static filter and the DNS handler - and two copies would
+     * be two call sites that must resolve the same layout, where fixing one diverges the other in silence.
      */
     static URI compose(URI target, String path) {
         String base = target.toString();
@@ -89,6 +85,7 @@ public interface RedirectHandlerProvider {
         return URI.create(base + suffix);
     }
 
+    /** What the wiring layer hands every provider. */
     record Context(UnaryOperator<String> config, Screen screen, Predicate<URI> privateHost,
                    Predicate<URI> credentialed, Downloads downloads) {
 

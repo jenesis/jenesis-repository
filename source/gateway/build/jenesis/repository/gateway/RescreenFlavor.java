@@ -58,7 +58,7 @@ import build.jenesis.repository.store.ArtifactDescriptor;
  * <p><b>Everything else stays {@code PROXY}</b> - no origin record, an unreadable document, a row
  * naming other bytes. The default is deliberately the unchanged one, so this can only ever move an artifact off the
  * proxy flavour on positive durable evidence that it was uploaded; a hardened proxy with a pre-cache (the
- * migration case the sweep exists for) keeps being screened exactly as it is today, private-name dimension included.
+ * migration case the sweep exists for) is screened through the proxy flavour, private-name dimension included.
  * It is the same direction {@code InventoryEviction.reclaimFallbackCache} already takes for the same destructive
  * question - "a quota sweep never blindly reclaims a blob it cannot classify" - read off the same durable record.
  *
@@ -80,9 +80,9 @@ public final class RescreenFlavor {
      * {@code local-upload} row for exactly those bytes, {@link GatePolicyProvider.Path#PROXY} otherwise. A read
      * failure answers {@code PROXY} - the unchanged default - and is logged rather than swallowed.
      *
-     * <p>{@code inventory} is taken rather than built here because constructing one runs a {@link java.util.ServiceLoader}
-     * scan ({@code MetadataProvider.installed()} caches nothing, by its own contract), and the sweep asks this question
-     * once per cached artifact - so the caller hoists it out of its loop.
+     * <p>{@code inventory} is taken rather than built here because constructing one runs a
+     * {@link java.util.ServiceLoader} scan ({@code MetadataProvider.installed()} caches nothing, by its own contract),
+     * and the sweep asks this question once per cached artifact - so the caller hoists it out of its loop.
      */
     public static GatePolicyProvider.Path of(StoreRepositoryInventory inventory, MetadataStore metadata, String path,
                                              String digest) {

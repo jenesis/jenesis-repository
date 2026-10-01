@@ -110,14 +110,14 @@ public final class ProxyScreen {
     }
 
     /** Wrap an upstream fetcher to screen its fetched artifact: a non-{@link Verdict#ALLOW} verdict becomes an empty
-     *  result, so the pull-through treats it as a miss and neither caches nor serves it. The {@link
-     *  ProxyFormat.Fetcher#download streaming download} is overridden too: an artifact no inspector claims has nothing
-     *  to screen, so it streams straight from upstream to the store. A claimed artifact IS screened, but only over a
-     *  bounded {@link #inspectionLimit()} prefix - the firewall reads the front of the stream, reaches its verdict, and
-     *  then streams the un-buffered remainder straight to the client/store on {@code ALLOW}, so a large claimed proxy
-     *  artifact is never materialised whole in heap (which routing a claimed download through the buffered {@link
-     *  ProxyFormat.Fetcher#fetch fetch} would do). A withheld artifact is streamed into {@code /quarantine} for review
-     *  and recorded in the durable log.
+     *  result, so the pull-through treats it as a miss and neither caches nor serves it. The
+     *  {@link ProxyFormat.Fetcher#download streaming download} is overridden too: an artifact no inspector claims has
+     *  nothing to screen, so it streams straight from upstream to the store. A claimed artifact IS screened, but only
+     *  over a bounded {@link #inspectionLimit()} prefix - the firewall reads the front of the stream, reaches its
+     *  verdict, and then streams the un-buffered remainder straight to the client/store on {@code ALLOW}, so a large
+     *  claimed proxy artifact is never materialised whole in heap (which routing a claimed download through the
+     *  buffered {@link ProxyFormat.Fetcher#fetch fetch} would do). A withheld artifact is streamed into
+     *  {@code /quarantine} for review and recorded in the durable log.
      *
      *  <p><b>The metadata leg ({@link ProxyFormat.Fetcher#head}).</b> The screen is a <em>decorator</em> over a real
      *  transport, so it is never a {@link ProxyFormat.Fetcher.Buffered}: all three legs are declared, and {@code head}
@@ -135,9 +135,9 @@ public final class ProxyScreen {
      *  metadata leg too. The content dimensions (license, embedded secrets) are not answerable without content and are
      *  not faked here; the {@code GET} that follows is screened in full.
      *
-     *  <p>Nothing is quarantined or logged on this leg: the durable record accompanies a withheld <em>body</em> there is
-     *  a copy of to review, and a bodiless probe withholds none - while recording per {@code HEAD} would let a client's
-     *  probe loop write the durable log without ever fetching an artifact. */
+     *  <p>Nothing is quarantined or logged on this leg: the durable record accompanies a withheld <em>body</em> there
+     *  is a copy of to review, and a bodiless probe withholds none - while recording per {@code HEAD} would let a
+     *  client's probe loop write the durable log without ever fetching an artifact. */
     public ProxyFormat.Fetcher wrap(ProxyFormat.Fetcher delegate, String path) {
         return wrap(delegate, path, Map.of());
     }
@@ -184,10 +184,10 @@ public final class ProxyScreen {
             public Optional<ProxyFormat.Download> download(URI url, Map<String, String> headers) throws IOException {
                 if (unclaimed(path)) {
                     // UNCLAIMED: no inspector can turn the body into a subject, but the operator deny-list must still
-                    // bite a raw/un-inspected coordinate rather than streaming it through unscreened - the exact path an
-                    // attacker uses to bypass "deny com.evil:*". Screen from a path-derived subject WITHOUT reading the
-                    // body (the deny-list needs only the coordinate), and stream the un-buffered body through only on
-                    // ALLOW; a withheld one is stored/discarded and logged exactly as a claimed withholding is.
+                    // bite a raw/un-inspected coordinate rather than streaming it through unscreened - the exact path
+                    // an attacker uses to bypass "deny com.evil:*". Screen from a path-derived subject WITHOUT reading
+                    // the body (the deny-list needs only the coordinate), and stream the un-buffered body through only
+                    // on ALLOW; a withheld one is stored/discarded and logged exactly as a claimed withholding is.
                     Optional<ProxyFormat.Download> pulled = delegate.download(url, headers);
                     if (pulled.isEmpty() || pulled.get().status() != 200) {
                         return pulled;   // an upstream miss - nothing to screen or withhold
@@ -289,9 +289,9 @@ public final class ProxyScreen {
         } catch (MalformedArtifactException malformed) {
             // A proxied artifact an inspector claimed but could not parse (a corrupt .nupkg/.gem/.rpm/.deb pulled from
             // upstream) must never 500 the fetch nor be served silently. Screen it from its
-            // path-derived coordinate against the operator deny-list (so a deny-listed coordinate delivered as a corrupt
-            // body is still withheld), with the immaturity hold on top, and log the failure - never a silent serve.
-            // (The hardened proxy leg is stricter: it REFUSES an unparseable body rather than falling back - see
+            // path-derived coordinate against the operator deny-list (so a deny-listed coordinate delivered as a
+            // corrupt body is still withheld), with the immaturity hold on top, and log the failure - never a silent
+            // serve. (The hardened proxy leg is stricter: it REFUSES an unparseable body rather than falling back - see
             // HardenedScreen, which inspects the body itself and lets this exception surface.)
             LOGGER.warn("Could not parse proxied artifact " + path
                     + "; screening it from its path coordinate rather than serving it unscreened", malformed);
@@ -316,7 +316,7 @@ public final class ProxyScreen {
      * leg it is the AND of what each claiming inspector reported about its own read. The two are not the same claim:
      * the body's length says whether a <em>bridged</em> inspector could have seen the whole artifact, while a full-body
      * scanner's own budget, entry, finding and nesting ceilings can stop it over a body of any length - and a screen
-     * that inferred completeness from the merged subject list being empty lost that report entirely the moment another
+     * that inferred completeness from the merged subject list being empty would lose that report the moment another
      * inspector produced a subject.
      */
     Screening assessSubjects(String path, QualityInspector.Inspection inspection, Instant lastModified) {
@@ -325,8 +325,8 @@ public final class ProxyScreen {
             // No package subject came back, so no parsed coordinate ever reached the gate, and the path's own
             // coordinate is screened instead. Whether an inspector CLAIMED the path is no part of that: a claim is a
             // declaration of interest, not an assessment, and an inspector that claims an artifact and derives
-            // nothing has screened exactly as much as one that never looked - the publish edge admitted an advised
-            // Ivy jar for precisely that reading. When a bound stopped the read the hole is wider still - a padded
+            // nothing has screened exactly as much as one that never looked. When a bound stopped the read the hole is
+            // wider still - a padded
             // archive with trailing metadata would proxy through un-screened, with nothing logged - and there the
             // fallback subject is APPENDED to the content findings rather than assessed beside them.
             if (inspection.complete()) {
@@ -430,10 +430,10 @@ public final class ProxyScreen {
     }
 
     /** Screen UNCLAIMED proxied content against the operator deny-list (and the harmless coordinate/feed dimensions)
-     *  from a path-derived subject, WITHOUT reading the body - {@link ComplianceGate#assessUnclaimed} deliberately skips
-     *  the license/discovered dimensions, so an ordinary raw fetch is NOT over-quarantined as unknown-license while a
-     *  deny-listed coordinate delivered as raw content is still withheld. The immaturity hold still applies on top,
-     *  exactly as it does for a claimed subject. */
+     *  from a path-derived subject, WITHOUT reading the body - {@link ComplianceGate#assessUnclaimed} deliberately
+     *  skips the license/discovered dimensions, so an ordinary raw fetch is NOT over-quarantined as unknown-license
+     *  while a deny-listed coordinate delivered as raw content is still withheld. The immaturity hold still applies on
+     *  top, exactly as it does for a claimed subject. */
     private Screening assessUnclaimed(String path, Instant lastModified) {
         ComplianceGate.Assessment assessment = gate.assessUnclaimed(pathDerivedSubject(path));
         Verdict verdict = assessment.verdict();
@@ -481,7 +481,7 @@ public final class ProxyScreen {
     }
 
     /** The inspectors that claim (and so run over) an artifact at this path - the validators the hardened leg names in
-     *  its digest-pinned verdict record. A {@link QualityInspector} carries no version today, so each validator
+     *  its digest-pinned verdict record. A {@link QualityInspector} carries no version, so each validator
      *  is named by its inspector class; a validator that later supplies a version records it through
      *  {@link VerdictSection.Validator}. */
     List<VerdictSection.Validator> validators(String path) {
@@ -518,9 +518,9 @@ public final class ProxyScreen {
      * inspector screens the whole body via {@link QualityInspector#inspectArtifact(String, QualityInspector.Content,
      * QualityInspector.Lookup)} - a full-body-tier inspector (the secret content scanner) reading past the bounded
      * prefix so a secret sitting beyond the 32 MiB window is still caught, a format inspector default-bridged to the
-     * same front prefix it read before. Mirrors {@link #inspect(String, byte[])} but over a re-openable spool handle
-     * rather than a heap {@code byte[]}; a {@link MalformedArtifactException} still surfaces for the hardened leg to
-     * refuse (fail-closed), exactly as on the {@code byte[]} path.
+     * same front prefix the {@code byte[]} leg hands it. Mirrors {@link #inspect(String, byte[])} but over a
+     * re-openable spool handle rather than a heap {@code byte[]}; a {@link MalformedArtifactException} still surfaces
+     * for the hardened leg to refuse (fail-closed), exactly as on the {@code byte[]} path.
      *
      * <p><b>Every claiming inspector takes this leg, whatever {@link QualityInspector#streams()} says, and that is
      * the one place the two screens answer differently on purpose.</b> The publish screen asks that question,
@@ -567,17 +567,12 @@ public final class ProxyScreen {
      * Run one inspector and name it in whatever it raises.
      *
      * <p>The publish leg puts all three of {@code QualityInspector}'s legal failure shapes on one fail-closed leg -
-     * held, recorded, attributed. This leg caught nothing per inspector and its caller catches only
-     * {@link MalformedArtifactException}, so an inspector's {@code RuntimeException} or plain {@code IOException}
-     * left the fetch as a raw error with no quarantine row and no attribution, while the same inspector over the
-     * same bytes on the publish leg was held with a legible reason. Which of the two an operator got depended on
-     * how the artifact arrived.
-     *
-     * <p>All three shapes now leave here as a {@code MalformedArtifactException} naming the inspector, so the
-     * caller's existing fail-closed path records and refuses identically whichever one occurred. The distinction
+     * held, recorded, attributed - and so does this one: the caller catches only {@link MalformedArtifactException},
+     * so all three shapes leave here as one naming the inspector, and the caller's fail-closed path records and
+     * refuses identically whichever one occurred, however the artifact arrived. The distinction
      * the publish leg draws between "could not parse" and "threw" is preserved in the message rather than in the
      * type, because on this leg both mean the same thing to the caller: these bytes were not screened, so they do
-     * not serve. A deployment installs seventeen inspectors, so "an inspector threw" names none of them.
+     * not serve. A deployment installs many inspectors, so "an inspector threw" names none of them.
      */
     private static <T> T attributed(QualityInspector inspector, String path, Inspecting<T> call)
             throws MalformedArtifactException {

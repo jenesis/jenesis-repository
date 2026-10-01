@@ -6,8 +6,8 @@ import build.jenesis.repository.settings.SettingsContributor;
 
 /**
  * Surfaces the hardening proxy's runtime dials so they render on the settings screens, {@code /api/settings} and the
- * CLI exactly when the gateway module is installed, and apply live (the next pass reads the current values). For now
- * this is the late-enablement migration re-screen sweep ({@link MigrationRescreenTaskProvider}): a switch that turns the
+ * CLI exactly when the gateway module is installed, and apply live (the next pass reads the current values). It is
+ * the late-enablement migration re-screen sweep ({@link MigrationRescreenTaskProvider}): a switch that turns the
  * back-fill on and the cadence that paces it. The sweep's untrusted-upstream fetch bounds and the spool budget are
  * deploy-time resource dials bound from the environment (the {@code spool.*} keys), not UI settings, so they are not
  * declared here.

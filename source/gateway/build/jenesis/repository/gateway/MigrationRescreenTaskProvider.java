@@ -15,12 +15,12 @@ import build.jenesis.repository.maintenance.MaintenanceTask;
 import build.jenesis.repository.maintenance.MaintenanceTaskProvider;
 
 /**
- * Discovers the late-enablement migration re-screen sweep ({@link MigrationRescreenTask}) through {@code ServiceLoader},
- * exactly as the gate/reclamation sweeps ({@code QuarantineRetentionTaskProvider}, {@code ReanalysisTaskProvider}) are.
- * It is enabled by its own {@code harden-rescreen} switch and paced by {@code harden-rescreen-interval} (both declared
- * on {@link HardeningSettingsContributor}, so they render on the settings screen and apply on the next pass without a
- * restart); a deployment that never enables it schedules nothing, and a deployment with no {@code harden} repository
- * simply back-fills nothing.
+ * Discovers the late-enablement migration re-screen sweep ({@link MigrationRescreenTask}) through
+ * {@code ServiceLoader}, exactly as the gate/reclamation sweeps ({@code QuarantineRetentionTaskProvider},
+ * {@code ReanalysisTaskProvider}) are. It is enabled by its own {@code harden-rescreen} switch and paced by
+ * {@code harden-rescreen-interval} (both declared on {@link HardeningSettingsContributor}, so they render on the
+ * settings screen and apply on the next pass without a restart); a deployment that never enables it schedules nothing,
+ * and a deployment with no {@code harden} repository simply back-fills nothing.
  *
  * <p>The pass re-screens with the same compliance gates the live legs use - the deployment's CVSS threshold, malware
  * action, deny list and every discovered {@link GatePolicy} dimension over the resolved advisory source - reconstructed
@@ -37,10 +37,10 @@ import build.jenesis.repository.maintenance.MaintenanceTaskProvider;
  */
 public final class MigrationRescreenTaskProvider implements MaintenanceTaskProvider {
 
-    /** How often the migration back-fill re-screens: daily. It was hourly, and every pass listed every cached
-     *  artifact of every hardened repository to find that a converged one re-screens nothing; a repository flipped
-     *  to harden late is verified fail-closed on every read until the sweep reaches it, so a day is what the
-     *  bulk complement costs, not what the guarantee waits for. */
+    /** How often the migration back-fill re-screens: daily, because every pass lists every cached artifact of every
+     *  hardened repository even when a converged one re-screens nothing. A repository flipped to harden late is
+     *  verified fail-closed on every read until the sweep reaches it, so a day is what the bulk complement costs,
+     *  not what the guarantee waits for. */
     static final IntervalSetting INTERVAL = IntervalSetting.of("harden-rescreen-interval", "P1D");
 
     @Override

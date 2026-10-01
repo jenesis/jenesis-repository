@@ -24,8 +24,7 @@ import build.jenesis.repository.gate.HeldElsewhere;
  * claimants of each marked hash come from the inventory rows as the pass hands them over; and the live review
  * pointers under {@code /quarantine} - withheld pointers, which this consumer asks to see - answer the cross-alias
  * question one pointer at a time. At the end of the pass every marker is judged, the holderless ones cleared and
- * re-verified against fresh truth exactly as before. Fail-safe in every branch it always was: a marker nobody can
- * judge stands.
+ * re-verified against fresh truth. Fail-safe in every branch: a marker nobody can judge stands.
  */
 public final class WithheldReconcileConsumer implements WalkConsumer {
 

@@ -44,7 +44,7 @@ import build.jenesis.repository.store.ArtifactStore;
  * 32 MiB prefix: every claiming inspector screens the complete artifact through a re-openable
  * {@link QualityInspector.Content} spool handle ({@link ProxyScreen#inspectFullBody}) - the embedded-secret content
  * scanner streaming past the prefix window so a credential beyond 32 MiB is caught, a format inspector default-bridged
- * to the same front prefix it read before. Decompression/scan stays bounded by the shared
+ * to the same front prefix the prefix leg hands it. Decompression/scan stays bounded by the shared
  * {@link QualityInspector#FULL_BODY_INSPECTION_LIMIT full-body tier} (and each inspector's own entry/finding/nesting
  * caps), so full-body is not unbounded (a decompression bomb cannot exhaust the node). Every claiming
  * inspector <em>reports</em> whether its own read reached the end of the body or one of those bounds
@@ -75,14 +75,15 @@ import build.jenesis.repository.store.ArtifactStore;
  * <p>The screening <em>decision</em> - inspectors, gate policy, immaturity hold - is reused wholesale from
  * {@link ProxyScreen}; no compliance mechanism is copied. The hardened leg owns only the spool, the
  * decide-then-serve disposition, the full-body inspection driver, the refusal typing and the digest-pinned verdict
- * record. Its buffered {@link ProxyFormat.Fetcher#fetch} path (small mutable indexes, screened whole today) is
+ * record. Its buffered {@link ProxyFormat.Fetcher#fetch} path (small mutable indexes, screened whole) is
  * delegated to the ordinary complete-body screen unchanged.
  */
 public final class HardenedScreen {
 
     private static final Logger LOGGER = LoggerFactory.getLogger(HardenedScreen.class);
 
-    /** The screening tier this leg records in the verdict's {@code profile}: the untrusted-upstream full-body screen. */
+    /** The screening tier this leg records in the verdict's {@code profile}: the untrusted-upstream full-body screen.
+     *  */
     static final String PROFILE = "hardened/full-body";
 
     /** The reason-line prefix every hardened structural refusal (and the drift alarm) records into the durable
@@ -139,7 +140,8 @@ public final class HardenedScreen {
      *       rather than letting a configured policy quietly do nothing - see
      *       {@link #reachableWithin(SpoolStore.Budget)}.</li>
      *   <li><b>Fetch duration ceiling</b> ({@link #fetchTimeout()}). An absolute wall-clock cap on the whole body
-     *       transfer, a backstop against a fetch that is slow overall; exceeding it is a {@link Refusal#FETCH_TIMEOUT}.</li>
+     *       transfer, a backstop against a fetch that is slow overall; exceeding it is a
+     *       {@link Refusal#FETCH_TIMEOUT}.</li>
      *   <li><b>Minimum throughput floor</b> ({@link #minThroughputBytesPerSecond()}). A slow-loris upstream that
      *       trickles bytes or stalls mid-stream would otherwise pin a spool + connection indefinitely (the transport
      *       request timeout deliberately does not clip body transfer). Measured as the <em>cumulative average</em>
@@ -163,7 +165,8 @@ public final class HardenedScreen {
         public static final Duration DEFAULT_FETCH_TIMEOUT = Duration.ofHours(1);
 
         /** A conservative minimum-throughput floor: 256 B/s (cumulative average). Far below any real link (even a poor
-         *  mobile connection sustains tens of KiB/s), so it bites only a true trickle/stall, not a slow-but-real fetch. */
+         *  mobile connection sustains tens of KiB/s), so it bites only a true trickle/stall, not a slow-but-real fetch.
+         *  */
         public static final long DEFAULT_MIN_THROUGHPUT_BYTES_PER_SECOND = 256;
 
         /** The grace window before the throughput floor is measured, so a legitimately slow-starting fetch (a TLS
@@ -236,7 +239,8 @@ public final class HardenedScreen {
         /** Whether this per-artifact ceiling can actually be reached under {@code budget} - it is at or below the
          *  shared in-flight budget the guarded body is spooled through. At equality the ceiling still fires first for
          *  a single spool (the guard counts a chunk before the store reserves it), so equality is reachable; above the
-         *  budget nothing can reach it. The one place the two records meet, so neither restates the other's arithmetic. */
+         *  budget nothing can reach it. The one place the two records meet, so neither restates the other's arithmetic.
+         *  */
         public boolean reachableWithin(SpoolStore.Budget budget) {
             return maxArtifactBytes <= budget.maxInFlightBytes();
         }
@@ -363,11 +367,13 @@ public final class HardenedScreen {
 
     /** Immutable-coordinate drift alarm events (each a refused re-fetch of an immutable coordinate whose bytes changed
      *  under it) since the gateway started - the loud {@code jenrepo.gateway.hardened.drift} counter. Static so a
-     *  per-request screen still contributes to the one gateway-wide alarm the {@link HardeningObservability} reports. */
+     *  per-request screen still contributes to the one gateway-wide alarm the {@link HardeningObservability} reports.
+     *  */
     private static final AtomicLong DRIFT_EVENTS = new AtomicLong();
 
     /** The number of upstream drift alarms raised - a re-fetch of an immutable coordinate whose digest differed from
-     *  the previously screened, pinned one, refused as tampering. Surfaced as a metric by {@link HardeningObservability}. */
+     *  the previously screened, pinned one, refused as tampering. Surfaced as a metric by
+     *  {@link HardeningObservability}. */
     public static long driftEvents() {
         return DRIFT_EVENTS.get();
     }
@@ -396,14 +402,13 @@ public final class HardenedScreen {
      *
      * <p>Separate from the verdict coordinate above, and deliberately. A verdict is about <em>these bytes at this
      * request path</em> and is looked up before anything is inspected, so a path-derived key is the right one and is
-     * the only one available that early. An origin row is about <em>this artifact</em>, and a hand upload has always
-     * folded its {@code local-upload} row under the format coordinate - so keying the {@code fallback} row by the
-     * path split one artifact's acquisition history across two documents. One artifact, one origin document.
+     * the only one available that early. An origin row is about <em>this artifact</em>, and a hand upload folds its
+     * {@code local-upload} row under the format coordinate - so keying the {@code fallback} row by the path would
+     * split one artifact's acquisition history across two documents. One artifact, one origin document.
      *
      * <p>It lives here rather than being derived at each caller because there are three - the router that writes the
-     * row, the 409 message that reads it, and the console panel - and a reader that <em>restated</em> the derivation
-     * with a javadoc saying it was "keyed exactly as the fallback-fetch path records it" would fall behind it the
-     * moment the writer moved.
+     * row, the 409 message that reads it, and the console panel - and a reader restating the derivation would fall
+     * behind the writer.
      *
      * <p>{@link StoreRepositoryInventory#describe} is a pure path parse that opens no blob, so a caller on the serve
      * path pays only the format lookup it already does.
@@ -504,12 +509,12 @@ public final class HardenedScreen {
      *  {@link ProxyScreen} - which delegates the real HTTP {@code HEAD} to the transport below and holds the answer to
      *  the body-free half of the screen. The hardened strictening deliberately does <em>not</em> apply: it is
      *  spool-screen-release over a body, and a {@code HEAD} carries no body to spool, no bytes to digest and nothing to
-     *  pin a verdict to. That is not a hole in the fail-closed posture - fail-closed guards a <em>byte</em> reaching the
-     *  client, and this leg releases none. Refusing every {@code HEAD} outright would protect nothing and would push a
-     *  client that only wanted a size onto the {@code GET} path, spooling a multi-gigabyte untrusted body to answer a
-     *  metadata question: the precise inversion the three declared legs exist to prevent. The screen is a decorator, so
-     *  it is never a {@link ProxyFormat.Fetcher.Buffered}; inheriting the derivation here would have spooled and
-     *  full-body screened the whole artifact for every {@code HEAD}. */
+     *  pin a verdict to. That is not a hole in the fail-closed posture - fail-closed guards a <em>byte</em> reaching
+     *  the client, and this leg releases none. Refusing every {@code HEAD} outright would protect nothing and would
+     *  push a client that only wanted a size onto the {@code GET} path, spooling a multi-gigabyte untrusted body to
+     *  answer a metadata question: the precise inversion the three declared legs exist to prevent. The screen is a
+     *  decorator, so it is never a {@link ProxyFormat.Fetcher.Buffered}; inheriting the derivation here would spool and
+     *  full-body screen the whole artifact for every {@code HEAD}. */
     public ProxyFormat.Fetcher wrap(ProxyFormat.Fetcher upstream, String path) {
         return wrap(upstream, path, Map.of());
     }
@@ -531,7 +536,7 @@ public final class HardenedScreen {
                 // A metadata answer carries no body, so there is nothing to spool, digest, full-body screen or pin a
                 // verdict to - the hardened tier has no subject here. It is handed to the ordinary screen, whose head
                 // delegates the real HTTP HEAD below and holds the answer to the body-free deny-list/immaturity
-                // assessment. Deriving head (a Fetcher.Buffered) would have spooled and full-body screened an entire
+                // assessment. Deriving head (a Fetcher.Buffered) would spool and full-body screen an entire
                 // untrusted artifact to answer a question about its size.
                 return screened.head(url, headers);
             }
@@ -680,8 +685,8 @@ public final class HardenedScreen {
                 .orElse(false);
     }
 
-    /** The verdict previously recorded for this coordinate, if any - the reuse source (its {@code ALLOW}-and-pins check)
-     *  and the drift baseline (its pinned digest). An absent verdict or a read failure returns empty, so the leg
+    /** The verdict previously recorded for this coordinate, if any - the reuse source (its {@code ALLOW}-and-pins
+     *  check) and the drift baseline (its pinned digest). An absent verdict or a read failure returns empty, so the leg
      *  re-screens (fail-closed) rather than reusing or false-alarming. */
     private Optional<VerdictSection.Recorded> priorVerdict(Coordinate coordinate) {
         try {

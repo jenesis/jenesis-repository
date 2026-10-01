@@ -189,15 +189,15 @@ final class PublishRecorder {
      * Persist the publish-time advisory answer for a just-accepted coordinate: re-query the deployment's named
      * advisory feeds - the same instances the gate assessed through, so the gate's own lookup just warmed each feed's
      * {@code FeedCache} and this is a cache read, not a fresh network pass - and record each hit as a structured
-     * finding keyed by the real {@code (feed, advisory-id)} pair, exactly as the scheduled {@code VulnerabilityScanTask}
-     * writes them ({@link AdvisoryFindings#of}). This closes the between-sweeps window: a coordinate published AFTER the
-     * last sweep already carries its advisory findings rather than rendering clean until the next pass, and because the
-     * rows key by {@code (source, id)} the later sweep converges on the identical rows instead of doubling them. Held
-     * to ACCEPT, where the coordinate is recorded as published and the sweep will revisit it - a quarantined or
-     * rejected upload has no such record, so persisting its advisory rows would strand them. Best-effort like every
-     * derived write here, and fail-soft <em>per feed</em>: a feed the warm cache cannot answer (a feed failing
-     * closed with nothing cached) is logged and metered, never a reason to fail an already-accepted publish. A no-op
-     * when no findings module is installed or no feeds are wired.
+     * finding keyed by the real {@code (feed, advisory-id)} pair, exactly as the scheduled
+     * {@code VulnerabilityScanTask} writes them ({@link AdvisoryFindings#of}). This closes the between-sweeps window: a
+     * coordinate published AFTER the last sweep already carries its advisory findings rather than rendering clean until
+     * the next pass, and because the rows key by {@code (source, id)} the later sweep converges on the identical rows
+     * instead of doubling them. Held to ACCEPT, where the coordinate is recorded as published and the sweep will
+     * revisit it - a quarantined or rejected upload has no such record, so persisting its advisory rows would strand
+     * them. Best-effort like every derived write here, and fail-soft <em>per feed</em>: a feed the warm cache cannot
+     * answer (a feed failing closed with nothing cached) is logged and metered, never a reason to fail an
+     * already-accepted publish. A no-op when no findings module is installed or no feeds are wired.
      */
     void recordAdvisoryFindings(ArtifactStore store, ArtifactDescriptor artifact,
                                 List<ComplianceGate.Subject> inspected) {
@@ -331,17 +331,18 @@ final class PublishRecorder {
 
     /**
      * Persist the publish-time maintainer-health for a just-accepted coordinate: probe the deployment's live health
-     * source - the same instance the scheduled sweep probes, so its {@code FeedCache} may already carry the answer - and
-     * record it into the durable {@link HealthLedger} keyed by the coordinate (version-independent), exactly as the
+     * source - the same instance the scheduled sweep probes, so its {@code FeedCache} may already carry the answer -
+     * and record it into the durable {@link HealthLedger} keyed by the coordinate (version-independent), exactly as the
      * {@code HealthScanTask} writes it. This closes the between-sweeps window: a coordinate published AFTER the last
      * health sweep already carries its health in the ledger the gate now reads, so admission of a LATER version of the
      * same coordinate scores off a populated ledger rather than the not-yet-swept fallback. Held to ACCEPT, where the
      * coordinate is recorded as published and the sweep will revisit it. A coordinate the source scores nothing is
-     * left unrecorded (unknown, not healthy). Best-effort like every derived write here - the artifact is already stored,
-     * so a failed probe or write must not fail an accepted publish - and a no-op when no health-ledger module is
-     * installed or no live source is wired; the sweep then records the coordinate on its next pass. The commit does NOT
-     * stamp {@link build.jenesis.repository.health.HealthLedger#scanned health stamp}: a single-coordinate persistence is not a full scan, so
-     * the staleness stamp stays the last full sweep's, never masking that a fresh publish outran the sweep.
+     * left unrecorded (unknown, not healthy). Best-effort like every derived write here - the artifact is already
+     * stored, so a failed probe or write must not fail an accepted publish - and a no-op when no health-ledger module
+     * is installed or no live source is wired; the sweep then records the coordinate on its next pass. The commit does
+     * NOT stamp {@link build.jenesis.repository.health.HealthLedger#scanned health stamp}: a single-coordinate
+     * persistence is not a full scan, so the staleness stamp stays the last full sweep's, never masking that a fresh
+     * publish outran the sweep.
      */
     void recordHealth(ArtifactStore store, ArtifactDescriptor artifact, List<ComplianceGate.Subject> inspected) {
         if (healthLedger.isEmpty()) {
@@ -365,7 +366,8 @@ final class PublishRecorder {
             health = source.health(coordinate.ecosystem(), coordinate.coordinate());
         } catch (RuntimeException failure) {
             // The live source degrades to empty on its own (a ranking signal, not a hard gate); a probe that instead
-            // throws is caught here so an accepted publish is never failed for it. The sweep records the coordinate next pass.
+            // throws is caught here so an accepted publish is never failed for it. The sweep records the coordinate
+            // next pass.
             LOGGER.warn("Could not probe maintainer-health for "
                     + coordinate.coordinate() + " at publish; its health waits for the next sweep", failure);
             return;
@@ -403,9 +405,9 @@ final class PublishRecorder {
     /**
      * The coordinate an inspected subject names, spelled as the layout owning its ecosystem keys it. The subject reads
      * it out of the artifact as the artifact writes it - a NuGet id in its declared case - and the layout serves the
-     * version under its own normal form, so a record keyed by the subject's spelling was a record no read resolved
-     * to: a pushed package's signature, licences and hold records all landed in a document beside the one its reads
-     * found. The subject's own spelling stands only where no installed layout places the ecosystem.
+     * version under its own normal form, so a record keyed by the subject's spelling would be one no read resolves
+     * to: a pushed package's signature, licences and hold records would land in a document beside the one its reads
+     * find. The subject's own spelling stands only where no installed layout places the ecosystem.
      */
     private static Optional<StoreRepositoryInventory.Coordinate> subjectCoordinate(
             StoreRepositoryInventory inventory, ComplianceGate.Subject subject) {

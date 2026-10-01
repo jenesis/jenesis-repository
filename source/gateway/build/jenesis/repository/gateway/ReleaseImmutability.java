@@ -34,12 +34,12 @@ import build.jenesis.repository.server.kernel.LiveConfig;
  *   <li>the installed layout knowledge - some installed {@link ArtifactLayout#describe} that CLAIMS the path must
  *       yield a concrete {@code coordinate}+{@code version}. The deploying plugin is asked first and every other
  *       installed format claiming the path after, because the layout capability that places a path is
- *       separable from the format the edge dispatched the write to; keying the guard on the plugin alone let a
+ *       separable from the format the edge dispatched the write to; keying the guard on the plugin alone would let a
  *       deployment where the two differ silently exempt every release that layout places. A path that describes to
  *       empty or coordinate-less (a generated index, a {@code maven-metadata.xml}, a checksum root, an npm packument /
  *       dist-tag root) is a mutable channel and is exempt; an ecosystem no installed {@link ArtifactLayout} places at
  *       all (raw, OCI's digest-addressed store and its mutable tag space, which resolve only through a
- *       {@code BlobLayout}) exposes no immutable-release pointer here and is exempt, exactly as before;</li>
+ *       {@code BlobLayout}) exposes no immutable-release pointer here and is exempt;</li>
  *   <li>the gateway's drift signal {@link HardenedScreen#immutableCoordinate} - the same predicate the hardened
  *       proxy uses to tell an immutable coordinate from a Maven {@code -SNAPSHOT}/mutable one, so a snapshot
  *       re-publish stays allowed exactly as its bytes re-publish under the same coordinate by design.</li>
@@ -154,9 +154,9 @@ public final class ReleaseImmutability {
         }
     }
 
-    /** The loud, named {@code 409} message, now origin-aware: {@code originClause} names how the
-     *  incumbent arrived (a cached fallback copy vs a hand upload) when the origin record has it, or is empty (the plain
-     *  wording) when it does not. Origin-blind by construction - the message is richer, the refusal unchanged. */
+    /** The loud, named {@code 409} message, origin-aware: {@code originClause} names how the
+     *  incumbent arrived (a cached fallback copy vs a hand upload) when the origin record has it, or is empty (the
+     *  plain wording) when it does not. Origin-blind by construction - the message is richer, the refusal unchanged. */
     private static String message(String coordinate, String path, String originClause) {
         return "Release '" + coordinate + "' at '" + path + "' is already published with different bytes" + originClause
                 + "; release-version immutability refuses re-pointing it. Delete/evict the existing version, or enable "
@@ -171,12 +171,11 @@ public final class ReleaseImmutability {
      * <p><b>Asked of every installed layout, not of the deploying plugin alone.</b> The capability that places
      * a path as a coordinate+version is separable from the format that handles the write - the product ships exactly
      * such a split in {@code format.oci-inventory}, whose layout lives in a module of its own - so keying the guard on
-     * {@code plugin instanceof ArtifactLayout} made release immutability a function of which module happens to carry
-     * the layout: move it or drop it and every release it places is silently exempted, and an already-published release
-     * can be re-pointed at different bytes with no {@code 409}. The incumbent {@code publish/<path>} pointer is durable
-     * and says a release stands here; which module can name it is discovery, and discovery must not decide whether the
-     * release is protected. {@code plugin} is still consulted first so a plugin that IS the layout answers exactly as
-     * before, on the hot path, with no discovery at all.
+     * {@code plugin instanceof ArtifactLayout} would make release immutability a function of which module happens to
+     * carry the layout, and an already-published release could be re-pointed at different bytes with no {@code 409}.
+     * The incumbent {@code publish/<path>} pointer is durable and says a release stands here; which module can name
+     * it is discovery, and discovery must not decide whether the release is protected. {@code plugin} is consulted
+     * first so a plugin that IS the layout answers on the hot path, with no discovery at all.
      *
      * <p>The fan-out is the primary pass of {@code StoreRepositoryInventory.describe}, the product's one owner of
      * "which coordinate does this path name": only a layout that CLAIMS the path is asked. The inventory's
@@ -187,9 +186,9 @@ public final class ReleaseImmutability {
      * {@code /v2/} path). A parser that would mis-place another format's path must never be able to turn a mutable
      * channel into a {@code 409}.
      *
-     * <p>Restricted to {@link ArtifactLayout} on purpose: the deliberately-mutable hosted stores stay exempt exactly as
-     * they were - {@code raw} declares no layout at all, and OCI's tag space resolves only through a
-     * {@code BlobLayout}, so a tag re-push is as mutable as it has always been.
+     * <p>Restricted to {@link ArtifactLayout} on purpose: the deliberately-mutable hosted stores stay exempt -
+     * {@code raw} declares no layout at all, and OCI's tag space resolves only through a {@code BlobLayout}, so a tag
+     * re-push stays mutable.
      */
     static boolean immutableReleaseArtifact(RepositoryFormat plugin, String path) {
         if (plugin instanceof ArtifactLayout layout && places(layout, path)) {

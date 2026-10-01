@@ -23,9 +23,9 @@ import build.jenesis.repository.store.Publication;
  * Resolves a named repository to its backings and serves a request across them, so one deployment can offer
  * writable stores, read-through proxies and grouped views rather than a single deployment-wide mode. A
  * {@link RepositoryDefinition} is the {@code (writable, ordered fallbacks)} model: {@code writable} =
- * accepts uploads into its own store, and each {@link RepositoryDefinition.Fallback} is an external upstream URL or another
- * repository consulted, first-hit-wins, on a local miss - with a per-upstream copy ({@code store}) and screening
- * policy. A repository with no definition is {@code writable} with no fallbacks; a proxy is a single upstream
+ * accepts uploads into its own store, and each {@link RepositoryDefinition.Fallback} is an external upstream URL or
+ * another repository consulted, first-hit-wins, on a local miss - with a per-upstream copy ({@code store}) and
+ * screening policy. A repository with no definition is {@code writable} with no fallbacks; a proxy is a single upstream
  * fallback; a grouped view is a list of repository-name fallbacks.
  *
  * <p>{@link #resolve} walks it with a <b>typed {@link Outcome} channel</b>:
@@ -65,7 +65,7 @@ public final class RepositoryRouter {
          *  <b>ends</b> - no weaker fallback is consulted. */
         REFUSED,
         /** A structural refusal already committed to the wire (spool-budget {@code 503}, depth {@code 508}, a
-         *  cannot-serve {@code 5xx}); the walk ends exactly as today. */
+         *  cannot-serve {@code 5xx}); the walk ends. */
         ERROR
     }
 
@@ -91,11 +91,11 @@ public final class RepositoryRouter {
      * sibling coherence) while the module owns the behavior (the byte-free policy floor / withheld probe, the SSRF and
      * credential guards, the {@code 307} emission and its accounting). The handler emits its answer
      * through {@code exchange} and returns the walk {@link Outcome}: {@link Outcome#HIT} when a {@code 307} (or a
-     * terminal status) was committed, {@link Outcome#MISS} to fall through to the next fallback (a screened redirect the
-     * floor or withheld probe vetoed - the walk continues exactly as an upstream miss would), or
+     * terminal status) was committed, {@link Outcome#MISS} to fall through to the next fallback (a screened redirect
+     * the floor or withheld probe vetoed - the walk continues exactly as an upstream miss would), or
      * {@link Outcome#REFUSED} to end the walk. A {@code redirect} definition is refused at parse when no module is
-     * installed, so a production walk never reaches a REDIRECT leg without a handler; the default {@link #REDIRECT_ABSENT}
-     * sentinel is a belt-and-braces fail-loud for a directly-constructed one.
+     * installed, so a production walk never reaches a REDIRECT leg without a handler; the default
+     * {@link #REDIRECT_ABSENT} sentinel is a belt-and-braces fail-loud for a directly-constructed one.
      *
      * <p><b>DNS-directory legs.</b> A {@link RepositoryDefinition.Source.DnsDirectory} leg delegates here through the
      * same seam, but with {@code upstream == null}: the {@code redirect-dns}-provided handler resolves the target per
@@ -105,9 +105,10 @@ public final class RepositoryRouter {
      */
     @FunctionalInterface
     public interface RedirectHandler {
-        /** Serve one REDIRECT leg. {@code upstream} is the clause-literal target for an {@link RepositoryDefinition.Source.Upstream}
-         *  fallback, or {@code null} for a {@link RepositoryDefinition.Source.DnsDirectory} fallback whose target is resolved per
-         *  request by the DNS walk. */
+        /** Serve one REDIRECT leg. {@code upstream} is the clause-literal target for an
+         *  {@link RepositoryDefinition.Source.Upstream} fallback, or {@code null} for a
+         *  {@link RepositoryDefinition.Source.DnsDirectory} fallback whose target is resolved per request by the DNS
+         *  walk. */
         Outcome redirect(String tenant, String repository, RepositoryDefinition.Fallback fallback, URI upstream,
                          RepositoryFormat format, FormatExchange exchange) throws IOException;
     }
@@ -142,11 +143,11 @@ public final class RepositoryRouter {
     private final RedirectHandler redirect;
 
     /** The origin-refresh coalescing gate: the day each {@code (tenant|repo|path|sha256)} key last had its
-     *  {@code origin} row's {@code lastServed}/{@code serves} durably refreshed, so a hot no-copy pass-through refreshes
-     *  a key at most once per day rather than CAS-storming one doc key on every serve (the {@code BatchingDownloadTracker}
-     *  day-granular discipline). The first acquisition of a key - and every digest change (a new key) - is never in
-     *  this map, so it is always written synchronously. Pruned to a single day's keys on each pass, so it is bounded
-     *  by the distinct coordinates served in a day, not everything ever served. */
+     *  {@code origin} row's {@code lastServed}/{@code serves} durably refreshed, so a hot no-copy pass-through
+     *  refreshes a key at most once per day rather than CAS-storming one doc key on every serve (the
+     *  {@code BatchingDownloadTracker} day-granular discipline). The first acquisition of a key - and every digest
+     *  change (a new key) - is never in this map, so it is always written synchronously. Pruned to a single day's keys
+     *  on each pass, so it is bounded by the distinct coordinates served in a day, not everything ever served. */
     private final Map<String, LocalDate> originRefreshed = new ConcurrentHashMap<>();
 
     /** A router over definitions that are the same in every tenant - a fixed set, looked up by repository name. */
@@ -202,11 +203,11 @@ public final class RepositoryRouter {
 
     /** Screen every proxied artifact through the gate before caching or serving it, so a router-configured proxy
      *  applies the same fetch firewall as the deployment-wide proxy; a version the upstream published within the hold
-     *  window is quarantined. The gate is resolved per request from the serving tenant, so a tenant's own policy screens
-     *  its pull-through fetches (a null gate for the tenant disables screening).
+     *  window is quarantined. The gate is resolved per request from the serving tenant, so a tenant's own policy
+     *  screens its pull-through fetches (a null gate for the tenant disables screening).
      *
      *  <p>It is a lookup of <em>both</em> gate flavours rather than one gate: a fetch off an untrusted upstream
-     *  is screened through {@link GatePolicyProvider.Path#PROXY} as it always was, while a <em>stored</em> artifact
+     *  is screened through {@link GatePolicyProvider.Path#PROXY}, while a <em>stored</em> artifact
      *  re-screened on a hardened cache hit takes the flavour it was reached by ({@link RescreenFlavor}), which for the
      *  hybrid {@code writable} + hardened-fallback shape is not always the proxy one. */
     public RepositoryRouter gating(BiFunction<String, GatePolicyProvider.Path, ComplianceGate> gate,
@@ -228,9 +229,9 @@ public final class RepositoryRouter {
     }
 
     /** Inject the consolidated metadata-store factory the verdict and origin records are written through,
-     *  bound per call to a repository's scoped store. Production leaves the default ({@link MetadataProvider#installed()});
-     *  a test passes an in-test store so the router's records round-trip without installing the persistence module for
-     *  every gateway test. */
+     *  bound per call to a repository's scoped store. Production leaves the default
+     *  ({@link MetadataProvider#installed()}); a test passes an in-test store so the router's records round-trip
+     *  without installing the persistence module for every gateway test. */
     public RepositoryRouter tracking(Function<ArtifactStore, MetadataStore> metadataOver) {
         return new RepositoryRouter(definitions, stores, fetcher, gate, holdDays, passThrough, hardeningBounds,
                 withheld, metadataOver, redirect);
@@ -267,8 +268,8 @@ public final class RepositoryRouter {
     /** Inject the {@link RedirectHandler} a {@link RepositoryDefinition.Serve#REDIRECT} upstream leg delegates to (the
      *  {@code redirect-directory} module's handler - the router carries the seam, the module carries the behavior).
      *  Production wires it once at boot; a test injects a stub that records the leg. This only sets the
-     *  instance collaborator - {@link RepositoryDefinition#redirectHandlerInstalled(boolean)} controls whether the {@code redirect} token
-     *  parses at all. */
+     *  instance collaborator - {@link RepositoryDefinition#redirectHandlerInstalled(boolean)} controls whether the
+     *  {@code redirect} token parses at all. */
     public RepositoryRouter redirecting(RedirectHandler redirect) {
         return new RepositoryRouter(definitions, stores, fetcher, gate, holdDays, passThrough, hardeningBounds,
                 withheld, metadataOver, redirect);
@@ -315,10 +316,11 @@ public final class RepositoryRouter {
 
     /**
      * The typed-outcome resolution walk: local-first over the repository's own store, then the ordered
-     * {@link RepositoryDefinition.Fallback fallbacks}, first-hit-wins. A {@link Outcome#MISS} falls through to the next fallback;
-     * a {@link Outcome#HIT}/{@link Outcome#REFUSED}/{@link Outcome#ERROR} ends the walk. Each leg is served through a
-     * {@link Deferred} that streams a hit straight to the client but swallows a {@code 404}, so the walk can try the
-     * next fallback without a leaked existence probe; the final {@code 404} is committed once, by {@link #resolve}.
+     * {@link RepositoryDefinition.Fallback fallbacks}, first-hit-wins. A {@link Outcome#MISS} falls through to the next
+     * fallback; a {@link Outcome#HIT}/{@link Outcome#REFUSED}/{@link Outcome#ERROR} ends the walk. Each leg is served
+     * through a {@link Deferred} that streams a hit straight to the client but swallows a {@code 404}, so the walk can
+     * try the next fallback without a leaked existence probe; the final {@code 404} is committed once, by
+     * {@link #resolve}.
      *
      * <p><b>Streaming.</b> No artifact body is materialised here: the local leg runs the format's own {@code handle}
      * (streaming), each upstream leg runs the shared {@link PullThroughCache} streaming pull-through, and the
@@ -366,7 +368,8 @@ public final class RepositoryRouter {
                     }
                     return Outcome.REFUSED;   // serveVerified answered 404 (non-ALLOW, evicted): fail-closed, ends walk
                 }
-                // serveThrough (a valid recorded ALLOW, or nothing durably local): fall through to today's local-first.
+                // serveThrough (a valid recorded ALLOW, or nothing durably local): fall through to the local-first
+                // serve.
             }
             Deferred localLeg = new Deferred(exchange);
             format.handle(localLeg, local);
@@ -396,14 +399,15 @@ public final class RepositoryRouter {
                 case RepositoryDefinition.Source.Repository inner ->
                         resolve(tenant, inner.name(), format, new Deferred(exchange), depth + 1);   // recursion into a member
                 // A REDIRECT upstream leg delegates to the injected redirect handler (emit a 307 to the
-                // upstream) instead of fetch-screen-serving it; PROXY is today's pull-through walk, byte-for-byte.
+                // upstream) instead of fetch-screen-serving it; PROXY is the plain pull-through walk.
                 case RepositoryDefinition.Source.Upstream upstream -> fallback.serve() == RepositoryDefinition.Serve.REDIRECT
                         ? redirect.redirect(tenant, repository, fallback, upstream.url(), format, exchange)
                         : fetchScreenServe(tenant, repository, fallbackIndex, fallback, upstream.url(), format, exchange);
                 // A DNS-directory leg delegates to the SAME redirect handler, but with no
-                // clause-literal upstream - the redirect-dns-provided handler resolves the target per request by the DNS
-                // walk (DnsDirectory.locate) and emits the 307 (or MISSes to fall through / REFUSEs to end the walk).
-                // The `dns` source parses only as `redirect` (validated at parse), so the handler is always consulted.
+                // clause-literal upstream - the redirect-dns-provided handler resolves the target per request by the
+                // DNS walk (DnsDirectory.locate) and emits the 307 (or MISSes to fall through / REFUSEs to end the
+                // walk). The `dns` source parses only as `redirect` (validated at parse), so the handler is always
+                // consulted.
                 case RepositoryDefinition.Source.DnsDirectory dns ->
                         redirect.redirect(tenant, repository, fallback, null, format, exchange);
             };
@@ -417,8 +421,8 @@ public final class RepositoryRouter {
 
     /** The content-addressed hash a served fallback fetch landed under in {@code store} - the {@code blobs/<hash>}
      *  publish pointer the format wrote for {@code path}, or {@code null} when nothing is published there (an index
-     *  served through the buffered {@code fetch} path, or a leg that cached nothing readable). A tiny pointer read, never
-     *  a blob-body read: the store computed the hash on write, so origin reuses it. Best-effort - a read failure
+     *  served through the buffered {@code fetch} path, or a leg that cached nothing readable). A tiny pointer read,
+     *  never a blob-body read: the store computed the hash on write, so origin reuses it. Best-effort - a read failure
      *  yields {@code null} (no origin row), never a failed serve. */
     private static String located(ArtifactStore store, String path) {
         try {
@@ -431,9 +435,9 @@ public final class RepositoryRouter {
     /** Whether the repository has a store of its OWN to serve local-first from: it accepts uploads ({@code writable}),
      *  or it has at least one caching upstream fallback whose fetched bytes land in that store. A pure pass-through
      *  ({@code nocache} upstream) or a group view over other repositories owns nothing, so its store is never resolved
-     *  - preserving the "a pass-through never touches the repository store" guarantee and matching today's routing,
-     *  where a nocache leg's local-first ran over the scratch (driven by the fallback's own PullThroughCache), not the
-     *  durable store, and a group never touched a store for itself. */
+     *  - so a pass-through never touches the repository store: a nocache leg's local-first runs over the scratch
+     *  (driven by the fallback's own PullThroughCache), not the durable store, and a group touches no store for
+     *  itself. */
     private static boolean hasOwnStore(RepositoryDefinition definition) {
         return definition.writable() || definition.fallbacks().stream()
                 .anyMatch(fallback -> fallback.source() instanceof RepositoryDefinition.Source.Upstream && fallback.store());
@@ -441,11 +445,11 @@ public final class RepositoryRouter {
 
     /** Whether a fallback's {@code match=} coordinate predicate admits this request, derived from the path
      *  alone with no I/O. A fallback with no predicate always applies. A predicate is evaluated against the
-     *  format-derived coordinate: a coordinate that does not match skips the fallback (the MISS-composable walk filter),
-     *  while a request the format has no coordinate for - a coordinate-less checksum sibling, a metadata/index path, or
-     *  a format without the {@link ArtifactLayout} capability - is left to the configured order and never partitioned
-     *  away, so a sibling fetch follows the same leg its artifact took (sibling-coherence: the leg decision is made once
-     *  at fallback level, never per-URL inside a leg). */
+     *  format-derived coordinate: a coordinate that does not match skips the fallback (the MISS-composable walk
+     *  filter), while a request the format has no coordinate for - a coordinate-less checksum sibling, a metadata/index
+     *  path, or a format without the {@link ArtifactLayout} capability - is left to the configured order and never
+     *  partitioned away, so a sibling fetch follows the same leg its artifact took (sibling-coherence: the leg decision
+     *  is made once at fallback level, never per-URL inside a leg). */
     private static boolean applies(RepositoryDefinition.Fallback fallback, RepositoryFormat format, String path) {
         if (fallback.match() == null) {
             return true;
@@ -474,8 +478,8 @@ public final class RepositoryRouter {
         UpstreamProbe probe = new UpstreamProbe(fetcher);
         boolean harden = fallback.screening() == RepositoryDefinition.Screening.HARDEN;
         boolean store = fallback.store();
-        // The durable per-repository store the origin record (and the screen's own quarantine records) land in, resolved
-        // for a gated tenant even on a no-store leg (durable records beside transient bytes). For an ungated
+        // The durable per-repository store the origin record (and the screen's own quarantine records) land in,
+        // resolved for a gated tenant even on a no-store leg (durable records beside transient bytes). For an ungated
         // pass-through it stays the throwaway scratch, preserving the "an ungated pass-through never touches the
         // repository store" guarantee - origin then lands wherever the durable records do.
         ArtifactStore records = null;
@@ -661,7 +665,7 @@ public final class RepositoryRouter {
             // the fallback's screening()-composed fetcher is injected on the MISS leg via HardenedHitVerify.screenFetch
             // (one screening decorator, applied once - the eager screening() call still fails loud for a hardened leg
             // with no gate). On the HIT leg the same hooks verify a hardened cache hit fail-closed before it serves; a
-            // non-hardened fallback serves through (today's withheld-pointer retraction). This body store is usually the
+            // non-hardened fallback serves through (the withheld-pointer retraction). This body store is usually the
             // same durable store resolve()'s step-1 local-first already hit-verified, so this leg's verify is reached
             // only when step-1 missed - idempotent, never a double serve.
             // Composed eagerly for the requested path, so an unsatisfiable hardened leg fails at resolution; a format
@@ -700,8 +704,8 @@ public final class RepositoryRouter {
      *  does not record the {@link #url()} though: that names where the served <em>bytes</em> came from for the origin
      *  row, and a {@code HEAD} downloads none (origin follows the bytes). The walk reads
      *  {@link #served()} to tell a genuine upstream miss (never {@code 200}) from a refusal (the upstream served
-     *  {@code 200} but the wire ended a {@code 404} because the screen withheld it) - the discriminator the old
-     *  boolean 404-sniff lacked. Request-scoped: a fresh probe wraps the fetcher for each upstream fallback leg. */
+     *  {@code 200} but the wire ended a {@code 404} because the screen withheld it) - the discriminator a boolean
+     *  404-sniff lacks. Request-scoped: a fresh probe wraps the fetcher for each upstream fallback leg. */
     private static final class UpstreamProbe implements ProxyFormat.Fetcher {
 
         private final ProxyFormat.Fetcher delegate;
@@ -750,7 +754,8 @@ public final class RepositoryRouter {
         }
 
         /** The full upstream artifact URL the served body was downloaded from, or {@code null} when the leg served
-         *  nothing through {@code download} - the origin row's {@code target}, reconciled with the verdict's {@code source}. */
+         *  nothing through {@code download} - the origin row's {@code target}, reconciled with the verdict's
+         *  {@code source}. */
         private String url() {
             return url;
         }
@@ -811,9 +816,9 @@ public final class RepositoryRouter {
         @Override
         public String setting(String key) {
             // Delegate deployment toggles straight through: a format served through a fallback-walk leg (a group member
-            // recursion, a screened/spool leg) must read the operator's configured value, not the FormatExchange default
-            // null. Without this a walked leg silently sees the shipped default for every setting the direct-serve leg
-            // reads from the servlet environment (maven-metadata-compute, npm rewrite toggles, ...).
+            // recursion, a screened/spool leg) must read the operator's configured value, not the FormatExchange
+            // default null. Without this a walked leg silently sees the shipped default for every setting the
+            // direct-serve leg reads from the servlet environment (maven-metadata-compute, npm rewrite toggles, ...).
             return delegate.setting(key);
         }
 
@@ -824,9 +829,10 @@ public final class RepositoryRouter {
 
         @Override
         public void setResponseHeader(String name, String value) {
-            // Pre-commit: buffer, so headers set before a leg's status is known are replayed onto the real exchange on a
-            // hit (respond) and dropped with the swallowed body on a 404. Post-commit: respond already ran and flushed the
-            // buffered map, so a late header must go straight to the delegate - buffering it here would silently drop it.
+            // Pre-commit: buffer, so headers set before a leg's status is known are replayed onto the real exchange on
+            // a hit (respond) and dropped with the swallowed body on a 404. Post-commit: respond already ran and
+            // flushed the buffered map, so a late header must go straight to the delegate - buffering it here would
+            // silently drop it.
             if (committed) {
                 delegate.setResponseHeader(name, value);
             } else {

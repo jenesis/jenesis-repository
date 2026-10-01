@@ -55,9 +55,9 @@ public final class DeployEdgeHooks implements EdgeHooks {
      * Release-version immutability: BEFORE the format lays out the version, refuse a re-point of an
      * already-published immutable RELEASE coordinate at DIFFERENT bytes (default-on, {@code allow-redeploy} opt-out).
      * The check reads only the incumbent {@code publish/<path>} pointer's hash (never the body) and is origin-blind
-     * (keys off the pointer, not how the incumbent arrived), so a {@code 409} refusal fires here and nothing is laid out
-     * or re-pointed. A same-hash re-publish, a first publish, a snapshot/mutable coordinate, or an opted-out tenant fall
-     * through and lay out as before.
+     * (keys off the pointer, not how the incumbent arrived), so a {@code 409} refusal fires here and nothing is laid
+     * out or re-pointed. A same-hash re-publish, a first publish, a snapshot/mutable coordinate, or an opted-out tenant
+     * fall through and lay out normally.
      */
     @Override
     public Optional<Refusal> beforeLayout(RepositoryFormat format, ArtifactStore store, ArtifactDescriptor descriptor,
@@ -87,9 +87,9 @@ public final class DeployEdgeHooks implements EdgeHooks {
     /**
      * The gate held this upload before the format laid it out, so the stored blob is the raw publish envelope (an npm
      * packument, a NuGet/PyPI multipart), never the served artifact. Record the dispatch context beside the hold - the
-     * claiming format, method, body hash and framing headers - so a later review release can replay {@code plugin.handle}
-     * from it and actually materialise the version, rather than linking a raw envelope blob that installs nothing and
-     * strands a phantom pointer.
+     * claiming format, method, body hash and framing headers - so a later review release can replay
+     * {@code plugin.handle} from it and actually materialise the version, rather than linking a raw envelope blob that
+     * installs nothing and strands a phantom pointer.
      */
     @Override
     public void held(RepositoryFormat format, ArtifactStore store, String path, String hash, FormatExchange exchange)

@@ -21,10 +21,9 @@ import build.jenesis.repository.gate.QuarantineLog;
  * sibling per-version spaces and reachable from the name-enumeration screen that reads it.
  *
  * <p><b>Every prefix is named from its composer's constant, never re-spelled.</b> Three of these five spaces
- * are composed in a different module from the one that declares them, which is exactly the split that rots: a manifest
- * entry re-spelling the literal survives a rename in the owner, so the operator purge composes a key nothing writes,
- * the walk lists nothing under it, and the dry run reports an empty blast radius while the purge reclaims nothing -
- * the failure once found in the well-formedness direction and again in the reaper.
+ * are composed in a different module from the one that declares them: a manifest entry re-spelling the literal would
+ * survive a rename in the owner, so the operator purge would compose a key nothing writes, the walk would list
+ * nothing under it, and the dry run would report an empty blast radius while the purge reclaimed nothing.
  */
 public final class GateStorageNamespace implements StorageNamespace {
 
