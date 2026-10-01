@@ -3,13 +3,11 @@ package build.jenesis.repository.search;
 import module java.base;
 
 /**
- * How a repository answers a search, chosen per repository by the {@value #SETTING} setting, off by default.
- *
- * <p>{@link #NAME} is a lookup of a coordinate by the start of its name, answered from the version documents the
- * repository already keeps sorted: a bounded page of point reads and a cursor, and nothing built or stored for it.
- * {@link #FULL_TEXT} is the full-text index, built and kept by a background pass, answering free text over names,
- * descriptions, keywords and authors. The index is what a repository pays for - its build, its storage and the
- * pass that keeps it - so it is asked for repository by repository rather than paid for everywhere.
+ * How a repository answers a search, chosen per repository by {@value #SETTING}, off by default. {@link #NAME} looks a
+ * coordinate up by the start of its name from the version documents the repository already keeps sorted - a bounded
+ * page of point reads and a cursor, nothing built. {@link #FULL_TEXT} is the full-text index a background pass builds
+ * and keeps, answering free text over names, descriptions, keywords and authors; its build, storage and pass are a
+ * cost, so it is asked for per repository.
  */
 public enum SearchMode {
 
@@ -25,8 +23,8 @@ public enum SearchMode {
     /** Off: a repository answers by name until it is asked for more. */
     public static final String DEFAULT = "false";
 
-    /** The mode {@code config} - a repository's effective configuration - chooses; {@link #NAME} unless the setting
-     *  says {@code true}. */
+    /** The mode a repository's effective configuration {@code config} chooses: {@link #NAME} unless the setting says
+     *  {@code true}. */
     public static SearchMode of(UnaryOperator<String> config) {
         String value = config.apply(SETTING);
         return Boolean.parseBoolean((value == null || value.isBlank() ? DEFAULT : value).trim()) ? FULL_TEXT : NAME;
