@@ -8,15 +8,10 @@ import org.springframework.context.event.ContextRefreshedEvent;
 import org.springframework.core.env.Environment;
 
 /**
- * Greets a deployment nobody can sign in to yet, with the {@link FirstRunKey} that lets somebody in.
- *
- * <p>It speaks once the context has refreshed - the web server is listening by then - so the key is the last thing a
- * first start prints rather than a line lost among the beans that follow it. A start that finds somebody can sign in
- * prints nothing here; a store that refuses the write (a read-only deployment) is said so, since a key that was not
- * stored would be refused at the sign-in form.
- *
- * <p>At WARN rather than INFO, although nothing is wrong: the key is the only way into a fresh deployment, and a
- * deployment that raised its root level to WARN must still see it.
+ * Greets a deployment nobody can sign in to yet with the {@link FirstRunKey} that lets somebody in. It speaks once the
+ * context has refreshed, so the key is the last thing a first start prints; a store that refuses the write (a read-only
+ * deployment) is reported, since an unstored key would be refused at sign-in. At WARN, so a deployment logging at WARN
+ * still sees the only way in.
  */
 public final class FirstRunWelcome implements ApplicationListener<ContextRefreshedEvent> {
 

@@ -28,14 +28,12 @@ import org.thymeleaf.spring6.templateresolver.SpringResourceTemplateResolver;
 import build.jenesis.repository.scope.Scopes;
 
 /**
- * Wires key-based console sign-in unless {@code jenrepo.key-login=false}, and nothing at all when it is, so switching
- * it off leaves the other sign-in chains untouched. It contributes a form-login leg to the shared security chain (a
- * {@link LoginContributor}) backed by {@link KeyLoginAuthenticationProvider}, a "Sign in with a key" option to the
- * login page (a {@link LoginOptions}), the key-entry page, the issued keys' API and console screen over one
- * implementation ({@link KeyLogins}), and the {@link FirstRunKey} a
- * deployment nobody can sign in to yet announces when it has started ({@link FirstRunWelcome}). A full-access admin key
- * in the environment is still announced with a WARN. Registering the provider as a bean also stops Boot from
- * auto-creating a default in-memory user.
+ * Wires key-based console sign-in unless {@code jenrepo.key-login=false}, and nothing at all when it is, leaving the
+ * other sign-in chains untouched. It contributes a form-login leg to the shared chain ({@link LoginContributor}) backed
+ * by {@link KeyLoginAuthenticationProvider}, a "Sign in with a key" option ({@link LoginOptions}), the key-entry page,
+ * the issued keys' API and screen over {@link KeyLogins}, and the {@link FirstRunKey} announced by
+ * {@link FirstRunWelcome}. An admin key in the environment is announced with a WARN. Registering the provider as a bean
+ * also stops Boot from creating a default in-memory user.
  */
 @Configuration(proxyBeanMethods = false)
 @Conditional(KeyLoginConfig.KeyLoginEnabled.class)
@@ -43,9 +41,8 @@ public class KeyLoginConfig {
 
     private static final Logger LOGGER = LoggerFactory.getLogger(KeyLoginConfig.class);
 
-    /** True unless {@code jenrepo.key-login=false} ({@link KeyLoginMechanism#onByDefault()}): switched off, this
-     *  configuration and every bean it declares is absent, so the other sign-in chains are byte-for-byte untouched and
-     *  no key is ever accepted. */
+    /** True unless {@code jenrepo.key-login=false} ({@link KeyLoginMechanism#onByDefault()}); off, no bean here exists
+     *  and no key is ever accepted. */
     public static class KeyLoginEnabled implements Condition {
         @Override
         public boolean matches(ConditionContext context, AnnotatedTypeMetadata metadata) {
@@ -69,11 +66,8 @@ public class KeyLoginConfig {
         return new KeyLoginKeys(rootStorage);
     }
 
-    /**
-     * The first-run key, over the same documents the issued keys live in. "Administered" is one bounded page read
-     * of the deployment scope's principals and groups - whoever holds a grant there administers the deployment,
-     * however it was made - asked at start and at each first-run sign-in, never on a request path.
-     */
+    /** The first-run key, over the issued keys' documents. "Administered" is one bounded page read of the deployment
+     *  scope's principals and groups, asked at start and at each first-run sign-in, never on a request path. */
     @Bean
     public FirstRunKey firstRunKey(@Qualifier("rootStorage") Documents rootStorage, KeyLoginKeys keys,
                                    UiProperties properties, Authorization authorization) {
@@ -101,8 +95,7 @@ public class KeyLoginConfig {
                 audit, tenant, superadmins::is);
     }
 
-    /** Contribute a form-login leg to the shared chain: the key posts to {@code /login/key}, authenticated by the
-     *  key provider. Registering the provider here keeps this mechanism's authentication local to the chain. */
+    /** A form-login leg on the shared chain: the key posts to {@code /login/key}, authenticated by the key provider. */
     @Bean
     public LoginContributor keyLoginContributor(KeyLoginAuthenticationProvider provider) {
         return http -> {
@@ -129,15 +122,10 @@ public class KeyLoginConfig {
         return new KeyLoginPageController();
     }
 
-    /**
-     * Resolves this module's own page templates from the jar it ships in: {@code keylogin/form.html} lives under the
-     * module's {@code META-INF/templates/} - a location the module system derives no package from, so requiring the
-     * module splits nothing and the shell never needs to know the template. The template travels with the module (the
-     * GUI-contract template leg), mirroring {@code SharedShellConfig}'s free-shell resolver in the other direction.
-     * The resolver answers ONLY the {@code keylogin/*} namespace (resolvable patterns, not ordering, with
-     * {@code checkExistence}) so it can never hijack another module's view and every other name falls through to the
-     * shell's own resolvers - exactly the collision-proofing {@code SharedShellConfig} documents.
-     */
+    /** Resolves this module's own templates from its jar: {@code keylogin/form.html} lives under
+     *  {@code META-INF/templates/}, from which the module system derives no package, so the shell never needs to know
+     *  it. It answers only the {@code keylogin/*} namespace, with {@code checkExistence}, so it cannot hijack another
+     *  module's view - the collision-proofing {@code SharedShellConfig} documents. */
     @Bean
     public SpringResourceTemplateResolver keyLoginTemplateResolver(ApplicationContext context) {
         return ConsoleTemplates.resolver(context, KeyLoginMechanism.QUALIFIER);

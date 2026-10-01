@@ -11,16 +11,13 @@ import build.jenesis.repository.ui.identity.UserDirectory;
 import build.jenesis.repository.ui.store.TenantService;
 
 /**
- * The issued login keys, administered: listed, issued and revoked - the one implementation the API
- * ({@link KeyLoginController}), the console's login keys screen ({@link KeyLoginScreenController}) and so the CLI all
- * reach. Who may call it is each surface's gate, not this class's: the API route is one of the deployment-wide routes
- * the repository chain holds to a manage key of the operator tenant, and the screen sits under the console's
- * super-admin settings. A login key spans tenants in what it can be bound to, so both gates are the deployment's.
+ * The issued login keys, administered - the one implementation the API ({@link KeyLoginController}), the console screen
+ * ({@link KeyLoginScreenController}) and so the CLI reach. Each surface gates its callers: the API route is held to a
+ * manage key of the operator tenant, the screen to the console's super-admins.
  *
- * <p>Issuing binds the principal into a tenant at a {@link UserDirectory.Role} through the ordinary membership file,
- * so the per-tenant authorization applies to it unchanged, and returns the minted key exactly once - only its hash is
- * stored. Revoking reverses the membership grant the issue wrote, so a reissued same-name key inherits nothing. Both
- * are audited, naming the actor, the tenant and the principal.
+ * <p>Issuing binds the principal into a tenant at a {@link UserDirectory.Role} through the ordinary membership file, so
+ * per-tenant authorization applies unchanged, and returns the key once; only its hash is stored. Revoking reverses the
+ * membership grant, so a reissued same-name key inherits nothing. Both are audited with actor, tenant and principal.
  */
 public final class KeyLogins {
 
@@ -47,17 +44,16 @@ public final class KeyLogins {
 
     /**
      * Issue a key for {@code principal} as a member of {@code tenant} at {@code role} - admin or editor, anything else
-     * being a viewer, the least a member holds - on behalf of {@code actor}.
+     * a viewer - on behalf of {@code actor}.
      *
-     * @throws IllegalArgumentException naming what is wrong with the request: a missing or malformed principal or
-     *                                  tenant, or a tenant that does not exist
+     * @throws IllegalArgumentException naming what is wrong: a missing or malformed principal or tenant, or an unknown
+     *     tenant
      */
     public Issued issue(String actor, String principal, String login, String tenant, String role) throws IOException {
         String id = token(principal, "principal");
         String scope = token(tenant, "tenant");
-        // A tenant by the console's own rule, not by its marker alone: a store that already held the tenant's
-        // repositories before anyone created it through the console is a tenant with no marker, and it is the one
-        // an image started over an existing store serves.
+        // A tenant by the console's own rule, not its marker alone: a store holding a tenant's repositories from before
+        // the console created it has no marker, and an image started over that store serves it.
         if (!new TenantService(rootStorage).exists(scope)) {
             throw new IllegalArgumentException("Unknown tenant '" + scope + "'.");
         }
@@ -84,11 +80,9 @@ public final class KeyLogins {
         }
     }
 
-    /**
-     * A principal or tenant as one token. All whitespace is refused, not just a space: the stored line is split on
-     * {@code \s+} at read time, so a tab or newline would split into a forged extra field - and a {@code /}, {@code :}
-     * or {@code =} has a meaning of its own in a qualified id or a stored line.
-     */
+    /** A principal or tenant as one token. All whitespace is refused - the stored line splits on {@code \s+}, so a tab
+     *  or newline would forge a field - and so are {@code /}, {@code :} and {@code =}, which mean something in a
+     *  qualified id or a stored line. */
     private static String token(String value, String field) {
         if (value == null || value.isBlank()) {
             throw new IllegalArgumentException("Missing '" + field + "'.");

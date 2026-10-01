@@ -5,11 +5,10 @@ import org.springframework.web.bind.annotation.GetMapping;
 import build.jenesis.repository.ui.ConsoleScreen;
 
 /**
- * Serves the key-entry form at {@code GET /login/key} (the link the {@link build.jenesis.repository.ui.LoginOptions} adds to
- * the console login page). The form POSTs the key back to {@code /login/key}, where Spring Security's form-login filter
- * - configured by {@link KeyLoginConfig} against {@link KeyLoginAuthenticationProvider} - authenticates it; the GET
- * therefore reaches this controller while the POST is intercepted before it. The page labels the mechanism a demo /
- * simple-deployment path, not the recommended production sign-in.
+ * Serves the key-entry form at {@code GET /login/key}, the link {@link build.jenesis.repository.ui.LoginOptions} adds
+ * to the login page. The form POSTs back to {@code /login/key}, where Spring Security's form-login filter configured by
+ * {@link KeyLoginConfig} authenticates it, so only the GET reaches this controller. The page presents the mechanism as
+ * a simple-deployment path, not the recommended production sign-in.
  */
 @Controller
 @ConsoleScreen

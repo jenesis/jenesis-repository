@@ -5,12 +5,10 @@ import build.jenesis.repository.settings.Setting;
 import build.jenesis.repository.settings.SettingsContributor;
 
 /**
- * Lists the key-login module's one runtime dial - the {@code key-login} enable gate - in the deployment settings
- * catalogue, discovered by {@link ServiceLoader} so it appears exactly when this module is installed and pairs the
- * module with its on/off toggle on the modules screen (the {@link Setting#gate()} convention). The env bootstrap admin
- * key ({@code JENREPO_UI_ADMIN_KEY}) is deliberately not catalogued: it is a deploy-time secret, never a store-writable
- * setting, so it can never be set through the settings API nor appear on a settings surface at all - the strongest form
- * of "redacted".
+ * Lists the key-login module's one dial - the {@code key-login} gate - in the settings catalogue, so it appears exactly
+ * when this module is installed and pairs the module with its toggle (the {@link Setting#gate()} convention). The
+ * environment's admin key ({@code JENREPO_UI_ADMIN_KEY}) is not catalogued: a deploy-time secret is never a settable
+ * setting, so no settings API or screen can carry it.
  */
 public final class KeyLoginSettingsContributor implements SettingsContributor {
 

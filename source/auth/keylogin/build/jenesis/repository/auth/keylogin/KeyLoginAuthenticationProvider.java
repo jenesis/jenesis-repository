@@ -16,17 +16,13 @@ import org.springframework.security.authentication.AuthenticationProvider;
 import org.springframework.security.web.authentication.WebAuthenticationDetails;
 
 /**
- * Authenticates a pasted console login key into the same Spring Security session an OIDC or LDAP sign-in yields - a real
- * {@link UsernamePasswordAuthenticationToken} carrying the principal's authorities - so every per-tenant rule
- * ({@code TenantAuthorization} over {@code Memberships}) applies to
- * it unchanged, with no parallel authorization path. Three key sources: the env bootstrap admin key
- * ({@code JENREPO_UI_ADMIN_KEY}, full super-admin over every tenant), the {@link FirstRunKey} a deployment nobody can
- * sign in to yet prints at start (the same session, for its hour and until an administrator exists), and the
- * admin-issued {@link KeyLoginKeys} (a principal signed in at {@code ROLE_USER}, its tenant role resolved per request
- * from the membership file the key was bound to). Keys are matched only by their one-way hash - the admin key in constant time, an issued key by hash lookup
- * - never compared in the clear and never logged. Every attempt is first rate-limited by client address through the
- * shared {@link RateLimiter} (brute-force protection; nothing is limited when no rate-limit module is installed) and
- * every outcome is audited.
+ * Authenticates a pasted console login key into the same Spring Security session an OIDC or LDAP sign-in yields - a
+ * {@link UsernamePasswordAuthenticationToken} with the principal's authorities - so every per-tenant rule applies
+ * unchanged. Three key sources: the environment's admin key ({@code JENREPO_UI_ADMIN_KEY}, super-admin over every
+ * tenant), the {@link FirstRunKey} (the same session, for its hour and until an administrator exists), and the issued
+ * {@link KeyLoginKeys} (a {@code ROLE_USER} principal whose tenant role resolves per request from its membership). Keys
+ * are matched only by one-way hash - the admin key in constant time - never compared in the clear or logged. Every
+ * attempt is rate-limited by client address through the shared {@link RateLimiter} and every outcome audited.
  */
 public final class KeyLoginAuthenticationProvider implements AuthenticationProvider {
 
@@ -89,9 +85,9 @@ public final class KeyLoginAuthenticationProvider implements AuthenticationProvi
                 adminKeyHash.getBytes(StandardCharsets.UTF_8));
     }
 
-    /** The session token: its roles, and for the environment's admin key and the first-run key the
-     *  {@link StarterCredential#AUTHORITY starter-credential mark} the console's first-run guide keys on - a scoped
-     *  login key is a real identity somebody issued, so it never carries it. */
+    /** The session token: its roles, plus, for the admin key and the first-run key, the
+     *  {@link StarterCredential#AUTHORITY starter-credential mark} the console's setup guide keys on. An issued key is
+     *  a real identity, so it never carries it. */
     private static UsernamePasswordAuthenticationToken token(String principal, boolean superadmin, boolean starter) {
         Set<GrantedAuthority> authorities = new LinkedHashSet<>();
         authorities.add(new SimpleGrantedAuthority("ROLE_USER"));

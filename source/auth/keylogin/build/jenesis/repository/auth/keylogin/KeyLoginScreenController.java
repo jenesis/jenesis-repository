@@ -10,11 +10,9 @@ import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.servlet.mvc.support.RedirectAttributes;
 
 /**
- * The console's login keys screen: the issued keys, a form that issues one - its key shown once, on the page the form
- * lands on - and a revoke beside each. It calls {@link KeyLogins}, the implementation behind {@code /api/keylogin}, in
- * process, so the console, the API and the CLI issue and revoke through one piece of code. The screen sits under
- * {@code /ui/settings/}, which the console holds to its super-admins: a login key can bind a principal into any
- * tenant, so issuing one is the deployment's business rather than a tenant administrator's.
+ * The console's login keys screen: the issued keys, a form that issues one (shown once, on the page it lands on) and a
+ * revoke beside each, calling {@link KeyLogins} in process - the implementation behind {@code /api/keylogin}. It sits
+ * under {@code /ui/settings/}, held to super-admins, since a login key can bind a principal into any tenant.
  */
 @Controller
 @ConsoleScreen
@@ -53,7 +51,7 @@ public class KeyLoginScreenController {
         return "redirect:" + ROUTE;
     }
 
-    /** Revoke one key: it stops signing in at once, and the membership its issue wrote is removed. */
+    /** Revoke one key: it stops signing in at once, and its membership grant is removed. */
     @PostMapping(ROUTE + "/revoke")
     public String revoke(@RequestParam("id") String id, Principal operator, RedirectAttributes redirect)
             throws IOException {

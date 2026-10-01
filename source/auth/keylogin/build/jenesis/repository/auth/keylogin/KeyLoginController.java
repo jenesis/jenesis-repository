@@ -15,12 +15,10 @@ import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.server.ResponseStatusException;
 
 /**
- * The operator API for the issued login keys - list, issue and revoke - over {@link KeyLogins}, the implementation the
- * console's login keys screen calls too. What it answers to is decided before a request reaches it: {@code /api/keylogin}
- * is one of the deployment-wide routes the repository chain's authorization manager holds to a manage key of the
- * operator tenant, since a login key can bind a principal into any tenant. So the CLI's {@code keylogin} commands,
- * which present an operator key, reach it, and a tenant's own administrator key does not. A request it refuses for
- * what it asks - an unknown tenant, a malformed principal - answers {@code 400} with the reason.
+ * The operator API for issued login keys - list, issue, revoke - over {@link KeyLogins}, which the console screen calls
+ * too. {@code /api/keylogin} is a deployment-wide route the repository chain holds to a manage key of the operator
+ * tenant, since a login key can bind a principal into any tenant: the CLI's {@code keylogin} commands reach it, a
+ * tenant administrator's key does not. A request refused for what it asks answers {@code 400} with the reason.
  */
 @RestController
 @RequestMapping("/api/keylogin")
@@ -56,7 +54,7 @@ public class KeyLoginController {
         keyLogins.revoke(actor(request), id);
     }
 
-    /** Who a request acts as on the audit trail: its key's hash, the way every operator route records it. */
+    /** Who a request acts as on the audit trail: its key's hash, as every operator route records it. */
     private static String actor(HttpServletRequest request) {
         String key = PresentedKey.from(request);
         return key == null || key.isBlank() ? "anonymous" : Authorization.hash(key);
