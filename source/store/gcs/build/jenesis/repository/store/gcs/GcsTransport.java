@@ -9,22 +9,19 @@ import com.google.api.client.http.LowLevelHttpResponse;
 import com.google.api.client.util.StreamingContent;
 
 /**
- * The storage client's HTTP over the product's own client, in place of Google's {@code NetHttpTransport} - a URL
- * connection: the store's requests leave the way every other outbound call does.
+ * The storage client's HTTP over the product's own client rather than Google's {@code NetHttpTransport}, so the store's
+ * requests leave as every other outbound call does.
  *
- * <p>Two headers of the client library's are not sent. Its {@code User-Agent} and its {@code x-goog-api-client}
- * name the Java version, the library's own versions and the operating system; the request carries the product's
- * {@code User-Agent} instead, and neither header is needed by the JSON API. The headers the product's client sets
- * itself - {@code Host}, {@code Content-Length}, {@code Connection}, {@code Expect}, {@code Upgrade} - are carried as
- * what they mean: the length is the content's declared length.
+ * <p>The library's {@code User-Agent} and {@code x-goog-api-client} name the runtime's versions and the operating
+ * system, and the JSON API needs neither, so the product's {@code User-Agent} is sent instead. Headers the product's
+ * client sets itself are carried as what they mean: the length is the content's declared length.
  *
- * <p>An upload streams: the library writes its content into a pipe the request reads from, on a thread of its own,
- * so an artifact of any size is never held in memory. A response body streams back the same way, undecoded, and the
- * library decodes it by the {@code Content-Encoding} this reports.
+ * <p>An upload streams through a pipe the library writes into on a thread of its own; a response streams back
+ * undecoded, and the library decodes it by the reported {@code Content-Encoding}.
  */
 final class GcsTransport extends HttpTransport {
 
-    /** Headers not copied from the library's request: set by the product's client, or naming the runtime. */
+    /** Library headers not copied: set by the product's client, or naming the runtime. */
     private static final Set<String> NOT_SENT = Set.of("host", "content-length", "connection", "expect", "upgrade",
             "user-agent", "x-goog-api-client");
 
@@ -56,8 +53,8 @@ final class GcsTransport extends HttpTransport {
             headers.add(new String[] {name, value});
         }
 
-        /** The library's read timeout is a bound on silence, which is what the client's idle timeout is - never a
-         *  bound on the whole call, which would cut a large upload short. */
+        /** The library's read timeout bounds silence, as the client's idle timeout does - never the whole call, which
+         *  would cut a large upload short. */
         @Override
         public void setTimeout(int connectTimeout, int readTimeout) {
             if (connectTimeout > 0) {

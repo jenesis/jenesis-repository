@@ -38,24 +38,21 @@ import com.google.api.services.storage.model.Objects;
 import com.google.api.services.storage.model.StorageObject;
 
 /**
- * An {@link ArtifactStore} backed by a Google Cloud Storage bucket over the JSON API, through Google's API client.
- * A blob is the object at its key; a tenant or repository is a key prefix (see {@link #scope}). A read streams from
- * the media response and a ranged read is a real {@code Range} GET; an upload goes from an owner-only spool file,
- * because the API wants the length up front and the client re-reads the body when it retries a request, which a
- * plain stream cannot give - a publish would answer 500 under two nodes' contention.
+ * An {@link ArtifactStore} over a Google Cloud Storage bucket through the JSON API and Google's API client. A blob is
+ * the object at its key; a tenant or repository is a key prefix ({@link #scope}). A read streams the media response and
+ * a ranged read is a real {@code Range} GET. An upload goes from an owner-only spool file, because the API wants the
+ * length up front and the client re-reads the body when it retries.
  *
- * <p>The version token is the object <em>generation</em>: GCS's per-incarnation number, which a delete and re-create
- * never re-issues, so a compare-and-set from before the delete is refused. {@link #writeVersioned} is an insert under
- * {@code ifGenerationMatch} ({@code 0} = only if absent) whose {@code 412 Precondition Failed} becomes a
- * {@code false} return, so the caller re-reads and retries; concurrent listing edits and lock acquisitions across
- * many nodes therefore resolve through GCS itself, with no database or lock service. A conditional write is
- * idempotent, so the client's backoff re-sends it on a 408, 429 or 5xx as Google's retry guidance says, and an
- * unconditional one re-sends the same spooled bytes.
+ * <p>The version token is the object <em>generation</em>, which a delete and re-create never re-issues, so a
+ * compare-and-set from before a delete is refused. {@link #writeVersioned} is an insert under {@code ifGenerationMatch}
+ * ({@code 0} = only if absent) whose {@code 412} becomes {@code false}, so concurrent writers across nodes resolve
+ * through GCS itself. A conditional write is idempotent, so the client's backoff re-sends it on a 408, 429 or 5xx, and
+ * an unconditional one re-sends the same spooled bytes.
  */
 public final class GcsArtifactStore implements ArtifactStore {
 
-    /** The header every media response carries naming the object's generation - the version token, read with the
-     *  bytes in one round trip so the two cannot disagree. */
+    /** The header naming the object's generation on every media response - the version token, read with the bytes in
+     *  one round trip. */
     static final String GENERATION = "x-goog-generation";
     private static final String BINARY = "application/octet-stream";
     private static final String LISTING_FIELDS = "items(name,size,updated),prefixes,nextPageToken";
@@ -95,7 +92,7 @@ public final class GcsArtifactStore implements ArtifactStore {
         return signer == null ? Optional.empty() : Optional.of(signer.sign(bucket, keyPrefix + key, ttl));
     }
 
-    // --- reads ---------------------------------------------------------------------------------------------------
+    // ---- reads
 
     @Override
     public InputStream open(String key) throws IOException {
@@ -144,9 +141,8 @@ public final class GcsArtifactStore implements ArtifactStore {
         try {
             return metadata(key, "name") != null;
         } catch (IOException e) {
-            // Only a 404 means absent, and metadata() has already read that as null; a throttle or an auth failure
-            // must fail the request loudly, or a published artifact silently turns into a miss for as long as the
-            // backend misbehaves.
+            // Only a 404 is absence, already read as null by metadata(); a throttle or an auth failure fails loudly
+            // rather than turning a published artifact into a miss.
             throw new UncheckedIOException(e);
         }
     }
@@ -159,7 +155,7 @@ public final class GcsArtifactStore implements ArtifactStore {
 
     @Override
     public Optional<Listed> listed(String key) throws IOException {
-        // The same metadata request size makes, asking for the update time beside the size - never a download.
+        // The metadata request size makes, with the update time - never a download.
         StorageObject object = metadata(key, "size,updated");
         if (object == null) {
             return Optional.empty();
@@ -172,7 +168,7 @@ public final class GcsArtifactStore implements ArtifactStore {
 
     @Override
     public Optional<Object> version(String key) throws IOException {
-        // A metadata request, never a download: the token is the generation the JSON document carries.
+        // A metadata request: the token is the generation the JSON document carries.
         StorageObject object = metadata(key, "generation");
         if (object == null) {
             return Optional.empty();
@@ -199,9 +195,8 @@ public final class GcsArtifactStore implements ArtifactStore {
             byte[] content = in.readAllBytes();
             String generation = response.getHeaders().getFirstHeaderStringValue(GENERATION);
             if (generation == null) {
-                // Better no token than a fabricated one: an endpoint that answers a media GET without the generation
-                // is not the JSON API this store is written against, and a caller holding a made-up token would have
-                // every compare-and-set refused, or worse, honoured.
+                // No token rather than a fabricated one: an endpoint answering a media GET without the generation is
+                // not the JSON API, and a made-up token would have every compare-and-set refused, or worse, honoured.
                 throw new IOException("The endpoint returned no " + GENERATION + " header for " + key
                         + " - versioned reads need the JSON API's media response, which carries it");
             }
@@ -221,17 +216,17 @@ public final class GcsArtifactStore implements ArtifactStore {
         }
     }
 
-    // --- listing -------------------------------------------------------------------------------------------------
+    // ---- listing
 
-    /** The storage prefix of a listing container - the scope's key prefix and the normalised container name with its
-     *  trailing delimiter - so a caller's {@code a/b/} and {@code a/b} ask the service for one prefix. */
+    /** The storage prefix of a listing container - the scope's prefix plus the normalised container and its delimiter -
+     *  so {@code a/b/} and {@code a/b} ask for one prefix. */
     private String base(String prefix) {
         String container = ArtifactStore.container(prefix);
         return keyPrefix + (container.isEmpty() ? "" : container + "/");
     }
 
-    /** One page of the listing. {@code startOffset} is inclusive on the JSON API where S3's start-after is not, so a
-     *  caller that must not see the boundary's own object drops it itself. */
+    /** One page of the listing. {@code startOffset} is inclusive on the JSON API, unlike S3's start-after, so a caller
+     *  that must not see the boundary's own object drops it. */
     private Objects listPage(String prefix, String delimiter, String startOffset, long maxResults, String pageToken)
             throws IOException {
         Storage.Objects.List list = storage.objects().list(bucket).setPrefix(prefix).setMaxResults(maxResults)
@@ -256,8 +251,8 @@ public final class GcsArtifactStore implements ArtifactStore {
         return page.getPrefixes() == null ? List.of() : page.getPrefixes();
     }
 
-    /** A child as the listing saw it. {@code object} is null for a grouped prefix - a container - which reports no
-     *  size or age because it has none; both halves of a leaf's metadata ride along in the response already. */
+    /** A child as the listing saw it. {@code object} is null for a grouped prefix - a container, which has no size or
+     *  age; a leaf's metadata rides in the response. */
     private static Listed listed(String prefix, String name, StorageObject object) {
         String container = ArtifactStore.container(prefix);
         String key = container.isEmpty() ? name : container + "/" + name;
@@ -301,9 +296,9 @@ public final class GcsArtifactStore implements ArtifactStore {
         return new ArrayList<>(names);
     }
 
-    /** Whether {@code name} may not be paged out yet at stream position {@code relative}: a proper prefix of it
-     *  whose next character sorts below {@code '/'} could still arrive as a grouped prefix (its container key
-     *  {@code prefix + "/"} sorts at or past the position), and that shorter child name must page first. */
+    /** Whether {@code name} must wait at stream position {@code relative}: a proper prefix of it whose next character
+     *  sorts below {@code '/'} could still arrive as a grouped prefix ({@code prefix + "/"} sorts at or past the
+     *  position), and that shorter name must page first. */
     private static boolean held(String name, String relative) {
         for (int index = 1; index < name.length(); index++) {
             if (name.charAt(index) < '/' && relative.compareTo(name.substring(0, index) + "/") <= 0) {
@@ -319,13 +314,11 @@ public final class GcsArtifactStore implements ArtifactStore {
             return;
         }
         String base = base(prefix);
-        // The stream arrives in raw key order, where a container shows up as a grouped prefix at `name + "/"` -
-        // AFTER any sibling whose name extends this one past a character below '/' (the object `app.txt` precedes
-        // the grouped prefix `app/`, yet the child `app` must page before `app.txt`). Emitting in child-NAME order
-        // therefore parks every name and releases the smallest parked one only once no smaller-named child can
-        // still arrive - see held(). A released name at or below startAfter is dropped: the start offset is
-        // inclusive and does not skip a same-named container's grouped prefix, and a prefix-child of the boundary
-        // (`app` for `app.txt`) re-arrives here yet was already paged by the call that emitted the boundary itself.
+        // The stream arrives in raw key order, where a container appears as a grouped prefix at `name + "/"` - after
+        // any sibling extending the name past a character below '/' (object `app.txt` precedes prefix `app/`, yet child
+        // `app` must page first). So names are parked and the smallest released once no smaller one can still arrive
+        // (see held()). A released name at or below startAfter is dropped: the start offset is inclusive, and a
+        // prefix-child of the boundary re-arrives here although the previous call already paged it.
         TreeMap<String, Listed> pending = new TreeMap<>();
         int emitted = 0;
         String last = null;
@@ -364,8 +357,8 @@ public final class GcsArtifactStore implements ArtifactStore {
                     }
                     String name = relative.endsWith("/") ? relative.substring(0, relative.length() - 1) : relative;
                     if (!name.equals(last)) {
-                        // A leaf and a same-named container page as one child; the leaf's metadata is kept, because
-                        // that is what a GET of this key resolves to.
+                        // A leaf and a same-named container page as one child, keeping the leaf's metadata - what a GET
+                        // resolves to.
                         pending.merge(name, listed(prefix, name, objects.get(relative)),
                                 (kept, arriving) -> kept.size().isPresent() ? kept : arriving);
                     }
@@ -391,11 +384,9 @@ public final class GcsArtifactStore implements ArtifactStore {
             throw new IllegalArgumentException("A scan limit must be positive: " + limit);
         }
         String base = base(prefix);
-        // No delimiter, and therefore none of page()'s name-order repair: a recursive scan wants every object under
-        // the prefix, and without grouped prefixes the listing arrives in exactly the key order this method owes.
-        // The page asks for limit + 1 so the object after the last delivered one is what proves whether more
-        // remains, rather than a second request asking; the cursor's own object, which the inclusive start offset
-        // re-lists, is dropped.
+        // No delimiter, so none of page()'s name-order repair: without grouped prefixes the listing arrives in exactly
+        // the key order owed. The page asks for limit + 1 so the extra object proves whether more remain; the cursor's
+        // own object, re-listed by the inclusive start offset, is dropped.
         long steps = 0;
         long delivered = 0;
         String last = null;
@@ -412,7 +403,7 @@ public final class GcsArtifactStore implements ArtifactStore {
                 if (delivered == limit) {
                     return Scan.truncated(last, delivered, steps);
                 }
-                // Both halves come out of the listing response, so a scanned page costs exactly its listing calls.
+                // Both halves come from the listing response, so a scanned page costs only its listing calls.
                 consumer.accept(listed(object, key));
                 delivered++;
                 last = key;
@@ -422,7 +413,7 @@ public final class GcsArtifactStore implements ArtifactStore {
         return Scan.exhausted(delivered, steps);
     }
 
-    // --- writes --------------------------------------------------------------------------------------------------
+    // ---- writes
 
     @Override
     public void write(String key, InputStream in) throws IOException {
@@ -440,8 +431,8 @@ public final class GcsArtifactStore implements ArtifactStore {
 
     @Override
     public String writeBlob(InputStream in) throws IOException {
-        // A content-addressed key is the hash of the very bytes being written, so the body is spooled while it is
-        // digested and uploaded from the file under blobs/<hash> - never held whole in memory.
+        // A content-addressed key is the hash of the bytes, so the body is spooled while digested and uploaded from the
+        // file.
         Path temporary = spool();
         try {
             MessageDigest digest = MessageDigest.getInstance("SHA-256");
@@ -467,10 +458,8 @@ public final class GcsArtifactStore implements ArtifactStore {
         return put(key, new ByteArrayContent(BINARY, content), expected);
     }
 
-    /**
-     * The streaming compare-and-set: the same {@code ifGenerationMatch} precondition over a body of known length,
-     * spooled first so a retried request reads the same bytes.
-     */
+    /** The streaming compare-and-set: the same {@code ifGenerationMatch} precondition over a spooled body, so a retry
+     *  reads the same bytes. */
     @Override
     public boolean writeVersioned(String key, InputStream content, long length, Object expected) throws IOException {
         if (!streamingWrites) {
@@ -490,14 +479,14 @@ public final class GcsArtifactStore implements ArtifactStore {
         try {
             storage.objects().delete(bucket, keyPrefix + key).execute();
         } catch (GoogleJsonResponseException e) {
-            // Deleting what is not there is the same afterwards as deleting what was.
+            // Deleting what is absent leaves the same state as deleting what was there.
             if (e.getStatusCode() != 404) {
                 throw new IOException("Could not delete " + key, e);
             }
         }
     }
 
-    /** Both conditional writes; the generation precondition is identical, only the body differs. */
+    /** Both conditional writes; only the body differs. */
     private boolean put(String key, AbstractInputStreamContent body, Object expected) throws IOException {
         ArtifactStore.key(key);
         long generation;
@@ -510,9 +499,8 @@ public final class GcsArtifactStore implements ArtifactStore {
             insert(keyPrefix + key, body, generation);
             return true;
         } catch (GoogleJsonResponseException e) {
-            // The precondition: another incarnation is stored, or the one expected is gone. Only that reads as a
-            // lost compare-and-set; a missing bucket, a refusal or a throttle the retries did not outlast must
-            // surface, or the caller's retry loop turns an outage into silent exhaustion.
+            // Only the precondition reads as a lost compare-and-set; a missing bucket, a refusal or an outlasting
+            // throttle surfaces, so a caller's retry loop never turns an outage into silent exhaustion.
             if (e.getStatusCode() == 412) {
                 return false;
             }
@@ -521,9 +509,8 @@ public final class GcsArtifactStore implements ArtifactStore {
         }
     }
 
-    /** One insert: a direct {@code uploadType=media} request over a body whose length is known, under the
-     *  generation precondition when the write is conditional, and never gzip-encoded - an encoded upload is stored
-     *  as an encoded object, which is not what was written. */
+    /** One insert: a direct {@code uploadType=media} request of known length, under the generation precondition when
+     *  conditional, never gzip-encoded - an encoded upload is stored encoded. */
     private StorageObject insert(String name, AbstractInputStreamContent body, Long ifGenerationMatch) throws IOException {
         Storage.Objects.Insert insert = storage.objects().insert(bucket, null, body).setName(name);
         if (ifGenerationMatch != null) {
@@ -534,15 +521,14 @@ public final class GcsArtifactStore implements ArtifactStore {
         return insert.execute();
     }
 
-    /** The owner-only upload spool ({@link OwnerOnly}): the API wants a content length up front and a retried
-     *  request wants the body again, so a body is buffered here before upload, and never where the plaintext
-     *  artifact bytes would be world-readable for the life of the upload. */
+    /** The owner-only upload spool ({@link OwnerOnly}): the API wants a length up front and a retry wants the body
+     *  again, so a body is buffered here, never world-readable. */
     private static Path spool() throws IOException {
         return OwnerOnly.createTempFile("gcs-artifact-", null);
     }
 
-    /** Fill the spool through a TRUNCATE_EXISTING open of the already-0600 file, never a copy that recreates it
-     *  under the process umask. */
+    /** Fill the spool by a TRUNCATE_EXISTING open of the already-0600 file, never a copy that recreates it under the
+     *  umask. */
     private static void fill(Path temporary, InputStream in) throws IOException {
         try (OutputStream out = Files.newOutputStream(temporary, StandardOpenOption.WRITE, StandardOpenOption.TRUNCATE_EXISTING)) {
             in.transferTo(out);

@@ -16,12 +16,11 @@ import build.jenesis.repository.store.Clocks;
 import com.google.auth.ServiceAccountSigner;
 
 /**
- * A V4 signed URL for one object: the {@code GOOG4-RSA-SHA256} scheme GCS documents, a {@code GET} over the
- * fully-qualified object valid for a bounded time, signed by whatever the deployment's credential can sign with - a
- * service-account key locally, or the IAM signing service when the credential is the metadata server's, both behind
- * the auth library's one {@link ServiceAccountSigner} face. The string to sign is composed here because the API
- * client has no signed-URL surface of its own; a deployment whose credential cannot sign gets no signer, and the
- * store then streams the bytes itself.
+ * A V4 signed URL for one object: the {@code GOOG4-RSA-SHA256} scheme, a bounded-time {@code GET} over the
+ * fully-qualified object, signed by whatever the credential signs with - a service-account key, or the IAM signing
+ * service for the metadata server's account, both behind {@link ServiceAccountSigner}. The API client has no signed-URL
+ * surface, so the string to sign is composed here; a credential that cannot sign gets no signer, and the store streams
+ * the bytes.
  */
 final class GcsSignedUrl {
 
@@ -62,8 +61,8 @@ final class GcsSignedUrl {
         return URI.create(endpoint.getScheme() + "://" + host + path + "?" + canonicalQuery + "&X-Goog-Signature=" + signature);
     }
 
-    /** Percent-encoding as the signing scheme wants it: everything but the unreserved characters, and in a path
-     *  the segment separators are kept. */
+    /** Percent-encoding as the signing scheme wants it: everything but the unreserved characters, keeping a path's
+     *  separators. */
     private static String encode(String value, boolean path) {
         StringBuilder out = new StringBuilder();
         for (byte b : value.getBytes(StandardCharsets.UTF_8)) {

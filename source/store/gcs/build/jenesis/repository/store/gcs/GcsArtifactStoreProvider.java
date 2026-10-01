@@ -29,53 +29,49 @@ import com.google.auth.http.HttpCredentialsAdapter;
 import com.google.auth.oauth2.GoogleCredentials;
 
 /**
- * The {@code gcs} artifact-store backend over a Google Cloud Storage bucket, through GCS's JSON API on Google's
- * API client. Selected with {@code jenrepo.store=gcs}; configured by {@code jenrepo.gcs.bucket} (required), an
- * optional {@code jenrepo.gcs.credentials} (a service-account key file; absent, the Application Default Credentials
- * are used - {@code GOOGLE_APPLICATION_CREDENTIALS}, a {@code gcloud} login, or the metadata server that makes a
- * deployment on GCE, GKE or Cloud Run keyless under Workload Identity; the literal {@value #ANONYMOUS} sends no
- * credential at all, which only an emulator accepts), an optional {@code jenrepo.gcs.endpoint} (default
- * {@code https://storage.googleapis.com}; point it at an emulator, but it must be {@code https} unless
- * {@code jenrepo.gcs.allow-insecure-endpoint=true} explicitly permits a plaintext one), and an optional
- * {@code jenrepo.gcs.project}, which is what creating the bucket on first use needs - a deployment provisions its
- * bucket out of band, an emulator does not. Every request rides the JDK's own HTTP transport with a fresh
- * exponential backoff on the responses Google documents as retryable.
+ * The {@code gcs} artifact-store backend over a Cloud Storage bucket through the JSON API, selected with
+ * {@code jenrepo.store=gcs} and configured by:
+ * <ul>
+ *   <li>{@code jenrepo.gcs.bucket} (required);</li>
+ *   <li>{@code jenrepo.gcs.credentials} - a service-account key file; absent, Application Default Credentials
+ *       ({@code GOOGLE_APPLICATION_CREDENTIALS}, a {@code gcloud} login, or the metadata server that makes GCE, GKE or
+ *       Cloud Run keyless under Workload Identity); {@value #ANONYMOUS} sends none, which only an emulator
+ *       accepts;</li>
+ *   <li>{@code jenrepo.gcs.endpoint} - default {@code https://storage.googleapis.com}, {@code https} unless
+ *       {@code jenrepo.gcs.allow-insecure-endpoint=true};</li>
+ *   <li>{@code jenrepo.gcs.project} - what creating a missing bucket on first use needs; a deployment provisions its
+ *       bucket out of band.</li>
+ * </ul>
+ * Every request rides the JDK's HTTP transport with a fresh exponential backoff on Google's documented retryable
+ * responses.
  */
 public final class GcsArtifactStoreProvider implements ArtifactStoreProvider {
 
-    /** The one setting with no ambient fallback, so it is the one this backend declares as required config.
-     *  Composed through {@link Features#key} rather than written out, so the namespace has a single definition. */
+    /** The one setting with no ambient fallback, so the one declared required; composed through
+     *  {@link Features#key}. */
     public static final String BUCKET_KEY = Features.key("gcs.bucket");
 
     /** A service-account key file, or {@value #ANONYMOUS}; absent, the Application Default Credentials. */
     public static final String CREDENTIALS_KEY = Features.key("gcs.credentials");
 
-    /** The value of {@link #CREDENTIALS_KEY} that sends no credential at all - an emulator's setting, never a
-     *  deployment's, because Cloud Storage refuses an unauthenticated request. */
+    /** The {@link #CREDENTIALS_KEY} value that sends no credential - an emulator's setting, since Cloud Storage refuses
+     *  an unauthenticated request. */
     public static final String ANONYMOUS = "none";
 
-    /** The project the bucket is created in on first use when it does not exist yet; unset, the bucket must exist. */
+    /** The project a missing bucket is created in on first use; unset, the bucket must exist. */
     public static final String PROJECT_KEY = Features.key("gcs.project");
 
-    /**
-     * Whether a conditional write may stream its body ({@code true} by default).
-     *
-     * <p><b>Setting this to {@code false} restores a heap cost, and that is the whole of what it does.</b> A
-     * listing is one object written under compare-and-set, and some listings are proportional to the repository.
-     * Streaming the write is what keeps such a document out of memory; buffering puts it back, whole, on the path
-     * that writes it. Turn this off to work around a storage implementation, never for anything else, and expect
-     * the repository's memory ceiling to fall with it.
-     */
+    /** Whether a conditional write may stream its body ({@code true} by default). Some listings, written under
+     *  compare-and-set, are proportional to the repository; buffering puts such a document whole in memory on the write
+     *  path. Turn it off only to work around a storage implementation, expecting the memory ceiling to fall with it. */
     public static final String STREAMING_WRITES_KEY = Features.key("gcs.streaming-writes");
 
-    /** The config key a {@code gcs} endpoint is read from - named here so the screen's refusal and the resolution
-     *  that applies it cannot drift into naming different keys. */
+    /** The config key a {@code gcs} endpoint is read from, named once for the screen's refusal and the resolution. */
     public static final String ENDPOINT_KEY = Features.key("gcs.endpoint");
 
-    /** The config key that switches the boot-time conditional-write probe off ({@code false}); on by default.
-     *  The probe refuses to start a node over an endpoint that ignores a write precondition, which is how two
-     *  nodes would lose each other's writes silently; switching it off is for an endpoint a deployment has
-     *  satisfied itself about by other means, and the node then warns on every start. */
+    /** The config key that switches off the boot-time conditional-write probe ({@code false}); on by default. The probe
+     *  refuses to start over an endpoint that ignores a write precondition, under which two nodes would silently lose
+     *  each other's writes; off, the node warns on every start. */
     public static final String PROBE_KEY = Features.key("gcs.conditional-write-probe");
 
 
@@ -100,7 +96,7 @@ public final class GcsArtifactStoreProvider implements ArtifactStoreProvider {
 
     @Override
     public Set<String> requiredConfig() {
-        // The credential may come from the ambient Application Default Credentials, so only the bucket is required.
+        // The credential may be ambient, so only the bucket is required.
         return Set.of(BUCKET_KEY);
     }
 
@@ -125,7 +121,7 @@ public final class GcsArtifactStoreProvider implements ArtifactStoreProvider {
         GcsSignedUrl signer = credentials instanceof ServiceAccountSigner able ? new GcsSignedUrl(able, root) : null;
         GcsArtifactStore store = new GcsArtifactStore(storage, bucket,
                 !"false".equalsIgnoreCase(config.apply(STREAMING_WRITES_KEY)), signer);
-        // The one boot-time question every compare-and-set rests on, asked of every object-store endpoint alike.
+        // The question every compare-and-set rests on, asked of every object-store endpoint at boot.
         try {
             ConditionalWrites.probe(store, "the GCS endpoint " + endpoint + " for bucket " + bucket, config.apply(PROBE_KEY));
         } catch (IOException failure) {
@@ -135,22 +131,16 @@ public final class GcsArtifactStoreProvider implements ArtifactStoreProvider {
         return store;
     }
 
-    /**
-     * The endpoint (the {@code storage.googleapis.com} default, or an emulator override), required to be {@code https}
-     * by default so the bearer token and artifact bytes are not sent over a plaintext transport a MITM can read or
-     * tamper with. A plaintext {@code http} emulator endpoint is an explicit opt-out: set
-     * {@code jenrepo.gcs.allow-insecure-endpoint=true}.
-     *
-     * <p>The rule itself is {@link Endpoints#secure}, shared with the {@code s3} and {@code azure-blob} backends;
-     * what is this backend's own is the pair of config keys it names, and this method is where they are bound to
-     * the screen.
-     */
+    /** The endpoint (the default, or an emulator), {@code https} unless
+     *  {@code jenrepo.gcs.allow-insecure-endpoint=true}, so the bearer token and artifact bytes never cross a plaintext
+     *  transport. The rule is {@link Endpoints#secure}, shared with the {@code s3} and {@code azure-blob} backends;
+     *  this binds this backend's keys to it. */
     public static URI secureEndpoint(String endpoint, String allowInsecure) {
         return Endpoints.secure(ENDPOINT_KEY, endpoint, ALLOW_INSECURE_KEY, allowInsecure);
     }
 
-    /** The credential the setting names: a key file, the Application Default Credentials, or none for an emulator;
-     *  scoped to object reads and writes where the credential type takes a scope. */
+    /** The credential the setting names - a key file, Application Default Credentials, or none for an emulator - scoped
+     *  to object reads and writes where the type takes a scope. */
     private static GoogleCredentials credentials(String setting) {
         if (ANONYMOUS.equalsIgnoreCase(setting)) {
             return null;
@@ -158,7 +148,7 @@ public final class GcsArtifactStoreProvider implements ArtifactStoreProvider {
         GoogleCredentials credentials;
         try {
             if (setting == null || setting.isBlank()) {
-                // The token exchange goes over the product's client as well, not the library's URL connection.
+                // The token exchange also goes over the product's HTTP client.
                 credentials = GoogleCredentials.getApplicationDefault(GcsTransport::new);
             } else {
                 try (InputStream in = Files.newInputStream(Path.of(setting))) {
@@ -174,8 +164,8 @@ public final class GcsArtifactStoreProvider implements ArtifactStoreProvider {
         return credentials.createScopedRequired() ? credentials.createScoped(List.of(SCOPE)) : credentials;
     }
 
-    /** Create the bucket when it does not exist; one that does, or one the credential may not create, is left as
-     *  it is - the operations that follow say clearly when a bucket is truly unusable. */
+    /** Create the bucket when it does not exist; an existing one, or one the credential may not create, is left as it
+     *  is, and the operations that follow report a truly unusable bucket. */
     private static void ensureBucket(Storage storage, String project, String bucket) {
         try {
             storage.buckets().insert(project, new Bucket().setName(bucket)).execute();
@@ -188,12 +178,9 @@ public final class GcsArtifactStoreProvider implements ArtifactStoreProvider {
         }
     }
 
-    /**
-     * What every request carries: the credential's bearer token, refreshed by the auth adapter on a 401; timeouts
-     * sized for a large body; and Google's documented retry - a fresh exponential backoff per request on a 408, a
-     * 429 or a 5xx, and on a dropped connection. A conditional write is idempotent, so re-sending it is safe, and an
-     * unconditional one re-sends the same spooled bytes; the store never hands the client a body it cannot re-read.
-     */
+    /** What every request carries: the bearer token, refreshed on a 401; timeouts sized for a large body; and Google's
+     *  documented retry - a fresh exponential backoff on a 408, a 429, a 5xx or a dropped connection. Re-sending is
+     *  safe: a conditional write is idempotent and the body is always re-readable. */
     static final class Requests implements HttpRequestInitializer {
 
         private static final int RETRIES = 6;
