@@ -16,9 +16,9 @@ import build.jenesis.repository.store.ArtifactStore;
  * The per-coordinate declared-license facts: the licenses an artifact <em>declares</em> (a name and/or URL, exactly as
  * the publishing gate's quality inspector read them out of the artifact's own metadata), consolidated into the
  * {@code licenses} section of the unified per-coordinate metadata document ({@link MetadataKey#version}). It records
- * the <em>declared</em> form, not a resolved SPDX id, so the one place that categorises (the search sweep's
- * {@code License.identify}) stays authoritative and a later categorisation-table change re-derives cleanly from stored
- * truth rather than from a frozen verdict.
+ * the <em>declared</em> form, not a resolved SPDX id, so identification (the compliance {@code LicenseTable}, with
+ * the rows an operator configured) stays authoritative and a change to the table - a release's or an operator's -
+ * re-derives cleanly from stored truth rather than from a frozen verdict.
  *
  * <p>The distinction between a <em>present but empty</em> record (the gate inspected the artifact and it declared no
  * license) and an <em>absent</em> one (never inspected) is load-bearing: the sweep indexes an empty record as the

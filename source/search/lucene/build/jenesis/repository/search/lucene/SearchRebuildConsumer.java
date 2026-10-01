@@ -2,6 +2,7 @@ package build.jenesis.repository.search.lucene;
 
 import module java.base;
 
+import build.jenesis.repository.compliance.LicenseTable;
 import build.jenesis.repository.observation.Metric;
 import build.jenesis.repository.observation.ObservabilitySource;
 import build.jenesis.repository.search.SearchMode;
@@ -83,7 +84,7 @@ public final class SearchRebuildConsumer implements WalkConsumer {
             }
             Map<String, Double> gauges = new ConcurrentHashMap<>();
             new SearchIndexTask(Duration.ZERO, WalkProvider.resolve(Features.settings()).orElse(null))
-                    .rebuild(store, SearchIndexTaskProvider.CLAIM.resolve(effective),
+                    .rebuild(store, SearchIndexTaskProvider.CLAIM.resolve(effective), LicenseTable.of(effective),
                             (name, description, value) -> gauges.put(name, value));
             LAST.put(store.identity(), gauges);
         } catch (IOException unrebuilt) {

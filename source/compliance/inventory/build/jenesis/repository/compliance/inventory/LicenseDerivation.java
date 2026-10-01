@@ -5,6 +5,7 @@ import module org.slf4j;
 import build.jenesis.repository.cleanup.Release;
 import build.jenesis.repository.compliance.ComplianceGate;
 import build.jenesis.repository.compliance.License;
+import build.jenesis.repository.compliance.LicenseTable;
 import build.jenesis.repository.compliance.QualityInspector;
 import build.jenesis.repository.inventory.LicenseInventory;
 import build.jenesis.repository.inventory.StoreRepositoryInventory;
@@ -22,7 +23,8 @@ import build.jenesis.repository.store.PublishInterceptor;
  * {@link #MAX_METADATA_BYTES} is skipped). The backfill derivation stays for those artifacts - it is not written back,
  * so the {@code licenses} section the gate wrote remains the sole authored record and a pre-existing artifact is simply
  * re-derived on each pass (both callers produce derived data, recomputed every time). The declared licenses
- * (name/URL) are resolved to their SPDX id and category through the shared {@link License#identify} table; a release
+ * (name/URL) are resolved to their SPDX id and category through the deployment's {@link LicenseTable} - the built-in
+ * rows and the ones an operator configured, handed in by the caller from the settings it read; a release
  * that declares none, or nothing an inspector can read, resolves to the single {@link License#UNKNOWN} so it is
  * counted as unknown rather than vanishing.
  *
@@ -46,10 +48,13 @@ public final class LicenseDerivation {
     private final LicenseInventory licenses;
     private final Publication publication;
     private final List<QualityInspector> inspectors;
+    private final LicenseTable table;
     private final QualityInspector.Lookup siblings = new Siblings();
 
-    public LicenseDerivation(ArtifactStore store) {
+    /** A derivation over {@code store} resolving declarations through {@code table}. */
+    public LicenseDerivation(ArtifactStore store, LicenseTable table) {
         this.store = store;
+        this.table = table;
         this.inventory = new StoreRepositoryInventory(store);
         this.licenses = new LicenseInventory(store);
         this.publication = new Publication(store);
@@ -75,7 +80,7 @@ public final class LicenseDerivation {
         }
         List<License> resolved = new ArrayList<>();
         for (LicenseInventory.Declared license : declared) {
-            resolved.add(License.identify(license.name(), license.url()));
+            resolved.add(table.identify(license.name(), license.url()));
         }
         return resolved;
     }

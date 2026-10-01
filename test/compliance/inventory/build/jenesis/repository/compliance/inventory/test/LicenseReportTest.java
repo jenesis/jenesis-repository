@@ -3,6 +3,8 @@ package build.jenesis.repository.compliance.inventory.test;
 import module java.base;
 import module org.junit.jupiter.api;
 import build.jenesis.repository.cleanup.StoredReport;
+import build.jenesis.repository.compliance.ComplianceSettings;
+import build.jenesis.repository.compliance.LicenseTable;
 import build.jenesis.repository.compliance.inventory.LicenseReport;
 import build.jenesis.repository.inventory.LicenseInventory;
 import build.jenesis.repository.inventory.StoreRepositoryInventory;
@@ -70,7 +72,7 @@ class LicenseReportTest {
                 .containsExactly(tuple("permissive", 3L), tuple("strong-copyleft", 1L));
         assertThat(inventory.licenses()).extracting(LicenseReport.Count::value, LicenseReport.Count::versions)
                 .as("and a licence it names twice counts once")
-                .containsExactly(tuple("MIT", 3L), tuple("Apache-2.0", 1L), tuple("GPL", 1L));
+                .containsExactly(tuple("MIT", 3L), tuple("Apache-2.0", 1L), tuple("GPL-3.0", 1L));
         assertThat(inventory.truncated()).isFalse();
         assertThat(inventory.finishedAt()).isNotNull();
     }
@@ -89,6 +91,39 @@ class LicenseReportTest {
                 .containsExactly(tuple("unknown", 2L), tuple("permissive", 1L));
         assertThat(inventory.licenses()).extracting(LicenseReport.Count::value)
                 .as("an unidentified licence has no SPDX id to be counted under").containsExactly("MIT");
+    }
+
+    @Test
+    void a_licence_the_operator_defined_is_counted_under_its_own_identifier_and_category() throws Exception {
+        ArtifactStore store = store();
+        publish(store, "maven", "org.example:custom", "1.0", "Acme Internal Terms");
+        publish(store, "maven", "org.example:mit", "1.0", "MIT License");
+        LicenseReport.Inventory inventory;
+        try (AutoCloseable wiring = ComplianceSettings.wire(() -> Map.of(LicenseTable.KEY,
+                "Acme-Internal-1.0 | proprietary | Acme Internal Terms")::get)) {
+            inventory = written(store);
+        }
+
+        assertThat(inventory.categories()).extracting(LicenseReport.Count::value, LicenseReport.Count::versions)
+                .as("the name the operator listed is identified, under the category they gave it")
+                .containsExactlyInAnyOrder(tuple("proprietary", 1L), tuple("permissive", 1L));
+        assertThat(inventory.licenses()).extracting(LicenseReport.Count::value)
+                .containsExactlyInAnyOrder("Acme-Internal-1.0", "MIT");
+    }
+
+    @Test
+    void a_count_over_a_licence_table_that_does_not_parse_fails_naming_the_row() throws Exception {
+        ArtifactStore store = store();
+        publish(store, "maven", "org.example:lib", "1.0", "MIT License");
+
+        try (AutoCloseable wiring = ComplianceSettings.wire(() -> Map.of(LicenseTable.KEY, "Acme-1.0")::get)) {
+            assertThat(LicenseReport.start(store)).isTrue();
+            assertThat(StoredReport.awaitSettled(store, LicenseReport.NAME, PATIENCE)).isPresent();
+        }
+
+        LicenseReport.Inventory failed = LicenseReport.read(store);
+        assertThat(failed.state()).isEqualTo(LicenseReport.State.FAILED);
+        assertThat(failed.failure()).contains("row 1 of " + LicenseTable.KEY);
     }
 
     @Test

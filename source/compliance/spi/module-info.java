@@ -43,4 +43,6 @@ module build.jenesis.repository.compliance {
     uses build.jenesis.repository.compliance.SignerTrustProvider;
     uses build.jenesis.repository.compliance.SignalSourceProvider;
     uses build.jenesis.repository.compliance.VexProvider;
+    provides build.jenesis.repository.settings.SettingsContributor
+            with build.jenesis.repository.compliance.LicenseTableSettings;
 }

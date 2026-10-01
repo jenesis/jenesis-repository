@@ -469,7 +469,7 @@ class SearchIndexTest {
 
         assertThat(hits(query(alpha, "alpha/app"), "category:permissive")).containsExactly("com.alpha:lib:1.0");
         assertThat(hits(query(alpha, "alpha/app"), "category:strong-copyleft")).isEmpty();
-        assertThat(hits(query(beta, "beta/app"), "license:GPL")).containsExactly("com.beta:lib:1.0");
+        assertThat(hits(query(beta, "beta/app"), "license:GPL-3.0")).containsExactly("com.beta:lib:1.0");
         assertThat(hits(query(beta, "beta/app"), "license:MIT")).isEmpty();
     }
 

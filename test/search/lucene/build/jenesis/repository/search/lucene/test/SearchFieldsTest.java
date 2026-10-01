@@ -3,6 +3,7 @@ package build.jenesis.repository.search.lucene.test;
 import module java.base;
 import module org.junit.jupiter.api;
 import build.jenesis.repository.inventory.AboutSection;
+import build.jenesis.repository.compliance.LicenseTable;
 import build.jenesis.repository.inventory.LicenseInventory;
 import build.jenesis.repository.inventory.StoreRepositoryInventory;
 import build.jenesis.repository.maintenance.RepositoryContext;
@@ -42,6 +43,7 @@ class SearchFieldsTest {
         publish("org.example:yamlish", "2.0", new AboutSection.About("Reads YAML documents.", List.of("yaml"),
                 List.of("Grace Hopper")), "MIT");
         publish("org.example:bare", "3.0", null, null);
+        publish("com.acme:inhouse", "4.0", null, "Acme Internal Terms");
         new SearchIndexTask(Duration.ofMinutes(10)).repository(context());
     }
 
@@ -97,6 +99,12 @@ class SearchFieldsTest {
         assertThat(find("category:permissive")).containsExactly("org.example:jsonic:1.0", "org.example:yamlish:2.0");
     }
 
+    @Test
+    void a_licence_the_repositorys_settings_define_is_indexed_under_its_identifier_and_category() throws IOException {
+        assertThat(find("license:Acme-Internal-1.0")).containsExactly("com.acme:inhouse:4.0");
+        assertThat(find("category:proprietary")).containsExactly("com.acme:inhouse:4.0");
+    }
+
     private RepositoryContext context() {
         return new RepositoryContext() {
             @Override
@@ -121,7 +129,11 @@ class SearchFieldsTest {
 
             @Override
             public UnaryOperator<String> config() {
-                return key -> SearchMode.SETTING.equals(key) ? "true" : null;
+                return key -> switch (key) {
+                    case SearchMode.SETTING -> "true";
+                    case LicenseTable.KEY -> "Acme-Internal-1.0 | proprietary | Acme Internal Terms";
+                    default -> null;
+                };
             }
 
             @Override

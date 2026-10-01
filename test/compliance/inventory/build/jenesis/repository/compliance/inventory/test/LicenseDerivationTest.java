@@ -4,6 +4,7 @@ import module java.base;
 import module org.junit.jupiter.api;
 import build.jenesis.repository.cleanup.Release;
 import build.jenesis.repository.compliance.License;
+import build.jenesis.repository.compliance.LicenseTable;
 import build.jenesis.repository.compliance.QualityInspector;
 import build.jenesis.repository.compliance.inventory.LicenseDerivation;
 import build.jenesis.repository.inventory.LicenseInventory;
@@ -66,7 +67,7 @@ class LicenseDerivationTest {
         publish(store, "maven", "org.example:mit", "1.0", 32);
         sidecar(store, "maven", "org.example:mit", "1.0", "MIT License");
 
-        List<License> resolved = new LicenseDerivation(store).resolve(release("maven", "org.example:mit", "1.0"));
+        List<License> resolved = new LicenseDerivation(store, LicenseTable.defaults()).resolve(release("maven", "org.example:mit", "1.0"));
 
         // The maven ecosystem has no inspector on this test path, so a value other than unknown proves the sidecar
         // was read directly rather than re-derived.
@@ -79,7 +80,7 @@ class LicenseDerivationTest {
         publish(store, "fake", "example-lib", "2.0", 64);        // published, but no licenses section written
         assertThat(new LicenseInventory(store).read("fake", "example-lib", "2.0")).isEmpty();
 
-        List<License> resolved = new LicenseDerivation(store).resolve(release("fake", "example-lib", "2.0"));
+        List<License> resolved = new LicenseDerivation(store, LicenseTable.defaults()).resolve(release("fake", "example-lib", "2.0"));
 
         assertThat(resolved).extracting(License::spdxId).containsExactly("Apache-2.0");
         assertThat(resolved).allMatch(License::identified);
@@ -91,7 +92,7 @@ class LicenseDerivationTest {
         publish(store, "maven", "org.example:bare", "1.0", 32);
         sidecar(store, "maven", "org.example:bare", "1.0");      // inspected, none declared: a present-but-empty sidecar
 
-        List<License> resolved = new LicenseDerivation(store).resolve(release("maven", "org.example:bare", "1.0"));
+        List<License> resolved = new LicenseDerivation(store, LicenseTable.defaults()).resolve(release("maven", "org.example:bare", "1.0"));
 
         assertThat(resolved).containsExactly(License.UNKNOWN);
         assertThat(resolved).noneMatch(License::identified);
@@ -104,7 +105,7 @@ class LicenseDerivationTest {
         // and no license is derivable - the streaming guard, proven never to pull a large body into the heap.
         publish(store, "fake", "huge-lib", "3.0", (16 << 20) + 1);
 
-        List<License> resolved = new LicenseDerivation(store).resolve(release("fake", "huge-lib", "3.0"));
+        List<License> resolved = new LicenseDerivation(store, LicenseTable.defaults()).resolve(release("fake", "huge-lib", "3.0"));
 
         assertThat(resolved).containsExactly(License.UNKNOWN);
     }
@@ -118,7 +119,7 @@ class LicenseDerivationTest {
         byte[] payload = new byte[1024];
         Arrays.fill(payload, (byte) 'x');
         new Publication(store).link("/fake/sib/data.bin", store.writeBlob(new ByteArrayInputStream(payload)));
-        QualityInspector.Lookup siblings = new LicenseDerivation(store).siblings();
+        QualityInspector.Lookup siblings = new LicenseDerivation(store, LicenseTable.defaults()).siblings();
 
         QualityInspector.Lookup.Bounded cut = siblings.fetchBounded("/fake/sib/data.bin", 16).orElseThrow();
         assertThat(cut.content()).as("exactly the requested prefix").hasSize(16);
@@ -143,7 +144,7 @@ class LicenseDerivationTest {
         ArtifactStore store = store();
         new Publication(store).link("/fake/sib/huge.bin", store.writeBlob(
                 new ByteArrayInputStream(new byte[PublishInterceptor.Content.LARGEST_SIBLING + 1])));
-        QualityInspector.Lookup siblings = new LicenseDerivation(store).siblings();
+        QualityInspector.Lookup siblings = new LicenseDerivation(store, LicenseTable.defaults()).siblings();
 
         assertThatThrownBy(() -> siblings.fetch("/fake/sib/huge.bin"))
                 .as("read whole, it fails loudly rather than yielding a prefix a caller would read as complete")

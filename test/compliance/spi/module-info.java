@@ -1,7 +1,8 @@
 /**
  * The compliance contracts driven in isolation, with nothing installed behind them: the gate's decision logic and
- * its strongest-verdict aggregation, licence identification, the bounded inspection tiers and what they refuse, the
- * feed cache's aged answer and its per-key single flight, the refresh ledger, VEX suppression and waivers.
+ * its strongest-verdict aggregation, licence identification and the licences an operator adds, the bounded
+ * inspection tiers and what they refuse, the feed cache's aged answer and its per-key single flight, the refresh
+ * ledger, VEX suppression and waivers.
  *
  * <p>No network, no framework and <em>no discovered source</em>. That last one is the point of the module rather
  * than an omission: these suites assert what the contract does when a deployment has installed nothing, which is
@@ -15,6 +16,9 @@
  */
 open module build.jenesis.repository.compliance.spi.test {
     requires build.jenesis.repository.compliance;
+    // The licence table's setting is declared through the settings catalogue, and its default test asks the
+    // catalogue's own refusal - the one every write path asks.
+    requires build.jenesis.repository.settings;
     requires build.jenesis.repository.store;
     // SignalContextTest resolves a real filesystem store to assert the snapshot root a mirrored catalogue is
     // confined to; it is the store contract's own reference backend, so the assertion is about the layout.

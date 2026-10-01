@@ -1,20 +1,88 @@
-# License identification table - the ordered substring rules License.identify applies to a lower-cased "<name> <url>"
-# match, most-specific first (so the GPL family resolves before the broad permissive fallbacks). This mirrors the
-# build tool's compliance step; it is data, not code, so a new mapping is a line here rather than another branch in a
-# focal method. The first rule any of whose tokens is a substring of the match wins; no match is License.UNKNOWN.
+# The built-in licence identification table License identification reads, in order: the first row a declaration
+# matches decides it, so the most specific rows come first - every LGPL and AGPL row before any GPL row, a licence's
+# "-or-later" and "-only" rows before its plain version, a later version before an earlier one where one name is a
+# prefix of the other, and the rows for a name that carries no version at all (GNU General Public License, BSD,
+# Apache) last of all. An identifier may appear on more than one row; a bare declaration of it resolves to the first.
 #
-# Format, tab-separated: <spdx-id> <TAB> <category> <TAB> <token>[|<token>...]   (tokens are OR-ed, already lower-case)
-AGPL-3.0	network-copyleft	affero
-LGPL	weak-copyleft	lesser general public|lgpl
-GPL	strong-copyleft	general public license|/gpl
-Apache-2.0	permissive	apache
-BSD-3-Clause	permissive	eclipse distribution
-EPL-2.0	weak-copyleft	eclipse public|/epl
-MPL-2.0	weak-copyleft	mozilla public|mpl
-CDDL-1.1	weak-copyleft	common development and distribution|cddl
-BSD	permissive	bsd
-MIT	permissive	mit license|licenses/mit|(mit)
-BSL-1.0	permissive	boost software
-Unlicense	permissive	unlicense
-CC0-1.0	permissive	cc0|public domain
-ISC	permissive	isc
+# Format, tab-separated: <spdx-id> TAB <category> TAB <name>|<name>... TAB <url>|<url>...
+#   - the identifier matches a bare declaration ("MIT", "GPL-2.0-only") exactly, ignoring case;
+#   - a name or a URL matches as a whole word inside "<declared name> <declared url>", lower-cased, with "licence"
+#     read as "license"; a URL is written without its scheme, so http and https both match;
+#   - the category is one of permissive, weak-copyleft, strong-copyleft, network-copyleft. Public-domain dedications
+#     (CC0, the Unlicense) are permissive.
+# An unversioned GNU licence name resolves to the earliest version "or later", which is what the licence grants when
+# no version is named; any other unversioned name resolves to the version the name most often means today.
+# Versioned names, identifiers and licence pages.
+GPL-2.0-with-classpath-exception	weak-copyleft	gpl-2.0-with-classpath-exception|classpath exception|classpath-exception|gplv2+ce|gpl2 w/ cpe|gplv2 with classpath exception	openjdk.org/legal/gplv2+ce|openjdk.java.net/legal/gplv2+ce
+AGPL-3.0-or-later	network-copyleft	agpl-3.0-or-later|agpl-3.0+|agpl-3+|agplv3+|agpl 3.0+|agpl3+|affero general public license v3.0 or later|affero general public license v3 or later|affero general public license, version 3 or later|affero general public license version 3 or later	spdx.org/licenses/agpl-3.0-or-later
+AGPL-3.0-only	network-copyleft	agpl-3.0-only|affero general public license v3.0 only|affero general public license v3 only	spdx.org/licenses/agpl-3.0-only
+AGPL-3.0	network-copyleft	agpl-3.0|agplv3|agpl-3|agpl 3.0|agpl3|agpl v3|affero general public license v3|affero general public license, version 3|affero general public license version 3|affero general public license 3.0|affero general public license|affero|agpl	gnu.org/licenses/agpl|opensource.org/licenses/agpl-v3|spdx.org/licenses/agpl-3.0
+LGPL-3.0-or-later	weak-copyleft	lgpl-3.0-or-later|lgpl-3.0+|lgpl-3+|lgplv3+|lgpl 3.0+|lgpl3+|lesser general public license v3.0 or later|lesser general public license v3 or later|lesser general public license, version 3 or later|lesser general public license version 3 or later	spdx.org/licenses/lgpl-3.0-or-later
+LGPL-3.0-only	weak-copyleft	lgpl-3.0-only|lesser general public license v3.0 only|lesser general public license v3 only	spdx.org/licenses/lgpl-3.0-only
+LGPL-3.0	weak-copyleft	lgpl-3.0|lgplv3|lgpl-3|lgpl 3.0|lgpl3|lgpl v3|lesser general public license v3|lesser general public license, version 3|lesser general public license version 3|lesser general public license 3.0|lesser general public license (lgpl), version 3	gnu.org/licenses/lgpl.html|gnu.org/licenses/lgpl-3.0|opensource.org/licenses/lgpl-3.0|spdx.org/licenses/lgpl-3.0
+LGPL-2.1-or-later	weak-copyleft	lgpl-2.1-or-later|lgpl-2.1+|lgplv2.1+|lgpl 2.1+|lgpl2.1+|lesser general public license v2.1 or later|lesser general public license, version 2.1 or later|lesser general public license version 2.1 or later	spdx.org/licenses/lgpl-2.1-or-later
+LGPL-2.1-only	weak-copyleft	lgpl-2.1-only|lesser general public license v2.1 only	spdx.org/licenses/lgpl-2.1-only
+LGPL-2.1	weak-copyleft	lgpl-2.1|lgplv2.1|lgpl 2.1|lgpl2.1|lgpl v2.1|lgpl, version 2.1|lgpl version 2.1|lesser general public license v2.1|lesser general public license, version 2.1|lesser general public license version 2.1|lesser general public license 2.1|lesser general public license (lgpl), version 2.1|lesser general public license (lgpl) version 2.1	gnu.org/licenses/old-licenses/lgpl-2.1|opensource.org/licenses/lgpl-2.1|spdx.org/licenses/lgpl-2.1
+LGPL-2.0-or-later	weak-copyleft	lgpl-2.0-or-later|lgpl-2.0+|lgpl-2+|lgplv2+|lgpl 2.0+|lgpl2+|library general public license v2 or later|library general public license v2.0 or later|lesser general public license v2 or later|lesser general public license v2.0 or later	spdx.org/licenses/lgpl-2.0-or-later
+LGPL-2.0-only	weak-copyleft	lgpl-2.0-only|library general public license v2 only|library general public license v2.0 only	spdx.org/licenses/lgpl-2.0-only
+LGPL-2.0	weak-copyleft	lgpl-2.0|lgplv2|lgpl-2|lgpl 2.0|lgpl2|lgpl v2|library general public license v2|library general public license, version 2|library general public license version 2|library general public license 2.0|lesser general public license v2|lesser general public license, version 2|lesser general public license version 2|lesser general public license 2.0	gnu.org/licenses/old-licenses/lgpl-2.0|opensource.org/licenses/lgpl-2.0|spdx.org/licenses/lgpl-2.0
+GPL-3.0-or-later	strong-copyleft	gpl-3.0-or-later|gpl-3.0+|gpl-3+|gplv3+|gpl 3.0+|gpl3+|gpl v3+|general public license v3.0 or later|general public license v3 or later|general public license, version 3 or later|general public license version 3 or later	spdx.org/licenses/gpl-3.0-or-later
+GPL-3.0-only	strong-copyleft	gpl-3.0-only|general public license v3.0 only|general public license v3 only	spdx.org/licenses/gpl-3.0-only
+GPL-3.0	strong-copyleft	gpl-3.0|gplv3|gpl-3|gpl 3.0|gpl3|gpl v3|general public license v3|general public license, version 3|general public license version 3|general public license 3.0|general public license (gpl), version 3	gnu.org/licenses/gpl.html|gnu.org/licenses/gpl-3.0|opensource.org/licenses/gpl-3.0|spdx.org/licenses/gpl-3.0
+GPL-2.0-or-later	strong-copyleft	gpl-2.0-or-later|gpl-2.0+|gpl-2+|gplv2+|gpl 2.0+|gpl2+|gpl v2+|general public license v2.0 or later|general public license v2 or later|general public license, version 2 or later|general public license version 2 or later	spdx.org/licenses/gpl-2.0-or-later
+GPL-2.0-only	strong-copyleft	gpl-2.0-only|general public license v2.0 only|general public license v2 only	spdx.org/licenses/gpl-2.0-only
+GPL-2.0	strong-copyleft	gpl-2.0|gplv2|gpl-2|gpl 2.0|gpl2|gpl v2|general public license v2|general public license, version 2|general public license version 2|general public license 2.0|general public license (gpl), version 2	gnu.org/licenses/old-licenses/gpl-2.0|opensource.org/licenses/gpl-2.0|spdx.org/licenses/gpl-2.0
+SSPL-1.0	network-copyleft	sspl-1.0|sspl|server side public license	mongodb.com/licensing/server-side-public-license|spdx.org/licenses/sspl-1.0
+Apache-1.1	permissive	apache-1.1|apache 1.1|apache license, version 1.1|apache license version 1.1|apache license 1.1|apache software license, version 1.1|apache software license 1.1	apache.org/licenses/license-1.1|opensource.org/licenses/apache-1.1|spdx.org/licenses/apache-1.1
+Apache-2.0	permissive	apache-2.0|apache 2.0|apache-2|apache 2|apache2|apache license, version 2.0|apache license version 2.0|apache license 2.0|apache license v2.0|apache license, v2.0|apache license v2|apache software license, version 2.0|apache software license - version 2.0|apache software license version 2.0|apache software license 2.0|asl 2.0|asl-2.0|asl2	apache.org/licenses/license-2.0|opensource.org/licenses/apache-2.0|spdx.org/licenses/apache-2.0
+BSD-4-Clause	permissive	bsd-4-clause|4-clause bsd|bsd 4-clause|bsd 4 clause|original bsd|bsd with advertising	spdx.org/licenses/bsd-4-clause
+BSD-3-Clause	permissive	bsd-3-clause|3-clause bsd|bsd 3-clause|bsd 3 clause|bsd-3|new bsd|modified bsd|revised bsd|eclipse distribution license|edl-1.0|edl 1.0	opensource.org/licenses/bsd-3-clause|eclipse.org/org/documents/edl-v10|spdx.org/licenses/bsd-3-clause
+BSD-2-Clause	permissive	bsd-2-clause|2-clause bsd|bsd 2-clause|bsd 2 clause|bsd-2|simplified bsd|freebsd license	opensource.org/licenses/bsd-2-clause|spdx.org/licenses/bsd-2-clause
+0BSD	permissive	0bsd|zero-clause bsd|zero clause bsd|bsd zero clause	opensource.org/licenses/0bsd|spdx.org/licenses/0bsd
+BSL-1.0	permissive	bsl-1.0|boost software license|boost license	boost.org/license_1_0|opensource.org/licenses/bsl-1.0|spdx.org/licenses/bsl-1.0
+CC0-1.0	permissive	cc0-1.0|cc0 1.0|cc0|creative commons zero|cc zero	creativecommons.org/publicdomain/zero|spdx.org/licenses/cc0-1.0
+CC-BY-SA-4.0	weak-copyleft	cc-by-sa-4.0|cc by-sa 4.0|cc-by-sa 4.0|creative commons attribution-sharealike 4.0|creative commons attribution share alike 4.0|creative commons attribution-share alike 4.0	creativecommons.org/licenses/by-sa/4.0|spdx.org/licenses/cc-by-sa-4.0
+CC-BY-4.0	permissive	cc-by-4.0|cc by 4.0|cc-by 4.0|creative commons attribution 4.0	creativecommons.org/licenses/by/4.0|spdx.org/licenses/cc-by-4.0
+CC-BY-3.0	permissive	cc-by-3.0|cc by 3.0|cc-by 3.0|creative commons attribution 3.0	creativecommons.org/licenses/by/3.0|spdx.org/licenses/cc-by-3.0
+CDDL-1.1	weak-copyleft	cddl-1.1|cddl 1.1|cddl v1.1|common development and distribution license 1.1|common development and distribution license, version 1.1|common development and distribution license version 1.1|common development and distribution license (cddl) version 1.1|common development and distribution license (cddl), version 1.1|common development and distribution license (cddl) v1.1|cddl+gpl	glassfish.java.net/public/cddl+gpl_1_1|spdx.org/licenses/cddl-1.1
+CDDL-1.0	weak-copyleft	cddl-1.0|cddl 1.0|cddl v1.0|cddl1|common development and distribution license 1.0|common development and distribution license, version 1.0|common development and distribution license version 1.0|common development and distribution license (cddl) version 1.0|common development and distribution license (cddl), version 1.0|common development and distribution license (cddl) v1.0	opensource.org/licenses/cddl-1.0|spdx.org/licenses/cddl-1.0
+CPL-1.0	weak-copyleft	cpl-1.0|cpl 1.0|common public license	opensource.org/licenses/cpl-1.0|spdx.org/licenses/cpl-1.0
+ECL-2.0	permissive	ecl-2.0|educational community license, version 2.0|educational community license version 2.0|educational community license 2.0|educational community license v2.0	opensource.org/licenses/ecl-2.0|spdx.org/licenses/ecl-2.0
+EPL-2.0	weak-copyleft	epl-2.0|epl 2.0|epl v2.0|eclipse public license - v 2.0|eclipse public license - version 2.0|eclipse public license 2.0|eclipse public license v2.0|eclipse public license, version 2.0|eclipse public license version 2.0	eclipse.org/legal/epl-2.0|eclipse.org/legal/epl-v20|spdx.org/licenses/epl-2.0
+EPL-1.0	weak-copyleft	epl-1.0|epl 1.0|epl v1.0|eclipse public license - v 1.0|eclipse public license - version 1.0|eclipse public license 1.0|eclipse public license v1.0|eclipse public license, version 1.0|eclipse public license version 1.0	eclipse.org/legal/epl-v10|opensource.org/licenses/epl-1.0|spdx.org/licenses/epl-1.0
+EUPL-1.2	strong-copyleft	eupl-1.2|eupl 1.2|eupl v1.2|european union public license 1.2|european union public license v. 1.2|european union public license v1.2|european union public license, version 1.2|european union public license version 1.2	joinup.ec.europa.eu/collection/eupl/eupl-text-eupl-12|opensource.org/licenses/eupl-1.2|spdx.org/licenses/eupl-1.2
+EUPL-1.1	strong-copyleft	eupl-1.1|eupl 1.1|eupl v1.1|european union public license 1.1|european union public license v. 1.1|european union public license v1.1|european union public license, version 1.1|european union public license version 1.1	opensource.org/licenses/eupl-1.1|spdx.org/licenses/eupl-1.1
+MIT-0	permissive	mit-0|mit no attribution|mit no-attribution|mit-zero	opensource.org/licenses/mit-0|spdx.org/licenses/mit-0
+MIT	permissive	mit license|the mit license|(mit)|mit-license|mit/x11|mit/expat|expat license|expat	opensource.org/licenses/mit|mit-license.org|licenses/mit|spdx.org/licenses/mit
+MPL-2.0	weak-copyleft	mpl-2.0|mpl 2.0|mpl2|mpl v2|mpl-2|mozilla public license 2.0|mozilla public license, version 2.0|mozilla public license version 2.0|mozilla public license v2.0|mozilla public license v. 2.0|mpl/2.0	mozilla.org/mpl/2.0|opensource.org/licenses/mpl-2.0|spdx.org/licenses/mpl-2.0
+MPL-1.1	weak-copyleft	mpl-1.1|mpl 1.1|mozilla public license 1.1|mozilla public license, version 1.1|mozilla public license version 1.1|mozilla public license v1.1|mpl/1.1	mozilla.org/mpl/1.1|mozilla.org/mpl/mpl-1.1|opensource.org/licenses/mpl-1.1|spdx.org/licenses/mpl-1.1
+MS-PL	permissive	ms-pl|microsoft public license	opensource.org/licenses/ms-pl|spdx.org/licenses/ms-pl
+MS-RL	weak-copyleft	ms-rl|microsoft reciprocal license	opensource.org/licenses/ms-rl|spdx.org/licenses/ms-rl
+ODbL-1.0	weak-copyleft	odbl-1.0|odbl|open database license	opendatacommons.org/licenses/odbl|spdx.org/licenses/odbl-1.0
+OFL-1.1	weak-copyleft	ofl-1.1|sil open font license|open font license|sil ofl 1.1	openfontlicense.org|scripts.sil.org/ofl|spdx.org/licenses/ofl-1.1
+OpenSSL	permissive	openssl license	spdx.org/licenses/openssl
+PostgreSQL	permissive	postgresql license	opensource.org/licenses/postgresql|postgresql.org/about/licence|spdx.org/licenses/postgresql
+PSF-2.0	permissive	psf-2.0|python software foundation license|psf license|psfl	docs.python.org/3/license|spdx.org/licenses/psf-2.0
+Python-2.0	permissive	python-2.0|python license	opensource.org/licenses/python-2.0|spdx.org/licenses/python-2.0
+Ruby	permissive	ruby license|ruby's license	ruby-lang.org/en/about/license|spdx.org/licenses/ruby
+Unicode-DFS-2016	permissive	unicode-dfs-2016|unicode license agreement - data files and software|unicode license agreement	unicode.org/copyright|spdx.org/licenses/unicode-dfs-2016
+Unlicense	permissive	unlicense|the unlicense	unlicense.org|spdx.org/licenses/unlicense
+UPL-1.0	permissive	upl-1.0|universal permissive license	oss.oracle.com/licenses/upl|opensource.org/licenses/upl|spdx.org/licenses/upl-1.0
+W3C	permissive	w3c software notice and license|w3c software license|w3c license	w3.org/consortium/legal/2015/copyright-software-and-document|w3.org/consortium/legal/copyright-software|spdx.org/licenses/w3c
+WTFPL	permissive	wtfpl|do what the fuck you want to public license	wtfpl.net|spdx.org/licenses/wtfpl
+Zlib	permissive	zlib license|zlib/libpng license	opensource.org/licenses/zlib|zlib.net/zlib_license|spdx.org/licenses/zlib
+ISC	permissive	isc license|(isc)	opensource.org/licenses/isc|spdx.org/licenses/isc
+AFL-3.0	permissive	afl-3.0|academic free license 3.0|academic free license, version 3.0|academic free license version 3.0|academic free license v3.0	opensource.org/licenses/afl-3.0|spdx.org/licenses/afl-3.0
+Artistic-2.0	permissive	artistic-2.0|artistic 2.0|artistic license 2.0|artistic license, version 2.0|artistic license version 2.0|artistic license v2.0	perlfoundation.org/artistic_license_2_0|opensource.org/licenses/artistic-2.0|spdx.org/licenses/artistic-2.0
+BlueOak-1.0.0	permissive	blueoak-1.0.0|blue oak model license	blueoakcouncil.org/license/1.0.0|spdx.org/licenses/blueoak-1.0.0
+
+# Names that carry no version, after every row that names one.
+LGPL-2.0-or-later	weak-copyleft	lesser general public license|library general public license|lgpl	
+GPL-1.0-or-later	strong-copyleft	gpl-1.0-or-later|gpl-1.0+|general public license|gnu gpl|gpl	spdx.org/licenses/gpl-1.0-or-later
+Apache-2.0	permissive	apache license|apache software license|apache	
+BSD-3-Clause	permissive	bsd license|bsd	
+CDDL-1.1	weak-copyleft	common development and distribution license|cddl	
+EPL-2.0	weak-copyleft	eclipse public license|epl	
+MPL-2.0	weak-copyleft	mozilla public license|mpl	
+EUPL-1.2	strong-copyleft	european union public license|eupl	
+CC0-1.0	permissive	public domain	

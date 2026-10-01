@@ -4,7 +4,9 @@ import module java.base;
 import build.jenesis.repository.cleanup.Release;
 import build.jenesis.repository.cleanup.RepositoryInventory;
 import build.jenesis.repository.cleanup.StoredReport;
+import build.jenesis.repository.compliance.ComplianceSettings;
 import build.jenesis.repository.compliance.License;
+import build.jenesis.repository.compliance.LicenseTable;
 import build.jenesis.repository.inventory.StoreRepositoryInventory;
 import build.jenesis.repository.store.ArtifactStore;
 
@@ -190,7 +192,10 @@ public final class LicenseReport {
 
         @Override
         public StoredReport.Rows run() throws IOException {
-            derivation = new LicenseDerivation(repository);
+            // The table is read here, on the count's own thread and off the request that asked for it, from the
+            // deployment's compliance settings - the licences an operator added are deployment-wide. A value that
+            // does not parse fails the count, naming the row.
+            derivation = new LicenseDerivation(repository, LicenseTable.of(ComplianceSettings.lookup()));
             new StoreRepositoryInventory(repository).releases(this);
             List<String> rows = new ArrayList<>();
             rows.add(VERSIONS + "\t\t" + versions);

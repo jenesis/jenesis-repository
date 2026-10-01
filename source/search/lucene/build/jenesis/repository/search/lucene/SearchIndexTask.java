@@ -4,6 +4,7 @@ import module java.base;
 import build.jenesis.repository.cleanup.Release;
 import build.jenesis.repository.cleanup.RepositoryInventory;
 import build.jenesis.repository.compliance.License;
+import build.jenesis.repository.compliance.LicenseTable;
 import build.jenesis.repository.compliance.inventory.LicenseDerivation;
 import build.jenesis.repository.inventory.AboutSection;
 import build.jenesis.repository.inventory.StoreRepositoryInventory;
@@ -135,7 +136,7 @@ public final class SearchIndexTask implements MaintenanceTask {
         ArtifactStore store = context.store();
         SearchIndex index = new SearchIndex(store, SearchIndexTaskProvider.CLAIM.resolve(context.config()));
         StoreRepositoryInventory inventory = new StoreRepositoryInventory(store);
-        LicenseDerivation licenses = new LicenseDerivation(store);
+        LicenseDerivation licenses = new LicenseDerivation(store, LicenseTable.of(context.config()));
         DirtyIndexFeed feed = new DirtyIndexFeed(store, SearchIndex.DIRECTORY);
 
         Optional<ArtifactStore.Versioned> stored = index.manifestVersioned();
@@ -166,11 +167,12 @@ public final class SearchIndexTask implements MaintenanceTask {
     }
 
     /** The full rebuild from truth over {@code store}, for the walk consumer that runs it when a walk carrying it
-     *  completes: the same rebuild the task's periodic reconcile ran, with the feed compacted through the cutoff. */
-    void rebuild(ArtifactStore store, Duration claim, Gauges gauges) throws IOException {
+     *  completes: the same rebuild the task's periodic reconcile ran, with the feed compacted through the cutoff, and
+     *  licences identified through {@code table}, built from the repository's settings as the task's own pass is. */
+    void rebuild(ArtifactStore store, Duration claim, LicenseTable table, Gauges gauges) throws IOException {
         SearchIndex index = new SearchIndex(store, claim);
         StoreRepositoryInventory inventory = new StoreRepositoryInventory(store);
-        LicenseDerivation licenses = new LicenseDerivation(store);
+        LicenseDerivation licenses = new LicenseDerivation(store, table);
         DirtyIndexFeed feed = new DirtyIndexFeed(store, SearchIndex.DIRECTORY);
         Optional<ArtifactStore.Versioned> stored = index.manifestVersioned();
         SearchManifest current = stored.map(versioned -> SearchManifest.parse(versioned.content())).orElse(null);
