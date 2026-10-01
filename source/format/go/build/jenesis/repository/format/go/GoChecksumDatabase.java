@@ -7,55 +7,27 @@ import build.jenesis.repository.format.ProxyFormat;
 import build.jenesis.repository.store.Features;
 
 /**
- * The Go ecosystem's checksum database, as this repository reaches it - the service that answers "what is the
- * {@code h1:} dirhash of module M at version V" and therefore the <em>only</em> place a GOPROXY mirror can learn what a
- * proxied {@code .mod} or {@code .zip} is supposed to hash to.
+ * The Go checksum database as this repository reaches it: the service that answers "what is the {@code h1:} dirhash of
+ * module M at version V", the only place a GOPROXY mirror learns what a proxied {@code .mod} or {@code .zip} should
+ * hash to.
  *
- * <h2>Why this is a second upstream, and not a corner of the first</h2>
- * The GOPROXY protocol advertises no digest at all: {@code <module>/@v/<version>.info}, {@code .mod} and {@code .zip}
- * are served with no checksum sibling, no digest header and no content-addressed reference. Go's integrity guarantee
- * lives in a separate service (the {@code GOSUMDB}, {@code sum.golang.org} by default), which the {@code go} client
- * consults itself. A proxy <em>may</em> mirror it under {@code <proxy>/sumdb/<name>/...}, and the protocol tells a
- * client to prefer that route - but the canonical public proxy does not implement it (a {@code /sumdb/.../supported}
- * against {@code proxy.golang.org} is a {@code 404}), so a repository that only ever spoke to its configured GOPROXY
- * could obtain no digest for anything. That is why the database is configured in its own right.
+ * <p>It is configured as an upstream of its own because the GOPROXY protocol advertises no digest, and the canonical
+ * public proxy does not mirror the database under {@code /sumdb/}. It is read directly first, then through the
+ * upstream's mirror: the direct route is cheaper and stronger, since a digest from an origin independent of the one
+ * that served the bytes cannot be made to agree by a compromised GOPROXY.
  *
- * <p><b>Direct first, the upstream's mirror second.</b> Reaching the database directly is both cheaper (a mirror that
- * does not implement it costs a wasted round trip) and <em>stronger</em>: the digest then comes from an origin
- * independent of the one that served the bytes, so a compromised or merely broken GOPROXY cannot make its own body and
- * its own digest agree. The mirror route is the fallback for the deployment whose only egress is its configured
- * upstream.
+ * <p>The {@code lookup} record is read and compared; the note's Ed25519 signature and the tile inclusion proof are not
+ * verified, the signature binding a tree head rather than a line and the proof needing a transparency-log client. So
+ * this is a digest check against the database, and {@link GoFormat} relays {@code /go/sumdb/...} so a client can run
+ * the full check itself.
  *
- * <h2>What this check is, and is not</h2>
- * The record returned by a {@code lookup} is read out of the response and compared; the note's Ed25519 signature and
- * the tile-based inclusion proof that would bind that record to the signed tree head are <b>not</b> verified. Verifying
- * the signature alone would prove nothing about the record (it signs a tree head, not a line), and the proof needs the
- * whole transparency-log client. So this leg is a digest check against what the checksum database says, not a
- * transparency-log attestation - which is exactly why {@link GoFormat} also relays {@code /go/sumdb/...} so a client
- * can run the full check itself, against the same database, through this repository.
- *
- * <h2>Configuration, and the screen on it</h2>
- * {@code jenrepo.go.sumdb} is the database's base URL, {@code https://sum.golang.org/} by default and {@code off} to
- * disable. It is deploy-time configuration in the {@code jenrepo.<feature>.<property>} convention: which hosts a
- * deployment may reach is an egress decision made where the process is started, not a runtime dial, and an air-gapped
- * deployment sets it {@code off} so no fill waits on a name that cannot resolve.
- *
- * <p>It is also an <b>operator-configured outbound target, and it is screened</b>. {@link #base(boolean)} fails fast -
- * a value that is not an http(s) base URL throws at read, naming the key, so an operator who misspelt it is not left
- * believing verification is running - and it does not admit plain {@code http} without the opt-in. No credential
- * rides to the checksum database, so this is not the credential-in-cleartext
- * hazard of a proxy upstream; it is the other one, and on this leg it is sharper. A cleartext {@code lookup} is an
- * active intermediary's opportunity to answer <em>every</em> integrity question itself, and this repository then holds
- * a proxied {@code .zip} to whatever that answer said - so one attacker on the path chooses both the module bytes (from
- * a cleartext GOPROXY) and the digest they are checked against, and the check reports success. The screen is therefore
- * {@link OutboundTargets#configuredRefusal}, the <em>same</em> rule the proxy upstream runs under the <em>same</em>
- * {@link ProxyLeg#ALLOW_INTERNAL} dial, rather than a second spelling of it.
- *
- * <p><b>The transport half only, for the proxy upstream's reason and one of this leg's own.</b> An operator running
- * their own checksum database on an internal address is a legitimate deployment - the same judgement made about an
- * internal upstream mirror - and the host half would put a DNS resolution on the path of every {@code lookup} to
- * re-decide a value that was fixed when the process started. The capability floor beneath it is not a policy question
- * and the dial does not lift it.
+ * <p>{@code jenrepo.go.sumdb} is the database's base URL, {@code https://sum.golang.org/} by default and {@code off} to
+ * disable: an egress decision made where the process starts, so an air-gapped deployment sets it off. It is screened as
+ * an operator-configured outbound target: {@link #base(boolean)} throws on a value that is no http(s) base URL, naming
+ * the key, and refuses cleartext without the opt-in, since an intermediary answering every lookup in cleartext would
+ * choose both the module bytes and the digest they are checked against. The screen is
+ * {@link OutboundTargets#configuredRefusal}, the proxy upstream's rule under the same {@link ProxyLeg#ALLOW_INTERNAL}
+ * dial: the transport half only, since a database on an internal address is a legitimate deployment.
  */
 public final class GoChecksumDatabase {
 
@@ -65,35 +37,31 @@ public final class GoChecksumDatabase {
     /** The ecosystem's own default, and the value {@code GOSUMDB} carries when nothing sets it. */
     private static final String DEFAULT_DATABASE = "https://sum.golang.org/";
 
-    /** The operations the GOPROXY protocol defines under {@code /sumdb/<name>/}; anything else is not relayed, so the
-     *  path a client supplies can never become an arbitrary request against the database. */
+    /** The operations the GOPROXY protocol defines under {@code /sumdb/<name>/}; nothing else is relayed, so a client
+     *  path never becomes an arbitrary request. */
     private static final List<String> OPERATIONS = List.of("supported", "latest", "lookup/", "tile/");
 
-    /** How many lines of a lookup response are read before it stops being a record and starts being a body someone is
-     *  feeding us; the record itself is three lines and a signed tree head follows a blank one. */
+    /** How many lines of a lookup response are read: the record is three lines and a signed tree head follows a blank
+     *  one. */
     private static final int MAX_RECORD_LINES = 64;
 
     private GoChecksumDatabase() {
         throw new UnsupportedOperationException("GoChecksumDatabase is a static utility");
     }
 
-    /** The two dirhashes a lookup publishes for one module version: the {@code .zip}'s and the {@code go.mod}'s. Either
-     *  may be {@code null} when the record does not carry it. */
+    /** The two dirhashes a lookup publishes for one module version, the {@code .zip}'s and the {@code go.mod}'s; either
+     *  may be {@code null}. */
     public record Dirhashes(String zip, String mod) {
     }
 
     /**
-     * The configured database's base URL, or {@code null} when a deployment turned it off - in which case no digest is
-     * advertised to this repository at all and a proxied module is cached unverified, which {@link GoFormat} declares.
+     * The configured database's base URL, or {@code null} when turned off, in which case a proxied module is cached
+     * unverified, as {@link GoFormat} declares.
      *
-     * @param allowInternal the deployment's {@link ProxyLeg#ALLOW_INTERNAL} dial, threaded from the exchange exactly
-     *                      as the enumeration walks thread it: this class has no {@code FormatExchange} to read
-     *                      it from, and a second read of the dial would be a second chance for the two to disagree
-     * @throws IllegalArgumentException when the key is set to something that is not an {@code http}/{@code https} URL,
-     *         or to a cleartext one this deployment has not opted into - an operator who pointed at their own database
-     *         and got the spelling (or the scheme) wrong must not be left believing the verification is running
-     *         (fail fast). It throws rather than declining because this is a <em>configuration</em> fault and not an
-     *         upstream-chosen target: the same shape the malformed-value refusal beside it has
+     * @param allowInternal the deployment's {@link ProxyLeg#ALLOW_INTERNAL} dial, threaded from the exchange
+     * @throws IllegalArgumentException when the key is not an {@code http}/{@code https} URL, or is cleartext without
+     *     the opt-in: a configuration fault, so it fails fast rather than leaving an operator believing verification
+     *     runs
      */
     public static URI base(boolean allowInternal) {
         String configured = Features.lookup().apply(DATABASE_KEY);
@@ -114,8 +82,7 @@ public final class GoChecksumDatabase {
             throw new IllegalArgumentException(DATABASE_KEY + " must be an http(s) base URL of a Go checksum database "
                     + "(or 'off'), not '" + configured + "'");
         }
-        // The screen this operator-configured outbound target never had, and it is the proxy upstream's screen
-        // rather than a private one - one rule, one wording, one dial for both of the edition's configured roots.
+        // The proxy upstream's screen, one rule and one dial for both operator-configured roots.
         String refusal = OutboundTargets.configuredRefusal(base, allowInternal);
         if (refusal != null) {
             throw new IllegalArgumentException(DATABASE_KEY + " names a checksum database this deployment refuses to "
@@ -127,8 +94,8 @@ public final class GoChecksumDatabase {
         return base;
     }
 
-    /** The name the configured database answers to in a {@code /sumdb/<name>/} path - its authority, which is what the
-     *  {@code go} client spells there. {@code null} when the database is off. */
+    /** The name the configured database answers to in a {@code /sumdb/<name>/} path, its authority; {@code null} when
+     *  off. */
     public static String name(boolean allowInternal) {
         URI base = base(allowInternal);
         return base == null ? null : base.getAuthority();
@@ -144,33 +111,20 @@ public final class GoChecksumDatabase {
         return false;
     }
 
-    /**
-     * Read one checksum-database path ({@code supported}, {@code latest}, {@code lookup/...}, {@code tile/...}) - the
-     * configured database directly where the name matches it, otherwise the configured GOPROXY's own mirror of it.
-     * Empty when neither answers.
-     *
-     * <p>{@code database} is the name off the request path for the relay leg and the configured one for a verification
-     * lookup. It is only ever spliced into the <em>path</em> of the operator-configured upstream, never into a host, so
-     * a client cannot aim this at a host of its choosing; the direct leg is taken only for the one name the operator
-     * configured. Small bodies throughout (a record, a signed tree head, a tile), so the buffered leg is the right one
-     * and carries the transport's own response ceiling.
-     */
+    /** Read one checksum-database path ({@code supported}, {@code latest}, {@code lookup/...}, {@code tile/...}) from
+     *  the configured database directly where the name matches it, else from the configured GOPROXY's mirror; empty
+     *  when neither answers. {@code database} is only ever spliced into the operator-configured upstream's path, never
+     *  a host, and the direct leg is taken only for the configured name. The bodies are small, so the buffered leg is
+     *  right. */
     public static Optional<ProxyFormat.Fetched> read(ProxyFormat.Fetcher fetcher, URI upstream, String database,
                                               String operation, boolean allowInternal) throws IOException {
         return route(fetcher, upstream, database, operation, allowInternal).answer();
     }
 
-    /**
-     * The same two-route read as {@link #read}, but keeping <em>why</em> it produced nothing - which the relay leg does
-     * not need and a verification lookup must not lose. A route that answered {@code 404}/{@code 410} is the
-     * database saying it carries no such record, and a record it does not carry declares no digest; a route that could
-     * not be reached, or that answered a {@code 429}/{@code 5xx}/challenge, said nothing at all, and treating that as
-     * "the database publishes no dirhash for this module" is what turned a network blip into an unverified cache fill.
-     *
-     * <p>The verdict is over <em>both</em> routes: the digest is unreadable only when neither the direct database nor
-     * the upstream's mirror of it answered the question. One route missing while the other says "no such record" is the
-     * database answering.
-     */
+    /** The two-route read of {@link #read}, keeping why it produced nothing. A route answering {@code 404}/{@code 410}
+     *  is the database saying it has no such record, which declares no digest; an unreachable route or a
+     *  {@code 429}/{@code 5xx}/ challenge said nothing, and must not become an unverified fill. The digest is
+     *  unreadable only when neither route answered. */
     static Route route(ProxyFormat.Fetcher fetcher, URI upstream, String database, String operation,
                        boolean allowInternal) throws IOException {
         URI base = base(allowInternal);
@@ -205,32 +159,29 @@ public final class GoChecksumDatabase {
                 : "the upstream's checksum-database mirror at " + mirror + " answered " + mirrored.get().status());
     }
 
-    /** Whether a status is the route's own answer that it carries no such record - the one absence a caller may read as
-     *  a fact, mirroring {@code ProxyRelay.upstreamMiss} for the two routes this class owns. */
+    /** Whether a status is a route's own "no such record", the one absence read as a fact. */
     private static boolean miss(int status) {
         return status == 404 || status == 410;
     }
 
-    /** What a two-route checksum-database read produced: the {@code 200} answer, or nothing - and, when nothing, why.
+    /**
+     * What a two-route read produced: the {@code 200} answer, or nothing and why.
      *
-     *  @param answer     the {@code 200} response, or empty
-     *  @param unreadable why no route could be read at all, or {@code null} when a route answered (including one that
-     *                    answered "no such record") */
+     * @param answer the {@code 200} response, or empty
+     * @param unreadable why no route could be read, or {@code null} when a route answered, a "no such record" included
+     */
     record Route(Optional<ProxyFormat.Fetched> answer, String unreadable) {
     }
 
     /**
      * The dirhashes the checksum database publishes for one module version. {@code escapedModule} and
-     * {@code escapedVersion} are the request path's own spelling (the {@code !lower} case escaping a {@code go} client
-     * applies), which is also how a lookup URL spells them; the record body spells them back out unescaped, so the
-     * comparison happens on the unescaped pair.
+     * {@code escapedVersion} are the request path's {@code !lower} spelling, which a lookup URL uses; the record spells
+     * them unescaped, so the unescaped pair is compared.
      *
-     * <p>The three states are the ones {@code ProxyFormat} clause 5 needs kept apart. It <b>declares nothing</b>
-     * ({@code null} {@link Advertised#dirhashes()}, so the fill goes ahead unverified, which {@link GoFormat} states)
-     * for a deployment that turned the database {@code off}, a malformed escape naming no module, and a database that
-     * <em>answered</em> that it carries no such record. It is {@linkplain Advertised#unreadable() unreadable} when
-     * neither the database nor the upstream's mirror of it could be read at all - not a module the database does not
-     * carry, and not a licence to cache the module unverified.
+     * <p>The three states of {@code ProxyFormat} clause 5: it declares nothing ({@code null}
+     * {@link Advertised#dirhashes()}, the fill unverified) when the database is off, an escape is malformed, or the
+     * database answered it has no such record; it is {@linkplain Advertised#unreadable() unreadable} when neither route
+     * could be read.
      */
     public static Advertised lookup(ProxyFormat.Fetcher fetcher, URI upstream, String escapedModule,
                                       String escapedVersion, boolean allowInternal) throws IOException {
@@ -255,17 +206,14 @@ public final class GoChecksumDatabase {
         return new Advertised(hashes.zip() == null && hashes.mod() == null ? null : hashes, null);
     }
 
-    /** What a lookup learned: the dirhashes the database publishes for the module version ({@code null} when it
-     *  publishes none), or why the database could not be read at all ({@code null} when it was). */
+    /** What a lookup learned: the published dirhashes ({@code null} when none), or why the database could not be read
+     *  ({@code null} when it was). */
     public record Advertised(Dirhashes dirhashes, String unreadable) {
     }
 
-    /**
-     * The {@code h1:} lines of a lookup response for one module version. The body is a signed note: a record id, then
-     * one {@code <module> <version> h1:...} line per hashed thing ({@code <version>} for the zip,
-     * {@code <version>/go.mod} for the module file), then a blank line and the tree head. Only lines naming exactly
-     * this module version are read, so a record that also carries a neighbouring version contributes nothing.
-     */
+    /** The {@code h1:} lines of a lookup response for one module version: a record id, one
+     *  {@code <module> <version> h1:...} line per hashed thing ({@code <version>} for the zip, {@code <version>/go.mod}
+     *  for the module file), a blank line and the tree head. Only lines naming exactly this version are read. */
     private static Dirhashes parse(byte[] body, String module, String version) {
         String zip = null;
         String mod = null;
@@ -287,12 +235,9 @@ public final class GoChecksumDatabase {
         return new Dirhashes(zip, mod);
     }
 
-    /**
-     * The unescaped form of a module path or version as a request path spells it: the {@code go} client escapes every
-     * upper-case letter as {@code !} plus its lower-case form, because module paths are case-sensitive while many file
-     * systems are not. {@code null} when the escaping is malformed (a trailing {@code !}, or one before something that
-     * is not a lower-case letter) - which names no module rather than being silently repaired.
-     */
+    /** The unescaped form of a module path or version: the {@code go} client escapes every upper-case letter as
+     *  {@code !} and its lower case, since module paths are case-sensitive and file systems may not be. {@code null}
+     *  for a malformed escape, which names no module rather than being repaired. */
     public static String unescape(String escaped) {
         StringBuilder unescaped = new StringBuilder(escaped.length());
         for (int index = 0; index < escaped.length(); index++) {

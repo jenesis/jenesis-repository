@@ -10,10 +10,9 @@ import build.jenesis.repository.store.StoredListing;
 import build.jenesis.repository.format.Semver;
 
 /**
- * A Go module's {@code @v/list} as a stored listing - one line per version - with {@code @latest} (the highest
- * semantic version of the list) derived from it on every write. A version is listed exactly when it is servable: its
- * {@code .info} and {@code .zip} pointers not withheld and the version not yanked - the screen the on-read
- * enumeration applied per version, applied here to the one version a write touches.
+ * A Go module's {@code @v/list} as a stored listing, one line per version, with {@code @latest}, the highest version,
+ * derived on every write. A version is listed exactly when servable: its {@code .info} and {@code .zip} not withheld
+ * and the version not yanked.
  */
 final class GoListings {
 
@@ -58,8 +57,7 @@ final class GoListings {
         return entries;
     }
 
-    /** Re-decide one version's membership from the store's current state - after a write under {@code @v}, a hold,
-     *  a release or a mark. */
+    /** Re-decide one version's membership from the store's current state. */
     void refresh(String modulePath, String version) throws IOException {
         if (blobs.exists("go/" + modulePath + "/@v/" + version + ".info") && servable(modulePath, version)) {
             StoredListing.put(store, spec(modulePath), version, version.getBytes(StandardCharsets.UTF_8));

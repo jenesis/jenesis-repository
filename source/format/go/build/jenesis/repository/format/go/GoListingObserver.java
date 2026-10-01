@@ -10,10 +10,9 @@ import build.jenesis.repository.store.ListingObserver;
 import build.jenesis.repository.store.StoredListing;
 
 /**
- * Keeps the Go {@linkplain GoListings stored version lists} in step with the transitions that happen off the publish
- * path - a hold on a published version and its release, a yank and its reversal, a removal - by re-deciding the one
- * version's membership. A transition whose subject names neither a module path nor a coordinate is mapped to no
- * version, so every list is rebuilt in place.
+ * Keeps the Go {@linkplain GoListings stored version lists} in step with transitions off the publish path - a hold and
+ * its release, a yank and its reversal, a removal - by re-deciding the one version. A subject naming neither a module
+ * path nor a coordinate rebuilds every list in place.
  */
 public final class GoListingObserver implements ListingObserver {
 
