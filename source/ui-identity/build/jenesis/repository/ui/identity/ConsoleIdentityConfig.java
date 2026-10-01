@@ -10,10 +10,9 @@ import org.springframework.context.annotation.Configuration;
 
 /**
  * The identity layer's beans, declared once for the console that imports this class: the per-tenant membership
- * directory over the current session's tenant, the deployment's super-admin set, the provider-independent login
- * decision, and the console's own properties. The classes carry no Spring annotation of their own - the console's
- * component scan of its own package does not reach a module of their own - so a composition that wants them names
- * this configuration, and a test constructs them.
+ * directory over the session's tenant, the super-admin set, the provider-independent login decision and the console's
+ * properties. The classes carry no Spring annotation and lie outside the console's component scan, so a composition
+ * names this configuration and a test constructs them.
  */
 @Configuration
 @EnableConfigurationProperties(UiProperties.class)

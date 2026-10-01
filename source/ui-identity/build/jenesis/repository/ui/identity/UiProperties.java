@@ -3,21 +3,19 @@ package build.jenesis.repository.ui.identity;
 import org.springframework.boot.context.properties.ConfigurationProperties;
 
 /**
- * Configuration for the admin console, bound from the {@code jenrepo.ui.*} properties - each reached from its own
- * {@code JENREPO_UI_*} environment variable by relaxed binding, with the default beside the field rather than in a
- * properties file restating it.
+ * Configuration for the admin console, bound from {@code jenrepo.ui.*} - each reached from its {@code JENREPO_UI_*}
+ * variable by relaxed binding, the default beside the field.
  *
- * <p>The console's reclaim targets are not fed from the build cache's {@code JENREPO_CACHE_MIN_FREE*} variables:
- * setting the cache's reaper target must not silently move the console's global reclaim target, which is a
- * different decision about a different sweep.
+ * <p>The console's reclaim targets are deliberately not fed from the build cache's {@code JENREPO_CACHE_MIN_FREE*}
+ * variables: they govern a different sweep.
  *
+ * <pre>
  *   jenrepo.ui.admins            comma-separated provider-qualified ids SEEDED as deployment administrators on
- *                               every boot (JENREPO_UI_ADMINS). It is not a mirror: an id dropped from it keeps
- *                               its administration until the grant is revoked through the API, and an
- *                               administrator granted there is equally real. A '*' entry is refused at startup -
- *                               an admin is a holder of rights, and it names none
+ *                                every boot (JENREPO_UI_ADMINS). Not a mirror: an id dropped from it keeps its
+ *                                administration until revoked through the API. A '*' entry is refused at startup.
  *   jenrepo.ui.min-free-bytes    global disk-reclaim target in bytes
  *   jenrepo.ui.min-free-percent  global disk-reclaim target in percent
+ * </pre>
  */
 @ConfigurationProperties(prefix = "jenrepo.ui")
 public class UiProperties {
@@ -27,7 +25,8 @@ public class UiProperties {
     private int minFreePercent = 0;
     /** Bearer token an identity provider presents to the SCIM provisioning API; blank disables SCIM. */
     private String scimToken = "";
-    /** The full-access administrator key key sign-in accepts ({@code JENREPO_UI_ADMIN_KEY}); blank accepts none. */
+    /** The full-access administrator key that key sign-in accepts ({@code JENREPO_UI_ADMIN_KEY}); blank accepts
+     *  none. */
     private String adminKey = "";
 
 

@@ -1,17 +1,12 @@
 /**
- * The admin console's identity layer: the per-tenant membership directory ({@code UserDirectory}), the
- * deployment's super-admin set ({@code Superadmins}), the provider-independent login decision every sign-in
- * mechanism shares ({@code LoginAuthorization}), what counts as the starter credential ({@code StarterCredential})
- * and the console's own {@code jenrepo.ui.*} properties ({@code UiProperties}), with the one configuration class a
- * console imports to declare them as beans.
+ * The admin console's identity layer: the per-tenant membership directory ({@code UserDirectory}), the super-admin set
+ * ({@code Superadmins}), the login decision every sign-in mechanism shares ({@code LoginAuthorization}), the starter
+ * credential ({@code StarterCredential}) and the console's {@code jenrepo.ui.*} properties ({@code UiProperties}), with
+ * the configuration a console imports to declare them as beans.
  *
- * <p>It exists so that the modules that sign a person in - key login, SAML, OIDC - and the SCIM provisioner reach
- * these classes without requiring the whole console, which would make the console and its sign-in modules move
- * together; these classes are all those modules take from it. What the layer
- * itself needs is the authorization store's contract, the store's documents, the console module's seams (the current
- * tenant, the administrators, the known principals, the login authorities) and the domain layer's tenant marker;
- * Spring Security's authority type for the two classes that speak it, and Spring Boot's properties binding for the
- * one that is bound.
+ * <p>A module of its own so key login, SAML, OIDC and the SCIM provisioner reach these classes without requiring the
+ * whole console. It needs the authorization store's contract, the store's documents, the console module's seams, the
+ * domain layer's tenant marker, Spring Security's authority type and Spring Boot's properties binding.
  *
  * @jenesis.release 25
  * @jenesis.bom pin-repository.properties
