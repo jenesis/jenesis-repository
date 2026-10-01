@@ -1,8 +1,7 @@
 /**
- * The generic (raw) repository format as a plugin module: it provides
- * {@link build.jenesis.repository.format.RepositoryFormat} for the {@code /raw/...} layout, a plain
- * content-addressed file store over the {@code Publication} primitives in the store module. Discovered through
- * {@code provides}.
+ * The generic (raw) repository format: a {@link build.jenesis.repository.format.RepositoryFormat} for the
+ * {@code /raw/...} layout, a content-addressed file store over the store module's {@code Publication} primitives, with
+ * a proxy leg and an importer.
  *
  * @jenesis.release 25
  * @jenesis.bom pin-repository.properties
@@ -14,7 +13,6 @@ module build.jenesis.repository.format.raw {
     requires build.jenesis.repository.walk;
     // The action name a client's DELETE is recorded under on the audit trail.
     requires build.jenesis.repository.audit;
-    requires java.xml;
     exports build.jenesis.repository.format.raw;
     provides build.jenesis.repository.format.RepositoryFormat
             with build.jenesis.repository.format.raw.RawFormat;

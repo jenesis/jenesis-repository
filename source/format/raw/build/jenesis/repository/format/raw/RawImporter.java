@@ -7,12 +7,9 @@ import build.jenesis.repository.format.RepositoryImporter;
 import build.jenesis.repository.store.ArtifactStore;
 
 /**
- * Imports a generic repository (Nexus {@code raw}, Artifactory {@code generic}) from an incumbent manager: a raw
- * asset has no ecosystem layout, so its path is kept verbatim under {@code /raw/...} and its bytes are stored
- * content-addressed through {@link Publication}, exactly as a {@code PUT} to {@link RawFormat} would - which also
- * dedupes a raw file that happens to match an imported jar, tarball or OCI layer to the one {@code blobs/<sha256>}.
- * This rounds out the core's import capability alongside Maven and OCI, so the installers, archives and signed
- * binaries an organisation keeps in a raw repository migrate with the rest.
+ * Imports a generic repository (Nexus {@code raw}, Artifactory {@code generic}): a raw asset has no ecosystem layout,
+ * so its path is kept verbatim under {@code /raw/...} and its bytes stored content-addressed, exactly as a {@code PUT}
+ * to {@link RawFormat} would.
  */
 public final class RawImporter implements RepositoryImporter {
 
@@ -23,13 +20,11 @@ public final class RawImporter implements RepositoryImporter {
 
     @Override
     public Optional<ArtifactDescriptor> importTarget(String sourcePath) {
-        // RepositoryImporter clause 4: a source path is as client-supplied as a request path, and the descriptor
-        // composed here is what the import edge screens against, what an edition records for a held asset and what a
-        // quarantine diversion keys off - so "/../x" must be refused by name rather than echoed as "/raw/../x".
-        // Empty is not the answer: the edge reads it as "lay this out unscreened".
+        // RepositoryImporter clause 4: the descriptor composed here is what the import edge screens, records and
+        // diverts on, so "/../x" is refused by name rather than echoed as "/raw/../x". Empty would mean "lay this out
+        // unscreened".
         String relative = RepositoryImporter.importablePath(sourcePath, "raw");
-        // A raw asset carries no ecosystem coordinate; the target request path it lands on is its screen identity, so
-        // the edge gates the /raw/ path the asset will serve from.
+        // A raw asset has no coordinate; the /raw/ path it will serve from is its screen identity.
         return Optional.of(ArtifactDescriptor.at("raw", "/raw/" + relative));
     }
 
@@ -37,9 +32,8 @@ public final class RawImporter implements RepositoryImporter {
     public void importArtifact(String path, InputStream content, ArtifactStore store) throws IOException {
         String relative = RepositoryImporter.importablePath(path, "raw");
         Publication publication = new Publication(store);
-        // Layout-only: screening rides the ingress edge (the import walk screens each asset before handing it
-        // here), so this lays the asset out - store it content-addressed (streamed, never buffered) and link its
-        // /raw/ path.
+        // Layout only: the import walk has screened the asset, so this stores it content-addressed and links its /raw/
+        // path.
         Publication.Blob blob = publication.stored(content);
         publication.link("/raw/" + relative, blob.hash(), blob.size());
     }

@@ -11,10 +11,10 @@ import build.jenesis.repository.walk.ScreenedNames;
 import build.jenesis.repository.format.Listings;
 
 /**
- * The raw format's directory pages as stored listings: one page per folder, its entries the folder's servable
- * children - a file whose blob is present and not withheld, or a sub-folder - keyed by name. A publish adds its
- * file to its folder's page and the folder to every ancestor's; a removal, a hold or a release re-decides the one
- * entry; so a directory page is one read however many files the folder holds.
+ * The raw format's directory pages as stored listings: one page per folder, its entries the servable children - a file
+ * whose blob is present and not withheld, or a sub-folder - keyed by name. A publish adds its file to its folder's page
+ * and the folder to every ancestor's; a removal, hold or release re-decides the one entry; so a directory page is one
+ * read however large the folder.
  */
 final class RawListings {
 
@@ -51,18 +51,9 @@ final class RawListings {
         return StoredListing.Spec.of(page(folder), PAGE, sink -> generate(folder, sink));
     }
 
-    /**
-     * Emit a link per served child, in the order the scan yields them.
-     *
-     * <p>The scan is paged - a thousand names at a time, by cursor - so the names are never all in hand, and this
-     * emits rather than collecting the <em>page</em>: an entry per child of the folder held in a map until the last
-     * one arrived would be the whole folder on a request path, since a raw folder has no bound on its children and
-     * this generator runs on the first read of a folder page that does not exist yet. Emitting hands each link to the
-     * codec, which writes it and lets it go.
-     *
-     * <p>The scan's order is the sink's order, which is what the contract requires: the cursor it pages by is only
-     * meaningful over one, so ascending is what it already yields.
-     */
+    /** Emit a link per served child in the scan's order - the paged, ascending order the cursor is meaningful over. The
+     *  scan is paged by cursor and each link handed to the codec as it comes, since a raw folder has no bound on its
+     *  children and this generator runs on the first read of a folder page. */
     private void generate(String folder, StoredListing.Generator.Sink sink) throws IOException {
         String prefix = ServableNames.PUBLISHED + folder.substring(0, folder.length() - 1);
         ScreenedNames.paths(names, ServableNames.Policy.HIDE_WITHHELD_AND_GONE)
@@ -87,8 +78,8 @@ final class RawListings {
         return ("<a href=\"" + Listings.html(child) + "\">" + Listings.html(child) + "</a><br/>").getBytes(StandardCharsets.UTF_8);
     }
 
-    /** A file was published, removed, held or released: re-decide its entry in its folder's page, and the folder's
-     *  in every ancestor's (a folder is listed while it has a child). */
+    /** A file was published, removed, held or released: re-decide its entry in its folder's page, and the folder's in
+     *  every ancestor's (a folder is listed while it has a child). */
     void refresh(String path) throws IOException {
         String folder = folderOf(path);
         if (folder == null) {

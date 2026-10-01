@@ -8,9 +8,9 @@ import build.jenesis.repository.store.ListingObserver;
 import build.jenesis.repository.store.StoredListing;
 
 /**
- * Keeps the raw format's {@linkplain RawListings stored directory pages} in step with the transitions that happen
- * off the publish path - a hold on a file and its release, a removal - by re-deciding the one entry. A transition
- * that names no path rebuilds every page in place.
+ * Keeps the raw format's {@linkplain RawListings stored directory pages} in step with transitions off the publish path
+ * - a hold and its release, a removal - by re-deciding the one entry. A transition naming no path rebuilds every page
+ * in place.
  */
 public final class RawListingObserver implements ListingObserver {
 

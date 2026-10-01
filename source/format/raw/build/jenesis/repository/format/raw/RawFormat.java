@@ -16,26 +16,15 @@ import build.jenesis.repository.format.ExportTarget;
 import build.jenesis.repository.format.PublishedExport;
 
 /**
- * The generic (raw) format: a plain HTTP file store under {@code /raw/...}, for the artifacts that fit no package
- * ecosystem - installers, archives, datasets, signed binaries. A {@code PUT} stores the bytes content-addressed
- * through {@link Publication} (so a raw file that matches a jar, a tarball or an OCI layer dedupes to the one
- * {@code blobs/<sha256>}), a {@code GET} serves them, a {@code GET} on a trailing-slash path lists the directory,
- * and a {@code DELETE} removes the pointer. No metadata, no protocol - just the content-addressed store behind a
- * file API, so it is a thin plugin over the same primitives every other layout uses.
+ * The generic (raw) format: a plain HTTP file store under {@code /raw/...} for artifacts that fit no package ecosystem
+ * - installers, archives, datasets, signed binaries. A {@code PUT} stores the bytes content-addressed through
+ * {@link Publication} (so a raw file identical to a jar, tarball or OCI layer dedupes to one {@code blobs/<sha256>}), a
+ * {@code GET} serves them, a {@code GET} on a trailing-slash path lists the directory, and a {@code DELETE} removes the
+ * pointer.
  */
 public final class RawFormat implements RepositoryFormat, ProxyFormat, RepositoryImporter, RepositoryExporter {
 
-    // Reused across listings rather than rebuilt per request: newInstance() runs the full JAXP provider lookup, and the
-    // factory is safe to share for creating writers once configured.
-
-
-    /** How many entries one rendered listing document may carry. A directory browser is navigated into, not scrolled,
-     *  so an enormous directory renders its first page rather than building a millions-anchor document in heap. */
-    private static final int LISTING_ENTRIES = 10_000;
-
-
-    /** The migration-import capability, delegated to the layout-only {@link RawImporter} - the format IS
-     *  the discovered importer now (an {@code instanceof} capability), and the importer class stays as its delegate. */
+    /** The migration-import capability, delegated to {@link RawImporter}. */
     private final RawImporter importer = new RawImporter();
 
     @Override
@@ -54,32 +43,25 @@ public final class RawFormat implements RepositoryFormat, ProxyFormat, Repositor
         Publication publication = new Publication(store);
         switch (exchange.method()) {
             case "PUT" -> {
-                // Layout-only: screening rides the ingress edge, which screens the body to ACCEPT and
-                // restreams the stored blob into this format. Store content-addressed (streamed, never buffered) and
-                // link the path, then respond 201 - verdicts are the edge's business, not the format's.
+                // Layout only: the ingress edge has screened the body and restreams the stored blob, so this stores it
+                // content-addressed, links the path and answers 201.
                 Publication.Blob blob = publication.stored(exchange.requestStream());
                 publication.link(path, blob.hash(), blob.size());
-                // The directory pages are written here, on the publish: the file joins its folder's stored page and
-                // the folder its ancestors', rather than the folder being enumerated and screened on every listing.
+                // The file joins its folder's stored page, and the folder its ancestors', on the publish rather than
+                // per listing.
                 new RawListings(store).refresh(path);
                 exchange.respond(201);
             }
-            // A raw file is a path rather than a coordinate's version, so no pin names one and none is asked: the
-            // rule that a client's removal leaves a pinned version alone is about versions, which the registry's
-            // DELETE alone removes, and the key's delete right is what governs this one.
+            // A raw file is a path, not a coordinate's version, so no pin applies; the key's delete right governs this.
             case "DELETE" -> {
                 publication.unpublish(path);
                 new RawListings(store).refresh(path);
                 exchange.audit(AuditActions.ARTIFACT_DELETE, path);
                 exchange.respond(204);
             }
-            // HEAD must answer exactly what a GET would: located() applies the withheld (quarantine/retraction)
-            // screens and confirms the content-addressed blob still exists, where blob() only reads the pointer -
-            // so a withheld or GC-reclaimed path would otherwise HEAD 200 while GET 404s. And "exactly what a GET
-            // would" includes its headers: the Content-Type and the Content-Length are read from the store's metadata
-            // (never by opening the blob), so a client sizing an artifact before pulling it gets the same answer here
-            // as from the GET below - the HEAD-from-metadata shape MavenFormat, JenesisFormat and OciFormat already
-            // carry, which this leg alone was missing.
+            // HEAD answers exactly what a GET would: locate() applies the withheld screens and confirms the blob
+            // exists, where blob() only reads the pointer, and Content-Type and Content-Length come from the store's
+            // metadata, never by opening the blob.
             case "HEAD" -> {
                 Optional<Publication.Located> located = publication.locate(path);
                 if (located.isEmpty()) {
@@ -103,8 +85,7 @@ public final class RawFormat implements RepositoryFormat, ProxyFormat, Repositor
                     return;
                 }
                 exchange.setResponseHeader("Content-Type", "application/octet-stream");
-                // Opened before the response is committed, so the open is the existence check and a pointer whose
-                // blob is gone answers a clean 404 rather than a truncated 200 (the same shape MavenFormat serves).
+                // Opened before the response is committed, so a pointer whose blob is gone answers a clean 404.
                 InputStream in;
                 try {
                     in = store.open(located.get().key(), exchange.from(located.get().size()));
@@ -123,9 +104,7 @@ public final class RawFormat implements RepositoryFormat, ProxyFormat, Repositor
     public boolean proxy(FormatExchange exchange, ArtifactStore store, URI upstream, ProxyFormat.Fetcher fetcher)
             throws IOException {
         String path = exchange.path();
-        // The proxy leg carries the same clause-6 screen as the request seam: a traversal-shaped path
-        // is no proxy target either, so it never reaches the upstream and never lays a fetched body out
-        // under a path the store refuses.
+        // The request seam's clause-6 screen applies here too: a traversal-shaped path is no proxy target.
         if (!path.startsWith("/raw/") || path.endsWith("/") || !ArtifactStore.traversalFree(path)) {
             return false;
         }
@@ -141,9 +120,8 @@ public final class RawFormat implements RepositoryFormat, ProxyFormat, Repositor
             if (download.status() != 200) {
                 return false;
             }
-            // Layout-only: screening rides the ingress edge (under downstream the proxy ingress is already
-            // screened by ProxyScreen/harden), so this lays the fetched body out - store it content-addressed
-            // (streamed, never buffered) and link the path - and the handle() re-dispatch serves it.
+            // Layout only: the proxy ingress has screened the fetch, so this stores the body content-addressed and
+            // links the path, and handle() serves it.
             Publication.Blob blob = publication.stored(download.body());
             publication.link(path, blob.hash(), blob.size());
         }
@@ -152,8 +130,8 @@ public final class RawFormat implements RepositoryFormat, ProxyFormat, Repositor
     }
 
     /** A directory page ({@code GET} on a trailing slash): the folder's stored listing, streamed as it is. A folder
-     *  with no servable child at all - none published, or every child screened away - is a {@code 404}, as before;
-     *  the structural probe is paid only until the page exists. */
+     *  with no servable child - none published, or all screened away - is a {@code 404}; the structural probe is paid
+     *  only until the page exists. */
     private void listing(String path, ArtifactStore store, FormatExchange exchange) throws IOException {
         RawListings listings = new RawListings(store);
         if (!StoredListing.present(store, RawListings.page(path))
@@ -178,9 +156,7 @@ public final class RawFormat implements RepositoryFormat, ProxyFormat, Repositor
                 return;
             }
             exchange.setResponseHeader("Content-Type", "text/html");
-            // Streamed rather than handed over as bytes. The document is the size of the folder, so materialising
-            // it here put the whole page in heap on the request path - a folder of a hundred thousand children
-            // died exactly here, in Served.bytes, once the write side stopped being the first thing to run out.
+            // Streamed: the document is the size of the folder.
             try (OutputStream out = exchange.respond(200, page.header().size())) {
                 page.body().transferTo(out);
             }
@@ -211,8 +187,8 @@ public final class RawFormat implements RepositoryFormat, ProxyFormat, Repositor
         importer.importArtifact(path, content, store);
     }
 
-    /** Raw files record no coordinates, so each published file is a unit of its own, put at its path under the
-     *  client's {@code .../raw/} URL. */
+    /** Raw files record no coordinates, so each is a unit of its own, put at its path under the client's
+     *  {@code .../raw/} URL. */
     @Override
     public Exported export(ArtifactStore repository, String path, String version, ExportTarget target)
             throws IOException {
