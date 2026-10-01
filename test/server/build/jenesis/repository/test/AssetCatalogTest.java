@@ -33,7 +33,8 @@ class AssetCatalogTest {
 
     @BeforeEach
     void seed() throws IOException {
-        store = ArtifactStoreProvider.resolve("filesystem", key -> root.toString())
+        store = ArtifactStoreProvider.resolve("filesystem",
+                key -> "jenrepo.filesystem.root".equals(key) ? root.toString() : null)
                 .scope("default").scope("default");
         publication = new Publication(store);
 

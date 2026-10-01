@@ -10,6 +10,7 @@
  */
 module build.jenesis.repository.store.filesystem {
     requires build.jenesis.repository.store;
+    exports build.jenesis.repository.store.filesystem to build.jenesis.repository.store.filesystem.test;
     provides build.jenesis.repository.store.ArtifactStoreProvider
             with build.jenesis.repository.store.filesystem.FilesystemArtifactStoreProvider;
 }

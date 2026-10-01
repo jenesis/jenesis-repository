@@ -20,6 +20,19 @@ import build.jenesis.repository.store.OwnerOnly;
  */
 public final class FilesystemArtifactStoreProvider implements ArtifactStoreProvider {
 
+    /**
+     * How a write reaches the disk: {@code strict}, the default, forces each file and the rename that places it before
+     * the write answers, so an acknowledged write survives a power loss; {@code relaxed} renames atomically and leaves
+     * the flush to the operating system, so a power loss can roll back the last few seconds of writes but never tear
+     * one. Strict costs a synchronous flush or two per write - a fraction of a millisecond on a disk that protects its
+     * cache against power loss, ten or more on one that does not - which is what relaxed is for: a development
+     * machine, a test lane.
+     */
+    public static final String DURABILITY_KEY = "jenrepo.filesystem.durability";
+
+    /** The value of {@link #DURABILITY_KEY} a deployment gets when it sets none. */
+    public static final String DURABILITY_DEFAULT = "strict";
+
     @Override
     public String name() {
         return "filesystem";
@@ -43,6 +56,16 @@ public final class FilesystemArtifactStoreProvider implements ArtifactStoreProvi
         } catch (IOException e) {
             throw new UncheckedIOException("Cannot create filesystem store root " + path, e);
         }
-        return new FilesystemArtifactStore(path);
+        return new FilesystemArtifactStore(path, durable(config.apply(DURABILITY_KEY)));
+    }
+
+    private static boolean durable(String value) {
+        String chosen = value == null || value.isBlank() ? DURABILITY_DEFAULT : value.strip().toLowerCase(Locale.ROOT);
+        return switch (chosen) {
+            case "strict" -> true;
+            case "relaxed" -> false;
+            default -> throw new IllegalArgumentException(DURABILITY_KEY + "=" + value
+                    + " is not a durability this store offers: strict (the default) or relaxed");
+        };
     }
 }

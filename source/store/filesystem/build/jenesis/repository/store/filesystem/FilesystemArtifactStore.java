@@ -53,18 +53,36 @@ public final class FilesystemArtifactStore implements ArtifactStore {
      *  the mount, and two nodes contending for one key contend under the same top-level root. */
     private final Path locks;
 
+    /** Whether a write is forced to the disk before it answers ({@link #durableMove}); every scoped view shares it. */
+    private final boolean durable;
+
+    /** A durable store at {@code root}. */
     public FilesystemArtifactStore(Path root) {
-        this(root, root.resolve(CAS_LOCKS));
+        this(root, true);
     }
 
-    private FilesystemArtifactStore(Path root, Path locks) {
+    /** A store at {@code root} whose writes are forced to the disk before they answer when {@code durable}, and
+     *  otherwise left to the operating system to flush - each still an atomic rename, so a crash loses the last few
+     *  seconds of writes rather than tearing one. */
+    public FilesystemArtifactStore(Path root, boolean durable) {
+        this(root, root.resolve(CAS_LOCKS), durable);
+    }
+
+    private FilesystemArtifactStore(Path root, Path locks, boolean durable) {
         this.root = root;
         this.locks = locks;
+        this.durable = durable;
+    }
+
+    /** Whether this store's writes are forced to the disk before they answer. */
+    public boolean durable() {
+        return durable;
     }
 
     @Override
     public ArtifactStore scope(String tenant) {
-        return new FilesystemArtifactStore(root.resolve(FileNames.encode(ArtifactStore.segment(tenant))), locks);
+        return new FilesystemArtifactStore(root.resolve(FileNames.encode(ArtifactStore.segment(tenant))), locks,
+                durable);
     }
 
     @Override
@@ -187,23 +205,30 @@ public final class FilesystemArtifactStore implements ArtifactStore {
      *
      * <p>Each costs a synchronous flush on the write path - a few milliseconds a write on a local SSD, more on a
      * network disk - which is the price of a {@code 201} meaning stored. A file system that cannot open a directory
-     * for syncing (not one this store is deployed on) skips the directory half rather than failing the write.
+     * for syncing (not one this store is deployed on) skips the directory half rather than failing the write. A store
+     * that is not {@linkplain #durable durable} renames and leaves the flushes to the operating system.
      */
-    private static void durableMove(Path temp, Path target) throws IOException {
+    private void durableMove(Path temp, Path target) throws IOException {
         force(temp);
         Files.move(temp, target, StandardCopyOption.REPLACE_EXISTING, StandardCopyOption.ATOMIC_MOVE);
         forceDirectory(target.getParent());
     }
 
-    /** Force a spooled file's bytes to the disk. */
-    private static void force(Path file) throws IOException {
+    /** Force a spooled file's bytes to the disk, on a durable store. */
+    private void force(Path file) throws IOException {
+        if (!durable) {
+            return;
+        }
         try (FileChannel channel = FileChannel.open(file, StandardOpenOption.WRITE)) {
             channel.force(true);
         }
     }
 
-    /** Force a directory's entries - a rename into it - to the disk. */
-    private static void forceDirectory(Path directory) throws IOException {
+    /** Force a directory's entries - a rename into it - to the disk, on a durable store. */
+    private void forceDirectory(Path directory) throws IOException {
+        if (!durable) {
+            return;
+        }
         try (FileChannel channel = FileChannel.open(directory, StandardOpenOption.READ)) {
             channel.force(true);
         } catch (UnsupportedOperationException | AccessDeniedException _) {
