@@ -6,27 +6,19 @@ import build.jenesis.repository.compliance.Waiver;
 import build.jenesis.repository.compliance.Waivers;
 
 /**
- * The accept-risk waiver contract over the findings/annotations substrate: an operator's time-boxed decision to accept
- * a known vulnerability on a coordinate, recorded as a {@code (source="operator", name="accept-risk")} label on the
- * still-present finding - the same operator-confirmed-candidate model {@link ReviewLabels} uses, so the ledger stays
- * the single source of truth and the gate and the vulnerability ranking read a durable annotation rather than a side
- * store. The label's value is the ISO-8601 instant the acceptance {@linkplain #expiryOf expires}; an optional
- * {@link #NOTE} sibling carries the operator's justification, and re-applying refreshes the own value (the sanctioned
- * refresh), so extending or revoking a waiver is a relabel, never a deletion.
- *
- * <p>Categorize-never-discard holds: a waiver is a label on a finding that stays fully present and served, a revoke is a
- * relabel to {@link #REVOKED} rather than a removal, and the acceptance auto-lapses at its expiry with no sweep having
- * to retract it - a reader simply stops honouring it once {@code expires} is past. {@link #apply} refuses a row that is
- * not an advisory-derived finding (a vulnerability or malware kind): a license fact, a gate decision or an AI candidate
- * is not a risk an accept-risk waiver defers, and asking throws.
+ * The accept-risk waiver contract: an operator's time-boxed acceptance of a known vulnerability on a coordinate,
+ * recorded as a {@code (source="operator", name="accept-risk")} label on the still-present finding, so the gate and the
+ * ranking read the ledger rather than a side store. The value is the ISO-8601 instant the acceptance
+ * {@linkplain #expiryOf expires}, with an optional {@link #NOTE} justification; extending is a relabel and revoking a
+ * relabel to {@link #REVOKED}. A waiver lapses at its expiry with no sweep, since readers stop honouring it. Only
+ * advisory-derived findings take one ({@link #WAIVABLE}).
  */
 public final class WaiverLabels {
 
     private WaiverLabels() {
     }
 
-    /** The label source an operator's accept-risk decision writes under - the same attributed operator channel a
-     *  review decision uses. */
+    /** The label source an operator's accept-risk decision writes under, shared with review decisions. */
     public static final String SOURCE = "operator";
 
     /** The label name carrying the acceptance's expiry instant (its value is the ISO-8601 {@code expires}). */
@@ -35,12 +27,10 @@ public final class WaiverLabels {
     /** The label name carrying the operator's optional justification for accepting the risk. */
     public static final String NOTE = "accept-risk-note";
 
-    /** The {@link #NAME} value a revoked waiver carries - a relabel, never a removal, so the acceptance stops being
-     *  honoured at once while the still-present row records that it once was. */
+    /** The {@link #NAME} value a revoked waiver carries, so the row still records that the risk was once accepted. */
     public static final String REVOKED = "revoked";
 
-    /** The finding kinds an accept-risk waiver may be applied to - the advisory-derived ones the gate suppresses by
-     *  advisory id (a vulnerability, or a malicious-package verdict). */
+    /** The finding kinds a waiver applies to: the advisory-derived ones the gate suppresses by advisory id. */
     public static final Set<Finding.Kind> WAIVABLE = Set.of(Finding.Kind.VULNERABILITY, Finding.Kind.MALWARE);
 
     /** The most characters of justification one waiver keeps. */
@@ -51,8 +41,7 @@ public final class WaiverLabels {
         return WAIVABLE.contains(kind);
     }
 
-    /** The instant this finding's accept-risk waiver expires, or empty when it carries no waiver, is revoked, or the
-     *  recorded value does not parse as an instant (a corrupt label never over-accepts). */
+    /** The instant this finding's waiver expires, or empty when it has none, is revoked, or does not parse. */
     public static Optional<Instant> expiryOf(Finding finding) {
         for (Finding.Label label : finding.labels()) {
             if (SOURCE.equals(label.source()) && NAME.equals(label.name())) {
@@ -75,12 +64,8 @@ public final class WaiverLabels {
     }
 
     /**
-     * The active accept-risk waivers among a coordinate's stored advisory findings, keyed by advisory id <em>and</em>
-     * every CVE alias the finding carries - the same identifiers the vulnerability view de-duplicates rows by - each
-     * key holding the ISO-8601 instant the acceptance stands until. A view badges a merged advisory row by looking up
-     * its id, falling back to its CVE aliases; a revoked or expired waiver contributes nothing, so the badge shows only
-     * a still-standing acceptance. Mirrors {@link ReachabilityLabels#verdicts} so the vulnerability report's waiver
-     * badge keys exactly as its reachability and applicability badges do, without a second store walk.
+     * The waivers standing at {@code now} among a coordinate's advisory findings, keyed as
+     * {@link ReachabilityLabels#verdicts} keys them, each holding the ISO-8601 instant the acceptance stands until.
      */
     public static Map<String, String> expiries(List<Finding> findings, Instant now) {
         Map<String, String> expiries = new HashMap<>();
@@ -112,13 +97,11 @@ public final class WaiverLabels {
     }
 
     /**
-     * Record an operator's accept-risk waiver on the advisory-derived finding identified by {@code (source, id)} on a
-     * coordinate: the expiry label, and the note label when a non-blank justification was given. A repeated apply
-     * refreshes its own labels (the sanctioned own-value refresh), so extending a waiver is a relabel.
+     * Records a waiver on the advisory-derived finding {@code (source, id)}: the expiry label, and the note label for a
+     * non-blank justification. A repeated apply refreshes its own labels.
      *
-     * @throws IllegalArgumentException when no such finding exists on the coordinate, the finding is not
-     *                                  advisory-derived, or the expiry is not in the future (a time-boxed exception must
-     *                                  bound a future window)
+     * @throws IllegalArgumentException when no such finding exists, it is not advisory-derived, or the expiry is not
+     *                                  in the future
      */
     public static void apply(Findings ledger, String ecosystem, String coordinate, String version,
                              String source, String id, Instant expires, String note, Instant now)
@@ -140,8 +123,7 @@ public final class WaiverLabels {
         }
     }
 
-    /** Revoke an operator's accept-risk waiver: relabel the expiry to {@link #REVOKED} so it stops being honoured at
-     *  once, leaving the still-present finding to record that the risk was once accepted.
+    /** Revokes a waiver by relabelling its expiry to {@link #REVOKED}.
      *
      *  @throws IllegalArgumentException when no such finding exists on the coordinate */
     public static void revoke(Findings ledger, String ecosystem, String coordinate, String version,
@@ -152,10 +134,7 @@ public final class WaiverLabels {
     }
 
     /**
-     * Every active accept-risk waiver recorded in a repository's ledger, as the ecosystem-neutral {@link Waiver} the
-     * compliance gate matches - projected from the {@code accept-risk} annotations on the advisory-derived findings, so
-     * the gate reads the same durable ledger the review surfaces write. A revoked or expired waiver is skipped, so the
-     * matcher only ever carries what is currently standing at {@code now}.
+     * Every waiver standing at {@code now} in a repository's ledger, as the {@link Waiver} the gate matches.
      */
     public static List<Waiver> waivers(Findings ledger, Instant now) throws IOException {
         List<Waiver> waivers = new ArrayList<>();
@@ -175,27 +154,17 @@ public final class WaiverLabels {
     }
 
     /**
-     * A repository's active accept-risk waivers as the {@link Waivers} overlay the compliance gate consults - the
-     * ledger-backed mirror of {@code VexStore.asVex()}, so a deployment wires waiver suppression into the gate exactly
-     * as it wires VEX: resolve this per tenant/repository and hand it to {@link build.jenesis.repository.compliance.ComplianceGate#waivers}.
-     * Projects {@link #waivers(Findings, Instant)} through {@link Waivers#of}, so a revoked or expired waiver is already
-     * dropped; a ledger with no standing waiver yields an empty matcher that suppresses nothing (the gate then behaves
-     * exactly as before it was wired). The one bridge from the durable ledger to the gate's matcher, so no caller
-     * re-implements the {@code waivers(...) -> Waivers.of(...)} step.
+     * A repository's standing waivers as the {@link Waivers} overlay handed to
+     * {@link build.jenesis.repository.compliance.ComplianceGate#waivers}, as VEX is; empty when none stands.
      */
     public static Waivers overlay(Findings ledger, Instant now) throws IOException {
         return Waivers.of(waivers(ledger, now));
     }
 
     /**
-     * The active accept-risk waivers standing on just the coordinate versions about to be assessed, as the
-     * {@link Waivers} overlay the compliance gate consults - the coordinate-scoped counterpart of {@link #overlay}.
-     * Where {@code overlay} walks the whole repository ledger to project every standing waiver, this reads only each
-     * inspected subject's own finding record (a point lookup per coordinate - {@link Findings#of}), so a publish into a
-     * busy repository never pays an {@code O(ledger)} walk before the gate assesses. A waiver on any other
-     * coordinate is irrelevant to this publish (the gate only produces findings for the subjects it is handed), so
-     * scoping to the subjects is exactly the overlay the gate needs and no suppression is lost. Duplicate coordinates
-     * among the subjects are read once; a subject whose coordinate carries no standing waiver contributes nothing.
+     * The {@link #overlay} restricted to the subjects about to be assessed: one {@link Findings#of} point read per
+     * distinct coordinate rather than a ledger walk, losing nothing, since the gate only judges the subjects it is
+     * handed.
      */
     public static Waivers overlayFor(Findings ledger, List<ComplianceGate.Subject> subjects, Instant now)
             throws IOException {
@@ -231,8 +200,7 @@ public final class WaiverLabels {
         throw new IllegalArgumentException("No finding " + source + ":" + id + " on " + coordinate + ":" + version);
     }
 
-    /** The instant the standing waiver was recorded (its {@link #NAME} label's {@code when}), or {@code null} when the
-     *  finding carries no such label - the grant instant the matcher uses to let the newest waiver win. */
+    /** When the waiver was granted, or {@code null} without one; the newest waiver wins. */
     private static Instant grantedAt(Finding finding) {
         for (Finding.Label label : finding.labels()) {
             if (SOURCE.equals(label.source()) && NAME.equals(label.name())) {

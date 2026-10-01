@@ -3,32 +3,19 @@ package build.jenesis.repository.settings;
 import module java.base;
 
 /**
- * The app-layer envelope cipher for {@link Setting.Kind#SECRET SECRET} settings, sitting beside the
- * {@link SettingsSecrets} classifier so the "which keys are secret" and "how a secret is protected at rest" concerns
- * live together. A SECRET value written through the console/API is encrypted before it reaches the store, so the store
- * holds only ciphertext (the store-read threat: an attacker who can read the store but not the key); it is decrypted transparently
- * when read for use.
+ * The envelope cipher for {@link Setting.Kind#SECRET SECRET} settings: a secret written through the console or API is
+ * encrypted before it reaches the store, so someone who can read the store but not the key sees only ciphertext.
  *
- * <p><b>Algorithm (prefer libraries).</b> JDK {@code AES/GCM/NoPadding} from {@code java.base} - a maintained,
- * native-image-safe AEAD with no added dependency (Tink would add reflection metadata for no gain at this scale). A
- * fresh {@link SecureRandom} 12-byte IV per encryption, a 256-bit key, and the 128-bit GCM tag authenticate the
- * ciphertext so a tampered value fails loud rather than decrypting to garbage.
+ * <p>JDK {@code AES/GCM/NoPadding} with a 256-bit key, a fresh 12-byte IV per encryption and a 128-bit tag, so a
+ * tampered value fails rather than decrypting to garbage.
  *
- * <p><b>Master keys and rotation.</b> The keys come from the {@value #ENV} environment variable (the
- * env-&gt;Spring-Boot bootstrap path, like the store credentials themselves): one or more comma-separated
- * {@code <key-id>:<base64(32-byte key)>} entries. The <em>first</em> entry is the active writer (every new envelope is
- * sealed under it); <em>all</em> entries are candidate decryptors, addressed by the {@code <key-id>} an envelope
- * carries, so a rotation prepends a new key, restarts, and later drops the old key once nothing is sealed under it.
+ * <p>The keys come from {@value #ENV}: comma-separated {@code <key-id>:<base64(32-byte key)>} entries. The first seals
+ * every new envelope and all of them decrypt, addressed by the key id an envelope carries, so a rotation prepends a
+ * key, restarts, and drops the old one once nothing is sealed under it.
  *
- * <p><b>Envelope format.</b> {@code enc:v1:<key-id>:<base64(iv || ciphertext || tag)>}. The {@code v1} gives algorithm
- * agility and the {@code <key-id>} gives rotation addressing; the literal {@code enc:v1:} prefix is unambiguous because
- * no legitimate secret value collides with it after the clean cutover (a stored SECRET value that is <em>not</em> an
- * envelope is treated as invalid/needs-re-entry, never as plaintext).
- *
- * <p><b>Fail-fast.</b> A malformed {@value #ENV} - an entry that is not {@code <id>:<base64>}, base64 that does
- * not decode, or a key that is not 32 bytes - throws at construction (i.e. at boot), naming the environment variable,
- * rather than silently disabling encryption. {@code java.base} only, like every settings contract, so any surface can
- * hold a cipher without a heavier dependency.
+ * <p>An envelope is {@code enc:v1:<key-id>:<base64(iv || ciphertext || tag)>}; a stored SECRET value that is not one
+ * is invalid and needs re-entry, never plaintext. A malformed {@value #ENV} throws at construction, naming the
+ * variable, rather than disabling encryption.
  */
 public final class SecretCipher {
 
@@ -42,8 +29,8 @@ public final class SecretCipher {
     private static final int IV_BYTES = 12;       // GCM standard nonce
     private static final int TAG_BITS = 128;      // GCM authentication tag
 
-    /** The candidate decryptors by key-id (insertion-ordered), the first of which is the active writer; empty when the
-     *  env var is unset (the deployment then persists no secret and refuses a secret write). */
+    /** The decryptors by key id, the first the active writer; empty when {@value #ENV} is unset, and a secret write is
+     *  then refused. */
     private final SequencedMap<String, SecretKey> keys;
     private final SecureRandom random = new SecureRandom();
 
@@ -57,10 +44,9 @@ public final class SecretCipher {
         return of(System.getenv(ENV));
     }
 
-    /** The cipher configured from a raw key specification ({@code <key-id>:<base64>[,<key-id>:<base64>]...}), the same
-     *  shape {@value #ENV} carries; a {@code null}/blank spec yields an unconfigured cipher. Package-and-test entry
-     *  point so a suite injects keys without mutating the process environment. A malformed spec throws, naming the
-     *  environment variable. */
+    /** The cipher configured from a key specification in the shape {@value #ENV} carries; {@code null} or blank yields
+     *  an unconfigured cipher, and a malformed one throws naming the variable. Lets a test inject keys without touching
+     *  the environment. */
     public static SecretCipher of(String spec) {
         LinkedHashMap<String, SecretKey> parsed = new LinkedHashMap<>();
         if (spec != null && !spec.isBlank()) {
@@ -103,15 +89,14 @@ public final class SecretCipher {
         return !keys.isEmpty();
     }
 
-    /** Whether {@code value} is an {@code enc:v1:} envelope this cipher produces - a cheap prefix check, so a
-     *  non-secret read never touches the cipher. */
+    /** Whether {@code value} is an {@code enc:v1:} envelope: a prefix check, so a non-secret read never touches the
+     *  cipher. */
     public static boolean isEnvelope(String value) {
         return value != null && value.startsWith(PREFIX);
     }
 
-    /** Seal {@code plaintext} under the active (first) master key into an {@code enc:v1:<key-id>:<base64>} envelope.
-     *  A fresh random IV per call. Throws when no key is configured - callers must gate on {@link #configured()} and
-     *  refuse a secret write with the operator remedy first. */
+    /** Seals {@code plaintext} under the active key with a fresh IV. Throws when no key is configured; callers check
+     *  {@link #configured()} and refuse the write with the remedy first. */
     public String encrypt(String plaintext) {
         if (!configured()) {
             throw new IllegalStateException("cannot encrypt a secret: " + ENV + " is not configured");
@@ -136,11 +121,10 @@ public final class SecretCipher {
     private static final String PLAIN = "plain:";
 
     /**
-     * {@code secret} as a stored value, for a secret the deployment generates and cannot work without - the key a
-     * repository signs its index with: sealed into an envelope under the active master key where one is configured,
-     * and otherwise kept as {@code plain:} and its base64, since refusing to store it would leave the repository
-     * unable to sign at all. {@link #opened} reads either, and {@link #isSealed} tells a reader holding a master key
-     * that a plain value is still to be sealed.
+     * {@code secret} as a stored value, for a secret the deployment generates and cannot work without, such as a
+     * repository's index-signing key: sealed when a master key is configured, otherwise {@code plain:} and its base64,
+     * since refusing would leave the repository unable to sign. {@link #opened} reads either; {@link #isSealed} tells a
+     * reader holding a key that a plain value is still to be sealed.
      */
     public String sealed(byte[] secret) {
         String encoded = Base64.getEncoder().encodeToString(secret);
@@ -165,10 +149,8 @@ public final class SecretCipher {
         return isEnvelope(stored);
     }
 
-    /** Open an {@code enc:v1:<key-id>:<base64>} envelope with the candidate key its {@code <key-id>} names.
-     *  Fail-closed: a malformed envelope, a key-id no configured key matches (wrong/absent key, e.g. after a botched
-     *  rotation), or a GCM tag mismatch (tamper) throws - a secret that cannot be decrypted must never read as blank
-     *  or as its ciphertext. */
+    /** Opens an envelope with the key its id names. Fail-closed: a malformed envelope, an unknown key id or a tag
+     *  mismatch throws, so an undecryptable secret never reads as blank or as its ciphertext. */
     public String decrypt(String envelope) {
         if (!isEnvelope(envelope)) {
             throw new IllegalStateException("not an " + PREFIX + " secret envelope");

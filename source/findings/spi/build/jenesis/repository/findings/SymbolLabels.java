@@ -3,22 +3,14 @@ package build.jenesis.repository.findings;
 import module java.base;
 
 /**
- * The vulnerable-symbol contract shared by everything that names the code an advisory finding is about - fixed
- * here, beside {@link ReachabilityLabels}, so the writers and the reader never drift. Two channels carry symbols:
- * a symbol-aware feed records them authoritatively as the finding's {@link #ATTRIBUTE} (part of the row's own
- * facts, refreshed with every re-scan), and the AI extractor - which only ever <em>refines</em> - attaches them as
- * a {@code (source="ai-symbols", name="symbols")} {@linkplain Finding.Label label}: an addition beside the row that
- * survives a feed re-record, is separately attributed (its sibling {@code model} label names exactly which model
- * answered and where it runs), and replaces only its own prior value on re-extraction. {@link #symbolsOf} folds the
- * two into one reader-side rule: <strong>the feed's attribute always wins</strong>; the AI label is consulted only
- * where no feed named the symbols, so an extraction can sharpen a coarse verdict but never displace authoritative
- * feed data.
+ * The vulnerable-symbol contract: the code an advisory finding is about. A symbol-aware feed records symbols
+ * authoritatively as the finding's {@link #ATTRIBUTE}; an AI extractor may add them as a
+ * {@code (source="ai-symbols", name="symbols")} {@linkplain Finding.Label label}, which survives a feed re-record.
+ * {@link #symbolsOf} prefers the feed's attribute and consults the label only where no feed named symbols.
  *
- * <p>The symbol spelling is the one the reachability engine parses: a comma- or whitespace-separated list of
- * {@code com.example.Lib} class names and {@code com.example.Lib#method} members. A symbol set that resolves to
- * nothing in the dependency's actual classes widens the reachability test to the whole artifact rather than
- * narrowing it - so a hallucinated or version-mismatched extraction can only ever coarsen a verdict, never
- * quietly clear it.
+ * <p>The spelling is the one the reachability engine parses: comma- or whitespace-separated {@code com.example.Lib}
+ * classes and {@code com.example.Lib#method} members. A set that resolves to nothing widens the reachability test to
+ * the whole artifact, so a wrong extraction can only coarsen a verdict, never clear it.
  */
 public final class SymbolLabels {
 

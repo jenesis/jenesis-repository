@@ -3,15 +3,11 @@ package build.jenesis.repository.findings;
 import module java.base;
 
 /**
- * The reachability-verdict label contract shared by the writer (the {@code security/reachability} sweep) and every
- * surface that badges or filters a vulnerability finding by it - fixed here, beside {@link AdvisoryFindings}, so the
- * two sides never drift. The sweep attaches one label per advisory finding, {@code (source="reachability",
- * name="verdict")}, whose value is a three-valued category: {@link #REACHABLE} (a static call path from some held
- * artifact's own code into the vulnerable symbols exists), {@link #NOT_REACHABLE} (the static graph is confident no
- * such path exists from any analyzed consumer), or {@link #UNKNOWN} (the graph met a blind spot - reflection,
- * unresolvable dispatch, missing bytecode - and honestly refuses to assert either way). The label is a filterable
- * attribute, never a filter that removes anything: a finding without it simply was not analyzed, and every view
- * defaults to showing all findings regardless of verdict.
+ * The reachability-verdict label contract, shared by the reachability sweep and every surface that badges or filters
+ * an advisory finding by it: a {@code (source="reachability", name="verdict")} label of {@link #REACHABLE} (a static
+ * call path from some held artifact's code into the vulnerable symbols exists), {@link #NOT_REACHABLE} (no analyzed
+ * consumer has one) or {@link #UNKNOWN} (the graph met a blind spot). The label narrows a view; it never removes a
+ * finding, and a finding without it was not analyzed.
  */
 public final class ReachabilityLabels {
 
@@ -49,9 +45,8 @@ public final class ReachabilityLabels {
         return Optional.empty();
     }
 
-    /** The stronger of two verdicts - the conservative merge a view uses when advisory rows from several feeds
-     *  collapse onto one displayed advisory: {@code reachable} outranks {@code unknown} outranks
-     *  {@code not-reachable}, so a merged badge never under-reports. A {@code null} side yields the other. */
+    /** The stronger of two verdicts ({@code reachable} over {@code unknown} over {@code not-reachable}), for rows from
+     *  several feeds merged onto one advisory; a {@code null} side yields the other. */
     public static String strongest(String left, String right) {
         if (left == null) {
             return right;
@@ -63,10 +58,8 @@ public final class ReachabilityLabels {
     }
 
     /**
-     * The verdicts of a coordinate's stored advisory findings, keyed by advisory id <em>and</em> every CVE alias the
-     * finding carries - the same identifiers the vulnerability view de-duplicates rows by - each key holding the
-     * strongest verdict among the rows it appeared on. A view renders the badge of a merged advisory by looking up
-     * its id, falling back to its CVE aliases.
+     * The verdicts of a coordinate's advisory findings, keyed by advisory id and every CVE alias (the identifiers the
+     * vulnerability view de-duplicates by), each holding the strongest verdict among its rows.
      */
     public static Map<String, String> verdicts(List<Finding> findings) {
         Map<String, String> verdicts = new HashMap<>();
@@ -86,10 +79,8 @@ public final class ReachabilityLabels {
     }
 
     /**
-     * Whether a row whose badge is {@code verdict} (empty when not analyzed) passes the view filter {@code filter}
-     * (blank matches everything). An un-analyzed row matches the {@code unknown} filter: absence of proof <em>is</em>
-     * unknown reachability, so the conservative triage view ("everything not proven unreachable") never hides what
-     * the engine has not reached yet. The filter is a view narrowing only - no store row is touched by it.
+     * Whether a row whose badge is {@code verdict} passes the view filter {@code filter}; blank matches everything. An
+     * un-analyzed row matches {@code unknown}, so a triage view never hides what the engine has not reached.
      */
     public static boolean matches(String verdict, String filter) {
         if (filter == null || filter.isBlank()) {

@@ -3,20 +3,12 @@ package build.jenesis.repository.findings;
 import module java.base;
 
 /**
- * The operator-review contract for AI-produced findings, fixed here so the review surfaces (the console queue, the
- * {@code /api/findings/review} endpoint) and every reader of a review mark never drift. An AI-produced row - a
- * {@link Finding.Kind#AI_CANDIDATE} the code-audit sweep emitted, or an {@link Finding.Kind#APPLICABILITY}
- * judgement - is always a <em>labeled candidate the operator confirms or dismisses</em>, never an authoritative
- * verdict; this contract is that confirmation channel: a {@code (source="operator", name="review")} label whose
- * value is {@link #CONFIRMED} or {@link #DISMISSED}, with the optional {@link #NOTE} sibling carrying the
- * reviewer's reasoning.
- *
- * <p>Categorize-never-discard holds for the review itself: a dismissal is a label, not a deletion or a
- * supersession - the row stays fully present and served with its mark, the pending queue is merely the <em>view</em>
- * of unreviewed rows, and a decision is reversible (the label channel's own-value refresh lets a reviewer flip a
- * mistaken dismissal back). {@link #apply} refuses any row that is not AI-produced: an advisory feed's row or a
- * gate decision is authoritative data no review label may editorialize - dismissing those is exactly the discard
- * semantics this ledger forbids.
+ * The operator-review contract for AI-produced findings: an {@link Finding.Kind#AI_CANDIDATE} or
+ * {@link Finding.Kind#APPLICABILITY} row is a candidate the operator confirms or dismisses, through a
+ * {@code (source="operator", name="review")} label of {@link #CONFIRMED} or {@link #DISMISSED} with an optional
+ * {@link #NOTE}. A dismissal is a label, not a deletion; the pending queue is the view of unreviewed rows, and a
+ * decision can be flipped. {@link #apply} refuses a row that is not AI-produced, since a feed's row or a gate decision
+ * is authoritative.
  */
 public final class ReviewLabels {
 
@@ -35,10 +27,10 @@ public final class ReviewLabels {
     /** The operator confirmed the AI-produced finding as worth acting on. */
     public static final String CONFIRMED = "confirmed";
 
-    /** The operator dismissed the AI-produced finding - a mark on the still-present row, never a removal. */
+    /** The operator dismissed the AI-produced finding. */
     public static final String DISMISSED = "dismissed";
 
-    /** The finding kinds a review decision may be applied to - exactly the AI-produced ones. */
+    /** The finding kinds a review decision applies to: the AI-produced ones. */
     public static final Set<Finding.Kind> REVIEWABLE = Set.of(Finding.Kind.AI_CANDIDATE, Finding.Kind.APPLICABILITY);
 
     /** The most characters of note one review keeps. */
@@ -65,13 +57,11 @@ public final class ReviewLabels {
     }
 
     /**
-     * Apply an operator's review decision to the AI-produced finding identified by {@code (source, id)} on a
-     * coordinate: the decision label, and the note label when a non-blank note was given. A repeated review
-     * refreshes its own labels (the sanctioned own-value refresh), so a decision is always reversible.
+     * Applies a review decision to the AI-produced finding {@code (source, id)}: the decision label, and the note label
+     * for a non-blank note. A repeated review refreshes its own labels.
      *
-     * @throws IllegalArgumentException when the decision spelling is unknown, no such finding exists on the
-     *                                  coordinate, or the finding is not AI-produced (an authoritative row is
-     *                                  never editorialized by a review label)
+     * @throws IllegalArgumentException when the decision is unknown, no such finding exists, or it is not
+     *                                  AI-produced
      */
     public static void apply(Findings ledger, String ecosystem, String coordinate, String version,
                              String source, String id, String decision, String note, Instant now)

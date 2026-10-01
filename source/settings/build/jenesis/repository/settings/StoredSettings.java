@@ -8,17 +8,11 @@ import build.jenesis.repository.store.Epoch;
 import build.jenesis.repository.store.Retries;
 
 /**
- * The settings documents of one repository or one build-cache project: the same per-module JSON documents
- * ({@link SettingsDocuments}) the deployment keeps at its root and a tenant inside its scope, kept inside the
- * repository's or the project's own scope - {@code <tenant>/<repository>/.system/config/settings/<module>.json} and
- * {@code .system/cache/<tenant>/<project>/.system/config/settings/<module>.json}. So what a repository or a project is
- * configured with lives with it, goes with it when it is deleted, and is written the way every other level is: one
- * compare-and-set per owning module's document.
- *
- * <p>The repository server, the console and the build cache each read these through here, which is what lets a
- * repository's value resolve over its tenant's and the deployment's the same way on every surface. Nothing stored at
- * these two levels is a secret - the census refuses a repository or project setting of the secret kind - so, unlike
- * the deployment's documents, nothing here is encrypted.
+ * The settings documents of one repository or build-cache project: the per-module {@link SettingsDocuments} kept in
+ * its own scope ({@code <tenant>/<repository>/.system/config/settings/<module>.json},
+ * {@code .system/cache/<tenant>/<project>/.system/config/settings/<module>.json}), so they go with it when it is
+ * deleted, written as one compare-and-set per module's document. Every surface reads them through here, so a value
+ * resolves the same way everywhere. No setting at these levels may be a secret, so nothing here is encrypted.
  */
 public final class StoredSettings {
 
@@ -31,9 +25,8 @@ public final class StoredSettings {
     }
 
     /**
-     * The scope a build-cache project's documents live in: inside the project, in the build cache's space
-     * ({@code .system/cache/<tenant>/<project>}), so deleting the project deletes them with its entries. A project
-     * name is the cache's own grammar, which the scope segment rule admits.
+     * The scope a build-cache project's documents live in, {@code .system/cache/<tenant>/<project>}, so deleting the
+     * project deletes them with its entries.
      */
     public static ArtifactStore project(ArtifactStore root, String tenant, String project) {
         return root.scope(Scopes.SYSTEM).scope(Scopes.CACHE).scope(Scopes.require("tenant", tenant))
@@ -41,11 +34,9 @@ public final class StoredSettings {
     }
 
     /**
-     * A build-cache project's effective configuration read straight from the store - its own documents over its
-     * tenant's over the deployment's, {@code null} for a key none of them sets - for the build cache, which runs no
-     * settings service of its own. A tenant's or the deployment's value counts only for a key it may hold
-     * ({@link SettingsScopes#settableAt}), so a local key is the project's own or nothing. No operator pin applies: the
-     * deployment document is where every project's default is set.
+     * A build-cache project's effective configuration read from the store, for the build cache, which runs no settings
+     * service: its own documents over its tenant's over the deployment's, each wider level counting only for a key it
+     * may hold ({@link SettingsScopes#settableAt}); {@code null} when none sets it. No operator pin applies.
      */
     public static UnaryOperator<String> projectChain(ArtifactStore root, String tenant, String project)
             throws IOException {
@@ -73,11 +64,9 @@ public final class StoredSettings {
     }
 
     /**
-     * The values a scope's documents hold for the modules that declare a setting of {@code level}
-     * ({@link SettingsScopes#modulesDeclaring}): one point read per such module - a repository level has two, a
-     * project level one - and never a listing. It is the read a repository's and a project's requests make, and the
-     * one the build cache makes each policy window, so it costs the same however much the scope holds and is cheaper
-     * than the listing it replaces on an object store, where a listing is billed as about twelve reads.
+     * The values a scope's documents hold for the modules declaring a setting of {@code level}
+     * ({@link SettingsScopes#modulesDeclaring}): one point read per module and no listing, so a request costs the same
+     * however much the scope holds.
      */
     public static Map<String, String> read(ArtifactStore scope, Setting.Scope level) throws IOException {
         Map<String, String> merged = new TreeMap<>();
@@ -90,9 +79,8 @@ public final class StoredSettings {
         return merged;
     }
 
-    /** Every value stored in a scope's documents, merged across every module's document found by listing them; empty
-     *  when there are none. For the one-time move, which runs off the request path and must see a document whatever
-     *  module wrote it; a request reads by level ({@link #read(ArtifactStore, Setting.Scope)}). */
+    /** Every value in a scope's documents, found by listing them: for the one-time move off the request path, which
+     *  must see any module's document. A request reads by level ({@link #read(ArtifactStore, Setting.Scope)}). */
     public static Map<String, String> read(ArtifactStore scope) throws IOException {
         Map<String, String> merged = new TreeMap<>();
         for (String child : scope.list(SettingsDocuments.ROOT)) {
@@ -108,10 +96,9 @@ public final class StoredSettings {
     }
 
     /**
-     * Set each non-blank value and clear each blank one, in each key's owning module document - one compare-and-set
-     * per document, re-read and retried on a lost race so a concurrent change to another key is never clobbered. The
-     * caller has validated every value ({@link SettingsContributor#refusal(String, String, Setting.Scope,
-     * UnaryOperator)}); this only persists them.
+     * Sets each non-blank value and clears each blank one, one compare-and-set per owning module's document, so a
+     * concurrent change to another key is never clobbered. The caller has validated every value
+     * ({@link SettingsContributor#refusal(String, String, Setting.Scope, UnaryOperator)}).
      */
     public static void write(ArtifactStore scope, Map<String, String> values) throws IOException {
         Map<String, Map<String, String>> byModule = new TreeMap<>();
@@ -134,17 +121,15 @@ public final class StoredSettings {
         }
     }
 
-    /** Move the settings epoch of the deployment whose root {@code root} is, after a write that did not go through the
-     *  repository server's own settings service - so every node's scheduled re-read picks the write up
-     *  ({@link SettingsDocuments#EPOCH}). */
+    /** Moves the deployment's settings epoch ({@link SettingsDocuments#EPOCH}) after a write made outside the server's
+     *  settings service, so every node's re-read picks it up. */
     public static void changed(ArtifactStore root) throws IOException {
         new Epoch(root, SettingsDocuments.EPOCH).bump();
     }
 
     /**
-     * Set each value only where the scope's documents hold none for its key yet, returning what was written - the
-     * one-time move of a value kept elsewhere before it was a setting, which must never overwrite a value an
-     * operator has since set, and is safe to run again.
+     * Sets each value only where the scope holds none for its key, returning what was written: the one-time move of a
+     * value into a setting, which never overwrites an operator's value and is safe to re-run.
      */
     public static Map<String, String> writeAbsent(ArtifactStore scope, Map<String, String> values) throws IOException {
         Map<String, String> stored = read(scope);

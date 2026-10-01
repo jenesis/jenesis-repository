@@ -9,11 +9,10 @@ import build.jenesis.repository.store.Stamp;
 
 /**
  * The findings ledger over one repository's scoped store: any module records findings and labels against a
- * coordinate, every surface reads and filters them. Writes obey categorize-never-discard - {@link #record} merges
- * by {@code (source, id)} and never removes a sibling row, {@link #supersede} marks rather than deletes, and
- * {@link #label} adds an attributed annotation to an existing finding. The only removals are the artifact's own
- * lifecycle: an eviction deletes the version's rows with the version's document, and a discarded quarantine hold takes
- * its gate findings with it - the ledger's data never outlives what it describes, and never goes for any lesser reason.
+ * coordinate, every surface reads and filters them. Writes categorize and never discard: {@link #record} merges by
+ * {@code (source, id)}, {@link #supersede} marks rather than deletes, and {@link #label} adds an attributed annotation.
+ * Rows go only with the artifact: an eviction deletes the version's rows, and a discarded hold takes its gate
+ * findings.
  */
 public interface Findings {
 
@@ -21,19 +20,14 @@ public interface Findings {
     String PREFIX = "findings";
 
     /**
-     * The repository-level eviction-epoch marker: a one-segment in-tree sentinel beside the ledger's ecosystem subtrees
-     * (the same shape as {@code findings/scanned}, {@link #scanned scan stamp}), declared in the storage manifest by the
-     * persistence module. It carries an opaque token bumped every time a version's findings are reclaimed by
-     * <em>eviction</em> - the "dirty" signal the vulnerability rank index folds into its rebuild stamp so an evicted
-     * version's line drops on the next rank-index pass rather than lingering until the next <em>scan</em> moves
-     * {@link #scanned scan stamp}. It is deliberately NOT the scan stamp: an eviction is not a scan, so bumping the freshness
-     * stamp would both misreport the report's as-of instant and make the eventually-consistent read fall
-     * back - the two failure modes this separate epoch avoids.
+     * The eviction epoch's key, beside the ledger's ecosystem subtrees: a token bumped whenever a version's findings
+     * are reclaimed by eviction, which the vulnerability rank index folds into its rebuild stamp so an evicted version
+     * drops on its next pass. Separate from the {@link #scanned scan stamp}, since an eviction is not a scan and moving
+     * that stamp would misreport the report's as-of instant.
      */
     String EVICTED = PREFIX + "/evicted";
 
-    /** The key of the {@linkplain #scanned freshness stamp}, inside the prefix so it lives and dies with the
-     *  ledger's key-space. */
+    /** The key of the {@linkplain #scanned freshness stamp}, inside the ledger's key-space. */
     String SCANNED = PREFIX + "/scanned";
 
     /** Record (or refresh) a finding against a coordinate. An existing row with the same {@code (source, id)} keeps
@@ -57,11 +51,8 @@ public interface Findings {
             throws IOException;
 
     /**
-     * A batch of same-{@code (coordinate, version)} writes committed in <em>one</em> mutation: the rows to
-     * {@link #record} (append-or-refresh, categorize-never-discard) and the labels to attach to existing rows. This is
-     * the shape that collapses the per-row CAS storms - a scan pass's advisory rows, an AI sweep's per-finding labels
-     * plus its queryable judgement row - from one read-modify-write per row into one per (coordinate-version, pass).
-     * Immutable: both lists are copied defensively, and the batch never changes after construction.
+     * Writes to one coordinate version committed as one mutation: the rows to {@link #record} and the labels to attach,
+     * so a pass costs one read-modify-write per version rather than one per row.
      */
     record Batch(List<Finding> records, List<Annotation> annotations) {
 
@@ -85,15 +76,13 @@ public interface Findings {
         }
     }
 
-    /** Record (or refresh) many findings against one coordinate version in a single commit - the batched form of
-     *  {@link #record} the scan sweep and the gate use so a pass's rows cost one mutation, not one per row. */
+    /** {@link #record} for many findings of one coordinate version, in one commit. */
     default void recordAll(String ecosystem, String coordinate, String version, List<Finding> findings)
             throws IOException {
         commit(ecosystem, coordinate, version, Batch.ofRecords(findings));
     }
 
-    /** Attach many labels to a coordinate version's existing findings in a single commit - the batched form of
-     *  {@link #label} the AI sweeps use so a per-coordinate labelling pass costs one mutation, not one per label.
+    /** {@link #label} for many findings of one coordinate version, in one commit.
      *
      *  @throws IllegalArgumentException when an annotation names a finding not recorded on the coordinate */
     default void labelAll(String ecosystem, String coordinate, String version, List<Batch.Annotation> annotations)
@@ -102,9 +91,8 @@ public interface Findings {
     }
 
     /**
-     * Apply a {@link Batch} of records and labels to one coordinate version in a single commit. The default
-     * applies each write in turn (a mutation each) so a simple implementation stays correct; the store overrides it to
-     * fold the whole batch into <em>one</em> compare-and-set against the coordinate's document.
+     * Applies a {@link Batch} to one coordinate version. The default applies each write in turn; the store folds the
+     * batch into one compare-and-set.
      *
      * @throws IllegalArgumentException when an annotation names a finding not present after the batch's records apply
      */
@@ -121,30 +109,10 @@ public interface Findings {
      *  recorded order; empty when none was ever recorded. */
     List<Finding> of(String ecosystem, String coordinate, String version) throws IOException;
 
-    /** Every finding recorded in this repository that matches the filter, walked from the ledger's own key tree -
-     *  no feed is queried and no artifact is read. A coordinate-scoped filter resolves by a direct key-prefix lookup
-     *  rather than a full scan of every coordinate. */
+    /** Every finding in this repository matching the filter, from the ledger alone; a coordinate-scoped filter is a
+     *  key-prefix lookup. */
     List<Located> all(Filter filter) throws IOException;
 
-    /**
-     * A bounded page of the repository-wide walk: the findings matching the filter from {@code offset}, at most
-     * {@code limit} of them, so a large repository's view is served a slice at a time rather than the whole ledger
-     * materialised on every request. A coordinate-scoped filter still resolves by direct key-prefix lookup.
-     *
-     * <p><strong>A ledger pages its own walk; the inherited body is a small-ledger fallback and says so out loud.</strong>
-     * The {@code default} delegates to {@link #pageByListing}, which materialises {@link #all(Filter)} and slices it:
-     * it answers the right page, but it buffers every matching finding in the repository to do it - the opposite of
-     * what a paged read is for. So it refuses rather than pretending: past
-     * {@link ArtifactStore#MAX_INHERITED_CHILDREN} matched rows it throws an {@link IllegalStateException} naming the
-     * inheriting class and the remedy, instead of quietly turning one console render into an unbounded heap
-     * allocation. The store-backed ledger therefore overrides this - it bounds the walk itself, collecting no more
-     * than one page past the offset, and serves a selective filter from the durable filter index - and an
-     * implementation whose matched set genuinely <em>is</em> in memory calls {@link #pageByListing} by name, making
-     * the cost a decision at the call site rather than an accident of inheritance.
-     *
-     * @throws IllegalStateException when the inherited fallback matches more than
-     *                               {@link ArtifactStore#MAX_INHERITED_CHILDREN} findings
-     */
     /** The distinct facet values the ledger's findings carry - the choices a filter offers - as far as a bounded
      *  read can answer them: the built filter index's buckets. Empty when no index stands; a console then offers
      *  the values of the rows it shows. */
@@ -159,21 +127,25 @@ public interface Findings {
      *  examines more than this many rows before its window. */
     int MAX_OFFSET = 10_000;
 
+    /**
+     * A bounded page of the findings matching the filter: from {@code offset}, at most {@code limit}.
+     *
+     * <p>The default, {@link #pageByListing}, materialises {@link #all(Filter)} and slices it, so it refuses past
+     * {@link ArtifactStore#MAX_INHERITED_CHILDREN} matched rows. The store-backed ledger overrides it, collecting no
+     * more than one page past the offset and serving a selective filter from the filter index; an in-memory ledger
+     * calls {@link #pageByListing} by name.
+     *
+     * @throws IllegalStateException when the inherited fallback matches more than
+     *                               {@link ArtifactStore#MAX_INHERITED_CHILDREN} findings
+     */
     default Page all(Filter filter, int offset, int limit) throws IOException {
         return pageByListing(this, filter, offset, limit);
     }
 
     /**
-     * Stream every finding a filter matches to {@code visitor}, in {@link #all(Filter)}'s order and with the same
-     * union/dedup semantics, but without ever materialising the whole matched set in heap - the form a whole-ledger
-     * pass (a console facet fold, a background reclassification) uses to stay bounded on a repository with a very
-     * large finding set.
-     *
-     * <p>The {@code default} delegates to {@link #streamByListing}, which materialises {@link #all(Filter)} and
-     * emits it row by row - the one thing this signature exists to avoid - so it carries the same visible ceiling
-     * as {@link #all(Filter, int, int)}: past {@link ArtifactStore#MAX_INHERITED_CHILDREN} matched rows it throws
-     * rather than buffering the ledger behind a streaming promise. The store overrides it to stream the key-tree
-     * walk itself, holding no more than the current row.
+     * Streams every finding a filter matches to {@code visitor}, in {@link #all(Filter)}'s order, without
+     * materialising the matched set. The default, {@link #streamByListing}, materialises it and so refuses past
+     * {@link ArtifactStore#MAX_INHERITED_CHILDREN} rows; the store streams its key-tree walk.
      *
      * @throws IllegalStateException when the inherited fallback matches more than
      *                               {@link ArtifactStore#MAX_INHERITED_CHILDREN} findings
@@ -183,12 +155,8 @@ public interface Findings {
     }
 
     /**
-     * Page {@code findings} by materialising and slicing its whole {@link #all(Filter)} answer - the explicit, named
-     * form of the fallback {@link #all(Filter, int, int)} inherits, for an implementation whose matched set is
-     * already in memory (a map-backed ledger, a fixture) and for which a "bounded" walk would be this code anyway.
-     *
-     * <p>It is bounded, and the bound throws: see {@link InheritedBound}, which holds the ceiling and the refusal
-     * for every SPI that ships this shape.
+     * Pages {@code findings} by materialising and slicing {@link #all(Filter)}, for a ledger already in memory. Bounded
+     * by {@link InheritedBound}, which throws past the ceiling.
      *
      * @throws IllegalStateException when the filter matches more than {@link ArtifactStore#MAX_INHERITED_CHILDREN}
      *                               findings
@@ -202,9 +170,8 @@ public interface Findings {
     }
 
     /**
-     * Emit {@code findings}' whole {@link #all(Filter)} answer to {@code visitor} row by row - the explicit, named
-     * form of the fallback {@link #all(Filter, Visitor)} inherits, for an implementation whose matched set is
-     * already in memory. Bounded exactly as {@link #pageByListing} is.
+     * Emits {@code findings}' whole {@link #all(Filter)} answer to {@code visitor}, for a ledger already in memory.
+     * Bounded as {@link #pageByListing} is.
      *
      * @throws IllegalStateException when the filter matches more than {@link ArtifactStore#MAX_INHERITED_CHILDREN}
      *                               findings
@@ -216,20 +183,16 @@ public interface Findings {
         }
     }
 
-    /** A sink for {@link #all(Filter, Visitor)}: receives each matching finding in turn, allowed the store I/O the
-     *  walk does, so a caller folds facets or rows without buffering the whole matched set. */
+    /** A sink for {@link #all(Filter, Visitor)}, allowed store I/O. */
     @FunctionalInterface
     interface Visitor {
         void accept(Located located) throws IOException;
     }
 
     /**
-     * Rebuild any durable derived index this ledger keeps for the repository-wide views (the findings-filter index that
-     * lets a selective {@code /api/findings} query seek a facet bucket rather than scan the whole plane), from the
-     * current findings. Driven by a scheduled maintenance pass off the request path, not a read. The default is a no-op:
-     * a simple implementation keeps no derived index and answers {@link #all(Filter, int, int)} by walking directly; the
-     * store overrides it to rebuild the index, gated on a freshness stamp so a pass whose findings have not moved writes
-     * nothing.
+     * Rebuilds the derived index this ledger keeps for repository-wide views (the filter index a selective
+     * {@code /api/findings} query seeks), from a maintenance pass off the request path. A no-op by default; the store
+     * skips the rebuild when the findings have not moved.
      */
     default void reindex() throws IOException {
     }
@@ -238,22 +201,17 @@ public interface Findings {
     record Located(String ecosystem, String coordinate, String version, Finding finding) {
     }
 
-    /** A bounded slice of the repository-wide walk: the located findings in this page, whether more remain past it (so a
-     *  reader knows to ask for the next offset), and - when the page was served from the eventually-consistent
-     *  findings-filter index - the ledger scan freshness that index was {@code builtScanStamp built at} (an
-     *  {@code Instant} string, or blank for a never-scanned repository). {@code builtScanStamp} is {@code null} on a
-     *  page the live walk produced (or a not-yet-built index falling back to it), signalling the reader to render the
-     *  live scan stamp; a non-null value is the index's own as-of instant, so a selective query served from a built
-     *  index is never labelled fresher than the index it came from (mirroring the health/vulnerability
-     *  rank indexes' {@code builtScanStamp} split). */
+    /** A page of located findings, whether more remain, and {@code builtScanStamp}: the scan instant the filter index
+     *  serving the page was built at (blank for a never-scanned repository), or {@code null} for a page the live walk
+     *  produced, whose reader renders the live scan stamp. So an index-served page is never labelled fresher than its
+     *  index. */
     record Page(List<Located> located, boolean more, String builtScanStamp) {
 
         public Page {
             located = List.copyOf(located);
         }
 
-        /** A page the live walk produced (or a not-yet-built index fell back to): not index-served, so
-         *  {@code builtScanStamp} is {@code null} and a reader renders the live scan stamp. */
+        /** A page the live walk produced. */
         public Page(List<Located> located, boolean more) {
             this(located, more, null);
         }
@@ -261,10 +219,8 @@ public interface Findings {
 
     /**
      * The query surface's filter; a {@code null} member matches everything. {@code coordinate} matches the bare
-     * coordinate or the {@code coordinate:version} form, so a per-artifact view needs no separate parameter.
-     * {@code ecosystem} scopes the match to one ecosystem (case-insensitively), so a coordinate that two ecosystems
-     * both name - an {@code npm} and a {@code PyPI} package of the same name - is not conflated across them; a
-     * {@code null} ecosystem matches every ecosystem, the pre-ecosystem behaviour.
+     * coordinate or {@code coordinate:version}; {@code ecosystem} matches case-insensitively, so same-named packages of
+     * two ecosystems are not conflated.
      */
     record Filter(String coordinate, Finding.Kind kind, String source, String category, Severity severity,
                   String ecosystem) {
@@ -296,21 +252,16 @@ public interface Findings {
     }
 
     /**
-     * The instant the repository's advisory findings were last refreshed against the live feeds - by the scheduled
-     * vulnerability sweep or an operator's explicit rescan - so every view can show how fresh its rendered ledger is.
-     * Last-writer-wins: the newest completed refresh is the panel's honest freshness, whoever drove it. Absent means the
-     * repository was never scanned, which a view must render as "never scanned", not as "clean".
+     * The instant the repository's advisory findings were last refreshed against the feeds, by the sweep or an
+     * operator's rescan; last writer wins. Absent means never scanned, which a view renders as such, not as clean.
      */
     static Stamp scanned(ArtifactStore store) {
         return new Stamp(store, SCANNED);
     }
 
     /**
-     * The {@link #EVICTED eviction epoch}: bumped when a version's findings were reclaimed by eviction, so the
-     * vulnerability rank index rebuilds on its next pass instead of no-opping on an unmoved {@link #scanned} stamp.
-     * Bumped by an artifact-lifecycle owner (the inventory's {@code evict}, a cache reclaim, a discarded-hold reap)
-     * <em>after</em> the findings are removed, so a rebuild that observes the new epoch also observes the removal. A
-     * lifecycle owner marks it through this key without reaching into the findings module.
+     * The {@link #EVICTED eviction epoch}, bumped by a lifecycle owner (an eviction, a cache reclaim, a discarded-hold
+     * reap) after the findings are removed, so a rebuild that sees the new epoch also sees the removal.
      */
     static Epoch evictions(ArtifactStore store) {
         return new Epoch(store, EVICTED);

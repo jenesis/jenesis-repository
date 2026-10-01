@@ -5,10 +5,9 @@ import build.jenesis.repository.compliance.AdvisorySource;
 import build.jenesis.repository.compliance.Severity;
 
 /**
- * The advisory-to-finding mapping shared by every surface that persists or replays feed advisories - the scan
- * sweep, the on-demand vulnerability report, the console - so the two representations never drift: the malicious
- * flag selects the finding kind, the CVE aliases become references, a recorded fixed version rides the
- * {@code fixed} attribute, and the feed's summary is the description the ledger keeps so no display re-fetches it.
+ * The advisory-to-finding mapping every surface that persists or replays feed advisories shares: the malicious flag
+ * selects the kind, CVE aliases become references, a fixed version rides the {@code fixed} attribute, and the feed's
+ * summary is kept as the description so no display re-fetches it.
  */
 public final class AdvisoryFindings {
 

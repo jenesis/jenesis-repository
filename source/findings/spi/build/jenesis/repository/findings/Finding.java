@@ -4,25 +4,21 @@ import module java.base;
 import build.jenesis.repository.compliance.Severity;
 
 /**
- * One durable finding against a coordinate: what was found, by which module or feed, and how it is categorized.
- * A finding is identified within its coordinate by {@code (source, id)} - the same advisory reported by two feeds
- * is two findings, each attributed, so the ledger never loses who said what (the de-duplicated union is a display
- * concern). Re-recording an existing finding refreshes its mutable facts and {@code lastSeen} while keeping
- * {@code firstSeen}, its labels and any supersession mark, so a scheduled re-scan converges instead of duplicating.
+ * One durable finding against a coordinate: what was found, by which module or feed, and how it is categorized. It is
+ * identified within its coordinate by {@code (source, id)}, so the same advisory from two feeds is two attributed
+ * findings. Re-recording refreshes the mutable facts and {@code lastSeen} and keeps {@code firstSeen}, the labels and
+ * any supersession mark, so a re-scan converges.
  *
- * <p>The row obeys categorize-never-discard: a finding that stops being reported keeps its row (its {@code lastSeen}
- * simply ages), a wrong or replaced finding is {@linkplain #supersededBy marked} rather than erased, and later
- * classifiers (reachability, applicability, AI) attach {@linkplain Label labels} rather than rewriting the finding.
- * Kind-specific structured facts that no shared field carries - a vulnerability's fixed version, a reachability
- * verdict's call path - ride the small {@code attributes} map, so a new finding kind needs no schema change.
+ * <p>A finding no longer reported keeps its row with an ageing {@code lastSeen}, a wrong one is
+ * {@linkplain #supersededBy marked} rather than erased, and later classifiers attach {@linkplain Label labels}.
+ * Kind-specific facts (a fixed version, a call path) ride {@code attributes}.
  */
 public record Finding(String id, String source, Kind kind, String category, Severity severity, double confidence,
                       String description, List<String> references, String provenance,
                       Map<String, String> attributes, Instant firstSeen, Instant lastSeen, String supersededBy,
                       List<Label> labels) {
 
-    /** What family of statement a finding makes; open-ended by design - a future engine adds a constant here, and
-     *  the ledger stores the name, so old rows survive new kinds. */
+    /** What family of statement a finding makes. The ledger stores the name, so stored rows survive new kinds. */
     public enum Kind {
         /** A known vulnerability reported by an advisory feed. */
         VULNERABILITY,
@@ -38,21 +34,15 @@ public record Finding(String id, String source, Kind kind, String category, Seve
         AI_CANDIDATE,
         /** A structured gate decision - the reasons the compliance gate withheld an artifact. */
         GATE,
-        /** A statement about a publisher's signature on an artifact: that it verified, did not verify, was made by a
-         *  signer the deployment has no reason to believe, was absent where the format expects one, or was present
-         *  but unreadable. Distinct from {@link #GATE} because a signature fact outlives the verdict taken on it -
-         *  the same signature is a finding whether or not a dimension is installed to act on it - and distinct from
-         *  the provenance an attestation carries, which is a claim about how an artifact was BUILT rather than about
-         *  who vouched for these bytes. */
+        /** A statement about a publisher's signature: verified, not verified, by an untrusted signer, absent where the
+         *  format expects one, or unreadable. Not {@link #GATE}, since the fact stands whether or not a dimension acts
+         *  on it, and not provenance, which says how an artifact was built rather than who vouched for its bytes. */
         SIGNATURE,
-        /** A quality-inspection failure: the artifact claimed a format but could not be parsed by its inspector
-         *  (truncated, corrupt, not the archive it names, a decompression bomb), so it was screened only from its path
-         *  coordinate. Recorded so an unparseable artifact renders as "could not derive - not fully screened" rather
-         *  than a silent clean, distinct from a well-formed artifact that genuinely declares nothing. */
+        /** A quality-inspection failure: the artifact could not be parsed by its format's inspector (truncated,
+         *  corrupt, a decompression bomb) and was screened from its path alone, so it renders as not fully screened
+         *  rather than clean. */
         INSPECTION,
-        /** A negative scan result: the advisory feeds were consulted for this coordinate and reported nothing. Recorded
-         *  so a known-clean coordinate is served from the ledger instead of re-querying every feed on every read, until
-         *  the marker ages past its freshness window. Never rendered as a vulnerability. */
+        /** A negative scan result ({@link CleanScanMarker}): the feeds reported nothing for this coordinate. */
         CLEAN;
 
         /** The wire spelling ({@code ai-candidate}), the form the HTTP API and the CLI accept and emit. */
@@ -71,9 +61,7 @@ public record Finding(String id, String source, Kind kind, String category, Seve
         }
     }
 
-    /** An annotation a module attaches to an existing finding - a separately attributed opinion (an AI reachability
-     *  judgement beside the static one, an applicability rationale) that adds to the finding without replacing
-     *  anything on it. */
+    /** A separately attributed annotation on an existing finding, adding without replacing anything. */
     public record Label(String source, String name, String value, double confidence, Instant when) {
     }
 

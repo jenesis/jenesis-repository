@@ -4,18 +4,11 @@ import module java.base;
 import build.jenesis.repository.scope.Scopes;
 
 /**
- * The neutral core's own {@link SettingsContributor} - the product's built-in runtime dials (the compliance verdict
- * knobs and deny list, the pull-through proxy toggle and immaturity hold, the maintenance lease and the deployment
- * defaults), dogfooding the same SPI 28 plugin modules already use rather than being inlined by hand in every
- * administration surface. The {@code /api/settings} adapter and the console's {@code SettingsAdmin} both read
- * {@link SettingsContributor#all()}, so the core is described once, here.
- *
- * <p>The defaults are the product defaults - the same values a pristine {@code RepositoryProperties} carries - held as
- * constants so this contributor needs nothing but {@code java.base}, like every other contract in this module. It is
- * marked {@link #neutral() neutral}: its keys belong to the {@link SettingsDocuments#NEUTRAL neutral} document and to no
- * plugin module, and their tenant/global scope stays classified by {@link SettingsScopes}, so the deduplication changes
- * where the catalogue is authored without moving a stored value, adding a module row, or reclassifying a scope. A new
- * core dial is added here, not in a call site.
+ * The core's own {@link SettingsContributor}: the built-in runtime dials (the compliance verdict knobs and deny list,
+ * the pull-through proxy toggle and immaturity hold, the maintenance lease, the deployment defaults), declared once
+ * through the same SPI as every module. Defaults the server kernel also binds come from {@link CoreDefaults}. It is
+ * {@link #neutral() neutral}, so its keys live in the {@link SettingsDocuments#NEUTRAL neutral} document and are scoped
+ * by {@link SettingsScopes}. A new core dial is added here.
  */
 public final class CoreSettingsContributor implements SettingsContributor {
 
@@ -98,16 +91,13 @@ public final class CoreSettingsContributor implements SettingsContributor {
                         Setting.Kind.STRING, "", false).standard());
     }
 
-    /** The core's dials are neutral: they render in the catalogue ({@link SettingsContributor#all()}) but stay out of
-     *  the plugin-oriented views, so a core setting keeps the {@link SettingsDocuments#NEUTRAL} document, adds no
-     *  modules-console row and keeps its {@link SettingsScopes} scope classification. */
+    /** The core's dials are {@link SettingsContributor#neutral() neutral}. */
     @Override
     public boolean neutral() {
         return true;
     }
 
-    /** The per-format upstreams the console's Format upstreams panel stores, one key per format under a prefix the
-     *  operator's choice of format opens - {@code format-upstream.maven}, {@code format-upstream.npm}. */
+    /** The per-format upstreams the console stores, one key per format ({@code format-upstream.maven}). */
     @Override
     public Set<String> startupKeys() {
         return Set.of("jenrepo.format-upstream.*");

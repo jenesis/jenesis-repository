@@ -5,18 +5,14 @@ import module java.base;
 import build.jenesis.repository.observation.SpiCatalog;
 
 /**
- * The installed/enabled state of one discovered module, resolved for the modules console and {@code /api/capabilities}
- * from {@link SettingsContributor#modules() discovery} layered over a configuration lookup - no maintained table of
- * modules and their flags. A discovered module is {@code installed}; its {@code enabled} state reads the effective
- * value of its {@link Setting#enablement enablement gate} (a module with no gate is always on once installed).
- * {@code live} says whether flipping the gate applies on the next scheduled re-read or only on restart, and
- * {@code toggleable} whether the gate is a plain boolean the console offers as an enable/disable switch (a numeric
- * ceiling like {@code rate-limit} is edited as a value, not switched).
+ * The installed and enabled state of one module, for the modules console and {@code /api/capabilities}, from
+ * {@link SettingsContributor#modules() discovery} over a configuration lookup. {@code enabled} reads the effective
+ * value of the module's {@link Setting#enablement enablement gate} (always on without one), {@code live} whether
+ * flipping it applies on the next re-read, and {@code toggleable} whether it is a boolean the console offers as a
+ * switch rather than a value such as a numeric ceiling.
  *
- * <p>A module named only by a leftover stored settings document but absent from the module path renders
- * {@code installed == false} with no settings - the leftovers case, so an operator sees a stored document for a
- * module this image was not built with. Presence is an image-build decision (the {@code build-images.sh} feature set),
- * never a runtime one; the screen says so.
+ * <p>A module named only by a leftover stored document is {@code installed == false} with no settings. Presence is
+ * decided when the image is built, never at runtime.
  */
 public record ModuleCapability(String module, boolean installed, String enableKey, boolean enabled, boolean live,
                                boolean toggleable, List<Setting> settings) {
@@ -26,11 +22,8 @@ public record ModuleCapability(String module, boolean installed, String enableKe
     }
 
     /**
-     * The removable modules and the settings each declares, read once.
-     *
-     * <p>{@link #resolve} is called from the deployment report per request and walked every contributor to build
-     * this each time. A module's identity and the keys it owns are properties of what is installed; whether it is
-     * <em>enabled</em> is not, and that is still read from the effective configuration on every call below.
+     * The removable modules and their settings, read once since they are fixed by what is installed; whether one is
+     * enabled is read on every call to {@link #resolve}, which the deployment report makes per request.
      */
     private static final class Declared {
 
@@ -47,18 +40,9 @@ public record ModuleCapability(String module, boolean installed, String enableKe
     }
 
     /**
-     * The deployment's plug-in surface grouped by SPI: the shared module-graph walk, decorated with what this
-     * deployment knows about each implementation's module.
-     *
-     * <p>The walk itself is not here: one walk serves both the console, which can report only which providers exist,
-     * and this, which also knows each module's installed and enabled state. This supplies the half a deployment
-     * reading stored settings can add; the enumeration is
-     * {@link SpiCatalog#of(ModuleLayer, SpiCatalog.Decoration)}.
-     *
-     * <p>{@code effective} answers the effective value of a settings key - an operator's pin over the stored value
-     * over the product default, which is the chain the running server resolves a gate through - and
-     * {@code storedModules} are the module names holding a stored document, so an uninstalled leftover still
-     * surfaces.
+     * The deployment's plug-in surface grouped by SPI ({@link SpiCatalog#of(ModuleLayer, SpiCatalog.Decoration)}),
+     * decorated with each module's installed and enabled state. {@code effective} answers a key's effective value and
+     * {@code storedModules} names the modules holding a stored document, as for {@link #resolve}.
      */
     public static List<SpiCatalog> catalog(UnaryOperator<String> effective, Set<String> storedModules) {
         Map<String, SpiCatalog.Capability> byModule = new HashMap<>();
@@ -67,17 +51,14 @@ public record ModuleCapability(String module, boolean installed, String enableKe
                     capability.enableKey(), capability.settings().stream()
                     .map(setting -> new SpiCatalog.Setting(setting.key(), setting.label())).toList()));
         }
-        // A module the capability resolution never saw contributes no SettingsContributor at all, so it declares no
-        // gate and is on once installed - the same rule resolve() applies to a discovered module without one.
+        // A module with no SettingsContributor declares no gate, so it is on once installed.
         return SpiCatalog.of(ModuleLayer.boot(),
                 module -> byModule.getOrDefault(module, SpiCatalog.Capability.ALWAYS_ON));
     }
 
-    /** The resolved capability of every discovered module plus a not-installed row for any module named only by a
-     *  leftover stored document. {@code effective} answers the effective value of a settings key (an operator's pin
-     *  over the store, {@code null} when neither is set, so the gate's product default applies); {@code storedModules}
-     *  are the module names that hold a stored settings document, so an uninstalled one still surfaces. Ordered by
-     *  module name. */
+    /** Every discovered module's capability, plus a not-installed row for each module named only by a stored document,
+     *  ordered by module name. {@code effective} answers a key's effective value, {@code null} when unset so the gate's
+     *  default applies; {@code storedModules} are the modules holding a stored document. */
     public static List<ModuleCapability> resolve(UnaryOperator<String> effective, Set<String> storedModules) {
         List<ModuleCapability> capabilities = new ArrayList<>();
         Set<String> installed = new HashSet<>();
@@ -100,9 +81,8 @@ public record ModuleCapability(String module, boolean installed, String enableKe
         return List.copyOf(capabilities);
     }
 
-    /** Whether an enablement gate resolves to on: a boolean reads {@code true}, a numeric ceiling is on when non-zero,
-     *  any other kind when its value is non-blank. A {@code null} lookup falls back to the gate's product default, so a
-     *  module never installs disabled merely because nothing has been stored yet. */
+    /** Whether a gate resolves to on: a boolean when {@code true}, a number when non-zero, any other kind when
+     *  non-blank. An unset value falls back to the gate's default. */
     private static boolean isEnabled(Setting gate, String value) {
         String resolved = value == null || value.isBlank() ? gate.defaultValue() : value.trim();
         return switch (gate.kind()) {

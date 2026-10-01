@@ -3,14 +3,11 @@ package build.jenesis.repository.settings;
 import module java.base;
 
 /**
- * The wizards that ask for settings, and what each asks - derived from the catalogue, never listed.
+ * The wizards that ask for settings, and what each asks, derived from the catalogue.
  *
- * <p>A wizard belongs to a level ({@link #level()}), the level whose documents its answers are stored in, and asks
- * every {@link Setting.Tier#ESSENTIAL essential} setting of the scopes it is for ({@link #asks}): one step per settings
- * group, the groups in catalogue order, and nothing else. A {@link Setting.Tier#STANDARD standard} or
- * {@link Setting.Tier#ADVANCED advanced} setting keeps what it inherits and is changed later on its level's settings
- * screen. So a module that declares an essential setting of a scope has put a question into that scope's wizard on
- * every surface that runs it, by declaring it - there is no second list to add it to.
+ * <p>A wizard stores its answers at its {@link #level()} and asks every {@link Setting.Tier#ESSENTIAL essential} setting
+ * of its scopes ({@link #asks}), one step per settings group in catalogue order. Declaring an essential setting is all
+ * it takes to add a question to that scope's wizard on every surface.
  * <ul>
  * <li>{@link #SETUP} is the first boot's: the deployment's own essential settings, and a tenant's and a repository's,
  *     which it asks as the deployment-wide value every tenant and repository inherits - a repository's routing, which
@@ -29,10 +26,8 @@ public enum Wizard {
     PROJECT(Setting.Scope.PROJECT, Setting.Scope.PROJECT);
 
     /**
-     * The one step of the first boot's wizard that is about no setting: the starter credential, which is an
-     * environment secret a deployment is provisioned with rather than a value in the store. Every surface that runs
-     * the first boot's wizard shows it first, and says what to do about it; the console adds the state of this
-     * deployment's two starter keys and links to where a real administrator and credential are made.
+     * The first boot's step about no setting: the starter credential, an environment secret rather than a stored
+     * value. Every surface running the first-boot wizard shows it first.
      */
     public static final Information STARTER_CREDENTIAL = new Information("starter-credential",
             "Stop using the starter credential",
@@ -86,9 +81,8 @@ public enum Wizard {
         return this == SETUP ? List.of(STARTER_CREDENTIAL) : List.of();
     }
 
-    /** The settings steps over {@code catalogue}: one per group holding a setting this wizard {@link #asks}, in the
-     *  catalogue's order - which {@link SettingsContributor#all()} gives by group - with a group it asks nothing of
-     *  left out. */
+    /** The settings steps over {@code catalogue}: one per group holding a setting this wizard {@link #asks}, in
+     *  catalogue order. */
     public List<Step> steps(List<Setting> catalogue) {
         Map<String, List<Setting>> byGroup = new LinkedHashMap<>();
         for (Setting setting : catalogue) {

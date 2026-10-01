@@ -3,23 +3,14 @@ package build.jenesis.repository.findings;
 import module java.base;
 
 /**
- * The AI reachability-opinion label contract, fixed here beside {@link ReachabilityLabels} so the writer (the
- * {@code ai/reachability} classifier sweep) and every surface that badges or filters by it never drift. Where the
- * deterministic call graph gave up - the {@code unknown} verdicts whose blind spots are reflection, unresolvable
- * dispatch, {@code ServiceLoader}, missing bytecode - the classifier reads the blind-spot call sites and offers a
- * <em>second, model-based opinion</em> as a {@code (source="ai-reachability", name="verdict")} label: an
- * <strong>addition beside the deterministic label, never a replacement of it</strong>. Both labels render together
- * ("static: unknown, AI: likely-reachable") and each names its provenance - the sibling {@link #MODEL} label says
- * exactly which model answered and where it runs, and {@link #RATIONALE} carries the model's reasoning about the
- * flagged sites.
+ * The AI reachability-opinion label contract, shared by its writer and every surface that badges or filters by it.
+ * Where the deterministic call graph answered {@code unknown}, a classifier may offer a model-based second opinion as
+ * a {@code (source="ai-reachability", name="verdict")} label beside the deterministic one, never replacing it; the
+ * {@link #MODEL} label names the model that answered and {@link #RATIONALE} carries its reasoning.
  *
- * <p>The honesty guards are structural. The classifier only ever opines where the static verdict is {@code unknown},
- * so the two labels never compete on a decided case - and {@link #agreed} enforces the ranking anyway: a decisive
- * deterministic verdict <em>is</em> the combined answer whatever the AI once said (a stale opinion under a
- * since-sharpened static verdict is outranked, never trusted), and only where the graph honestly cannot tell does
- * the AI's advisory opinion fill in. The spellings say what they are: {@link #LIKELY_REACHABLE} and
- * {@link #LIKELY_NOT_REACHABLE} are opinions, never the proof the deterministic engine's unprefixed verdicts assert,
- * and a low-confidence answer stays {@link #UNKNOWN} rather than pretending to know.
+ * <p>{@link #agreed} ranks a decisive deterministic verdict above any opinion, so a stale opinion under a sharpened
+ * static verdict is outranked. {@link #LIKELY_REACHABLE} and {@link #LIKELY_NOT_REACHABLE} are spelled as opinions,
+ * and a low-confidence answer is {@link #UNKNOWN}.
  */
 public final class AiReachabilityLabels {
 
@@ -44,7 +35,7 @@ public final class AiReachabilityLabels {
     /** The model's opinion that the flagged sites are unrelated to the vulnerable code. */
     public static final String LIKELY_NOT_REACHABLE = "likely-not-reachable";
 
-    /** The model cannot tell either - the honest residue, also what a low-confidence answer records. */
+    /** The model cannot tell, which a low-confidence answer also records. */
     public static final String UNKNOWN = "unknown";
 
     /** Whether {@code value} is one of the three opinion spellings (case-insensitively). */
@@ -63,9 +54,8 @@ public final class AiReachabilityLabels {
         return Optional.empty();
     }
 
-    /** The stronger of two opinions - the conservative merge across a dependency's analyzed consumers:
-     *  {@code likely-reachable} outranks {@code unknown} outranks {@code likely-not-reachable}, so an aggregate
-     *  never under-reports. A {@code null} side yields the other. */
+    /** The stronger of two opinions ({@code likely-reachable} over {@code unknown} over {@code likely-not-reachable}),
+     *  so an aggregate never under-reports; a {@code null} side yields the other. */
     public static String strongest(String left, String right) {
         if (left == null) {
             return right;
@@ -77,9 +67,8 @@ public final class AiReachabilityLabels {
     }
 
     /**
-     * The AI opinions of a coordinate's stored advisory findings, keyed by advisory id and every CVE alias -
-     * the same identifiers the vulnerability view de-duplicates rows by, mirroring
-     * {@link ReachabilityLabels#verdicts} - each key holding the strongest opinion among the rows it appeared on.
+     * The AI opinions of a coordinate's advisory findings, keyed as {@link ReachabilityLabels#verdicts} keys them,
+     * each holding the strongest opinion among its rows.
      */
     public static Map<String, String> verdicts(List<Finding> findings) {
         Map<String, String> verdicts = new HashMap<>();
@@ -99,14 +88,9 @@ public final class AiReachabilityLabels {
     }
 
     /**
-     * The two engines' combined verdict - what the deterministic label and the AI label agree the row's category
-     * is. The deterministic engine outranks: a decisive static verdict ({@code reachable} / {@code not-reachable})
-     * <em>is</em> the agreement whatever the AI opinion says (the classifier only ever opines on {@code unknown}
-     * verdicts, so a contradicting opinion can only be a stale one a since-sharpened analysis outran - it is
-     * outranked, never trusted, and in particular an AI opinion can never downgrade a deterministic
-     * {@code reachable}). Only where the static verdict is {@code unknown} or absent does the AI opinion decide
-     * ({@code likely-reachable} counts as {@code reachable}, {@code likely-not-reachable} as
-     * {@code not-reachable}); {@code unknown} remains exactly the rows neither engine can tell.
+     * The two engines' combined verdict. A decisive static verdict wins whatever the opinion says, so an opinion never
+     * downgrades a deterministic {@code reachable}; where the static verdict is {@code unknown} or absent, the opinion
+     * decides ({@code likely-reachable} as {@code reachable}, {@code likely-not-reachable} as {@code not-reachable}).
      */
     public static String agreed(String staticVerdict, String aiVerdict) {
         if (ReachabilityLabels.REACHABLE.equalsIgnoreCase(staticVerdict)) {
@@ -125,19 +109,9 @@ public final class AiReachabilityLabels {
     }
 
     /**
-     * Whether a row whose deterministic badge is {@code staticVerdict} and AI badge is {@code aiVerdict} (either
-     * empty when not analyzed / not opined) passes the view filter {@code filter} - the operator's choice of what
-     * the facet keys on, and always a view narrowing only, never a store change:
-     * <ul>
-     * <li>a bare verdict ({@code reachable} / {@code not-reachable} / {@code unknown}) keys on the static label
-     *     exactly as {@link ReachabilityLabels#matches} always did (an un-analyzed row matches {@code unknown});</li>
-     * <li>{@code ai:likely-reachable} / {@code ai:likely-not-reachable} / {@code ai:unknown} keys on the AI label
-     *     (a row without an opinion matches {@code ai:unknown} - absence of an opinion is unknown, the same
-     *     conservative rule the static facet holds to);</li>
-     * <li>{@code agreed:reachable} / {@code agreed:not-reachable} / {@code agreed:unknown} keys on the two labels'
-     *     {@linkplain #agreed combined verdict} - {@code agreed:unknown} is exactly the residue neither engine can
-     *     decide.</li>
-     * </ul>
+     * Whether a row with these badges (either empty when absent) passes the view filter {@code filter}: a bare verdict
+     * keys on the static label ({@link ReachabilityLabels#matches}), {@code ai:<opinion>} on the AI label (no opinion
+     * matches {@code ai:unknown}), and {@code agreed:<verdict>} on the {@linkplain #agreed combined verdict}.
      */
     public static boolean matches(String staticVerdict, String aiVerdict, String filter) {
         if (filter == null || filter.isBlank()) {

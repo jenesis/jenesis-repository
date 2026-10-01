@@ -1,15 +1,8 @@
 /**
- * The runtime-settings contracts: a typed descriptor for one editable setting and the {@code ServiceLoader} SPI a
- * plugin module implements to contribute its settings to the deployment's catalogue. Light, so any module - a
- * compliance feed, a retention engine, a storage backend - describes its settings without pulling in anything it does
- * not already carry (the JSON library every module has is the one dependency beyond the core contracts), and the
- * console, API and CLI list exactly what is installed.
- *
- * <p>It also owns the posture advisories about its own dials: {@link build.jenesis.repository.settings.TenantPosture}
- * is the {@code SafetyAdvisor} for the tenant-overridable compliance-gate knobs {@link
- * build.jenesis.repository.settings.CoreSettingsContributor} declares, and is the first advisor in either repository
- * to raise a {@code TENANT}-scoped advisory. The posture SPI is {@code java.base}-only like this module, so the
- * dependency keeps the contract module light.
+ * The runtime-settings contracts: a typed descriptor for one editable setting and the SPI a module implements to
+ * contribute its settings to the deployment's catalogue, kept light so any module can describe its settings, and the
+ * console, API and CLI list exactly what is installed. It also carries the posture advisor for the core's
+ * tenant-overridable gate dials, {@link build.jenesis.repository.settings.TenantPosture}.
  *
  * @jenesis.release 25
  * @jenesis.bom pin-repository.properties

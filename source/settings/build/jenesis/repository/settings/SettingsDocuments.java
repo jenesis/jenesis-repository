@@ -8,51 +8,39 @@ import tools.jackson.databind.ObjectWriter;
 import tools.jackson.databind.json.JsonMapper;
 
 /**
- * The on-store shape of the runtime settings: one JSON document per contributing module, kept under
- * {@code config/settings/<module>.json}, rather than a single object for the whole deployment. Keying storage by the
- * owning module lets a write to one module's settings compare-and-set only that module's document, so concurrent
- * edits to different modules never contend, and it aligns the storage key with the module attribution the modules
- * console surfaces. The neutral core dials and the map-shaped entries ({@code repositories.*}, {@code
- * format-upstream.*}) - which no discovered {@link SettingsContributor} declares - live in the {@link #NEUTRAL}
- * document.
+ * The on-store shape of the runtime settings: one JSON document per contributing module under
+ * {@code config/settings/<module>.json}, so a write compare-and-sets only its module's document and edits to different
+ * modules never contend. The core dials and the map-shaped entries ({@code repositories.*}, {@code format-upstream.*})
+ * live in the {@link #NEUTRAL} document.
  *
- * <p>This is the one place the document format lives, shared by the repository server ({@code Settings}), the console
- * ({@code SettingsAdmin}) and the boot-time environment layer, so the three administration surfaces read and write an
- * identical layout. It carries no store dependency - a caller streams the document bytes in and out through its own
- * {@code ArtifactStore}, this only maps a key to its document and (de)serialises the flat {@code string -> string}
- * body through the JSON library. The stored form is key-sorted and indented, so a re-write of unchanged state is
- * byte-identical and reads cleanly in a diff.
+ * <p>The one home of the format, shared by the server, the console and the boot-time environment layer. It maps a key
+ * to its document and (de)serialises the flat {@code string -> string} body; the caller does the store I/O. The stored
+ * form is key-sorted and indented, so unchanged state re-writes byte-identical.
  */
 public final class SettingsDocuments {
 
     /** The store prefix under which the per-module documents are kept. */
     public static final String ROOT = Scopes.space(Scopes.CONFIG) + "/settings";
 
-    /** The settings epoch, beside the documents under {@code .system/config}: a token every settings write moves, so a
-     *  node's scheduled re-read lists and re-reads the documents only when some writer - on any node, on any surface -
-     *  changed one. A key at the root would make {@code config} a tenant to every pass that enumerates them. */
+    /** The settings epoch: a token every settings write moves, so a node's scheduled re-read re-reads the documents
+     *  only when a writer anywhere changed one. Under {@code .system/config}, so no pass enumerates it as a tenant. */
     public static final String EPOCH = Scopes.space(Scopes.CONFIG) + "/settings-epoch";
 
     /** The document a setting with no discovered contributor (the neutral core dials, the map entries) belongs in. */
     public static final String NEUTRAL = "core";
 
-    /** The reserved prefix that keys a tenant's per-module document within an export bundle: {@code tenant:<tenant>:<module>}.
-     *  A colon can never appear in a JPMS module name ({@link #MODULE}), so a tenant slice never collides with a
-     *  deployment-wide (global) document key, and the bundle stays one flat {@code string -> document} object that the
-     *  existing serializer and parser handle unchanged. */
+    /** The prefix keying a tenant's module document in an export bundle, {@code tenant:<tenant>:<module>}. No module
+     *  name holds a colon ({@link #MODULE}), so a tenant slice never collides with a deployment-wide document. */
     public static final String TENANT_KEY_PREFIX = "tenant:";
 
-    /** A safe document name: a JPMS module name (or {@link #NEUTRAL}), never a path that could escape the settings
-     *  prefix. Disallows a separator or an empty/dot segment. */
+    /** A safe document name: a JPMS module name or {@link #NEUTRAL}, never a path. */
     private static final Pattern MODULE = Pattern.compile("[A-Za-z0-9_.-]+");
 
-    /** A safe tenant name - the same traversal-free segment the store scopes by, so an operator-supplied bundle key
-     *  can never escape a tenant's scope. */
+    /** A safe tenant name: the traversal-free segment the store scopes by. */
     private static final Pattern TENANT = Pattern.compile("[A-Za-z0-9_-]+");
 
     private static final JsonMapper JSON = JsonMapper.builder().build();
 
-    /** Key-sorted and indented, so unchanged state re-writes byte-identical and a stored document reads in a diff. */
     private static final ObjectWriter PRETTY = JSON.writerWithDefaultPrettyPrinter();
 
     private SettingsDocuments() {
@@ -69,9 +57,8 @@ public final class SettingsDocuments {
         return key != null && key.startsWith(TENANT_KEY_PREFIX);
     }
 
-    /** The {@code [tenant, module]} a {@link #isTenantKey tenant bundle key} names, or {@code null} when the key is
-     *  malformed or carries an unsafe tenant/module segment - so an operator-supplied bundle key can never escape a
-     *  tenant's settings scope. */
+    /** The {@code [tenant, module]} a {@link #isTenantKey tenant bundle key} names, or {@code null} when it is
+     *  malformed or carries an unsafe segment. */
     public static String[] parseTenantKey(String key) {
         if (!isTenantKey(key)) {
             return null;
@@ -88,8 +75,7 @@ public final class SettingsDocuments {
         return new String[] {tenant, module};
     }
 
-    /** Whether {@code tenant} is a safe tenant name - a traversal-free path segment, never a path that could escape
-     *  its store scope. Guards an operator-supplied import bundle before its tenant keys become store paths. */
+    /** Whether {@code tenant} is a safe tenant name, checked before an import bundle's keys become store paths. */
     public static boolean validTenant(String tenant) {
         return tenant != null && TENANT.matcher(tenant).matches();
     }
@@ -99,9 +85,7 @@ public final class SettingsDocuments {
         return ROOT + "/" + module + ".json";
     }
 
-    /** Whether {@code module} is a safe settings-document name - a JPMS module name or {@link #NEUTRAL}, and not a
-     *  path that could escape {@link #ROOT}. Guards an operator-supplied import bundle before its module keys become
-     *  store paths. */
+    /** Whether {@code module} is a safe document name, checked before an import bundle's keys become store paths. */
     public static boolean validModule(String module) {
         return module != null && !module.equals(".") && !module.equals("..") && MODULE.matcher(module).matches();
     }
@@ -138,15 +122,12 @@ public final class SettingsDocuments {
         return values;
     }
 
-    /** Serialise a flat map into a document body: a key-sorted, indented JSON object, so the stored form is stable
-     *  under re-writes and reads cleanly in a diff. */
+    /** A flat map as a document body: key-sorted, indented JSON. */
     public static byte[] serialize(Map<String, String> values) {
         return pretty(new TreeMap<>(values));
     }
 
-    /** Serialise a whole settings bundle - each module name to that module's stored overrides - into one indented
-     *  JSON object, the on-store documents dumped for export. Modules and keys are sorted, so an export of unchanged
-     *  state is byte-identical and a re-import writes each document back unchanged. */
+    /** A settings bundle (module to stored values) as one sorted, indented JSON object, the export form. */
     public static byte[] serializeBundle(Map<String, ? extends Map<String, String>> documents) {
         SortedMap<String, SortedMap<String, String>> sorted = new TreeMap<>();
         documents.forEach((module, values) -> sorted.put(module, new TreeMap<>(values)));
