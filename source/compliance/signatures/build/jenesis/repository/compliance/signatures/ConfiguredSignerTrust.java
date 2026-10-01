@@ -5,32 +5,19 @@ import build.jenesis.repository.compliance.SignerIdentity;
 import build.jenesis.repository.compliance.SignerTrust;
 
 /**
- * Signer trust from the deployment's own configuration: the key material an operator supplied, and the identities they
- * pinned per namespace.
- *
- * <h2>What it answers, and what it deliberately does not</h2>
- *
- * This is the curated half of the trust model - the one an operator states outright. It holds no history, so it cannot
- * answer "who signed this coordinate's earlier versions"; {@link #expected} is always empty and {@link #observed} goes
- * nowhere. Key continuity is learned from what was ingested and needs durable state, which is a store-backed provider
- * rather than a settings string.
- *
- * <h2>The three postures, and why the empty one refuses</h2>
+ * Signer trust from the deployment's own configuration: the key material an operator supplied and the identities they
+ * pinned per namespace. It holds no history, so {@link #expected} is empty and {@link #observed} records nothing;
+ * continuity is the store-backed part's.
  *
  * <ul>
- *   <li><b>No keys configured.</b> Nothing is trusted. A signature may still verify against nothing - it cannot - so
- *       every one is reported untrusted. A deployment that has told us about no keys has given us no grounds to
- *       believe anyone, and reporting otherwise would be inventing an endorsement.</li>
- *   <li><b>Keys, no pins.</b> A key the operator supplied is trusted wherever it signs. They put it there.</li>
- *   <li><b>Keys and pins.</b> A namespace that carries a pin trusts <em>only</em> the identities pinned to it; a
- *       namespace with no pin falls back to the posture above. This is the scoped shape a keyring-per-namespace
- *       library has: a key admitted for one group must not thereby vouch for another, because the interesting attack
- *       is a real key signing something it has no business signing.</li>
+ *   <li><b>No keys:</b> nothing is trusted, since nothing gives grounds to believe anyone.</li>
+ *   <li><b>Keys, no pins:</b> a supplied key is trusted wherever it signs.</li>
+ *   <li><b>Keys and pins:</b> a pinned namespace trusts only its pinned identities, so a key admitted for one group
+ *       cannot vouch for another; an unpinned namespace falls back to the keys.</li>
  * </ul>
  *
- * <p>A pin is written {@code <namespace> = <identity>}, comma- or newline-separated, the namespace matching a
- * coordinate outright or as a prefix with a trailing {@code *} - the same spelling the version-floor and private-name
- * dimensions already use, so an operator learns it once.
+ * <p>A pin is {@code <namespace> = <identity>}, comma- or newline-separated, the namespace matching outright or as a
+ * prefix with a trailing {@code *}, as the version-floor and private-name dimensions spell it.
  */
 final class ConfiguredSignerTrust implements SignerTrust {
 
@@ -71,15 +58,7 @@ final class ConfiguredSignerTrust implements SignerTrust {
         String sigstore = value(config, SIGSTORE_ROOT);
         List<Pin> pins = pins(value(config, PINS));
         if (armoured.isBlank() && pem.isBlank() && bare.isBlank() && sigstore.isBlank() && pins.isEmpty()) {
-            // Nothing configured at all: no material to verify against and nobody named. NONE says that honestly
-            // rather than pretending to a trust store.
-            //
-            // A pin on its own is NOT nothing: it is not a promise about keys we do not hold, because the trusted
-            // root can be FETCHED rather than pasted. A deployment that names a root URL and pins an identity holds
-            // material (in the fetched part) and names a signer (here), and collapsing this part to NONE would read
-            // every bundle it verified as UNTRUSTED. A pin can never admit something
-            // unverifiable in any case: trusts() is asked only after a signature has verified against somebody's
-            // material.
+            // Nothing configured. A pin alone is not nothing: it names a signer whose material may be fetched.
             return SignerTrust.NONE;
         }
         return new ConfiguredSignerTrust(armoured.getBytes(StandardCharsets.UTF_8), pem.getBytes(StandardCharsets.UTF_8),
@@ -88,8 +67,7 @@ final class ConfiguredSignerTrust implements SignerTrust {
 
     @Override
     public Optional<byte[]> material(String scheme) {
-        // One pool of armoured OpenPGP key material and one PEM bundle of X.509 anchors, each handed only to the
-        // verifier shaped for it; a Fulcio root gets its own key when that verifier lands.
+        // Each kind of material goes only to the verifier shaped for it.
         if (SignerIdentity.OPENPGP.equals(scheme)) {
             return keys.length == 0 ? Optional.empty() : Optional.of(keys);
         }
@@ -105,8 +83,7 @@ final class ConfiguredSignerTrust implements SignerTrust {
         return Optional.empty();
     }
 
-    /** An operator's keyring is deployment-wide, so it anchors every ecosystem - and an instance built from pins
-     *  alone holds none, which is why this is asked rather than assumed. */
+    /** An operator's keyring anchors every ecosystem; an instance built from pins alone anchors none. */
     @Override
     public boolean anchored(String ecosystem) {
         return keys.length > 0 || certificates.length > 0 || publicKeys.length > 0 || sigstoreRoot.length > 0;
@@ -119,15 +96,7 @@ final class ConfiguredSignerTrust implements SignerTrust {
         }
         List<Pin> matching = pins.stream().filter(pin -> pin.covers(coordinate)).toList();
         if (matching.isEmpty()) {
-            // No pin speaks for this coordinate, so the operator's keyring stands on its own: they supplied the key,
-            // and a key that verifies is one they put there. A Sigstore root is the exception: the public-good
-            // Fulcio certifies anyone the issuers know, so holding its root vouches for no identity - only a pin
-            // names one this deployment believes.
-            //
-            // The keyring has to actually exist for that argument to hold. An instance built from pins alone holds
-            // no material, so a signature that verified did so against somebody ELSE's - a fetched root, a format's
-            // provisioned keyring, a discovered key - and "they put it there" is not true of it. Such an instance
-            // admits exactly what its pins name and nothing else.
+            // Unpinned: the operator's own keyring is trusted, if there is one; a Sigstore root vouches for nobody.
             return anchored(ecosystem) && !SignerIdentity.SIGSTORE.equals(signer.scheme());
         }
         return matching.stream().anyMatch(pin -> pin.signer().equals(signer));
@@ -135,9 +104,7 @@ final class ConfiguredSignerTrust implements SignerTrust {
 
     @Override
     public Optional<Expectation> expected(String ecosystem, String coordinate, String scheme) {
-        // Only a pin of the scheme being asked about. An operator who pins a keyless identity for a namespace has
-        // said nothing about the OpenPGP key that signs the same artifacts, and answering with the pin anyway
-        // reported every such signature as a change of signer.
+        // Only a pin of the scheme asked about, so a keyless pin says nothing about an OpenPGP signer.
         return pins.stream()
                 .filter(pin -> pin.covers(coordinate) && pin.signer().scheme().equals(scheme))
                 .findFirst()
@@ -146,7 +113,7 @@ final class ConfiguredSignerTrust implements SignerTrust {
 
     @Override
     public void observed(String ecosystem, String coordinate, String version, SignerIdentity signer, Instant when) {
-        // Configuration is stated, never learned. Continuity is the store-backed provider's to record.
+        // Configuration is stated, never learned.
     }
 
     /** One operator pin: a coordinate pattern and the identity it admits. */
@@ -171,9 +138,7 @@ final class ConfiguredSignerTrust implements SignerTrust {
             String namespace = line.substring(0, equals).strip();
             Optional<SignerIdentity> signer = SignerIdentity.ofWire(line.substring(equals + 1).strip());
             if (signer.isEmpty() || namespace.isEmpty()) {
-                // A malformed pin is skipped rather than throwing: this is read on the publish path, and one typo in a
-                // settings string must not take the gate down. The settings screen validates on write, which is where
-                // an operator can still act on the mistake.
+                // Skipped rather than thrown on the publish path; the settings screen validates on write.
                 continue;
             }
             boolean prefix = namespace.endsWith("*");

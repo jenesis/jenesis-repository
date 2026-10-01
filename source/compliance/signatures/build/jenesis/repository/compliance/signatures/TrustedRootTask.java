@@ -13,54 +13,32 @@ import build.jenesis.repository.store.ArtifactStore;
 
 /**
  * The pass that keeps this deployment's Sigstore trusted root current: it fetches the document
- * {@code signature-sigstore-trusted-root-url} names - the public-good root by default - and stores it where
- * {@link FetchedTrustedRoot} reads it, so a bundle is verified against a root that was fetched off the request
- * path rather than against whatever a verification could reach at the moment it ran.
+ * {@code signature-sigstore-trusted-root-url} names and stores it where {@link FetchedTrustedRoot} reads it, off the
+ * request path.
  *
- * <h2>Nothing is fetched until a URL is set</h2>
+ * <p>The dial is empty by default and the pass does not run, so nothing is fetched until an operator sets it, for
+ * instance to {@value #DEFAULT_URL}, the document the Sigstore project publishes. Fetching over HTTPS trusts that host;
+ * the TUF repository serves the same root signed by the project's keys, which this pass does not yet read, so an
+ * operator wanting more points it at a mirror. A pasted {@code signature-sigstore-trusted-root} wins and nothing is
+ * fetched.
  *
- * The dial is empty by default and this pass does not run, so a stock deployment makes no outbound call: a
- * repository is not a thing that should reach the internet because it was installed. An operator who wants the
- * public-good instance sets the dial to {@value #DEFAULT_URL}, which is the document the Sigstore project
- * publishes and the value the setting's own text names so it can be copied rather than remembered.
- *
- * <p><b>What that URL trusts, when it is set.</b> Taking the document over HTTPS trusts that host and the
- * organisation behind it to serve the real thing, which is a weaker statement than the one the document itself
- * can make: the same root is served through a TUF repository ({@code https://tuf-repo-cdn.sigstore.dev}), where
- * it is signed by the project's own keys and a client verifies those signatures against a root of trust it was
- * shipped with. The library this build already carries has that client, and teaching this pass the TUF form is
- * the next thing it should learn; an operator wanting the stronger statement today points the dial at their own
- * mirror of the document.
- *
- * <p><b>A pasted root wins, and then nothing is fetched.</b> {@code signature-sigstore-trusted-root} is the
- * operator's own document - a self-hosted Fulcio's, or the public one pinned by hand - and a deployment that set
- * it has said what it verifies against; the pass makes no outbound call at all in that case either.
- *
- * <h2>What a fetched root does not do</h2>
- *
- * It re-judges nothing by itself. A version screened before a root was held carries a recorded summary saying its
- * bundle chained to no root; the retroactive sweep re-judges recorded summaries under the policy as it stands but
- * re-verifies no bytes, so such a version stays as it was recorded until something re-derives it - a late sidecar,
- * a re-publish. That is a deliberate limit of the sweep rather than of this pass, and it is stated in the setting's
- * own text so an operator switching the root on does not read an old UNTRUSTED as today's answer.
+ * <p>A fetched root re-judges nothing: a version recorded as chaining to no root stays so until a late sidecar or a
+ * re-publish re-derives it, which the setting's text says.
  */
 public final class TrustedRootTask implements MaintenanceTask {
 
     static final String NAME = "sigstore-trusted-root";
 
-    /** Where the trusted root is fetched from; empty - which is what a deployment that says nothing has - means
-     *  no fetch and no pass. */
+    /** Where the trusted root is fetched from; empty, the default, means no fetch and no pass. */
     static final String URL = "signature-sigstore-trusted-root-url";
 
-    /** The public-good instance's published root: not a default, but the value the setting's text names for an
-     *  operator who wants it, and what the fetch is designed around. */
+    /** The public-good instance's published root, which the setting's text names. */
     static final String DEFAULT_URL =
             "https://raw.githubusercontent.com/sigstore/root-signing/main/targets/trusted_root.json";
 
     static final IntervalSetting INTERVAL = IntervalSetting.of("signature-sigstore-trusted-root-interval", "P1D");
 
-    /** The most of a document this pass reads. A trusted root is tens of kilobytes; a megabyte is generous, and a
-     *  host answering with something larger is answering with something else. */
+    /** The most of a document this pass reads; a root is tens of kilobytes. */
     static final int LARGEST = 1024 * 1024;
 
     /** One fetch of the document at a URL: its bytes, or empty where the host answered that it has none. */
@@ -110,19 +88,15 @@ public final class TrustedRootTask implements MaintenanceTask {
         }
         String pasted = context.config().apply(ConfiguredSignerTrust.SIGSTORE_ROOT);
         if (pasted != null && !pasted.isBlank()) {
-            // The operator said what they verify against. Fetching anyway would make an outbound call whose answer
-            // nothing reads, which is the one thing a quiet deployment must not do behind its own configuration.
+            // A pasted root is used, so nothing is fetched.
             return;
         }
         Optional<byte[]> fetched = fetcher.fetch(URI.create(url));
         if (fetched.isEmpty()) {
             throw new IOException("the trusted root at " + url + " was not served");
         }
-        // A host that answered with a login page, an error document or a root this build cannot read is a host
-        // that did not answer. Storing it would replace a working root with something no bundle verifies against,
-        // and the failure would surface as every bundle going untrusted rather than as this pass. The Sigstore
-        // verifier reads it, through the scheme seam, so this pass carries no Sigstore library of its own; with no
-        // verifier installed nothing could verify against the root either, and it is refused the same way.
+        // A document the installed Sigstore verifier cannot read is refused, so a working root is never replaced by
+        // a login page.
         byte[] root = SignatureScheme.installed(ArtifactSignatures.Scheme.SIGSTORE_BUNDLE)
                 .flatMap(sigstore -> sigstore.trustMaterial(fetched.get()))
                 .orElseThrow(() -> new IOException("what " + url + " served is not a Sigstore trusted root this "

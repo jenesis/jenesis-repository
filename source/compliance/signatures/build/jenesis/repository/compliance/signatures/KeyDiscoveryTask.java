@@ -13,45 +13,29 @@ import build.jenesis.repository.maintenance.RepositoryContext;
 import build.jenesis.repository.store.ArtifactStore;
 
 /**
- * The pass that resolves the keys the screen met and could not place: for every wanted key id
- * ({@link DiscoveredKeys#WANTED}) it asks the sources configured - the two public keyservers by key id, the Web
- * Key Directory by each e-mail address the artifact's metadata names as a maintainer, GitHub by each login it
- * names - and appends what it finds to the repository's discovered bundle,
- * where the trust reads it by point read at the next verification. A key found through a maintainer is
- * {@linkplain DiscoveredKeys#bind bound} to that maintainer, since it was found because an artifact named them and
- * must not vouch for artifacts that do not. A key no source has is asked for again after a day; a source that does
- * not answer leaves the marker for the next pass and counts a failure. Nothing here runs on a request path, which
- * is what the trust provider's read-purity clause asks: a verdict reads what was last discovered, never a
- * keyserver's uptime.
+ * The pass that resolves the keys the screen met and could not place: for each wanted key id
+ * ({@link DiscoveredKeys#WANTED}) it asks the configured sources - the public keyservers by key id, the Web Key
+ * Directory by each maintainer e-mail the artifact's metadata names, GitHub by each login - and appends what it finds
+ * to the repository's discovered bundle, which the trust reads at the next verification. A key found through a
+ * maintainer is {@linkplain DiscoveredKeys#bind bound} to them, so it vouches only for what names them. A key nobody has
+ * is asked for again after a day; a source that does not answer leaves the marker and counts a failure. Off the
+ * request path, so a verdict never depends on a keyserver's uptime.
  *
- * <h2>Nothing is asked until a source is named</h2>
+ * <p>{@code signature-key-discovery} is empty by default and the pass does not run, so nothing is fetched until an
+ * operator names a source. {@value #KEYSERVER_UBUNTU} and {@value #KEYS_OPENPGP_ORG} look a key up by its id, which
+ * names no person; named both, they are asked in order, since the first keeps every user id and a key is often on only
+ * one; each has its own URL for a mirror. {@code wkd} and {@code github} are looked up by what the artifact names, a
+ * further decision about whom the deployment talks to.
  *
- * {@code signature-key-discovery} is empty by default and this pass does not run, so a stock deployment makes
- * no outbound call of any kind. That is the posture the rest of the product keeps - the public advisory feeds
- * are opt-in for the same reason - and it is the one an operator can reverse in one place: naming a source
- * switches the pass on for that source alone. The dial is the list rather than a boolean beside one, so what
- * is asked and whether anything is asked are one answer.
- *
- * <p><b>Two public keyservers are supported, and each is one word.</b> {@value #KEYSERVER_UBUNTU} and
- * {@value #KEYS_OPENPGP_ORG} both look a key up by the signature's own key id, which names no person and
- * reveals only that this deployment met a signature by that key; naming both asks them in the order written,
- * which is the order the build tool asks them in and for the same reason - the first keeps every user id a key
- * carries, the second serves them only for an address its owner verified, and a key exists on one and not the
- * other often enough that asking one is asking half. Each has a URL of its own so an internal mirror answers
- * instead. {@code wkd} and {@code github} are looked up by an address or a login the <em>artifact</em> names
- * rather than by a host the operator chose, so switching those on is a further decision about whom a
- * deployment talks to on a publisher's say-so.
- *
- * <p>Fetching is still not trusting: a discovered key verifies a signature while the outcome stays
- * {@code UNTRUSTED}, saying the key was discovered, until the operator admits it - by pasting it into the
- * trusted keys, or by accepting the sources outright, which is off by default ({@link DiscoveredKeys}).
+ * <p>Fetching is not trusting: a discovered key verifies while the outcome stays {@code UNTRUSTED} until the operator
+ * admits it, or accepts the sources outright ({@link DiscoveredKeys}).
  */
 public final class KeyDiscoveryTask implements MaintenanceTask {
 
     static final String NAME = "key-discovery";
 
-    /** The sources asked, comma-separated: {@value #KEYSERVER_UBUNTU}, {@value #KEYS_OPENPGP_ORG},
-     *  {@value #WKD}, {@value #GITHUB}. Empty - which is what a deployment that says nothing has - asks none. */
+    /** The sources asked, comma-separated: {@value #KEYSERVER_UBUNTU}, {@value #KEYS_OPENPGP_ORG}, {@value #WKD},
+     *  {@value #GITHUB}; empty, the default, asks none. */
     static final String SOURCES = "signature-key-discovery";
     static final String KEYSERVER_UBUNTU = "keyserver.ubuntu.com";
     static final String KEYS_OPENPGP_ORG = "keys.openpgp.org";
@@ -76,12 +60,10 @@ public final class KeyDiscoveryTask implements MaintenanceTask {
     /** How long a key no source had waits before it is asked for again. */
     static final Duration RETRY_MISS = Duration.ofDays(1);
 
-    /** The most wanted keys one pass resolves, so a burst of unknown signers is drained over passes rather than in one. */
+    /** The most wanted keys one pass resolves; a burst drains over passes. */
     static final int PER_PASS = 200;
 
-    /** The most of one answer a lookup reads: an armoured key with every certification a keyserver keeps on it is
-     *  some hundreds of kilobytes at most, while a key flooded with certifications runs to tens of megabytes and is
-     *  refused rather than held. */
+    /** The most of one answer a lookup reads; a key flooded with certifications past it is refused. */
     static final int LARGEST_KEY = 4 * 1024 * 1024;
 
     private static final System.Logger LOGGER = System.getLogger(KeyDiscoveryTask.class.getName());
@@ -94,9 +76,8 @@ public final class KeyDiscoveryTask implements MaintenanceTask {
         Optional<byte[]> fetch(String keyId) throws IOException;
     }
 
-    /** One lookup by a maintainer's own identity - an e-mail address, a GitHub login - answering every key the
-     *  source publishes for them, binary or armoured, or empty when it publishes none; a source that could not be
-     *  asked throws. Whether the wanted key is among them is the pass's question, not the source's. */
+    /** One lookup by a maintainer's e-mail address or GitHub login: every key the source publishes for them, or empty;
+     *  a source that could not be asked throws. */
     @FunctionalInterface
     public interface MaintainerFetcher {
 
@@ -125,8 +106,7 @@ public final class KeyDiscoveryTask implements MaintenanceTask {
                 || names(config, WKD) || names(config, GITHUB);
     }
 
-    /** Whether the sources setting names this source; a setting nothing has written names none, so nothing is
-     *  asked and the pass does not run. */
+    /** Whether the sources setting names this source. */
     static boolean names(UnaryOperator<String> config, String source) {
         String sources = config == null ? null : config.apply(SOURCES);
         return sources != null && Arrays.stream(sources.split(","))
@@ -148,10 +128,8 @@ public final class KeyDiscoveryTask implements MaintenanceTask {
     }
 
     /**
-     * The HKP lookup keyserver.ubuntu.com and every SKS-descended server speaks:
-     * {@code GET <base>/pks/lookup?op=get&options=mr&search=0x<key id>}, answering one armoured key.
-     * {@code options=mr} is what asks for the machine-readable answer rather than the HTML page, and the
-     * {@code 0x} prefix is the spelling the protocol names a key id in.
+     * The HKP lookup every SKS-descended server speaks: {@code GET <base>/pks/lookup?op=get&options=mr&search=0x<key id>},
+     * {@code options=mr} asking for the machine-readable answer.
      */
     public static Fetcher hkp(String base) {
         String root = (base == null || base.isBlank() ? DEFAULT_UBUNTU : base.trim()).replaceAll("/+$", "");
@@ -161,11 +139,8 @@ public final class KeyDiscoveryTask implements MaintenanceTask {
     }
 
     /**
-     * The named sources as one lookup, asked in order until one has the key.
-     *
-     * <p>A source that cannot be reached must not hide the next: the failure is kept and raised only if no
-     * later source answers, so one keyserver being down leaves the pass asking the other rather than counting a
-     * failure and waiting a day. Empty from every source is empty, which is the pass's "nobody has it".
+     * The named sources as one lookup, asked in order until one has the key; a failure is raised only if no later source
+     * answers, so one server down does not hide the other.
      */
     public static Fetcher first(List<Fetcher> sources) {
         List<Fetcher> asked = List.copyOf(sources);
@@ -192,15 +167,9 @@ public final class KeyDiscoveryTask implements MaintenanceTask {
     }
 
     /**
-     * The Web Key Directory lookup: the advanced method on the address's {@code openpgpkey} subdomain, then the
-     * direct method on the domain, as the draft orders them ({@link WebKeyDirectory}). With {@code base} given,
-     * the direct method rooted at that one host for every domain - a stub, or an internal directory that mirrors
-     * every domain a deployment's maintainers use.
-     *
-     * <p>Without {@code base} the domain is taken from package metadata - the address a publisher wrote - so it is
-     * screened as a proxy fetch is: a host resolving to a private, loopback or link-local address is not asked, and
-     * no redirect is followed, since a public host could otherwise send the fetch inward. A directory the operator
-     * names is theirs to point anywhere, internal included, and is asked as named.
+     * The Web Key Directory lookup ({@link WebKeyDirectory}): the advanced method, then the direct one, or with
+     * {@code base} the direct method at that one host. A domain taken from package metadata is screened as a proxy fetch
+     * is, private addresses refused and no redirect followed; an operator-named directory is asked as named.
      */
     public static MaintainerFetcher wkd(String base) {
         boolean named = base != null && !base.isBlank();
@@ -294,8 +263,7 @@ public final class KeyDiscoveryTask implements MaintenanceTask {
         store.page(DiscoveredKeys.WANTED.substring(0, DiscoveredKeys.WANTED.length() - 1), "", PER_PASS, wanted::add);
         Optional<SignatureScheme> installed = SignatureScheme.installed(ArtifactSignatures.Scheme.OPENPGP_DETACHED);
         if (installed.isEmpty()) {
-            // No OpenPGP verifier is installed, so nothing could read what a source served or say whether a keyring
-            // holds a key: the wanted markers stay for a deployment that gains the verifier, and nothing is fetched.
+            // Without an OpenPGP verifier nothing could read a key, so the markers stay.
             return;
         }
         SignatureScheme openpgp = installed.get();
@@ -345,10 +313,8 @@ public final class KeyDiscoveryTask implements MaintenanceTask {
     }
 
     /**
-     * Ask the sources for one wanted key, in the order they are named: by the key's own id, then by each maintainer
-     * e-mail address, then by each GitHub login. A source that answers keys not including the wanted one has not
-     * found it - a maintainer may publish several. The first hit lands in the bundle; found through a maintainer, it
-     * is bound to them.
+     * Asks for one wanted key by its id, then by each maintainer e-mail, then each GitHub login; the first hit lands in
+     * the bundle, bound to the maintainer it was found through.
      */
     private boolean resolve(ArtifactStore store, SignatureScheme openpgp, String keyId, Set<String> maintainers)
             throws IOException {

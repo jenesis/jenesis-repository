@@ -7,28 +7,15 @@ import build.jenesis.repository.compliance.SignerTrust;
 import build.jenesis.repository.store.ArtifactStore;
 
 /**
- * Provenance-bound trust: a keyless identity is believed for a coordinate when the workflow that signed is one of
- * the repository the artifact's own metadata names, and the identity's issuer is one the operator accepts.
+ * Provenance-bound trust: a keyless identity is believed for a coordinate when its workflow belongs to the repository
+ * the artifact's own metadata names and its issuer is one the operator accepts. Holding the Sigstore root vouches for
+ * nobody, and a pin does not scale; but a POM's {@code <scm>} or a package.json's {@code repository} names the source,
+ * recorded per coordinate by the maintainer seam. So {@code sigstore:<issuer>|<subject>} is trusted when the issuer is
+ * listed in {@code signature-provenance-accept} and the subject's repository (a GitHub subject before
+ * {@code /.github/}, a GitLab one before the double slash) is the recorded one; a fork stays UNTRUSTED.
  *
- * <p>A Sigstore signer is an OIDC identity Fulcio certified for ten minutes - for a CI build, the workflow file of
- * a repository at a ref - and holding the public-good root vouches for nobody, since Fulcio certifies anyone the
- * issuers know. A pin names one such identity outright, which is exact and does not scale past a handful of
- * coordinates. What does scale is what the artifact already says about itself: a POM's {@code <scm>} and a
- * package.json's {@code repository} name the source repository, and the maintainer seam records it per coordinate
- * before the signature question is asked. So this part trusts {@code sigstore:<issuer>|<subject>} for a coordinate
- * exactly when the issuer is one the {@code signature-provenance-accept} dial lists and the subject's repository -
- * the host, owner and name a GitHub workflow subject carries before {@code /.github/}, or a GitLab one before the
- * double slash - is the repository the coordinate's recorded metadata names. A bundle from a fork of the declared
- * repository names another repository and stays UNTRUSTED; a repository the metadata never named admits nothing.
- *
- * <p>The dial is empty by default, so nothing is admitted this way until an operator names an issuer - GitHub
- * Actions' {@code https://token.actions.githubusercontent.com} being the one worth naming first. A pin still wins
- * where one covers the coordinate, since the configured trust is asked first, and continuity still reports a
- * change of signer. Every signature admitted here says so: {@link #source()} is {@value #SOURCE}, recorded on the
- * signature as its key source, so a screen and a finding can tell "the operator pinned this identity" from "this
- * identity is a workflow of the declared repository".
- *
- * <p>A point read of the coordinate's maintainer record at trust time, never a walk and never a network call.
+ * <p>The dial is empty by default. A pin still wins, continuity still reports a change of signer, and a signature
+ * admitted here records {@value #SOURCE} as its source. One point read of the maintainer record, no network.
  */
 public final class ProvenanceTrust implements SignerTrust {
 
@@ -93,7 +80,7 @@ public final class ProvenanceTrust implements SignerTrust {
 
     @Override
     public void observed(String ecosystem, String coordinate, String version, SignerIdentity signer, Instant when) {
-        // Nothing is learned here: the record this reads is written by the maintainer seam on every accepted publish.
+        // The maintainer seam writes the record this reads.
     }
 
     @Override

@@ -4,9 +4,7 @@ import module java.base;
 import build.jenesis.repository.maintenance.MaintenanceTask;
 import build.jenesis.repository.maintenance.MaintenanceTaskProvider;
 
-/** Schedules {@link KeyDiscoveryTask} with the sources {@code signature-key-discovery} names - the two public
- *  keyservers by key id, asked in the order named, the Web Key Directory by maintainer e-mail, GitHub by
- *  maintainer login; nothing when the dial is written empty, which is the pass's off switch. */
+/** Schedules {@link KeyDiscoveryTask} with the sources {@code signature-key-discovery} names; none when it is empty. */
 public final class KeyDiscoveryTaskProvider implements MaintenanceTaskProvider {
 
     public KeyDiscoveryTaskProvider() {

@@ -6,27 +6,14 @@ import build.jenesis.repository.store.ArtifactStore;
 import build.jenesis.repository.store.Retries;
 
 /**
- * Everything one signer signed, per repository: the browse an operator opens when a signer-changed finding names an
- * identity, and the blast radius of a key the moment it is revoked - which is the same question asked in the other
- * direction. Written beside the continuity record from the same observation, an accepted version that carried a
- * trusted signature, and read by bounded, cursor-paged point reads; nothing here enumerates a repository.
+ * Everything one signer signed, per repository: the browse a signer-changed finding opens and a revoked key's blast
+ * radius. Written from the continuity observation of an accepted, trusted signature; read by cursor-paged point reads.
  *
- * <p>Two small key spaces under the continuity root. {@code signers/who/<signer hash>} holds the identity a hash
- * stands for, written once; {@code signers/by/<signer hash>/<coordinate hash>} holds one document per signer and
- * coordinate - ecosystem, coordinate, versions counted, since when, the last version counted - rewritten under
- * compare-and-set as versions land. A version is counted once: {@code signers/counted/<signer hash>/<coordinate
- * hash>/<version hash>} is created the first time a signer is seen on that version, and only that creation counts it,
- * here and in the continuity record alike - so a re-publish, a late sidecar re-derivation and a re-observed older
- * version all agree. A crash between the marker and the count leaves that version one short, never counted twice. The hashes keep a signer's own
- * characters (a Sigstore subject is a URL, an OpenPGP fingerprint forty hex digits) and a coordinate's separators
- * out of the key space, the way the continuity document's key already does, and they are what a cursor names.
- *
- * <p>Read the other way, a page of signers is a page of names under {@code signers/by} with one point read each
- * for the identity, and a page of one signer's coordinates a page of names under that signer's prefix with one
- * point read each for the document: a repository with a million signed versions costs a screen no more than a
- * repository with ten, and a caller past a page follows the cursor. A hash that appears while its identity or
- * document is still being written - the two writes are not one - is skipped rather than rendered half-known, and
- * shows on the next page load.
+ * <p>Under the continuity root: {@code signers/who/<signer hash>} holds the identity, written once;
+ * {@code signers/by/<signer hash>/<coordinate hash>} the per-coordinate count, under compare-and-set; and
+ * {@code signers/counted/<signer hash>/<coordinate hash>/<version hash>}, created once, decides whether a version
+ * counts, here and in the continuity record alike. A crash between marker and count leaves a version one short, never
+ * counted twice. A hash whose documents are still being written is skipped until the next page load.
  */
 public final class SignerIndex {
 
@@ -77,9 +64,8 @@ public final class SignerIndex {
     }
 
     /**
-     * Record that an accepted version of a coordinate carried this signer's trusted signature - the continuity
-     * observation, indexed from the signer's side. The identity document is written once; the per-coordinate
-     * document counts a version not yet counted.
+     * Records an accepted version's trusted signature from the signer's side: the identity once, and the version counted
+     * once.
      */
     public static void observed(ArtifactStore store, String ecosystem, String coordinate, String version,
                                 SignerIdentity signer, Instant when) throws IOException {
@@ -87,8 +73,7 @@ public final class SignerIndex {
                 counted(store, ecosystem, coordinate, version, signer));
     }
 
-    /** Mark {@code version} of a coordinate as signed by {@code signer}: {@code true} the first time, which is the one
-     *  time the version is counted toward the signer, and {@code false} for every observation after. */
+    /** Marks {@code version} as signed by {@code signer}: {@code true} only the first time, when it counts. */
     static boolean counted(ArtifactStore store, String ecosystem, String coordinate, String version,
                            SignerIdentity signer) throws IOException {
         String key = COUNTED + "/" + id(signer) + "/" + ContinuityTrust.coordinateId(ecosystem, coordinate) + "/"
@@ -119,8 +104,7 @@ public final class SignerIndex {
         });
     }
 
-    /** The hash a signer is filed under: a digest of its wire form, so the identity's own characters never shape
-     *  the key space. */
+    /** The hash a signer is filed under, a digest of its wire form. */
     public static String id(SignerIdentity signer) {
         return digest(signer.wire());
     }
@@ -134,8 +118,7 @@ public final class SignerIndex {
         }
     }
 
-    /** Up to {@code limit + 1} child names under {@code prefix} after {@code after}: one more than the page, so the
-     *  caller knows whether a next page exists without a count. */
+    /** Up to {@code limit + 1} child names after {@code after}, the extra one saying whether a next page exists. */
     private static List<String> names(ArtifactStore store, String prefix, String after, int limit) {
         List<String> names = new ArrayList<>();
         store.page(prefix, after == null ? "" : after, Math.clamp(limit, 1, MAX_PAGE) + 1, names::add);

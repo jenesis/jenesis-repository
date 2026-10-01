@@ -7,21 +7,14 @@ import build.jenesis.repository.store.ArtifactStore;
 import build.jenesis.repository.store.Retries;
 
 /**
- * The store-backed half of continuity: what a coordinate's accepted versions established about who signs it, learned
- * from {@link #observed} and answered by {@link #expected}. It holds no key material and admits nobody - a signer
- * seen before is not thereby trusted - so its whole contribution to the composed trust is the expectation a verified
- * signature by another signer is measured against, under the {@code signature-signer-changed} dial.
+ * Continuity: who a coordinate's accepted versions were signed by, learned through {@link #observed} and answered by
+ * {@link #expected}. It holds no keys and admits nobody; it supplies the expectation a verified signature by another
+ * signer is measured against under {@code signature-signer-changed}.
  *
- * <p>One small document per coordinate, {@code signers/<sha256 of ecosystem and coordinate>}, read by point read
- * when a signature verified and rewritten under compare-and-set when an accepted version carried a signer: the
- * same signer counts one more version - once per version, decided by the marker {@link SignerIndex} creates for it, so
- * a re-publish, a late sidecar re-derivation and a re-observed older version agree - and another signer replaces the
- * expectation and starts its count at one. An accepted
- * version is what reaches here - a held one does not until an operator releases it - so the expectation follows
- * what the deployment actually admitted, and a change an operator waved through becomes the new expectation the
- * moment it lands. An operator's pin ({@code signature-trusted-signers}) is answered ahead of this by the configured
- * trust and is never overwritten by what was learned. Every observation is also indexed from the signer's side by
- * {@link SignerIndex}, under the same root.
+ * <p>One document per coordinate and scheme ({@link #key}), rewritten under compare-and-set when an accepted version
+ * carried a signer: the same signer counts one more version, once per version as {@link SignerIndex} decides, and
+ * another replaces the expectation. Only admitted versions reach here, so a change an operator released becomes the
+ * new expectation. A pin is answered ahead of this and never overwritten.
  */
 final class ContinuityTrust implements SignerTrust {
 
@@ -75,30 +68,19 @@ final class ContinuityTrust implements SignerTrust {
             }
             return next.render();
         });
-        // The same observation from the signer's side, so what one identity signed can be browsed and a revoked
-        // key's blast radius read without a walk.
+        // The same observation from the signer's side.
         SignerIndex.observed(store, ecosystem, coordinate, version, signer, when, first);
     }
 
     /**
-     * The document key: the coordinate's digest and then the scheme.
-     *
-     * <p>The scheme is part of the key, and that is this part's whole answer to an artifact signed several ways at
-     * once. A Maven release carries the detached OpenPGP signature its layout requires and may carry a Sigstore
-     * bundle beside it, which establishes two continuities rather than one that flips; keyed by the coordinate
-     * alone the two signers would overwrite each other on every publish, and the next assessment would report
-     * whichever lost as a change of signer.
-     *
-     * <p>A record under a key without the scheme is unreachable, and continuity re-establishes itself from the next
-     * signed publish of the coordinate. That is the fail-open direction for a dimension whose finding is "this is
-     * not who signed last time", so nothing reads such a key and nothing migrates it.
+     * The document key: the coordinate's digest, then the scheme, so an artifact signed two ways (OpenPGP and a Sigstore
+     * bundle) keeps two continuities rather than one that flips.
      */
     static String key(String ecosystem, String coordinate, String scheme) {
         return ROOT + "/" + coordinateId(ecosystem, coordinate) + "/" + scheme;
     }
 
-    /** The coordinate's own digest, without a scheme - shared with the signer index, which is keyed by coordinate
-     *  and must name one the same way this does. */
+    /** The coordinate's digest, shared with the signer index. */
     static String coordinateId(String ecosystem, String coordinate) {
         try {
             return HexFormat.of().formatHex(MessageDigest.getInstance("SHA-256")

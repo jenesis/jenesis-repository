@@ -19,37 +19,21 @@ import build.jenesis.repository.store.ArtifactStore;
 import build.jenesis.repository.store.Publication;
 
 /**
- * The retroactive signature sweep: a gate verdict is reached once, when the bytes arrive, so an artifact admitted
- * under yesterday's dials keeps serving under today's - a signature floor raised to {@code STRONG} says nothing
- * about the weak signatures already in the layout, and an untrusted-signature action moved from {@code ALLOW} to
- * {@code QUARANTINE} holds only what arrives next. This pass applies the current dials to what is already
- * published: it walks the inventory, reads the signature summary the gate recorded for each version, judges that
- * summary under the signature policy as it stands now, and holds a version whose recorded outcome or grade the
- * policy would no longer admit - the same {@code signature} hold, the same review queue, the same release and
- * discard as a publish-time hold.
+ * The retroactive signature sweep: applies the current dials to what is already published, since a verdict is reached
+ * once, when the bytes arrive. It walks the inventory, judges each version's recorded signature summary under the
+ * policy as it stands, and holds a version the policy would no longer admit, under the ordinary {@code signature} hold.
  *
- * <p>It judges the record, never the bytes. Re-verifying every artifact every pass would cost a read of every blob
- * held, and would in any case answer a different question: a signature's cryptographic outcome does not change
- * with a dial. What changes is the verdict a recorded outcome deserves, and the recorded summary carries exactly
- * what the policy reads - the outcome, the grade, the signer, where the material sat. Two things this therefore
- * cannot do, on purpose: it does not re-decide trust (a key admitted or withdrawn since the record was written
- * changes an outcome only through re-verification, which a re-publish or a late sidecar triggers), and it does not
- * re-judge continuity (the signer-changed finding is measured against the history as it stood at publish). A
- * version published before signatures were recorded here has no summary and is left alone: it was never judged,
- * and inventing a judgement would make it indistinguishable from one judged and found wanting.
+ * <p>It judges the record, never the bytes: a cryptographic outcome does not change with a dial. So it neither
+ * re-decides trust nor re-judges continuity, which need re-verification (a re-publish or a late sidecar), and a version
+ * with no recorded summary is left alone.
  *
- * <p>Off unless {@code signature-sweep} is switched on, because its whole purpose is to hold what a tightened
- * dial now refuses, and that can be a great deal of a repository at once; an operator tightening a dial turns it
- * on with the change and reads the review queue. Exclusive, since it writes holds; idempotent, since a hold
- * already placed is converged rather than duplicated; a human's release sticks through the {@code signature}
- * kind's override, so the very findings a reviewer waved through are never re-held, though a further tightening
- * that raises a new finding may hold the version again. Nothing is ever auto-released here: a dial loosened after
- * a hold leaves the hold for a person to lift.
+ * <p>Off unless {@code signature-sweep} is on, since it can hold much of a repository at once. Exclusive and
+ * idempotent; a release sticks through the kind's override, and nothing is ever auto-released.
  */
 public final class SignatureSweepTask implements MaintenanceTask {
 
     static final String NAME = "signature-sweep";
-    /** The switch: off by default, since a pass whose purpose is mass-holding must be asked for. */
+    /** The switch, off by default. */
     static final String ENABLED = "signature-sweep";
     static final IntervalSetting INTERVAL = IntervalSetting.of("signature-sweep-interval", "P1D");
 
@@ -94,8 +78,7 @@ public final class SignatureSweepTask implements MaintenanceTask {
         HoldKind kind = SignatureHoldReleaseObserver.KIND;
         long[] held = {0};
         long[] unenforceable = {0};
-        // Every version every Nth pass; between, the versions published since the last full one - a tightened dial
-        // wants the full pass, which the operator gets by switching the sweep on (no full pass has landed yet).
+        // Every version every Nth pass, the versions published since between; the first pass is full.
         IncrementalPasses cadence = IncrementalPasses.over(store, name(), "findings/signature-sweep", context.config());
         cadence.releases(inventory, release -> {
             String eco = release.ecosystem(), coordinate = release.coordinate(), version = release.version();
@@ -167,9 +150,7 @@ public final class SignatureSweepTask implements MaintenanceTask {
                 Map.of("tenant", context.tenant(), "repository", context.repository()), held[0]);
     }
 
-    /** The recorded summary as the signature the policy judges: the outcome and grade it recorded, the signer it
-     *  named and where its trust came from, the material's location and what else it stated; nothing about the
-     *  key, since nothing is re-read. */
+    /** The recorded summary as the signature the policy judges. */
     static ComplianceGate.Signature recorded(SignatureSection.Summary summary, String coveredPath) {
         ComplianceGate.Signature.Outcome outcome;
         try {

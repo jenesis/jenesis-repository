@@ -20,62 +20,27 @@ import build.jenesis.repository.store.Publication;
 import build.jenesis.repository.store.PublicationObserver;
 
 /**
- * Re-derives a coordinate's recorded signature when the signature itself lands <em>after</em> the artifact it covers.
+ * Re-derives a coordinate's recorded signature when the signature lands after the artifact it covers, as in a Maven
+ * deploy, which sends the jar before its {@code .asc}; without this every signed release would read unsigned. The
+ * gate's {@code QualityInspector.completes} re-assesses only held artifacts, so an accepted one needs this.
  *
- * <h2>Why this is needed at all</h2>
+ * <p>It records and does not enforce: under {@code signature-missing=ALLOW}, the default, a later tampered or untrusted
+ * signature leaves the artifact serving with that verdict on its record, and acting on it is the {@code signature} hold
+ * kind's retroactive sweep. A deployment that wants the late signature to decide holds the artifact until it arrives
+ * ({@code signature-missing=QUARANTINE}).
  *
- * A Maven deploy is several requests and the client sends the artifact first: the jar is screened while its
- * {@code .asc} is still in flight, so at the only moment the gate looks at it, the artifact genuinely carries no
- * signature. Without this, <em>every properly signed release</em> would be recorded as unsigned - the capability would
- * be exactly wrong in the ordinary case and right only in the rare one.
- *
- * <p>The gate already has a seam for this - {@code QualityInspector.completes} - but it re-assesses artifacts that are
- * <b>held</b>, which is the licence dimension's problem: a POM arriving late releases a jar quarantined for an unknown
- * licence. An artifact that was <em>accepted</em> is not in that queue, and until a signature dimension exists to hold
- * an unsigned artifact, nothing brings the late sidecar back to it. So the fact needs its own convergence, and it
- * belongs to the module that owns the fact rather than to the format-agnostic screen.
- *
- * <h2>What it does not do</h2>
- *
- * It records; it does not enforce. An artifact accepted under {@code signature-missing=ALLOW} - the shipped default,
- * because a signature still in flight is not an absent one - and then followed by a signature that proves tampered
- * or untrusted keeps serving, with that verdict on its version record. Enforcing evidence that arrives after
- * acceptance is a retroactive decision over what is already published, the sweep the {@code signature} hold kind
- * exists for, and not a publish-time one. A deployment that wants the late signature to decide holds the artifact
- * until it arrives ({@code signature-missing=QUARANTINE}); the gate's own completion then re-assesses the held
- * artifact over its sidecar and releases only what it now allows. The soak drives the signature fates under that
- * posture for exactly this reason: under the default, a tampered signature changes nothing a client sees.
- *
- * <h2>What it costs</h2>
- *
- * It runs only when the published path is signature material some installed format claims - a {@code .asc}, not a jar -
- * so an ordinary publish pays one {@code covers} call per signature-declaring format and nothing else, except where a
- * format's material names what it covers in its own bytes: an OCI manifest's head is read to learn whether it is a
- * referrer carrying a signature. When it does
- * fire it re-reads one artifact, streaming: the signature is a few hundred bytes and the body is fed through a digest
- * in bounded chunks, so a multi-gigabyte package costs no heap. It writes one section of one version document.
- *
- * <p>It is deliberately an observer rather than part of the screen: the screen names no dimension, and a format-blind
- * gate that knew about signatures in order to converge them would be the same shape this codebase removes elsewhere.
- * Absent the module, nothing observes and nothing converges - which is the correct degradation, because nothing is
- * recording the fact either.
+ * <p>It runs only for a path some format claims as signature material, which costs one {@code covers} call per
+ * signature-declaring format (and an OCI manifest's head). When it fires it re-reads one artifact, streaming, and
+ * writes one section of one version document. Without this module nothing records the fact or converges it.
  */
 public final class SignatureCompletionObserver implements PublicationObserver {
 
     @Override
     public void onPublished(ArtifactDescriptor artifact, ArtifactStore store) throws IOException {
-        // EVERY format that claims to cover this path, not the first one discovery happened to yield.
-        //
-        // A detached sidecar's covers() strips its suffix and answers; it never asks whether the path is under its
-        // own route. So a path ending .sig is answered by Swift's declaration wherever it sits - including an OCI
-        // cosign signature tag, where the right answer is the manifest DIGEST and the suffix strip gives the tag
-        // with ".sig" removed. Taking the first match would make which answer won a property of the module path's
-        // ordering, and the losing case is silent: the wrong subject does not describe, the observer returns, and
-        // an artifact's signature is simply never re-derived. That is the ecosystem fan-out rule this codebase
-        // states for advisory lookups - ask all of them and union the answers.
+        // Every format's answer: a suffix-stripping covers() answers for any path, so an OCI cosign tag also gets
+        // Swift's wrong answer, and a first match would depend on module-path order.
         Set<String> candidates = new LinkedHashSet<>();
-        // The published bytes, opened only by a format whose material names what it covers in its own bytes - an OCI
-        // referrer - and only for a path its path-only answer leaves open.
+        // Opened only by a format whose material names its subject in its own bytes (an OCI referrer).
         ArtifactSignatures.Signed published = () -> {
             Optional<String> hash = artifact.hash() != null ? Optional.of(artifact.hash())
                     : storedHash(artifact.path(), store);
@@ -104,33 +69,18 @@ public final class SignatureCompletionObserver implements PublicationObserver {
             return;   // the signature names something this deployment cannot place on a coordinate
         }
         Blobs blobs = new Blobs(store);
-        // blob(), not located(): located answers "which bytes would a GET serve", which respects a hold, and this is
-        // re-deriving a fact about the bytes that are stored. A held artifact still has a signature, and recording
-        // nothing for it would read as "nobody signed this".
+        // The stored bytes, not the served ones: a held artifact still has a signature.
         Publication publication = new Publication(store);
-        // The serving pointer first, then the quarantine one. A signature that arrives after its artifact very often
-        // arrives after that artifact was HELD for the want of it - which is the secure floor working - and a held
-        // artifact has no serving pointer. Reading the held blob back under "/quarantine" is exactly how
-        // ComplianceScreen re-assesses a jar whose POM landed late, and the same artifact is reachable the same way
-        // here. Without it the fact is derived for the artifacts that did not need it and skipped for the ones that
-        // did.
+        // The serving pointer, else the quarantine one, since a late signature's artifact is often held for want of it.
         Optional<String> hash = storedHash(covered, store);
         if (hash.isEmpty()) {
             return;   // the sidecar arrived before its artifact; the artifact's own screening will read it
         }
 
-        // The same effective lookup the screens use, not the boot environment: this observer runs on the publishing
-        // thread, so the tenant is still bound and the keys an operator configured at runtime are the ones that
-        // apply. Reading the process configuration here instead would make a correctly configured deployment report
-        // every signature untrusted - and it would hide behind the inline path, because a held artifact is recorded
-        // by THIS observer rather than by the screen. The composed trust with nothing installed is NONE,
-        // so this needs no presence check of its own.
+        // The screens' effective lookup on the publishing thread, so runtime-configured keys apply.
         SignerTrust trust = SignerTrustProvider.trust(ComplianceSettings.lookup(store), store);
         QualityInspector inspector = ((TrustAware) new SignatureInspector()).withTrust(trust);
-        // The screen's own sibling lookup over the stored view, not a second one written here: it carries the bounded
-        // read, the blobs-namespace formats' own serving keys, and - through heldContentOf - the stored pointer rather
-        // than the serving one, which is what makes a sidecar visible while its subject is held. A private copy had
-        // none of the second and would have gone blind on every format that keeps its own key space.
+        // The screen's own sibling lookup over the stored view, which sees a sidecar while its subject is held.
         List<ComplianceGate.Subject> subjects = inspector.inspectArtifact(covered,
                 new StoredContent(blobs, hash.get()),
                 PublishInspection.siblings(publication.heldContentOf(hash.get()))).subjects();
@@ -141,9 +91,7 @@ public final class SignatureCompletionObserver implements PublicationObserver {
         if (summary.isEmpty()) {
             return;
         }
-        // The late sidecar is where Maven's continuity is learned: the artifact was screened before its signature
-        // existed, so the screen observed nothing, and this re-derivation is the first to see who signed it. A
-        // version whose every signature verified by a trusted signer is observed here as an accepted publish is.
+        // Where a late signature's continuity is learned, as for an accepted publish.
         for (ComplianceGate.Signature signature : signatures) {
             if (signature.signer() == null) {
                 continue;
@@ -153,9 +101,7 @@ public final class SignatureCompletionObserver implements PublicationObserver {
                         described.get().version(), signature.signer(), Instant.now());
             } else if (signature.outcome() == ComplianceGate.Signature.Outcome.UNTRUSTED
                     && signature.keySource() == null) {
-                // No source held this signer's key: a discovery source, where the operator named one, fetches it -
-                // by its id, or by the maintainers the coordinate's accepted publish recorded, since the artifact
-                // was screened one request before its signature and this re-derivation reads no metadata itself.
+                // No source held the key: a discovery source fetches it by id or by the recorded maintainers.
                 trust.wanted(signature.signer(), covered, Maintainers.named(store, described.get().ecosystem(),
                         described.get().coordinate()), Instant.now());
             }
@@ -171,13 +117,8 @@ public final class SignatureCompletionObserver implements PublicationObserver {
     }
 
     /**
-     * The content hash of the artifact stored at a covered path, wherever this deployment keeps it: the serving
-     * pointer under {@code publish/}, the held one under {@code /quarantine}, or - for a blobs-namespace format
-     * (Helm, Swift), which keeps its pointers under its own roots and never under {@code publish/} - the key the
-     * owning layout serves the path from, found the way a sibling read finds it. Empty when the artifact has not
-     * arrived, which is the "sidecar first" order every ingress allows and the artifact's own screening then covers.
-     * Public because it is the one blobs-namespace-aware resolution of a covered path, and the thing a test of the
-     * late-sidecar order proves without a consolidated metadata store to record into.
+     * The content hash of the artifact stored at a covered path: the serving pointer, the held one, or a blobs-namespace
+     * layout's own key. Empty when the artifact has not arrived yet, whose own screening then covers it.
      */
     public static Optional<String> storedHash(String covered, ArtifactStore store) throws IOException {
         Publication publication = new Publication(store);
@@ -205,11 +146,8 @@ public final class SignatureCompletionObserver implements PublicationObserver {
 
         @Override
         public long size() throws IOException {
-            // Real, not -1: the inspector decides from it whether an artifact is past the inspection bound, and an
-            // unknown size would make it start reading one it was never going to finish. The store's own stat of
-            // the blob: Blobs.size resolves a POINTER at the key it is given, and handing it the blob's key read the
-            // whole artifact as if it were a pointer body and answered -1 for every artifact - the unknown this
-            // comment says must not happen, unnoticed because nothing asserted the figure.
+            // The blob's real size, from the store's stat (Blobs.size expects a pointer key), so the inspector can tell
+            // an oversized artifact before reading it.
             return blobs.store().size("blobs/" + hash);
         }
 

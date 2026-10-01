@@ -7,16 +7,9 @@ import build.jenesis.repository.settings.Setting;
 import build.jenesis.repository.settings.SettingsContributor;
 
 /**
- * The dials that tell this deployment which publisher signatures it believes, surfacing on the settings screens
- * exactly when this module is installed - without it they would guard nothing.
- *
- * <p>Both are {@link Setting.Scope#TENANT}: which keys are trusted, and for which namespaces, is a statement one
- * tenant makes about its own supply chain, and two tenants sharing a deployment have no reason to share a keyring.
- *
- * <p>The keyless dials - the Sigstore trusted root, where it is fetched from and how often, and the issuers trusted by
- * provenance - are listed only where a scheme verifies a Sigstore bundle. Without one they configure nothing, and the
- * settings screen, the generated reference and the boot check for unrecognised settings would describe a capability
- * the deployment does not have. The answer is held, since installation is fixed for the life of a JVM.
+ * The signature dimension's dials. The trust dials are {@link Setting.Scope#TENANT}, since which keys a tenant believes
+ * is a statement about its own supply chain. The keyless dials are listed only where a scheme verifies Sigstore
+ * bundles, since without one they configure nothing; that answer is held, installation being fixed for the JVM.
  */
 public final class SignatureSettingsContributor implements SettingsContributor {
 

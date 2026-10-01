@@ -4,9 +4,7 @@ import module java.base;
 import build.jenesis.repository.maintenance.MaintenanceTask;
 import build.jenesis.repository.maintenance.MaintenanceTaskProvider;
 
-/** Schedules {@link TrustedRootTask} unless {@code signature-sigstore-trusted-root-url} was written empty, which is
- *  how a deployment says it fetches no root; a deployment that pasted its own root keeps it and the pass, finding
- *  one, fetches nothing. */
+/** Schedules {@link TrustedRootTask} once {@code signature-sigstore-trusted-root-url} is set. */
 public final class TrustedRootTaskProvider implements MaintenanceTaskProvider {
 
     public TrustedRootTaskProvider() {

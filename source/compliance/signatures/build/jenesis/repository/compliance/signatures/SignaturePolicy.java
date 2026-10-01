@@ -11,39 +11,22 @@ import build.jenesis.repository.compliance.SignerTrust;
 import build.jenesis.repository.compliance.Verdict;
 
 /**
- * The gate's signature dimension: it turns what the inspector found about a publisher's signature into a verdict.
+ * The gate's signature dimension: turns what the inspector found about a publisher's signature into a verdict. It
+ * reads nothing, since every fact was stamped onto the subject by the inspector, which alone is handed the bytes.
  *
- * <p>It decides and reads nothing. Every fact it needs was stamped onto the subject by the inspector, which is what
- * keeps this pure as the contract requires - no key, no artifact, no store. The split is not tidiness: verification
- * needs the bytes and the key at one moment, and only an inspector is ever handed the bytes.
- *
- * <h2>Four outcomes, four dials, because they are four different statements</h2>
- *
+ * <p>Four outcomes, each with its own dial, since refusing tampering and refusing an unfamiliar maintainer are
+ * different policies:
  * <ul>
- *   <li><b>Invalid</b> - the bytes do not match the signature made for them. Corruption or tampering, and the only
- *       one of these that is evidence of something actively wrong; it defaults to REJECT.</li>
- *   <li><b>Untrusted</b> - a perfectly good signature by a signer this deployment has no reason to believe. Very
- *       common the day enforcement is switched on, and a hold for review rather than a refusal.</li>
- *   <li><b>Signer changed</b> - this coordinate's earlier versions carried a different signer. The attack a
- *       single global keyring cannot see, because the key is genuinely valid; held for a human, never refused
- *       outright, since a legitimate key rotation looks exactly the same and only a person can tell them apart.</li>
+ *   <li><b>Invalid</b> - the bytes do not match the signature: tampering or corruption, REJECT by default.</li>
+ *   <li><b>Untrusted</b> - a good signature by a signer the deployment has no reason to believe: held for review.</li>
+ *   <li><b>Signer changed</b> - earlier versions carried another signer: held for a person, since a key rotation looks
+ *       the same as a takeover.</li>
  *   <li><b>Missing</b> - the format expected a signature and none arrived.</li>
  * </ul>
  *
- * <p>Collapsing any two of these would be a real loss. "Refuse tampering" and "refuse artifacts whose maintainer we
- * have not met" are not the same policy, and a deployment that cannot say the first without the second will end up
- * saying neither.
- *
- * <h2>Why missing has a dial of its own on the proxy path</h2>
- *
- * The same reason the licence dimension softens an unknown licence: an upstream carries artifacts published long
- * before its own signing requirement existed, and a proxy that quarantines every one of them stops being a proxy. A
- * hosted publish is the deployment's own supply chain and is held to the stricter answer. So the proxy leg reads
- * {@code signature-missing-proxy}, ALLOW by default, rather than {@code signature-missing}. It is a dial and not a
- * constant because the pull-through now fetches what an upstream publishes beside an artifact - Maven's
- * {@code .asc} and {@code .sigstore.json}, a registry's attestations - before the screen decides, so "carries no
- * signature" on a proxied artifact is a fact about the upstream rather than about which sidecars a client
- * happened to request, and an operator mirroring a registry that signs everything can hold what arrives unsigned.
+ * <p>On the proxy path a missing signature reads {@code signature-missing-proxy}, ALLOW by default, since an upstream
+ * holds artifacts from before its signing requirement; the pull-through fetches sidecars first, so stricter is a real
+ * choice for a registry that signs everything.
  */
 final class SignaturePolicy implements GatePolicy {
 
@@ -59,30 +42,18 @@ final class SignaturePolicy implements GatePolicy {
     static final String QUALITY_ACTION = "signature-quality-action";
 
     /**
-     * The verdict each dial carries when a deployment sets nothing - defined here, on the code that applies them,
-     * and referenced by the setting catalogue rather than written out a second time there.
-     *
-     * <p>They are not all the same, and the split is the dimension's whole argument. {@code INVALID_DEFAULT} is
-     * {@link Verdict#REJECT} and {@code UNTRUSTED_DEFAULT}/{@code CHANGED_DEFAULT} are
-     * {@link Verdict#QUARANTINE}, because each is a statement about evidence that has <em>arrived</em>: a signature
-     * that does not stand for these bytes means something is actively wrong, and one by a signer nobody vouched for
-     * is a decision for an operator rather than a defect. {@code MISSING_DEFAULT} is {@link Verdict#ALLOW} alone
-     * among them, because "carries no signature" at screening time is usually a statement about the ordering of two
-     * requests - a deploy sends the {@code .asc} after the artifact it signs - rather than about the artifact.
-     *
-     * <p>Written once: a default that lives in several places lets a change move some of them, and the product then
-     * reports a floor it is not applying.
+     * The dials' defaults, defined here and referenced by the settings catalogue. Evidence that arrived is judged:
+     * invalid is {@link Verdict#REJECT}, untrusted and changed {@link Verdict#QUARANTINE}. Missing is
+     * {@link Verdict#ALLOW}, since at screening time it usually means the {@code .asc} is still in flight.
      */
     static final String INVALID_DEFAULT = "REJECT";
     static final String UNTRUSTED_DEFAULT = "QUARANTINE";
     static final String CHANGED_DEFAULT = "QUARANTINE";
     static final String MISSING_DEFAULT = "ALLOW";
 
-    /** The proxy leg's own missing-signature default, ALLOW for the reason the class comment gives: an upstream
-     *  carries artifacts from before its signing requirement, and a proxy that holds every one of them is no proxy. */
+    /** The proxy leg's missing-signature default (see the class comment). */
     static final String MISSING_PROXY_DEFAULT = "ALLOW";
-    /** Below-floor quality is informational until an operator says otherwise: a grade is a judgement about a
-     *  signature that verified, so it names a risk rather than a failure. */
+    /** Below-floor quality is informational by default: a grade judges a signature that verified. */
     static final String QUALITY_ACTION_DEFAULT = "ALLOW";
 
     private final Verdict invalid;
@@ -115,8 +86,7 @@ final class SignaturePolicy implements GatePolicy {
                 GateDimension.verdict(QUALITY_ACTION, config.apply(QUALITY_ACTION), Verdict.valueOf(QUALITY_ACTION_DEFAULT)));
     }
 
-    /** This policy as the proxy leg applies it: the missing-signature verdict is the proxy dial's, every other
-     *  verdict the same - a signature that does not stand for its bytes is as alarming whichever way it arrived. */
+    /** This policy on the proxy leg: the proxy dial's missing-signature verdict, every other verdict the same. */
     SignaturePolicy onProxy() {
         return new SignaturePolicy(invalid, untrusted, changed, missingOnProxy, missingOnProxy, floor, belowFloor);
     }
@@ -159,12 +129,8 @@ final class SignaturePolicy implements GatePolicy {
                     + " is present but could not be read (" + signature.location() + ") - which is not the same as "
                     + "carrying none, and is not something to conclude anything from", "unreadable"));
             case VALID -> {
-                // Nothing to say about the signature itself, unless the coordinate's history says who should have
-                // made it: a verified signature by a trusted signer that is not the signer every earlier version
-                // carried - or not the one an operator pinned - is the continuity finding, and a key rotation, a
-                // maintainer handover and a takeover all look exactly like it at this point, which is why it is a
-                // dial rather than a verdict. Its quality may still be worth saying something about, and that is
-                // a separate dial: an operator raising a quality floor is not thereby changing who they trust.
+                // A trusted signature by a signer other than the expected one is the continuity finding; its quality
+                // is judged separately.
                 if (signature.expected() != null) {
                     findings.add(finding(changed, "Signer changed for " + where + signedBy(signature) + " - "
                             + expectedBy(signature.expected()), "changed"));
@@ -181,16 +147,14 @@ final class SignaturePolicy implements GatePolicy {
         return findings;
     }
 
-    /** A finding that also names what the hold kind records, so a publish-time hold leaves the record a retroactive
-     *  sweep would and a human's release writes the same sticky override. */
+    /** A finding naming the hold kind's token, so a publish-time hold records what the sweep would. */
     private static ComplianceGate.Finding finding(Verdict verdict, String detail, String token) {
         return verdict == Verdict.ALLOW
                 ? new ComplianceGate.Finding(verdict, detail)
                 : new ComplianceGate.Finding(verdict, detail, ComplianceGate.Hold.of(KIND, Set.of(token)));
     }
 
-    /** What the expectation rests on: an operator's pin, or the versions that established it - the difference
-     *  between "unexpected" and something an operator can act on. */
+    /** What the expectation rests on: a pin, or the versions that established it. */
     private static String expectedBy(SignerTrust.Expectation expected) {
         if (expected.pinned()) {
             return "the operator pinned " + expected.signer().wire() + " as this coordinate's signer";
@@ -199,8 +163,7 @@ final class SignaturePolicy implements GatePolicy {
                 + (expected.versions() == 1 ? "" : "s") + (expected.since() == null ? "" : " since " + expected.since());
     }
 
-    /** The signer, where one was read - which is every outcome that got far enough to parse the packet. An operator
-     *  told only that something is wrong cannot act; told which key, they can. */
+    /** The signer, where one was read, so the operator knows which key. */
     private static String signedBy(ComplianceGate.Signature signature) {
         return signature.signer() == null ? "" : ", signed by " + signature.signer().wire();
     }

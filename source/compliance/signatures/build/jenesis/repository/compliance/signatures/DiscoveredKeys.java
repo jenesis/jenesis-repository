@@ -10,28 +10,14 @@ import build.jenesis.repository.store.ArtifactStore;
 import build.jenesis.repository.store.Retries;
 
 /**
- * The keys a deployment discovered rather than configured: what the key-discovery pass fetched from the sources an
- * operator named, kept per repository as one armoured bundle ({@code discovered/openpgp}) beside the queue of keys
- * still wanted ({@code discover/openpgp/<key id>}, one marker per signer the screen met and could not place) and,
- * for a key found through a maintainer rather than by its own id, the binding that says whose it is
- * ({@code discovered/bound/<key id>}).
+ * The keys a deployment discovered rather than configured, per repository: one armoured bundle ({@link #BUNDLE}), the
+ * queue of keys still wanted ({@link #WANTED}) and the binding of a key found through a maintainer ({@link #BOUND}).
  *
- * <p>Discovery is off by default, and a discovered key <em>verifies</em> a signature but does not make it trusted:
- * as a {@link SignerTrust} part this holds the bundle as its material and answers {@link #trusts} only when the
- * operator set {@code signature-key-discovery-accept}, so the outcome of a signature by a discovered key stays
- * UNTRUSTED - with the finding saying where the key came from - until the operator admits the key by pasting it
- * into {@code signature-trusted-keys}, or accepts the source outright. That is what keeps "we could verify this"
- * and "we believe this" apart, which is the whole point of discovering keys without trusting them.
- *
- * <p>Accepting the sources does not pool a key found through a maintainer. A key looked up by its own id speaks
- * for nobody in particular and, accepted, is trusted wherever it signs; a key found in the Web Key Directory of an
- * e-mail address or among a GitHub login's published keys was found <em>because an artifact's metadata named that
- * person</em>, and it is trusted only for a coordinate whose recorded {@link Maintainers} name them. A stranger's
- * key discovered for one package therefore never admits that stranger's signature on another.
- *
- * <p>Nothing here makes an outbound call: the bundle, the bindings and the maintainer records are stored documents
- * read by point read at verification time, and the pass that fills them runs on the maintenance cadence, off every
- * request path.
+ * <p>A discovered key verifies a signature without making it trusted: {@link #trusts} answers only under
+ * {@code signature-key-discovery-accept}, so the outcome stays UNTRUSTED, naming where the key came from, until the
+ * operator admits the key or accepts the source. Even accepted, a key found through a maintainer is trusted only for a
+ * coordinate whose recorded {@link Maintainers} name them. Everything is read by point read; the pass that fills it
+ * runs off every request path.
  */
 final class DiscoveredKeys implements SignerTrust {
 
@@ -118,8 +104,7 @@ final class DiscoveredKeys implements SignerTrust {
         }
     }
 
-    /** Whether the bundle already holds a key by this id, so the pass fetches nothing it has - asked of the
-     *  installed OpenPGP verifier, and false where none is installed to read the bundle. */
+    /** Whether the bundle holds a key by this id, as the installed OpenPGP verifier reads it; false without one. */
     static boolean holds(ArtifactStore store, String keyId) throws IOException {
         Optional<byte[]> bundle = store.readVersioned(BUNDLE).map(ArtifactStore.Versioned::content);
         return bundle.isPresent() && SignatureScheme.installed(ArtifactSignatures.Scheme.OPENPGP_DETACHED)
@@ -141,8 +126,7 @@ final class DiscoveredKeys implements SignerTrust {
         });
     }
 
-    /** Bind a key found through a maintainer to that maintainer - unioned, since one key may be found for the
-     *  same person named two ways - with the source it was found at. */
+    /** Binds a key to the maintainer it was found through, unioned, with its source. */
     static void bind(ArtifactStore store, String keyId, String maintainer, String source) throws IOException {
         Retries.update(store, BOUND + keyId, current -> {
             Marker bound = Marker.parse(current.map(ArtifactStore.Versioned::content).orElse(new byte[0]));
@@ -160,10 +144,9 @@ final class DiscoveredKeys implements SignerTrust {
     }
 
     /**
-     * Record that the screen met a signature by this key id and could not place it, so the pass fetches it. The
-     * marker names the path that wanted it, when, and the maintainers that artifact names; a marker already present
-     * keeps what it knew and gains the maintainers it did not, so a key looked for and not found ({@link #missed})
-     * is not asked for again on every publish, while a later publish that names whom to ask still reaches the pass.
+     * Records that the screen met a signature by this key id and could not place it: the path, when, and the
+     * maintainers named. An existing marker keeps its state, so a {@link #missed} key is not re-asked per publish, and
+     * gains any new maintainers.
      */
     static void want(ArtifactStore store, String keyId, String path, Set<String> maintainers, Instant when)
             throws IOException {
@@ -173,7 +156,7 @@ final class DiscoveredKeys implements SignerTrust {
             Map<String, String> fresh = new LinkedHashMap<>();
             fresh.put("path", path);
             fresh.put("wanted", when.toString());
-            // A create, never an overwrite: a marker a peer wrote in the same moment stays, and carries the same want.
+            // Create-if-absent: a peer's marker stays.
             store.writeVersioned(key, new Marker(fresh, maintainers).render(), null);
             return;
         }
@@ -183,7 +166,6 @@ final class DiscoveredKeys implements SignerTrust {
         }
         Set<String> union = new LinkedHashSet<>(marker.maintainers());
         union.addAll(maintainers);
-        // A lost race is a peer's union landing first, which the next want completes.
         store.writeVersioned(key, new Marker(marker.lines(), union).render(), current.get().token());
     }
 
@@ -199,8 +181,7 @@ final class DiscoveredKeys implements SignerTrust {
         return Optional.of(hex.substring(hex.length() - 16).toUpperCase(Locale.ROOT));
     }
 
-    /** Mark a wanted key no source had, with when it was asked, so the pass asks again only after a day - keeping
-     *  the path and the maintainers the marker named, since the next asking wants them as much as this one did. */
+    /** Marks a wanted key no source had with when it was asked, keeping the rest, so it is asked again after a day. */
     static void missed(ArtifactStore store, String keyId, Instant when) throws IOException {
         String key = WANTED + keyId;
         Optional<ArtifactStore.Versioned> current = store.readVersioned(key);

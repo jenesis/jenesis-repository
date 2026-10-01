@@ -17,22 +17,14 @@ import build.jenesis.repository.store.Publication;
 import build.jenesis.repository.store.PublicationObserver;
 
 /**
- * Asks an attestation store for the bundles it holds for an artifact that was just published, by the artifact's
- * digest, and keeps the answer beside it as the sidecar its format reads as evidence. The shape exists for the
- * ecosystems whose provenance lives in a store keyed by digest rather than beside the artifact: Homebrew attests
- * every bottle its CI builds through GitHub Artifact Attestations, which are fetched from
- * {@code https://api.github.com/orgs/Homebrew/attestations/sha256:<digest>} and which no bottle domain ever serves.
- * A proxied artifact's companions are fetched beside the fill; a published one has nothing to fetch beside, only a
- * digest to ask with, which is why this is an observer of the publish rather than a companion of it.
+ * Asks an attestation store, by digest, for the bundles it holds for a just-published artifact, and keeps the answer
+ * beside it as the sidecar its format reads: for ecosystems whose provenance lives in a store rather than beside the
+ * artifact, such as Homebrew's GitHub Artifact Attestations.
  *
- * <p>Off unless {@code signature-attestation-lookup} names a store for the artifact's ecosystem, one
- * {@code <ecosystem> = <url>} per line, the way the pins are written. A store answering 404 holds nothing for the
- * digest, which is absence; any other failure is logged and the publish is unaffected, since the lookup is best
- * effort and the artifact's own verdict does not wait on it. An answer naming no bundle is not kept. What is kept
- * goes where the format serves the sidecar from - through its {@link BlobLayout#servingKey serving key} for a
- * format that keeps its pointers in a root of its own, else linked at the sidecar's path - and is then announced
- * as a publish of its own, so the completion observer re-derives the artifact's verdict over it exactly as it
- * does for a signature that arrives one request after its artifact.
+ * <p>Off unless {@code signature-attestation-lookup} names a store for the ecosystem, one {@code <ecosystem> = <url>}
+ * per line. A 404 is absence; any other failure is logged and the publish is unaffected. An answer naming no bundle is
+ * not kept. What is kept goes where the format serves the sidecar ({@link BlobLayout#servingKey}, else linked at its
+ * path) and is announced as a publish, so the completion observer re-derives the verdict over it.
  */
 public final class AttestationLookupObserver implements PublicationObserver {
 
@@ -60,7 +52,7 @@ public final class AttestationLookupObserver implements PublicationObserver {
         this(AttestationLookupObserver::http);
     }
 
-    /** Over a fetcher of the test's choosing, so a lookup is driven without a network. */
+    /** Over the given fetcher. */
     public AttestationLookupObserver(Fetcher fetcher) {
         this.fetcher = fetcher;
     }
@@ -106,8 +98,7 @@ public final class AttestationLookupObserver implements PublicationObserver {
         new Publication(store).published(ArtifactDescriptor.at(format.name(), sidecar));
     }
 
-    /** The store the dial names for an ecosystem, resolved so a base without a trailing slash still resolves its
-     *  digest beneath it. */
+    /** The store the dial names for an ecosystem, with a trailing slash. */
     static Optional<URI> store(UnaryOperator<String> config, String ecosystem) {
         String configured = config == null || ecosystem == null ? null : config.apply(STORES);
         if (configured == null || configured.isBlank()) {
