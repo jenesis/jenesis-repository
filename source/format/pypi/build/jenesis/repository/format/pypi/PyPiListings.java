@@ -10,10 +10,9 @@ import build.jenesis.repository.walk.BoundedChildren;
 import build.jenesis.repository.format.Listings;
 
 /**
- * The PEP 503 Simple pages as stored listings: one page per project, whose entries are its distribution files (a link
- * each, with the file's SHA-256 fragment and its {@code data-yanked} attribute from the lifecycle mark), and the root
- * page, whose entries are the listed projects. A file is listed exactly when its pointer is not withheld, and a
- * project exactly when it has a servable file or no files at all - the screens the on-read generation applied.
+ * The PEP 503 Simple pages as stored listings: a page per project whose entries are its files (a link each with its
+ * SHA-256 fragment and its {@code data-yanked} from the lifecycle mark), and the root page of listed projects. A file
+ * is listed when its pointer is not withheld, a project when it has a servable file or no files at all.
  */
 final class PyPiListings {
 
@@ -48,32 +47,18 @@ final class PyPiListings {
         return StoredListing.Spec.of(root(), page("Simple index"), this::generateRoot);
     }
 
-    /**
-     * The stride the index is enumerated in. It <b>drains</b>, because the Simple index names every project by
-     * definition, so neither the names nor the round-trips that fetch them may cap it; what is bounded is how many
-     * names are in hand at once. Capping either one silently omits projects - or, once the entry cap alone was lifted, stopped
-     *  omitting them and started throwing instead, at exactly {@code steps x page} names. That is the ceiling the
-     *  OCI tag canary hit at a million: a generator that raises {@code TraversalException} does not answer short,
-     *  it never materialises the document at all. */
+    /** The stride the index is enumerated in. It drains: the Simple index names every project, so neither names nor
+     *  round-trips are capped - a cap would omit projects or throw and never materialise the document - and only the
+     *  names in hand are bounded. */
     private static final BoundedChildren PROJECTS = BoundedChildren.draining();
 
     StoredListing.Spec projectSpec(String project) {
         return StoredListing.Spec.materialising(project(project), page(project), () -> generateProject(project));
     }
 
-    /**
-     * Emit a link per servable project, in the order the scan yields them.
-     *
-     * <p>This used to collect every project into a sorted map and hand the map over. A Simple index names every
-     * project in the repository, so that map was the repository - held whole, on the first read of an index that
-     * does not exist yet, which is a request path.
-     *
-     * <p>The scan's order is the sink's order, which is what the generator contract requires. That is not a
-     * coincidence to rely on quietly: no map sorts here, so the guarantee rests on {@code BoundedChildren}
-     * delivering children in the store's lexicographic order -
-     * which it documents, which every shipped backend implements natively, and which the store contract kit's
-     * native-paging property proves for each of them.
-     */
+    /** Emit a link per servable project in the scan's order, which is the order the sink requires:
+     *  {@code BoundedChildren} delivers children in the store's lexicographic order, as every backend does natively and
+     *  the store contract kit proves. Nothing is collected, since the index is every project in the repository. */
     private void generateRoot(StoredListing.Generator.Sink sink) throws IOException {
         PROJECTS.scan(store, "pypi", project -> {
             if (PyPiFormat.servable(project, blobs)) {
@@ -99,7 +84,7 @@ final class PyPiListings {
                 .getBytes(StandardCharsets.UTF_8);
     }
 
-    /** The link of a servable file, or {@code null} when the file is not served (its pointer withheld or gone). */
+    /** The link of a servable file, or {@code null} when its pointer is withheld or gone. */
     private byte[] fileLink(String project, String file, Map<String, Lifecycle.Flag> marks) throws IOException {
         String key = "pypi/" + project + "/files/" + file;
         if (blobs.withheld(key)) {
@@ -115,7 +100,7 @@ final class PyPiListings {
         if (flag != null) {
             link.append(" data-yanked=\"").append(Listings.html(flag.message() == null ? "" : flag.message())).append('"');
         }
-        // PEP 740: a file uploaded with attestations names its provenance document, relative to the project's page.
+        // PEP 740: a file with attestations names its provenance document, relative to the page.
         if (blobs.exists(PyPiFormat.attestationsKey(project, file))) {
             Optional<String> version = new PyPiFormat().describe("/pypi/simple/" + project + "/" + file)
                     .map(described -> described.version());
@@ -142,8 +127,7 @@ final class PyPiListings {
         return false;
     }
 
-    /** Re-decide one file's entry (and its project's) from the store's current state - after an upload, a hold, a
-     *  release or a mark. */
+    /** Re-decide one file's entry and its project's from the store's current state. */
     void refresh(String project, String file) throws IOException {
         byte[] link = fileLink(project, file, Lifecycle.versions(store, project));
         if (link == null) {

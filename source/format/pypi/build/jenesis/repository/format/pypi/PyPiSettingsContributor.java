@@ -5,9 +5,8 @@ import build.jenesis.repository.settings.Setting;
 import build.jenesis.repository.settings.SettingsContributor;
 
 /**
- * The PyPI format's own dials, so they appear in the settings screen and the generated reference exactly when an
- * image ships the format. One today: where a proxied distribution's PEP 740 provenance is fetched from, read off the
- * exchange by {@link PyPiFormat#companions} on every fill.
+ * The PyPI format's dials, shown in the settings screen and reference when an image ships the format: where a proxied
+ * distribution's PEP 740 provenance is fetched from, read by {@link PyPiFormat#companions} on every fill.
  */
 public final class PyPiSettingsContributor implements SettingsContributor {
 

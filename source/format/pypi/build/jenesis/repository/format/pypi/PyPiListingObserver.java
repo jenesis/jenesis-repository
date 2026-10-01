@@ -10,10 +10,9 @@ import build.jenesis.repository.store.ListingObserver;
 import build.jenesis.repository.store.StoredListing;
 
 /**
- * Keeps the PyPI {@linkplain PyPiListings stored Simple pages} in step with the transitions that happen off the
- * upload path - a hold on an uploaded file and its release, a yank and its reversal, a removal - by re-deciding the
- * one file's link (and its project's). A transition whose subject names neither a file path nor a coordinate is
- * mapped to no link, so every page is rebuilt in place.
+ * Keeps the PyPI {@linkplain PyPiListings stored Simple pages} in step with transitions off the upload path - a hold
+ * and its release, a yank and its reversal, a removal - by re-deciding the one file's link and its project's. A subject
+ * naming neither a file path nor a coordinate rebuilds every page in place.
  */
 public final class PyPiListingObserver implements ListingObserver {
 

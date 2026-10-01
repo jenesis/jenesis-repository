@@ -35,12 +35,11 @@ import build.jenesis.repository.walk.BoundedChildren;
 import build.jenesis.repository.walk.ScreenedNames;
 
 /**
- * The PyPI format (the Simple Repository API plus the legacy upload endpoint), so {@code twine upload} and
- * {@code pip install} work over the same store. It owns {@code /pypi/...}. An upload ({@code POST /pypi/}, a
- * multipart form from twine) stores the distribution file under {@code pypi/<project>/files/<filename>}, the
- * project name normalized per PEP 503. The project index ({@code GET /pypi/simple/<project>/}) is served from a
- * stored page the upload maintains, as the PEP 503 HTML, each link relative to the index with the file's
- * {@code #sha256} so pip verifies it; the file itself is served at {@code /pypi/simple/<project>/<filename>}.
+ * The PyPI format (the Simple Repository API and the legacy upload endpoint): {@code twine upload} and
+ * {@code pip install} over the same store, under {@code /pypi/...}. An upload ({@code POST /pypi/}, twine's multipart
+ * form) stores the distribution under {@code pypi/<project>/files/<filename>}, the project PEP 503-normalized. The
+ * project index ({@code GET /pypi/simple/<project>/}) is a stored page the upload maintains, each link relative with
+ * the file's {@code #sha256}, and the file is served at {@code /pypi/simple/<project>/<filename>}.
  */
 public final class PyPiFormat implements RepositoryFormat, ProxyLeg, BlobLayout, RepositoryImporter,
         ArtifactSignatures, RepositoryExporter {
@@ -48,11 +47,11 @@ public final class PyPiFormat implements RepositoryFormat, ProxyLeg, BlobLayout,
     private static final Logger LOGGER =
             LoggerFactory.getLogger(PyPiFormat.class);
 
-    // Compiled once, not per request: the anchor href of a proxied Simple page, and the PEP 503 project-name separator run.
+    // The anchor href of a proxied Simple page.
     private static final Pattern HREF = Pattern.compile("href=\"([^\"]*)\"");
-    // The whole anchor, because a PEP 658 sidecar's digest lives on the tag beside the href rather than in it.
+    // The whole anchor, since a PEP 658 sidecar's digest is an attribute beside the href.
     private static final Pattern ANCHOR = Pattern.compile("<a\\s([^>]*)>", Pattern.CASE_INSENSITIVE);
-    // PEP 714 renamed PEP 658's attribute; indexes in the wild serve either, so both are read and the newer wins.
+    // PEP 714 renamed PEP 658's attribute; both are read and the newer wins.
     private static final Pattern CORE_METADATA =
             Pattern.compile("data-core-metadata=\"([^\"]*)\"", Pattern.CASE_INSENSITIVE);
     private static final Pattern DIST_INFO_METADATA =
@@ -82,9 +81,8 @@ public final class PyPiFormat implements RepositoryFormat, ProxyLeg, BlobLayout,
 
     @Override
     public List<String> blobKeys(String coordinate, String version, ArtifactStore store) throws IOException {
-        // Every distribution file whose name carries this version as its '-'-delimited token: an sdist
-        // (<name>-<version>.tar.gz / .zip) or a wheel (<name>-<version>-<pytag>...whl). All of a project's versions
-        // share one files/ directory, so the version is matched in the filename rather than a directory segment.
+        // Every distribution file whose name carries this version as its '-'-delimited token, an sdist or a wheel; a
+        // project's versions share one files/ directory.
         if (!BlobLayout.addressable(coordinate, version)) {
             return List.of();   // a traversal-shaped coordinate maps nowhere - these keys are what an eviction DELETES
         }
@@ -92,8 +90,7 @@ public final class PyPiFormat implements RepositoryFormat, ProxyLeg, BlobLayout,
         String dir = "pypi/" + project + "/files";
         List<String> keys = new ArrayList<>();
         if (!store.isEmpty("pypi/" + project + "/by")) {
-            // The reverse index an upload writes answers without a scan; a project from before it is scanned as
-            // before.
+            // The reverse index an upload writes answers without a scan; a project without one is scanned.
             for (String file : store.list(reverseKey(project, version, ""))) {
                 if (store.readVersioned(dir + "/" + file).isPresent()) {
                     keys.add(dir + "/" + file);
@@ -111,16 +108,10 @@ public final class PyPiFormat implements RepositoryFormat, ProxyLeg, BlobLayout,
         return keys;
     }
 
-    /**
-     * The project version a stored distribution pointer serves - the backwards direction the inventory back-fill and
-     * forwarding's self-repair rebuild a lost row from.
-     *
-     * <p>Only {@code pypi/<project>/files/<file>} is decoded, and through {@link #describe} of the path it serves at:
-     * the filename parse is the one the publish recorded its row with, so the two cannot disagree. A file that parse
-     * cannot version answers nothing rather than a coordinate-less descriptor. The reverse index beside it
-     * ({@code by/<version>/<file>}) would decode as well and is left alone - two derivations of one row are two ways
-     * for them to disagree.
-     */
+    /** The project version a stored distribution pointer serves, from which the inventory back-fill and forwarding's
+     *  repair rebuild a lost row. Only {@code pypi/<project>/files/<file>} is decoded, through {@link #describe} of its
+     *  served path, the parse the publish recorded its row with; a file it cannot version answers nothing. The reverse
+     *  index beside it is left alone, so one row has one derivation. */
     @Override
     public Optional<ArtifactDescriptor> describePointer(String key) {
         String[] parts = key.split("/", -1);
@@ -137,18 +128,15 @@ public final class PyPiFormat implements RepositoryFormat, ProxyLeg, BlobLayout,
         return "pypi/" + project + "/by/" + version + (file.isEmpty() ? "" : "/" + file);
     }
 
-    /** One project's distribution files: a flat container enumerated through the shared bounded primitive.
-     *  This feeds {@code blobKeys}/{@code servedPaths}, so a listing that answered short would be a KEV-listed
-     *  distribution that keeps serving after its hold - the entry cap is therefore OFF, and the binding bound is the
-     *  primitive's step budget (1000 page round-trips of the drain page), which raises a named
-     *  {@link build.jenesis.repository.walk.TraversalException} rather than dropping keys. */
+    /** One project's distribution files, a flat container. It feeds {@code blobKeys} and {@code servedPaths}, where a
+     *  short listing would leave a held distribution serving, so the entry cap is off and the step budget (1000 drain
+     *  pages) raises a {@link build.jenesis.repository.walk.TraversalException} rather than dropping keys. */
     private static final BoundedChildren DISTRIBUTIONS = BoundedChildren.bounded().entries(Integer.MAX_VALUE)
             .page(BoundedChildren.DRAIN_PAGE);
 
 
-    /** The request paths this project version's distributions serve at ({@code /pypi/simple/<project>/<file>}), the
-     *  inverse of {@link #describe} - a retroactive hold links a {@code /quarantine} review handle at each. Matches the
-     *  same version-carrying distribution files {@link #blobKeys} names, mapped back to their {@code simple/} URL. */
+    /** The request paths this version's distributions serve at ({@code /pypi/simple/<project>/<file>}), where a
+     *  retroactive hold links its {@code /quarantine} handles: the files {@link #blobKeys} names. */
     @Override
     public List<String> servedPaths(String coordinate, String version, ArtifactStore store) throws IOException {
         if (!BlobLayout.addressable(coordinate, version)) {
@@ -162,13 +150,10 @@ public final class PyPiFormat implements RepositoryFormat, ProxyLeg, BlobLayout,
         return paths;
     }
 
-    /** Whether a distribution filename carries exactly this version as its {@code -}-delimited token, without matching
-     *  a longer version of which it is a prefix. A wheel bounds the version with {@code -} on both sides
-     *  ({@code <name>-<version>-<pytag>...whl}), so {@code -<version>-} never matches a longer {@code -<version>.x-}
-     *  (a dot, not a dash, follows the prefix). An sdist ends the version with the extension's leading dot
-     *  ({@code <name>-<version>.tar.gz}/{@code .zip}), so {@code -<version>.} is a match only when a non-digit (the
-     *  extension) follows - a continued version like {@code 1.0.10} has a digit after {@code -1.0.} and is not
-     *  mistaken for {@code 1.0}. This prevents retention from deleting {@code 1.0.10}'s files when evicting {@code 1.0}. */
+    /** Whether a distribution filename carries exactly this version as its {@code -}-delimited token, not a longer
+     *  version it prefixes. A wheel bounds the version with {@code -} on both sides; an sdist ends it with the
+     *  extension's dot, so {@code -<version>.} matches only when a non-digit follows. Otherwise evicting {@code 1.0}
+     *  would delete {@code 1.0.10}'s files. */
     private static boolean matchesVersion(String file, String version) {
         if (file.contains("-" + version + "-")) {
             return true;
@@ -180,16 +165,14 @@ public final class PyPiFormat implements RepositoryFormat, ProxyLeg, BlobLayout,
                 && !Character.isDigit(file.charAt(at + needle.length()));
     }
 
-    /** The distribution extensions a describable file carries - the same set the PyPI compliance inspector screens. */
+    /** The distribution extensions a describable file carries, the set the PyPI inspector screens. */
     private static final List<String> DIST_EXTENSIONS = List.of(".whl", ".tar.gz", ".zip", ".egg");
 
-    /** The coordinate a distribution request path carries ({@code /pypi/simple/<project>/<file>}, the project
-     *  PEP 503-normalized exactly as {@link #blobKeys}, the upload and the PyPI compliance inspector key it), so the
-     *  inventory records the release the retroactive enforcement sweeps enumerate the version by.
-     *  The root and per-project indexes and a PEP 658 {@code .metadata} sidecar name no versioned artifact and stay
-     *  empty. The version is peeled from the filename the way the inspector does: a wheel's is unambiguously its
-     *  second {@code -} field (the wheel spec escapes the name's dashes to {@code _}), an sdist/egg's by matching the
-     *  normalized project prefix; a filename neither parse fits describes coordinate-less rather than guessing. */
+    /** The coordinate a distribution path carries ({@code /pypi/simple/<project>/<file>}), the project PEP
+     *  503-normalized as everywhere else. The indexes and a PEP 658 {@code .metadata} sidecar name no version. The
+     *  version is peeled from the filename as the inspector does: a wheel's second {@code -} field (the wheel spec
+     *  escapes the name's dashes), an sdist's or egg's after the normalized project prefix; a filename neither fits
+     *  describes coordinate-less. */
     @Override
     public Optional<ArtifactDescriptor> describe(String path) {
         if (!path.startsWith("/pypi/simple/")) {
@@ -203,8 +186,7 @@ public final class PyPiFormat implements RepositoryFormat, ProxyLeg, BlobLayout,
         String project = normalize(after.substring(0, slash));
         String file = after.substring(slash + 1);
         if (file.indexOf('/') >= 0) {
-            // A distribution path is exactly <project>/<filename>; a deeper path is not a coordinate this format serves.
-            // Defence in depth so a stray multi-segment path can never leak its slashes into the parsed version segment.
+            // A distribution path is exactly <project>/<filename>, so no slash can leak into the parsed version.
             return Optional.empty();
         }
         String base = null;
@@ -225,11 +207,8 @@ public final class PyPiFormat implements RepositoryFormat, ProxyLeg, BlobLayout,
                 "application/octet-stream", false, null, -1L));
     }
 
-    /** The version encoded in a distribution filename's extension-less base, given the normalized project it belongs
-     *  to - the PyPI compliance inspector's parse, mirrored so both report one coordinate for one file. */
-    /** The mark on the version a distribution FILE belongs to, or null when it carries none. The filename is parsed
-     *  by the same rule {@link #describe} uses, so a file the coordinate parse cannot place is one this cannot mark
-     *  either - it lists unyanked rather than guessing at a version. */
+    /** The mark on the version a distribution file belongs to, or null, the filename parsed as {@link #describe} parses
+     *  it. */
     static Lifecycle.Flag marked(Map<String, Lifecycle.Flag> lifecycle, String project, String file) {
         if (lifecycle.isEmpty()) {
             return null;
@@ -244,14 +223,16 @@ public final class PyPiFormat implements RepositoryFormat, ProxyLeg, BlobLayout,
         return null;
     }
 
+    /** The version in a distribution filename's extension-less base, given its normalized project: the PyPI
+     *  inspector's parse, so both report one coordinate for one file. */
     private static String version(String project, String base, boolean wheel) {
         if (wheel) {
-            // {name}-{version}(-{build})?-{python}-{abi}-{platform}: the wheel spec escapes every '-' in the name to
-            // '_', so the version is unambiguously the second '-'-separated field.
+            // {name}-{version}(-{build})?-{python}-{abi}-{platform}: the name's dashes are escaped, so the version is
+            // the second field.
             String[] parts = base.split("-");
             return parts.length >= 2 ? parts[1] : null;
         }
-        // sdist/egg: {name}-{version}. The name may itself contain '-', so peel it off by matching the known project.
+        // sdist/egg: {name}-{version}, the name possibly containing '-', peeled off by matching the project.
         int dash = base.length();
         while ((dash = base.lastIndexOf('-', dash - 1)) > 0) {
             if (normalize(base.substring(0, dash)).equals(project)) {
@@ -262,7 +243,7 @@ public final class PyPiFormat implements RepositoryFormat, ProxyLeg, BlobLayout,
         return last <= 0 ? null : base.substring(last + 1);
     }
 
-    // An original CC0 line glyph (two interlocking rounded squares) drawn for this project.
+    // An original CC0 line glyph (two interlocking rounded squares).
     private static final IconResource ICON = IconResource.svg("""
             <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round">
               <rect x="4" y="4" width="11" height="11" rx="3"/><rect x="9" y="9" width="11" height="11" rx="3"/>
@@ -283,18 +264,11 @@ public final class PyPiFormat implements RepositoryFormat, ProxyLeg, BlobLayout,
         return path.startsWith("/pypi/");
     }
 
-    /**
-     * A {@code twine upload} wraps its artifact in a multipart form, so this format is <b>not</b> edge-screened:
-     * the request body is an <em>envelope</em>, and gating it at the shared single-body edge would hash and
-     * assess the multipart while the bytes that later serve are the wheel or sdist inside it - a second
-     * content-addressed object under a hash no interceptor ever saw, which is {@code RepositoryFormat} clause 14's
-     * fail-open direction. The shared edge ({@code ScreenedDispatch}) takes the request body verbatim and offers no
-     * seam to unwrap one, so this format is in the {@code screened() == false} case the clause names and screens at its
-     * own documented choke point: {@link #upload} peels the {@code content} part off the envelope while it streams and
-     * drives the shared {@code Publication.commit} - with the <em>discovered</em> interceptor chain and observers -
-     * over the distribution's own bytes. The legacy upload endpoint is the only way a distribution is hosted-published
-     * here, so declaring {@code false} does not leave the format unscreened.
-     */
+    /** Not edge-screened: a {@code twine upload} body is a multipart envelope, and screening it at the shared edge
+     *  would assess the envelope while the bytes that serve are the wheel or sdist inside it ({@code RepositoryFormat}
+     *  clause 14). This format screens at its own choke point: {@link #upload} peels the {@code content} part off as it
+     *  streams and drives {@code Publication.commit} with the discovered chain and observers over the distribution's
+     *  bytes. The legacy upload endpoint is the only way a distribution is hosted-published here. */
     @Override
     public boolean screened() {
         return false;
@@ -329,19 +303,13 @@ public final class PyPiFormat implements RepositoryFormat, ProxyLeg, BlobLayout,
         exchange.respond(404);
     }
 
-    /**
-     * Where a proxied distribution's PEP 740 provenance is fetched from: the base of the integrity API, the document
-     * being {@code <base>/<project>/<version>/<file>/provenance}. Empty by default, which reads the upstream's own
-     * origin - pypi.org serves it at {@code https://pypi.org/integrity/}; a mirror that serves no integrity API
-     * answers 404, which is absence and never a failure.
-     */
+    /** Where a proxied distribution's PEP 740 provenance is fetched: the integrity API's base, the document being
+     *  {@code <base>/<project>/<version>/<file>/provenance}. Empty by default, meaning the upstream's own origin
+     *  (pypi.org serves {@code https://pypi.org/integrity/}); a mirror without it answers 404, which is absence. */
     public static final String PROVENANCE_URL = "pypi-provenance-url";
 
-    /**
-     * The provenance document PyPI publishes for a distribution and pip never fetches, named so the pull-through
-     * fetches it beside the file and the screen judges the file by it. Kept through {@link #keep} as the attestations
-     * the upload leg would have stored, so the integrity endpoint and the evidence reader serve both alike.
-     */
+    /** The provenance document PyPI publishes for a distribution and pip never fetches, fetched beside the file so the
+     *  screen judges the file by it, and kept through {@link #keep} as the attestations an upload would have stored. */
     @Override
     public List<ProxyFormat.Companion> companions(FormatExchange exchange, URI upstream) {
         String path = exchange.path();
@@ -361,12 +329,9 @@ public final class PyPiFormat implements RepositoryFormat, ProxyLeg, BlobLayout,
         return List.of(new ProxyFormat.Companion("/pypi/integrity/" + rest, URI.create(base + rest)));
     }
 
-    /**
-     * A fetched provenance document is kept as the attestations it carries - every attestation of every publisher
-     * bundle, flattened into the list the upload leg stores - under the distribution's attestations key, so
-     * {@link #evidence} and the integrity endpoint read a proxied file exactly as an uploaded one. Always answers
-     * {@code true}: a document that is not provenance is dropped rather than linked at a path nothing serves.
-     */
+    /** A fetched provenance document is kept as the attestations it carries - every attestation of every publisher
+     *  bundle, flattened as an upload stores them - so {@link #evidence} and the integrity endpoint read a proxied file
+     *  as an uploaded one. Always {@code true}: a document that is not provenance is dropped. */
     @Override
     public boolean keep(ArtifactStore store, ProxyFormat.Companion companion, byte[] body) throws IOException {
         if (!companion.path().startsWith("/pypi/integrity/")) {
@@ -395,39 +360,22 @@ public final class PyPiFormat implements RepositoryFormat, ProxyLeg, BlobLayout,
         return true;
     }
 
-    /**
-     * Proxy a PyPI miss to the upstream index (pypi.org). The project index is mutable: the upstream PEP 503 page is
-     * fetched and each file link rewritten to its bare filename (so it resolves to this repository's file URL),
-     * then served fresh. A file is immutable: its upstream location is found in the project index (the file lives on
-     * a different host than the index), fetched, cached and served locally.
-     */
+    /** Proxy a PyPI miss to the upstream index. The project page is mutable: fetched fresh, each file link rewritten to
+     *  its bare filename so it resolves here. A file is immutable: its location found in the project page (on another
+     *  host), fetched, cached and served. */
     @Override
     public boolean pullThrough(FormatExchange exchange, ArtifactStore store, URI upstream,
                                ProxyFormat.Fetcher fetcher) throws IOException {
         String path = exchange.path();
         if (!path.startsWith("/pypi/simple/")) {
-            // ProxyLeg has screened the path already - this format claims it, and it carries no traversal
-            // segment, backslash or control character. What is left is this leg's own routing: only the
-            // subtree below proxies, and any other claimed path lets the local 404 stand.
+            // ProxyLeg has screened the path; only the simple/ subtree proxies.
             return false;
         }
         String after = path.substring("/pypi/simple/".length());
         if (after.isEmpty()) {
-            // The ROOT index, which this leg must not answer. `handle` splits this case off to projects() and serves
-            // the repository's own project list; `pullThrough` did not, so "" fell through as a project name: it
-            // fetched `<upstream>simple//` and handed the result to rewriteIndex, which reduces every href to the text
-            // after its last '/'. PyPI's root links are `/simple/<project>/` and END in '/', so **every rewritten href
-            // came out empty** - a 200 carrying a page of links to nowhere. Only a pure pass-through repository ever
-            // reached it; one with a store answers locally and never gets here.
-            //
-            // Declined rather than repaired, and the buffering is why. The root index is PyPI's entire project list -
-            // the one index in this product that is categorically not small - and this leg reads it through the
-            // BUFFERED fetch, so answering it at all materialises the whole list in heap on every request, against
-            // clause 4 (only small metadata may be materialised). Serving it correctly would mean rewriting while
-            // streaming, and serving it partially would be worse than not serving it: a project missing from a
-            // truncated list reads as "this index does not carry it", which is a wrong answer rather than a short one.
-            // A pass-through repository publishes no project list of its own, and saying so is honest - nothing pip
-            // does on an install reads this document, and every link it has ever served here was empty.
+            // The root index is declined: it is PyPI's entire project list, read through the buffered fetch, so
+            // answering it would materialise it on every request (clause 4), and a truncated one would read as projects
+            // the index does not carry. Nothing pip does on an install reads it.
             return false;
         }
         int slash = after.indexOf('/');
@@ -437,11 +385,8 @@ public final class PyPiFormat implements RepositoryFormat, ProxyLeg, BlobLayout,
         }
         if (slash < 0 || slash == after.length() - 1) {
             String project = normalize(slash < 0 ? after : after.substring(0, slash));
-            // ENUMERATION: the PEP 503 project page IS pip's file list for the project - every distribution and
-            // therefore every version it may resolve to - so an absent one is the answer "no such project here" and an
-            // EMPTY one is "no distribution matches your Python". A fetch that never landed rendered as either is a
-            // resolution changed by a network blip, so only an upstream that ANSWERED 404/410 reaches the client as a
-            // 404; anything else refuses visibly.
+            // The project page is pip's file list for the project, an ENUMERATION: absent means no such project, empty
+            // means no matching distribution, so only an upstream that answered 404/410 reaches the client as a 404.
             ProxyRelay.Answer answer = ProxyRelay.fetchFresh(fetcher, URI.create(root + "simple/" + project + "/"),
                     Map.of(), exchange, ProxyRelay.Document.ENUMERATION);
             if (!answer.answered()) {
@@ -458,7 +403,7 @@ public final class PyPiFormat implements RepositoryFormat, ProxyLeg, BlobLayout,
         if (index.isEmpty() || index.get().status() != 200) {
             return false;
         }
-        // PEP 658: pip requests <distribution>.metadata; its upstream URL is the distribution's URL plus the suffix.
+        // PEP 658: pip requests <distribution>.metadata, the distribution's URL plus the suffix.
         boolean metadata = file.endsWith(".metadata");
         String distribution = metadata ? file.substring(0, file.length() - ".metadata".length()) : file;
         Located found = findFile(new String(index.get().body(), StandardCharsets.UTF_8), distribution);
@@ -466,13 +411,9 @@ public final class PyPiFormat implements RepositoryFormat, ProxyLeg, BlobLayout,
             return false;
         }
         String location = found.location();
-        // The file's location is read from the untrusted upstream index body and is cross-host by design (pypi.org's
-        // files live on files.pythonhosted.org), so an attacker who can publish a project to the proxied upstream
-        // chooses both its host and its scheme: an unguarded fetch would be an SSRF, and an unguarded http one would
-        // put the wheel and any per-host upstream credential in front of every observer. The one shared outbound
-        // screen decides it - the SAME call the composer, cocoapods, nuget, cargo and rpm legs make, so
-        // "mirrors the composer guard" is now a fact about the code rather than a claim in a comment. A refused target
-        // is declined and the miss falls through to a 404, never a throw (ProxyLeg clause 2).
+        // The location comes from the untrusted upstream page and is cross-host by design, so a publisher to the
+        // upstream chooses its host and scheme: it is screened by the shared outbound call, and a refused target falls
+        // through to a 404 (ProxyLeg clause 2).
         URI target;
         try {
             target = URI.create(metadata ? location + ".metadata" : location);
@@ -482,36 +423,21 @@ public final class PyPiFormat implements RepositoryFormat, ProxyLeg, BlobLayout,
         if (!OutboundTargets.mayFollow(target, upstream, ProxyLeg.allowInternalTargets(exchange))) {
             return false;
         }
-        // A distribution file is an immutable artifact of unbounded size: stream it from the network straight into the
-        // content-addressed store rather than buffering the whole body, then re-serve it locally.
+        // Streamed from the network into the content-addressed store, since a distribution is unbounded.
         try (ProxyFormat.Download download = fetcher.download(target, Map.of()).orElse(null)) {
             if (download == null || download.status() != 200) {
                 return false;
             }
-            // Bind the cached distribution to the SHA-256 the upstream PEP 503 index declares for it (the #sha256=
-            // fragment on the file href), the way conda/nuget/cargo/cocoapods/conan/huggingface/npm bind their
-            // proxy-cached artifacts: the file lives on a different host than the index that vouches for it (the SSRF
-            // note above), so a diverging or MITM'd file host cannot have its bytes durably cached and re-served as the
-            // authentic artifact - writeVerified refuses and caches nothing on a digest mismatch. Absent a usable digest
-            // (the PEP 658 .metadata sidecar carries the distribution's hash, not its own, so it is never verified here)
-            // the write is unverified, the prior behaviour.
-            //
-            // No split to make here, and for the same protocol reason Composer and CocoaPods have none: the
-            // simple index is the SAME document that resolves the file's location, so an index this repository could
-            // not read declines the whole fill above (the `index.isEmpty() || status != 200` return) rather than
-            // reaching this point with "the index declares no digest".
+            // The cached file is bound to the SHA-256 the page declares (#sha256=), so a diverging file host cannot
+            // have its bytes cached; with no usable digest the write is unverified. A sidecar is held to its own digest
+            // from the anchor. A page that could not be read already declined the fill above, being the same document
+            // that locates the file.
             byte[] expected = metadata ? hexOrNull(found.metadataSha256()) : hexOrNull(found.sha256());
             if (!ProxyRelay.fill(new Blobs(store), "pypi/" + project + "/files/" + file, target, download.body(),
                     expected == null ? ProxyRelay.Declared.NONE : ProxyRelay.Declared.of("SHA-256", expected))) {
-                // A refused fill on the PEP 658 sidecar is answered VISIBLY, not as a local miss. Most distributions
-                // publish no .metadata at all, so a 404 here is the ordinary, legal answer and pip acts on it: it
-                // downloads the whole wheel and reads METADATA out of it, and reports success. Spelling a refusal the
-                // same way therefore does not withhold the sidecar, it substitutes a different resolution for it
-                // silently - the repository detected a corrupted document and the build went green over it.
-                // Exactly the Maven .module split, on the one PyPI path with the same property.
-                //
-                // The distribution keeps the plain decline: a wheel's absence is a loud answer that fails an install,
-                // so nothing resolves around it and a miss cannot be mistaken for a decision.
+                // A refused PEP 658 sidecar is answered visibly: pip reads a 404 as "no sidecar" and falls back to the
+                // wheel, so a refusal spelled as a miss would let the build go green over a corrupted document. A
+                // distribution keeps the plain decline, since its absence fails an install loudly.
                 if (metadata) {
                     LOGGER.warn("Refusing to answer the proxied PEP 658 sidecar {} as an absent one: its bytes do not "
                             + "match the digest the upstream index declares for it. Nothing was served; a local 404 "
@@ -537,17 +463,12 @@ public final class PyPiFormat implements RepositoryFormat, ProxyLeg, BlobLayout,
         });
     }
 
-    /** A file href resolved out of the upstream simple index: its bare {@code location} URL and the {@code sha256} hex
-     *  the {@code #sha256=} fragment declares for it ({@code null} when the index carries none), so the proxy can bind
-     *  the cached bytes to the digest the index vouches for. */
     /**
-     * One file's row on a proxied Simple page.
+     * One file's row on a proxied Simple page: its bare {@code location} URL and two digests.
      *
-     * @param sha256         the DISTRIBUTION's digest, off the href fragment
-     * @param metadataSha256 the PEP 658 sidecar's OWN digest, off the anchor's {@code data-core-metadata} /
-     *                       {@code data-dist-info-metadata} attribute - a different file and therefore a different
-     *                       hash, which is why one cannot stand in for the other and why the sidecar went unverified
-     *                       while the fragment was the only digest read
+     * @param sha256 the distribution's digest, off the href fragment
+     * @param metadataSha256 the PEP 658 sidecar's own digest, off the {@code data-core-metadata} or
+     *     {@code data-dist-info-metadata} attribute: a different file, so neither stands in for the other
      */
     private record Located(String location, String sha256, String metadataSha256) {
     }
@@ -582,12 +503,8 @@ public final class PyPiFormat implements RepositoryFormat, ProxyLeg, BlobLayout,
         return null;
     }
 
-    /** The {@code sha256=<hex>} an anchor attribute declares, or null when it declares none.
-     *
-     *  <p>PEP 658 also allows a bare {@code true} - "a sidecar exists here" - which vouches for nothing and is
-     *  deliberately NOT read as a digest: treating it as one would have to invent a value, and the honest handling of
-     *  an index that publishes no digest is the unverified write.
-     *  Only a declared digest narrows anything. */
+    /** The {@code sha256=<hex>} an anchor attribute declares, or null. PEP 658's bare {@code true} vouches for nothing
+     *  and is not read as a digest. */
     private static String digest(String attributes, Pattern attribute) {
         Matcher matcher = attribute.matcher(attributes);
         if (!matcher.find()) {
@@ -597,8 +514,8 @@ public final class PyPiFormat implements RepositoryFormat, ProxyLeg, BlobLayout,
         return value.startsWith("sha256=") ? value.substring("sha256=".length()) : null;
     }
 
-    /** Decode a hex digest to bytes, or {@code null} when it is absent or malformed - a malformed upstream digest falls
-     *  back to an unverified cache write rather than refusing the fetch, exactly as an absent one does. */
+    /** Decode a hex digest to bytes, or {@code null} when absent or malformed, which falls back to an unverified
+     *  write. */
     private static byte[] hexOrNull(String hex) {
         if (hex == null || hex.isBlank()) {
             return null;
@@ -610,60 +527,30 @@ public final class PyPiFormat implements RepositoryFormat, ProxyLeg, BlobLayout,
         }
     }
 
-    /**
-     * The republish policy handed to the hosted-publish operation, which evaluates it before the layout runs:
-     * {@code OVERWRITE}, since the key an upload collides on is only known once the envelope's {@code name} field and
-     * the {@code content} part's filename have both been read - inside the layout, as the protocol does not order the
-     * two. PyPI refuses a filename already uploaded, whatever its bytes, and so does this: the refusal is taken at the
-     * link ({@link Blobs#linkOnce}), inside the pointer's compare-and-set, and answered as PyPI answers it
-     * ({@link #alreadyExists}). A re-upload of the identical file converges rather than being refused, so an upload
-     * whose answer was lost can be sent again.
-     */
+    /** The republish policy for the hosted publish: {@code OVERWRITE}, since the colliding key is known only once the
+     *  layout has read the {@code name} field and the {@code content} filename, in either order. PyPI refuses a
+     *  filename already uploaded whatever its bytes, and so does this, at the link ({@link Blobs#linkOnce}) inside the
+     *  pointer's compare-and-set, answered as PyPI answers ({@link #alreadyExists}); an identical re-upload
+     *  converges. */
     private static final Publication.Republish REPUBLISH = Publication.Republish.overwrite();
 
     /**
-     * The legacy {@code twine upload} endpoint, run through the one shared hosted-publish choreography
-     * ({@code Publication.commit}) rather than hand-assembled here: the distribution streams
-     * content-addressed into the store, the accepted layout finishes reading the small form fields that name it, and
-     * only then does the operation link the serving pointer and stamp the per-project hosted marker.
-     * <b>The commit point is the {@code pypi/<project>/files/<filename>} pointer link</b> - before it nothing serves
-     * and the Simple index answers a miss; after it the distribution downloads and the project index lists it.
+     * The legacy {@code twine upload} endpoint, through {@code Publication.commit}: the distribution streams into the
+     * store, the layout finishes reading the small fields that name it, and only then is the serving pointer linked and
+     * the per-project hosted marker stamped. <b>The commit point is the {@code pypi/<project>/files/<filename>} pointer
+     * link</b>; the hosted marker, which switches the project index on, is written after it, never ahead of the bytes
+     * it lists.
      *
-     * <p>The order matters: linking the distribution pointer <em>first</em> and only then stamping
-     * {@code pypi/<project>/.hosted} as a separate step would let a crash in between leave a downloadable file whose
-     * project index had not yet been switched on. The marker gates a listing surface, so it is a visibility write and
-     * is declared beside the pointer - after it, never before, so the index is never switched on ahead of the
-     * bytes it would list.
+     * <p>The {@code content} part is the one unbounded part, handed to the operation as the accepted body and streamed
+     * content-addressed, so the wheel is stored once and the hash the chain assesses is the {@code #sha256} the index
+     * publishes and pip downloads. The pointer is declared, never written by the layout, so a {@code name} field
+     * arriving after the file is still read before anything is declared.
      *
-     * <p>The distribution file (the multipart {@code content} part) is the one unbounded part - a wheel or sdist of
-     * arbitrary size - so it is handed to the operation as the accepted body and streams straight into the
-     * content-addressed store (hash-on-write, never buffered) while the small text fields (name, version, digests) are
-     * read whole. That part is also what the <b>screen</b> sees: this format opts out of the single-body
-     * ingress edge ({@link #screened()}), so nothing content-addresses the multipart envelope any more and there is no
-     * second CAS object under a hash no interceptor ever saw. The wheel is stored exactly once, the accepted hash is
-     * the distribution's own - which is what the Simple index publishes as its {@code #sha256} - and the bytes the
-     * chain assessed are the bytes {@code pip} later downloads.
-     *
-     * <p>The pointer is declared, never written by the layout, so the upload stays robust to part order: the
-     * {@code name} field may arrive before or after the file (twine sends it before; the protocol does not require
-     * it), and the layout finishes walking the envelope for the fields it still needs before it declares anything.
-     * No size cap: a multi-gigabyte upload that no heap could hold still completes, because the body is never a
-     * {@code byte[]}.
-     *
-     * <p><b>This is the format's screening choke point</b>. Because {@link #screened()} is {@code false} the
-     * shared ingress edge dispatches the upload straight here, so the operation is constructed with the
-     * <em>discovered</em> interceptor chain and observer list rather than two empty ones: the one screen runs here,
-     * over the distribution's own bytes, and the one after-commit notification fires here once it is visible. The
-     * choreography, the ordering and the layout are otherwise unchanged; only the bytes the chain sees moved from the
-     * envelope to the artifact.
-     *
-     * <p>The descriptor the screen assesses under is the distribution's own <em>served</em> path
-     * ({@code /pypi/simple/<project>/<filename>}), not the {@code POST} endpoint, so a deny-list, a
-     * {@code /quarantine} review handle and an inspector's artifact leg all key on the coordinate the download will
-     * serve. {@code twine} and every other client build the envelope metadata-first, so the {@code name} field is
-     * already in hand when the file part is reached; a client that sends it <em>after</em> the file is screened under
-     * the coordinate-less endpoint descriptor instead - its content is still hashed and assessed, only the
-     * coordinate-keyed dimensions degrade, and the layout still refuses to declare anything without a project.
+     * <p><b>This is the format's screening choke point</b> ({@link #screened()}): the operation carries the discovered
+     * chain and observers. The descriptor is the distribution's served path
+     * ({@code /pypi/simple/<project>/<filename>}), so a deny-list, a review handle and an inspector key on what the
+     * download serves; a client sending {@code name} after the file is screened under the coordinate-less endpoint
+     * descriptor, its content still assessed.
      */
     private void upload(FormatExchange exchange, Blobs blobs, ArtifactStore store) throws IOException {
         Optional<String> boundary = MultipartBody.boundary(exchange.requestHeader("Content-Type"));
@@ -671,9 +558,8 @@ public final class PyPiFormat implements RepositoryFormat, ProxyLeg, BlobLayout,
             exchange.respond(400);
             return;
         }
-        // The shared streaming reader (build.jenesis.repository.multipart): one bounded, forward-only cursor over the
-        // envelope, so the `content` part reaches the store as a stream and the small fields are read against an
-        // explicit bound. The NuGet push walks the same reader.
+        // One bounded, forward-only cursor over the envelope: the content part reaches the store as a stream, the small
+        // fields are read against a bound.
         MultipartBody body = MultipartBody.over(exchange.requestStream(), boundary.get());
         Form form = new Form();
         InputStream distribution = form.readToDistribution(body);
@@ -686,38 +572,31 @@ public final class PyPiFormat implements RepositoryFormat, ProxyLeg, BlobLayout,
             commit = new Publication(store).commit(
                     uploaded(exchange, form.project, form.filename), part, REPUBLISH,
                     _ -> {
-                        // Finish the envelope: the accepted body is already stored content-addressed, and the fields
-                        // that name it may still be ahead of us in the stream. Nothing servable has been written yet,
-                        // so reading them here is exactly "parse before you declare".
+                        // The body is stored; the naming fields may still be ahead, and nothing servable is written
+                        // until they are read.
                         form.readRemainder(body);
                         String project = form.project;
                         String filename = form.filename;
                         if (project == null || Keys.unsafe(project) || Keys.unsafe(filename)) {
-                            // No project field, or a body-supplied project/filename that would forge a pointer key
-                            // with '/' or '..': nothing servable, so nothing is declared and nothing is linked.
+                            // No project, or a project or filename that would forge a pointer key: nothing is declared.
                             return Publication.Visibility.declined();
                         }
                         return Publication.Visibility
-                                // The serving pointer, in this format's own namespace rather than publish/ - so it is
-                                // declared through a Serving step, not named with at().
+                                // The serving pointer, in this format's namespace rather than publish/, so a Serving
+                                // step.
                                 .through((hash, size, _) -> blobs.linkRelease(fileKey(project, filename), hash, size))
-                                // The attestations the upload carried, kept beside the file before the Simple page
-                                // links them, so no client reads a link whose provenance is still to come.
+                                // Attestations are kept before the page links them, so no client reads a link whose
+                                // provenance is to come.
                                 .andThrough((_, _, _) -> storeAttestations(blobs, project, filename, form.attestations))
-                                // Stamp the per-project hosted-publish marker, so a later project-index read serves the
-                                // local files. A pull-through proxy repository (whose files are cached by proxy(), never
-                                // uploaded) never writes it, so its index read misses locally and the pull-through
-                                // fetches the authoritative upstream Simple index for every version rather than
-                                // shadowing it with only the cached files. Mirrors the RPM hosted-revision gate.
+                                // The per-project hosted marker switches on the local index; a pull-through proxy never
+                                // writes it, so its index falls through to the upstream's.
                                 .andThrough((_, _, target) -> markHosted(target, hostedKey(project)))
                                 .andThrough((_, _, _) -> reverseIndex(blobs, project, filename))
-                                // The served Simple pages are written here, on the upload: the file's link joins the
-                                // project's stored page and the project the stored root page.
+                                // The Simple pages are maintained on the upload.
                                 .andThrough((_, _, _) -> new PyPiListings(blobs).refresh(project, filename));
                     });
-            // The chain HELD the distribution. The layout above never ran, so it is written here instead - behind the
-            // withhold marker (see {@link #held}) and inside this try, while the envelope cursor is still live, since
-            // the fields that NAME the distribution may still be ahead of the file part.
+            // Held: the layout is written here behind the withhold marker (see held), while the envelope cursor is
+            // live, since the naming fields may still be ahead.
             switch (commit.disposition()) {
                 case QUARANTINE -> held(body, form, blobs, store, commit.hash());
                 default -> {
@@ -725,7 +604,7 @@ public final class PyPiFormat implements RepositoryFormat, ProxyLeg, BlobLayout,
             }
         } catch (Publication.RepublishConflict taken) {
             if (commit != null) {
-                // A held re-upload was refused before anything was marked: its review handle goes with it.
+                // A held re-upload was refused before anything was marked, so its review handle goes.
                 new Publication(store, List.of(), List.of()).unpublish("/quarantine" + commit.artifact().path());
             }
             exchange.respond(400, alreadyExists(form.filename, taken));
@@ -733,30 +612,19 @@ public final class PyPiFormat implements RepositoryFormat, ProxyLeg, BlobLayout,
         }
         switch (commit.disposition()) {
             case ACCEPT -> exchange.respond(commit.visible() ? 200 : 400);
-            // Held for review: stored, laid out and withheld - the Simple index screens it out until it is released.
+            // Held: stored, laid out and withheld; the Simple index screens it out until released.
             case QUARANTINE -> exchange.respond(202);
-            // Refused outright: nothing is linked and no marker is set, so the Simple index never lists it and the
-            // stored blob is the usual unreferenced content-addressed object a collection reclaims. A refusal is never
-            // released, so it is never laid out.
+            // Refused: nothing linked or marked; the stored blob is an unreferenced object the collector reclaims.
             case REJECT -> exchange.respond(422);
         }
     }
 
-    /**
-     * Lay a <em>held</em> distribution out behind its withhold marker, so the review release that follows is the
-     * same marker clear a retroactive KEV/licence hold's release is - one hold-release mechanism for this format, not
-     * two. The shared commit operation runs its accepted layout only on {@code ACCEPT}, so a screen-time
-     * {@code QUARANTINE} would otherwise store the wheel, link nothing and index nothing:
-     * {@code HoldLifecycle.release} would then resolve the hold and materialise no distribution at all.
-     *
-     * <p>The envelope is finished first - exactly as the accepted layout finishes it - because a client may send the
-     * {@code name} field <em>after</em> the file part, and the project is what every key below is built from. Then
-     * {@link Withheld#mark} retracts the distribution's hash, and only after it are the serving pointer and the
-     * project's hosted marker written, so at no instant is the held wheel downloadable or listed: {@link #index} and
-     * {@link #projects} screen on that same marker, exactly as {@link #serveFile} does. A body that names no project (or
-     * one that would forge a pointer key) lays nothing out, for the reason the accepted layout declines it - there is no
-     * servable coordinate to hold open, and the hold stays reviewable by its stored blob alone.
-     */
+    /** Lay a held distribution out behind its withhold marker, so its review release is the marker clear a retroactive
+     *  hold's is; the shared commit lays out only on {@code ACCEPT}. The envelope is finished first, the {@code name}
+     *  field possibly following the file. Then {@link Withheld#mark}, and only after it the serving pointer and the
+     *  hosted marker, so the held wheel is never downloadable or listed: {@link #index}, {@link #projects} and
+     *  {@link #serveFile} screen on that marker. A body naming no project lays nothing out, and the hold stays
+     *  reviewable by its stored blob. */
     private static void held(MultipartBody body, Form form, Blobs blobs, ArtifactStore store, String hash)
             throws IOException {
         form.readRemainder(body);
@@ -765,7 +633,7 @@ public final class PyPiFormat implements RepositoryFormat, ProxyLeg, BlobLayout,
         if (project == null || Keys.unsafe(project) || Keys.unsafe(filename)) {
             return;
         }
-        // A hold never replaces a released file nor its attestations: refused before the mark, so nothing is left held.
+        // A hold never replaces a released file or its attestations: refused before the mark.
         blobs.refuseReplacement(fileKey(project, filename), hash);
         byte[] attestations = attestationsDocument(form.attestations);
         if (attestations != null) {
@@ -786,7 +654,7 @@ public final class PyPiFormat implements RepositoryFormat, ProxyLeg, BlobLayout,
     }
 
     /** PyPI's answer to a filename already uploaded, which {@code twine upload --skip-existing} recognises by its
-     *  {@code 400} and its words. */
+     *  {@code 400} and words. */
     private static byte[] alreadyExists(String filename, Publication.RepublishConflict taken) {
         return ("File already exists ('" + filename + "', with sha256 hash '" + taken.published() + "'). A published "
                 + "file cannot be replaced; upload it under a new version.").getBytes(StandardCharsets.UTF_8);
@@ -800,12 +668,9 @@ public final class PyPiFormat implements RepositoryFormat, ProxyLeg, BlobLayout,
         }
     }
 
-    /** The descriptor the uploaded distribution is screened under: its own served path
-     *  ({@code /pypi/simple/<project>/<filename>}) with the coordinate {@link #describe} parses out of it, so the
-     *  screen assesses the artifact under the identity the download will serve. Falls back to the coordinate-less
-     *  endpoint descriptor when the envelope has not yet named a project (a client that sends {@code name} after the
-     *  file part) or when either body-supplied value would forge a key - the content is screened either way, and the
-     *  layout refuses to declare anything servable in those cases. */
+    /** The descriptor the uploaded distribution is screened under: its served path with the coordinate
+     *  {@link #describe} parses. The coordinate-less endpoint descriptor when no project is named yet or a value would
+     *  forge a key; the content is screened either way. */
     private ArtifactDescriptor uploaded(FormatExchange exchange, String project, String filename) {
         if (project == null || filename == null || Keys.unsafe(project) || Keys.unsafe(filename)) {
             return ArtifactDescriptor.at("PyPI", exchange.path());
@@ -814,26 +679,19 @@ public final class PyPiFormat implements RepositoryFormat, ProxyLeg, BlobLayout,
         return describe(served).orElseGet(() -> ArtifactDescriptor.at("PyPI", served));
     }
 
-    /**
-     * The twine form fields the upload is named by, accumulated across the one pass over the multipart envelope: the
-     * distribution's filename (the {@code content} part's {@code Content-Disposition} filename) and the PEP 503
-     * -normalized project (the {@code name} text field). The walk is split in two because the artifact part is handed
-     * to the hosted-publish operation as a bounded stream: {@link #readToDistribution} walks up to and including that
-     * part's headers, and {@link #readRemainder} finishes the envelope from inside the accepted layout - which is why
-     * a {@code name} field sent <em>after</em> the file is still read before anything is declared.
-     *
-     * <p>A method-local accumulator over one request, never shared and never escaping the upload, so its mutation is
-     * the loop-accumulator kind the immutability rule allows rather than a churned live object.
-     */
+    /** The twine form fields naming the upload, accumulated over the one pass: the {@code content} part's filename and
+     *  the PEP 503-normalized {@code name}. {@link #readToDistribution} walks up to the file part's headers, and
+     *  {@link #readRemainder} finishes the envelope inside the accepted layout. A method-local accumulator, never
+     *  shared. */
     private static final class Form {
 
         private String project;
         private String filename;
         private String attestations;
 
-        /** Walk the envelope until the {@code content} file part, recording every small text field on the way, and
-         *  return that part as a stream bounded to the distribution's bytes - the accepted body of the publish.
-         *  {@code null} when the envelope ends without one, in which case nothing was stored. */
+        /** Walk the envelope to the {@code content} part, recording small text fields, and return it as a stream
+         *  bounded to the distribution, the publish's accepted body; {@code null} when there is none, and nothing was
+         *  stored. */
         private InputStream readToDistribution(MultipartBody body) throws IOException {
             for (Optional<MultipartBody.Part> next = body.next(); next.isPresent(); next = body.next()) {
                 MultipartBody.Part part = next.get();
@@ -846,30 +704,25 @@ public final class PyPiFormat implements RepositoryFormat, ProxyLeg, BlobLayout,
             return null;
         }
 
-        /** Finish the envelope after the distribution part has been consumed and stored, so a {@code name} field the
-         *  client sent after the file is still read before the layout declares anything. The cursor releases the
-         *  distribution part itself as it advances - it has been read to its terminating boundary, and closing it
-         *  before the walk resumes keeps the two from interleaving their positions in the shared buffer. The caller's
-         *  own try-with-resources closing it again is a no-op. */
+        /** Finish the envelope after the distribution part was stored, so a later {@code name} field is read before the
+         *  layout declares anything. The cursor releases the distribution part as it advances; the caller's close is a
+         *  no-op. */
         private void readRemainder(MultipartBody body) throws IOException {
             for (Optional<MultipartBody.Part> next = body.next(); next.isPresent(); next = body.next()) {
                 field(next.get());
             }
         }
 
-        /** Read one small text field - the project {@code name} is kept PEP 503-normalized, anything else is
-         *  discarded. A `name` longer than the shared field bound is left unset rather than truncated: a value that
-         *  large is not a project name, and a cut-off one would forge a different coordinate, so the upload declines
-         *  below (400) instead of publishing under half a name. */
+        /** Read one small text field: {@code name} is kept PEP 503-normalized, anything else discarded. A {@code name}
+         *  past the field bound is left unset rather than truncated, which would forge another coordinate; the upload
+         *  then answers 400. */
         private void field(MultipartBody.Part part) throws IOException {
             if ("name".equals(part.name())) {
                 project = part.text(MultipartBody.FIELD_LIMIT)
                         .map(value -> normalize(value.trim()))
                         .orElse(null);
             } else if ("attestations".equals(part.name())) {
-                // PEP 740: the JSON list of attestation objects twine sends beside the distribution - a certificate,
-                // a transparency-log entry and a signed statement each, a few kilobytes - bounded at the signature
-                // limit past which the upload carries none rather than an unbounded document.
+                // PEP 740: twine's JSON list of attestations, a few kilobytes, bounded at the signature limit.
                 attestations = part.text(ArtifactSignatures.Material.LARGEST_SIGNATURE).orElse(null);
             } else {
                 part.discard();   // any other metadata field, not needed here
@@ -877,77 +730,61 @@ public final class PyPiFormat implements RepositoryFormat, ProxyLeg, BlobLayout,
         }
     }
 
-    /** The JSON reader and writer for the attestations an upload carries and the provenance document served. */
+    /** The JSON mapper for the attestations an upload carries and the provenance served. */
     private static final JsonMapper MAPPER = JsonMapper.builder().build();
 
-    /** The bytes of the hosted-publish marker (its value is irrelevant; only its presence gates). */
+    /** The hosted marker's bytes; only its presence gates. */
     private static final byte[] HOSTED = "1".getBytes(StandardCharsets.UTF_8);
 
-    /** The per-project hosted-publish marker key - a sibling of the {@code files} directory, so no index listing ever
-     *  surfaces it. Package-private so {@link PyPiImporter} stamps it too: an import is a hosted publish, exactly as a
-     *  {@code twine} upload is. The project is already PEP 503-normalized. */
+    /** The per-project hosted marker, beside {@code files}, so no listing surfaces it; {@link PyPiImporter} stamps it
+     *  too, an import being a hosted publish. */
     static String hostedKey(String project) {
         return "pypi/" + project + "/.hosted";
     }
 
-    /** Whether this (already-normalized) project has ever taken a hosted upload (or import) - it then carries the
-     *  marker {@link #upload} stamps, which a pull-through proxy never writes. The project-index gate keys on it so a
-     *  proxy repository's index read always misses locally and reproxies the upstream index (every version) for an
-     *  uncached version rather than shadowing it with only the cached distribution files. */
+    /** Whether this normalized project has taken a hosted upload or import. The project-index gate keys on it, so a
+     *  proxy repository's index misses locally and relays the upstream's full page. */
     private static boolean hosted(String project, Blobs blobs) throws IOException {
         return blobs.exists(hostedKey(project));
     }
 
-    /** Whether the root index may list this (already-normalized) project - it has at least one distribution a client
-     *  can actually fetch. A project every one of whose distributions a compliance hold has withheld is screened out:
-     *  listing its name would disclose a quarantined project pip then 404s on the download of, the same disclosure the
-     *  per-project {@link #index} screen and the OCI catalog screen close. A project with no local distribution files
-     *  (a proxy/metadata-only entry) is left listed - it names no withheld coordinate - and the first servable file
-     *  short-circuits the scan, so a normal project pays only one {@code withheld} probe. */
+    /** Whether the root index may list this normalized project: it has a distribution a client can fetch, or no
+     *  distribution at all. A project whose every file is held is screened out, since listing it discloses a
+     *  quarantined project; the first servable file short-circuits the scan. */
     static boolean servable(String project, Blobs blobs) throws IOException {
         String prefix = "pypi/" + project + "/files";
-        // The membership question the shared screened enumeration answers directly, short-circuiting at the first
-        // disclosable name: a normal project pays one probe, and the answer is the same screen the per-project index
-        // applies, not a second private one.
+        // The shared screened enumeration, short-circuiting at the first disclosable name, the per-project index's
+        // screen.
         if (ScreenedNames.keys(blobs.servableNames(), ServableNames.Policy.HIDE_WITHHELD).any(blobs.store(), prefix)) {
             return true;
         }
-        // Provably no disclosable distribution. A project with NO distribution file at all is still listed - it names no
-        // withheld coordinate - so only the emptiness probe distinguishes the two, and it is a structural question about
-        // the container, not a disclosure of any name.
+        // No disclosable file: still listed when there are no files at all, a structural probe that discloses no name.
         return blobs.isEmpty("pypi/" + project + "/files");
     }
 
-    /** Stamp a hosted-publish marker once, idempotently - a compare-and-set against an absent pointer, so a concurrent
-     *  upload's lost race simply means a peer already set it. The marker is a bare presence flag (not a blob pointer),
-     *  written straight through the store like the RPM revision stamp. */
+    /** Stamp a hosted marker once, by compare-and-set against absence; a lost race means a peer set it. */
     static void markHosted(ArtifactStore store, String key) throws IOException {
         if (store.readVersioned(key).isEmpty()) {
             store.writeVersioned(key, HOSTED, null);
         }
     }
 
-    /** Whether a body-derived value must not be spliced into a store pointer key - empty, a dot segment, or carrying a
-     *  path separator or control character. Mirrors the composer/cargo/lifecycle guard. */
-
     /** The stored attestations of a distribution: PEP 740's list, as the client sent it, under the file. */
     static String attestationsKey(String project, String file) {
         return "pypi/" + project + "/attestations/" + file;
     }
 
-    /** Keep an upload's attestations when it carried a non-empty list; anything else is not provenance. */
+    /** Keep an upload's attestations when it carried a non-empty list. */
     private static void storeAttestations(Blobs blobs, String project, String filename, String attestations)
             throws IOException {
         byte[] document = attestationsDocument(attestations);
         if (document != null) {
-            // The attestations are the file's own: a re-upload of the same file with others is refused rather than
-            // rewriting what the release was published with.
+            // The attestations are the file's own: a re-upload with others is refused.
             blobs.writeRelease(attestationsKey(project, filename), document);
         }
     }
 
-    /** The attestations document an upload's {@code attestations} field is kept as, or {@code null} when the field
-     *  carries no non-empty JSON array. */
+    /** The document an upload's {@code attestations} field is kept as, or {@code null} for no non-empty JSON array. */
     private static byte[] attestationsDocument(String attestations) {
         if (attestations == null) {
             return null;
@@ -964,12 +801,9 @@ public final class PyPiFormat implements RepositoryFormat, ProxyLeg, BlobLayout,
         return MAPPER.writeValueAsBytes(list);
     }
 
-    /**
-     * PEP 740's provenance endpoint, {@code /integrity/<project>/<version>/<file>/provenance}: the attestations the
-     * distribution was uploaded with, as one attestation bundle - a version, the bundles, each naming its publisher
-     * and carrying its attestations. The publisher is what the identity in each attestation's certificate says, and
-     * this registry does not restate it: the verifier reads the certificate.
-     */
+    /** PEP 740's provenance endpoint, {@code /integrity/<project>/<version>/<file>/provenance}: the distribution's
+     *  uploaded attestations as one bundle per publisher. The publisher is what each certificate's identity says; the
+     *  verifier reads it. */
     private void provenance(String rest, Blobs blobs, FormatExchange exchange) throws IOException {
         String[] parts = rest.split("/");
         if (parts.length != 4 || !parts[3].equals("provenance") || Keys.unsafe(parts[0]) || Keys.unsafe(parts[2])) {
@@ -1001,8 +835,8 @@ public final class PyPiFormat implements RepositoryFormat, ProxyLeg, BlobLayout,
 
     // ---- the signature seam: PEP 740 attestations as Sigstore bundles ----
 
-    /** A distribution may have been uploaded with PEP 740 attestations - each a Sigstore signing of an in-toto
-     *  statement naming the file by digest; optional, since most uploads carry none. */
+    /** A distribution may carry PEP 740 attestations, each a Sigstore signing of an in-toto statement naming the file
+     *  by digest; optional. */
     @Override
     public List<ArtifactSignatures.Expectation> expects(String path) {
         return describe(path).map(described -> described.coordinate() != null && described.version() != null)
@@ -1042,11 +876,9 @@ public final class PyPiFormat implements RepositoryFormat, ProxyLeg, BlobLayout,
         return evidence;
     }
 
-    /**
-     * A PEP 740 attestation as the Sigstore bundle the verifier reads: the same certificate, the same
-     * transparency-log entries, and the statement and signature as a DSSE envelope over the in-toto payload type.
-     * Empty for an object that is not one.
-     */
+    /** A PEP 740 attestation as the Sigstore bundle the verifier reads: the certificate, the transparency-log entries,
+     *  and the statement and signature as a DSSE envelope over the in-toto payload type. Empty for an object that is
+     *  not one. */
     static Optional<byte[]> bundle(JsonNode attestation) throws IOException {
         JsonNode material = attestation.path("verification_material");
         JsonNode envelope = attestation.path("envelope");
@@ -1069,8 +901,8 @@ public final class PyPiFormat implements RepositoryFormat, ProxyLeg, BlobLayout,
         return Optional.of(MAPPER.writeValueAsBytes(bundle));
     }
 
-    /** A request path's serving key, for the compliance screen's sibling read: a distribution under its project's
-     *  Simple page, or a distribution's provenance under the integrity endpoint - when the pointer exists. */
+    /** A request path's serving key, for the compliance screen's sibling read: a distribution under its Simple page, or
+     *  its provenance under the integrity endpoint, when the pointer exists. */
     @Override
     public Optional<String> servingKey(String requestPath, ArtifactStore store) throws IOException {
         String key;
@@ -1106,8 +938,7 @@ public final class PyPiFormat implements RepositoryFormat, ProxyLeg, BlobLayout,
         long size = located.get().size();
         exchange.setResponseHeader("Content-Type", "application/octet-stream");
         if (exchange.method().equals("HEAD")) {
-            // Answer HEAD from the stored blob size (Content-Length, 200, no body) rather than streaming the whole
-            // distribution just to discard it - pip issues HEADs to probe a file's size and existence.
+            // HEAD answers from the stored size; pip probes a file's size and existence with it.
             if (size >= 0) {
                 exchange.setResponseHeader("Content-Length", Long.toString(size));
             }
@@ -1117,10 +948,8 @@ public final class PyPiFormat implements RepositoryFormat, ProxyLeg, BlobLayout,
         blobs.serve(located.get(), exchange);
     }
 
-    /** The PEP 503 root index ({@code /pypi/simple/}): the stored page every upload maintains, listing every hosted
-     *  project with a servable distribution - the page the standard requires and the one an enumeration starts
-     *  from. A project whose every distribution is compliance-withheld is not listed, the same way the per-project
-     *  page screens a withheld file (and OCI its catalog). */
+    /** The PEP 503 root index ({@code /pypi/simple/}): the stored page uploads maintain, listing every hosted project
+     *  with a servable distribution, which an enumeration starts from. */
     private void projects(Blobs blobs, FormatExchange exchange) throws IOException {
         Optional<StoredListing.Served> served = StoredListing.open(blobs.store(), new PyPiListings(blobs).rootSpec());
         if (served.isEmpty()) {
@@ -1136,7 +965,7 @@ public final class PyPiFormat implements RepositoryFormat, ProxyLeg, BlobLayout,
         }
     }
 
-    /** The length of a root page listing nothing - the page frame alone. */
+    /** The length of a root page listing nothing: the frame alone. */
     private static final long EMPTY_ROOT_LENGTH = PyPiListings.page("Simple index").join(new TreeMap<>()).length;
 
     private static void respondPage(StoredListing.Served page, FormatExchange exchange) throws IOException {
@@ -1150,7 +979,7 @@ public final class PyPiFormat implements RepositoryFormat, ProxyLeg, BlobLayout,
             exchange.respond(404);
             return;
         }
-        // The project page is a stored listing the upload maintains, streamed as is.
+        // The project page is a stored listing, streamed as is.
         Optional<StoredListing.Served> served = StoredListing.open(blobs.store(),
                 new PyPiListings(blobs).projectSpec(project));
         if (served.isEmpty()) {
@@ -1166,8 +995,7 @@ public final class PyPiFormat implements RepositoryFormat, ProxyLeg, BlobLayout,
         return SEPARATORS.matcher(name.toLowerCase(Locale.ROOT)).replaceAll("-");
     }
 
-    /** The migration-import capability, delegated to the layout-only {@link PyPiImporter} - the format IS the
-     *  discovered importer now (an {@code instanceof} capability), and the importer class stays as its delegate. */
+    /** The migration-import capability, delegated to {@link PyPiImporter}. */
     private final PyPiImporter importer = new PyPiImporter();
 
     @Override
@@ -1185,12 +1013,9 @@ public final class PyPiFormat implements RepositoryFormat, ProxyLeg, BlobLayout,
         importer.importArtifact(path, content, store);
     }
 
-    /**
-     * Each distribution of the version is uploaded as {@code twine upload} sends it: the legacy form posted to the
-     * repository's root, naming the project and version and carrying the file, its SHA-256 and the PEP 740
-     * attestations it was uploaded with. The target is asked for each file back at its Simple index path, so a
-     * distribution already there is not sent again.
-     */
+    /** Each distribution of the version is uploaded as {@code twine upload} sends it: the legacy form posted to the
+     *  repository root with the project, version, file, SHA-256 and attestations, unless its Simple path already
+     *  answers. */
     @Override
     public Exported export(ArtifactStore repository, String coordinate, String version, ExportTarget target)
             throws IOException {

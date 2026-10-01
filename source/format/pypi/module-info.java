@@ -1,8 +1,7 @@
 /**
- * The PyPI format as a plugin module: it provides {@link build.jenesis.repository.format.RepositoryFormat} for the
- * {@code /pypi/...} layout, accepting twine's multipart upload (read through the shared streaming reader
- * {@code build.jenesis.repository.multipart}) and serving the PEP 503 simple index from stored pages the upload
- * maintains. Discovered through {@code provides}.
+ * The PyPI format as a plugin module: a {@link build.jenesis.repository.format.RepositoryFormat} for {@code /pypi/...},
+ * accepting twine's multipart upload through {@code build.jenesis.repository.multipart} and serving the PEP 503 simple
+ * index from stored pages the upload maintains.
  *
  * @jenesis.bom pin-repository.properties
  * @jenesis.signature signature-repository.properties
@@ -17,8 +16,7 @@ module build.jenesis.repository.format.pypi {
     requires org.slf4j;
     requires java.xml;
     requires build.jenesis.repository.multipart;
-    // The PEP 740 attestations a twine upload carries are JSON: kept whole, and each turned into the Sigstore bundle
-    // the verifier reads.
+    // PEP 740 attestations are JSON, each turned into the Sigstore bundle the verifier reads.
     requires tools.jackson.databind;
     requires build.jenesis.repository.settings;
     exports build.jenesis.repository.format.pypi to

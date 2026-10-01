@@ -5,15 +5,11 @@ import build.jenesis.repository.blobs.OutboundTargets;
 import build.jenesis.repository.format.ProxyFormat;
 
 /**
- * Walks a PEP 503 simple index rooted at an upstream - the same pages {@link PyPiFormat} already reads to serve
- * pull-through, pointed at "list everything" instead of "resolve one": the root {@code simple/} project list, then
- * each project's page, each file link resolved against the page it appears on (the file usually lives on another
- * host, pypi.org's files on files.pythonhosted.org) with its {@code #sha256} fragment dropped. Each entry pairs the
- * layout path {@link PyPiImporter} accepts ({@code <project>/<filename>}) with the file's download URL. Covers
- * pypi.org, a Nexus or Artifactory pypi repository, and jenesis's own generated index alike - anything speaking
- * PEP 503. Not wired into {@code ProxyFormat.enumerate}; callers drive it directly. The root list is read eagerly
- * (an unreachable or index-less source fails up front); project pages are read lazily as the stream advances,
- * failures surfacing as {@link UncheckedIOException}.
+ * Walks a PEP 503 simple index rooted at an upstream: the root {@code simple/} project list, then each project's page,
+ * each file link resolved against its page (files usually live on another host) with its {@code #sha256} fragment
+ * dropped. Each entry pairs the {@code <project>/<filename>} path {@link PyPiImporter} accepts with the file's download
+ * URL, for any index speaking PEP 503. Callers drive it directly. The root list is read eagerly, so an index-less
+ * source fails up front; project pages are read lazily, failures surfacing as {@link UncheckedIOException}.
  */
 public final class PyPiEnumeration {
 
@@ -23,13 +19,10 @@ public final class PyPiEnumeration {
     }
 
     /**
-     * @param allowInternal the deployment's {@link build.jenesis.repository.blobs.ProxyLeg#ALLOW_INTERNAL} dial - the
-     *                      same one the proxy leg reads, so a walk and a pull-through of the same file href cannot
-     *                      answer differently, and the one screen they both call is {@link
-     *                      build.jenesis.repository.blobs.OutboundTargets}. Off means a cross-origin file link must be
-     *                      {@code https} and public; one on the submitted upstream's own ORIGIN (scheme and authority)
-     *                      is operator-trusted either way, because it reaches no host, port or scheme the walk is not
-     *                      already reaching.
+     * @param allowInternal the deployment's {@link build.jenesis.repository.blobs.ProxyLeg#ALLOW_INTERNAL} dial, the
+     *     one the proxy leg reads, screened by {@link build.jenesis.repository.blobs.OutboundTargets}: off, a
+     *     cross-origin file link must be {@code https} and public; a link on the upstream's own origin is trusted
+     *     either way
      */
     public static Stream<Map.Entry<String, URI>> enumerate(ProxyFormat.Fetcher fetcher, URI upstream,
                                                            boolean allowInternal) throws IOException {
@@ -51,10 +44,8 @@ public final class PyPiEnumeration {
                 Matcher link = HREF.matcher(fetch(fetcher, page));
                 while (link.find()) {
                     URI file = page.resolve(strip(link.group(1)));
-                    // The file href comes from untrusted upstream index content and is cross-host by design
-                    // (pypi.org's files live on files.pythonhosted.org), so a hostile index linking a loopback /
-                    // 169.254.169.254 / CGNAT control plane must not become an importer download target. Screen it
-                    // through the one shared OutboundTargets call every peer leg and walk now makes.
+                    // The file href is untrusted upstream content and cross-host by design, so it is screened before it
+                    // becomes a download target.
                     if (!OutboundTargets.mayFollow(file, index, allowInternal)) {
                         continue;
                     }

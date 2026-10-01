@@ -7,12 +7,9 @@ import build.jenesis.repository.store.ArtifactDescriptor;
 import build.jenesis.repository.store.ArtifactStore;
 
 /**
- * Imports a PyPI repository (Nexus {@code pypi}) from an incumbent manager. A distribution file is stored under
- * {@code pypi/<project>/files/<filename>}, the project normalized per PEP 503, exactly where {@link PyPiFormat}
- * keeps an uploaded distribution; the stored Simple pages are generated from those files when first read. The
- * project is taken from the distribution filename (a wheel or sdist names the project before its version), since a
- * migrated asset carries no upload form. One of the language importers, discovered through the same
- * {@code RepositoryImporter} SPI the built-in importers use.
+ * Imports a PyPI repository from an incumbent manager. A distribution file is stored under
+ * {@code pypi/<project>/files/<filename>}, where {@link PyPiFormat} keeps an upload, and the Simple pages are generated
+ * on first read. The project is taken from the filename, a migrated asset carrying no upload form.
  */
 public final class PyPiImporter implements RepositoryImporter {
 
@@ -23,16 +20,9 @@ public final class PyPiImporter implements RepositoryImporter {
 
     @Override
     public Optional<ArtifactDescriptor> importTarget(String path) {
-        // Describe the distribution's canonical served coordinate /pypi/simple/<project>/<filename>, derived from the
-        // filename alone - NOT the raw source path. A live incumbent manager lays a distribution at a deep asset path
-        // (Nexus: packages/<name>/<version>/<file>); prepending that whole path made PyPiFormat parse a version that
-        // still carried the path's slashes (e.g. "demo/1.0.0/acme_demo"), which the inventory then rejected as a
-        // non-traversal-free segment, failing the import. The filename alone names the project and version (a wheel/
-        // sdist encodes both), exactly as importArtifact derives the storage layout below. Empty for an asset that is
-        // not a recognised distribution - the walk lays it out unscreened and importArtifact imports the rest.
-        // RepositoryImporter clause 4: a source path is as client-supplied as a request path, so a
-        // traversal-shaped one is refused by name rather than echoed into the descriptor the import edge
-        // screens and the trail records, as every importer does.
+        // The served coordinate is derived from the filename alone, which names project and version, not from the
+        // source path: a deep incumbent path would otherwise leak its slashes into the parsed version. Empty for a file
+        // that is no distribution. RepositoryImporter clause 4: a traversal-shaped source path is refused by name.
         String relative = RepositoryImporter.importablePath(path, "pypi");
         String filename = relative.substring(relative.lastIndexOf('/') + 1);
         String project = normalize(project(filename));
@@ -44,9 +34,7 @@ public final class PyPiImporter implements RepositoryImporter {
 
     @Override
     public void importArtifact(String path, InputStream content, ArtifactStore store) throws IOException {
-        // RepositoryImporter clause 4: a source path is as client-supplied as a request path, so a
-        // traversal-shaped one is refused by name rather than echoed into the descriptor the import edge
-        // screens and the trail records, as every importer does.
+        // RepositoryImporter clause 4: a traversal-shaped source path is refused by name.
         String relative = RepositoryImporter.importablePath(path, "pypi");
         String filename = relative.substring(relative.lastIndexOf('/') + 1);
         if (!(filename.endsWith(".whl") || filename.endsWith(".tar.gz")
@@ -58,8 +46,7 @@ public final class PyPiImporter implements RepositoryImporter {
             return;
         }
         new Blobs(store).write("pypi/" + project + "/files/" + filename, content);
-        // An import is a hosted publish (exactly as a twine upload is), so stamp the per-project hosted marker the
-        // Simple-index gate keys on - otherwise an imported project's index would miss locally as if it were a proxy.
+        // An import is a hosted publish, so the project's hosted marker is stamped.
         PyPiFormat.markHosted(store, PyPiFormat.hostedKey(project));
     }
 
