@@ -7,34 +7,21 @@ import build.jenesis.repository.store.Publication;
 import build.jenesis.repository.store.StoredListing;
 
 /**
- * A module's revisions, as the document an Ivy resolver discovers them from.
+ * A module's revisions, as the document an Ivy resolver discovers them from. Ivy publishes no
+ * {@code maven-metadata.xml}: a resolver asked for {@code 1.+} or {@code latest.release} lists the module directory and
+ * picks, so without this every dynamic revision would fail.
  *
- * <h2>Why this exists at all, which is the whole difference from Maven</h2>
+ * <p>The listing is a stored document maintained on the write path: a publish adds its revision and a read streams the
+ * document. The generator is the first materialisation and the repair, never the read path.
  *
- * <p>Maven publishes a {@code maven-metadata.xml} naming a coordinate's versions. Ivy publishes nothing of the
- * kind: a resolver asked for {@code 1.+} or {@code latest.release} <b>lists the module directory</b> and picks
- * from what it sees. That is one of the two differences between the formats that actually reaches a repository
- * server, and it is why an Ivy repository without this serves every pinned revision correctly and silently fails
- * every dynamic one.
- *
- * <p>So the listing is a stored document maintained on the write path, not a rendering: a publish adds the one
- * revision, and a read streams the document as it is. The on-read generation survives as the document's
- * <em>generator</em> - the first materialisation for a repository that holds revisions but no document yet, and the
- * repair path afterwards - never as the read path.
- *
- * <h2>What a withheld revision must do to it</h2>
- *
- * <p>Leave it. A revision listed after its bytes are withheld is a revision {@code 1.+} <em>selects</em> and then
- * fails to download, which is worse than one that was never offered: the resolution succeeds, the build fails, and
- * the failure names a download rather than a hold. So the generator skips what is withheld and
- * {@link IvyListingObserver} re-decides the one entry when a hold, a release or a removal happens off the publish
- * path.
+ * <p>A withheld revision leaves it: listed, {@code 1.+} would select it and fail at the download, naming a download
+ * rather than a hold. The generator skips what is withheld and {@link IvyListingObserver} re-decides an entry on a
+ * hold, release or removal.
  */
 final class IvyListings {
 
-    /** The directory-listing document a resolver parses. Deliberately the plainest HTML that every Ivy resolver
-     *  has read since the format existed - an anchor per revision, its own name as the text - because this is the
-     *  one document whose consumer is a parser nobody here controls. */
+    /** The directory listing a resolver parses: the plainest HTML every Ivy resolver reads - an anchor per revision,
+     *  its name as the text - since its consumer is a parser nobody here controls. */
     private static final String PROLOGUE = "<html><body>\n";
 
     private static final String EPILOGUE = "</body></html>\n";
@@ -69,8 +56,7 @@ final class IvyListings {
         this.store = store;
     }
 
-    /** One revision's line, which is also the entry the codec stores it as - so splitting and joining are inverse
-     *  by construction rather than by two functions agreeing. */
+    /** One revision's line, which is also its stored entry, so splitting and joining are inverse by construction. */
     private static byte[] entry(String revision) {
         return ("<a href=\"" + revision + "/\">" + revision + "/</a>\n").getBytes(StandardCharsets.UTF_8);
     }
@@ -103,14 +89,8 @@ final class IvyListings {
         StoredListing.put(store, spec(organisation, module), revision, entry(revision));
     }
 
-    /**
-     * Re-decide one revision by asking the store: listed when something under it still serves, absent otherwise.
-     *
-     * <p>Only correct where the store <em>can</em> answer that - the repair, and a lifecycle mark, both of which
-     * run against the serving store. A hold notifies through the store it was written to rather than the one the
-     * interceptor chain wraps, so it takes {@link #withdraw} instead: see the observer, where the difference is
-     * recorded with the measurement behind it.
-     */
+    /** Re-decide one revision by asking the store: listed when something under it still serves. Correct only against
+     *  the serving store - the repair and a lifecycle mark; a hold uses {@link #withdraw} (see the observer). */
     void refresh(String organisation, String module, String revision) throws IOException {
         if (servable(organisation, module, revision)) {
             published(organisation, module, revision);
@@ -119,8 +99,8 @@ final class IvyListings {
         }
     }
 
-    /** Take a revision out of its module's listing, because the transition said so rather than because the store
-     *  was asked. {@code module} is {@code [organisation, module]}, as the observer resolved it. */
+    /** Take a revision out of its module's listing because the transition said so. {@code module} is
+     *  {@code [organisation, module]}, as the observer resolved it. */
     void withdraw(String[] module, String revision) throws IOException {
         StoredListing.remove(store, spec(module[0], module[1]), revision);
     }
@@ -130,12 +110,8 @@ final class IvyListings {
         published(module[0], module[1], revision);
     }
 
-    /**
-     * The module's revisions as the store has them - the generator, and therefore also the repair.
-     *
-     * <p>A revision counts when at least one file under it serves. A revision whose every file is withheld is a
-     * revision a resolver must not select, and one whose directory is empty was never a revision at all.
-     */
+    /** The module's revisions as the store has them - the generator and the repair. A revision counts when at least one
+     *  file under it serves. */
     private SortedMap<String, byte[]> generate(String organisation, String module) throws IOException {
         SortedMap<String, byte[]> entries = new TreeMap<>();
         for (String revision : store.list(IvyFormat.publishPrefix(organisation, module))) {
@@ -146,12 +122,8 @@ final class IvyListings {
         return entries;
     }
 
-    /**
-     * Regenerate this listing if it is one of ours, which is the repair half of maintaining it on the write path.
-     *
-     * <p>A listing key here is {@code ivy/<organisation>/<module>} and nothing else, so recognising one is exact
-     * rather than a guess - and a key that is not ours is declined rather than rebuilt into something wrong.
-     */
+    /** Regenerate this listing if it is one of ours: a key is exactly {@code ivy/<organisation>/<module>}, and any
+     *  other is declined. */
     boolean rebuild(String listing) throws IOException {
         String[] segments = listing.split("/");
         if (segments.length != 3 || !segments[0].equals("ivy")) {
