@@ -1,20 +1,12 @@
 /**
- * The scheduled vulnerability re-scan as a plugin module: it provides
- * {@link build.jenesis.repository.maintenance.MaintenanceTaskProvider} answering to {@code scan} (the non-exclusive
- * gauge pass), to {@code kev-enforce} (the exclusive retroactive known-exploited hold), to {@code reanalyze} (the
- * exclusive continuous re-analysis / auto-release pass), to {@code vulnerability-rank-index} (the exclusive pass
- * keeping the durable worst-first rank index current) and to {@code signal-refresh} (the exclusive write-role draw
- * that keeps a mirroring signal source's snapshot present, so its query path may render rather than fetch on the
- * publish thread), so the neutral maintenance scheduler discovers all of them and a
- * deployment without this module simply publishes no scan gauges and neither enforces nor walks back a late-arriving
- * known-exploited finding. The gauge pass counts each repository's inventory against the discovered advisory feeds and
- * known-exploited catalogues and reports the vulnerable and known-exploited coordinate counts per repository; the
- * enforcement pass quarantines an already-published artifact whose CVE is on a known-exploited catalogue, writing the
- * same {@code /quarantine} hold and {@link build.jenesis.repository.gate.QuarantineLog} row the publish-time gate writes
- * (through {@link build.jenesis.repository.store.Publication}), so it lands in the normal review queue and the existing
- * release/discard flow applies unchanged; the re-analysis pass is its self-healing mirror, auto-releasing a retroactive
- * hold ({@link build.jenesis.repository.gate.KevHold#cleared}, no override) the moment its known-exploited intel clears
- * and keeping the findings substrate current for served coordinates over the same walk.
+ * The scheduled vulnerability passes as a plugin module, each a
+ * {@link build.jenesis.repository.maintenance.MaintenanceTaskProvider}: {@code scan} counts each repository against the
+ * advisory and known-exploited feeds and publishes the counts as gauges; {@code kev-enforce} holds an already-published
+ * artifact whose CVE a known-exploited catalogue lists, writing the gate's {@code /quarantine} hold and
+ * {@link build.jenesis.repository.gate.QuarantineLog} row; {@code reanalyze} releases such a hold once its intel clears
+ * ({@link build.jenesis.repository.gate.KevHold#cleared}); {@code vulnerability-rank-index} keeps the worst-first rank
+ * index current; and {@code signal-refresh} draws a mirroring signal source's snapshot so its query path renders rather
+ * than fetches. Without this module there are no scan gauges and no retroactive holds.
  *
  * @jenesis.release 25
  * @jenesis.bom pin-repository.properties
@@ -35,19 +27,13 @@ module build.jenesis.repository.compliance.scan {
     requires build.jenesis.repository.gate.spi;
     requires tools.jackson.databind;
     requires org.slf4j;
-    // The report's records are rendered by the console's template engine, which reaches them reflectively -
-    // the same reason build.jenesis.repository.ui.store is an open module. Opened rather than the whole
-    // module, so only the package a template reads is reachable that way.
+    // The console's template engine reads the report's records reflectively; only this package is opened.
     opens build.jenesis.repository.compliance.scan;
 
     exports build.jenesis.repository.compliance.scan to build.jenesis.repository.compliance.web,
             build.jenesis.repository.ui.store,
-            // the admin console's own suite, which names the report's types because the console assembles
-            // through the same service the API does rather than building a second report of its own
             build.jenesis.repository.ui.admin.installed.test,
             build.jenesis.repository.server.kernel.test, build.jenesis.repository.recovery.test,
-            // The maintenance-task contract kit reads the rank index back through the very Page record the
-            // /api/vulnerabilities surface renders, rather than restating the generation layout inside a fixture.
             build.jenesis.repository.maintenance.contract.test;
     provides build.jenesis.repository.maintenance.MaintenanceTaskProvider
             with build.jenesis.repository.compliance.scan.VulnerabilityScanTaskProvider,

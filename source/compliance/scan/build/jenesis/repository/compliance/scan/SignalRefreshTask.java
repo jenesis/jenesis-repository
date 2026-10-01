@@ -9,29 +9,19 @@ import build.jenesis.repository.maintenance.MaintenanceTask;
 import build.jenesis.repository.maintenance.RepositoryContext;
 
 /**
- * The scheduled write-role half of "reads render, writes refresh" for the signal family: it draws whatever a
- * {@link RefreshableSource mirroring signal source} has to draw, so the sources' <em>query</em> paths can render a
- * persisted snapshot and never fetch. A mirror refreshed from inside {@code contains(cve)} would put a
- * multi-megabyte download on the publish thread and make a gate decision depend on the vendor being reachable at
- * the moment somebody uploaded.
+ * The scheduled write half of "reads render, writes refresh" for the signal family: it draws what a
+ * {@link RefreshableSource mirroring signal source} has to draw, so the query paths render a persisted snapshot and
+ * never fetch on the publish thread.
  *
- * <p>Deployment-global, not per repository. A signal source is a deployment singleton by its SPI's own tenant-scoping
- * clause - the CISA catalogue is the same public data for every tenant - so the work happens once per pass in
- * {@link #completed}, after the (empty) repository fan-out, rather than once per {@code (tenant, repository)} unit. A
- * deployment with no repositories at all still refreshes, which matters on the first boot of an empty server.
+ * <p>Deployment-global, since a signal source is a deployment singleton: the work happens once per pass in
+ * {@link #completed}, so a deployment with no repositories still refreshes.
  *
- * <p>Exclusive: the refresh commits into the deployment-global snapshot space through a compare-and-set, so one node
- * per interval draws the feed and the rest render what it committed. Idempotent by construction - a source inside its
- * own refresh window renders and returns without spending a request - so a short pass interval costs a store read
- * rather than a vendor call, and the interval is about how quickly a <em>cold</em> deployment catches up rather than
- * about how often the vendor is drawn.
+ * <p>Exclusive: the refresh commits into the global snapshot space through a compare-and-set, so one node per interval
+ * draws. A source inside its own refresh window returns without a request, so a short interval costs a store read
+ * rather than a vendor call.
  *
- * <p><strong>A failed draw fails the pass.</strong> {@code MaintenanceTask} clause 4 is explicit that a unit which
- * could not do its work must throw rather than return quietly, or an index unrebuilt for a week is indistinguishable
- * from a healthy one. So a source whose refresh did not land is named in an {@link IOException} the scheduler logs and
- * counts on {@code jenrepo.maintenance.failures}. The refresh itself stays fail-soft where it must be: the
- * prior-good catalogue keeps serving and the gate keeps deciding - but an outage is <em>counted</em> instead of being
- * a silent lazy-load nobody watches.
+ * <p><strong>A failed draw fails the pass</strong> (clause 4): the source is named in an {@link IOException} the
+ * scheduler logs and counts, while the prior-good catalogue keeps serving.
  */
 public final class SignalRefreshTask implements MaintenanceTask {
 
@@ -41,8 +31,7 @@ public final class SignalRefreshTask implements MaintenanceTask {
     public static final List<String> CATALOGUE_DRIVEN = List.of("scan", "kev-enforce", "reanalyze");
 
     private final Duration interval;
-    /** The enabled mirroring sources, keyed by signal name - resolved once by the provider, exactly as the sibling
-     *  compliance passes resolve their feeds, because a signal source carries no tenant to re-resolve for. */
+    /** The enabled mirroring sources, keyed by signal name, resolved once since a signal source carries no tenant. */
     private final Map<String, RefreshableSource> sources;
 
     public SignalRefreshTask(Duration interval, Map<String, RefreshableSource> sources) {
@@ -73,8 +62,8 @@ public final class SignalRefreshTask implements MaintenanceTask {
     @Override
     public void completed(Instant started) throws IOException {
         List<String> failed = new ArrayList<>();
-        // Name-sorted, and every signal is attempted even when an earlier one raised: a store fault under one mirror
-        // must not cost the others their draw, which is the same containment the scheduler gives a repository unit.
+        // Every signal is attempted even when an earlier one raised, so a fault under one mirror does not cost the
+        // others their draw.
         for (Map.Entry<String, RefreshableSource> source : new TreeMap<>(sources).entrySet()) {
             try {
                 Optional<String> before = source.getValue().snapshot();
@@ -84,13 +73,13 @@ public final class SignalRefreshTask implements MaintenanceTask {
                     LOGGER.debug("Refreshed the {} signal; its data was drawn at {}", source.getKey(),
                             freshness.refreshed().map(Instant::toString).orElse("an unrecorded instant"));
                     Optional<String> after = source.getValue().snapshot();
-                    // Changed when the committed snapshot's digest moved; a source with no durable snapshot to
-                    // compare counts every draw that landed as a change, since it cannot say otherwise.
+                    // Changed when the snapshot digest moved; a source with no durable snapshot counts every landed
+                    // draw as a change.
                     boolean changed = after.isPresent() ? !after.equals(before)
                             : freshness.refreshed().isPresent() && !freshness.refreshed().equals(drawnBefore);
                     if (changed) {
-                        // The catalogue changed: the passes that read only what was published since their last full
-                        // pass are asked, by name, for a full one - a listing or a delisting names old versions.
+                        // A changed catalogue asks the incremental passes for a full one, since a listing or delisting
+                        // names old versions.
                         for (String pass : CATALOGUE_DRIVEN) {
                             Requests.requestOnRoot(pass, "the " + source.getKey() + " catalogue changed");
                         }
@@ -100,27 +89,16 @@ public final class SignalRefreshTask implements MaintenanceTask {
                             + freshness.refreshed().map(Instant::toString).orElse("never") + ")");
                 }
             } catch (Throwable e) {
-                // The durable side, not the vendor: a wiring or infrastructure fault, which the role's contract
-                // distinguishes precisely so it does not read as "the feed is down".
-                //
-                // Throwable rather than IOException | RuntimeException. An Error out of one mirror is the
-                // likeliest failure a plugged-in feed module actually produces - a NoClassDefFoundError from a
-                // half-installed optional dependency - and leaving this loop on it would mean the mirrors sorted
-                // after it never draw at all. The scheduler survives that, which would make it quiet: the pass would
-                // count as failing without naming which signal, and every OTHER signal's catalogue would stay
-                // undrawn for the life of the process while the gate kept screening against it.
-                // Containing it here is not swallowing it - the product's rule is that an Error is attributed rather
-                // than filed as the guest's answer, and the escalation question is decided by who the caller is:
-                // this method's caller is the maintenance worker, which has none, so the escalation goes to the
-                // operator through the named failure below exactly as the scheduler's own does. The name is the map
-                // key captured when the pass was built, never read back off the mirror that just gave way.
+                // The durable side failed, not the vendor. Throwable is caught because a plugged-in feed's likeliest
+                // failure is an Error such as a NoClassDefFoundError from a half-installed dependency, and leaving the
+                // loop would leave every later signal undrawn. It is not swallowed: it is named in the failure raised
+                // below.
                 LOGGER.warn("Could not commit the {} signal's snapshot", source.getKey(), e);
                 failed.add(source.getKey() + " (" + e + ")");
             }
         }
         if (!failed.isEmpty()) {
-            // Named, not merely counted: the message says which signals are stale, so an operator reading the failure
-            // counter can act on it rather than only knowing that "something" did not refresh.
+            // Named, so an operator knows which signals are stale.
             throw new IOException("Could not refresh " + String.join(", ", failed)
                     + "; the prior-good data keeps serving and the pass is retried on the next interval");
         }

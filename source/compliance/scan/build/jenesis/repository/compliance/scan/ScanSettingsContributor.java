@@ -8,21 +8,14 @@ import build.jenesis.repository.settings.SettingsContributor;
 import build.jenesis.repository.maintenance.IntervalSetting;
 
 /**
- * Describes the scheduled re-scan's settings, so they surface on the settings screens exactly when this module is
- * installed.
+ * Describes the scheduled re-scan's settings.
  *
- * <p>The two cadence entries render their key and default straight off {@link IntervalSetting#SCANS} and
- * {@link SignalRefreshTaskProvider}'s {@code IntervalSetting} constant, so the catalogue and the code cannot drift.
- * Both keys name their unit, so the default is rendered in milliseconds rather than as an ISO-8601 string: the entry
- * an operator edits is a {@code LONG}, and a duration string in a number field would be a default nobody could type
- * back. The scan cadence is the whole scan family's dial, and every pass of the family reads that one constant.
+ * <p>The cadence entries render their key and default from {@link IntervalSetting#SCANS} and
+ * {@link SignalRefreshTaskProvider}'s constant, so the catalogue cannot drift from the code; both are in milliseconds,
+ * since the entry is a {@code LONG} field. The scan cadence is the dial of every pass in this module.
  *
  * <p>The signal refresh and the two known-exploited dials are listed only where a known-exploited catalogue is
- * installed: the refresh pass is created only for a mirroring source and the enforcement holds nothing without a
- * catalogue, so on a composition carrying none they are settings that change nothing - and the settings screen, the
- * generated reference and the boot check for unrecognised settings would all describe a capability the deployment
- * does not have. The answer is held, since installation is fixed for the life of a JVM and the catalogue is asked
- * for on every render of the settings screens.
+ * installed, since without one they change nothing. The answer is held because installation is fixed for the JVM.
  */
 public final class ScanSettingsContributor implements SettingsContributor {
 

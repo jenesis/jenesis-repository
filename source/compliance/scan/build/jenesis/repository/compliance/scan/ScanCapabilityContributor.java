@@ -5,9 +5,8 @@ import build.jenesis.repository.maintenance.MaintenanceTaskProvider;
 import build.jenesis.repository.server.spi.CapabilityContributor;
 
 /**
- * Contributes the {@code scan} capability flag to {@code /api/capabilities}: whether the vulnerability-scan
- * maintenance task is installed on this deployment. Resolved from the discovered {@link MaintenanceTaskProvider}
- * registry - identical to the value the neutral server built by hand before the fan-out.
+ * Contributes the {@code scan} capability flag to {@code /api/capabilities}: whether the vulnerability-scan maintenance
+ * task is installed, read from the discovered {@link MaintenanceTaskProvider} registry.
  */
 public final class ScanCapabilityContributor implements CapabilityContributor {
 

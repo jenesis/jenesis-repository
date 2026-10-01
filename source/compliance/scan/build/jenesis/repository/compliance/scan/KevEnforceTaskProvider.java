@@ -9,13 +9,10 @@ import build.jenesis.repository.maintenance.MaintenanceTask;
 import build.jenesis.repository.maintenance.MaintenanceTaskProvider;
 
 /**
- * Discovers the retroactive known-exploited enforcement pass, beside the gauge {@link VulnerabilityScanTaskProvider}
- * in the same module. It rides the same enablement as the gauge scan - the {@code scheduled-scan} setting turns
- * scheduled re-scanning on and the {@code scan-interval-millis} cadence paces both passes over the same feeds - so a
- * deployment that schedules re-scanning gets retroactive KEV holding with it. Whether a pass actually writes holds is
- * a separate, per-pass decision read inside the task from {@code kev-auto-hold} (default on), so an operator can leave
- * re-scanning on for the gauges yet turn enforcement off without a restart. The feeds are the discovered advisory and
- * known-exploited plugins, resolved from the same configuration, so this pass names no backend.
+ * Discovers the retroactive known-exploited enforcement pass. It rides the {@code scheduled-scan} enablement and the
+ * {@code scan-interval-millis} cadence of the gauge scan; whether a pass writes holds is read per pass from
+ * {@code kev-auto-hold}, so enforcement can be switched off without a restart. The feeds are the discovered advisory
+ * and known-exploited plugins.
  */
 public final class KevEnforceTaskProvider implements MaintenanceTaskProvider {
 
