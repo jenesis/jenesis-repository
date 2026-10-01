@@ -101,12 +101,15 @@ public final class ConsoleLayout {
      *  one. */
     public static final String MODULE_VIEWS = "moduleViews";
 
+    /** A link into the browse tree, drawn as a small folder beside a heading, taking the address and what it opens. */
+    public static final String FOLDER_LINK = "folderLink";
+
     /** Every fragment an extending console may build on. */
     public static final Set<String> FRAGMENTS = Set.of(
             PAGE_HEADER, PAGE_HEADER_CRUMBS, EMPTY, ALERT, HEAD_CONTENTS, PRIMARY_BUTTON, SECONDARY_BUTTON,
             CAUTION_BUTTON, DANGER_BUTTON, DELETE_BUTTON, SHELL, SIGN_IN_SHELL, MESSAGES, SUBSECTION_ERROR,
             BROWSE_ROWS, BROWSE_UP, RUNNING, REPOSITORY_HEADER, REPOSITORY_OVERVIEW_HEADER, REPOSITORY_IDENTITY,
-            MODULE_VIEWS);
+            MODULE_VIEWS, FOLDER_LINK);
 
     private ConsoleLayout() {
         throw new UnsupportedOperationException();

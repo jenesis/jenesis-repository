@@ -64,6 +64,10 @@
                     <small th:if="${!detail.lastDownloaded.isEmpty()}" th:text="'last ' + ${instants.display(detail.lastDownloaded)}">last 2026-06-05T12:00:00Z</small>
                     <small th:if="${!downloadsLag.isEmpty()}" th:text="'(up to ' + ${downloadsLag} + ' behind)'">(up to 6 hours behind)</small></td>
             </tr>
+            <tr th:if="${capabilities.findings()}">
+                <th scope="row">Findings</th>
+                <td><th:block th:replace="~{fragments :: findingsState(${detail.findings}, @{'/ui/repositories/' + ${repo} + '/findings'(coordinate=${detail.coordinate + ':' + detail.version})})}"></th:block></td>
+            </tr>
             <tr>
                 <th scope="row">Licences</th>
                 <td>
@@ -106,8 +110,6 @@
         </table>
         </figure>
         <p>
-            <a th:if="${capabilities.findings()}"
-               th:href="@{'/ui/repositories/' + ${repo} + '/findings'(coordinate=${detail.coordinate + ':' + detail.version})}">findings &rarr;</a>
             <a th:if="${isEditor and repositoryPagePaths.contains('/lifecycle') and !detail.cached}"
                th:href="@{/ui/repositories/{repo}/lifecycle(repo=${repo},coordinate=${detail.coordinate},version=${detail.version},path=${detail.paths.isEmpty() ? '' : detail.paths[0]})}">deprecate
                 or yank &rarr;</a>
@@ -115,7 +117,8 @@
     </article>
 
     <article>
-        <h2>Files</h2>
+        <h2>Files<th:block th:if="${!detail.browseFolder().isEmpty()}"> <a th:replace="~{base :: folderLink(
+                @{/ui/repositories/{repo}/browse(repo=${repo},prefix=${detail.browseFolder()})}, 'Browse the folder of its files')}"></a></th:block></h2>
         <th:block th:if="${detail.paths.isEmpty()}">
             <div th:replace="~{base :: empty('No file of this version is served.')}"></div>
         </th:block>

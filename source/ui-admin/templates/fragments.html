@@ -45,6 +45,12 @@
         .setting-controls > .setting-edit { margin: 0; }
         .setting-controls > .setting-revert { margin: 0; }
         .setting-revert button { margin: 0; }
+        /* A row's controls are sized as every table row's actions are - a size down - so Save and Reset to default
+           read as Release and Discard do, and the value beside them matches their height. */
+        .setting-controls button { padding: var(--app-space-1) var(--app-space-3); font-size: var(--app-font-size-sm);
+                                   line-height: 1.25; }
+        .setting-edit > input, .setting-edit > select { padding: var(--app-space-1) var(--app-space-2);
+                                                        font-size: var(--app-font-size-sm); height: auto; }
         /* In-memory option search: a client-side filter over the config catalogue, matching a
            knob's key and its documentation text so it is found by what it does, not just its name. */
         .setting-filter { max-width: 42rem; }
@@ -89,6 +95,15 @@
 <div th:fragment="settingRow(s, back)"
      th:replace="~{fragments :: settingRowFor(${s}, '/ui/settings/save', ${back}, 'default', 'its default',
              '')}"></div>
+
+<!--/* findingsState: what the findings ledger holds against one version - none, or how many still stand drawn in the
+     colour of the worst, linking to them - and nothing where no ledger could be asked, rather than a clean bill. */-->
+<th:block th:fragment="findingsState(state, href)">
+    <small th:if="${state.known() and state.count() == 0}">none</small>
+    <a th:if="${state.count() > 0}" th:href="${href}"
+       th:title="|${state.count()} standing, the worst ${state.worst()}|"><span th:class="|app-badge ${state.badge()}|"
+            th:text="|${state.count()} · ${#strings.toLowerCase(state.worst())}|">2 · high</span></a>
+</th:block>
 
 <!--/* settingRowFor: the row itself, for either layer it edits. The deployment's settings and a tenant's overrides
      differ only in where a value is saved and what it falls back to, so the one row takes those as parameters rather

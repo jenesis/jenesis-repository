@@ -304,6 +304,12 @@
      name/value pair choosing between two submits, an accessible name wider than its label, a disabled state, or a
      link styled as a button - writes the weight's classes itself: `app-primary`, or `secondary outline
      app-secondary`. */-->
+<!--/* A link into the browse tree, drawn as a small folder beside the heading of what the folder holds. */-->
+<a th:fragment="folderLink(href, label)" class="app-folder-link" th:href="${href}" th:title="${label}"
+   th:attr="aria-label=${label}"><svg aria-hidden="true" focusable="false" width="16" height="16" viewBox="0 0 24 24"
+        fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path
+        d="M3 6a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2Z"/></svg></a>
+
 <button th:fragment="primaryButton(label)" type="submit" class="app-primary" th:text="${label}">Save</button>
 
 <button th:fragment="secondaryButton(label)" type="submit" class="secondary outline app-secondary"

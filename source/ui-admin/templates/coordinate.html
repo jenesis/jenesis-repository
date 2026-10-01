@@ -16,12 +16,6 @@
 <main id="main">
     <div th:replace="~{fragments :: messages}"></div>
     <th:block th:replace="~{base :: repositoryHeader(${detail.coordinate}, 'Browse', @{/ui/repositories/{repo}/browse(repo=${repo})})}"></th:block>
-    <p>
-        <th:block th:if="${!detail.location.isEmpty()}">
-            <a th:href="@{/ui/repositories/{repo}/browse(repo=${repo},prefix=${detail.location})}">browse folder &rarr;</a>
-        </th:block>
-    </p>
-
     <article>
         <p>
             <span th:if="${mark != null}"
@@ -29,13 +23,12 @@
                   th:title="${mark.title}" role="img" th:attr="aria-label=${mark.title}" th:utext="${mark.svg}"></span>
             <small th:text="${detail.ecosystem}">npm</small>
             <small th:if="${mark != null and !mark.installed}">&mdash; no installed format serves this ecosystem</small>
-            <a th:if="${capabilities.findings()}"
-               th:href="@{'/ui/repositories/' + ${repo} + '/findings'(coordinate=${detail.coordinate})}">findings &rarr;</a>
         </p>
     </article>
 
     <article>
-        <h2>Versions</h2>
+        <h2>Versions<th:block th:if="${!detail.location.isEmpty()}"> <a th:replace="~{base :: folderLink(
+                @{/ui/repositories/{repo}/browse(repo=${repo},prefix=${detail.location})}, 'Browse the folder of its versions')}"></a></th:block></h2>
         <p><small>The versions of this coordinate this repository holds - published into it, or cached from an
             upstream - newest first; a long list is paged by name. Open a version for everything recorded about it:
             its licences, what its manifest says, its signature, dependencies and files. A held or collected version
@@ -53,6 +46,7 @@
                     <th scope="col">Published or cached</th>
                     <th scope="col">Pinned</th>
                     <th scope="col" th:if="${downloadsTracked}">Downloads</th>
+                    <th scope="col" th:if="${capabilities.findings()}">Findings</th>
                     <th scope="col">Files</th>
                 </tr>
                 </thead>
@@ -86,6 +80,8 @@
                         <span th:text="${v.downloads}">7</span>
                         <small th:if="${!v.lastDownloaded.isEmpty()}" th:text="'last ' + ${instants.display(v.lastDownloaded)}">last 2026-06-05T12:00:00Z</small>
                     </td>
+                    <td th:if="${capabilities.findings()}"><th:block
+                            th:replace="~{fragments :: findingsState(${v.findings}, @{'/ui/repositories/' + ${repo} + '/findings'(coordinate=${detail.coordinate + ':' + v.version})})}"></th:block></td>
                     <td class="app-list__num"><small th:text="${v.paths.isEmpty() ? '—'
                             : (v.paths.size() == 1 ? '1 file' : v.paths.size() + ' files')}">4 files</small></td>
                 </tr>

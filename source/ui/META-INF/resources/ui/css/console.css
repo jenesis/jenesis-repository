@@ -643,6 +643,16 @@ hgroup.app-page-header__heading > h1.app-page-header__title {
 .app-inline-edit > details:not([open]) ~ form {
     display: none;
 }
+/* A folder link beside a heading: a small mark in the link colour, sitting on the heading's line. */
+.app-folder-link {
+    display: inline-flex;
+    margin-left: var(--app-space-2);
+    vertical-align: middle;
+    color: var(--pico-muted-color);
+}
+.app-folder-link:hover {
+    color: var(--pico-primary);
+}
 .app-page-header__actions {
     display: flex;
     align-items: center;
@@ -1053,6 +1063,27 @@ form.app-actions > button,
 .app-actions > form > button {
     width: auto;
     margin-bottom: 0;
+}
+/* What changes nothing - going back, leaving - drawn as a link at the far end, so the buttons are only the acts. */
+.app-actions__quiet {
+    display: flex;
+    align-items: center;
+    gap: var(--app-space-4);
+    margin-left: auto;
+}
+button.app-quiet {
+    width: auto;
+    margin: 0;
+    padding: 0;
+    border: 0;
+    background: none;
+    color: var(--pico-primary);
+    text-decoration: underline;
+    text-underline-offset: var(--pico-text-underline-offset);
+}
+button.app-quiet:hover {
+    background: none;
+    color: var(--pico-primary-hover);
 }
 .app-actions__danger {
     margin-left: auto;

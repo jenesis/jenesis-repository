@@ -37,7 +37,7 @@ public final class AdminConsoleLayout implements ConsoleLayout.Extension {
                 // that asks, or a deletion guarded by typing its name.
                 ConsoleLayout.PRIMARY_BUTTON, ConsoleLayout.SECONDARY_BUTTON, ConsoleLayout.CAUTION_BUTTON,
                 ConsoleLayout.DANGER_BUTTON, ConsoleLayout.DELETE_BUTTON,
-                ConsoleLayout.BROWSE_ROWS, ConsoleLayout.BROWSE_UP,
+                ConsoleLayout.BROWSE_ROWS, ConsoleLayout.BROWSE_UP, ConsoleLayout.FOLDER_LINK,
                 // Every screen that starts work off the request path renders this instead of telling the reader to
                 // reload: the rescans, the blast radius, the project count, both cleanup notices and the migration.
                 ConsoleLayout.RUNNING,

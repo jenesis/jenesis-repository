@@ -6,6 +6,7 @@ import build.jenesis.repository.ui.CurrentTenant;
 import build.jenesis.repository.index.keys.PublishedIndexKeys;
 import build.jenesis.repository.cleanup.Release;
 import build.jenesis.repository.compliance.ProvenanceSignerProvider;
+import build.jenesis.repository.compliance.Severity;
 import build.jenesis.repository.findings.Finding;
 import build.jenesis.repository.findings.Findings;
 import build.jenesis.repository.findings.FindingsProvider;
@@ -187,7 +188,7 @@ public class RepositoryBrowse extends TenantScope {
      */
     public record CoordinateVersion(String version, String published, boolean pinned, boolean served,
                                     List<String> paths, boolean browsable, Long downloads, String lastDownloaded,
-                                    boolean cached, String upstream) {
+                                    boolean cached, String upstream, FindingsState findings) {
 
         /** The folder every path lies in - see {@link RepositoryBrowse#folder(List)}. */
         public String folder() {
@@ -197,6 +198,49 @@ public class RepositoryBrowse extends TenantScope {
         /** The paths as the row lists them - see {@link RepositoryBrowse#files(List)}. */
         public List<ServedFile> files() {
             return RepositoryBrowse.files(paths);
+        }
+    }
+
+    /**
+     * What the findings ledger holds against one version: how many findings still stand, and the worst severity among
+     * them - which a version's row shows as its state and links to. {@code worst} is empty when none stands; the whole
+     * state is {@link #NONE} where no ledger is installed or it cannot be read, which a row shows as nothing at all
+     * rather than as a clean bill.
+     */
+    public record FindingsState(boolean known, int count, String worst) {
+
+        /** No ledger to ask. */
+        public static final FindingsState NONE = new FindingsState(false, 0, "");
+
+        /** The badge kind the worst severity is drawn in: danger from HIGH up, and for a severity no scorer could
+         *  read, which the gate treats the same; a caution for MEDIUM; otherwise muted. */
+        public String badge() {
+            return switch (worst) {
+                case "CRITICAL", "HIGH", "UNKNOWN" -> "app-badge--danger";
+                case "MEDIUM" -> "app-badge--warn";
+                default -> "app-badge--muted";
+            };
+        }
+
+        static FindingsState of(Optional<Findings> ledger, String ecosystem, String coordinate, String version) {
+            if (ledger.isEmpty()) {
+                return NONE;
+            }
+            try {
+                int count = 0;
+                Severity worst = null;
+                for (Finding finding : ledger.get().of(ecosystem, coordinate, version)) {
+                    if (finding.active()) {
+                        count++;
+                        if (worst == null || finding.severity().compareTo(worst) > 0) {
+                            worst = finding.severity();
+                        }
+                    }
+                }
+                return new FindingsState(true, count, worst == null ? "" : worst.name());
+            } catch (IOException | RuntimeException _) {
+                return NONE;
+            }
         }
     }
 
@@ -346,7 +390,8 @@ public class RepositoryBrowse extends TenantScope {
     }
 
     /** One page of the coordinate's versions - the page is cut in name order from {@code after} and shown newest
-     *  first; {@code location} is the browse folder of the page's most recently published browsable version. */
+     *  first; {@code location} is the browse folder holding the coordinate's versions - the one above the page's most
+     *  recently published browsable version's - or empty where the format keeps no folder tree. */
     public CoordinateDetail coordinate(String repository, String ecosystem, String coordinate, String after,
                                        int limit) throws IOException {
         ArtifactStore store = scope(repository);
@@ -355,6 +400,7 @@ public class RepositoryBrowse extends TenantScope {
                 Math.max(1, Math.min(limit, VERSIONS_PAGE)));
         List<CoordinateVersion> versions = new ArrayList<>();
         CoordinateVersion newest = null;
+        Optional<Findings> ledger = FindingsProvider.installed().map(provider -> provider.over(store));
         for (StoreRepositoryInventory.Holding holding : page.holdings()) {
             String when = holding.at() == null ? "" : holding.at().toString();
             boolean served = inventory.disclosable(ecosystem, coordinate, holding.version(),
@@ -362,7 +408,8 @@ public class RepositoryBrowse extends TenantScope {
             boolean browsable = !inventory.locate(ecosystem, coordinate, holding.version()).isEmpty();
             CoordinateVersion row = new CoordinateVersion(holding.version(), when, holding.pinned(), served,
                     inventory.paths(ecosystem, coordinate, holding.version()), browsable, holding.downloads(),
-                    stamp(holding.downloadedAt()), holding.cached(), holding.upstream());
+                    stamp(holding.downloadedAt()), holding.cached(), holding.upstream(),
+                    FindingsState.of(ledger, ecosystem, coordinate, holding.version()));
             versions.add(row);
             if (browsable && (newest == null || row.published().compareTo(newest.published()) > 0)) {
                 newest = row;
@@ -370,8 +417,9 @@ public class RepositoryBrowse extends TenantScope {
         }
         versions.sort(Comparator.comparing(CoordinateVersion::published).reversed()
                 .thenComparing(CoordinateVersion::version));
-        String location = newest == null ? ""
+        String version = newest == null ? ""
                 : safePrefix(inventory.locateHeld(ecosystem, coordinate, newest.version()));
+        String location = version.lastIndexOf('/') <= 0 ? "" : version.substring(0, version.lastIndexOf('/'));
         return new CoordinateDetail(ecosystem, coordinate, location, versions, page.next());
     }
 
@@ -416,7 +464,9 @@ public class RepositoryBrowse extends TenantScope {
                 ProvenanceSection.summary(document.section(ProvenanceSection.TAG)).orElse(null),
                 dependencies.stream().limit(DEPENDENCIES_SHOWN).toList(), dependencies.size(),
                 inventory.paths(ecosystem, coordinate, version),
-                !inventory.locate(ecosystem, coordinate, version).isEmpty()));
+                !inventory.locate(ecosystem, coordinate, version).isEmpty(),
+                FindingsState.of(FindingsProvider.installed().map(provider -> provider.over(store)), ecosystem,
+                        coordinate, version)));
     }
 
     /** One version as its own page shows it - see {@link #version}. {@code about}, {@code signature} and
@@ -427,7 +477,8 @@ public class RepositoryBrowse extends TenantScope {
                                 String lastDownloaded, AboutSection.About about,
                                 List<LicenseInventory.Declared> licenses, SignatureSection.Summary signature,
                                 ProvenanceSection.Summary provenance, List<DependencySection.Declared> dependencies,
-                                int dependencyCount, List<String> paths, boolean browsable) {
+                                int dependencyCount, List<String> paths, boolean browsable,
+                                FindingsState findings) {
 
         /** The folder every file lies in - see {@link RepositoryBrowse#folder(List)}. */
         public String folder() {
@@ -437,6 +488,11 @@ public class RepositoryBrowse extends TenantScope {
         /** The files with {@link #folder()} taken off. */
         public List<ServedFile> files() {
             return RepositoryBrowse.files(paths);
+        }
+
+        /** The browse folder the files lie in, or empty where the format keeps no folder tree. */
+        public String browseFolder() {
+            return browsable ? safePrefix(folder()) : "";
         }
     }
 

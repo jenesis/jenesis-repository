@@ -89,20 +89,24 @@
             </th:block>
         </dl>
 
-        <!--/* Next or Complete is the step's one primary action and comes first, so Enter moves on; Back goes back
-             with nothing lost; the quicker completion takes what the steps not yet seen would have defaulted. */-->
+        <!--/* Next or Complete is the step's one primary action and comes first, so Enter moves on; the quicker
+             completion, which takes what the steps not yet seen would have defaulted, is the one outlined beside it.
+             Going back and leaving change nothing, so they are quiet links at the far end rather than two more
+             buttons that look like the completion. */-->
         <div class="app-actions">
             <button type="submit" name="action" value="complete" class="app-primary" th:if="${wizard.reviewing()}"
                     th:text="${wizard.completeLabel()}">Create</button>
             <button type="submit" name="action" value="next" class="app-primary" th:unless="${wizard.reviewing()}">Next</button>
-            <button type="submit" name="action" value="back" class="secondary outline app-secondary"
-                    th:if="${wizard.index() > 0}">Back</button>
             <button type="submit" name="action" value="now" class="secondary outline app-secondary"
                     th:if="${wizard.completesEarly()}" th:text="${wizard.nowLabel()}">Create now</button>
-            <a th:unless="${wizard.exit().posts()}" th:href="@{${wizard.exit().href()}}"
-               th:text="${wizard.exit().label()}">Cancel</a>
-            <button th:if="${wizard.exit().posts()}" type="submit" class="secondary outline app-secondary"
-                    th:formaction="@{${wizard.exit().href()}}" th:text="${wizard.exit().label()}">Skip for now</button>
+            <span class="app-actions__quiet">
+                <button type="submit" name="action" value="back" class="app-quiet"
+                        th:if="${wizard.index() > 0}">&larr; Back</button>
+                <a th:unless="${wizard.exit().posts()}" th:href="@{${wizard.exit().href()}}"
+                   th:text="${wizard.exit().label()}">Cancel</a>
+                <button th:if="${wizard.exit().posts()}" type="submit" class="app-quiet"
+                        th:formaction="@{${wizard.exit().href()}}" th:text="${wizard.exit().label()}">Skip for now</button>
+            </span>
         </div>
     </form>
 </main>
