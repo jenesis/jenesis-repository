@@ -29,11 +29,8 @@ import org.springframework.core.env.Environment;
 import org.springframework.core.env.PropertySource;
 
 /**
- * The first-run boot behaviours split out of {@link RepositoryConfig}: the background demo seeding (off by
- * default, only against a completely empty artifact space, screened by the same DEFAULT-strength proxy screen the
- * router uses) and the first-run guided-hardening advice logged once on a genuinely fresh deploy. The demo seed
- * depends on every {@link PublishPathWiring} bean by parameter, so whatever arms the publish path is armed before
- * it publishes. The enabled-format list is shared with {@link ServingConfig#enabledFormats}.
+ * The first-run boot behaviours: the background demo seeding and the boot-time advice on an unconfigured or
+ * misconfigured deployment.
  */
 @Configuration(proxyBeanMethods = false)
 public class DemoConfig {
@@ -44,53 +41,35 @@ public class DemoConfig {
     public DemoSeeding demoSeeding(LiveConfig liveConfig, Settings settings, Repositories repositories,
                                    ProxyFormat.Fetcher upstreamFetcher, RepositoryProperties properties,
                                    List<PublishPathWiring> publishPathWiring, Environment environment) {
-        // Demo mode seeds a fresh, empty repository with real artifacts through the formats' own pull-through paths,
-        // on a background thread after boot (never blocking it) and only against a completely empty artifact space;
-        // off by default. It seeds the default tenant's repositories, one per format, and - only when it is about to seed
-        // - applies a small demo gate config (a version floor that quarantines the old log4j-core, a deny-list that
-        // rejects commons-collections) so the QUARANTINE/REJECT surfaces carry examples. Depending on the compliance
-        // publish-path wiring keeps whatever screens a publish armed before the seed publishes through it. The list
-        // is never read - asking for it is the whole point, because the container builds it first.
+        // Off by default, and only against a completely empty artifact space: seeds the default tenant's repositories
+        // in the background through the formats' own pull-through paths. publishPathWiring is never read - asking for
+        // it makes the container arm the publish path before the seed publishes through it.
         ArtifactStore store = repositories.tenantScope(properties.getDefaultTenant());
-        // The demo proxy leg is dispatcher-direct - it does NOT pass through the routed gateway's own
-        // screening() decoration - so without help it would pull through unscreened. Hand the free DemoSeeder a
-        // PullThroughHooks whose screenFetch is the SAME DEFAULT-strength
-        // ProxyScreen the router's DEFAULT fallbacks use, over the serving tenant's live gate (resolved lazily, so the
-        // demo gate config armed just before the seed is the one that screens) and the seed target store - so the demo
-        // proxy leg is screened by the identical mechanism, with no screening code added to the free DemoSeeder and no
-        // reintroduced embedded publish screen. A quarantined/rejected suggestion then populates the QUARANTINE/REJECT
-        // surface from the proxy-leg screen.
+        // The seeder fetches through the dispatcher, not the routed gateway, so it is handed the same DEFAULT-strength
+        // proxy screen the router's fallbacks use, over the tenant's live gate resolved lazily so the demo gate config
+        // applied just before the seed is the one that screens.
         PullThroughHooks demoScreen = ProxyScreenHooks.perTenant(liveConfig::proxyGate, liveConfig.holdDays(), false)
                 .forTenant(properties.getDefaultTenant());
-        // The seed writes through the store, so a read-only deployment runs no seeding - a background write job.
+        // The seed writes, so a read-only deployment does not seed.
         return new DemoSeeding(liveConfig.demo() && !properties.isReadOnly(),
                 new DemoSeeder(ServingConfig.enabledFormats(environment), upstreamFetcher, demoScreen), store,
                 () -> applyDemoGateConfig(settings, liveConfig));
     }
 
     /**
-     * The first-run guided-hardening step: on a genuinely fresh deploy (no runtime configuration persisted),
-     * log once the deployment-specific dials still at their open default so an operator sees them on first boot -
-     * mirroring the loud auth-disabled boot warning, but at INFO since the secure floor is already active and this is
-     * advisory guidance, not an insecure posture. Reads the store-backed {@link Settings} the same way the demo seeder
-     * reads an empty artifact space, and writes nothing (the dials need a deployment-specific answer there is no safe
-     * universal value for). The advice falls silent once anything is configured, so a configured deploy is never
-     * re-nagged; {@link DeploymentInfoController} recomputes the same {@link FirstRunHardening#assess advice} live on
-     * {@code /api/config} so the console/CLI can render and act on it. Returned as a bean so the boot computation is a
-     * first-class, testable wiring rather than a side effect buried in another bean.
+     * On a fresh deployment (no runtime configuration stored), logs once at INFO the dials that still need a
+     * deployment-specific answer. It writes nothing and falls silent once anything is configured;
+     * {@link DeploymentInfoController} serves the same {@link FirstRunHardening#assess advice} on {@code /api/config}.
      */
     @Bean
     public FirstRunHardening.Advice firstRunHardening(Settings settings, Environment environment,
                                                      PinnedSettings pins) {
-        // The same pin > stored > deployment chain /api/config recomputes this advice through, so the boot log and the
-        // live read cannot disagree about which dials are still open.
+        // The chain /api/config resolves through, so the boot log and the live read agree.
         UnaryOperator<String> effective = pins.effective(settings, environment);
         FirstRunHardening.Advice advice = FirstRunHardening.assess(
                 FirstRunHardening.firstRun(settings), SettingsContributor.all(), effective);
         if (advice.hasGuidance()) {
-            // One line naming the dials rather than a paragraph per dial: their descriptions are what the console's
-            // setup guide and settings screen render, and a first start's log is read for the sign-in key, not for
-            // documentation. The advice itself stays whole on /api/config for a program to act on.
+            // One line naming the dials; their descriptions are on the setup guide and on /api/config.
             LOGGER.info("FIRST-RUN HARDENING: this deployment has no runtime configuration yet. Authorization is on "
                     + "and the gate refuses CRITICAL findings; the advisory feeds are off until switched on. The "
                     + "console's setup guide (/ui/setup) walks through the settings that still need a "
@@ -104,21 +83,13 @@ public class DemoConfig {
     /**
      * Warn once, at boot, about any {@code jenrepo.*} property this deployment does not read.
      *
-     * <p>The gap it closes: settings change by clean cutover here - compatibility shims are disallowed - while an
-     * unrecognised key is silently ignored, so a rename leaves whoever had the old key set with a value that quietly
-     * stops having effect and nothing anywhere saying so. This is the saying-so, in {@code Features.active}'s
-     * register: a warning naming the keys, never a refusal, because failing a start over a stale key would be a far
-     * worse trade than the silence it replaces.
+     * <p>Settings change by clean cutover and an unrecognised key is silently ignored, so a renamed key would
+     * otherwise stop having effect with nothing saying so. It warns rather than refuses: failing a start over a stale
+     * key is the worse trade.
      *
-     * <p>Recognised is <em>computed</em>, never listed. The catalogue supplies the runtime-editable dials (the
-     * per-module toggles among them, generated from the installed modules and therefore invisible to the build's
-     * class-file extractor but perfectly visible here); every {@code @ConfigurationProperties} object bound under the
-     * namespace supplies the boot-only properties the catalogue deliberately omits, which are most of a real
-     * deployment's configuration; and a {@code Map}-bound property opens its prefix, which is what keeps
-     * {@code jenrepo.proxy.<format>} from being reported as unknown without anyone writing that exception down.
-     *
-     * <p>Returned as a bean for the reason the hardening advice is: the boot computation is then first-class and
-     * testable wiring rather than a side effect buried in another bean.
+     * <p>Recognised is computed, never listed: the settings catalogue (module toggles included), every
+     * {@code @ConfigurationProperties} object bound under the namespace, and the prefix of each {@code Map}-bound
+     * property, so {@code jenrepo.proxy.<format>} is known.
      */
     @Bean
     public UnrecognisedSettings.Report unrecognisedSettings(ConfigurableEnvironment environment,
@@ -161,9 +132,9 @@ public class DemoConfig {
         return report;
     }
 
-    /** Layer in the demo gate config only where an operator left the dial unset, then rebuild the live gate so the
-     *  seed publishes through it - never clobbering a real gate policy, and a no-op outside the empty-repo demo path
-     *  (this runs from {@link DemoSeeding} only when a seed is actually about to happen). */
+    /** Sets the demo gate config - a version floor quarantining the old log4j-core and a deny-list rejecting
+     *  commons-collections, so the review surfaces carry examples - on each dial an operator left unset, then rebuilds
+     *  the live gate. {@link DemoSeeding} runs it only when a seed is about to happen. */
     private static void applyDemoGateConfig(Settings settings, LiveConfig liveConfig) {
         try {
             setIfBlank(settings, "version-floor", "org.apache.logging.log4j:log4j-core >= 2.17.0");

@@ -42,13 +42,11 @@ import org.springframework.core.env.ConfigurableEnvironment;
 import org.springframework.core.env.Environment;
 
 /**
- * The store / settings / tenant kernel wiring split out of {@link RepositoryConfig}: the artifact store
- * (a backend chosen by name through {@code ArtifactStoreProvider}, wrapped for metering then read-only), the
- * {@link Authorization}, the store-backed {@link Settings}, the discovered token-exchange and audit-trail plugins,
- * the settings-precedence probe, the tenant directory and the {@link Repositories} tenant kernel, and the boot-time
- * storage-namespace registration. The store's wrap order is not this class's business: it contributes layers through
- * {@link ArtifactStoreDecorator} and the declaration that resolves the store applies them, along with the quota
- * and read-only wrappers this class must not restate.
+ * The store, settings and tenant kernel wiring: this composition's layers over the artifact store, the
+ * {@link Authorization}, the store-backed {@link Settings}, the token-exchange and audit-trail plugins, the
+ * settings-precedence probe, the tenant directory, the {@link Repositories} tenant kernel and the storage-namespace
+ * registration. The declaration that resolves the store applies the layers, and the quota and read-only wrappers
+ * this class must not restate.
  */
 @Configuration(proxyBeanMethods = false)
 public class StoreConfig {
@@ -58,13 +56,9 @@ public class StoreConfig {
      * This composition's two layers over the resolved store, contributed rather than declared as a second
      * {@code artifactStore} bean.
      *
-     * <p>Redeclaring that bean would mean restating the resolution and the wrappers around it, and a restatement
-     * can drop one of them - the deployment-wide {@code jenrepo.quota} cap, say - with nothing to read. A
-     * contribution cannot drop what it does not contain.
-     *
-     * <p>Order is the point: the meter sits closest to the backend and the node's memories above it, so a read
-     * the memory answers is a read the meter does not count - which is what "a read spared" means. Read-only and
-     * quota stay outermost, applied by the declaration this layers into.
+     * <p>A redeclared bean could drop one of the wrappers around the resolution - the {@code jenrepo.quota} cap, say -
+     * with nothing failing. The meter sits closest to the backend and the node's memories above it, so a read a memory
+     * answers is not metered; read-only and quota stay outermost.
      */
     @Bean
     @Order(10)
@@ -91,23 +85,15 @@ public class StoreConfig {
 
     @Bean
     public Authorization authorization(RepositoryProperties properties, ArtifactStore store) throws IOException {
-        // The strictly-opt-in anonymous role, read the same way this bean reads auth/read-only - off the
-        // @ConfigurationProperties-bound RepositoryProperties (jenrepo.anonymous-rights), not an ad-hoc
-        // config.apply, as isAuth()/isReadOnly() do. Default empty ⇒ no anonymous
-        // access whatsoever, byte-for-byte today's keyless rejection.
+        // Opt-in; empty grants no anonymous access at all.
         String anonymousRights = properties.getAnonymousRights().strip();
         if (!properties.isAuth()) {
-            // Secure-defaults principle: an insecure configuration must be loud, not silent. Per-credential
-            // authorization is on by default; this deployment turned it off explicitly (jenrepo.auth=false),
-            // so warn at boot that every request is served with no credential. Anonymous is a legitimate explicit
-            // choice, so this warns rather than failing the boot.
+            // An explicit opt-out is legitimate, so it warns rather than failing the boot.
             LOGGER.warn("SECURITY: per-credential authorization is DISABLED (jenrepo.auth=false) - the "
                     + "repository is running ANONYMOUS/OPEN and every request is served without a credential. This is "
                     + "an explicit opt-out; unset it or set jenrepo.auth=true (the default) to enforce "
                     + "authorization.");
-            // Guardrail: anonymous-rights is only meaningful under an enforcing deployment. Under auth=false the
-            // instance is ALREADY fully open, so a configured anonymous-rights is redundant and ignored - warn so the
-            // operator is not misled into thinking it is narrowing an open deployment (mirrors the autoconfig).
+            // Under auth=false every request is already anonymous, so the grant is redundant and ignored.
             if (!anonymousRights.isEmpty()) {
                 LOGGER.warn("SECURITY: jenrepo.anonymous-rights is set but jenrepo.auth=false, so "
                         + "the deployment is ALREADY fully open (every request is served anonymously) and the "
@@ -116,12 +102,8 @@ public class StoreConfig {
             }
             return Authorization.anonymous();
         }
-        // Second guardrail: a loud startup WARN naming exactly what a keyless caller may do, escalated for
-        // write/admin - the mirror of the free RepositoryAutoConfiguration WARN (this bean wins over the free
-        // @ConditionalOnMissingBean authorization bean, so the free WARN never fires here). The
-        // jenrepo.anonymous.* security-posture advisories (logged by the logSecurityPosture at boot, which runs in
-        // this deployment) carry the governance escalation onto the console and GET /api/posture. Default (empty) ⇒ no
-        // anonymous access and no warning, byte-for-byte today's behaviour.
+        // Names exactly what a keyless caller may do, louder for write or admin; the posture advisories carry it onto
+        // the console and /api/posture.
         if (!anonymousRights.isEmpty()) {
             if (AnonymousRights.grantsWriteOrAdmin(anonymousRights)) {
                 LOGGER.warn("SECURITY: anonymous access ENABLED with WRITE/ADMIN rights: {}. A keyless caller may "
@@ -135,16 +117,12 @@ public class StoreConfig {
                         + "jenrepo.anonymous-rights to require a key for every request.", anonymousRights);
             }
         }
-        // The one choke-point: hand the anonymous grant set to the free Authorization the multi-tenant
-        // the authorization manager already delegates every decision to (authorize(key, scope, path, required)),
-        // so a keyless request is decided against anonymous-rights identically to the keyless branch - no second
-        // code path. Empty grants ⇒ keyless UNAUTHORIZED, exactly as today.
+        // A keyless request is decided against the anonymous grants by the same authorize call as any other.
         Authorization authorization = Authorization.enforcing(store)
                 .withLifetimes(properties.getCredentialDefaultLifetime(), properties.getCredentialMaxLifetime())
                 .withAnonymousRights(anonymousRights);
-        // The first credential of an enforcing deployment: every route that could mint one requires one already, so
-        // jenrepo.bootstrap-key is provisioned here - the same contract the server's authorization bean carries,
-        // which this bean replaces and therefore has to honour. An object-store deployment has no other route in.
+        // Every route that mints a credential requires one, so jenrepo.bootstrap-key provisions the first - the
+        // contract of the server's own authorization bean, which this one replaces.
         String tenant;
         try {
             tenant = authorization.bootstrap(properties.getBootstrapKey());
@@ -157,31 +135,23 @@ public class StoreConfig {
                     + "credentials you actually want, then unset it; it is re-provisioned on every boot for as long "
                     + "as it is set.", tenant);
         }
-        // The other boot obligation an enforcing deployment's authorization carries, beside the bootstrap key:
-        // repair what an interrupted group derivation left behind. Both editions honour it here, in the same
-        // place and for the same reason - a process that died mid-derivation is a process that is starting now.
+        // A process that died mid-derivation is one starting now, so boot repairs what it left behind.
         authorization.groups().repairDerivedGrants();
         return authorization;
     }
 
     @Bean
     public Settings settings(ArtifactStore store, Environment environment) throws IOException {
-        // The master key(s) that envelope-encrypt SECRET settings at rest are deploy-time bootstrap infra, like the
-        // store credentials themselves: read from the environment through the same
-        // effective-config lookup the other env-only credentials use (github-token, the store-backend credentials), so
-        // "secrets-key"
-        // (the env var JENREPO_SECRETS_KEY via Spring relaxed binding) is a first-class, allowlisted
-        // bootstrap config read rather than a stranded key. A malformed value fails fast here (at boot), naming the
-        // variable.
+        // The key that encrypts SECRET settings at rest is deploy-time configuration (JENREPO_SECRETS_KEY); a
+        // malformed value fails the boot naming the variable.
         UnaryOperator<String> config = Features.namespaced(environment::getProperty);
         return new Settings(store, SecretCipher.of(config.apply("secrets-key")));
     }
 
     /**
      * The one-time move of the configuration kept outside the settings catalogue into its tenant, repository and
-     * project settings ({@link SettingsScopeMove}), run as this node starts and before it serves, since what it moves
-     * decides how a request is answered. A read-only node moves nothing: it writes nothing, and a writing node of the
-     * same deployment makes the move.
+     * project settings ({@link SettingsScopeMove}), run before this node serves, since what it moves decides how a
+     * request is answered. A read-only node moves nothing; a writing node of the deployment does.
      */
     @Bean
     public SettingsScopeMove.Moved settingsScopeMove(ArtifactStore store, Settings settings,
@@ -198,17 +168,14 @@ public class StoreConfig {
 
     @Bean
     public TokenExchange tokenExchange(Authorization authorization, Environment environment) {
-        // The token exchange is a discovered plugin (the oidc module); NONE when absent - /api/token then
-        // answers 501, and the server carries no OAuth2/JOSE stack.
+        // NONE when no provider is installed, and /api/token answers 501.
         return TokenExchangeProvider.resolve(authorization,
                 Features.namespaced(environment::getProperty));
     }
 
     @Bean
     public AuditTrail auditTrail(RepositoryProperties properties, ArtifactStore store, Environment environment) {
-        // The audit trail is a discovered plugin; recording additionally requires auth, since an anonymous
-        // deployment has no actors worth recording, and is off in read-only mode, where the trail is a store write
-        // and there is no mutation to record.
+        // Off without auth, which has no actors to record, and in read-only mode, which has no mutations.
         return AuditTrailProvider.resolve(store, key -> "audit".equals(key) && (!properties.isAuth() || properties.isReadOnly())
                 ? "false"
                 : environment.getProperty(Features.key(key)));
@@ -216,17 +183,14 @@ public class StoreConfig {
 
     @Bean
     public PinnedSettings pinnedSettings(ConfigurableEnvironment environment) {
-        // The one origin probe for the settings-precedence rule: whether a key is fixed by a source above the store
-        // (an env var, -D, an external config file). LiveConfig and the settings screen consult it so a pinned key
-        // ignores the store.
+        // Whether a key is fixed above the store (an env var, -D, an external config file), so it ignores the store.
         return new PinnedSettings(environment);
     }
 
     @Bean
     public Repositories repositories(ArtifactStore store, Authorization authorization, LiveConfig liveConfig,
                                      LiveDefinitions definitions, Environment environment) {
-        // Staging and the retention engine are discovered plugins; with no provider module installed the
-        // corresponding endpoints answer 501.
+        // Staging and retention answer 501 when no provider is installed.
         UnaryOperator<String> config = Features.namespaced(environment::getProperty);
         return new Repositories(store, authorization, liveConfig,
                 StagingProvider.resolve(config), RetentionProvider.resolve(config), definitions);
@@ -234,12 +198,8 @@ public class StoreConfig {
 
     @Bean
     public StorageNamespaces storageNamespaces(ArtifactStore store, RepositoryProperties properties) throws IOException {
-        // Boot persists every installed module's storage manifest (an additive, idempotent write - never a
-        // deletion), so the manifest outlives a later module removal: that is what lets the orphan diagnostic
-        // name leftover data and the operator purge a key-space whose declaring module is gone. A read-only
-        // deployment runs no store write, so it skips registration (which would raise ReadOnlyException at boot):
-        // the manifest it would persist is only consulted by the orphan diagnostic and the operator purge, neither
-        // of which a read-only instance ever performs.
+        // Each installed module's manifest is persisted additively, so it outlives the module and the orphan
+        // diagnostic and purge can name its leftover data. A read-only node, which runs neither, skips the write.
         StorageNamespaces namespaces = new StorageNamespaces(store);
         if (!properties.isReadOnly()) {
             namespaces.register();
@@ -249,8 +209,6 @@ public class StoreConfig {
 
     @Bean
     public Tenants tenants(ArtifactStore store, LiveConfig liveConfig, Environment environment) {
-        // The tenant directory is a discovered plugin; a store-backed module answers, so the
-        // directory reflects the shared <tenant>/<repository> layout and can grow.
         return TenantsProvider.resolve(store, environment::getProperty, liveConfig.defaultTenant());
     }
 }

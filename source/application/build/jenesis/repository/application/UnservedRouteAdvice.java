@@ -10,15 +10,10 @@ import org.springframework.web.servlet.resource.NoResourceFoundException;
 /**
  * Marks a {@code 404} that no route answered with {@code Jenesis-Installed: false}.
  *
- * <p>The product is assembled from modules a deployment may leave out, and an absent module serves nothing, so a
- * request for its routes is answered {@code 404} exactly like a request that names something absent. The two mean
- * opposite things to a caller - one is worth asking again with other arguments, the other never is - and only this
- * node knows which routes it has, so it says so rather than leaving a client to keep its own copy of which module
- * serves what. The {@code jenrepo} CLI reads the header to answer with its own exit code.
- *
- * <p>Only a request no handler matched carries it. A route that exists and answers {@code 404} for an absent or
- * hidden tenant, repository or artifact does not, so the header says what this node carries and nothing about what
- * the store holds. The answer is otherwise the ordinary {@code 404}, rendered by the same error handling.
+ * <p>A route of a module the deployment left out answers {@code 404} like a request naming something absent, and
+ * only this node knows which routes it has, so it says so; the {@code jenrepo} CLI turns the header into its own exit
+ * code. A route that exists and answers {@code 404} for something absent or hidden carries no header, so it says what
+ * this node carries and nothing about what the store holds.
  */
 @ControllerAdvice
 public class UnservedRouteAdvice {

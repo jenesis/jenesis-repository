@@ -11,48 +11,29 @@ import jakarta.servlet.http.HttpServletResponseWrapper;
 import org.springframework.web.filter.OncePerRequestFilter;
 
 /**
- * The CDN-cache precondition: give artifact {@code GET}/{@code HEAD} responses an
- * immutability-driven {@code Cache-Control} so a CDN or proxy in front of the serve plane can actually cache them.
+ * Gives artifact {@code GET}/{@code HEAD} responses an immutability-driven {@code Cache-Control}, so a CDN or proxy in
+ * front of the serve plane can cache them.
  *
- * <p><b>The problem this solves.</b> The security chain configures no {@code .headers()}, so Spring Security's
- * default {@code HeaderWriterFilter} blankets <em>every</em> response with
- * {@code Cache-Control: no-cache, no-store, max-age=0, must-revalidate} (plus {@code Pragma}/{@code Expires}) - which
- * forbids any shared-cache retention. This filter overrides that for artifact serve reads only, by the seam Spring's
- * own {@code CacheControlHeadersWriter} leaves open: that writer is <em>set-if-absent</em> (it returns early when the
- * response already carries a {@code Cache-Control}), and it runs at response commit. So this filter, run after the
- * authorization layer and wrapping the response the format writes to, sets {@code Cache-Control} at the format's
- * commit point - before the default writer runs - and the writer then defers to it. Every route this filter does not
- * touch (API, console, auth, actuator) keeps the default {@code no-store}: the scoping is the filter's own
- * path/method/status guard, not a global disable of the writer, so relaxed caching can never leak onto a non-artifact
- * route (proven in {@code CacheControlHeaderFilterTest}).
+ * <p>Spring Security's default header writer stamps {@code no-store} on every response, but only when the response
+ * carries no {@code Cache-Control} yet, and only at commit. This filter runs after authorization, wraps the response
+ * the format writes to and sets the header at the format's commit point, so the writer defers to it. Every route it
+ * does not touch (API, console, auth, actuator) keeps {@code no-store}: the scoping is this filter's own
+ * path/method/status guard, never a global disable of the writer.
  *
- * <p><b>The policy.</b> For a {@code GET}/{@code HEAD} under {@code /repository/} that answers a cacheable success
- * ({@code 200}/{@code 206}/{@code 304}):
+ * <p>For a {@code GET}/{@code HEAD} under {@code /repository/} answering {@code 200}, {@code 206} or {@code 304}:
  * <ul>
- *   <li>a released, frozen coordinate ({@link HardenedScreen#immutableCoordinate(String)} true, and a concrete
- *       versioned artifact file rather than a metadata/index/packument/dist-tag document) -&gt;
+ *   <li>a released versioned artifact file ({@link #immutableArtifact}) -&gt;
  *       {@code Cache-Control: public, max-age=31536000, immutable};</li>
- *   <li>everything else mutable (a {@code -SNAPSHOT}, a {@code maven-metadata.xml}, a directory index, an npm packument
- *       or dist-tag) -&gt; {@code Cache-Control: no-cache} (revalidate). These already carry {@code ETag}s from the free
- *       {@code ServletFormatExchange} buffered-200 path, which this filter leaves untouched.</li>
+ *   <li>anything else (a {@code -SNAPSHOT}, {@code maven-metadata.xml}, a directory index, a packument or dist-tag)
+ *       -&gt; {@code Cache-Control: no-cache}.</li>
  * </ul>
- * A non-cacheable status (a {@code 404}, an error, a redirect) is left to the default {@code no-store}.
+ * Any other status keeps the default {@code no-store}.
  *
- * <p><b>The validator outranks the path, and that is what makes the policy safe.</b> The path predicate below is a
- * name test, and a name test cannot tell a frozen artifact from a generated index that happens to carry an extension:
- * every format's enumeration surface but Maven's and npm's does ({@code repodata.json}, {@code repomd.xml},
- * {@code Packages.gz}, {@code packages.json}, {@code index.json}, {@code specs.4.8.gz}). Handed a year of
- * {@code immutable}, a client stops asking, and a version published after it first read the index stays invisible to
- * it - which is not a caching inefficiency but a registry that silently serves a stale catalogue. So the deciding
- * input is not the name: it is whether the response carries an {@code ETag}. The generated indexes go out through the
- * buffered path that sets one; streamed artifact bytes do not. A response that offered a validator is a response the
- * format expects to be revalidated, and it gets {@code no-cache} whatever its name looks like. An artifact that
- * happens to carry an ETag merely loses a year of shared caching, which is the harmless direction to be wrong in.
- *
- * <p><b>No ETag on a streamed body.</b> An ETag derived from the blob key of a streamed body is deliberately not built
- * here: for immutable artifacts {@code Cache-Control: immutable} means clients never revalidate, so a streamed ETag is
- * moot; mutable indexes/metadata already get buffered ETags free-side (untouched here). Doing it properly would be a
- * change to the free core's {@code ServletFormatExchange}, not to this filter.
+ * <p><b>An {@code ETag} outranks the path.</b> A name test cannot tell a frozen artifact from a generated index with
+ * an extension ({@code repodata.json}, {@code Packages.gz}, {@code index.json}), and a year of {@code immutable} on an
+ * index hides every later publish from the client. Generated indexes go out through the buffered path that sets an
+ * {@code ETag} and streamed artifact bytes do not, so a response offering a validator gets {@code no-cache} whatever
+ * its name. An artifact that happens to carry one only loses shared caching, the harmless direction.
  */
 public final class CacheControlHeaderFilter extends OncePerRequestFilter {
 
@@ -67,8 +48,6 @@ public final class CacheControlHeaderFilter extends OncePerRequestFilter {
             throws ServletException, IOException {
         String policy = policyFor(request);
         if (policy == null) {
-            // Not an artifact serve read (a non-GET/HEAD, or a non-repository route): leave the chain
-            // and its default no-store entirely alone.
             chain.doFilter(request, response);
             return;
         }
@@ -76,14 +55,13 @@ public final class CacheControlHeaderFilter extends OncePerRequestFilter {
         try {
             chain.doFilter(request, wrapped);
         } finally {
-            // Buffered replies (a metadata 200, a 304) never call getOutputStream/getWriter, so apply here too before
-            // the container commits - idempotent with the commit-point application a streamed body already made.
+            // A buffered reply (a metadata 200, a 304) never opens the body, so the policy is applied here too.
             wrapped.applyCachePolicy();
         }
     }
 
-    /** The {@code Cache-Control} value this request's response should carry on a cacheable success, or {@code null}
-     *  when the filter must not touch the response at all (leaving the default {@code no-store}). */
+    /** The {@code Cache-Control} for this request's cacheable success, or {@code null} when the filter leaves the
+     *  response alone. */
     private static String policyFor(HttpServletRequest request) {
         String method = request.getMethod();
         if (!"GET".equals(method) && !"HEAD".equals(method)) {
@@ -98,10 +76,9 @@ public final class CacheControlHeaderFilter extends OncePerRequestFilter {
 
     /**
      * Whether {@code path} names a released, frozen artifact file (a year-cacheable immutable coordinate) rather than a
-     * mutable document. Reuses the shared drift predicate {@link HardenedScreen#immutableCoordinate(String)} for
-     * the SNAPSHOT test - never a parallel heuristic - then excludes the mutable document families that stay
-     * {@code no-cache}: release-level {@code maven-metadata.*}, directory indexes, npm dist-tags, and any
-     * extensionless root (an npm packument, a listing). Errs to mutable when unsure.
+     * mutable document: {@link HardenedScreen#immutableCoordinate(String)} decides the snapshot test, then
+     * release-level {@code maven-metadata.*}, directory indexes, npm dist-tags and extensionless roots (a packument, a listing) stay
+     * mutable. Errs to mutable when unsure.
      */
     static boolean immutableArtifact(String path) {
         if (!HardenedScreen.immutableCoordinate(path)) {
@@ -122,18 +99,14 @@ public final class CacheControlHeaderFilter extends OncePerRequestFilter {
                                                             // extensionless root (packument/index) is mutable
     }
 
-    /** Whether a committed status is a cacheable read success - the only responses that receive the relaxed header;
-     *  a {@code 404}/error/redirect keeps the default {@code no-store}. */
+    /** Whether a committed status is a cacheable read success, the only responses given the relaxed header. */
     private static boolean cacheable(int status) {
         return status == 200 || status == 206 || status == 304;
     }
 
     /**
-     * Wraps the response the format writes to and stamps {@code Cache-Control} at the format's commit point
-     * ({@code getOutputStream}/{@code getWriter}), by which time the status is set (Spring's {@code respond} sets the
-     * status before opening the body). Set-if-once and only on a cacheable success, so a {@code 404} that reused this
-     * wrapper is never given the relaxed header. Because this runs before the default writer at commit, and that writer
-     * is set-if-absent, this value wins - without disabling the default writer for any other route.
+     * Stamps {@code Cache-Control} once, at the format's commit point ({@code getOutputStream}/{@code getWriter}), by
+     * which time the status is set, and only on a cacheable success.
      */
     private static final class CachePolicyResponse extends HttpServletResponseWrapper {
 
@@ -152,11 +125,7 @@ public final class CacheControlHeaderFilter extends OncePerRequestFilter {
             }
             applied = true;
             if (cacheable(getStatus())) {
-                // An ETag on this very response is the format SAYING the document is one it expects clients to
-                // revalidate - it is set by the buffered path the generated indexes go out through, and never by the
-                // streamed artifact path. So it outranks anything guessed from the filename: whatever the path
-                // predicate concluded, a document that offered a validator gets no-cache. See immutableArtifact for
-                // what this catches that a name test cannot.
+                // An ETag means the format expects revalidation, whatever the path predicate concluded.
                 super.setHeader("Cache-Control", getHeader("ETag") == null ? policy : REVALIDATE);
             }
         }

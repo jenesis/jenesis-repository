@@ -16,33 +16,19 @@ import org.springframework.security.web.access.intercept.AuthorizationFilter;
 import org.springframework.security.web.authentication.UsernamePasswordAuthenticationFilter;
 
 /**
- * Composes this composition's security concerns <em>over</em> the server's own security chain rather than
- * replacing it: the {@code RepositorySecurityAutoConfiguration} builds the stateless, deny-by-default chain
- * (key authentication, rate limiting and the deny-by-default authorization manager), and this contributes to it
- * through the {@link SecurityChainCustomizer} seam.
+ * Contributes to the server's own deny-by-default security chain through {@link SecurityChainCustomizer} rather
+ * than replacing it.
  *
- * <p><b>The authorization manager is not declared here.</b> Declaring it under a name the chain's
- * {@code @ConditionalOnMissingBean(name = ...)} backs off from would couple two modules by a matched string, where
- * nothing fails when it stops matching and what fails instead is that every access decision is taken by the
- * weaker manager. There is one manager, the server's own, and a richer policy is offered
- * through {@code AuthorizationManagerProvider}, which the declaration resolves as it builds the bean, so a
- * replacement happens in every composition carrying it rather than only in whichever one is the composition root.
+ * <p>The authorization manager is not declared here: the server's own is the one manager, and a richer policy
+ * arrives through {@code AuthorizationManagerProvider}, so it applies in every composition carrying it. Overriding the
+ * bean by name would couple two modules by a string that fails silently when it stops matching.
  *
- * <p>The {@link RateLimitFilter} is declared here rather than reused from the free
- * {@code RepositorySecurityAutoConfiguration}: this wiring resolves the default ceiling through the pin-aware
- * runtime-settings chain, which the bean does not consult. The
- * filter is still the class over the {@code RateLimiterProvider} - shared mechanism reused, only its
- * wiring lives here - and the chain's {@code @ConditionalOnMissingBean} rate-limit filter backs off in its
- * favour and shed-loads the wire through it.
+ * <p>The {@link RateLimitFilter} is declared here so its ceiling resolves through the pin-aware runtime-settings
+ * chain; the chain's own filter backs off in its favour.
  *
- * <p>The customizer opens the routes that authenticate by something other than a management key - the console
- * landing page and console shell ({@code GET /}, {@code GET /console}), the deployment-static format icons
- * ({@code GET /api/formats/<name>/icon}, a brand asset the console renders) and provenance verification key
- * ({@code GET /api/provenance/key}), the secret-scanning leak webhook ({@code POST /api/leaked}, authenticated by
- * signature) and the OIDC token-exchange endpoint ({@code POST /api/token}, authenticated by the presented
- * id-token) - and adds the {@link RequestBodyLimitFilter} that caps the unauthenticated write routes so an
- * anonymous caller cannot exhaust memory. Everything else falls through to the chain's deny-by-default
- * {@code anyRequest} rule.
+ * <p>The customizer opens the routes that authenticate by something other than a management key - the provenance
+ * verification key, the leak webhook (signed) and the token exchange (an id-token) - and caps unauthenticated request
+ * bodies with {@link RequestBodyLimitFilter}. Everything else falls to the chain's deny-by-default rule.
  */
 @Configuration
 public class RepositorySecurityConfig {
@@ -51,10 +37,8 @@ public class RepositorySecurityConfig {
     public RateLimitFilter rateLimitFilter(RateLimiter rateLimiter, RepositoryProperties properties,
                                            Settings settings, Environment environment,
                                            PinnedSettings pinnedSettings) {
-        // Each tenant's ceiling is read live through the whole runtime-settings chain - an operator's pin, else the
-        // tenant's stored value, else the deployment's, else the environment - so the rate-limit setting written
-        // through the settings API is honoured within the filter's ten-second ceiling cache rather than at the next
-        // boot; the boot property stays the fallback for a deployment that never set it at runtime.
+        // Each tenant's ceiling is read live through the settings chain, so a change applies within the filter's
+        // ceiling cache; the boot property is the fallback.
         return new RateLimitFilter(rateLimiter, RateLimitFilter.liveCeiling(
                 tenant -> pinnedSettings.effectiveProperty(settings, environment, tenant), properties.getRateLimit()));
     }
@@ -63,9 +47,7 @@ public class RepositorySecurityConfig {
     public SecurityChainCustomizer repositorySecurityChainCustomizer() {
         return http -> http
                 .authorizeHttpRequests(authorize -> authorize
-                        // The repository node serves no console shell, so no console route is opened here. A permit
-                        // for an unmapped route is inert, but it reads as a surface that exists, which is worse than
-                        // nothing.
+                        // No console route: this node serves no console, and a permit reads as a surface.
                         .requestMatchers(HttpMethod.GET, "/api/provenance/key").permitAll()
                         .requestMatchers(HttpMethod.POST, "/api/leaked").permitAll()
                         .requestMatchers(HttpMethod.POST, "/api/token").permitAll())
@@ -73,13 +55,8 @@ public class RepositorySecurityConfig {
     }
 
     /**
-     * The CDN-cache precondition: insert the {@link CacheControlHeaderFilter} <em>after</em> Spring
-     * Security's {@link AuthorizationFilter}, so it runs only for an authorized request (a denied request never reaches
-     * it and keeps the default {@code no-store}) and wraps the response the format writes to. The filter stamps an
-     * immutability-driven {@code Cache-Control} on artifact {@code GET}/{@code HEAD} reads only, overriding the default
-     * {@code no-store} for exactly those responses while every other route (API, console, auth, actuator, admin) keeps
-     * it - the scoping lives in the filter's own path/method/status guard, never a global disable of
-     * Spring's cache-control writer. Contributed as a separate customizer bean so the two concerns stay independent.
+     * Places the {@link CacheControlHeaderFilter} after the {@link AuthorizationFilter}, so a denied request never
+     * reaches it and keeps the default {@code no-store}.
      */
     @Bean
     public SecurityChainCustomizer cacheControlSecurityChainCustomizer() {

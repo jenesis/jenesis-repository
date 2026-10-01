@@ -7,38 +7,21 @@ import org.springframework.context.annotation.Import;
 import org.springframework.scheduling.annotation.EnableScheduling;
 
 /**
- * Wires the repository from {@link RepositoryProperties}: the artifact store (a backend chosen by name
- * through {@code ArtifactStoreProvider}), the {@link build.jenesis.repository.server.spi.Authorization} (enforcing or
- * anonymous), the {@code ComplianceGate} (a license allow-list and a CVSS threshold, optionally over a live OSV
- * source), the gated publish path, the store-backed staging and inventory, and the retention policy. Every bean is
- * plain domain code reused as-is; Spring only assembles them.
- *
- * <p>The wiring is split into five focused, same-package {@code @Configuration} classes,
- * grouped by concern - this class is the thin shell that carries the context-level annotations
- * ({@link EnableConfigurationProperties}, {@link EnableScheduling}) and {@link Import}s the groups. The singleton
- * graph holds by construction: no {@code @Bean} method calls another (which {@code proxyBeanMethods = false}
- * forbids from returning shared instances) - every collaborator is method-parameter injected, so Spring supplies
- * the one singleton across the config-class boundaries, and no bean is defined twice ({@code @Import} and the
- * same-package component scan dedupe configuration classes by class name). In particular the metering / read-only
- * artifact-store wrap order is applied where the store is declared, which this composition layers into, and the
- * demo seed depends
- * on every {@link build.jenesis.repository.store.PublishPathWiring} bean by parameter so the publish path is armed
- * before the seed publishes.
+ * The shell that carries the context-level annotations and imports the wiring, grouped by concern. No {@code @Bean}
+ * method calls another: every collaborator is injected by parameter, so Spring supplies one singleton across the
+ * configuration classes.
  *
  * <ul>
- *   <li>{@link StoreConfig} - artifact store (metering/read-only wrap), authorization, settings, token exchange,
- *       audit trail, pinned-settings probe, the {@link build.jenesis.repository.server.kernel.Repositories} tenant
- *       kernel, storage namespaces, tenants.</li>
- *   <li>{@link SignalsConfig} - advisory feeds/source, health source, report signals, provenance signer, the live
- *       {@link build.jenesis.repository.server.kernel.LiveConfig} gate (VEX overlay + definition sweep) and the
- *       publish-path
- *       wiring beans.</li>
- *   <li>{@link ServingConfig} - the upstream credentials/fetcher, the router
- *       and routed serving, tenancy routing, format dispatcher, batch ingestion, the {@code repositoryController}
- *       serving bean, the deploy edge hooks and the publish-tenant filter.</li>
- *   <li>{@link WorkersConfig} - download/key-usage trackers, the maintenance scheduler and the settings-refresh
- *       convergence pass.</li>
- *   <li>{@link DemoConfig} - demo seeding and the first-run hardening advice.</li>
+ *   <li>{@link StoreConfig} - the store's layers, authorization, settings, token exchange, audit trail, the
+ *       pinned-settings probe, the {@link build.jenesis.repository.server.kernel.Repositories} tenant kernel, storage
+ *       namespaces and tenants.</li>
+ *   <li>{@link SignalsConfig} - advisory feeds, health source, report signals, provenance signer and the live
+ *       {@link build.jenesis.repository.server.kernel.LiveConfig} gate.</li>
+ *   <li>{@link ServingConfig} - upstream credentials and fetcher, the router and routed serving, tenancy routing,
+ *       format dispatcher, batch ingestion, the {@code repositoryController} serving bean and its deploy hooks.</li>
+ *   <li>{@link WorkersConfig} - download and key-usage trackers, the maintenance scheduler and the settings
+ *       refresh.</li>
+ *   <li>{@link DemoConfig} - demo seeding and the boot-time configuration advice.</li>
  * </ul>
  */
 @Configuration(proxyBeanMethods = false)

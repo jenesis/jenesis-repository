@@ -10,61 +10,33 @@ import org.springframework.web.bind.annotation.RequestMethod;
 import org.springframework.web.servlet.mvc.method.annotation.RequestMappingHandlerMapping;
 
 /**
- * The repository server's composition: a Spring Boot configuration whose dual-layout serving, compliance gate,
- * staging and cleanup live in the framework-independent {@code build.jenesis.repository.*} modules and are wired by
- * {@link RepositoryConfig} and exposed by the focused core controllers (
- * {@code ImportController}, {@code BrowseController}, {@code DependentsController}, {@code FormatIconController},
- * {@code DeploymentInfoController}) plus the discovered per-feature {@code web} adapters. Artifact writes ride the free
- * {@code RepositoryController} serving bean, with the deploy concerns (tenant binding, release immutability,
- * quarantine-dispatch record, deploy observation) plugged in through the
+ * The repository server's composition: {@link RepositoryConfig} wires the framework-independent
+ * {@code build.jenesis.repository.*} modules, and the discovered feature modules contribute their controllers.
+ * Writes ride the free {@code RepositoryController} serving bean, with the deploy concerns plugged in through the
  * {@link build.jenesis.repository.server.kernel.PublishTenantFilter} and the
- * {@link build.jenesis.repository.gateway.DeployEdgeHooks} {@code EdgeHooks} bean, never a forked deploy controller.
- * The storage backend is selected by
- * {@code jenrepo.store} through {@code ArtifactStoreProvider} (ServiceLoader, filesystem fallback).
+ * {@link build.jenesis.repository.gateway.DeployEdgeHooks} bean. The storage backend is selected by
+ * {@code jenrepo.store}.
  *
- * <p>The {@code RepositorySecurityAutoConfiguration} is not excluded: it runs and this distribution
- * <em>composes over</em> its chain rather than forking it. A contributed authorization manager (a
- * {@code @ConditionalOnMissingBean} the chain picks up), the open routes and the request-body cap ride the free
- * security chain through the {@code SecurityChainCustomizer} seam (see {@link RepositorySecurityConfig}); the rate limiter
- * and filter reuse the classes, re-declared there with the pin-aware live ceiling.
+ * <p>No free auto-configuration is excluded. The security chain runs and this composition contributes to it through
+ * {@code SecurityChainCustomizer} ({@link RepositorySecurityConfig}); every {@code RepositoryAutoConfiguration} bean is
+ * {@code @ConditionalOnMissingBean} and backs off behind its richer replacement here.
  *
- * <p>No free auto-configuration is excluded. The {@code RepositoryAutoConfiguration} runs alongside
- * the security one: every one of its beans is {@code @ConditionalOnMissingBean}, so each backs off behind this
- * module's richer replacement (the serving controller is registered here under the bean name
- * {@code repositoryController} so the one backs off too). One prefix carries one schema: the pull-through switch is
- * {@code jenrepo.proxy-enabled}, the per-format upstreams are {@code jenrepo.proxy.<format>}, and the repository
- * definitions are {@code jenrepo.repositories.<name>}.
- *
- * <p><b>Nothing ships this.</b> It was an image of its own once; the shipped artifact is the bundle,
- * which imports this composition. The module declares no {@code @jenesis.main}, so no launcher is built from it -
- * what is left is {@link #start(int)} for an embedder or a test, and a {@link #main} the containerised harness
- * starts when a suite needs this node without the console and the cache around it.
+ * <p>Nothing ships this: the bundle imports it, and the module declares no {@code @jenesis.main}. What remains is
+ * {@link #start(int)} for an embedder or a test and the {@link #main} below.
  */
 @SpringBootApplication
 public class RepositoryApplication {
 
     /**
-     * An entry point for a process that must run <em>this node alone</em>, which today means the containerised e2e
-     * harness: it boots the product in a container by naming a module and a main class, and its own modules are
-     * deliberately excluded from the module path it mounts ({@code ServerRuntime.isHarness}), so that entry point
-     * has to be a product one - the format suites want this node without the console and the cache around it.
-     * Nothing ships from here: the module declares no {@code @jenesis.main}, so no launcher is built from it.
+     * Runs this node alone, for the containerised harness, which boots a product module and main class and keeps its
+     * own modules off the module path it mounts. A debt rather than a design: the way out is a test-owned launcher
+     * module the harness may mount.
      *
-     * <p><b>It is a debt, not a design.</b> A class with a {@code main} reads as a product whatever its javadoc
-     * says. The way out is to let the harness mount one test-owned launcher module - a deliberate exception to
-     * that filter rather than a loosened rule - and delete this.
-     *
-     * <p>What may live here is a report every entry point makes, not a decision a deployment depends on. The
-     * licence report qualifies and is made here; a defaults map does not.
-     *
-     * <p><b>Nothing a deployment depends on may be done in this method.</b> That is not a style note. No shipped
-     * artifact runs this method, so a default floored here would be off in the image while the settings screen said
-     * it was on. A boot-time decision belongs in the artifact that ships.
+     * <p>No shipped artifact runs this method, so nothing a deployment depends on may be decided here - a default set
+     * here would be off in the image while the settings screen said it was on. A report every entry point makes may.
      */
     public static void main(String[] args) {
-        // The licence report fires from the licence feature module's configuration, which every composition that
-        // imports the kernel's feature modules constructs - so this node reports without naming the licence, and
-        // the bundle still reports from its own main; the guard keeps it to one line per JVM either way.
+        // The licence report fires from the licence module's configuration, once per JVM.
         new SpringApplicationBuilder(RepositoryApplication.class)
                 .properties("spring.config.name=repository")
                 .run(args);
@@ -76,10 +48,8 @@ public class RepositoryApplication {
      * types leaking into its module.
      */
     public static Running start(int port) {
-        // The port rides as a run argument rather than a default property: a .properties() default is Spring's
-        // lowest-precedence layer, so anything above it wins and two suites asking for an ephemeral port would race
-        // for one fixed port. No file pins server.port any more - 8080 is Spring's own default - so the argument is
-        // what makes 0 mean 0.
+        // A run argument, not a .properties() default: that is Spring's lowest layer, which any configured port
+        // would outrank.
         ConfigurableApplicationContext context = new SpringApplicationBuilder(RepositoryApplication.class)
                 .properties("spring.config.name=repository")
                 .run("--server.port=" + port);
@@ -88,13 +58,11 @@ public class RepositoryApplication {
     }
 
     /**
-     * The {@code (method, path-pattern)} routes a booted context mapped, as {@link Running#routes()} reports them -
-     * shared with the launchers that compose this application with others, so a handle on any of them answers the
-     * question the same way.
+     * The routes a booted context mapped, as {@link Running#routes()} reports them; shared with the launchers that
+     * compose this application.
      */
     public static Set<String> routes(ConfigurableApplicationContext context) {
-        // Select the app controllers' mapping by name: actuator contributes a second RequestMappingHandlerMapping
-        // (controllerEndpointHandlerMapping), so a by-type lookup is ambiguous.
+        // By name: actuator contributes a second RequestMappingHandlerMapping.
         RequestMappingHandlerMapping mapping = context.getBean(
                 "requestMappingHandlerMapping", RequestMappingHandlerMapping.class);
         Set<String> routes = new TreeSet<>();
@@ -133,31 +101,22 @@ public class RepositoryApplication {
 
         /**
          * The {@code (method, path-pattern)} routes Spring actually mapped, each rendered as {@code "METHOD /pattern"}
-         * (a method-agnostic mapping as {@code "* /pattern"}), enumerated from the {@link RequestMappingHandlerMapping}.
-         * The endpoint auth-matrix guard reads this to fail the build if a controller ships a route with no auth-matrix
-         * entry or explicit public allowlist entry - the completeness "teeth" - without leaking the Spring context out
-         * of the handle.
+         * (a method-agnostic mapping as {@code "* /pattern"}), without exposing the Spring context.
          */
         public Set<String> routes() {
             return RepositoryApplication.routes(context);
         }
 
         /**
-         * Run every enabled maintenance task once, synchronously - the deterministic sweep an embedder or a test
-         * triggers instead of waiting for the schedule (delegating to {@link MaintenanceScheduler#runNow(Instant)}),
-         * still without leaking the Spring context out of the handle. An exclusive pass still takes (and promptly
-         * releases) its single-writer {@link build.jenesis.repository.store.Lease} exactly as the scheduled loop
-         * does, so a synchronous run coordinates with other nodes rather than double-sweeping. A no-op when this image
-         * was built without the scheduler, so it degrades gracefully.
+         * Runs every enabled maintenance task once, synchronously ({@link MaintenanceScheduler#runNow(Instant)}); an
+         * exclusive pass still takes its lease, so it coordinates with other nodes. A no-op without a scheduler.
          */
         public void runMaintenance(Instant now) {
             context.getBeanProvider(MaintenanceScheduler.class).ifAvailable(scheduler -> scheduler.runNow(now));
         }
 
         /**
-         * The deployment's root store - the one every repository's store is scoped from, carrying what the deployment
-         * bound to it - so a test can read and publish exactly as this node does, rather than through a store built
-         * beside it that carries none of it.
+         * The deployment's root store, carrying its bindings, so a test reads and publishes as this node does.
          */
         public ArtifactStore store() {
             return context.getBean(ArtifactStore.class);

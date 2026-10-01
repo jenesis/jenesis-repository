@@ -1,16 +1,10 @@
 /**
- * The repository server's BOOT MODULE (kernel/boot split): the {@code @SpringBootApplication}
- * composition root - {@code RepositoryApplication}, the focused {@code @Configuration} groups (store, gate wiring,
- * serving, workers, demo and the {@code RepositoryConfig} import shell), the security composition, the discovered
- * feature-module bridge ({@code ServerModuleImports}/{@code ServerModulesConfig}) and the boot-time probes - apart
- * from {@code build.jenesis.repository.server.kernel}, which is the shared runtime KERNEL this module composes
- * over ({@code Repositories}, {@code Settings}, {@code LiveConfig}, {@code RepositoryProperties}, the maintenance
- * scheduler and the authorization manager). Nothing in the product depends on this module: feature-web modules
- * require the kernel and are discovered from here through {@code ServerModuleProvider}, and only the {@code bundle}
- * (and the test suites) name it - stated by the extension contract. Component scan covers ONLY this
- * package: every kernel bean that must be Spring-visible is registered by an explicit {@code @Bean} method here
- * (notably {@code repositoryAuthorizationManager} in {@code RepositorySecurityConfig} - the free chain's back-off contract is
- * on that bean name). Open so Spring can reflect over the beans and controllers.
+ * The repository server's composition root: {@code RepositoryApplication}, the {@code @Configuration} groups, the
+ * security contributions and the bridge that imports the discovered feature modules
+ * ({@code ServerModuleImports}), composed over the runtime kernel {@code build.jenesis.repository.server.kernel}.
+ * Only the bundle and the suites that boot it name it: feature modules require the kernel and are discovered from
+ * here. Component scan covers only this package, so every kernel bean Spring must see is declared by a {@code @Bean}
+ * method here. Open so Spring can reflect over the beans and controllers.
  *
  * @jenesis.bom pin-repository.properties
  * @jenesis.signature signature-repository.properties
@@ -20,7 +14,6 @@
  */
 open module build.jenesis.repository.application {
     requires build.jenesis.repository.server.kernel;
-    // The enforcing authorization manager the security composition registers by name (RepositorySecurityConfig).
     requires build.jenesis.repository.server;
     requires build.jenesis.repository.store;
     requires build.jenesis.repository.gateway;
@@ -39,10 +32,7 @@ open module build.jenesis.repository.application {
     requires build.jenesis.repository.importer;
     requires build.jenesis.repository.ui;
     requires jakarta.servlet;
-    // Claim the free-core import edge on module presence, so the free ImportEdgeController (conditionally
-    // registered by FreeImportEdgeCondition when no provider is installed) is never created and this composition's
-    // tenant-scoped ImportController is the sole import edge - through the free ImportEdgeProvider SPI rather than a
-    // WebMvcRegistrations mapping suppression.
+    // Claims the import edge, so the server's own import controller is not created beside ImportController.
     provides build.jenesis.repository.server.spi.ImportEdgeProvider
             with build.jenesis.repository.application.RoutedImportEdge;
     requires micrometer.observation;
@@ -60,8 +50,7 @@ open module build.jenesis.repository.application {
     requires spring.boot.webmvc;
     requires spring.boot.starter.jetty;
     requires org.eclipse.jetty.jndi;
-    // The server customizer that admits an encoded slash (EncodedSlashConfig): the connector's URI compliance and
-    // the servlet handler's ambiguous-URI decoding, both Jetty's own API.
+    // Jetty's own API, for the encoded-slash customizer (EncodedSlashConfig).
     requires spring.boot.jetty;
     requires org.eclipse.jetty.server;
     requires org.eclipse.jetty.http;
@@ -72,20 +61,10 @@ open module build.jenesis.repository.application {
     requires spring.security.core;
     requires spring.security.web;
     requires spring.boot.starter.security;
+    // The bundle that ships this composition, and the suites and harnesses that boot it.
     exports build.jenesis.repository.application to build.jenesis.repository.bundle.full,
             build.jenesis.repository.server.kernel.test, build.jenesis.repository.degraded.test,
-            // The server-module contract suite drives the real deferred import selector - the one place the
-            // "configured off degrades exactly like an absent module" contract is observable - over every declared
-            // ServerModuleProvider. A test-only export, like the three above it.
-            // The ecosystem release-confidence harness boots this application (and not the free core's) so
-            // the compliance, settings, lifecycle and maintenance wiring the feature matrix drives is present. It is
-            // test support that no runtime module may require - EcosystemRunGraphTest enforces that - so the export
-            // stays qualified rather than opening the composition root to the product.
             build.jenesis.repository.ecosystem.run,
-            // The Keycloak rig boots this application against a real realm; it left test/server for
-            // test/server-docker so a change anywhere else stops paying for a container start.
             build.jenesis.repository.server.docker.test,
-            // the publish cost probe boots the whole bundle in process over a tracing store and prints what one
-            // publish costs the store key by key - the composition the shipped image runs, not a test module's.
             build.jenesis.repository.load.lane.test;
 }

@@ -11,12 +11,9 @@ import org.springframework.core.type.AnnotationMetadata;
 
 /**
  * Bridges {@link ServiceLoader} discovery into the Spring context: every installed {@link ServerModuleProvider}'s
- * configuration class is imported as a deferred configuration - the same treatment Boot gives its auto-configurations
- * - so a feature module's {@code @Bean} methods, controllers, conditions and properties work exactly as if the class
- * were part of the server, while the server names no module. A module configured off by its provider name
- * ({@code jenrepo.<name>=false}, the {@link Features} convention - settable as
- * {@code JENREPO_<NAME>=false} through relaxed binding) is not imported, so its endpoints degrade exactly
- * as if the module were absent from the image. Mirrors {@code ConsoleModuleImports} on the console side.
+ * configuration class is imported as a deferred configuration, as Boot treats its auto-configurations, so the server
+ * names no module. A module switched off by name ({@code jenrepo.<name>=false}, the {@link Features} convention) is
+ * not imported, exactly as if it were absent.
  */
 public class ServerModuleImports implements DeferredImportSelector, EnvironmentAware {
 
@@ -33,9 +30,7 @@ public class ServerModuleImports implements DeferredImportSelector, EnvironmentA
         UnaryOperator<String> config = environment == null
                 ? key -> null
                 : Features.namespaced(environment::getProperty);
-        // One validated discovery in the SPI home (ServerModuleProvider.enabled), not a loop here: the enablement
-        // convention, the name-sorted order and the refusal of two modules answering to one name all live beside the
-        // contract, so this selector cannot drift from the catalogue that lists the same toggles.
+        // The SPI home owns the enablement, the order and the refusal of a duplicate name.
         return ServerModuleProvider.enabled(config).stream()
                 .map(provider -> provider.configuration().getName())
                 .toArray(String[]::new);

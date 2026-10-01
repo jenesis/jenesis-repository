@@ -29,8 +29,7 @@ import org.springframework.web.bind.annotation.RestController;
  * The deployment-info reads: {@code /api/config} (the store, default repository and gate posture) and
  * {@code /api/capabilities} (the installed formats, import sources, report columns and feature flags), so a client -
  * the CLI, a script, the console - renders exactly what the modules on this deployment's module path provide instead
- * of hardcoding any backend. One of the focused controllers the {@code RepositoryController}
- * monolith split into.
+ * of hardcoding any backend.
  */
 @RestController
 public class DeploymentInfoController {
@@ -48,13 +47,10 @@ public class DeploymentInfoController {
     private final ProvenanceSigner provenanceSigner;
     private final Settings settings;
     /** The effective-value chain both reads resolve through - an operator's pin over the stored value over the
-     *  deployment environment. Held as the composed lookup rather than the probe, so neither read can be
-     *  written with a leg missing: a pin-blind read reports a stored value the running server does not use. */
+     *  deployment environment - held composed so no read can miss the pin leg. */
     private final UnaryOperator<String> effective;
-    // Module presence is static for a JVM; resolved once so the capability flag reflects the installed metering.
+    // Module presence is static for a JVM, so the discovered inputs are resolved once.
     private final boolean rateLimiting = RateLimiterProvider.resolve(key -> null) != RateLimiter.NONE;
-    // The remaining discovered inputs are equally static for the JVM, so they are resolved once here rather than
-    // re-scanning the ServiceLoader on every /api/capabilities call.
     private final List<ImportSourceCapabilityView> importSources = ImportSourceProvider.declared().stream()
             .map(provider -> new ImportSourceCapabilityView(provider.name(), provider.label(), provider.requiresFormat()))
             .toList();
@@ -79,23 +75,13 @@ public class DeploymentInfoController {
     @GetMapping("/api/config")
     @ResponseBody
     public ConfigView config() {
-        // The runtime-tunable dials (proxy, licence policy, vulnerability threshold) are editable live over
-        // /api/settings and applied to the gate without a restart, so report their effective value through the same
-        // pin > stored > deployment chain LiveConfig resolves the gate through - reading the file default straight off
-        // RepositoryProperties would show a stale posture until reboot, and reading the store alone would report a
-        // stored value an operator's pin above it makes inert.
+        // Live-editable dials, reported through the same chain LiveConfig resolves the gate through.
         boolean proxy = Boolean.parseBoolean(dial("proxy-enabled", Boolean.toString(properties.isProxyEnabled())));
-        // The licence dials fall back to what their dimension DECLARES, not to a field here. Licence is a discovered
-        // plugin, so this class never held its defaults for any purpose but this report - and when the dimension's
-        // default moved and the field did not, this is the line that told an operator the product holds an undeclared
-        // licence while the gate was serving it. Reading the catalogue means the report cannot say anything the
-        // dimension does not.
+        // The licence dials fall back to what their dimension declares, so the report cannot contradict the gate.
         String licenseAllowed = dial("license-allowed", declared("license-allowed"));
         String licenseUnknown = dial("license-unknown", declared("license-unknown"));
         String threshold = dial("vulnerability-threshold", properties.getVulnerabilityThreshold());
-        // The first-run guided-hardening advice, recomputed live from the stored settings so it renders the
-        // current posture and falls silent the moment anything is configured - a read that renders durable state, never
-        // a write. The same FirstRunHardening.assess the boot log uses, so both surfaces agree.
+        // The advice the boot log gives, recomputed live so it falls silent once anything is configured.
         FirstRunHardening.Advice hardening = FirstRunHardening.assess(
                 FirstRunHardening.firstRun(settings), DECLARED, effective);
         return new ConfigView(properties.getStore(), proxy,
@@ -103,23 +89,16 @@ public class DeploymentInfoController {
                 threshold, advisories != AdvisorySource.none(), hardening);
     }
 
-    /** One runtime-tunable dial's effective value: the {@link #effective} chain (an operator's pin over the stored
-     *  value over the deployment environment), falling back to the given default when nothing in that chain sets the
-     *  key - the same order {@code LiveConfig} resolves the running gate through. */
+    /** One dial's value through {@link #effective}, or {@code fallback} when nothing in the chain sets it. */
     private String dial(String key, String fallback) {
         String resolved = effective.apply(key);
         return resolved == null ? fallback : resolved;
     }
 
-    /** A discovered dimension's own declared default for a key - the value its settings screen row shows and its
-     *  policy applies, read from the one catalogue rather than copied into a field here. Empty when no installed
-     *  module declares the key, which is the honest answer for a dimension this deployment does not carry. */
-    /** Every installed module's declared settings, read once: this controller consulted the catalogue three
-     *  times per request - twice through {@link #declared} and once for the hardening advice - and each call was a
-     *  walk of the module graph's service declarations. What a setting *declares* is fixed for the JVM; what a
-     *  deployment has *set* is read live, below, and is the part that must be. */
+    /** Every installed module's declared settings; what a setting declares is fixed for the JVM. */
     private static final List<Setting> DECLARED = SettingsContributor.all();
 
+    /** A key's declared default, or empty when no installed module declares it. */
     private static String declared(String key) {
         return DECLARED.stream()
                 .filter(setting -> key.equals(setting.key()))
@@ -128,19 +107,14 @@ public class DeploymentInfoController {
                 .orElse("");
     }
 
-    /** The rich-capabilities view as the flat, JSON-serialisable map the
-     *  {@link build.jenesis.repository.server.spi.CapabilityContributor} merges onto {@code /api/capabilities}: the six
-     *  {@link CapabilitiesView} components ({@code version}, {@code formats}, {@code importSources}, {@code signals},
-     *  {@code modules}, {@code features}) as top-level keys - the base keys ({@code readOnly}, {@code auth},
-     *  {@code anonymousRights}) are then added around it by the merge. Recomputed
-     *  per call off the live settings, so a toggle re-resolves without a restart. */
+    /** {@link #capabilities()} as the flat map {@link DeploymentCapabilities} contributes to
+     *  {@code /api/capabilities}, one top-level key per component, recomputed per call off the live settings. */
     public Map<String, Object> capabilityMap() {
         CapabilitiesView view;
         try {
             view = capabilities();
         } catch (IOException e) {
-            // The rich view reads the stored-settings documents; a read failure there surfaces as an unchecked error so
-            // the merge (and the capabilities() the SPI feeds) fails cleanly rather than serving a half-built body.
+            // Fails the contribution rather than serving a half-built body.
             throw new UncheckedIOException(e);
         }
         Map<String, Object> map = new LinkedHashMap<>();
@@ -153,12 +127,8 @@ public class DeploymentInfoController {
         return map;
     }
 
-    /** What this deployment carries - the installed formats, import sources, report columns and features - so a
-     *  client (the CLI, a script) renders exactly what the modules on this module path provide instead of
-     *  hardcoding any backend. {@code version} lets a future shape change be detected. Not mapped to
-     *  {@code /api/capabilities} directly: the {@code RepositoryController} owns the single mapping and
-     *  merges this view through the {@code CapabilityContributor} SPI ({@link #capabilityMap}), so there is no
-     *  cross-layer mapping override. */
+    /** What this deployment carries - the installed formats, import sources, report columns, modules and features.
+     *  {@code version} lets a client detect a change of shape. Served through {@link #capabilityMap}. */
     public CapabilitiesView capabilities() throws IOException {
         List<FormatCapabilityView> formatViews = new ArrayList<>();
         for (RepositoryFormat format : formats) {
@@ -169,22 +139,15 @@ public class DeploymentInfoController {
         for (AdvisorySignal signal : advisorySignals) {
             signals.add(new SignalColumnView(signal.name(), signal.label()));
         }
-        // The per-module capability list, enumerated from the discovered settings contributors and provider registries
-        // rather than a maintained table: each module's installed and enabled state (the enablement gate's effective
-        // value, an operator's pin over the store over the product default) and whether a toggle applies live or on the
-        // next restart. A module named only by a leftover stored document renders not-installed.
+        // Enumerated from the discovered contributors; a module named only by a leftover stored document is not
+        // installed.
         List<ModuleCapabilityView> moduleViews = new ArrayList<>();
         for (ModuleCapability capability : ModuleCapability.resolve(effective, settings.documents().keySet())) {
             moduleViews.add(new ModuleCapabilityView(capability.module(), capability.installed(),
                     capability.enableKey(), capability.enabled(), capability.live()));
         }
-        // The optional modules' feature flags are NOT here. Each feature module ships a CapabilityContributor that
-        // reports its own flag (walk, gc, search, dependents, scan, provenance, audit) straight onto the one
-        // /api/capabilities document this view is itself merged into, so those flags are top-level entries of that
-        // body rather than fields of this record. There is one contributor SPI and one merge, and a flag is written
-        // by the module that owns it - no second fan-out here lifting the same flags into a fixed view, which is
-        // what let the two surfaces disagree after a live toggle. What stays below is what no ServiceLoader
-        // fan-out can see: this deployment's Spring-composed beans and tenant kernel.
+        // Optional modules contribute their own flags to the same document; these are the postures only this
+        // context's beans can answer.
         return new CapabilitiesView(1, formatViews, importSources, signals, moduleViews, new FeaturesView(
                 advisoryModule,
                 advisories != AdvisorySource.none(),
@@ -212,11 +175,9 @@ public class DeploymentInfoController {
     public record FormatCapabilityView(String name, String ecosystem) {
     }
 
-    /** One discovered module's state, enumerated from the settings contributors and provider registries rather than a
-     *  maintained table: its JPMS module name, whether it is {@code installed} (on this deployment's module path), the
-     *  key of its enablement gate ({@code null} for an always-on module), whether that gate resolves to {@code enabled},
-     *  and whether toggling it applies {@code live} (on the next scheduled re-read) or only on the next restart. A
-     *  module named only by a leftover stored settings document renders {@code installed == false}. */
+    /** One module's state: its JPMS name, whether it is {@code installed}, its enablement key ({@code null} for an
+     *  always-on module), whether that resolves {@code enabled}, and whether a toggle applies {@code live} or on the
+     *  next restart. */
     public record ModuleCapabilityView(String module, boolean installed, String enableKey, boolean enabled,
                                        boolean live) {
     }
@@ -224,17 +185,12 @@ public class DeploymentInfoController {
     public record ImportSourceCapabilityView(String name, String label, boolean requiresFormat) {
     }
 
-    /** One report column contributed by an installed {@code AdvisorySignal}, so a client renders whatever this
-     *  deployment's modules contribute. Shares the shape of the vulnerability report's column in {@code compliance/web}. */
+    /** One report column contributed by an installed {@code AdvisorySignal}. */
     public record SignalColumnView(String name, String label) {
     }
 
-    /** The deployment postures this controller's own Spring context knows and no contributor can see. The
-     *  module-contributed flags ({@code scan}, {@code provenance}, {@code audit}, {@code dependents},
-     *  {@code search}, {@code walk}, {@code gc}) are deliberately absent: their owning modules contribute them as
-     *  top-level entries of the same {@code /api/capabilities} document this view is merged into, so a client reads
-     *  each flag from the module that owns it rather than from a copy this controller re-resolved through a second
-     *  chain. */
+    /** The postures this context knows and no discovered contributor can see; each optional module's flag is a
+     *  top-level entry contributed by that module. */
     public record FeaturesView(boolean advisories, boolean advisoriesEnabled, boolean staging, boolean retention,
                                boolean provenanceEnabled, boolean upstream, boolean tokenExchange,
                                boolean rateLimit, boolean readOnly) {

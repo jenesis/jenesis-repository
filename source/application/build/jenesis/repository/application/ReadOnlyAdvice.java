@@ -9,14 +9,9 @@ import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
 
 /**
- * Maps a write refused because the deployment is read-only to HTTP {@code 403 Forbidden}, globally: the
- * {@link ReadOnlyArtifactStore} choke point raises {@link ReadOnlyException} from whatever endpoint attempted the
- * mutation - a publish on {@code DeployController}, an import, a promotion on the staging controller, a credential or
- * settings edit on a management / config controller in another module - and this one advice answers them all with a
- * clear {@code 403}, so no per-controller guard has to remember the mode (the quota {@code 507} handler stays
- * per-controller because only the publish path meters bytes; read-only cuts across every write). The store refuses
- * the write before any bytes are stored, so the response is never committed when this runs. It answers for the
- * {@code @RestController}s only: a console screen renders the refusal as its own error page.
+ * Answers a write refused because the deployment is read-only with {@code 403}, whichever controller attempted it:
+ * {@link ReadOnlyArtifactStore} raises {@link ReadOnlyException} before any byte is stored, so no controller has to
+ * remember the mode. It covers {@code @RestController}s only; a console screen renders the refusal itself.
  */
 @RestControllerAdvice(annotations = RestController.class)
 public class ReadOnlyAdvice {
