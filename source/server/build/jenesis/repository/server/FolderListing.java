@@ -49,6 +49,10 @@ final class FolderListing {
     private FolderListing() {
     }
 
+    /** One child of a folder, named as it lists, and whether it is a folder itself; its JSON keeps this order. */
+    record Entry(String name, boolean folder) {
+    }
+
     /** Whether {@code exchange} asks for a folder and the repository answers one with a listing. */
     static boolean asked(FormatExchange exchange) {
         return exchange.path().endsWith("/")
@@ -65,7 +69,7 @@ final class FolderListing {
             return;
         }
         String scope = ServableNames.PUBLISHED + exchange.path().substring(0, exchange.path().length() - 1);
-        List<Map<String, Object>> entries = new ArrayList<>();
+        List<Entry> entries = new ArrayList<>();
         Traversal.Result result;
         try {
             result = ScreenedNames.paths(new ServableNames(store, new Publication(store)),
@@ -74,7 +78,7 @@ final class FolderListing {
                     .scanning(BoundedChildren.bounded().entries(PAGE + 1).page(PAGE + 1))
                     .take(PAGE)
                     .scan(store, scope, after == null ? null : Traversal.key(scope, after),
-                            (name, container) -> entries.add(Map.of("name", name, "folder", container)));
+                            (name, container) -> entries.add(new Entry(name, container)));
         } catch (TraversalException unaddressable) {
             exchange.respond(400);
             return;
@@ -102,7 +106,7 @@ final class FolderListing {
         return any[0];
     }
 
-    private static byte[] document(List<Map<String, Object>> entries, String next) {
+    private static byte[] document(List<Entry> entries, String next) {
         Map<String, Object> document = new LinkedHashMap<>();
         document.put("entries", entries);
         document.put("next", next);
@@ -111,16 +115,16 @@ final class FolderListing {
 
     /** The index a browsing client parses: the plainest HTML that every such parser reads, one anchor per line, its
      *  links relative so they hold under any routing; {@code folder} is the URL the client reached it at. */
-    private static byte[] page(String folder, List<Map<String, Object>> entries, String next) {
+    private static byte[] page(String folder, List<Entry> entries, String next) {
         String title = HtmlUtils.htmlEscape(folder);
         StringBuilder page = new StringBuilder("<!DOCTYPE html>\n<html><head><title>").append(title)
                 .append("</title></head><body>\n<h1>").append(title).append("</h1>\n<pre>\n")
                 .append("<a href=\"../\">../</a>\n");
-        for (Map<String, Object> entry : entries) {
-            String name = (String) entry.get("name");
-            String shown = HtmlUtils.htmlEscape(name) + (Boolean.TRUE.equals(entry.get("folder")) ? "/" : "");
+        for (Entry entry : entries) {
+            String name = entry.name();
+            String shown = HtmlUtils.htmlEscape(name) + (entry.folder() ? "/" : "");
             String href = UriUtils.encodePathSegment(name, StandardCharsets.UTF_8)
-                    + (Boolean.TRUE.equals(entry.get("folder")) ? "/" : "");
+                    + (entry.folder() ? "/" : "");
             page.append("<a href=\"").append(href).append("\">").append(shown).append("</a>\n");
         }
         page.append("</pre>\n");

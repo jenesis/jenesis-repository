@@ -511,6 +511,10 @@ public final class WalkConsumerContract {
 
     /** The consumer under test, wrapped so the kit can see what it was handed and arm the crash off that count. The
      *  wrapper never changes what the delegate observes: it forwards first and arms afterwards. */
+    /** A cursor commit the walk began: the cursor it carried and how many deliveries preceded it. */
+    private record Checkpoint(String cursor, int deliveries) {
+    }
+
     private static final class Instrumented implements WalkConsumer {
 
         private final WalkConsumer delegate;
@@ -520,6 +524,8 @@ public final class WalkConsumerContract {
         private final int checkpoint;
         private final Predicate<String> pointers;
         private final List<String> events = new ArrayList<>();
+        /** The cursor each commit was about to land, and the deliveries made before it, in commit order. */
+        private final List<Checkpoint> checkpoints = new ArrayList<>();
         private int deliveries;
         private long generation = -1;
         private boolean complete;
@@ -598,6 +604,7 @@ public final class WalkConsumerContract {
         @Override
         public void beforeCheckpoint(String cursor) throws IOException {
             events.add("checkpoint");
+            checkpoints.add(new Checkpoint(cursor, deliveries));
             delegate.beforeCheckpoint(cursor);
         }
 
@@ -670,11 +677,16 @@ public final class WalkConsumerContract {
      */
     private static void landed(WalkConsumerFixture fixture, WalkHarness harness, FaultInjectingStore store,
                                CrashPoint point, Corpus corpus, Instrumented crashed) throws IOException {
+        if (point == CrashPoint.BETWEEN_A_DURABLE_WRITE_AND_ITS_CHECKPOINT
+                || point == CrashPoint.AFTER_THE_CHECKPOINT_LANDED) {
+            strideCommit(fixture, harness, store, point, crashed);
+            return;
+        }
         int expected = switch (point) {
             case BEFORE_THE_FIRST_DELIVERY -> 0;
             case MID_STRIDE -> harness.checkpoint() + 2;
-            case BETWEEN_A_DURABLE_WRITE_AND_ITS_CHECKPOINT, AFTER_THE_CHECKPOINT_LANDED -> harness.checkpoint();
             case AT_SEGMENT_COMPLETION, AT_PASS_COMPLETION -> corpus.deliveries();
+            default -> throw new IllegalStateException(point.name());
         };
         equal(crashed.deliveries, expected, fixture,
                 point + ": the crash must land after exactly " + expected + " deliveries, or it is not the window "
@@ -689,14 +701,44 @@ public final class WalkConsumerContract {
         isTrue(!harness.walk().pass(store, RebuildPass.CONSUMER).orElseThrow().complete(), fixture,
                 point + ": a crashed pass is left active");
         WalkSegment segment = segment(fixture, harness, store);
-        boolean committed = switch (point) {
-            case BEFORE_THE_FIRST_DELIVERY, BETWEEN_A_DURABLE_WRITE_AND_ITS_CHECKPOINT -> false;
-            default -> true;
-        };
+        boolean committed = point != CrashPoint.BEFORE_THE_FIRST_DELIVERY;
         equal(segment.cursor() != null, committed, fixture, point + ": the cursor "
                 + (committed ? "landed before the crash" : "never landed, so the previous one still stands")
                 + " - it is " + (segment.cursor() == null ? "absent" : "present") + ", which is the opposite of what "
                 + "this crash point exists to create");
+        isTrue(segment.state() != WalkSegment.State.DONE, fixture,
+                point + ": the segment the crashed worker held is not done");
+    }
+
+    /**
+     * The two crash points in a cursor commit, which are positioned off a commit rather than off a delivery count.
+     *
+     * <p>The walk's stride counts every key it visits, not every key it delivers, so a corpus whose undelivered
+     * leaves sort ahead of its pointers - OCI's {@code oci/.types} sidecars before its {@code oci/<name>} tags -
+     * commits between deliveries the consumer never sees as stride boundaries. What the window means does not move
+     * with that: the crash is the first commit after a whole stride's worth of deliveries, and the cursor left behind
+     * is the commit before it (it never landed) or its own (it landed and the worker died before it learned so).
+     */
+    private static void strideCommit(WalkConsumerFixture fixture, WalkHarness harness, FaultInjectingStore store,
+                                     CrashPoint point, Instrumented crashed) throws IOException {
+        List<Checkpoint> commits = crashed.checkpoints;
+        isTrue(!commits.isEmpty() && "checkpoint".equals(crashed.events.getLast()), fixture,
+                point + ": the crash must land in a cursor commit, or it is not the window this check names - the "
+                        + "last thing the consumer saw was " + (crashed.events.isEmpty() ? "nothing"
+                        : crashed.events.getLast()));
+        Checkpoint crashedIn = commits.getLast();
+        isTrue(crashedIn.deliveries() >= harness.checkpoint() && (commits.size() == 1
+                        || commits.get(commits.size() - 2).deliveries() < harness.checkpoint()), fixture,
+                point + ": the crash must land in the first commit after " + harness.checkpoint() + " deliveries, "
+                        + "or it is not the window this check names - it landed after " + crashedIn.deliveries());
+        isTrue(!harness.walk().pass(store, RebuildPass.CONSUMER).orElseThrow().complete(), fixture,
+                point + ": a crashed pass is left active");
+        WalkSegment segment = segment(fixture, harness, store);
+        String expected = point == CrashPoint.AFTER_THE_CHECKPOINT_LANDED ? crashedIn.cursor()
+                : commits.size() == 1 ? null : commits.get(commits.size() - 2).cursor();
+        equal(segment.cursor(), expected, fixture, point + ": the cursor "
+                + (point == CrashPoint.AFTER_THE_CHECKPOINT_LANDED ? "the crashed commit carried landed"
+                : "the crashed commit carried never landed, so the previous one still stands"));
         isTrue(segment.state() != WalkSegment.State.DONE, fixture,
                 point + ": the segment the crashed worker held is not done");
     }
@@ -722,6 +764,20 @@ public final class WalkConsumerContract {
         return key -> key != null && roots.stream().anyMatch(root -> key.startsWith(root + "/"));
     }
 
+    /** Whether the body stored at {@code key} names a content hash, in either pointer dialect. */
+    private static boolean namesAHash(ArtifactStore store, String key) {
+        try {
+            Optional<ArtifactStore.Versioned> stored = store.readVersioned(key);
+            if (stored.isEmpty()) {
+                return false;
+            }
+            String hash = ServableNames.hash(stored.get().content());
+            return hash != null && hash.matches("[0-9a-f]{64}");
+        } catch (IOException | RuntimeException _) {
+            return false;
+        }
+    }
+
     /** The fixture's family roots as the pass takes them. */
     private static RebuildPass.Roots roots(WalkConsumerFixture fixture) {
         Map<WalkConsumer.Family, List<String>> roots = fixture.familyRoots();
@@ -740,8 +796,11 @@ public final class WalkConsumerContract {
         // reads, whatever the interceptor chain says - before the consumer's first pass.
         List<String> pointerRoots = fixture.familyRoots().getOrDefault(WalkConsumer.Family.POINTERS,
                 fixture.pointerRoots());
+        // The first key under those roots whose body names a hash: a root may also hold leaves that are not
+        // pointers - OCI's media-type sidecars sort ahead of its tags - and withholding one would withhold nothing.
         Optional<String> pointer = keys(store).stream()
                 .filter(key -> pointerRoots.stream().anyMatch(root -> key.startsWith(root + "/")))
+                .filter(key -> namesAHash(store, key))
                 .findFirst();
         if (pointer.isEmpty()) {
             throw failure(fixture, "the corpus seeds no pointer under " + pointerRoots + ", so there is nothing to "
