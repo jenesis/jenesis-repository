@@ -3,12 +3,11 @@ package build.jenesis.repository.staging;
 import module java.base;
 
 /**
- * One staging repository and its lifecycle. It accepts {@link #stage staged} items while {@code OPEN}, seals for
- * review on {@link #close}, and then either {@link #promote promotes} every item into the release layout or
- * {@link #drop drops} the lot. The state machine is enforced here - staging into a sealed repository, promoting an
- * open one, or dropping a terminal one each throw - while the actual storage is the {@link StagingBackend}'s
- * concern. The compliance gate is the intended reviewer between close and promote, but staging does not require it,
- * so a deployment can gate or not.
+ * One staging repository and its lifecycle: it accepts {@link #stage staged} items while {@code OPEN}, seals for review
+ * on {@link #close}, then {@link #promote promotes} every item into the release layout or {@link #drop drops} them. The
+ * state machine is enforced here - staging into a sealed repository, promoting an open one or dropping a terminal one
+ * throws - while storage is the {@link StagingBackend}'s. The compliance gate is the intended reviewer between close
+ * and promote, but staging does not require it.
  */
 public final class StagingRepository {
 
