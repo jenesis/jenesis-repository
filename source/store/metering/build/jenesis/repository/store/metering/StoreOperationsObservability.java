@@ -7,17 +7,15 @@ import build.jenesis.repository.observation.ObservabilitySource;
 import build.jenesis.repository.store.Retries;
 
 /**
- * The store operations this node has issued, on the observability report: one counter per operation name under
- * {@code jenrepo.store.ops.<op>} and the two class totals {@code jenrepo.store.ops.reads} and {@code .writes}. What
- * the operation-count suites read - a download, a publish and a walked object each held to a standard of reads and
- * writes - and what the soak prints per interval, so a store that fills up shows constant operations per request.
+ * The store operations this node issued, on the observability report: a counter per operation under
+ * {@code jenrepo.store.ops.<op>} and the class totals {@code jenrepo.store.ops.reads} and {@code .writes} - what the
+ * operation-count suites read and the soak prints per interval, so a filling store shows constant operations per
+ * request.
  *
- * <p>Beside them, what the compare-and-set loops made of the writes the store refused, under
- * {@code jenrepo.store.cas.*}: how many conditional writes were tried, how many refusals turned out to have landed
- * ({@code replayed}), how many found a peer's bytes on the key ({@code lost.peer}) and how many found this node's
- * bytes but work still outstanding ({@code lost.unsettled}). Read and write totals alone cannot tell a lost write
- * from a deferred counter flush; with these verdicts reported, "the store refused a write it had accepted" is a
- * number on a serial publish rather than a theory about one.
+ * <p>Beside them, what the compare-and-set loops made of refused writes, under {@code jenrepo.store.cas.*}: conditional
+ * writes tried, refusals that had in fact landed ({@code replayed}), refusals finding a peer's bytes
+ * ({@code lost.peer}), and refusals finding this node's bytes with work outstanding ({@code lost.unsettled}). Totals
+ * alone cannot tell a lost write from a deferred counter flush; these verdicts can.
  */
 public final class StoreOperationsObservability implements ObservabilitySource {
 
@@ -54,9 +52,8 @@ public final class StoreOperationsObservability implements ObservabilitySource {
         metrics.add(Metric.counter("jenrepo.store.cas.lost.unsettled", "Refused conditional writes whose key held this "
                 + "node's bytes while the mutation still had work to do - an accumulation, a claim, a delete - and was "
                 + "retried rather than believed landed.", Retries.lostUnsettled(), "writes"));
-        // Deliberately a different prefix, not more jenrepo.store.ops.* names: the two totals above are summed by
-        // partitioning that namespace on the operation name, so a family-suffixed name in it would be read as an
-        // operation nobody recognises and counted into the reads.
+        // A different prefix from jenrepo.store.ops.*: the totals above partition that namespace by operation name, so
+        // a family-suffixed name in it would be counted into the reads.
         MeteringArtifactStore.byFamily().forEach((name, count) -> {
             String[] split = name.split(" ", 2);
             metrics.add(Metric.counter("jenrepo.store.family." + signal(split[0]) + "." + segment(split[1]),
@@ -66,21 +63,12 @@ public final class StoreOperationsObservability implements ObservabilitySource {
         return metrics;
     }
 
-    /**
-     * A key family as signal segments: the separators a layout uses are not the separators a signal name may carry.
-     *
-     * <p><b>It has to be total.</b> A signal segment is {@code [a-z][a-z0-9]*} - it must begin with a letter - and
-     * this is the one place in the report where a name is derived from a store key rather than written by an author,
-     * so whatever a key contains has to come out the other side as a legal name. Cleaning non-alphanumerics to dots
-     * and stopping is legal only while no key family carries a segment that starts with a digit. An audit trail keyed
-     * by date does: {@code .system/audit/2026-09-09} folds to {@code .system/audit/<n>-09-09} and cleaned to
-     * {@code system.audit.n.09.09}, whose {@code 09} the grammar refuses - and a refused {@link Metric} name is not
-     * one missing metric, it throws, and the report drops this whole source as unavailable: switching
-     * {@code jenrepo.store-families} on would make a node report NO {@code jenrepo.store.ops.*} counters at all.
-     *
-     * <p>So every part is made to begin with a letter, and the cleaning is ASCII-only - {@code Character.isLetterOrDigit}
-     * is Unicode-aware and would pass an accented letter straight into a name the grammar also refuses.
-     */
+    /** A key family as signal segments. It must be total: a signal segment is {@code [a-z][a-z0-9]*}, and this is the
+     *  one name derived from a store key, so any key must yield a legal name. A family with a digit-leading segment -
+     *  an audit trail keyed by date, {@code .system/audit/<n>-09-09} - would otherwise clean to
+     *  {@code system.audit.n.09.09}, whose {@code 09} the grammar refuses; a refused {@link Metric} name throws and
+     *  drops this whole source from the report. So every part is made to begin with a letter, and the cleaning is
+     *  ASCII-only - {@code Character.isLetterOrDigit} would pass an accented letter the grammar also refuses. */
     static String segment(String family) {
         StringBuilder cleaned = new StringBuilder();
         for (char c : family.toLowerCase(Locale.ROOT).toCharArray()) {
@@ -91,16 +79,15 @@ public final class StoreOperationsObservability implements ObservabilitySource {
             if (part.isEmpty()) {
                 continue;
             }
-            // A part that starts with a digit is a number the layout carries - a date, a generation, a version -
-            // and the grammar has no spelling for one. Naming it as a number keeps it readable and legal.
+            // A digit-leading part is a number the layout carries - a date, a generation - which the grammar cannot
+            // spell.
             parts.add(Character.isDigit(part.charAt(0)) ? "n" + part : part);
         }
         return parts.isEmpty() ? "none" : String.join(".", parts);
     }
 
-    /** An operation's name as signal segments: {@code readVersioned} is {@code read.versioned}, because a signal
-     *  segment is lower-case and a name that is not one is refused by {@link Metric} - which dropped this whole
-     *  source from the report as unavailable, silently, until a booted node was asked for its counters. */
+    /** An operation's name as signal segments: {@code readVersioned} is {@code read.versioned}, because a segment is
+     *  lower case and {@link Metric} refuses any other name, which would drop this source from the report. */
     static String signal(String op) {
         StringBuilder segments = new StringBuilder();
         for (char c : op.toCharArray()) {

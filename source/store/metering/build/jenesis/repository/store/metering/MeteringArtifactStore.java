@@ -7,32 +7,27 @@ import io.micrometer.core.instrument.MeterRegistry;
 import io.micrometer.core.instrument.Timer;
 
 /**
- * An {@link ArtifactStore} decorator that times each store operation as {@code jenrepo.store.operations}, tagged by
- * the operation ({@code op}), the configured backend ({@code backend}: filesystem, s3, azure, ...) and the
- * {@code outcome} ({@code ok}/{@code error}) - so a deployment sees per-backend store latency the same way the
- * quota decorator meters bytes. It is wired only in the distribution, and only when a {@link MeterRegistry} is
- * present, so the serving path stays inert (no metrics dependency reaches the store SPI). A scoped view meters
- * too, so a tenant/repository operation is timed the same as a root one. The decorator adds nothing to the bytes:
- * a {@link ArtifactStore.RangedSink} target and the content-addressed {@link #writeBlob} pass straight through to
- * the leaf backend.
+ * An {@link ArtifactStore} decorator timing each store operation as {@code jenrepo.store.operations}, tagged by
+ * operation ({@code op}), backend ({@code backend}) and {@code outcome} ({@code ok}/{@code error}), so a deployment
+ * sees per-backend store latency. Wired only in the distribution, with a {@link MeterRegistry}, so no metrics
+ * dependency reaches the store SPI; a scoped view meters too. The bytes pass straight through: a
+ * {@link ArtifactStore.RangedSink} target and {@link #writeBlob} reach the leaf backend unchanged.
  */
 public final class MeteringArtifactStore implements ArtifactStore {
 
     private final ArtifactStore delegate;
     private final MeterRegistry registry;
     private final String backend;
-    // The (op, outcome) tag set is stable and one timer is recorded on every store operation - the hottest path in
-    // the product - so each timer is resolved once and reused rather than rebuilding the tag array and re-doing the
-    // registry lookup per call (backend is fixed for the whole decorator tree). The map is shared with every scoped
-    // view, since routing mints a fresh decorator per request through scope(); a per-instance map would be discarded
-    // each request and never pay off. Bounded: op has a fixed handful of values and outcome is ok/error.
+    // One timer per (op, outcome), resolved once and reused on the hottest path rather than looked up per call; the map
+    // is shared with every scoped view, since routing mints a decorator per request through scope(). Bounded: a handful
+    // of ops, two outcomes, one backend.
     private final ConcurrentMap<String, Timer> timers;
 
-    /** Whether this store counts by key family as well as by operation - the deployment's
-     *  {@code jenrepo.store-families}, for a run measuring where its store cost goes. */
+    /** Whether this store also counts by key family - {@code jenrepo.store-families}, for a run measuring where its
+     *  store cost goes. */
     private final boolean families;
 
-    /** Over {@code delegate}; {@code registry} may be null, in which case the operations are counted but not timed. */
+    /** Over {@code delegate}; with a null {@code registry} operations are counted but not timed. */
     public MeteringArtifactStore(ArtifactStore delegate, MeterRegistry registry, String backend) {
         this(delegate, registry, backend, false);
     }
@@ -116,8 +111,7 @@ public final class MeteringArtifactStore implements ArtifactStore {
 
     @Override
     public Optional<Listed> listed(String key) throws IOException {
-        // Forwarded, not inherited: the SPI default answers presence from exists() and drops the time the backend
-        // would have carried, which is what a caller of listed() came for.
+        // Forwarded, not inherited: the default answers presence from exists() and drops the time the caller came for.
         return timed("listed", key, () -> delegate.listed(key));
     }
 
@@ -135,21 +129,12 @@ public final class MeteringArtifactStore implements ArtifactStore {
     }
 
     /**
-     * Delegate the scan, for the same reason {@link #page} is delegated and with the same consequence for getting it
-     * wrong.
+     * Delegated, as {@link #page} is. The inherited {@code scan} is {@code scanByListing}, which lists recursively into
+     * heap and refuses past ten thousand keys; a decorator inheriting it would replace the backend's bounded prefix
+     * listing with that fallback, so a tenant existence probe - a point read with a page limit of one - would
+     * materialise 10,001 keys, and the image would not boot over a store larger than that.
      *
-     * <p>The SPI's inherited {@code scan} is {@code scanByListing}, which walks {@code list} recursively into heap
-     * and then refuses past ten thousand keys - a deliberate bound, because a fallback that buffered a namespace to
-     * answer one page would be worse than one that says it cannot. A decorator that forgets this method does not
-     * merely lose performance: it *replaces* the backend's native, genuinely bounded prefix listing with that
-     * fallback, so a bounded question asked through the decorator becomes an unbounded one.
-     *
-     * <p>Without it, a tenant existence probe - written as a point read with a page limit of one - reaches this
-     * fallback through the decorator and materialises 10,001 keys to answer it, and the image does not boot over a
-     * store holding more than ten thousand keys.
-     *
-     * <p>And it is metered, as {@code scan}: a scan is the listing request it is on every object store, and a bench
-     * of the build cache once read a warm build as one read per hit while every hit's stamp scan went uncounted.
+     * <p>Metered as {@code scan}, since a scan is a listing request on every object store.
      */
     @Override
     public Scan scan(String prefix, String startAfter, int limit, Consumer<Listed> consumer) throws IOException {
@@ -158,12 +143,9 @@ public final class MeteringArtifactStore implements ArtifactStore {
 
     @Override
     public void page(String prefix, String startAfter, int limit, Consumer<String> consumer) {
-        // Delegate to the backend's native bounded paging rather than inherit the SPI default, which materialises and
-        // sorts the whole child set of the prefix into heap (list() then Collections.sort) on every page. This store is
-        // the always-injected outer decorator, and the GC / store-walk / quota-recompute jobs page through it over the
-        // flat, content-addressed blobs/ namespace (millions of entries on a busy repo), so the default would OOM those
-        // maintenance passes - the exact whole-namespace materialisation the paging primitive and every sibling
-        // decorator (Quota, ReadOnly, the object-store backends) exist to prevent.
+        // Delegated to the backend's bounded paging rather than the default, which lists and sorts the prefix's whole
+        // child set per page. This is the always-injected outer decorator, and maintenance passes page the flat blobs/
+        // namespace through it - millions of entries - which the default would exhaust the heap over.
         timedRuntime("page", prefix, () -> {
             delegate.page(prefix, startAfter, limit, consumer);
             return null;
@@ -175,9 +157,8 @@ public final class MeteringArtifactStore implements ArtifactStore {
         return timed("readVersioned", key, () -> delegate.readVersioned(key));
     }
 
-    /** Delegated rather than inherited: the default asks the delegate for the whole object to keep its token, so a
-     *  metered deployment - which is any deployment wiring this decorator - would read a document it declined
-     *  to hold. */
+    /** Delegated: the default reads the whole object to keep its token, so every metered deployment would read a
+     *  document it declined to hold. */
     @Override
     public Optional<Object> version(String key) throws IOException {
         return timed("version", key, () -> delegate.version(key));
@@ -188,8 +169,8 @@ public final class MeteringArtifactStore implements ArtifactStore {
         return timed("writeVersioned", key, () -> delegate.writeVersioned(key, content, expected));
     }
 
-    /** Forwarded like {@link #page}, and for the same reason plus one: the SPI's default derives the page from names
-     *  alone and drops the listing's sizes and ages, which the store contract's decorator leg holds. */
+    /** Forwarded like {@link #page}, and because the default derives the page from names alone and drops the sizes and
+     *  ages the store contract's decorator leg holds. */
     @Override
     public void pageListed(String prefix, String startAfter, int limit, Consumer<Listed> consumer) {
         timedRuntime("pageListed", prefix, () -> {
@@ -211,8 +192,8 @@ public final class MeteringArtifactStore implements ArtifactStore {
         });
     }
 
-    /** Timed and delegated rather than inherited: the inherited body buffers, so a metered deployment would lose
-     *  the streaming write it is sitting in front of - and the meter would time the wrong call. */
+    /** Timed and delegated: the inherited body buffers, so this decorator would lose the streaming write it sits in
+     *  front of and time the wrong call. */
     @Override
     public boolean writeVersioned(String key, InputStream content, long length, Object expected) throws IOException {
         return timed("writeVersioned", key, () -> delegate.writeVersioned(key, content, length, expected));
@@ -256,14 +237,10 @@ public final class MeteringArtifactStore implements ArtifactStore {
         }
     }
 
-    /**
-     * The key's family: its first two path segments, with an identity folded out of each.
-     *
-     * <p>That is the grain the store is laid out in - {@code blobs/<hash>}, {@code publish/<format>/...},
-     * {@code gc/<pass>/refs/...} - and therefore the grain a cost is argued in. A count by operation alone says a
-     * collection issues three hundred thousand versioned reads without saying whether they are the collector's or
-     * the walk's, which is the difference between a change that helps and one that does nothing.
-     */
+    /** The key's family: its leading path segments with any identity folded out - {@code blobs/<hash>},
+     *  {@code publish/<format>/...}, {@code gc/<pass>/refs/...} - the grain the store is laid out in and so the grain a
+     *  cost is argued in. A count by operation alone cannot say whether a collection's reads are the collector's or the
+     *  walk's. */
     static String family(String key) {
         if (key == null || key.isBlank()) {
             return "-";
@@ -273,31 +250,26 @@ public final class MeteringArtifactStore implements ArtifactStore {
             return key;
         }
         int second = key.indexOf('/', first + 1);
-        // Three segments rather than two: two collapse a walk's manifest and its segment state into one family,
-        // and those are different costs with different fixes. The third is folded below when it is an identity,
-        // so the map stays the handful of spaces the layout has.
+        // Three segments, since two would merge a walk's manifest and its segment state, which are different costs.
         int third = second < 0 ? -1 : key.indexOf('/', second + 1);
         String family = third < 0 ? (second < 0 ? key : key) : key.substring(0, third);
-        // A hash, a pass number or a uuid is an identity rather than a family: fold them, or the map would grow
-        // with the store instead of staying the handful of spaces the layout has.
+        // A hash, a pass number or a uuid is an identity, folded so the map stays the layout's handful of spaces.
         return family.replaceAll("[0-9a-f]{32,}", "<id>").replaceAll("/[0-9]+", "/<n>");
     }
 
-    /** Every operation this node has issued to its store, by name, since it started - the count the observability
-     *  report carries as {@code jenrepo.store.ops.<op>}, so a suite that drives the product as booted can hold a
-     *  download, a publish or a walked object to a standard of reads and writes, and a soak can show the operations
-     *  per request staying flat as the store fills. The Micrometer timer above is per backend and outcome for a
-     *  dashboard; this is the plain count a harness reads over HTTP. Process-wide because the figure is the node's
-     *  and a process is one node: it carries no deployment's configuration, only what was counted, and the suites
-     *  that compare two nodes' figures run each node as a process of its own. */
+    /** Every operation this node has issued to its store, by name - the count the observability report carries as
+     *  {@code jenrepo.store.ops.<op>}, so a suite driving the booted product can hold a download, a publish or a walked
+     *  object to a standard of reads and writes, and a soak can show operations per request staying flat. The
+     *  Micrometer timer is per backend and outcome for a dashboard; this is the plain count a harness reads over HTTP.
+     *  Process-wide, since a process is one node. */
     private static final Map<String, LongAdder> COUNTS = new ConcurrentHashMap<>();
 
-    /** The same operations by key family, kept only by a store built to count them - one map lookup and a string
-     *  concatenation per store call is not something the read path should pay to answer a question nobody asked.
-     *  Process-wide for the reason {@link #COUNTS} is. */
+    /** The same operations by key family, kept only by a store built to count them, since a map lookup and a
+     *  concatenation per call is not something the read path should pay unasked. Process-wide, as {@link #COUNTS}
+     *  is. */
     private static final Map<String, LongAdder> FAMILIES = new ConcurrentHashMap<>();
 
-    /** The operations this node issued so far, by operation and key family; empty unless switched on. */
+    /** The operations this node issued, by operation and key family; empty unless switched on. */
     public static Map<String, Long> byFamily() {
         Map<String, Long> counts = new TreeMap<>();
         FAMILIES.forEach((name, count) -> counts.put(name, count.sum()));
@@ -311,7 +283,7 @@ public final class MeteringArtifactStore implements ArtifactStore {
         return counts;
     }
 
-    /** Whether {@code op} writes: the operation classes a bill separates, twelve to one on every object store. */
+    /** Whether {@code op} writes - the two classes a bill separates, twelve to one on every object store. */
     public static boolean writes(String op) {
         return switch (op) {
             case "write", "writeBlob", "writeVersioned", "delete", "touch" -> true;
