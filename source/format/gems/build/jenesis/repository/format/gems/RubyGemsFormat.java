@@ -315,55 +315,6 @@ public final class RubyGemsFormat implements RepositoryFormat, ProxyLeg, BlobLay
      */
     private static final Publication.Republish REPUBLISH = Publication.Republish.overwrite();
 
-    /**
-     * The {@code gem push} endpoint, run through the one shared hosted-publish choreography
-     * ({@code Publication.commit}) rather than hand-assembled here. A {@code .gem} is an immutable artifact of
-     * unbounded size, so it is handed to the operation as the accepted body and streams straight into the
-     * content-addressed store (hash-on-write, never buffered), taking the SHA-256 the store computes on the way in as
-     * the compact-index checksum; the layout then reopens only the front of the <em>stored</em> gem to read the
-     * gemspec that names it (the {@code metadata.gz} that identifies the gem is the first tar entry, so the parse
-     * never pulls the artifact back whole).
-     *
-     * <p><b>The commit point is the {@code rubygemfiles/<name>-<version>.gem} pointer link</b> - before it nothing
-     * serves, {@code /info/<name>} is a structural miss and the compact index does not name the gem; after the last
-     * declared step the gem downloads, {@code /info} lists it and {@code /versions} carries it.
-     *
-     * <p>The order matters: linking the {@code .gem} pointer <em>first</em> and only then writing the compact-index
-     * line, the quick spec and the rolled-forward {@code /versions} document would let a crash in between leave a
-     * downloadable gem whose {@code gem install} could not find its spec. So the one parse result that is not itself
-     * a serving surface, the quick spec, lands before
-     * anything serves, and the three writes that <em>are</em> visibility are declared to the operation in order:
-     * <ol>
-     *   <li>the {@code .gem} pointer - the download, and the commit point;</li>
-     *   <li>the compact-index line under {@code rubygems/<name>/versions/<version>} - what makes the version
-     *       <em>enumerable</em> ({@code /info}, {@code blobKeys}, the screened version scan), declared after the bytes
-     *       it names rather than before them;</li>
-     *   <li>the stored {@code /info/<name>} document and, derived from it, the gem's line in the stored
-     *       repository-wide {@code /versions} document ({@link RubyGemsListings}) - the served listings, written
-     *       incrementally from the line above once it has landed, so a push costs one rewrite of each of the two
-     *       documents and never a scan of the other gems.</li>
-     * </ol>
-     * Declaring all three to the operation - rather than running them after a pointer the format wrote itself - is
-     * what makes a failure in any of them fail the push loudly instead of answering {@code 200} over a half-built
-     * index.
-     *
-     * <p>The quick spec is written <em>inside</em> the layout, before any of that: it is a precomputed rendering of
-     * the gemspec (the {@code Gem::Specification} Marshal that plain {@code gem install} fetches), keyed by the exact
-     * coordinate and reachable only by a client that has already resolved that coordinate through {@code /info} or
-     * {@code /versions} - neither of which names the version until step 2. Writing it first is therefore the strong
-     * ordering: at the instant a version becomes listable, its quick spec is already there, so {@code gem install}
-     * can never see a listed version whose spec fetch 404s. It goes through {@link Blobs#write} rather than the
-     * operation's sidecar seam because a blobs-namespace format stores its derived documents in the same
-     * pointer -&gt; blob representation as its artifacts (the serve path reads it back with the ordinary blob read),
-     * and that seam writes a raw store object; the ordering guarantee is the same, since this runs inside the layout,
-     * strictly before any declared visibility step.
-     *
-     * <p>The chain and the observer list are passed in <b>explicitly empty</b>: this format never screens (screening
-     * is the ingress edges' monopoly - the edge already ran the discovered {@code PublishInterceptor} chain over this
-     * body) and never notifies (the edge fires the one after-commit notification once its own commit returns). So the
-     * operation is used here for what it is - the pointer-last layout choreography - and adds neither a second gate
-     * nor a second publish event.
-     */
     /** The attestations a push carried beside its gem, read only once the gem part has been consumed and stored -
      *  a multipart client sends its parts in an order of its own, and the gem streams into the store unbuffered. */
     @FunctionalInterface
@@ -371,12 +322,6 @@ public final class RubyGemsFormat implements RepositoryFormat, ProxyLeg, BlobLay
         byte[] read() throws IOException;
     }
 
-    /**
-     * A push is the raw {@code .gem} as the request body, or - {@code gem push --attestations}, rubygems 3.6 and
-     * later - a multipart form with the gem as its file part and an {@code attestations} field holding a JSON array
-     * of Sigstore bundles, in whichever order the client sends them. The bundles are kept beside the gem before the
-     * version is discoverable, exactly as the npm leg keeps a publish's attestations.
-     */
     /** The most a yank's form body may carry: a gem name, a version and a platform, with room to spare. */
     private static final int YANK_FORM = 4096;
 
@@ -435,6 +380,12 @@ public final class RubyGemsFormat implements RepositoryFormat, ProxyLeg, BlobLay
         return fields;
     }
 
+    /**
+     * A push is the raw {@code .gem} as the request body, or - {@code gem push --attestations}, rubygems 3.6 and
+     * later - a multipart form with the gem as its file part and an {@code attestations} field holding a JSON array
+     * of Sigstore bundles, in whichever order the client sends them. The bundles are kept beside the gem before the
+     * version is discoverable, exactly as the npm leg keeps a publish's attestations.
+     */
     private void push(FormatExchange exchange, Blobs blobs, ArtifactStore store) throws IOException {
         Optional<String> boundary = MultipartBody.boundary(exchange.requestHeader("Content-Type"));
         if (boundary.isEmpty()) {
@@ -467,6 +418,55 @@ public final class RubyGemsFormat implements RepositoryFormat, ProxyLeg, BlobLay
         }
     }
 
+    /**
+     * The {@code gem push} endpoint, run through the one shared hosted-publish choreography
+     * ({@code Publication.commit}) rather than hand-assembled here. A {@code .gem} is an immutable artifact of
+     * unbounded size, so it is handed to the operation as the accepted body and streams straight into the
+     * content-addressed store (hash-on-write, never buffered), taking the SHA-256 the store computes on the way in as
+     * the compact-index checksum; the layout then reopens only the front of the <em>stored</em> gem to read the
+     * gemspec that names it (the {@code metadata.gz} that identifies the gem is the first tar entry, so the parse
+     * never pulls the artifact back whole).
+     *
+     * <p><b>The commit point is the {@code rubygemfiles/<name>-<version>.gem} pointer link</b> - before it nothing
+     * serves, {@code /info/<name>} is a structural miss and the compact index does not name the gem; after the last
+     * declared step the gem downloads, {@code /info} lists it and {@code /versions} carries it.
+     *
+     * <p>The order matters: linking the {@code .gem} pointer <em>first</em> and only then writing the compact-index
+     * line, the quick spec and the rolled-forward {@code /versions} document would let a crash in between leave a
+     * downloadable gem whose {@code gem install} could not find its spec. So the one parse result that is not itself
+     * a serving surface, the quick spec, lands before
+     * anything serves, and the three writes that <em>are</em> visibility are declared to the operation in order:
+     * <ol>
+     *   <li>the {@code .gem} pointer - the download, and the commit point;</li>
+     *   <li>the compact-index line under {@code rubygems/<name>/versions/<version>} - what makes the version
+     *       <em>enumerable</em> ({@code /info}, {@code blobKeys}, the screened version scan), declared after the bytes
+     *       it names rather than before them;</li>
+     *   <li>the stored {@code /info/<name>} document and, derived from it, the gem's line in the stored
+     *       repository-wide {@code /versions} document ({@link RubyGemsListings}) - the served listings, written
+     *       incrementally from the line above once it has landed, so a push costs one rewrite of each of the two
+     *       documents and never a scan of the other gems.</li>
+     * </ol>
+     * Declaring all three to the operation - rather than running them after a pointer the format wrote itself - is
+     * what makes a failure in any of them fail the push loudly instead of answering {@code 200} over a half-built
+     * index.
+     *
+     * <p>The quick spec is written <em>inside</em> the layout, before any of that: it is a precomputed rendering of
+     * the gemspec (the {@code Gem::Specification} Marshal that plain {@code gem install} fetches), keyed by the exact
+     * coordinate and reachable only by a client that has already resolved that coordinate through {@code /info} or
+     * {@code /versions} - neither of which names the version until step 2. Writing it first is therefore the strong
+     * ordering: at the instant a version becomes listable, its quick spec is already there, so {@code gem install}
+     * can never see a listed version whose spec fetch 404s. It goes through {@link Blobs#write} rather than the
+     * operation's sidecar seam because a blobs-namespace format stores its derived documents in the same
+     * pointer -&gt; blob representation as its artifacts (the serve path reads it back with the ordinary blob read),
+     * and that seam writes a raw store object; the ordering guarantee is the same, since this runs inside the layout,
+     * strictly before any declared visibility step.
+     *
+     * <p>The chain and the observer list are passed in <b>explicitly empty</b>: this format never screens (screening
+     * is the ingress edges' monopoly - the edge already ran the discovered {@code PublishInterceptor} chain over this
+     * body) and never notifies (the edge fires the one after-commit notification once its own commit returns). So the
+     * operation is used here for what it is - the pointer-last layout choreography - and adds neither a second gate
+     * nor a second publish event.
+     */
     private void push(InputStream body, Attestations attestations, Blobs blobs, FormatExchange exchange,
                       ArtifactStore store) throws IOException {
         try {

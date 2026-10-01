@@ -339,10 +339,6 @@ public final class Blobs {
         return Checksums.isSha256Hex(hex) ? Optional.of(hex) : Optional.empty();
     }
 
-    /** The stored byte length of the blob the pointer at {@code key} resolves to, or {@code -1} if nothing is
-     *  published there, the blob is gone, or the blob is {@linkplain build.jenesis.repository.store.Withheld withheld} - so a serve sets its
-     *  {@code Content-Length} and streams the blob rather than buffering it whole to learn its length, and a HEAD
-     *  answers exactly what a GET would for a held version (absent). */
     /** A servable artifact located for one download: the pointer resolved, the withheld marker probed and the blob
      *  sized - once - so the stream that follows opens the blob and reads nothing else. */
     public record Located(String hash, long size) {

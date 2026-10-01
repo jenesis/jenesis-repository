@@ -218,7 +218,7 @@ public class WebhookTest {
     }
 
     /**
-     *, the write-back leg: the drain commits its progress with the compare-and-set token it read the entry at,
+     * The write-back leg: the drain commits its progress with the compare-and-set token it read the entry at,
      * so a rival that replaced the entry mid-pass - a concurrent unpark from {@code POST /api/webhook/retry}, which
      * runs off the drain's lease, or a producer's re-emit - is never overwritten by this pass's stale bookkeeping.
      *
@@ -253,7 +253,7 @@ public class WebhookTest {
     }
 
     /**
-     *, the drop leg - the same discipline where losing it deletes rather than defers. On a full delivery the
+     * The drop leg - the same discipline where losing it deletes rather than defers. On a full delivery the
      * drain drops the entry; if a rival re-queued it mid-pass, an untokened delete removes an event that has been
      * delivered to nobody. Compare-and-set leaves it for the next drain instead.
      */
