@@ -10,10 +10,9 @@ import build.jenesis.repository.store.ListingObserver;
 import build.jenesis.repository.store.StoredListing;
 
 /**
- * Keeps the conda {@linkplain CondaListings stored repodata} in step with the transitions that happen off the publish
- * path - a hold on a published package and its release, a yank and its reversal, a removal - by re-deciding the one
- * record's membership. A transition whose subject names neither a package path nor a conda coordinate is mapped to
- * no record, so the repository's repodata documents are regenerated in place.
+ * Keeps the conda {@linkplain CondaListings stored repodata} in step with transitions off the publish path - a hold and
+ * its release, a yank and its reversal, a removal - by re-deciding the one record. A subject naming neither a package
+ * path nor a conda coordinate regenerates the repository's repodata in place.
  */
 public final class CondaListingObserver implements ListingObserver {
 

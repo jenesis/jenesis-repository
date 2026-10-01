@@ -16,12 +16,10 @@ import tools.jackson.databind.node.ObjectNode;
 import build.jenesis.repository.store.OwnerOnly;
 
 /**
- * A conda subdir's {@code repodata.json} as a stored listing, with its {@code .bz2} twin derived on every write. The
- * entries are the per-package records the publish stored, keyed by package file name, and an entry exists exactly
- * when the package is servable: its archive pointer not withheld, its version not yanked - the screen the on-read
- * generation applied per record, applied here to the one record a write touches. The document's shape is conda's:
- * {@code info}, then {@code packages} ({@code .tar.bz2}) and {@code packages.conda} ({@code .conda}) by file name, then
- * {@code repodata_version}.
+ * A conda subdir's {@code repodata.json} as a stored listing, its {@code .bz2} twin derived on every write. The entries
+ * are the stored records keyed by file name, present exactly when the package is servable: archive pointer not
+ * withheld, version not yanked. The shape is conda's: {@code info}, {@code packages} ({@code .tar.bz2}),
+ * {@code packages.conda} ({@code .conda}), {@code repodata_version}.
  */
 final class CondaListings {
 
@@ -72,10 +70,8 @@ final class CondaListings {
                 return CondaFormat.MAPPER.writeValueAsBytes(root);
             }
 
-            /** The members of both sections, one at a time through a streaming parser: the listing mechanism
-             *  reads a document through this on every update, and without it falls back to reading the whole
-             *  document into heap and splitting it as a tree - O(N) heap per publish, which the conda-repodata
-             *  canary showed as an OutOfMemoryError at three hundred thousand packages in a 512 MiB container. */
+            /** The members of both sections, one at a time through a streaming parser, since the document is read on
+             *  every update. */
             @Override
             public Reader read(InputStream in, long ignored) throws IOException {
                 JsonParser parser = CondaFormat.MAPPER.createParser(in);
@@ -122,19 +118,10 @@ final class CondaListings {
                 };
             }
 
-            /**
-             * The same document, written as the records arrive - with the {@code .conda} half spooled.
-             *
-             * <p>This document has two sections split by file extension, so the entries do not arrive in document
-             * order: a {@code Sink} delivers them in one ascending run and each belongs to one section or the
-             * other. The first section is written straight out and the second to a temporary file, which is
-             * appended behind it at close, so heap stays at one record however many packages a subdir holds.
-             *
-             * <p>Deliberately not {@link StoredListing#spooling}, which defers a document's <em>opening</em> bytes
-             * until a count is known. What is deferred here is a whole section, and one spool is being written
-             * while the other section streams past it - a different arrangement of the same idea rather than the
-             * same one. If a third format wants a deferred section, that is the point to make it shared.
-             */
+            /** The same document, written as the records arrive, with the {@code .conda} section spooled: a
+             *  {@code Sink} delivers one ascending run spanning both sections, so the first is written out and the
+             *  second to a temporary file appended at close, holding one record at a time. Not
+             *  {@link StoredListing#spooling}, which defers a document's opening bytes rather than a whole section. */
             @Override
             public Appender append(OutputStream out) {
                 return new Appender() {
@@ -204,21 +191,18 @@ final class CondaListings {
         };
     }
 
-    /** One section of the repodata, written as nodes rather than as pre-rendered text. */
+    /** One section of the repodata, written as nodes. */
     private static void members(ObjectMapper mapper, ObjectNode section, Map<String, byte[]> records) {
         records.forEach((file, record) -> section.set(file, mapper.readTree(record)));
     }
 
     StoredListing.Spec spec(String repo, String subdir) {
-        // The .bz2 twin is derived off the publish's thread: bzip2 of a large repodata costs more than the write it
-        // follows (a second and more past a few thousand packages), and the twin is the legacy form a modern client
-        // does not ask for first. It lags its source by the derivation's own time and never less than a write.
+        // The .bz2 twin is derived off the publish's thread: compressing a large repodata costs more than the write,
+        // and the twin is the legacy form. It lags its source by the derivation's time.
         return StoredListing.Spec.of(repodata(repo, subdir), codec(subdir), sink -> generate(repo, subdir, sink))
                 .deriving(document -> {
-                    // Clause 1 of StoredListing.Derived: the body is readable only for the duration of this call,
-                    // and the compression deliberately is not - it runs off the write's thread. So the bytes are
-                    // copied to a file this derivation owns, before it queues. Reading document.body() from the
-                    // deferred work would be reading the write's rendered file after the write deleted it.
+                    // StoredListing.Derived clause 1: the body is readable only during this call and the compression
+                    // runs later, so it is copied to a file this derivation owns first.
                     Path source = OwnerOnly.createTempFile("jenrepo-repodata", ".json");
                     try (InputStream body = document.open()) {
                         Files.copy(body, source, StandardCopyOption.REPLACE_EXISTING);
@@ -228,10 +212,8 @@ final class CondaListings {
                     }
                     String twin = repodata(repo, subdir) + ".bz2";
                     long seq = document.header().seq();
-                    // Coalesced, not a bare Runnable: later() replaces a derivation still waiting for the same
-                    // twin, and a replaced one never runs - so without superseded() the copy above stays on disk
-                    // for good, once per coalesced write. It is the price of copying at all, and copying is what
-                    // clause 1 of Derived requires of work that leaves the call it was queued in.
+                    // Coalesced: later() replaces a derivation still waiting for the same twin, and superseded()
+                    // deletes the copy a replaced one leaves.
                     StoredListing.later(twin, new StoredListing.Coalesced() {
 
                         @Override
@@ -268,14 +250,8 @@ final class CondaListings {
                 });
     }
 
-    /**
-     * Emit an entry per package, in the order the scan yields them.
-     *
-     * <p>The index names every package it covers, so collecting them into a sorted map held that whole set. The
-     * scan's order is the sink's order - the store's lexicographic child order, which is where the sorted map's
-     * ordering came from and is what now supplies it. The key here is the child name itself, which is what makes
-     * that substitution sound: a key composed across nested scans would not be in scan order.
-     */
+    /** Emit an entry per package in the scan's order, the store's lexicographic child order, which the sink needs since
+     *  the key is the child name itself. */
     private void generate(String repo, String subdir, StoredListing.Generator.Sink sink) throws IOException {
         String prefix = CondaFormat.indexPrefix(repo, subdir);
         ENTRIES.scan(store, prefix, file -> {
@@ -295,7 +271,7 @@ final class CondaListings {
         }
     }
 
-    /** Re-decide one package's membership from the store's current state - after a hold, a release or a mark. */
+    /** Re-decide one package's membership from the store's current state. */
     void refresh(String repo, String subdir, String file) throws IOException {
         ByteArrayOutputStream buffer = new ByteArrayOutputStream();
         if (!blobs.read(CondaFormat.indexKey(repo, subdir, file), buffer)) {
@@ -315,14 +291,14 @@ final class CondaListings {
         if (name == null || version == null) {
             return true;
         }
-        // A YANKED version leaves the index: conda retires a build by dropping it from repodata while its bytes stay
-        // fetchable at their own URL. Only YANKED - conda has no deprecation.
+        // A YANKED version leaves the index, its bytes still fetchable, as conda retires a build. Conda has no
+        // deprecation.
         return Lifecycle.read(store, name, version)
                 .filter(flag -> flag.state() == Lifecycle.State.YANKED)
                 .isEmpty();
     }
 
-    /** Regenerate the listing at this key if it is a conda repodata (its {@code .bz2} twin regenerates with it). */
+    /** Regenerate the listing at this key if it is a conda repodata; its {@code .bz2} twin regenerates with it. */
     boolean rebuild(String listing) throws IOException {
         String[] segments = listing.split("/");
         if (!segments[0].equals("conda") || segments.length != 4) {
@@ -335,11 +311,8 @@ final class CondaListings {
         return segments[3].equals("repodata.json.bz2");
     }
 
-    /** The stride the repository-wide index is enumerated in. It <b>drains</b>: the index names every package by
-     *  definition, so neither the names nor the round-trips that fetch them may cap it, and what is bounded is how
-     *  many names are in hand at once. Capping either one silently omits packages - or, once the entry cap alone was
-     *  lifted, stopped omitting them and started throwing instead, at exactly {@code steps x page} names. That is
-     *  the ceiling the OCI tag canary hit at a million: a generator that raises {@code TraversalException} does not
-     *  answer short, it never materialises the document at all. */
+    /** The stride the repository-wide index is enumerated in. It drains: the index names every package, so neither
+     *  names nor round-trips are capped - a cap would omit packages or throw and never materialise the document - and
+     *  only the names in hand are bounded. */
     private static final BoundedChildren ENTRIES = BoundedChildren.draining();
 }

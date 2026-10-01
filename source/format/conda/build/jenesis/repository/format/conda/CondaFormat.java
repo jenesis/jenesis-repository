@@ -34,52 +34,33 @@ import tools.jackson.core.JsonToken;
 import build.jenesis.repository.store.OwnerOnly;
 
 /**
- * The Conda channel format, so {@code conda install} and {@code conda create} resolve packages over the shared store.
- * It owns {@code /conda/...}, where the first path segment is a channel (repository) and the second is a platform
- * {@code subdir} ({@code linux-64}, {@code noarch}, {@code osx-arm64}, ...). A package is pushed with
- * {@code PUT /conda/<repo>/<subdir>/<name>-<version>-<build>.conda} (the modern zip container) or the legacy
- * {@code .tar.bz2}, the raw archive as the body, and downloaded from the same path. The per-subdir index a client
- * reads ({@code GET /conda/<repo>/<subdir>/repodata.json}, and its {@code .bz2} variant) is a stored listing the
- * publish maintains.
+ * The Conda channel format: {@code conda install} and {@code conda create} over the shared store, under
+ * {@code /conda/...}, the first segment a channel and the second a platform {@code subdir}. A package is pushed with
+ * {@code PUT /conda/<repo>/<subdir>/<name>-<version>-<build>.conda} or the legacy {@code .tar.bz2}, and downloaded from
+ * the same path; the per-subdir {@code repodata.json} (and {@code .bz2}) is a stored listing the publish maintains.
  *
- * <p><b>Streaming publish.</b> The upload streams straight through {@link ArtifactStore#writeBlob} into the
- * content-addressed store, hashed on the way and never buffered; the SHA-256 the store returns is both the package
- * pointer's blob hash and the {@code sha256} the index records. Conda keeps a package's metadata (name, version,
- * build, {@code depends}, license, ...) in an {@code info/index.json} <i>inside</i> the archive, so - exactly as the
- * store-then-gate publish path reads a just-stored artifact back rather than buffering it from the network - the
- * stored blob is reopened ({@link ArtifactStore#open}) and only that small {@code info/index.json} is materialised:
- * a {@code .tar.bz2} is a bzip2 tar and a {@code .conda} is a zip whose {@code info-*.tar.zst} member is a
- * Zstandard tar, both walked with Commons Compress (bzip2 pure-Java, {@code .zst} via zstd) rather than hand-parsed.
- * The augmented record is stored per package (the Debian/RPM/Cargo per-package-stanza pattern), so the publish joins
- * the record into the stored {@code repodata.json} and a read streams it rather than reopening every archive
- * (read-first).
+ * <p><b>Streaming publish.</b> The archive streams through {@link ArtifactStore#writeBlob} into the content-addressed
+ * store, and the SHA-256 returned is both the pointer's hash and the index's {@code sha256}. The metadata lives in an
+ * {@code info/index.json} inside the archive, so the stored blob is reopened ({@link ArtifactStore#open}) and only that
+ * file read: a {@code .tar.bz2} is a bzip2 tar, a {@code .conda} a zip whose {@code info-*.tar.zst} member is a
+ * Zstandard tar. The record is stored per package and joined into the stored {@code repodata.json}.
  *
- * <p>The record carries {@code sha256} and {@code size} but not {@code md5}: modern conda verifies a download against
- * {@code sha256} when present (for both {@code .conda} and {@code .tar.bz2}), so the content-addressed hash the store
- * already computed is the verification field, and a second full read of the blob to also compute an md5 is avoided.
+ * <p>The record carries {@code sha256} and {@code size} but no {@code md5}: conda verifies against {@code sha256} when
+ * present, so a second read of the blob for an md5 is avoided.
  *
- * <p><b>Pull-through proxy.</b> The same layout is also a {@link ProxyFormat}: a local miss on a proxy channel is
- * served from an upstream conda channel, mapping {@code /conda/<repo>/<subdir>/<file>} to
- * {@code <upstream>/<subdir>/<file>} (the local channel name is a deployment alias, so it is stripped and only the
- * subdir and file map through). An immutable package ({@code .conda} / {@code .tar.bz2}) streams from upstream
- * straight into the CAS and is cached (a later read is a local hit that never touches the upstream), while the mutable
- * index a client reads ({@code repodata.json}, its {@code .bz2}/{@code .zst}, {@code current_repodata.json}, ...) is
- * streamed through fresh - a package record's location is its bare filename relative to the subdir root, which maps
- * onto this repository's {@code /conda/<repo>/<subdir>/} prefix, so the index needs no rewrite. Conda has no single
- * canonical upstream (conda-forge, bioconda, anaconda main, ...), so a deployment names one per repository
- * ({@link #defaultUpstream()} stays empty), and an empty subdir's local {@code repodata.json} is a {@code 404} so the
- * pull-through reaches the upstream index rather than serving an empty local one.
+ * <p><b>Pull-through proxy.</b> A local miss is served from an upstream channel, {@code /conda/<repo>/<subdir>/<file>}
+ * mapping to {@code <upstream>/<subdir>/<file>}. A package is immutable, streamed into the store and cached; the index
+ * ({@code repodata.json}, its compressed forms, {@code current_repodata.json}) is streamed fresh and needs no rewrite,
+ * locations being bare filenames. Conda has no canonical upstream, so {@link #defaultUpstream()} is empty, and an empty
+ * subdir's local {@code repodata.json} is a {@code 404} so pull-through reaches the upstream's.
  *
- * <p>The layout declares its ecosystem ({@code "conda"}) so a compliance inspector, the console and download
- * tracking key on it; {@link #describe} resolves a package download path to its {@code name}/{@code version}
- * coordinate from the filename ({@code <name>-<version>-<build>.<ext>}, split from the right, since a conda version
- * carries no {@code -}). Package pointers live in the shared {@code Blobs} namespace like the other language formats,
- * so the {@code publish/}-namespace eviction ({@link #paths}) stays empty; coordinate-scoped enforcement runs through
- * the {@code BlobLayout} seam ({@link #blobKeys}/{@link #servedPaths}) instead.
+ * <p>The ecosystem is {@code "conda"}, and {@link #describe} maps a package path to {@code name}/{@code version} from
+ * the filename, split from the right since a conda version has no {@code -}. Pointers live in the shared {@code Blobs}
+ * namespace, so {@link #paths} is empty and a coordinate is reached through {@link #blobKeys} and {@link #servedPaths}.
  */
 public final class CondaFormat implements RepositoryFormat, ArtifactLayout, ProxyLeg, BlobLayout, RepositoryImporter, RepositoryExporter {
 
-    /** The package-ecosystem name this format's artifacts report (distinct from {@link #name()}, the routing id). */
+    /** The ecosystem name this format's artifacts report, distinct from {@link #name()}, the routing id. */
     public static final String ECOSYSTEM = "conda";
 
     static final ObjectMapper MAPPER = new ObjectMapper();
@@ -90,19 +71,10 @@ public final class CondaFormat implements RepositoryFormat, ArtifactLayout, Prox
     private static final String REPODATA = "repodata.json";
     private static final String REPODATA_BZ2 = "repodata.json.bz2";
 
-    // A hostile package cannot force a large allocation: the info/index.json read is bounded by the product's one
-    // archive-inflation ceiling, ArchiveInflation.largestEntry(), settable at jenrepo.archive.largest-entry - not by a
-    // private constant of this format's (RepositoryFormat contract clause 15). How far the WALK may run to
-    // reach that member is the sibling bound one dimension over, ArchiveWalk.largestWalk(), settable at
-    // jenrepo.archive.largest-walk - also shared, and also not this format's to restate. What IS this format's is the
-    // ratio below, which the legacy container needs and states at the call site that applies it.
-
-    /** The legacy {@code .tar.bz2} is a single archive whose {@code info/index.json} may sit anywhere - even after a
-     *  large payload - so it cannot use the flat {@link ArchiveWalk#largestWalk()} tier without refusing valid large
-     *  packages. Instead its info scan is bounded to this multiple of the stored (compressed) blob size: a genuine package
-     *  inflates at a normal ratio well under this, while a bzip2 bomb (tiny compressed, huge inflated) is stopped at
-     *  {@code compressed * ratio}, capping the decompression a single publish can be forced to run to a bounded
-     *  multiple of the upload the caller actually transferred. */
+    /** How far the legacy {@code .tar.bz2}'s info scan may inflate, as a multiple of the stored compressed size: its
+     *  {@code info/index.json} may follow a large payload, so the flat walk tier would refuse valid packages, while a
+     *  bzip2 bomb is stopped at {@code compressed * ratio}. The ratio is conda's; the floor and the {@code index.json}
+     *  read are the shared archive bounds (RepositoryFormat clause 15). */
     private static final long MAX_INFO_INFLATION_RATIO = 100L;
 
     @Override
@@ -129,20 +101,14 @@ public final class CondaFormat implements RepositoryFormat, ArtifactLayout, Prox
     @Override
     public List<String> blobKeys(String coordinate, String version, ArtifactStore store) throws IOException {
         if (!BlobLayout.addressable(coordinate, version)) {
-            // A traversal-shaped coordinate or version maps nowhere: these keys are what an eviction DELETES, and
-            // ArtifactStore.delete is not screened. The shared per-part screen, so a legitimately
-            // multi-segment coordinate still resolves.
+            // A traversal-shaped coordinate or version maps nowhere, since an eviction deletes these keys; judged part
+            // by part.
             return List.of();
         }
-        // A conda package is keyed on its filename (<name>-<version>-<build>.<ext>) under its <repo>/<subdir>; the
-        // build/subdir are not derivable from the <name,version> coordinate, so discover them by walking each channel's
-        // subdirs and keeping the package pointers whose coordinate(file) matches - this collects EVERY build of the
-        // version (the correct retroactive-hold scope). The BlobLayout.blobHashes default resolves the withhold set from
-        // these pointers (bare-hex bodies), so a retroactive KEV/license hold marks them and serving (serve + repodata
-        // listing all gate on the withheld marker) retracts; an eviction deletes these exact keys. An empty return
-        // would make a hold a silent no-op (no marker, no review handle) and a KEV-listed package would keep serving.
-        // The
-        // per-subdir pkgs listing is unbounded (attacker-publishable), so it is PAGED, never list()ed whole.
+        // A package is keyed on <name>-<version>-<build>.<ext> under <repo>/<subdir>; build and subdir are not
+        // derivable, so every channel's subdirs are walked for pointers whose filename matches, collecting every build
+        // of the version. Each pointer's body is the blob hash, from which the withhold set derives; a hold marks those
+        // hashes and eviction deletes these keys. The pkgs listing is publisher-grown, so it is paged.
         List<Coordinate> kept = keptPackages(coordinate, version, store);
         List<String> keys = new ArrayList<>(kept.size());
         for (Coordinate found : kept) {
@@ -151,11 +117,9 @@ public final class CondaFormat implements RepositoryFormat, ArtifactLayout, Prox
         return keys;
     }
 
-    /** The request paths this coordinate version's package(s) serve at ({@code /conda/<repo>/<subdir>/<file>}), one per
-     *  build - the inverse of {@link #describe}, so a retroactive hold links a {@code /quarantine} review handle per
-     *  served path exactly as {@code ArtifactLayout.paths} does for a publish/ layout. The per-package repodata record
-     *  ({@code indexKey}) carries no download path and is regenerated (already screened on the package pointer), so it is
-     *  not a served path. Reads only the tiny pointers, never a blob body. */
+    /** The request paths this version's packages serve at ({@code /conda/<repo>/<subdir>/<file>}), one per build, where
+     *  a retroactive hold links its {@code /quarantine} handles. The repodata record is not a download. Only pointers
+     *  are read. */
     @Override
     public List<String> servedPaths(String coordinate, String version, ArtifactStore store) throws IOException {
         if (!BlobLayout.addressable(coordinate, version)) {
@@ -168,23 +132,21 @@ public final class CondaFormat implements RepositoryFormat, ArtifactLayout, Prox
         return paths;
     }
 
-    /** One stored package file located by the retroactive-hold discovery walk: its channel, subdir and filename. */
+    /** One stored package found by the hold discovery walk: its channel, subdir and filename. */
     private record Coordinate(String repo, String subdir, String file) {
     }
 
-    /** Every stored package file whose {@code coordinate(file)} equals {@code (coordinate, version)}, across all
-     *  channels and subdirs - so a hold covers every build of the version. Channels and subdirs are operator/platform
-     *  bounded (a bare list is right), but the per-subdir {@code pkgs} listing is attacker-publishable, so it is
-     *  enumerated through the shared bounded {@link #PKGS} scan - never {@code list()}ed whole (a whole
-     *  listing there is a denial-of-service lever), and never a hand-rolled page loop either. */
+    /** Every stored package whose filename names {@code (coordinate, version)}, across channels and subdirs, so a hold
+     *  covers every build. Channels and subdirs are bounded by operator and platform, so a plain list suits them; each
+     *  subdir's {@code pkgs} listing is publisher-grown and scanned through the bounded {@link #PKGS}. */
     private static List<Coordinate> keptPackages(String coordinate, String version, ArtifactStore store)
             throws IOException {
         List<Coordinate> kept = new ArrayList<>();
         for (String repo : store.list("conda")) {
             for (String subdir : store.list("conda/" + repo)) {
                 if (!store.isEmpty("conda/" + repo + "/" + subdir + "/by")) {
-                    // The reverse index a publish writes answers without a scan; a subdir from before it is scanned
-                    // as before, until the rebuild pass has backfilled it.
+                    // The reverse index a publish writes answers without a scan; a subdir without one is scanned until
+                    // the rebuild pass has written it.
                     for (String file : store.list("conda/" + repo + "/" + subdir + "/by/" + coordinate + "/"
                             + version)) {
                         if (!isPackage(file)) {
@@ -212,15 +174,12 @@ public final class CondaFormat implements RepositoryFormat, ArtifactLayout, Prox
         return kept;
     }
 
-    /** The bounded {@code pkgs} page size the legacy retroactive-hold discovery walk streams through: the per-subdir
-     *  package listing is walked a page at a time, never materialised whole. */
+    /** The page size the hold discovery walk lists a subdir's packages in. */
     private static final int PKGS_PAGE = 1000;
 
-    /** One subdir's package container: a flat enumeration through the shared bounded primitive. This feeds
-     *  {@code blobKeys}/{@code servedPaths}, so a listing that answered short would be a KEV-listed build that keeps
-     *  serving after its hold - the entry cap is therefore OFF, and the binding bound is the primitive's step budget
-     *  (1000 page round-trips, ~10^6 names), which raises a named
-     *  {@link build.jenesis.repository.walk.TraversalException} rather than dropping keys. */
+    /** One subdir's package container, a flat enumeration. It feeds {@code blobKeys} and {@code servedPaths}, where a
+     *  short listing would leave a held build serving, so the entry cap is off and the step budget (1000 pages) raises
+     *  a {@link build.jenesis.repository.walk.TraversalException} rather than dropping keys. */
     private static final BoundedChildren PKGS =
             BoundedChildren.bounded().entries(Integer.MAX_VALUE).page(PKGS_PAGE);
 
@@ -268,18 +227,13 @@ public final class CondaFormat implements RepositoryFormat, ArtifactLayout, Prox
         }
     }
 
-    /**
-     * Stream a package upload into the CAS while materialising only its {@code info/index.json}, then record the
-     * package pointer and its repodata record. The archive streams straight through {@link ArtifactStore#writeBlob},
-     * so an arbitrarily large package never lands in heap; the just-stored blob is reopened to read its metadata.
-     */
+    /** Stream a package upload into the store while reading only its {@code info/index.json}, then record the pointer
+     *  and its repodata record. */
     private void publish(String repo, String subdir, String file, FormatExchange exchange, ArtifactStore store)
             throws IOException {
         if (Keys.unsafe(repo) || Keys.unsafe(subdir) || Keys.unsafe(file)) {
-            // Validate the channel, subdir and filename BEFORE any store write, so a coordinate segment of ".." (or one
-            // carrying a path separator or control character) cannot splice the package pointer key out of this
-            // channel's namespace - the guard RpmFormat.publish documents, and which the package pointer's own
-            // Blobs.link safe-key check would otherwise only enforce after the blob was already stored.
+            // Validated before any store write, so a segment cannot splice the pointer key out of the channel's
+            // namespace.
             exchange.respond(400);
             return;
         }
@@ -297,10 +251,8 @@ public final class CondaFormat implements RepositoryFormat, ArtifactLayout, Prox
         }
         String[] pathCoordinate = coordinate(file);
         if (pathCoordinate != null && !pathCoordinate[0].equals(text(index, "name"))) {
-            // The embedded info/index.json declares a different package name than the filename this package deploys
-            // under: refuse rather than let it be screened under the filename name yet stored/served under the
-            // index.json name (a screen-label bypass), the way Composer/CocoaPods refuse a manifest that disagrees with
-            // the deploy path. The importer screens on the filename coordinate, so the two must agree.
+            // The embedded name must match the filename it deploys under, or a package screened under one name would
+            // serve under another.
             exchange.respond(400);
             return;
         }
@@ -311,14 +263,11 @@ public final class CondaFormat implements RepositoryFormat, ArtifactLayout, Prox
         }
         record.put("sha256", hash);
         record.put("size", size);
-        // The package pointer goes through Blobs rather than a bare writeVersioned: the link spares the blob from a
-        // collector that has condemned it, so content byte-identical to a condemned blob is not swept from under a
-        // publish that answered 201.
+        // Blobs.link spares a byte-identical blob a collector condemned, so it is not swept after a 201.
         Blobs blobs = new Blobs(store);
         try {
-            // A package file never changes under its name once uploaded - a conda lock file pins its sha256 - so the
-            // first bytes stay, decided at the pointer's compare-and-set, and a second upload is answered as
-            // anaconda.org answers it.
+            // A package file never changes under its name, since a lock file pins its sha256: the first bytes stay,
+            // decided at the pointer's compare-and-set, and a second upload is answered as anaconda.org does.
             blobs.linkRelease(packageKey(repo, subdir, file), hash, -1L);
         } catch (Publication.RepublishConflict taken) {
             exchange.respond(409, ("Conflict: the file " + subdir + "/" + file + " already exists")
@@ -328,11 +277,10 @@ public final class CondaFormat implements RepositoryFormat, ArtifactLayout, Prox
         byte[] indexed = MAPPER.writeValueAsBytes(record);
         blobs.write(indexKey(repo, subdir, file), indexed);
         if (pathCoordinate != null) {
-            // The reverse index a coordinate's package keys are found through without scanning every subdir.
+            // The reverse index from a coordinate to its package keys.
             blobs.note(reverseKey(repo, subdir, pathCoordinate[0], pathCoordinate[1], file), file);
         }
-        // The subdir's repodata is written here, on the publish, rather than generated on every read: the record
-        // joins the stored document (if the package is servable), which re-derives its .bz2 twin.
+        // The repodata is maintained on the publish: the record joins it if servable, re-deriving the .bz2 twin.
         new CondaListings(blobs).published(repo, subdir, file, indexed);
         exchange.respond(201);
     }
@@ -342,33 +290,24 @@ public final class CondaFormat implements RepositoryFormat, ArtifactLayout, Prox
         return "conda/" + repo + "/" + subdir + "/by/" + name + "/" + version + "/" + file;
     }
 
-    /** Read {@code info/index.json} from a just-stored package blob, decompressing only as far as that entry: a
-     *  {@code .conda} is a zip whose {@code info-*.tar.zst} member is a Zstandard tar, a {@code .tar.bz2} a bzip2 tar.
-     *  Only the small JSON is materialised; the (large) payload streams past or is skipped. Both the zip <em>walk</em>
-     *  and the info member's own decompressed stream run under the product's shared archive-walk bound, so skipping
-     *  past a hostile deflate-bombed member (or a package with no {@code info-*} member at all) cannot drive unbounded
-     *  inflation on the publish thread; the {@code info-*} member sits near the front of a well-formed {@code .conda},
-     *  so a legitimate package reaches it well within the bound. A walk the bound stopped yields no index, and the
-     *  caller treats the package as unindexable (a {@code 400} publish) - the safe outcome for a member that will not
-     *  yield its metadata cheaply. */
+    /** Read {@code info/index.json} from a stored package, decompressing only as far as it: a {@code .conda} is a zip
+     *  whose {@code info-*.tar.zst} member is a Zstandard tar, a {@code .tar.bz2} a bzip2 tar. The zip walk and the
+     *  info member's own stream run under the shared archive-walk bound, so a deflate-bombed member or a package
+     *  without an {@code info-*} member cannot drive unbounded inflation; a stopped walk yields no index, and the
+     *  publish answers {@code 400}. */
     private static ObjectNode readIndex(String file, InputStream blob, long compressed) throws IOException {
         if (file.endsWith(CONDA_EXT)) {
             return ArchiveWalk.walk(blob, CondaFormat::infoMember).orNull();
         }
-        // Legacy .tar.bz2: bound the info scan to a multiple of the stored compressed size rather than the flat tier,
-        // so a valid large package (whose info/ may follow a large payload) is never refused, while a bzip2 bomb (tiny
-        // compressed, huge inflated) is stopped at compressed*ratio instead of decompressing unbounded on this thread.
-        // Only the ratio is conda's; the floor is the shared bound's.
+        // The legacy container's scan is bounded to a multiple of its compressed size (MAX_INFO_INFLATION_RATIO).
         return ArchiveWalk.walk(new BZip2CompressorInputStream(blob),
                 ArchiveWalk.largestWalk(compressed, MAX_INFO_INFLATION_RATIO),
                 CondaFormat::indexFromTar).orNull();
     }
 
-    /** The {@code info/index.json} of a {@code .conda}'s {@code info-*} member, read from an already-bounded zip
-     *  stream, or {@code null} when the package carries no info member. The member's own decompressed stream gets its
-     *  own walk bound: the entry is deflate-compressed at the zip layer, so a small upload whose {@code info-*.tar}
-     *  inflates to many GB (a deflate bomb with no {@code info/index.json} to stop the walk early) would otherwise
-     *  drive unbounded inflation on the publish thread even though the compressed bytes it drew were bounded. */
+    /** The {@code info/index.json} of a {@code .conda}'s {@code info-*} member, or {@code null} when there is none. The
+     *  member's decompressed stream gets its own walk bound, since it is deflated at the zip layer and could inflate to
+     *  gigabytes from a small upload. */
     private static ObjectNode infoMember(InputStream archive) throws IOException {
         ZipInputStream zip = ArchiveWalk.zip(archive);
         for (ZipEntry entry = zip.getNextEntry(); entry != null; entry = zip.getNextEntry()) {
@@ -383,18 +322,15 @@ public final class CondaFormat implements RepositoryFormat, ArtifactLayout, Prox
         return null;
     }
 
-    /** The {@code info/index.json} object from a (decompressed) info tar, bounded so a hostile entry cannot force a
-     *  large allocation. */
+    /** The {@code info/index.json} object from a decompressed info tar, bounded. */
     private static ObjectNode indexFromTar(InputStream stream) throws IOException {
         TarArchiveInputStream tar = new TarArchiveInputStream(stream, "UTF-8");
         for (TarArchiveEntry entry = tar.getNextEntry(); entry != null; entry = tar.getNextEntry()) {
             String name = entry.getName();
             if (name.equals("info/index.json") || name.equals("./info/index.json")) {
-                // The index is this publish's GUARD INPUT - publish() checks the declared name against the filename
-                // this package deploys under - so a read the ceiling stopped fails closed rather than answering
-                // "declares nothing". Bounding on entry.getSize() (what the tar header CLAIMS) and then reading that
-                // many bytes was the older shape: a header may under-declare, and what came back would then be a
-                // prefix of the real member that can still parse into a plausible index.
+                // The index is the publish's guard input, checked against the filename, so a read the ceiling stopped
+                // fails closed; the tar header's declared size is not trusted, since a prefix could still parse into a
+                // plausible index.
                 byte[] json = ArchiveInflation.entry(tar).required("conda package", "info/index.json");
                 return MAPPER.readTree(json) instanceof ObjectNode object ? object : null;
             }
@@ -403,31 +339,16 @@ public final class CondaFormat implements RepositoryFormat, ArtifactLayout, Prox
     }
 
     /**
-     * The channel's {@code channeldata.json}: its populated subdirs, the standard document a client - and an
-     * enumeration, jenesis's own index walk included - discovers a channel's subdirs from without probing.
+     * The channel's {@code channeldata.json}: its populated subdirs, from which a client or an enumeration discovers
+     * them without probing.
      *
-     * <p><b>Screened: a subdir every package of which is held is not announced.</b> This is the half of the
-     * withhold-on-enumeration rule that enumerates names the client did not supply - it is handed a channel and answers
-     * with platform names - so a container with nothing servable is dropped, exactly as Composer's {@code list.json}
-     * drops a package and PyPI's Simple root drops a project. <b>The call, stated rather than inherited</b>, because a
-     * {@code subdir} is a platform name one level of abstraction above a published coordinate and the question is a
-     * real one: <em>a container name is screened on the same rule as a coordinate.</em> Three reasons.
-     * <ul>
-     *   <li><b>The product has already answered it for the identical shape.</b> Debian's {@code dists/} autoindex
-     *       screens the <em>suite</em>, and a suite is exactly as much an operator/platform container as
-     *       {@code linux-64} is. Two formats may not answer one question differently.</li>
-     *   <li><b>What {@code channeldata.json} is for is servability.</b> Its subdir list is a solver's answer to "which
-     *       platforms can this channel resolve for". Announcing a platform whose every package is quarantined offers a
-     *       view that is not merely stale but known-unservable, where a silently-incomplete view must never be
-     *       served as if it were whole.</li>
-     *   <li><b>The rule's own criterion.</b> The disclosure that matters is servability, not whether the token looks
-     *   like
-     *       a coordinate; a subdir with nothing servable is a container with nothing servable.</li>
-     * </ul>
-     * A subdir with no package at all stays listed - it names no withheld coordinate, and only a structural emptiness
-     * probe over the raw container separates the two cases - which is the same carve-out {@code ComposerFormat.servable}
-     * and {@code PyPiFormat.servable} draw for the same reason. The screen is the shared primitive short-circuiting at
-     * the first surviving package, so a normal channel pays one probe per subdir.
+     * <p><b>A subdir every package of which is held is not announced.</b> This route answers with names the client did
+     * not supply, so a container with nothing servable is dropped, as Debian's {@code dists/} autoindex drops a suite,
+     * Composer's {@code list.json} a package and PyPI's root a project. A subdir is a platform name, a container like a
+     * suite, and the document's list is a solver's answer to "which platforms can this channel resolve for", so
+     * announcing an unservable one would offer a known-unservable view. A subdir with no package at all stays listed,
+     * naming no withheld coordinate; only a structural probe tells the two apart. The screen short-circuits at the
+     * first surviving package.
      */
     private void channeldata(String repo, Blobs blobs, FormatExchange exchange) throws IOException {
         List<String> subdirs = new ArrayList<>();
@@ -451,12 +372,9 @@ public final class CondaFormat implements RepositoryFormat, ArtifactLayout, Prox
         exchange.answer(MAPPER.writeValueAsBytes(root));
     }
 
-    /** Whether {@code channeldata.json} may announce this subdir - it carries at least one package a client can
-     *  actually download. The membership question the shared screened enumeration answers directly, short-circuiting
-     *  at the first disclosable package and judging each enumerated index record by the package archive pointer key
-     *  that carries its bytes - the same screen {@link #repodata} renders through, not a second private one. A subdir
-     *  with no indexed package at all is left listed: it names no withheld coordinate, so only this structural
-     *  emptiness probe over the raw container separates "nothing published here" from "everything here is held". */
+    /** Whether {@code channeldata.json} may announce this subdir: a package a client can download, judged by the
+     *  screened enumeration {@link #repodata} renders through, short-circuiting at the first. A subdir with no indexed
+     *  package stays listed, told apart by a structural emptiness probe. */
     private static boolean servable(String repo, String subdir, Blobs blobs) throws IOException {
         if (ScreenedNames.keys(blobs.servableNames(), ServableNames.Policy.HIDE_WITHHELD,
                         file -> packageKey(repo, subdir, file))
@@ -466,37 +384,32 @@ public final class CondaFormat implements RepositoryFormat, ArtifactLayout, Prox
         return blobs.isEmpty(indexPrefix(repo, subdir));
     }
 
-    /** The subdir's {@code repodata.json} - the stored listing a publish maintains - streamed as is, or its
-     *  {@code .bz2} twin. The ETag is the stored document's digest, so apt-style revalidation answers {@code 304}
-     *  from the header alone. */
+    /** The subdir's {@code repodata.json}, the stored listing, streamed as is, or its {@code .bz2} twin; the ETag is
+     *  the document's digest, so revalidation answers {@code 304} from the header. */
     private void repodata(String repo, String subdir, ArtifactStore store, FormatExchange exchange, boolean compressed)
             throws IOException {
         Blobs blobs = new Blobs(store);
-        // The structural emptiness probe is paid only until the document exists: a present document proves the
-        // subdir was published to, so a read never enumerates the records again.
+        // The structural probe is paid only until the document exists.
         if (!StoredListing.present(store, CondaListings.repodata(repo, subdir))
                 && blobs.isEmpty(indexPrefix(repo, subdir))) {
-            // Nothing published under this subdir: a hosted channel has no repodata to serve, and a proxy channel
-            // needs this local miss so the pull-through fetches the upstream repodata. Modern conda tolerates a 404
-            // for a subdir it does not need. A structural emptiness probe over the raw container.
+            // Nothing published here: a 404, so a proxy channel's pull-through fetches the upstream repodata; conda
+            // tolerates a 404 for a subdir it does not need.
             exchange.respond(404);
             return;
         }
         StoredListing.Spec spec = new CondaListings(blobs).spec(repo, subdir);
         Optional<StoredListing.Served> served;
         if (compressed) {
-            // The twin is derived off the publish's thread, so a read of it checks the source's sequence against its
-            // own (one header read) and re-derives it here when it lags - the legacy variant pays for its
-            // compression only when it is asked for before the deriver reached it.
+            // The twin is derived off the publish's thread, so a read compares sequences and re-derives a lagging one
+            // here.
             Optional<StoredListing.Header> source = StoredListing.header(store, spec.listing());
             served = StoredListing.openDerived(store, spec.listing() + ".bz2");
             if (served.isEmpty() || source.isEmpty() || served.get().header().seq() < source.get().seq()) {
                 if (served.isPresent()) {
                     served.get().close();
                 }
-                // Streamed through two temporary files rather than held. This is a request thread and the
-                // repodata is every package in the subdir, so the array form compressed the subdir while holding
-                // it - the whole index twice, to answer one GET for the legacy variant.
+                // Streamed through two temporary files: the repodata is every package in the subdir, on a request
+                // thread.
                 Optional<StoredListing.Served> source0 = StoredListing.open(store, spec);
                 if (source0.isPresent()) {
                     Path plain = OwnerOnly.createTempFile("jenrepo-repodata", ".json");
@@ -554,18 +467,10 @@ public final class CondaFormat implements RepositoryFormat, ArtifactLayout, Prox
         blobs.serve(located.get(), exchange);
     }
 
-    /**
-     * Proxy a Conda miss to an upstream conda channel. The request {@code /conda/<repo>/<subdir>/<file>} maps to
-     * {@code <upstream>/<subdir>/<file>} - the local channel name is a deployment alias for the upstream channel, so it
-     * is stripped and only the subdir and file map through. An immutable package ({@code .conda} / {@code .tar.bz2})
-     * streams from upstream straight into the content-addressed store ({@link ProxyRelay#fill}, never
-     * buffered) and is served, so a later read is a local hit that never touches the upstream. The mutable index a
-     * client reads ({@code repodata.json}, its {@code .bz2}/{@code .zst}, {@code current_repodata.json}, ...) is
-     * streamed through fresh on every read - a package record's location is its bare filename relative to the subdir
-     * root, which maps onto this repository's {@code /conda/<repo>/<subdir>/} prefix, so the index needs no rewrite.
-     * Conda has no single canonical upstream, so a deployment always names one per repository and
-     * {@link #defaultUpstream()} stays empty.
-     */
+    /** Proxy a conda miss to an upstream channel: {@code /conda/<repo>/<subdir>/<file>} maps to
+     *  {@code <upstream>/<subdir>/<file>}, the alias stripped. A package streams into the store
+     *  ({@link ProxyRelay#fill}) and is cached; the index is streamed fresh, needing no rewrite. A deployment names one
+     *  upstream per repository. */
     @Override
     public boolean pullThrough(FormatExchange exchange, ArtifactStore store, URI upstream,
                                ProxyFormat.Fetcher fetcher) throws IOException {
@@ -592,10 +497,8 @@ public final class CondaFormat implements RepositoryFormat, ArtifactLayout, Prox
         }
         URI target = URI.create(root + subdir + "/" + file);
         if (isPackage(file)) {
-            // Point-integrity: the subdir's repodata.json publishes each package's SHA-256, so read that sibling and
-            // verify the streamed archive against it, refusing a mismatch (the Maven proxy leg's checksum parity). The
-            // index is a SEPARATE fetch from the archive below, so a repodata this repository could not read is not
-            // "this channel declares no sha256 for the package" and must not become an unverified fill.
+            // The subdir's repodata.json publishes each package's SHA-256, and the streamed archive is held to it. The
+            // index is a separate fetch, and one that could not be read must not become an unverified fill.
             ProxyRelay.Declared expected = repodataChecksum(root, subdir, file, fetcher);
             if (!expected.readable()) {
                 return ProxyRelay.unverifiable(target, expected);
@@ -612,10 +515,8 @@ public final class CondaFormat implements RepositoryFormat, ArtifactLayout, Prox
             serve(repo, subdir, file, new Blobs(store), exchange);
             return true;
         }
-        // A mutable index (repodata) streamed fresh, never cached; the upstream's Content-Type is relayed when present.
-        // ENUMERATION: repodata.json IS the subdir's package list, the document a solver reads to decide which packages
-        // and versions exist there - an absent one is the answer "this channel subdir is empty", so only an upstream
-        // that ANSWERED 404/410 may reach the client as a 404.
+        // The index streamed fresh with the upstream's Content-Type. repodata.json is the subdir's package list a
+        // solver reads, an ENUMERATION, so only an upstream 404/410 reaches the client as one.
         return ProxyRelay.streamFresh(fetcher, target, null, exchange, ProxyRelay.Document.ENUMERATION);
     }
 
@@ -636,20 +537,10 @@ public final class CondaFormat implements RepositoryFormat, ArtifactLayout, Prox
                 "application/octet-stream", false, null, -1L));
     }
 
-    /**
-     * The package version a stored conda pointer serves - the backwards direction the inventory back-fill rebuilds a
-     * lost {@code published} record from.
-     *
-     * <p>The pair lives in a <em>filename</em>, {@code <name>-<version>-<build>.<ext>}, and what makes decoding it
-     * safe is the ecosystem's own rule rather than this store's: a conda version contains no {@code -}, so
-     * {@link #coordinate}'s right-to-left split is exact even for the many package names that carry hyphens. That
-     * is the same guarantee Debian's underscore and RPM's hyphen-free version give, and the same reason npm's and
-     * Cargo's filename shapes are deliberately left undecoded.
-     *
-     * <p>Only a {@code pkgs/} pointer is claimed, and the position is checked rather than searched for: a per-package
-     * {@code index/} record is named after the same file and would otherwise decode to the same pair from a key that
-     * is not a package pointer at all.
-     */
+    /** The package version a stored conda pointer serves, from which the inventory back-fill rebuilds a lost
+     *  {@code published} record. A conda version contains no {@code -}, so {@link #coordinate}'s right-to-left split of
+     *  {@code <name>-<version>-<build>.<ext>} is exact for hyphenated names. Only a {@code pkgs/} pointer is claimed,
+     *  checked by position, since an {@code index/} record named after the same file is no package pointer. */
     @Override
     public Optional<ArtifactDescriptor> describePointer(String key) {
         String[] parts = key.split("/", -1);
@@ -666,13 +557,12 @@ public final class CondaFormat implements RepositoryFormat, ArtifactLayout, Prox
 
     @Override
     public List<String> paths(String coordinate, String version, ArtifactStore store) {
-        // Conda package pointers live in the shared Blobs namespace (like npm/pypi/go/rpm/cargo), not the Publication
-        // namespace coordinate-based eviction walks, so nothing is enumerable from the coordinate alone here.
+        // Pointers live in the shared Blobs namespace, so the coordinate enumerates nothing in publish/.
         return List.of();
     }
 
-    /** Split a conda filename {@code <name>-<version>-<build>.<ext>} into {@code [name, version]} from the right (a
-     *  conda version contains no {@code -}), or null when it does not carry two separators. */
+    /** Split {@code <name>-<version>-<build>.<ext>} into {@code [name, version]} from the right, or null without two
+     *  separators. */
     static String[] coordinate(String file) {
         String stem = file.endsWith(CONDA_EXT)
                 ? file.substring(0, file.length() - CONDA_EXT.length())
@@ -692,19 +582,17 @@ public final class CondaFormat implements RepositoryFormat, ArtifactLayout, Prox
         return file.endsWith(CONDA_EXT) || file.endsWith(TARBZ2_EXT);
     }
 
-    /** The SHA-256 the subdir's {@code repodata.json} records for a package, stream-parsed from the upstream index so
-     *  a proxied archive can be verified against it. repodata is a mutable index that can be very large, so it is read
-     *  through a streaming {@link JsonParser} - the {@code packages} / {@code packages.conda} sections are walked entry
-     *  by entry and every non-matching record is {@linkplain JsonParser#skipChildren() skipped}, so the document is
-     *  never materialised whole.
+    /**
+     * The SHA-256 the upstream subdir's {@code repodata.json} records for a package, stream-parsed: the
+     * {@code packages} sections are walked entry by entry and other records skipped, so the large document is never
+     * held.
      *
-     *  <p>{@link ProxyRelay.Declared#NONE} - cache without a point check, as Maven serves a jar whose {@code .sha1} is
-     *  missing - when the index <em>answered</em> and declares nothing: a {@code 404}/{@code 410} (no repodata for this
-     *  subdir), no record for this file, or a record with no 64-hex {@code sha256}.
-     *  {@linkplain ProxyRelay.Declared#unreadable Unreadable} when the index could not be read - a transport failure, a
-     *  refusing status, or a {@code 200} whose body is not a JSON object. It is read through the streaming
-     *  {@code download} leg rather than the buffered one, so it takes {@link ProxyRelay#declaration} directly rather
-     *  than {@code ProxyRelay.declaring}. */
+     * <p>{@link ProxyRelay.Declared#NONE}, cached without a check, when the index answered and declares nothing: a
+     * {@code 404}/{@code 410}, no record, or no 64-hex {@code sha256}.
+     * {@linkplain ProxyRelay.Declared#unreadable Unreadable} on a transport failure, a refusing status, or a body that
+     * is no JSON object. Read through the streaming {@code download} leg, so it takes {@link ProxyRelay#declaration}
+     * directly.
+     */
     private static ProxyRelay.Declared repodataChecksum(String root, String subdir, String file,
             ProxyFormat.Fetcher fetcher) throws IOException {
         URI index = URI.create(root + subdir + "/repodata.json");
@@ -739,9 +627,8 @@ public final class CondaFormat implements RepositoryFormat, ArtifactLayout, Prox
         return ProxyRelay.Declared.NONE;
     }
 
-    /** Walk a {@code packages} / {@code packages.conda} object entry by entry, returning the {@code sha256} of the
-     *  record whose key is {@code file} (or {@code null} if it is not in this section), skipping every other record's
-     *  subtree so a large section is never buffered. */
+    /** Walk a {@code packages} section entry by entry for the {@code sha256} of {@code file}'s record, or {@code null},
+     *  skipping every other record's subtree. */
     private static String scanRepodataSection(JsonParser parser, String file) throws IOException {
         while (parser.nextToken() == JsonToken.PROPERTY_NAME) {
             boolean match = file.equals(parser.currentName());
@@ -809,14 +696,9 @@ public final class CondaFormat implements RepositoryFormat, ArtifactLayout, Prox
         return out.toByteArray();
     }
 
-    /**
-     * bzip2 {@code source} into {@code target}, digesting the compressed bytes as they are written, and answer the
-     * header a derived twin carries.
-     *
-     * <p>The array form above holds the repodata and its compression at once, which is the whole subdir twice on a
-     * path that is already the slowest part of a publish. This one holds a buffer. The digests come out of the same
-     * pass because a twin's validator is what the read serves and reading it back to compute one would undo this.
-     */
+    /** bzip2 {@code source} into {@code target}, digesting the compressed bytes as they are written, and answer the
+     *  twin's header. Holds a buffer, not the subdir; the digests come from the same pass, since the twin's validator
+     *  is what a read serves. */
     static StoredListing.Header bzip2(Path source, Path target, long seq) throws IOException {
         MessageDigest sha256 = digest("SHA-256");
         try (InputStream content = new BufferedInputStream(Files.newInputStream(source));
@@ -836,12 +718,7 @@ public final class CondaFormat implements RepositoryFormat, ArtifactLayout, Prox
         }
     }
 
-    /** Whether a channel/subdir/filename segment must not be spliced into a {@code conda/...} store key - empty, a dot
-     *  segment, or carrying a path separator or control character. Mirrors the guard the sibling formats (rpm/cargo/…)
-     *  apply to their coordinates, so a body- or path-supplied {@code ..} cannot escape the channel's namespace. */
-
-    /** The migration-import capability, delegated to the layout-only {@link CondaImporter} - the format IS the
-     *  discovered importer now (an {@code instanceof} capability), and the importer class stays as its delegate. */
+    /** The migration-import capability, delegated to {@link CondaImporter}. */
     private final CondaImporter importer = new CondaImporter();
 
     @Override
@@ -859,8 +736,8 @@ public final class CondaFormat implements RepositoryFormat, ArtifactLayout, Prox
         importer.importArtifact(path, content, store);
     }
 
-    /** Each build of the version is put where conda's own upload puts it - {@code <channel>/<subdir>/<file>} - which is
-     *  the path it is served at, though not the key it is stored under. */
+    /** Each build of the version is put where conda's own upload puts it, {@code <channel>/<subdir>/<file>}: the path
+     *  it is served at, not the key it is stored under. */
     @Override
     public Exported export(ArtifactStore repository, String coordinate, String version, ExportTarget target)
             throws IOException {

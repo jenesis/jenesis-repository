@@ -5,13 +5,11 @@ import module tools.jackson.databind;
 import build.jenesis.repository.format.ProxyFormat;
 
 /**
- * Walks a conda channel rooted at an upstream - the same {@code repodata.json} {@link CondaFormat} generates to
- * serve clients, pointed at "list everything": the channel's subdirs come from its {@code channeldata.json} where
- * one is served (jenesis's own included), falling back to probing the standard platform subdirs; each subdir's
- * {@code repodata.json} contributes every {@code packages} and {@code packages.conda} filename. Each entry pairs
- * the {@code <subdir>/<filename>} path {@link CondaImporter} accepts with its download URL. Reached through
- * {@code CondaFormat}'s {@code ProxyFormat.enumerate}. The subdir discovery is eager (an unreachable channel fails up front); per-subdir repodata reads lazily, failures
- * surfacing as {@link UncheckedIOException} - except a {@code 404}, which is an empty subdir, not a failure.
+ * Walks a conda channel rooted at an upstream: the subdirs come from its {@code channeldata.json} where served, else by
+ * probing the standard platform subdirs, and each subdir's {@code repodata.json} contributes every {@code packages} and
+ * {@code packages.conda} filename. Each entry pairs the {@code <subdir>/<filename>} path {@link CondaImporter} accepts
+ * with its download URL. Subdir discovery is eager, so an unreachable channel fails up front; repodata reads lazily,
+ * failures surfacing as {@link UncheckedIOException}, a {@code 404} being an empty subdir.
  */
 public final class CondaEnumeration {
 
@@ -55,8 +53,8 @@ public final class CondaEnumeration {
         });
     }
 
-    /** The channel's subdirs: its {@code channeldata.json} where one answers, else the standard platform set -
-     *  probing costs one {@code 404} per absent subdir, which the walk treats as empty. */
+    /** The channel's subdirs: its {@code channeldata.json} where one answers, else the standard set, an absent subdir
+     *  costing one {@code 404} read as empty. */
     private static List<String> subdirs(ProxyFormat.Fetcher fetcher, URI root) throws IOException {
         Optional<ProxyFormat.Fetched> fetched = fetcher.fetch(root.resolve("channeldata.json"), Map.of());
         if (fetched.isEmpty()) {
