@@ -3,16 +3,14 @@ package build.jenesis.repository.outbox;
 import module java.base;
 
 /**
- * The one small-object encoding both outbox users store their entries in: URL-encoded {@code key=value} lines.
+ * The small-object encoding outbox users store their entries in: URL-encoded {@code key=value} lines. Encoding each
+ * value means a path, an error message or a JSON detail carrying a newline or {@code =} cannot corrupt the object, and
+ * a missing or malformed field reads as its zero rather than failing - refusing to read delivery bookkeeping would
+ * strand the delivery.
  *
- * <p>Encoding each value means a path, an error message or a JSON detail carrying a newline or {@code =} can never
- * corrupt the object, and a missing or malformed field reads as its zero rather than failing - the entry is
- * bookkeeping about a delivery, and refusing to read it would strand the delivery. Both users had this exact code,
- * character for character; it lives here so a third does not write it a third time.
- *
- * <p>Its sibling in the store SPI, {@code LineDocument}, frames named fields under a magic and a version and replaces
- * a newline in a value with a space; this codec has no header and keeps every byte of a value through URL encoding.
- * Two codecs on purpose: a lossless value and a self-identifying document are different requirements.
+ * <p>Unlike the store SPI's {@code LineDocument}, which frames named fields under a magic and a version and flattens a
+ * newline in a value, this codec has no header and keeps every byte of a value: a lossless value and a self-identifying
+ * document are different requirements.
  */
 public final class KeyValueLines {
 

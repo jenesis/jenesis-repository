@@ -7,17 +7,10 @@ import build.jenesis.repository.settings.Setting;
 import build.jenesis.repository.settings.SettingsContributor;
 
 /**
- * The parked backlog's retention, declared once for every outbox.
- *
- * <p>Parking fixes the cost per pass; it does not end an entry's life. A target that is permanently gone parks one
- * entry per delivery for ever, which is a queue that only grows, driven by traffic rather than by anything an
- * operator did. How long a dead delivery is worth keeping is a deployment's call, so it is a dial - and it is
- * <em>one</em> dial, here, rather than one per user: the webhook outbox declared its own, the forwarding outbox
- * pruned nothing at all, and the day the two were made one mechanism the settings surface was the last place the
- * split could have re-entered. Two keys for one behaviour is drift by another name.
- *
- * <p>Both dials are honoured together: age is the default bound, and a count cap is available for a hard ceiling
- * regardless of rate. The mechanism that reads them is {@link Outbox#prunePark}.
+ * The parked backlog's retention, declared once for every outbox. A permanently gone target parks an entry per delivery
+ * for ever, so how long a dead delivery is kept is a deployment's dial - one dial for every user, since two keys for
+ * one behaviour would drift. Age is the default bound, and a count cap gives a hard ceiling regardless of rate; both
+ * are read by {@link Outbox#prunePark}.
  */
 public final class OutboxSettings implements SettingsContributor {
 
