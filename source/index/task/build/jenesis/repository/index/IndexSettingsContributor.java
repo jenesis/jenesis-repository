@@ -5,14 +5,11 @@ import build.jenesis.repository.settings.Setting;
 import build.jenesis.repository.settings.SettingsContributor;
 
 /**
- * Describes the published-index settings, so they surface on the settings screens exactly when this module is
- * installed - without the pass, an index dial would publish nothing.
+ * Describes the published-index settings, so they appear on the settings screens exactly when this module is installed.
  *
- * <p>The two cadence entries render their key, default and (for the rebase) its maximum straight off
- * {@link PublishedIndexTaskProvider}'s {@code IntervalSetting} constants, so the catalogue and the code cannot drift.
- * The rebase's maximum is stated in its description because an operator who types a
- * ten-year rebase interval learns from a server log they may never read that it was capped, and the point of
- * configuration is where that belongs.
+ * <p>The cadence entries render their key, default and (for the rebase) maximum from
+ * {@link PublishedIndexTaskProvider}'s {@code IntervalSetting} constants. The rebase's maximum is stated in its
+ * description so an operator learns of the cap where they configure it rather than from a log.
  */
 public final class IndexSettingsContributor implements SettingsContributor {
 

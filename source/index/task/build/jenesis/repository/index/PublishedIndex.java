@@ -7,12 +7,11 @@ import build.jenesis.repository.store.Retries;
 import build.jenesis.repository.store.DirtyFlag;
 
 /**
- * The published index over one repository's scoped artifact store: the descriptor and the immutable chunk objects a
- * consumer syncs against, plus the write primitives the {@link PublishedIndexTask} commits through. Everything lives
- * under the {@code index/publish/} prefix of the same doubly-scoped store the repository already writes to - the
- * descriptor at {@code index/publish/descriptor} (compare-and-set so replicas converge) and each content-addressed
- * chunk at {@code index/publish/chunks/<sha256>} (write-once, so serving it with an immutable cache is truthful). No
- * database and no artifact blob is ever opened here.
+ * The published index over one repository's scoped store: the descriptor and immutable chunks a consumer syncs against,
+ * and the write primitives {@link PublishedIndexTask} commits through. The descriptor sits at
+ * {@code index/publish/descriptor} (compare-and-set, so replicas converge) and each chunk at
+ * {@code index/publish/chunks/<sha256>} (write-once, so serving it as immutable is truthful). No artifact blob is
+ * opened here.
  */
 public final class PublishedIndex {
 
@@ -20,9 +19,9 @@ public final class PublishedIndex {
     static final String DESCRIPTOR = PublishedIndexKeys.DESCRIPTOR;
     static final String CHUNKS = PublishedIndexKeys.CHUNKS;
 
-    /** The coalescing retraction flag - a single tiny object a sibling of the {@link #DESCRIPTOR}, under this module's
-     *  own {@link PublishedIndexStorageNamespace storage namespace} root, whose PRESENCE (never its body) is the signal
-     *  that a withhold transition happened and the next pass must rebase. */
+    /** The coalescing retraction flag beside the {@link #DESCRIPTOR}, under this module's
+     *  {@link PublishedIndexStorageNamespace storage namespace}; its presence, never its body, tells the next pass to
+     *  rebase. */
     static final String RETRACT = PublishedIndexKeys.RETRACT;
 
 
@@ -47,20 +46,16 @@ public final class PublishedIndex {
         return store.writeVersioned(DESCRIPTOR, descriptor.serialize(), expected);
     }
 
-    /**
-     * The coalescing retraction flag: one tiny sibling object of the descriptor whose PRESENCE tells the next index pass
-     * that a withhold transitioned (a retroactive hold landed, or a hold cleared), so the pass rebases the whole chain
-     * and re-screens every path through {@code ServableNames} - dropping a now-withheld stanza and re-including a
-     * cleared one. That is the only retraction immutable, content-addressed, {@code max-age} chunks consumers have
-     * already cached can ever get: a descriptor/chain change, not a serve-time filter. A {@link DirtyFlag}: raised by
-     * every {@code onWithheld}/{@code onWithholdCleared} writer without losing the signal, read with its token before
-     * the pass's walk, lowered only against that token after the rebuilt descriptor has committed.
-     */
+    /** The coalescing retraction flag, raised on every withhold transition: its presence makes the next pass rebase the
+     *  whole chain and re-screen every path through {@code ServableNames}. That is the only retraction cached immutable
+     *  chunks can get - a chain change, not a serve-time filter. A {@link DirtyFlag}: raised without losing a signal,
+     *  read with its token before the pass's walk, lowered only against that token after the rebuilt descriptor
+     *  commits. */
     public DirtyFlag retraction() {
         return new DirtyFlag(store, RETRACT);
     }
 
-    /** Store an immutable chunk content-addressed by its SHA-256 and return its id (also its checksum). */
+    /** Store an immutable chunk content-addressed by its SHA-256 and return its id. */
     String writeChunk(byte[] bytes) throws IOException {
         String id = sha256(bytes);
         store.write(CHUNKS + "/" + id, new ByteArrayInputStream(bytes));
@@ -87,16 +82,10 @@ public final class PublishedIndex {
         store.read(CHUNKS + "/" + id, out);
     }
 
-    /**
-     * The descriptor re-serialised as JSON for an external consumer. An empty index yields an empty chain, so the
-     * document also carries an explicit {@code "built"} flag: it is {@code false} only before the first pass has
-     * committed - the module installed but its sweep never run (or off), or a stored descriptor that parsed as corrupt
-     * and awaits the self-healing rebase - and {@code true} once a pass has committed a generation, even one that
-     * indexed an empty repository. A consumer reads {@code built:false} as "index not yet derived, retry later"
-     * instead of mistaking a not-yet-built index for a repository that has published nothing (the honest
-     * degrade-and-say-so; the chain still syncs correctly whether the flag is read or ignored, so it stays a
-     * non-breaking signal on the same {@code 200}).
-     */
+    /** The descriptor as JSON for an external consumer. It carries an explicit {@code "built"} flag, {@code false} only
+     *  before a pass has committed a generation (the pass never run or off, or a stored descriptor that parsed as
+     *  corrupt and awaits its rebase), so a consumer reads "not yet derived, retry later" rather than "nothing
+     *  published". The chain syncs correctly whether or not the flag is read. */
     public byte[] descriptorJson() throws IOException {
         Optional<IndexDescriptor> stored = descriptor();
         IndexDescriptor descriptor = stored.orElse(IndexDescriptor.empty());

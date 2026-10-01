@@ -3,12 +3,10 @@ package build.jenesis.repository.index;
 import module java.base;
 
 /**
- * The head of the published index: the current chain of immutable chunks a consumer syncs against, the durable
- * high-water {@link Cursor} incremental passes advance, the instant of the last full-snapshot rebase, and the
- * superseded chunks awaiting garbage collection. A consumer fetches this, diffs its {@link #chain} against what it
- * already holds, and fetches only the unseen chunk ids - regular sync without ever re-walking the repository.
- * Serialised as a small, line-oriented document so it parses without a JSON reader in this framework-free module; the
- * web adapter re-serialises it as JSON for external consumers.
+ * The head of the published index: the chain of immutable chunks a consumer syncs against, the high-water
+ * {@link Cursor} incremental passes advance, the instant of the last rebase, and superseded chunks awaiting deletion. A
+ * consumer diffs {@link #chain} against what it holds and fetches only unseen chunk ids. Stored as a small
+ * line-oriented document so this module needs no JSON reader; the web adapter serves it as JSON.
  */
 public record IndexDescriptor(int generation, Cursor watermark, Instant rebased,
                               List<Chunk> chain, List<Superseded> superseded) {
@@ -20,17 +18,12 @@ public record IndexDescriptor(int generation, Cursor watermark, Instant rebased,
         superseded = List.copyOf(superseded);
     }
 
-    /**
-     * The compound resume cursor an incremental pass advances and resumes strictly after: the high-water publish
-     * {@code instant} and, at that instant, the last-processed served {@code path}. The instant alone cannot resume a
-     * pass safely: two artifacts published in the very same millisecond can be split across passes (a pass ticks
-     * between them), and the later-walked one - published exactly <em>at</em> the committed instant - is neither past
-     * a bare instant watermark (so an instant-only incremental would skip it forever, recovered only by the periodic
-     * rebase) nor safely re-includable (re-walking everything at the instant each pass would duplicate the records
-     * already chained). Ordering by ({@code instant}, then {@code path}) makes the cursor a single monotonic mark: an
-     * incremental pass re-includes only same-instant artifacts whose path sorts <em>after</em> the last processed one
-     * - recovering the split-across-passes artifact without re-appending those already done.
-     */
+    /** The resume cursor an incremental pass resumes strictly after: the high-water publish {@code instant} and, at
+     *  that instant, the last processed served {@code path}. The instant alone is not enough: two artifacts published
+     *  in one millisecond can be split across passes, and the later one is neither past an instant-only watermark nor
+     *  safely re-includable without duplicating records already chained. Ordering by ({@code instant}, {@code path})
+     *  makes the cursor one monotonic mark, so a pass re-includes only same-instant artifacts whose path sorts after
+     *  the last one processed. */
     public record Cursor(Instant instant, String path) implements Comparable<Cursor> {
 
         /** The cursor a first pass rebases from: the epoch instant and the empty path, below every real record. */
@@ -47,20 +40,20 @@ public record IndexDescriptor(int generation, Cursor watermark, Instant rebased,
             return byInstant != 0 ? byInstant : path.compareTo(other.path);
         }
 
-        /** Whether an artifact at {@code (published, path)} sorts strictly after this cursor - i.e. an incremental
-         *  pass must (re-)index it: published past the instant, or published at the instant with a later path. */
+        /** Whether an artifact at {@code (published, path)} sorts strictly after this cursor, so an incremental pass
+         *  must index it. */
         public boolean precedes(Instant published, String path) {
             return compareTo(new Cursor(published, path)) < 0;
         }
     }
 
-    /** One immutable chunk in the chain: its content-addressed id (also its checksum), byte sizes, record count and
-     *  the publish-instant range its records span. */
+    /** One immutable chunk in the chain: its content-addressed id (also its checksum), sizes, record count and the
+     *  publish-instant range its records span. */
     public record Chunk(String id, long uncompressedSize, long compressedSize, int records,
                         Instant minPublished, Instant maxPublished) {
     }
 
-    /** A chunk dropped from a superseded chain, retained until the grace instant so an in-flight consumer finishes. */
+    /** A chunk dropped from a superseded chain, kept until the grace instant so an in-flight consumer finishes. */
     public record Superseded(String id, Instant deleteAfter) {
     }
 
@@ -95,18 +88,14 @@ public record IndexDescriptor(int generation, Cursor watermark, Instant rebased,
     }
 
     /**
-     * Parse a <b>stored</b> descriptor document; a blank, unrecognised, torn or garbled body yields {@link #empty} -
-     * the parse is total, so a corrupt head never throws out of every scheduled pass and the descriptor endpoint. It
-     * reads as the empty index instead, and the next pass self-heals by rebasing a fresh chain over it (the lost
-     * chain's chunk objects become unreferenced garbage; see the orphan note on {@code PublishedIndexTask}).
+     * Parse a <b>stored</b> descriptor document. The parse is total: a blank, torn or garbled body yields
+     * {@link #empty}, so a corrupt head never throws out of every pass and the descriptor endpoint, and the next pass
+     * rebases a fresh chain over it (the lost chain's chunks become unreferenced; see {@code PublishedIndexTask}).
      *
-     * <p><b>This is not what {@code GET /api/index} serves.</b> The wire form is JSON, assembled by
-     * {@code PublishedIndex.descriptorJson}; this reads the stored document the passes commit. The two are
-     * deliberately different and both are reachable from outside, so it is worth saying which is which: because the
-     * parse is total, handing it a served JSON body returns {@link #empty} rather than failing, and a consumer
-     * written against the wrong form therefore sees a repository that holds nothing and syncs nothing while looking
-     * healthy. The totality above is right for a corrupt stored head and is exactly what hides this mistake, which
-     * is why the warning belongs here rather than in the caller. {@code IndexConsumerSyncE2ETest} crosses that seam.
+     * <p><b>This is not what {@code GET /api/index} serves.</b> The wire form is JSON from
+     * {@code PublishedIndex.descriptorJson}. Because the parse is total, handing it a served JSON body returns
+     * {@link #empty} rather than failing, so a consumer written against the wrong form sees an empty repository that
+     * looks healthy.
      */
     public static IndexDescriptor parse(byte[] bytes) {
         try {
@@ -138,9 +127,8 @@ public record IndexDescriptor(int generation, Cursor watermark, Instant rebased,
         }
     }
 
-    /** Parse a {@code watermark <instant> [<path>]} line into its compound cursor: the instant is the first token
-     *  after the key, the path (empty when absent) is the untouched remainder, so a served path bearing a space is
-     *  carried verbatim rather than split. */
+    /** Parse a {@code watermark <instant> [<path>]} line: the instant is the first token, the path the untouched
+     *  remainder, so a path holding a space is kept whole. */
     private static Cursor parseCursor(String line) {
         String rest = line.substring(line.indexOf(' ') + 1).stripLeading();       // "<instant>" or "<instant> <path>"
         int afterInstant = rest.indexOf(' ');

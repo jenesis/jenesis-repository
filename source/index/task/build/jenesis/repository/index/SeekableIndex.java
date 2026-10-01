@@ -4,18 +4,11 @@ import module java.base;
 import com.github.luben.zstd.Zstd;
 
 /**
- * The published index chunk format: a sequence of <strong>independent Zstandard frames</strong> (each a complete,
- * standalone {@code zstd} frame compressing one block of NDJSON records) followed by a <strong>seek table</strong>
- * written as the standard {@code zstd} seekable-format skippable frame. Because every frame is self-contained, a
- * consumer decompresses any one frame in isolation - resuming decompression at a frame boundary, from that frame's
- * known byte offset, rather than re-reading the chunk from the start (and, once the chunk serve honours a byte range,
- * fetching only that suffix; it writes a whole {@code 200} today).
- * The trailing seek table (magic {@code 0x8F92EAB1}) maps each frame's compressed and decompressed sizes, so the
- * byte offset of any frame is known without scanning; the chunks are therefore readable by the reference
- * {@code zstd_seekable} tooling, not just this module.
- *
- * <p>Only the library does the compression ({@link Zstd#compress}/{@link Zstd#decompress}); this class lays out the
- * frames and the seek-table framing, which are a fixed on-disk format, not a hand-rolled algorithm.
+ * The published index chunk format: a sequence of <strong>independent Zstandard frames</strong>, each compressing one
+ * block of NDJSON records, followed by a <strong>seek table</strong> in the standard {@code zstd} seekable-format
+ * skippable frame (footer magic {@code 0x8F92EAB1}). Every frame is self-contained, so a consumer decompresses any one
+ * from its known offset without reading the chunk from the start; the table gives each frame's sizes, so the reference
+ * {@code zstd_seekable} tooling reads these chunks too. The library compresses; this class lays out the fixed framing.
  */
 public final class SeekableIndex {
 
@@ -38,12 +31,9 @@ public final class SeekableIndex {
     public record Frame(long compressedSize, long decompressedSize) {
     }
 
-    /**
-     * Assembles a streaming chunk one record line at a time, sealing an independent frame whenever the pending
-     * uncompressed block reaches the frame budget, and emitting the seek table on {@link #finish}. The budget bounds
-     * the memory a single frame holds, so building a chunk never buffers more than one frame of records plus the
-     * sealed-frame bytes.
-     */
+    /** Assembles a chunk one record line at a time, sealing a frame whenever the pending block reaches the frame budget
+     *  and emitting the seek table on {@link #finish}, so building a chunk holds at most one frame of records plus
+     *  sealed bytes. */
     public static final class Writer {
 
         private final int frameBudget;
@@ -139,10 +129,7 @@ public final class SeekableIndex {
         return frames;
     }
 
-    /**
-     * Decompress a single frame in isolation, seeking to its byte offset computed from {@code table} - the proof that
-     * a consumer resumes decompression at a frame boundary without touching earlier frames.
-     */
+    /** Decompress one frame in isolation, at the offset {@code table} gives - resuming at a frame boundary. */
     public static byte[] frame(byte[] chunk, List<Frame> table, int index) {
         long offset = 0;
         for (int earlier = 0; earlier < index; earlier++) {
@@ -153,7 +140,7 @@ public final class SeekableIndex {
         return Zstd.decompress(compressed, (int) frame.decompressedSize());
     }
 
-    /** Every NDJSON record line the whole chunk holds, decoded frame by frame - a full-chain replay for a consumer. */
+    /** Every NDJSON record line the chunk holds, decoded frame by frame. */
     public static List<byte[]> records(byte[] chunk) {
         List<Frame> table = seekTable(chunk);
         List<byte[]> lines = new ArrayList<>();

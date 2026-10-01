@@ -3,11 +3,10 @@ package build.jenesis.repository.index;
 import module java.base;
 
 /**
- * Streams index records into the store as a sequence of rotated chunks: records accumulate into the current
- * {@link SeekableIndex.Writer}, and when its sealed compressed size reaches the configured maximum the chunk is
- * finished, written content-addressed, and a fresh one started. Only one chunk's frames are ever held in memory, so
- * indexing a large repository never buffers the whole delta. Each finished chunk contributes an
- * {@link IndexDescriptor.Chunk} carrying its id, sizes, record count and the publish-instant range it spans.
+ * Streams index records into the store as rotated chunks: records accumulate into the current
+ * {@link SeekableIndex.Writer}, and when its sealed size reaches the configured maximum the chunk is written
+ * content-addressed and a fresh one started. Only one chunk's frames are held in memory. Each finished chunk
+ * contributes an {@link IndexDescriptor.Chunk}.
  */
 final class ChunkWriter {
 

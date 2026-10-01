@@ -6,17 +6,15 @@ import build.jenesis.repository.maintenance.MaintenanceTask;
 import build.jenesis.repository.maintenance.MaintenanceTaskProvider;
 
 /**
- * Discovers the published-index pass: enabled by the {@code index} setting, its cadence from {@code index-interval}
- * (default a day), its chunk rotation size from {@code index-max-chunk} (default 8 MiB) and its full-snapshot rebase
- * cadence from {@code index-rebase-interval} (default a week, at most a month). Off unless enabled, so a deployment
- * publishes no index until it opts in - and a deployment without this module has no published index at all.
- *
- * <p>Both cadences are held as {@link IntervalSetting} constants and rendered into {@link IndexSettingsContributor}
- * from these constants, so neither a catalogue default nor the rebase maximum can drift from the code.
+ * Discovers the published-index pass: enabled by {@code index}, its cadence from {@code index-interval} (a day by
+ * default), its chunk size from {@code index-max-chunk} (8 MiB) and its rebase cadence from
+ * {@code index-rebase-interval} (a week, at most a month). Off unless enabled. Both cadences are
+ * {@link IntervalSetting} constants that {@link IndexSettingsContributor} renders, so the catalogue cannot drift from
+ * the code.
  */
 public final class PublishedIndexTaskProvider implements MaintenanceTaskProvider {
 
-    /** How often the published index is appended to; daily by default. */
+    /** How often the published index is appended to. */
     static final IntervalSetting INTERVAL = IntervalSetting.of("index-interval", "P1D");
 
 
@@ -35,12 +33,12 @@ public final class PublishedIndexTaskProvider implements MaintenanceTaskProvider
         return Optional.of(new PublishedIndexTask(INTERVAL.resolve(config), maxChunk(config)));
     }
 
-    /** The chunk rotation size the deployment configured, or its default - what the walk's rebase sizes chunks by too. */
+    /** The configured chunk rotation size, or its default; the walk's rebase sizes chunks by it too. */
     static long maxChunk(UnaryOperator<String> config) {
         return bytes(config.apply("index-max-chunk"), DEFAULT_MAX_CHUNK);
     }
 
-    /** The chunk rotation size, or its default - a malformed or non-positive value falls back for the same reason. */
+    /** A byte size, or {@code fallback} when blank, malformed or not positive. */
     private static long bytes(String value, long fallback) {
         if (value == null || value.isBlank()) {
             return fallback;

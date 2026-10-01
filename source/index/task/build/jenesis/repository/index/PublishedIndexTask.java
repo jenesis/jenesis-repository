@@ -15,34 +15,26 @@ import build.jenesis.repository.walk.PagedTreeWalk;
 import build.jenesis.repository.walk.Traversal;
 
 /**
- * The scheduled published-index pass: each repository's publications are walked (the {@code publish/} pointer tree,
- * served-view - a withheld path is skipped, the quarantine review subtree excluded) and the ones published past the
- * durable high-water mark are appended as a new immutable chunk to the chain, advancing the mark. On a configured
- * cadence a full-snapshot rebase re-indexes everything into a fresh chain (Central's weekly-full/daily-incremental
- * shape), superseding the old chain's chunks and garbage-collecting them after a grace period. Exclusive (the
- * default), so a replicated deployment publishes on one node per interval under the {@code index} lease and the
- * descriptor's compare-and-set never loses an update. The walk reads only pointer metadata and each version's
- * document for its publish instant - never an artifact blob.
+ * The scheduled published-index pass: the publications marked since the last pass - served view only, a withheld path
+ * and the quarantine subtree skipped - are appended as a new immutable chunk, advancing the durable high-water mark. A
+ * full rebase re-indexes everything into a fresh chain and deletes the superseded chunks after a grace period.
+ * Exclusive, so a replicated deployment publishes on one node per interval under the {@code index} lease. It reads only
+ * pointer metadata and each version's document, never an artifact blob.
  *
- * <p>Orphan note: a pass that dies between writing chunk objects and committing the descriptor - or a corrupt head
- * that {@link IndexDescriptor#parse} reads as empty - leaves chunk objects behind that no descriptor references.
- * They are inert (never served, never re-linked; the store dedupes a re-written identical chunk) and are reclaimed
- * today only by the explicit operator purge of this module's namespace; an automatic unreferenced-chunk reconcile
- * is deliberately not attempted here (a sweeping delete keyed off a failed read is worse than a bounded leak).
+ * <p>A pass that dies between writing chunks and committing the descriptor, or a corrupt head that
+ * {@link IndexDescriptor#parse} reads as empty, leaves unreferenced chunks behind. They are inert (never served,
+ * deduped on rewrite) and reclaimed only by the operator purge of this namespace: a sweeping delete keyed off a failed
+ * read would be worse than a bounded leak.
  *
- * <p>Self-heal note: the inverse - a chunk the current chain still <em>references</em> that is lost out of band
- * (a partial store failure, an object-lifecycle rule, a purge that dropped objects but not the head) - is not a leak
- * but a hole that would 404 a consumer's sync, and it is self-healed: a pass that finds any referenced chunk absent
- * ({@link #chainIntact}) forces a full rebase that re-derives the whole chain from the durable publish pointers,
- * exactly as a corrupt head does. This adds nothing (a re-scanning delete keyed off a failed read) beyond the rebase
- * the module already runs - it only brings the recovery forward from the scheduled rebase to the next pass.
+ * <p>The inverse - a chunk the chain still references, lost out of band - is a hole that would 404 a consumer's sync,
+ * so a pass that finds one ({@link #chainIntact}) rebases from the publish pointers at once, as for a corrupt head.
  */
 public final class PublishedIndexTask implements MaintenanceTask {
 
     /** Zstandard level; 3 is the library default - fast, and the records are tiny and repetitive. */
     static final int LEVEL = 3;
 
-    /** Target uncompressed bytes per independent frame; capped to the chunk max so a small max still rotates. */
+    /** Target uncompressed bytes per frame; capped to the chunk maximum so a small maximum still rotates. */
     static final int FRAME_TARGET = 32 * 1024;
 
     /** How long a superseded chunk lingers after a rebase, so an in-flight consumer finishes reading it. */
@@ -83,11 +75,8 @@ public final class PublishedIndexTask implements MaintenanceTask {
                 (name, description, value) -> context.gauge(name, description, tags, value));
     }
 
-    /**
-     * Rebase the index onto a fresh chain from every served pointer, in path order: what a walk carrying
-     * {@link IndexRebaseConsumer} does at its completion, and what the scheduled pass does on its own only when an
-     * event demands it - no chain yet, a chain with a hole, the retraction flag standing.
-     */
+    /** Rebase the index onto a fresh chain from every served pointer, in path order: what a walk carrying
+     *  {@link IndexRebaseConsumer} does at completion, and what the pass does itself only when an event demands it. */
     public void rebase(ArtifactStore store, Instant now) throws IOException {
         pass(store, now, true, (name, description, value) -> { });
     }
@@ -95,9 +84,7 @@ public final class PublishedIndexTask implements MaintenanceTask {
     private void pass(ArtifactStore store, Instant now, boolean forced, Gauges gauges) throws IOException {
         StoreRepositoryInventory inventory = new StoreRepositoryInventory(store);
         Publication publication = new Publication(store);
-        // Route the served-view screen through the servable-name seam: a published pointer is indexed only
-        // when a GET would serve it (SERVABLE) - a withheld hold/quarantine or a torn-blob pointer is skipped - composing
-        // this pass's own Publication interceptor chain, the same discrimination the serve path makes.
+        // A pointer is indexed only when a GET would serve it - the serve path's own decision.
         ServableNames servableNames = new ServableNames(store, publication);
         PublishedIndex index = new PublishedIndex(store);
         DirtyIndexFeed feed = new DirtyIndexFeed(store, PublishedIndexKeys.PREFIX);
@@ -105,14 +92,11 @@ public final class PublishedIndexTask implements MaintenanceTask {
         IndexDescriptor descriptor = stored.map(versioned -> IndexDescriptor.parse(versioned.content()))
                 .orElse(IndexDescriptor.empty());
         Object token = stored.map(ArtifactStore.Versioned::token).orElse(null);
-        // The withhold-change retraction flag, read WITH its token before the walk: IndexRetractionObserver raises it
-        // on any withhold transition, and its presence forces the same full rebase a missing or broken chain already
-        // triggers - the rebase re-screens every path through ServableNames, so a now-withheld stanza drops out of
-        // the rebuilt chain and a cleared one re-appears. Immutable, content-addressed, consumer-cached chunks admit
-        // no other retraction (a serve-time filter never reaches a cached chunk). The scheduled rebase is the walk's.
+        // The retraction flag, read with its token before the walk: it forces the full rebase, which re-screens every
+        // path, so a withheld path drops out and a cleared one comes back.
         Optional<ArtifactStore.Versioned> retraction = index.retraction().peek();
-        // No chain yet counts a head that reads as empty - a torn descriptor parses as generation 0 - so a corrupt
-        // head is rebuilt over on the next pass rather than served empty until a walk happens to carry the rebase.
+        // A torn descriptor parses as generation 0, so a corrupt head is rebuilt on the next pass rather than served
+        // empty.
         boolean rebase = forced || stored.isEmpty() || descriptor.generation() == 0 || !chainIntact(index, descriptor)
                 || retraction.isPresent();
         long cutoff = System.currentTimeMillis();
@@ -122,15 +106,13 @@ public final class PublishedIndexTask implements MaintenanceTask {
         Progress progress = new Progress(watermark);
         List<DirtyIndexFeed.Entry> marked = List.of();
         if (rebase) {
-            // Every served pointer, in path order, over the pass's own bounded walk of the publish tree; each record's
-            // publish instant is read from its version document as it is walked, never pre-buffered.
+            // Every served pointer, in path order; each publish instant is read as it is walked, never pre-buffered.
             walk(store, publication, servableNames, inventory, true, watermark, record -> {
                 writer.add(record);
                 progress.advance(record.published(), record.path());
             });
         } else {
-            // Only what was published since the last pass: the paths the write path marked, each screened and read
-            // exactly as the walk would have, and nothing enumerated to find them.
+            // Only the paths the write path marked, each screened and read as the walk would, nothing enumerated.
             marked = feed.pending();
             for (DirtyIndexFeed.Entry entry : marked) {
                 String relative = entry.coordinate().startsWith("/") ? entry.coordinate().substring(1)
@@ -172,8 +154,8 @@ public final class PublishedIndexTask implements MaintenanceTask {
                     index.deleteChunk(gone.id());
                     collected = true;
                 } catch (IOException undeleted) {
-                    // One failed delete must not abort the pass before the descriptor commits (which would orphan
-                    // every chunk this pass wrote, unreferenced forever); keep the entry so the next pass retries.
+                    // One failed delete must not abort the pass before the descriptor commits, which would orphan every
+                    // chunk it wrote; the entry is kept so the next pass retries.
                     remaining.add(gone);
                 }
             } else {
@@ -186,10 +168,9 @@ public final class PublishedIndexTask implements MaintenanceTask {
         }
         IndexDescriptor updated = new IndexDescriptor(generation, progress.watermark(), rebased, chain, remaining);
         if (!index.putDescriptor(updated, token)) {
-            // A concurrent pass beat us (rare under the exclusive lease); discard the chunks we just orphaned. The
-            // chunks are content-addressed, so a winner that indexed the same publications wrote the very same ids -
-            // deleting those would tear a chunk out of the winner's served chain, so only unreferenced ones go (and
-            // if the winner's head cannot be re-read, nothing goes: a leaked chunk is recoverable, a torn chain not).
+            // A concurrent pass won (rare under the lease). Chunks are content-addressed, so the winner may hold the
+            // very ids this pass wrote: only ids its chain does not reference are deleted, and none if its head cannot
+            // be read - a leaked chunk is recoverable, a torn chain is not.
             Set<String> winners = new HashSet<>();
             try {
                 index.descriptor().ifPresent(winner -> {
@@ -210,16 +191,15 @@ public final class PublishedIndexTask implements MaintenanceTask {
             }
             return;
         }
-        // The committed chain has landed: the marks it applied are spent (a mark re-touched meanwhile keeps its newer
-        // token and survives to the next pass), and after a rebase every mark older than the walk is redundant.
+        // The committed chain has landed: its marks are spent (a mark re-touched meanwhile keeps a newer token and
+        // survives), and after a rebase every mark older than the walk is redundant.
         if (rebase) {
             feed.compactThrough(cutoff);
         } else {
             feed.clear(marked);
         }
-        // Clear the retraction flag, but only while its token is unchanged since it was read before the walk. A
-        // withhold event that re-wrote the flag mid-pass changed its token, so the flag survives and the next pass
-        // rebases again; a crash before here also leaves it, so the next pass rebases. Idempotent and crash-safe.
+        // Clear the flag only while its token is the one read before the walk: a withhold that re-raised it mid-pass,
+        // or a crash before here, leaves it for the next pass to rebase again.
         if (rebase && retraction.isPresent()) {
             index.retraction().clearIf(retraction.get().token());
         }
@@ -228,14 +208,9 @@ public final class PublishedIndexTask implements MaintenanceTask {
                 chain.stream().mapToLong(IndexDescriptor.Chunk::compressedSize).sum());
     }
 
-    /** Whether every chunk the descriptor's chain still references is present in the store. A referenced chunk lost
-     *  out of band - a partial store failure, an over-eager object-lifecycle rule, a purge that dropped objects but
-     *  not the head - leaves the served chain unusable ({@code GET /chunks/<id>} 404s the gap) and no incremental
-     *  pass would ever re-derive it, since only publications past the watermark are appended. So a hole in the chain
-     *  forces a full rebase that reconstructs the whole chain from the durable publish pointers on the very next
-     *  pass, exactly as a corrupt descriptor head already does - rather than lingering broken until the scheduled
-     *  rebase. A bounded per-chunk {@code exists} metadata probe (never an artifact read) evaluated only when the
-     *  pass would otherwise stay incremental, so the steady-state read cost is one cheap probe per live chunk. */
+    /** Whether every chunk the chain references is present. A chunk lost out of band leaves the served chain broken and
+     *  no incremental pass would re-derive it, so a hole forces a rebase on the next pass. One {@code exists} probe per
+     *  live chunk, made only when the pass would otherwise stay incremental. */
     private static boolean chainIntact(PublishedIndex index, IndexDescriptor descriptor) {
         for (IndexDescriptor.Chunk chunk : descriptor.chain()) {
             if (!index.chunkExists(chunk.id())) {
@@ -245,16 +220,14 @@ public final class PublishedIndexTask implements MaintenanceTask {
         return true;
     }
 
-    /** A record sink that can throw, so the walk streams straight into the chunk writer without a buffer. */
+    /** A record sink that can throw, so the walk streams into the chunk writer without a buffer. */
     private interface Sink {
         void accept(IndexRecord record) throws IOException;
     }
 
-    /** Tracks the advancing compound high-water cursor across a pass without a mutable capture. The cursor advances to
-     *  the lexicographic maximum of ({@code published}, then {@code path}) over every record indexed, so a pass that
-     *  only recovers a same-instant split artifact (published at the standing instant, later path) still advances the
-     *  path component - and a next pass resumes strictly after it, re-processing neither. A racing record's EPOCH
-     *  publish never advances the instant, exactly as before. */
+    /** Tracks the advancing high-water cursor across a pass: the maximum of ({@code published}, {@code path}) over
+     *  every record indexed, so a pass that only recovers a same-instant artifact still advances the path and the next
+     *  pass resumes after it. A racing record's EPOCH instant never advances the cursor. */
     private static final class Progress {
 
         private IndexDescriptor.Cursor watermark;
@@ -275,19 +248,16 @@ public final class PublishedIndexTask implements MaintenanceTask {
         }
     }
 
-    /** The bounds the index pass descends {@code publish/} under. An index that stopped early would publish a chunk
-     *  chain a consumer syncs as complete while it is missing every coordinate past the cap, and would then advance
-     *  the watermark past them - so the entry cap is only the per-call continuation {@link #walk} follows to
-     *  exhaustion, and the binding bound is the step budget (one {@link ArtifactStore#exists} probe per opened node),
-     *  which raises a named {@link build.jenesis.repository.walk.TraversalException} rather than answering short.
-     *  Depth stays at the primitive's {@link ArtifactStore#MAX_SEGMENTS} default, so a request path deeper than the
-     *  store's own write ceiling fails by name where the previous self-recursion would have descended it onto the
-     *  call stack. */
+    /** The bounds the pass descends {@code publish/} under. A truncated index would be synced as complete and its
+     *  watermark would pass the missing coordinates, so the entry cap is only the per-call page {@link #walk} follows
+     *  to exhaustion; the binding bound is the step budget, which raises a
+     *  {@link build.jenesis.repository.walk.TraversalException} rather than answering short. Depth stays at
+     *  {@link ArtifactStore#MAX_SEGMENTS}. */
     private static final PagedTreeWalk TREE = PagedTreeWalk.bounded().steps(5_000_000).page(BoundedChildren.DRAIN_PAGE);
 
-    /** Stream every served publish pointer, in path order, through the shared bounded tree walk - iterative
-     *  and paged, so neither a client-planted path depth nor a million-sibling folder reaches the call stack or heap.
-     *  The quarantine review subtree is stored but never served, so it is filtered out of the delivered keys. */
+    /** Stream every served publish pointer, in path order, through the shared bounded tree walk, so neither a deep path
+     *  nor a huge folder reaches the call stack or heap. The quarantine subtree is stored but never served, so it is
+     *  skipped. */
     private static void walk(ArtifactStore store, Publication publication, ServableNames servableNames,
                              StoreRepositoryInventory inventory, boolean rebase,
                              IndexDescriptor.Cursor watermark, Sink sink) throws IOException {
@@ -311,9 +281,8 @@ public final class PublishedIndexTask implements MaintenanceTask {
                              StoreRepositoryInventory inventory, String relative, boolean rebase,
                              IndexDescriptor.Cursor watermark, Sink sink) throws IOException {
         String requestPath = "/" + relative;
-        // Served-view screen through the seam: index a pointer only when a GET would serve it. A withheld
-        // hold/quarantine or a torn-blob pointer (BLOB_GONE) is skipped - the one shared servable-name decision, so
-        // an index stanza can never disagree with the serve path.
+        // Index a pointer only when a GET would serve it: a withheld or BLOB_GONE pointer is skipped, so an index line
+        // never disagrees with the serve path.
         if (servableNames.state(requestPath) != ServableNames.State.SERVABLE) {
             return;                                          // withheld (a hold/quarantine) or the blob is gone
         }
@@ -332,28 +301,21 @@ public final class PublishedIndexTask implements MaintenanceTask {
         Instant published = Instant.EPOCH;
         boolean racing = false;
         if (coordinate != null && version != null) {
-            // The publish instant is read per walked coordinate from its version document - a bounded small-object
-            // read alongside the describe/size reads above - rather than from a snapshot map pre-buffered over the whole
-            // release set. A publish racing this pass (its pointer walked, its document just written) is indexed at
-            // its real instant, so the watermark advances correctly and it is not stranded below EPOCH.
+            // The publish instant is read per coordinate as walked, so a publish racing this pass is indexed at its
+            // real instant.
             Instant at = inventory.publishedAt(ecosystem, coordinate, version).orElse(null);
             if (at != null) {
                 published = at;
             } else {
-                // A located coordinate/version whose publish instant is not yet recorded (the pointer landed but the
-                // version document has not - the narrow window a publish races this pass): it is indexable now, so do
-                // not let it fall below the watermark. Defaulting it to EPOCH and skipping it would strand it, because
-                // the committed watermark advances past its real instant via the other publications in this pass, and
-                // no later incremental pass would re-append it until the P7D rebase. Index it now (its EPOCH never
-                // advances the watermark, so nothing else is stranded); the rebase later re-derives it with its instant.
+                // The pointer landed but the version document has not yet: index it now rather than let the watermark,
+                // advanced by the other publications in this pass, strand it until the rebase. Its EPOCH instant never
+                // advances the watermark, and the rebase later records its real instant.
                 racing = true;
             }
         }
         if (!rebase && !racing && !watermark.precedes(published, requestPath)) {
-            // Incremental: only artifacts strictly past the compound cursor. Comparing the whole (instant, path)
-            // resumes strictly after the last processed same-instant path, so a same-millisecond artifact split into a
-            // later pass (published exactly at the cursor's instant, larger path) is re-included and recovered here
-            // rather than stranded until the rebase - while those already chained (path <= the cursor's) stay skipped.
+            // Incremental: only artifacts strictly past the (instant, path) cursor, so a same-millisecond artifact
+            // split into this pass is recovered while those already chained stay skipped.
             return;
         }
         sink.accept(new IndexRecord(requestPath, size, sha256, ecosystem, coordinate, version, prerelease, published));

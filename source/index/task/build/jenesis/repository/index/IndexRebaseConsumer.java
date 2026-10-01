@@ -9,17 +9,15 @@ import build.jenesis.repository.walk.WalkConsumer;
 import build.jenesis.repository.walk.WalkPass;
 
 /**
- * The published index rebased at the end of a walk: a fresh chunk chain re-derived from every served pointer, in
- * path order, riding the walk rather than a clock and a walk of the publish tree of its own. The pass keeps the two
- * rebases an event demands - no chain yet, and a chain with a
- * hole or a retraction flag on it - and appends only what the dirty feed marked between; this consumer is the
- * scheduled one, weekly on the rebuild entry by default. It still enumerates the pointers over its own ordered
- * walk at completion, because a chunk chain is one artifact committed whole and a segmented pass cannot hand it
- * over in order. Listens on the pointer stream only to be told which store's pass it is riding.
+ * The published index rebased at the end of a walk: a fresh chunk chain re-derived from every served pointer, in path
+ * order. The pass keeps the rebases an event demands - no chain yet, a chain with a hole, a standing retraction flag -
+ * and appends only what the dirty feed marked; this consumer is the scheduled rebase, weekly on the rebuild entry by
+ * default. It enumerates the pointers over its own ordered walk at completion, because a chain is committed whole and a
+ * segmented pass cannot hand it over in order; it listens on the pointer stream only to learn which store's walk it
+ * rides.
  *
- * <p>A chunk is immutable, content-addressed and cached by consumers, so a rebase is also what removes a
- * retroactively withheld path from the index once the live retraction flag was missed; an operator who carries
- * this consumer on no entry is left with the flag alone for that.
+ * <p>A chunk is immutable and cached by consumers, so this rebase is also what removes a retroactively withheld path
+ * once the retraction flag was missed; carrying this consumer on no entry leaves the flag alone for that.
  */
 public final class IndexRebaseConsumer implements WalkConsumer {
 
