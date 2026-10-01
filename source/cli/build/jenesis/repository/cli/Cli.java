@@ -243,10 +243,14 @@ public final class Cli {
                   body: arguments and flags carry everything.
 
                 GETTING A SESSION
-                  jenrepo login <url> --key <key>
-                  The URL and key are stored under ~/.jenesis (override with JENREPO_CLI_HOME) and every later
-                  command uses them. 'whoami' shows what is stored. Without a session every command that needs one
-                  fails immediately and says so.
+                  JENREPO_KEY=<key> jenrepo login <url>
+                  jenrepo login <url> --key-stdin < key-file
+                  jenrepo login <url> --key-file <path>
+                  The key is never an argument: the process list and the shell history would keep it. It is read
+                  from --key-file, from standard input with --key-stdin, from JENREPO_KEY, or asked for at the
+                  terminal. The URL and key are stored under ~/.jenesis (override with JENREPO_CLI_HOME) and every
+                  later command uses them. 'whoami' shows what is stored. Without a session every command that needs
+                  one fails immediately and says so.
 
                 FINDING YOUR WAY
                   help              every command, grouped by what it is about

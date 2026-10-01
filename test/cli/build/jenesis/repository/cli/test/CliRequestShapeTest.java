@@ -387,7 +387,8 @@ public class CliRequestShapeTest {
         payload = home.resolve("payload.json");
         Files.writeString(payload, PAYLOAD);
         System.setProperty("JENREPO_CLI_HOME", home.toString());
-        Cli.run(new String[] {"login", "http://127.0.0.1:" + server.port() + "/", "--key", "test-key"});
+        Cli.run(new String[] {"login", "http://127.0.0.1:" + server.port() + "/", "--key-file",
+                Files.writeString(home.resolve("key"), "test-key").toString()});
     }
 
     @AfterAll

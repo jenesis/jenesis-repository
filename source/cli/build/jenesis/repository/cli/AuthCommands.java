@@ -15,33 +15,68 @@ final class AuthCommands {
     private AuthCommands() {
     }
 
+    /** The environment variable a script hands its key through, for a session started without a terminal. */
+    static final String KEY_VARIABLE = "JENREPO_KEY";
+
+    /** How {@code login} is typed, as the usage error and the help both state it. */
+    static final String LOGIN = "login <url> [--key-file <path> | --key-stdin]";
+
+    /**
+     * {@code login}: store the repository URL and the key every later command sends.
+     *
+     * <p>The key never comes from the command line, where the process list shows it to every user of the machine
+     * and the shell history keeps it. It is read from the file {@code --key-file} names, from standard input with
+     * {@code --key-stdin}, from {@value #KEY_VARIABLE}, or else asked for at the terminal without echo - in that
+     * order, the first that is given winning. With none of them and no terminal the session is anonymous.
+     */
     static int login(String[] args, Path home) throws Exception {
         String url = null;
-        String key = null;
+        Path file = null;
+        boolean stdin = false;
         for (int i = 1; i < args.length; i++) {
-            if (args[i].equals("--key") && i + 1 < args.length) {
-                key = args[++i];
-            } else if (url == null) {
-                url = args[i];
-            }
-        }
-        if (url == null) {
-            throw new IllegalArgumentException("Usage: login <url> [--key <key>]");
-        }
-        if (key == null) {
-            Console console = System.console();
-            if (console != null) {
-                char[] entered = console.readPassword("Repository key (blank for anonymous): ");
-                if (entered != null && entered.length > 0) {
-                    key = new String(entered);
+            switch (args[i]) {
+                case "--key" -> throw new IllegalArgumentException("login takes no key on its command line, where "
+                        + "the process list and the shell history keep it: use --key-file <path>, --key-stdin or "
+                        + KEY_VARIABLE + ". Usage: " + LOGIN);
+                case "--key-file" -> file = Path.of(CliSupport.flag(args, ++i));
+                case "--key-stdin" -> stdin = true;
+                default -> {
+                    if (args[i].startsWith("--") || url != null) {
+                        throw new IllegalArgumentException("Usage: " + LOGIN);
+                    }
+                    url = args[i];
                 }
             }
         }
-        Session session = new Session(URI.create(url), key);
+        if (url == null || file != null && stdin) {
+            throw new IllegalArgumentException("Usage: " + LOGIN);
+        }
+        String key;
+        if (file != null) {
+            key = Files.readString(file, StandardCharsets.UTF_8).strip();
+        } else if (stdin) {
+            key = new String(System.in.readAllBytes(), StandardCharsets.UTF_8).strip();
+        } else {
+            key = System.getenv(KEY_VARIABLE);
+            if (key == null || key.isBlank()) {
+                key = prompted();
+            }
+        }
+        Session session = new Session(URI.create(url), key == null || key.isBlank() ? null : key);
         session.save(home);
         System.out.println("Logged in to " + url + ".");
         warnUnlicensed(session);
         return 0;
+    }
+
+    /** The key typed at the terminal, unechoed, or {@code null} when there is no terminal or nothing was typed. */
+    private static String prompted() {
+        Console console = System.console();
+        if (console == null) {
+            return null;
+        }
+        char[] entered = console.readPassword("Repository key (blank for anonymous): ");
+        return entered == null || entered.length == 0 ? null : new String(entered);
     }
 
     /**

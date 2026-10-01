@@ -33,7 +33,8 @@ public class CliMissingEndpointTest {
         server = new WireMockServer(WireMockConfiguration.options().bindAddress("127.0.0.1").dynamicPort());
         server.start();
         System.setProperty("JENREPO_CLI_HOME", home.toString());
-        Cli.run(new String[] {"login", "http://127.0.0.1:" + server.port() + "/", "--key", "k"});
+        Cli.run(new String[] {"login", "http://127.0.0.1:" + server.port() + "/", "--key-file",
+                Files.writeString(home.resolve("key"), "k").toString()});
     }
 
     @AfterAll

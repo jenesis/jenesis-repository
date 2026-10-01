@@ -54,7 +54,7 @@ public class CliBindingTest {
 
     /** The nouns that never call the server: they read or write the stored session on disk. */
     private static final Map<String, List<String>> LOCAL = Map.of(
-            "login", List.of("login", "http://127.0.0.1:1/", "--key", "k"),
+            "login", List.of("login", "http://127.0.0.1:1/", "--key-file", "key"),
             "logout", List.of("logout"),
             "whoami", List.of("whoami"));
 
@@ -141,7 +141,8 @@ public class CliBindingTest {
         // Log in through the CLI rather than writing its session file here: the format is the CLI's business, and
         // a fixture that hand-rolls it silently stops logging in the day that changes - which is exactly what
         // happened when this was first written, and every case then reported the command as unwired.
-        run("login", "http://127.0.0.1:" + server.port() + "/", "--key", "test-key");
+        run("login", "http://127.0.0.1:" + server.port() + "/", "--key-file",
+                Files.writeString(home.resolve("key"), "test-key").toString());
     }
 
     private static final JsonMapper JSON = JsonMapper.builder().build();

@@ -52,7 +52,9 @@ public final class Commands {
     public static final List<Section> SECTIONS = List.of(
             new Section("Session", List.of(
                     noun("login", "store the repository URL and key under ~/.jenesis", AuthCommands::login,
-                            act("login <url> [--key <key>]", "save the session used by every other command")),
+                            act(AuthCommands.LOGIN, "save the session used by every other command; the key is "
+                                    + "read from the file, standard input, " + AuthCommands.KEY_VARIABLE
+                                    + " or the terminal, never the command line")),
                     noun("logout", "forget the stored session", AuthCommands::logout,
                             act("logout", "delete the stored session")),
                     noun("whoami", "show the current session", AuthCommands::whoami,

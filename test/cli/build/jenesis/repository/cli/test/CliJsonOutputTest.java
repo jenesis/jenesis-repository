@@ -51,7 +51,8 @@ public class CliJsonOutputTest {
         // A write answers with no body, as the real server does - which is the case {"ok":true} exists for.
         server.stubFor(put(urlPathMatching("/api/settings/.*")).willReturn(aResponse().withStatus(200)));
         System.setProperty("JENREPO_CLI_HOME", home.toString());
-        Cli.run(new String[] {"login", "http://127.0.0.1:" + server.port() + "/", "--key", "test-key"});
+        Cli.run(new String[] {"login", "http://127.0.0.1:" + server.port() + "/", "--key-file",
+                Files.writeString(home.resolve("key"), "test-key").toString()});
     }
 
     @AfterAll

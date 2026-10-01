@@ -19,7 +19,7 @@ final class CliSupport {
     static RepositoryClient client(Path home) throws Exception {
         Session session = Session.load(home);
         if (session == null) {
-            throw new IllegalArgumentException("Not logged in; run 'login <url> --key <key>' first.");
+            throw new IllegalArgumentException("Not logged in; run '" + AuthCommands.LOGIN + "' first.");
         }
         return new RepositoryClient(session.url(), session.key(),
                 ScreenedHttpClient.newBuilder().connectTimeout(Duration.ofSeconds(10)).build());

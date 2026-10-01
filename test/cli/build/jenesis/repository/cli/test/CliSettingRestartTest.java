@@ -32,7 +32,8 @@ public class CliSettingRestartTest {
         server.stubFor(put(urlPathEqualTo("/api/settings/license-unknown")).willReturn(aResponse().withStatus(200)
                 .withHeader("Jenesis-Applies-On", "now")));
         System.setProperty("JENREPO_CLI_HOME", home.toString());
-        Cli.run(new String[] {"login", "http://127.0.0.1:" + server.port() + "/", "--key", "k"});
+        Cli.run(new String[] {"login", "http://127.0.0.1:" + server.port() + "/", "--key-file",
+                Files.writeString(home.resolve("key"), "k").toString()});
     }
 
     @AfterAll
