@@ -30,7 +30,7 @@
          else reads the values. */-->
     <th:block th:if="${isEditor}" th:each="g : ${groups}">
         <article th:replace="~{fragments :: settingGroup(${g}, '/ui/projects/' + ${project.name} + '/settings/save',
-                null, 'project value', 'inherited', 'the inherited value', ' for this project')}"></article>
+                null, 'inherited', 'the inherited value', ' for this project')}"></article>
     </th:block>
     <th:block th:unless="${isEditor}" th:each="g : ${groups}">
         <article class="setting-group">

@@ -20,7 +20,9 @@ import build.jenesis.repository.cleanup.StoredReport;
 import build.jenesis.repository.ui.BrowseRow;
 import build.jenesis.repository.ui.CurrentTenant;
 import org.springframework.security.core.Authentication;
+import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Controller;
+import org.springframework.web.server.ResponseStatusException;
 import org.springframework.ui.Model;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -551,6 +553,25 @@ public class RepositoryAdminController {
         model.addAttribute("mark", ecosystemMark(ecosystem));
         downloads(model);
         return "coordinate";
+    }
+
+    /** One version's own page: everything the repository records about it, from what its manifest says and the
+     *  licences it declares to its signature, provenance, dependencies and files - reached from its package's page. A
+     *  version the repository holds no document for is a {@code 404}. */
+    @GetMapping("/ui/repositories/{repo}/version")
+    public String version(@PathVariable("repo") String repo,
+                          @RequestParam("ecosystem") String ecosystem,
+                          @RequestParam("coordinate") String coordinate,
+                          @RequestParam("version") String version,
+                          Model model) throws IOException {
+        RepositoryBrowse.VersionDetail detail = browse.version(repo, ecosystem, coordinate, version)
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND,
+                        coordinate + " " + version + " is not held in " + repo));
+        model.addAttribute("repo", repo);
+        model.addAttribute("detail", detail);
+        model.addAttribute("mark", ecosystemMark(ecosystem));
+        downloads(model);
+        return "version";
     }
 
     /**

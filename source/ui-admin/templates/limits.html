@@ -21,7 +21,7 @@
     <!--/* The ceilings are the catalogue's own settings of the Limits group, rendered as every settings screen renders
          them; an administrator edits them, anyone else reads them. */-->
     <th:block th:if="${isAdmin}" th:each="g : ${groups}">
-        <article th:replace="~{fragments :: settingGroup(${g}, '/ui/limits/save', null, 'tenant override',
+        <article th:replace="~{fragments :: settingGroup(${g}, '/ui/limits/save', null,
                 'deployment', 'the deployment value', ' for this tenant')}"></article>
     </th:block>
     <th:block th:unless="${isAdmin}" th:each="g : ${groups}">

@@ -25,7 +25,7 @@
         may override the compliance gate policy and forward targets when those modules are present.</small></p>
 
     <th:block th:each="g : ${groups}">
-        <article th:replace="~{fragments :: settingGroup(${g}, '/ui/settings/tenant/save', null, 'tenant override',
+        <article th:replace="~{fragments :: settingGroup(${g}, '/ui/settings/tenant/save', null,
                 'deployment', 'the deployment value', ' for this tenant')}"></article>
     </th:block>
 

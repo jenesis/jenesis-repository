@@ -20,7 +20,7 @@
     <p class="setting-nomatch" id="setting-nomatch" hidden>No setting matches that filter.</p>
 
     <th:block th:each="g : ${groups}">
-        <article th:replace="~{fragments :: settingGroup(${g}, '/ui/settings/save', '/settings', 'changed', 'default',
+        <article th:replace="~{fragments :: settingGroup(${g}, '/ui/settings/save', '/settings', 'default',
                 'its default', '')}"></article>
     </th:block>
 </main>

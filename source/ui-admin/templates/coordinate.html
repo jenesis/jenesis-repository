@@ -37,9 +37,9 @@
     <article>
         <h2>Versions</h2>
         <p><small>The versions of this coordinate this repository holds - published into it, or cached from an
-            upstream - newest first, and the files each is served as, under the folder they share; a long list is
-            paged by name. A held or collected
-            version is listed greyed and its paths answer 404.</small></p>
+            upstream - newest first; a long list is paged by name. Open a version for everything recorded about it:
+            its licences, what its manifest says, its signature, dependencies and files. A held or collected version
+            is listed greyed and its paths answer 404.</small></p>
         <p th:if="${downloadsTracked && !downloadsLag.isEmpty()}"><small
                 th:text="'Download counts and times can be up to ' + ${downloadsLag} + ' behind.'">Download counts and times can be up to 6 hours behind.</small></p>
         <div th:if="${detail.versions.isEmpty()}" class="app-empty" role="status">
@@ -57,13 +57,13 @@
                 </tr>
                 </thead>
                 <tbody>
-                <!--/* Two rows a version: its facts, then - across the table's whole width - where its files are served:
-                     the folder they share, named once, and each file by its name below it. */-->
+                <!--/* A row a version, its facts at a glance; the version opens its own page, where everything else
+                     recorded about it - files, licences, manifest, signature - is listed. */-->
                 <th:block th:each="v : ${detail.versions}">
-                <tr th:classappend="${v.paths.isEmpty() and !v.cached} ? '' : 'app-list__lead'"
-                    th:style="${v.served} ? '' : 'opacity: 0.6'">
+                <tr th:style="${v.served} ? '' : 'opacity: 0.6'">
                     <td>
-                        <code th:text="${v.version}">1.0.0</code>
+                        <a th:href="@{/ui/repositories/{repo}/version(repo=${repo},ecosystem=${detail.ecosystem},coordinate=${detail.coordinate},version=${v.version})}"><code
+                                th:text="${v.version}">1.0.0</code></a>
                         <small th:unless="${v.served}">(withheld)</small>
                     </td>
                     <td class="app-list__date"><small th:text="${instants.display(v.published)}">2026-06-01T00:00:00Z</small>
@@ -71,10 +71,6 @@
                     <!--/* Pinned where the versions are listed: an editor pins or lifts it on the row itself. */-->
                     <td><div class="app-actions">
                         <span th:if="${v.pinned}">yes</span>
-                        <!--/* A version is deprecated or yanked on the lifecycle page, where an installed module adds one. */-->
-                        <a th:if="${isEditor and repositoryPagePaths.contains('/lifecycle') and !v.cached}"
-                           th:href="@{/ui/repositories/{repo}/lifecycle(repo=${repo},coordinate=${detail.coordinate},version=${v.version},path=${v.paths.isEmpty() ? '' : v.paths[0]})}">Deprecate
-                            or yank</a>
                         <form th:if="${isEditor and !v.cached}" method="post"
                               th:action="${v.pinned} ? @{'/ui/repositories/' + ${repo} + '/pins/remove'} : @{'/ui/repositories/' + ${repo} + '/pins'}"
                               th:with="here=@{/ui/repositories/{repo}/coordinate(repo=${repo},ecosystem=${detail.ecosystem},coordinate=${detail.coordinate})}">
@@ -92,23 +88,6 @@
                     </td>
                     <td class="app-list__num"><small th:text="${v.paths.isEmpty() ? '—'
                             : (v.paths.size() == 1 ? '1 file' : v.paths.size() + ' files')}">4 files</small></td>
-                </tr>
-                <tr th:unless="${v.paths.isEmpty() and !v.cached}" class="app-list__detail"
-                    th:style="${v.served} ? '' : 'opacity: 0.6'">
-                    <td th:colspan="${downloadsTracked} ? 5 : 4">
-                        <small th:if="${v.cached}" class="app-list__origin">cached from <code
-                                th:text="${v.upstream} ?: 'an upstream'">https://registry.npmjs.org/</code></small>
-                        <small th:unless="${v.paths.isEmpty() or v.folder.isEmpty()}">in
-                            <code th:text="${v.folder}">/maven/org/acme/lib/1.0/</code></small>
-                        <ul th:unless="${v.paths.isEmpty()}" class="app-files">
-                            <li th:each="f : ${v.files}">
-                                <a th:if="${v.browsable}" th:title="${f.path}"
-                                   th:href="@{/ui/repositories/{repo}/artifact(repo=${repo},path=${f.path})}"
-                                   th:text="${f.name}">lib-1.0.jar</a>
-                                <code th:unless="${v.browsable}" th:title="${f.path}" th:text="${f.name}">left-pad-1.0.0.tgz</code>
-                            </li>
-                        </ul>
-                    </td>
                 </tr>
                 </th:block>
                 </tbody>

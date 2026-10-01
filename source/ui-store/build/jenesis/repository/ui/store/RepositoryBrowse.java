@@ -11,10 +11,19 @@ import build.jenesis.repository.findings.Findings;
 import build.jenesis.repository.findings.FindingsProvider;
 import build.jenesis.repository.gate.QuarantineLog;
 import build.jenesis.repository.gateway.HardenedScreen;
+import build.jenesis.repository.inventory.AboutSection;
+import build.jenesis.repository.inventory.CachedSection;
+import build.jenesis.repository.inventory.DependencySection;
+import build.jenesis.repository.inventory.DownloadsSection;
+import build.jenesis.repository.inventory.LicenseInventory;
+import build.jenesis.repository.inventory.LicenseSection;
 import build.jenesis.repository.inventory.OriginSection;
+import build.jenesis.repository.inventory.ProvenanceSection;
+import build.jenesis.repository.inventory.PublishedSection;
 import build.jenesis.repository.inventory.SignatureSection;
 import build.jenesis.repository.inventory.SignatureSummaries;
 import build.jenesis.repository.inventory.StoreRepositoryInventory;
+import build.jenesis.repository.metadata.MetadataDocument;
 import build.jenesis.repository.metadata.MetadataProvider;
 import build.jenesis.repository.metadata.MetadataStore;
 import build.jenesis.repository.metadata.Section;
@@ -180,30 +189,40 @@ public class RepositoryBrowse extends TenantScope {
                                     List<String> paths, boolean browsable, Long downloads, String lastDownloaded,
                                     boolean cached, String upstream) {
 
-        /** The folder every path lies in, ending in {@code /} - the longest prefix they share, cut back to a folder -
-         *  or the empty string when they share none below the root, so a row names it once instead of per file. */
+        /** The folder every path lies in - see {@link RepositoryBrowse#folder(List)}. */
         public String folder() {
-            if (paths.isEmpty()) {
-                return "";
-            }
-            String shared = paths.getFirst();
-            for (String path : paths) {
-                int length = 0;
-                while (length < shared.length() && length < path.length()
-                        && shared.charAt(length) == path.charAt(length)) {
-                    length++;
-                }
-                shared = shared.substring(0, length);
-            }
-            int slash = shared.lastIndexOf('/');
-            return slash <= 0 ? "" : shared.substring(0, slash + 1);
+            return RepositoryBrowse.folder(paths);
         }
 
-        /** The paths as the row lists them: each with {@link #folder()} taken off, in the order they are served. */
+        /** The paths as the row lists them - see {@link RepositoryBrowse#files(List)}. */
         public List<ServedFile> files() {
-            String folder = folder();
-            return paths.stream().map(path -> new ServedFile(path.substring(folder.length()), path)).toList();
+            return RepositoryBrowse.files(paths);
         }
+    }
+
+    /** The folder every path lies in, ending in {@code /} - the longest prefix they share, cut back to a folder - or
+     *  the empty string when they share none below the root, so a version names it once instead of per file. */
+    static String folder(List<String> paths) {
+        if (paths.isEmpty()) {
+            return "";
+        }
+        String shared = paths.getFirst();
+        for (String path : paths) {
+            int length = 0;
+            while (length < shared.length() && length < path.length()
+                    && shared.charAt(length) == path.charAt(length)) {
+                length++;
+            }
+            shared = shared.substring(0, length);
+        }
+        int slash = shared.lastIndexOf('/');
+        return slash <= 0 ? "" : shared.substring(0, slash + 1);
+    }
+
+    /** The paths as a version lists them: each with {@link #folder(List)} taken off, in the order they are served. */
+    static List<ServedFile> files(List<String> paths) {
+        String folder = folder(paths);
+        return paths.stream().map(path -> new ServedFile(path.substring(folder.length()), path)).toList();
     }
 
     /** One path a version is served at: its {@code name} below the version's shared folder, and the whole path. */
@@ -354,6 +373,71 @@ public class RepositoryBrowse extends TenantScope {
         String location = newest == null ? ""
                 : safePrefix(inventory.locateHeld(ecosystem, coordinate, newest.version()));
         return new CoordinateDetail(ecosystem, coordinate, location, versions, page.next());
+    }
+
+    /** The most dependencies a version's page lists; past it the page says how many more there are. */
+    public static final int DEPENDENCIES_SHOWN = 200;
+
+    /**
+     * Everything this repository records about one version, for its own page: when it was published or cached and
+     * from where, whether it is served, pinned or a prerelease, its downloads, what its manifest says about it, the
+     * licences it declares, its signature and provenance, what it depends on and the files it is served as. One read
+     * of the version's document and of its served pointers - never an artifact body - and empty for a version this
+     * repository holds no document for.
+     */
+    public Optional<VersionDetail> version(String repository, String ecosystem, String coordinate, String version)
+            throws IOException {
+        ArtifactStore store = scope(repository);
+        Optional<MetadataDocument> read = MetadataProvider.installed().over(store).read(ecosystem, coordinate, version);
+        if (read.isEmpty()) {
+            return Optional.empty();
+        }
+        MetadataDocument document = read.get();
+        Optional<PublishedSection.Facts> published = PublishedSection.facts(document.section(PublishedSection.TAG));
+        Optional<CachedSection.Facts> cached = CachedSection.facts(document.section(CachedSection.TAG));
+        if (published.isEmpty() && cached.isEmpty()) {
+            return Optional.empty();
+        }
+        StoreRepositoryInventory inventory = new StoreRepositoryInventory(store);
+        Optional<DownloadsSection.Facts> downloads = DownloadsSection.facts(document.section(DownloadsSection.TAG));
+        Optional<AboutSection.About> about = AboutSection.about(document.section(AboutSection.TAG));
+        List<DependencySection.Declared> dependencies = DependencySection.declared(
+                document.section(DependencySection.TAG)).orElse(List.of());
+        return Optional.of(new VersionDetail(ecosystem, coordinate, version,
+                stamp(published.map(PublishedSection.Facts::at).orElse(cached.map(CachedSection.Facts::at).orElse(null))),
+                cached.isPresent(), cached.map(CachedSection.Facts::upstream).orElse(null),
+                published.map(PublishedSection.Facts::prerelease).orElse(false),
+                published.map(PublishedSection.Facts::pinned).orElse(false),
+                inventory.disclosable(ecosystem, coordinate, version, ServableNames.Policy.HIDE_WITHHELD_AND_GONE),
+                downloads.map(DownloadsSection.Facts::count).orElse(0L),
+                stamp(downloads.map(DownloadsSection.Facts::last).orElse(null)),
+                about.orElse(null), LicenseSection.declared(document.section(LicenseSection.TAG)),
+                SignatureSection.summary(document.section(SignatureSection.TAG)).orElse(null),
+                ProvenanceSection.summary(document.section(ProvenanceSection.TAG)).orElse(null),
+                dependencies.stream().limit(DEPENDENCIES_SHOWN).toList(), dependencies.size(),
+                inventory.paths(ecosystem, coordinate, version),
+                !inventory.locate(ecosystem, coordinate, version).isEmpty()));
+    }
+
+    /** One version as its own page shows it - see {@link #version}. {@code about}, {@code signature} and
+     *  {@code provenance} are {@code null} where the document records none; {@code dependencies} holds at most
+     *  {@link #DEPENDENCIES_SHOWN} of the {@code dependencyCount} declared. */
+    public record VersionDetail(String ecosystem, String coordinate, String version, String published, boolean cached,
+                                String upstream, boolean prerelease, boolean pinned, boolean served, long downloads,
+                                String lastDownloaded, AboutSection.About about,
+                                List<LicenseInventory.Declared> licenses, SignatureSection.Summary signature,
+                                ProvenanceSection.Summary provenance, List<DependencySection.Declared> dependencies,
+                                int dependencyCount, List<String> paths, boolean browsable) {
+
+        /** The folder every file lies in - see {@link RepositoryBrowse#folder(List)}. */
+        public String folder() {
+            return RepositoryBrowse.folder(paths);
+        }
+
+        /** The files with {@link #folder()} taken off. */
+        public List<ServedFile> files() {
+            return RepositoryBrowse.files(paths);
+        }
     }
 
     /**

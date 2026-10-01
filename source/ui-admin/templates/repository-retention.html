@@ -18,7 +18,7 @@
     <p th:unless="${isEditor}"><small>You have read-only access to this tenant.</small></p>
     <th:block th:if="${isEditor}" th:each="g : ${groups}">
         <article th:replace="~{fragments :: settingGroup(${g}, '/ui/repositories/' + ${repo} + '/settings/save',
-                '/ui/repositories/' + ${repo} + '/retention', 'repository value', 'inherited', 'the inherited value',
+                '/ui/repositories/' + ${repo} + '/retention', 'inherited', 'the inherited value',
                 ' for this repository')}"></article>
     </th:block>
 

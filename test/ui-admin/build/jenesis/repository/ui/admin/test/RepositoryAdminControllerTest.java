@@ -7,6 +7,9 @@ import build.jenesis.repository.audit.AuditTrail;
 import build.jenesis.repository.cleanup.StoredReport;
 import build.jenesis.repository.format.FormatMarks;
 import build.jenesis.repository.inventory.DownloadTracker;
+import build.jenesis.repository.inventory.AboutSection;
+import build.jenesis.repository.inventory.DependencySection;
+import build.jenesis.repository.inventory.LicenseInventory;
 import build.jenesis.repository.inventory.StoreRepositoryInventory;
 import build.jenesis.repository.store.ArtifactStore;
 import build.jenesis.repository.store.ArtifactStoreProvider;
@@ -354,6 +357,37 @@ class RepositoryAdminControllerTest {
         controller.coordinate("libs", "cobol", "x", "", orphan);
         assertThat(orphan.get("mark")).as("an ecosystem nothing installed declares is drawn as an orphan")
                 .isNotNull();
+    }
+
+    @Test
+    void a_version_page_shows_everything_the_version_document_records() throws IOException {
+        create("libs", "maven");
+        publish("libs", "/maven/org/acme/lib/1.0/lib-1.0.jar", "released jar");
+        publish("libs", "/maven/org/acme/lib/1.0/lib-1.0.pom", "released pom");
+        new StoreRepositoryInventory(repository("libs"))
+                .recording("Maven", "org.acme:lib", "1.0", false, Instant.parse("2026-01-01T00:00:00Z"))
+                .licenses(List.of(new LicenseInventory.Declared("MIT", null)))
+                .about(new AboutSection.About("A library", List.of("util"), List.of("Acme")))
+                .dependencies(List.of(new DependencySection.Declared("org.acme:base", "1.0")))
+                .commit();
+        ExtendedModelMap model = new ExtendedModelMap();
+
+        assertThat(controller.version("libs", "Maven", "org.acme:lib", "1.0", model)).isEqualTo("version");
+
+        RepositoryBrowse.VersionDetail detail = (RepositoryBrowse.VersionDetail) model.get("detail");
+        assertThat(detail.published()).isEqualTo("2026-01-01T00:00:00Z");
+        assertThat(detail.cached()).isFalse();
+        assertThat(detail.served()).isTrue();
+        assertThat(detail.licenses()).extracting(LicenseInventory.Declared::name).containsExactly("MIT");
+        assertThat(detail.about().description()).isEqualTo("A library");
+        assertThat(detail.dependencies()).extracting(DependencySection.Declared::coordinate)
+                .containsExactly("org.acme:base");
+        assertThat(detail.folder()).isEqualTo("/maven/org/acme/lib/1.0/");
+        assertThat(detail.files()).extracting(RepositoryBrowse.ServedFile::name)
+                .containsExactlyInAnyOrder("lib-1.0.jar", "lib-1.0.pom");
+        assertThatThrownBy(() -> controller.version("libs", "Maven", "org.acme:lib", "9.9", new ExtendedModelMap()))
+                .as("a version the repository holds no document for")
+                .isInstanceOf(org.springframework.web.server.ResponseStatusException.class);
     }
 
     @Test

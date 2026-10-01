@@ -87,15 +87,15 @@
      names. `s` is a SettingsAdmin.SettingView; `back` is the console path the save returns to (the settings screen
      vets it). Both forms post to /settings/save, so a value applied from either screen is applied by one path. */-->
 <div th:fragment="settingRow(s, back)"
-     th:replace="~{fragments :: settingRowFor(${s}, '/ui/settings/save', ${back}, 'changed', 'default', 'its default',
+     th:replace="~{fragments :: settingRowFor(${s}, '/ui/settings/save', ${back}, 'default', 'its default',
              '')}"></div>
 
 <!--/* settingRowFor: the row itself, for either layer it edits. The deployment's settings and a tenant's overrides
      differ only in where a value is saved and what it falls back to, so the one row takes those as parameters rather
      than being drawn twice: `action` is the save route, `back` the return path (null where the route takes none),
-     `changed` the badge an override carries, `baseline` what the value falls back to, `revertTo` the same in a
-     sentence, and `scope` what a confirmation adds (" for this tenant", or nothing). */-->
-<div th:fragment="settingRowFor(s, action, back, changed, baseline, revertTo, scope)" class="setting"
+     `baseline` what the value falls back to, `revertTo` the same in a sentence, and `scope` what a confirmation adds
+     (" for this tenant", or nothing). A value set here is marked overridden, the same word at every layer. */-->
+<div th:fragment="settingRowFor(s, action, back, baseline, revertTo, scope)" class="setting"
      th:attr="data-search=|${s.key} ${s.label} ${s.description} ${s.module}|">
     <div class="setting-head">
         <div>
@@ -106,8 +106,7 @@
         <div class="setting-badges">
             <span class="app-badge app-badge--pass" th:if="${s.live}">live</span>
             <span class="app-badge" th:unless="${s.live}">↻ restart</span>
-            <span class="app-badge app-badge--warn" th:if="${s.overridden and !s.pinned}"
-                  th:text="${changed}">changed</span>
+            <span class="app-badge app-badge--info" th:if="${s.overridden and !s.pinned}">overridden</span>
             <span class="app-badge" th:if="${s.pinned}"
                   th:title="|This value is fixed by ${s.pinnedBy} and cannot be changed from the store.|"
                   th:text="|🔒 pinned by ${s.pinnedBy}|">🔒 pinned</span>
@@ -121,9 +120,9 @@
         <span><th:block th:text="${baseline}">default</th:block>: <span
                 th:text="${s.defaultDisplay()}">default</span></span>
     </p>
-    <!--/* The row's controls on one line: the value and its Save, then Revert beside it while the value is set
-         here. Save is what the row is for, so it is the filled button; Revert drops the value set here, so it is
-         the caution. On a high-impact setting either can start rejecting or admitting packages, so both are the
+    <!--/* The row's controls on one line: the value and its Save, then Reset to default beside it while the value is
+         set here. Save is what the row is for, so it is the filled button; the reset drops the value set here, so it
+         is the caution. On a high-impact setting either can start rejecting or admitting packages, so both are the
          caution and ask first. */-->
     <div class="setting-controls">
     <th:block th:if="${s.toggle()}">
@@ -158,28 +157,28 @@
         <input type="hidden" name="key" th:value="${s.key}">
         <input type="hidden" name="return" th:value="${back}" th:if="${back != null}">
         <input type="hidden" name="value" value="">
-        <th:block th:if="${s.highImpact}"><button th:replace="~{base :: cautionButton('Revert',
-                |Revert this high-impact policy knob to ${revertTo}?|)}">Revert</button></th:block>
-        <button th:unless="${s.highImpact}" type="submit" class="secondary outline app-caution">Revert</button>
+        <th:block th:if="${s.highImpact}"><button th:replace="~{base :: cautionButton('Reset to default',
+                |Reset this high-impact setting to ${revertTo}?|)}">Reset to default</button></th:block>
+        <button th:unless="${s.highImpact}" type="submit" class="secondary outline app-caution">Reset to default</button>
     </form>
     </div>
 </div>
 
 <!--/* settingGroup: one group of settings, its essential ones shown and its advanced ones - tuning whose default nearly
      every deployment keeps - folded behind a disclosure that says how many it holds and how many of those have been
-     changed, so a changed value is never out of sight without a word. The settings filter opens the disclosure when
+     overridden, so an overridden value is never out of sight without a word. The settings filter opens the disclosure when
      it matches inside it. The parameters after `g` are settingRowFor's. */-->
-<article th:fragment="settingGroup(g, action, back, changed, baseline, revertTo, scope)" class="setting-group">
+<article th:fragment="settingGroup(g, action, back, baseline, revertTo, scope)" class="setting-group">
     <h2 th:text="${g.name}">Group</h2>
     <th:block th:each="s : ${g.essentials()}">
-        <div th:replace="~{fragments :: settingRowFor(${s}, ${action}, ${back}, ${changed}, ${baseline}, ${revertTo},
+        <div th:replace="~{fragments :: settingRowFor(${s}, ${action}, ${back}, ${baseline}, ${revertTo},
                 ${scope})}"></div>
     </th:block>
     <details class="setting-advanced" th:unless="${g.tuning().isEmpty()}">
         <summary><th:block th:text="|Advanced (${g.tuning().size()})|">Advanced</th:block><small
-                th:if="${g.tuningChanged() > 0}" th:text="| · ${g.tuningChanged()} ${changed}|"></small></summary>
+                th:if="${g.tuningChanged() > 0}" th:text="| · ${g.tuningChanged()} overridden|"></small></summary>
         <th:block th:each="s : ${g.tuning()}">
-            <div th:replace="~{fragments :: settingRowFor(${s}, ${action}, ${back}, ${changed}, ${baseline},
+            <div th:replace="~{fragments :: settingRowFor(${s}, ${action}, ${back}, ${baseline},
                     ${revertTo}, ${scope})}"></div>
         </th:block>
     </details>

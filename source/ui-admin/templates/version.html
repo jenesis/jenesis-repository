@@ -1,0 +1,156 @@
+<!DOCTYPE html>
+<!--
+  version.html - one version of one coordinate, and everything this repository records about it: when it was published
+  or cached and from where, whether it is served, pinned or a prerelease, its downloads, what its manifest says about
+  it, the licences it declares, its signature and provenance, what it depends on and the files it is served as.
+
+  Rendered by RepositoryAdminController from RepositoryBrowse.version, which reads the version's document and its served
+  pointers - never an artifact body. Reached from the version's row on its package's page.
+-->
+<html lang="en" xmlns:th="http://www.thymeleaf.org">
+<head th:replace="~{fragments :: head('Version')}"></head>
+<body>
+<header th:replace="~{fragments :: nav}"></header>
+<main id="main">
+    <div th:replace="~{fragments :: messages}"></div>
+    <th:block th:replace="~{base :: repositoryHeader(${detail.version}, ${detail.coordinate},
+            @{/ui/repositories/{repo}/coordinate(repo=${repo},ecosystem=${detail.ecosystem},coordinate=${detail.coordinate})})}"></th:block>
+
+    <article>
+        <p th:if="${detail.about != null and detail.about.description() != null}"
+           th:text="${detail.about.description()}">What the package is.</p>
+        <figure>
+        <table>
+            <tbody>
+            <tr>
+                <th scope="row" th:text="${detail.cached} ? 'Cached' : 'Published'">Published</th>
+                <td><span th:text="${instants.display(detail.published)}">2026-06-01T00:00:00Z</span>
+                    <small th:if="${detail.cached}">from <code th:text="${detail.upstream} ?: 'an upstream'">https://repo1.maven.org/maven2/</code></small></td>
+            </tr>
+            <tr>
+                <th scope="row">Served</th>
+                <td th:text="${detail.served} ? 'yes' : 'no - held or gone, so its paths answer 404'">yes</td>
+            </tr>
+            <tr>
+                <th scope="row">Ecosystem</th>
+                <td><span th:if="${mark != null}"
+                          th:class="${mark.installed} ? 'format-icon' : 'format-icon format-icon--orphaned'"
+                          th:title="${mark.title}" role="img" th:attr="aria-label=${mark.title}" th:utext="${mark.svg}"></span>
+                    <span th:text="${detail.ecosystem}">Maven</span></td>
+            </tr>
+            <tr th:if="${detail.prerelease}">
+                <th scope="row">Prerelease</th>
+                <td>yes</td>
+            </tr>
+            <tr>
+                <th scope="row">Pinned</th>
+                <td><div class="app-actions">
+                    <span th:text="${detail.pinned} ? 'yes' : 'no'">no</span>
+                    <form th:if="${isEditor and !detail.cached}" method="post"
+                          th:action="${detail.pinned} ? @{'/ui/repositories/' + ${repo} + '/pins/remove'} : @{'/ui/repositories/' + ${repo} + '/pins'}"
+                          th:with="here=@{/ui/repositories/{repo}/version(repo=${repo},ecosystem=${detail.ecosystem},coordinate=${detail.coordinate},version=${detail.version})}">
+                        <input type="hidden" name="ecosystem" th:value="${detail.ecosystem}">
+                        <input type="hidden" name="coordinate" th:value="${detail.coordinate}">
+                        <input type="hidden" name="version" th:value="${detail.version}">
+                        <input type="hidden" name="returnTo" th:value="${here}">
+                        <th:block th:if="${detail.pinned}"><button th:replace="~{base :: cautionButton('Unpin', 'Lift this pin? The version becomes eligible for retention eviction.')}">Unpin</button></th:block>
+                        <th:block th:unless="${detail.pinned}"><button th:replace="~{base :: secondaryButton('Pin')}">Pin</button></th:block>
+                    </form>
+                </div></td>
+            </tr>
+            <tr th:if="${downloadsTracked}">
+                <th scope="row">Downloads</th>
+                <td><span th:text="${detail.downloads}">7</span>
+                    <small th:if="${!detail.lastDownloaded.isEmpty()}" th:text="'last ' + ${instants.display(detail.lastDownloaded)}">last 2026-06-05T12:00:00Z</small>
+                    <small th:if="${!downloadsLag.isEmpty()}" th:text="'(up to ' + ${downloadsLag} + ' behind)'">(up to 6 hours behind)</small></td>
+            </tr>
+            <tr>
+                <th scope="row">Licences</th>
+                <td>
+                    <span th:if="${detail.licenses.isEmpty()}">none declared</span>
+                    <ul th:unless="${detail.licenses.isEmpty()}" class="app-reasons">
+                        <li th:each="license : ${detail.licenses}">
+                            <a th:if="${license.url() != null and !license.url().isBlank()}" th:href="${license.url()}"
+                               rel="noopener" th:text="${license.name()}">Apache-2.0</a>
+                            <span th:unless="${license.url() != null and !license.url().isBlank()}"
+                                  th:text="${license.name()}">Apache-2.0</span>
+                        </li>
+                    </ul>
+                </td>
+            </tr>
+            <tr th:if="${detail.about != null and !detail.about.authors().isEmpty()}">
+                <th scope="row">Authors</th>
+                <td th:text="${#strings.listJoin(detail.about.authors(), ', ')}">The Acme team</td>
+            </tr>
+            <tr th:if="${detail.about != null and !detail.about.keywords().isEmpty()}">
+                <th scope="row">Keywords</th>
+                <td><span th:each="keyword : ${detail.about.keywords()}" class="app-badge" th:text="${keyword}">pdf</span></td>
+            </tr>
+            <tr>
+                <th scope="row">Signature</th>
+                <td>
+                    <span th:if="${detail.signature == null}">none recorded</span>
+                    <th:block th:if="${detail.signature != null}">
+                        <strong th:text="${detail.signature.trusted()} ? 'Signed and trusted' : ${detail.signature.outcome()}">Signed and trusted</strong>
+                        <small th:if="${detail.signature.signer() != null}">by <code th:text="${detail.signature.signer()}">signer</code></small>
+                        <small th:if="${detail.signature.grade() != null}" th:text="'(' + ${detail.signature.grade()} + ')'">(STRONG)</small>
+                    </th:block>
+                </td>
+            </tr>
+            <tr>
+                <th scope="row">Provenance</th>
+                <td th:text="${detail.provenance == null} ? 'none recorded'
+                        : (${detail.provenance.verified()} ? 'verified' : 'recorded, not verified')">verified</td>
+            </tr>
+            </tbody>
+        </table>
+        </figure>
+        <p>
+            <a th:if="${capabilities.findings()}"
+               th:href="@{'/ui/repositories/' + ${repo} + '/findings'(coordinate=${detail.coordinate + ':' + detail.version})}">findings &rarr;</a>
+            <a th:if="${isEditor and repositoryPagePaths.contains('/lifecycle') and !detail.cached}"
+               th:href="@{/ui/repositories/{repo}/lifecycle(repo=${repo},coordinate=${detail.coordinate},version=${detail.version},path=${detail.paths.isEmpty() ? '' : detail.paths[0]})}">deprecate
+                or yank &rarr;</a>
+        </p>
+    </article>
+
+    <article>
+        <h2>Files</h2>
+        <th:block th:if="${detail.paths.isEmpty()}">
+            <div th:replace="~{base :: empty('No file of this version is served.')}"></div>
+        </th:block>
+        <th:block th:unless="${detail.paths.isEmpty()}">
+            <p th:unless="${detail.folder().isEmpty()}"><small>In <code th:text="${detail.folder()}">/maven/org/acme/lib/1.0/</code></small></p>
+            <ul class="app-files">
+                <li th:each="f : ${detail.files()}">
+                    <a th:if="${detail.browsable}" th:title="${f.path}"
+                       th:href="@{/ui/repositories/{repo}/artifact(repo=${repo},path=${f.path})}"
+                       th:text="${f.name}">lib-1.0.jar</a>
+                    <code th:unless="${detail.browsable}" th:title="${f.path}" th:text="${f.name}">left-pad-1.0.0.tgz</code>
+                </li>
+            </ul>
+        </th:block>
+    </article>
+
+    <article th:unless="${detail.dependencies.isEmpty()}">
+        <h2>Dependencies</h2>
+        <table class="app-list">
+            <thead>
+            <tr>
+                <th scope="col">Coordinate</th>
+                <th scope="col">Requirement</th>
+            </tr>
+            </thead>
+            <tbody>
+            <tr th:each="dependency : ${detail.dependencies}">
+                <td><code th:text="${dependency.coordinate()}">org.acme:base</code></td>
+                <td><code th:text="${dependency.requirement()}">[1.0,2.0)</code></td>
+            </tr>
+            </tbody>
+        </table>
+        <p th:if="${detail.dependencyCount > detail.dependencies.size()}"><small
+                th:text="|Showing the first ${detail.dependencies.size()} of ${detail.dependencyCount}.|">Showing the first 200 of 250.</small></p>
+    </article>
+</main>
+</body>
+</html>
