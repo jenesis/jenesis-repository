@@ -20,6 +20,10 @@
  * no library. That is why this module requires the compliance contract: the scheme is its service, and a format
  * that signs its own documents through {@code OpenPgpSigner} sees nothing of it.
  *
+ * <p>The key itself is kept here too, by {@code SigningKeys}: the secret key and the served keyring as one document,
+ * the secret sealed with the deployment's master key - which is why this module requires the settings module, where
+ * the cipher that seals every stored secret lives.
+ *
  * @jenesis.release 25
  * @jenesis.alias org.bouncycastle.pg org.bouncycastle/bcpg-jdk18on
  * @jenesis.alias org.bouncycastle.pkix org.bouncycastle/bcpkix-jdk18on
@@ -30,6 +34,7 @@
 module build.jenesis.repository.format.signing {
     requires transitive build.jenesis.repository.format;
     requires build.jenesis.repository.compliance;
+    requires build.jenesis.repository.settings;
     requires org.bouncycastle.pg;
     requires org.bouncycastle.pkix;
     requires org.bouncycastle.provider;

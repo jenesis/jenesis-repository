@@ -132,6 +132,39 @@ public final class SecretCipher {
         }
     }
 
+    /** The prefix of a value {@link #sealed} kept in the clear for want of a master key. */
+    private static final String PLAIN = "plain:";
+
+    /**
+     * {@code secret} as a stored value, for a secret the deployment generates and cannot work without - the key a
+     * repository signs its index with: sealed into an envelope under the active master key where one is configured,
+     * and otherwise kept as {@code plain:} and its base64, since refusing to store it would leave the repository
+     * unable to sign at all. {@link #opened} reads either, and {@link #isSealed} tells a reader holding a master key
+     * that a plain value is still to be sealed.
+     */
+    public String sealed(byte[] secret) {
+        String encoded = Base64.getEncoder().encodeToString(secret);
+        return configured() ? encrypt(encoded) : PLAIN + encoded;
+    }
+
+    /** The secret a {@link #sealed} value holds. Fail-closed as {@link #decrypt}: an envelope no configured key opens,
+     *  or a value that is neither form, throws rather than reading as an empty secret. */
+    public byte[] opened(String stored) {
+        if (isEnvelope(stored)) {
+            return Base64.getDecoder().decode(decrypt(stored));
+        }
+        if (stored != null && stored.startsWith(PLAIN)) {
+            return Base64.getDecoder().decode(stored.substring(PLAIN.length()));
+        }
+        throw new IllegalStateException("not a stored secret: neither an " + PREFIX + " envelope nor a " + PLAIN
+                + " value");
+    }
+
+    /** Whether a {@link #sealed} value is an envelope rather than kept in the clear. */
+    public static boolean isSealed(String stored) {
+        return isEnvelope(stored);
+    }
+
     /** Open an {@code enc:v1:<key-id>:<base64>} envelope with the candidate key its {@code <key-id>} names.
      *  Fail-closed: a malformed envelope, a key-id no configured key matches (wrong/absent key, e.g. after a botched
      *  rotation), or a GCM tag mismatch (tamper) throws - a secret that cannot be decrypted must never read as blank

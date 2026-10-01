@@ -75,7 +75,7 @@ public class ScreenedDispatchTest {
     }
 
     /** A minimal {@link FormatExchange}: a request of a method/path/body, capturing the status the edge or format set. */
-    private static final class FakeExchange implements FormatExchange {
+    private static class FakeExchange implements FormatExchange {
 
         private final String method;
         private final String path;
@@ -286,6 +286,54 @@ public class ScreenedDispatchTest {
 
         assertThat(seen).as("a write of a tenant that allows redeploys may replace a release, one of a tenant that "
                 + "does not may not, and a read is no publish at all").containsExactly(true, false, false);
+    }
+
+    /**
+     * A request the format declares as administering the repository is the operator's: refused without the right to
+     * administer it whatever the caller may publish, and otherwise handed to the format with nothing screened and
+     * nothing announced, since it is no artifact.
+     */
+    @Test
+    void an_administration_request_takes_the_operator_s_right_and_is_no_publish() throws IOException {
+        List<String> handled = new ArrayList<>();
+        RepositoryFormat signing = new RepositoryFormat() {
+
+            @Override
+            public String name() {
+                return "keyed";
+            }
+
+            @Override
+            public boolean handles(String path) {
+                return path.startsWith("/keyed/");
+            }
+
+            @Override
+            public boolean administers(String method, String path) {
+                return method.equals("POST") && path.equals("/keyed/keyring");
+            }
+
+            @Override
+            public void serve(FormatExchange exchange, ArtifactStore store) throws IOException {
+                handled.add(exchange.path());
+                exchange.respond(200, 0L);
+            }
+        };
+        FakeExchange publisher = new FakeExchange("POST", "/keyed/keyring", new byte[0]);
+        FakeExchange operator = new FakeExchange("POST", "/keyed/keyring", new byte[0]) {
+            @Override
+            public boolean administers() {
+                return true;
+            }
+        };
+
+        edge(signing).dispatch("acme", publisher, store);
+        edge(signing).dispatch("acme", operator, store);
+
+        assertThat(publisher.status).as("a caller that may not administer the repository is refused").isEqualTo(403);
+        assertThat(operator.status).isEqualTo(200);
+        assertThat(handled).as("only the operator's request reached the format").containsExactly("/keyed/keyring");
+        assertThat(CountingInterceptor.count()).as("and nothing of either was screened as an artifact").isZero();
     }
 
     @Test

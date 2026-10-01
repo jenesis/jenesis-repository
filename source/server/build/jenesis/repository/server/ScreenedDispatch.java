@@ -35,7 +35,9 @@ import build.jenesis.repository.store.ReadMemo;
  * concern such a write still takes from here is the tenant's {@code allow-redeploy}, bound around the dispatch, since a
  * format links its released files through {@code Blobs.linkRelease} whichever side screened them. Every non-body verb
  * ({@code GET}, {@code HEAD}, {@code DELETE}) dispatches untouched, so the pull-through and delete paths are the
- * format's own.
+ * format's own. A request the format declares as administering the repository
+ * ({@link RepositoryFormat#administers}) is no artifact either: it is refused {@code 403} to a caller that may not
+ * administer the repository, and otherwise dispatched unscreened and unannounced.
  *
  * <p>With the core's empty discovered chain {@code screen} degrades to a plain store-then-restream and an
  * accepted {@code PUT} is byte-for-byte what a direct dispatch produced (the same content-addressed blob, the same
@@ -73,6 +75,14 @@ public final class ScreenedDispatch {
             return false;
         }
         RepositoryFormat format = owner.get();
+        if (format.administers(exchange.method(), exchange.path())) {
+            if (!exchange.administers()) {
+                exchange.respond(403);
+                return true;
+            }
+            // An operator's act on the repository, not an artifact: nothing to screen and nothing to announce.
+            return dispatcher.dispatch(tenant, exchange, store);
+        }
         if (!isSingleBodyWrite(exchange.method())) {
             return dispatcher.dispatch(tenant, exchange, store);
         }

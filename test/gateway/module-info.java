@@ -39,6 +39,7 @@ open module build.jenesis.repository.gateway.contract.test {
     requires build.jenesis.repository.format.cocoapods;
     requires build.jenesis.repository.format.huggingface;
     requires build.jenesis.repository.format.signing;
+    requires build.jenesis.repository.settings;
     requires build.jenesis.repository.compliance;
     requires build.jenesis.repository.compliance.testkit;
     requires build.jenesis.repository.contract.testkit;

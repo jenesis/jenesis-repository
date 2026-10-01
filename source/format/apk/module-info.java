@@ -42,6 +42,7 @@ module build.jenesis.repository.format.apk {
     requires build.jenesis.repository.format.lifecycle;
     requires build.jenesis.repository.store;
     requires build.jenesis.repository.blobs;
+    requires build.jenesis.repository.settings;
     requires org.apache.commons.compress;
     requires org.slf4j;
     // Exported to test modules only; the unit suite is named here because its assertions

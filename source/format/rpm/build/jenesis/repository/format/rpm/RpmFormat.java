@@ -7,6 +7,7 @@ import module org.slf4j;
 import build.jenesis.repository.walk.BoundedChildren;
 import build.jenesis.repository.format.Listings;
 import build.jenesis.repository.format.signing.OpenPgpSigner;
+import build.jenesis.repository.format.signing.SigningKeys;
 import java.time.Duration;
 import build.jenesis.repository.blobs.BlobExport;
 import build.jenesis.repository.blobs.BlobLayout;
@@ -286,62 +287,76 @@ public final class RpmFormat implements RepositoryFormat, ArtifactLayout, ProxyL
         }
     }
 
-    /** Ensure a signing key exists (generate an unprotected RSA key on first call) and return its public key. The key is
-     *  deployment-global (like the Debian signing key) and signs the {@code repomd.xml} of every hosted RPM repository. */
+    /** Provisioning the signing key is the repository's operator's act, not a publish. */
+    @Override
+    public boolean administers(String method, String path) {
+        return method.equals("POST") && path.equals(PREFIX + "keyring");
+    }
+
+    /**
+     * Ensure a signing key exists, generating one on the first call, and answer its public key at once. The key signs
+     * the {@code repomd.xml} of every hosted RPM repository under this one ({@link #keys}). The signed
+     * {@code repomd.xml.asc} is derived on metadata writes, so the repositories indexed before the key existed are
+     * signed now rather than on their next publish - on the node's derivation thread, a page of them at a time, so
+     * the answer costs one key and never a walk of every repository this one holds.
+     */
     private void provisionKey(Blobs blobs, FormatExchange exchange) throws IOException {
-        if (!blobs.exists("rpm/keyring/secret.asc")) {
-            // Established rather than written, and the published half derived from whichever secret won: two first
-            // publishes racing would otherwise store one pair's secret beside another pair's public, and every
-            // signature this repository makes would be refused by a client doing its job.
-            OpenPgpSigner signer = new OpenPgpSigner(
-                    blobs.establish("rpm/keyring/secret.asc", () -> OpenPgpSigner.generate(IDENTITY, KEY_VALIDITY).secretKey()));
-            blobs.write("rpm/keyring/public.asc", signer.publicKeyring());
-            // The signed repomd.xml.asc is derived on metadata writes; a repository indexed before the key existed
-            // gets it now rather than on its next publish.
+        if (keys(blobs).signer().isEmpty()) {
+            keys(blobs).provision();
             RpmListings listings = listings(blobs);
-            for (String repo : blobs.list("rpm")) {
-                if (!repo.equals("keyring") && !blobs.isEmpty(indexPrefix(repo))) {
-                    listings.rederive(repo);
+            StoredListing.later(blobs.store().identity() + "|rpm/keyring/signing.rederive", () -> {
+                try {
+                    rederiveSigned(blobs, listings);
+                } catch (IOException failed) {
+                    throw new UncheckedIOException(failed);
                 }
-            }
+            });
         }
         servePublicKey(blobs, exchange);
     }
 
-    /** Serve the public signing key ({@code gpgkey=} target), or {@code 404} when the repository is unsigned. */
+    /** How many repositories a re-signing reads the names of at a time. */
+    private static final int RESIGN_PAGE = 1_000;
+
+    /** Re-derive the signed metadata of every indexed repository under this one, paging through their names. */
+    private static void rederiveSigned(Blobs blobs, RpmListings listings) throws IOException {
+        String after = "";
+        while (true) {
+            List<String> page = new ArrayList<>();
+            blobs.page("rpm", after, RESIGN_PAGE, page::add);
+            for (String repo : page) {
+                if (!repo.equals("keyring") && !blobs.isEmpty(indexPrefix(repo))) {
+                    listings.rederive(repo);
+                }
+            }
+            if (page.size() < RESIGN_PAGE) {
+                return;
+            }
+            after = page.getLast();
+        }
+    }
+
+    /** Serve the public signing keyring ({@code gpgkey=} target), or {@code 404} when the repository is unsigned. */
     private void servePublicKey(Blobs blobs, FormatExchange exchange) throws IOException {
-        ByteArrayOutputStream buffer = new ByteArrayOutputStream();
-        if (!blobs.read("rpm/keyring/public.asc", buffer)) {
+        Optional<byte[]> keyring = keys(blobs).publicKeyring();
+        if (keyring.isEmpty()) {
             exchange.respond(404);
             return;
         }
         exchange.setResponseHeader("Content-Type", "application/pgp-keys");
-        exchange.answer(buffer.toByteArray());
+        exchange.answer(keyring.get());
     }
 
     /** The current signer, or {@code null} when no key is provisioned (the repository serves unsigned metadata and no
-     *  {@code repomd.xml.asc}). Reading rotates a near-expiry key, mirroring the Debian on-read rotation. */
+     *  {@code repomd.xml.asc}). A near-expiry key rotates as it is asked for, in the one write that also publishes
+     *  its successor's public half. */
     private OpenPgpSigner signer(Blobs blobs) throws IOException {
-        ByteArrayOutputStream buffer = new ByteArrayOutputStream();
-        if (!blobs.read("rpm/keyring/secret.asc", buffer)) {
-            return null;
-        }
-        OpenPgpSigner signer = new OpenPgpSigner(buffer.toByteArray());
-        return signer.dueForRotation(Instant.now(), ROTATION_WINDOW) ? rotate(blobs) : signer;
+        return keys(blobs).signer().orElse(null);
     }
 
-    /** Rotate to a fresh signing key: it signs from now on, while the retiring key's public half stays in the served
-     *  keyring until it expires, so a client that already trusts it still verifies a {@code repomd.xml.asc} it signed
-     *  during the overlap. Best-effort under concurrency - a lost race simply re-rotates on the next read. */
-    private OpenPgpSigner rotate(Blobs blobs) throws IOException {
-        OpenPgpSigner.KeyMaterial fresh = OpenPgpSigner.generate(IDENTITY, KEY_VALIDITY);
-        ByteArrayOutputStream existing = new ByteArrayOutputStream();
-        byte[] published = blobs.read("rpm/keyring/public.asc", existing)
-                ? OpenPgpSigner.mergePublicKeyrings(existing.toByteArray(), fresh.publicKey(), Instant.now())
-                : fresh.publicKey();
-        blobs.write("rpm/keyring/secret.asc", fresh.secretKey());
-        blobs.write("rpm/keyring/public.asc", published);
-        return new OpenPgpSigner(fresh.secretKey());
+    /** This repository's signing key and served keyring, one document beside its RPM repositories. */
+    private static SigningKeys keys(Blobs blobs) {
+        return new SigningKeys(blobs.store(), "rpm/keyring/signing", IDENTITY, KEY_VALIDITY, ROTATION_WINDOW);
     }
 
     /** Stream the upload into the CAS while parsing only its header, then record the pointer and its repodata stanza. */

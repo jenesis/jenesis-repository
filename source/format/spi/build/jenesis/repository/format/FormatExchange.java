@@ -167,4 +167,15 @@ public interface FormatExchange {
     default boolean readsHeld() {
         return false;
     }
+
+    /**
+     * Whether the caller may administer the repository this request addresses - the right an operator holds on it,
+     * as opposed to the right to publish into it. A request a format declares as administration
+     * ({@link RepositoryFormat#administers}) is refused at the edge without it.
+     *
+     * <p>{@code false} on an exchange no edge wraps and for every caller whose credential does not carry the right.
+     */
+    default boolean administers() {
+        return false;
+    }
 }

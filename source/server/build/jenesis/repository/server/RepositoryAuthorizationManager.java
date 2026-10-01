@@ -65,6 +65,14 @@ public class RepositoryAuthorizationManager implements AuthorizationManager<Requ
      */
     public static final String READS_HELD = "jenrepo.reads-held";
 
+    /**
+     * The request attribute an artifact write carries a {@link BooleanSupplier} under: whether the presented key
+     * carries {@link Authorization#MANAGE_WRITE} on the repository the write addresses - the right a format's
+     * administration of the repository takes ({@code RepositoryFormat.administers}). Asked only when a format
+     * declares the request administration; an anonymous deployment answers yes, as it does every question.
+     */
+    public static final String ADMINISTERS = "jenrepo.administers";
+
     private final Authorization authorization;
     private final KeyUsageTracker usage;
     private final List<String> trustedProxies;
@@ -98,6 +106,7 @@ public class RepositoryAuthorizationManager implements AuthorizationManager<Requ
     public AuthorizationResult authorize(Supplier<? extends Authentication> authentication,
                                          RequestAuthorizationContext context) {
         if (!authorization.enforced()) {
+            context.getRequest().setAttribute(ADMINISTERS, (BooleanSupplier) () -> true);
             return new AuthorizationDecision(true);
         }
         HttpServletRequest request = context.getRequest();
@@ -145,6 +154,17 @@ public class RepositoryAuthorizationManager implements AuthorizationManager<Requ
                 try {
                     return authorization.authorize(key, target.scope(), target.subPath(),
                             Authorization.QUARANTINE_READ) == Authorization.Decision.ALLOWED;
+                } catch (IOException _) {
+                    return false;    // an unreadable store proves no authority, as above
+                }
+            });
+        }
+        if (decision == Authorization.Decision.ALLOWED && !read && !target.manage() && !target.probe()
+                && !"*".equals(target.scope())) {
+            request.setAttribute(ADMINISTERS, (BooleanSupplier) () -> {
+                try {
+                    return authorization.authorize(key, target.scope(), null, Authorization.MANAGE_WRITE)
+                            == Authorization.Decision.ALLOWED;
                 } catch (IOException _) {
                     return false;    // an unreadable store proves no authority, as above
                 }

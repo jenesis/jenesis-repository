@@ -52,6 +52,30 @@ class SecretCipherTest {
         assertThat(rotated.encrypt("fresh")).startsWith("enc:v1:new:");         // new values seal under the newest key
     }
 
+    /** A generated secret the deployment cannot work without is stored sealed where a master key is configured and
+     *  in the clear where none is, and either form opens back to the bytes; a value in neither form opens to
+     *  nothing rather than to an empty secret. */
+    @Test
+    void a_stored_secret_is_sealed_where_a_master_key_is_configured_and_opens_from_either_form() {
+        byte[] secret = {0, 1, 2, (byte) 0xff, 42};
+        SecretCipher keyed = SecretCipher.of("k1:" + key((byte) 7));
+        SecretCipher unkeyed = SecretCipher.of(null);
+
+        String sealed = keyed.sealed(secret);
+        String clear = unkeyed.sealed(secret);
+
+        assertThat(SecretCipher.isSealed(sealed)).isTrue();
+        assertThat(sealed).startsWith("enc:v1:k1:");
+        assertThat(SecretCipher.isSealed(clear)).isFalse();
+        assertThat(keyed.opened(sealed)).isEqualTo(secret);
+        assertThat(keyed.opened(clear)).as("a node holding a key still reads what was kept in the clear")
+                .isEqualTo(secret);
+        assertThat(unkeyed.opened(clear)).isEqualTo(secret);
+        assertThatThrownBy(() -> unkeyed.opened(sealed)).as("and one without it cannot open a sealed one")
+                .isInstanceOf(IllegalStateException.class);
+        assertThatThrownBy(() -> keyed.opened("neither")).isInstanceOf(IllegalStateException.class);
+    }
+
     @Test
     void decryption_fails_closed_when_the_key_bytes_are_wrong() {
         String envelope = SecretCipher.of("k1:" + key((byte) 5)).encrypt("x");

@@ -3,6 +3,9 @@ package build.jenesis.repository.format.apk;
 import module java.base;
 
 import build.jenesis.repository.blobs.Blobs;
+import build.jenesis.repository.settings.SecretCipher;
+import build.jenesis.repository.store.ArtifactStore;
+import build.jenesis.repository.store.Retries;
 import build.jenesis.repository.store.StoredListing;
 
 /**
@@ -32,17 +35,24 @@ import build.jenesis.repository.store.StoredListing;
  * operator's remaining job is to fetch the public half from {@code GET /apk/<repo>/keys} and drop it into
  * {@code /etc/apk/keys/}, which no server can do for them.
  *
- * <h2>One key, stored once, because the two halves must be one pair</h2>
+ * <h2>One document, because the two halves must be one pair</h2>
  *
- * <p>Only the private key is stored, and the public half is <b>derived from it</b> on the way out. That is the whole
- * mechanism keeping "the key this repository serves verifies what this repository signed" true: two halves
- * generated together and written as two blobs would let two first publishes racing store one pair's public half
- * beside the other pair's private half, and the served index would then not verify against the served key.
+ * <p>The private key and the public half <b>derived from it</b> are stored as one document, in one write. That is
+ * the whole mechanism keeping "the key this repository serves verifies what this repository signed" true: two halves
+ * written as two objects would let two first publishes racing store one pair's public half beside the other pair's
+ * private half, and the served index would then not verify against the served key.
  *
- * <p>Deriving removes one of the two writes; {@link Blobs#establish} removes the other, by letting exactly one
- * caller ever create the key and handing every loser the winner's. Neither alone is sufficient, because a caller
- * signs with the key it generated: without the first there are two pairs, and without the second there are two
- * keys.
+ * <p>One document removes the second write; establishing it by a compare-and-set against an absent document lets
+ * exactly one caller ever create the key and hands every loser the winner's. Neither alone is sufficient, because a
+ * caller signs with the key it generated: without the first there are two pairs, and without the second there are
+ * two keys.
+ *
+ * <h2>Sealed at rest</h2>
+ *
+ * <p>The private key is stored {@linkplain SecretCipher#sealed sealed} with the deployment's master key, as every
+ * stored secret is, in a {@code java.util.Properties} document ({@code version=1}, {@code secret=} the sealed PKCS#8
+ * key, {@code public=} the base64 of the public half's PEM). A deployment with no master key keeps it in the clear, since an apk repository that cannot keep its key
+ * cannot sign at all; a key kept in the clear is sealed the first time a node holding a master key signs with it.
  */
 final class ApkSigner {
 
@@ -52,7 +62,14 @@ final class ApkSigner {
     /** The tar entry the client looks for, and the algorithm it selects from the name. */
     static final String ENTRY = ".SIGN.RSA256." + PUBLIC_KEY;
 
-    private static final String PRIVATE_KEY_PATH = "apk/keys/private.der";
+    private static final String PRIVATE_KEY_PATH = "apk/keys/signing";
+
+    private static final String VERSION = "1";
+
+    /** The environment's cipher, parsed once, on the first signing: a malformed master key fails it loudly. */
+    private static final class Environment {
+        private static final SecretCipher CIPHER = SecretCipher.fromEnvironment();
+    }
 
     private static final int KEY_SIZE = 4096;
 
@@ -70,29 +87,88 @@ final class ApkSigner {
      * rather than with the one it generated - which is the whole point of establishing rather than writing.
      */
     static ApkSigner of(Blobs blobs) throws IOException {
-        return new ApkSigner(privateKey(blobs.establish(PRIVATE_KEY_PATH, ApkSigner::generate)));
+        return of(blobs.store(), Environment.CIPHER);
+    }
+
+    /** {@link #of(Blobs)} over {@code store}, sealing with {@code cipher}. */
+    static ApkSigner of(ArtifactStore store, SecretCipher cipher) throws IOException {
+        byte[] key = Retries.decide(store, PRIVATE_KEY_PATH, stored -> {
+            if (stored.isEmpty()) {
+                byte[] generated = generate();
+                return Retries.Verdict.write(document(generated, cipher), generated);
+            }
+            String secret = secret(stored.get().content());
+            byte[] opened = opened(secret, cipher);
+            return !SecretCipher.isSealed(secret) && cipher.configured()
+                    ? Retries.Verdict.write(document(opened, cipher), opened)
+                    : Retries.Verdict.keep(opened);
+        });
+        return new ApkSigner(privateKey(key));
     }
 
     /**
      * The public key as the PEM a client drops into {@code /etc/apk/keys/}, or empty when none was generated.
      *
-     * <p>Derived from the stored private key rather than stored beside it. An RSA private key in PKCS#8 carries the
-     * modulus and the public exponent, so the public half is a fact about the private one and there is nothing to
-     * keep in step - which is what makes the served key and the signing key the same pair by construction rather
-     * than by two writes landing in the right order.
+     * <p>Derived from the private key when the key is generated, and stored beside it in the same document. An RSA
+     * private key in PKCS#8 carries the modulus and the public exponent, so the public half is a fact about the
+     * private one, and one write of both is what makes the served key and the signing key the same pair by
+     * construction rather than by two writes landing in the right order; it is read without opening the private key,
+     * so a node that does not hold the master key still serves it.
      */
     static Optional<byte[]> publicKey(Blobs blobs) throws IOException {
-        ByteArrayOutputStream stored = new ByteArrayOutputStream();
-        if (!blobs.read(PRIVATE_KEY_PATH, stored)) {
+        return publicKey(blobs.store(), Environment.CIPHER);
+    }
+
+    /** {@link #publicKey(Blobs)} over {@code store}, opening the key with {@code cipher}. */
+    static Optional<byte[]> publicKey(ArtifactStore store, SecretCipher cipher) throws IOException {
+        Optional<ArtifactStore.Versioned> stored = store.readVersioned(PRIVATE_KEY_PATH);
+        if (stored.isEmpty()) {
             return Optional.empty();
         }
-        RSAPrivateCrtKey key = (RSAPrivateCrtKey) privateKey(stored.toByteArray());
+        return Optional.of(Base64.getDecoder().decode(properties(stored.get().content()).getProperty("public", "")));
+    }
+
+    /** The public half of a PKCS#8 RSA private key, as the PEM a client keeps. */
+    private static byte[] publicHalf(byte[] pkcs8) throws IOException {
+        RSAPrivateCrtKey key = (RSAPrivateCrtKey) privateKey(pkcs8);
         try {
-            return Optional.of(pem(KeyFactory.getInstance("RSA")
+            return pem(KeyFactory.getInstance("RSA")
                     .generatePublic(new RSAPublicKeySpec(key.getModulus(), key.getPublicExponent()))
-                    .getEncoded()));
+                    .getEncoded());
         } catch (GeneralSecurityException unreadable) {
             throw new IOException("the stored apk signing key has no derivable public half", unreadable);
+        }
+    }
+
+    /** The stored document holding {@code key}, sealed where {@code cipher} holds a master key, and its public half
+     *  derived from it in the same write - so a node without the master key still serves the public half, and the
+     *  two are one pair because they are written together. */
+    private static byte[] document(byte[] key, SecretCipher cipher) throws IOException {
+        return ("version=" + VERSION + "\nsecret=" + cipher.sealed(key) + "\npublic="
+                + Base64.getEncoder().encodeToString(publicHalf(key)) + "\n").getBytes(StandardCharsets.UTF_8);
+    }
+
+    /** The sealed secret a stored document carries. */
+    private static String secret(byte[] document) throws IOException {
+        return properties(document).getProperty("secret", "");
+    }
+
+    private static Properties properties(byte[] document) throws IOException {
+        Properties properties = new Properties();
+        try (Reader reader = new InputStreamReader(new ByteArrayInputStream(document), StandardCharsets.UTF_8)) {
+            properties.load(reader);
+        }
+        if (!VERSION.equals(properties.getProperty("version"))) {
+            throw new IOException("the stored apk signing key is not a version " + VERSION + " document");
+        }
+        return properties;
+    }
+
+    private static byte[] opened(String secret, SecretCipher cipher) throws IOException {
+        try {
+            return cipher.opened(secret);
+        } catch (IllegalStateException | IllegalArgumentException unopened) {
+            throw new IOException("the stored apk signing key cannot be opened on this node", unopened);
         }
     }
 

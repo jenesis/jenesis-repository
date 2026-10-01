@@ -300,6 +300,18 @@ public interface RepositoryFormat extends IconContributor {
     }
 
     /**
+     * Whether a request this format claims administers the repository rather than publishing to it or reading from
+     * it - provisioning the key the repository signs its index with, naming the signers it trusts. Such a request is
+     * an operator's act: the edge refuses it to a caller that does not hold the right to administer the repository
+     * ({@link FormatExchange#administers()}), however freely that caller may publish there, and it is no artifact, so
+     * the edge neither screens its body nor announces it as a publish. A pure predicate over the method and path, as
+     * {@link #handles} is. None by default.
+     */
+    default boolean administers(String method, String path) {
+        return false;
+    }
+
+    /**
      * Answer a request the edge refuses before this format is offered it - a write to a repository that takes none,
      * a proxy or a group view, is a {@code 405} - in this format's own error dialect, so a client that reads a
      * refusal's body is told why in the shape its protocol defines. The default answers the bare status.

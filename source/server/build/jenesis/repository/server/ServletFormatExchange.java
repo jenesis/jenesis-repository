@@ -87,6 +87,15 @@ public final class ServletFormatExchange implements FormatExchange {
                 && held.getAsBoolean();
     }
 
+    /** What the deployment's authorization recorded on the request: whether the presented credential may administer
+     *  the repository the request addresses, asked only when a format declares the request administration. Nothing
+     *  recorded - a request no authorization decided - administers nothing. */
+    @Override
+    public boolean administers() {
+        return request.getAttribute(RepositoryAuthorizationManager.ADMINISTERS) instanceof BooleanSupplier held
+                && held.getAsBoolean();
+    }
+
     @Override
     public Optional<ArtifactStore> readable(String path) {
         return readable.apply(path);

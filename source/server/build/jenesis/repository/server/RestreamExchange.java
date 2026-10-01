@@ -34,6 +34,11 @@ public final class RestreamExchange implements FormatExchange {
     }
 
     @Override
+    public boolean administers() {
+        return delegate.administers();
+    }
+
+    @Override
     public String method() {
         return delegate.method();
     }

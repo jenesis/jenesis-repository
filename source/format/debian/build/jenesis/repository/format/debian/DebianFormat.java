@@ -6,6 +6,7 @@ import module org.apache.commons.compress;
 import build.jenesis.repository.format.Listings;
 import build.jenesis.repository.format.debian.keys.DebianKeyring;
 import build.jenesis.repository.format.signing.OpenPgpSigner;
+import build.jenesis.repository.format.signing.SigningKeys;
 import build.jenesis.repository.blobs.BlobExport;
 import build.jenesis.repository.blobs.BlobLayout;
 import build.jenesis.repository.format.ExportTarget;
@@ -506,35 +507,68 @@ public final class DebianFormat implements RepositoryFormat, ProxyLeg, BlobLayou
                 .replace("\"", "&quot;").replace("'", "&#39;");
     }
 
-    /** Ensure a signing key exists (generate an unprotected RSA key on first call) and return its public key. */
+    /** Provisioning the signing key and naming the signers the repository trusts are its operator's acts, not
+     *  publishes. */
+    @Override
+    public boolean administers(String method, String path) {
+        return method.equals("POST") && (path.equals("/debian/keyring") || path.equals("/debian/keyring/trusted"));
+    }
+
+    /**
+     * Ensure a signing key exists, generating one on the first call, and answer its public key at once
+     * ({@link #keys}). The signed {@code Release} twins are derived on index writes, so the suites indexed before the
+     * key existed are signed now rather than on their next push - on the node's derivation thread, a page of them at
+     * a time, so the answer costs one key and never a walk of every suite.
+     */
     private void provisionKey(Blobs blobs, FormatExchange exchange) throws IOException {
-        if (!blobs.exists("debian/keyring/secret.asc")) {
-            // Established rather than written, and the published half derived from whichever secret won: two first
-            // publishes racing would otherwise store one pair's secret beside another pair's public, and every
-            // signature this repository makes would be refused by a client doing its job.
-            OpenPgpSigner signer = new OpenPgpSigner(
-                    blobs.establish("debian/keyring/secret.asc", () -> OpenPgpSigner.generate(IDENTITY, KEY_VALIDITY).secretKey()));
-            blobs.write("debian/keyring/public.asc", signer.publicKeyring());
-            // The signed Release twins are derived on index writes; a suite indexed before the key existed gets
-            // them now rather than on its next push.
+        if (keys(blobs).signer().isEmpty()) {
+            keys(blobs).provision();
             DebianListings listings = listings(blobs);
-            for (String suite : blobs.list("debian")) {
-                if (!blobs.isEmpty("debian/" + suite + "/index")) {
-                    listings.rederiveRelease(suite);
+            StoredListing.later(blobs.store().identity() + "|debian/keyring/signing.rederive", () -> {
+                try {
+                    rederiveSigned(blobs, listings);
+                } catch (IOException failed) {
+                    throw new UncheckedIOException(failed);
                 }
-            }
+            });
         }
         servePublicKey(blobs, exchange);
     }
 
+    /** How many suites a re-signing reads the names of at a time. */
+    private static final int RESIGN_PAGE = 1_000;
+
+    /** Re-derive the signed {@code Release} family of every indexed suite, paging through their names. */
+    private static void rederiveSigned(Blobs blobs, DebianListings listings) throws IOException {
+        String after = "";
+        while (true) {
+            List<String> page = new ArrayList<>();
+            blobs.page("debian", after, RESIGN_PAGE, page::add);
+            for (String suite : page) {
+                if (!blobs.isEmpty("debian/" + suite + "/index")) {
+                    listings.rederiveRelease(suite);
+                }
+            }
+            if (page.size() < RESIGN_PAGE) {
+                return;
+            }
+            after = page.getLast();
+        }
+    }
+
     private void servePublicKey(Blobs blobs, FormatExchange exchange) throws IOException {
-        ByteArrayOutputStream buffer = new ByteArrayOutputStream();
-        if (!blobs.read("debian/keyring/public.asc", buffer)) {
+        Optional<byte[]> keyring = keys(blobs).publicKeyring();
+        if (keyring.isEmpty()) {
             exchange.respond(404);
             return;
         }
         exchange.setResponseHeader("Content-Type", "application/pgp-keys");
-        exchange.respond(200, buffer.toByteArray());
+        exchange.respond(200, keyring.get());
+    }
+
+    /** This repository's signing key and served keyring, one document beside its suites. */
+    private static SigningKeys keys(Blobs blobs) {
+        return new SigningKeys(blobs.store(), "debian/keyring/signing", IDENTITY, KEY_VALIDITY, ROTATION_WINDOW);
     }
 
     /** The largest trusted-signers key upload accepted: an armored PGP public key (or a small bundle of them) is a few
@@ -566,27 +600,11 @@ public final class DebianFormat implements RepositoryFormat, ProxyLeg, BlobLayou
         exchange.respond(201);
     }
 
+    /** The current signer, or {@code null} when no key is provisioned. A near-expiry key rotates as it is asked
+     *  for, in the one write that also publishes its successor's public half beside the retiring one, so a client
+     *  that already trusts the retiring key still verifies an {@code InRelease} it signed during the overlap. */
     private OpenPgpSigner signer(Blobs blobs) throws IOException {
-        ByteArrayOutputStream buffer = new ByteArrayOutputStream();
-        if (!blobs.read("debian/keyring/secret.asc", buffer)) {
-            return null;
-        }
-        OpenPgpSigner signer = new OpenPgpSigner(buffer.toByteArray());
-        return signer.dueForRotation(Instant.now(), ROTATION_WINDOW) ? rotate(blobs) : signer;
-    }
-
-    /** Rotate to a fresh signing key: it signs from now on, while the retiring key's public half stays in the served
-     *  keyring until it expires, so a client that already trusts it still verifies an {@code InRelease} it signed
-     *  during the overlap. Best-effort under concurrency - a lost race simply re-rotates on the next read. */
-    private OpenPgpSigner rotate(Blobs blobs) throws IOException {
-        OpenPgpSigner.KeyMaterial fresh = OpenPgpSigner.generate(IDENTITY, KEY_VALIDITY);
-        ByteArrayOutputStream existing = new ByteArrayOutputStream();
-        byte[] published = blobs.read("debian/keyring/public.asc", existing)
-                ? OpenPgpSigner.mergePublicKeyrings(existing.toByteArray(), fresh.publicKey(), Instant.now())
-                : fresh.publicKey();
-        blobs.write("debian/keyring/secret.asc", fresh.secretKey());
-        blobs.write("debian/keyring/public.asc", published);
-        return new OpenPgpSigner(fresh.secretKey());
+        return keys(blobs).signer().orElse(null);
     }
 
     private void push(String rest, FormatExchange exchange, Blobs blobs, ArtifactStore store) throws IOException {

@@ -18,6 +18,7 @@ import build.jenesis.repository.format.FormatExchange;
 import build.jenesis.repository.format.RepositoryFormat;
 import build.jenesis.repository.format.RepositoryImporter;
 import build.jenesis.repository.format.signing.OpenPgpSigner;
+import build.jenesis.repository.format.signing.SigningKeys;
 import build.jenesis.repository.store.ArtifactDescriptor;
 import build.jenesis.repository.store.ArtifactStore;
 import build.jenesis.repository.store.Publication;
@@ -85,9 +86,8 @@ public final class TerraformFormat implements RepositoryFormat, ArtifactLayout, 
     /** How long before expiry a fresh key takes over, leaving an overlap for a client to refetch. */
     private static final Duration ROTATION_WINDOW = Duration.ofDays(90);
 
-    private static final String SECRET_KEY = "terraform/keys/secret.asc";
-
-    private static final String PUBLIC_KEY = "terraform/keys/public.asc";
+    /** Where the signing key and the keyring it is served beside are kept, as one document. */
+    private static final String SIGNING_KEY = "terraform/keys/signing";
 
     @Override
     public String name() {
@@ -218,9 +218,9 @@ public final class TerraformFormat implements RepositoryFormat, ArtifactLayout, 
                 .append(",\"shasums_signature_url\":").append(MAPPER.writeValueAsString(base + "/SHA256SUMS.sig"))
                 .append(",\"shasum\":").append(MAPPER.writeValueAsString(located.get().hash()))
                 .append(",\"signing_keys\":{\"gpg_public_keys\":[");
-        Optional<byte[]> publicKey = storedKey(blobs, PUBLIC_KEY);
+        Optional<byte[]> publicKey = keys(blobs).publicKeyring();
         if (publicKey.isPresent()) {
-            document.append("{\"key_id\":").append(MAPPER.writeValueAsString(keyId(blobs)))
+            document.append("{\"key_id\":").append(MAPPER.writeValueAsString(keys(blobs).keyId().orElse("")))
                     .append(",\"ascii_armor\":")
                     .append(MAPPER.writeValueAsString(new String(publicKey.get(), StandardCharsets.UTF_8)))
                     .append(",\"trust_signature\":\"\",\"source\":\"Jenesis\",\"source_url\":\"\"}");
@@ -344,42 +344,32 @@ public final class TerraformFormat implements RepositoryFormat, ArtifactLayout, 
     }
 
     /**
-     * The repository's signer, generating a key when there is none.
+     * The repository's signer, generating a key when there is none, and rotating a near-expiry one in the one write
+     * that also publishes its successor's public half beside the retiring one.
      *
      * <p>Generated on the write path (a {@code SHA256SUMS} derivation follows a publish), never on a read: a
      * provider release that cannot be verified cannot be installed, so a repository with providers and no key is
      * not a state worth being able to reach.
      */
     private OpenPgpSigner signer(Blobs blobs) throws IOException {
-        Optional<byte[]> stored = storedKey(blobs, SECRET_KEY);
-        if (stored.isEmpty()) {
-            // Established rather than written, and the published half derived from whichever secret won: two first
-            // publishes racing would otherwise store one pair's secret beside another pair's public, and every
-            // signature this repository makes would be refused by a client doing its job.
-            OpenPgpSigner signer = new OpenPgpSigner(
-                    blobs.establish(SECRET_KEY, () -> OpenPgpSigner.generate(IDENTITY, KEY_VALIDITY).secretKey()));
-            blobs.write(PUBLIC_KEY, signer.publicKeyring());
-            return signer;
-        }
-        OpenPgpSigner signer = new OpenPgpSigner(stored.get());
-        return signer.dueForRotation(Instant.now(), ROTATION_WINDOW) ? rotate(blobs) : signer;
+        return keys(blobs).provision();
     }
 
-    /** Rotate to a fresh key, keeping the retiring public half in the served keyring until it expires so a client
-     *  that already fetched it still verifies a {@code SHA256SUMS} signed during the overlap. */
-    private OpenPgpSigner rotate(Blobs blobs) throws IOException {
-        OpenPgpSigner.KeyMaterial fresh = OpenPgpSigner.generate(IDENTITY, KEY_VALIDITY);
-        Optional<byte[]> existing = storedKey(blobs, PUBLIC_KEY);
-        blobs.write(PUBLIC_KEY, existing.isPresent()
-                ? OpenPgpSigner.mergePublicKeyrings(existing.get(), fresh.publicKey(), Instant.now())
-                : fresh.publicKey());
-        blobs.write(SECRET_KEY, fresh.secretKey());
-        return new OpenPgpSigner(fresh.secretKey());
+    /** This repository's signing key and served keyring. */
+    private static SigningKeys keys(Blobs blobs) {
+        return new SigningKeys(blobs.store(), SIGNING_KEY, IDENTITY, KEY_VALIDITY, ROTATION_WINDOW);
+    }
+
+    /** Provisioning the signing key is the repository's operator's act, not a publish. */
+    @Override
+    public boolean administers(String method, String path) {
+        String[] segments = path.startsWith(PREFIX) ? path.substring(PREFIX.length()).split("/") : new String[0];
+        return method.equals("POST") && segments.length == 2 && segments[1].equals("keys");
     }
 
     private void provisionKey(FormatExchange exchange, Blobs blobs) throws IOException {
         signer(blobs);
-        Optional<byte[]> key = storedKey(blobs, PUBLIC_KEY);
+        Optional<byte[]> key = keys(blobs).publicKeyring();
         if (key.isEmpty()) {
             exchange.respond(500);
             return;
@@ -389,7 +379,7 @@ public final class TerraformFormat implements RepositoryFormat, ArtifactLayout, 
     }
 
     private void servePublicKey(FormatExchange exchange, Blobs blobs) throws IOException {
-        Optional<byte[]> key = storedKey(blobs, PUBLIC_KEY);
+        Optional<byte[]> key = keys(blobs).publicKeyring();
         if (key.isEmpty()) {
             exchange.respond(404);
             return;
@@ -401,17 +391,6 @@ public final class TerraformFormat implements RepositoryFormat, ArtifactLayout, 
             return;
         }
         exchange.respond(200, key.get());
-    }
-
-    private static Optional<byte[]> storedKey(Blobs blobs, String key) throws IOException {
-        ByteArrayOutputStream buffer = new ByteArrayOutputStream();
-        return blobs.read(key, buffer) ? Optional.of(buffer.toByteArray()) : Optional.empty();
-    }
-
-    /** The long key id the package document reports, as OpenPGP writes it: sixteen upper-case hex digits. */
-    private static String keyId(Blobs blobs) throws IOException {
-        Optional<byte[]> secret = storedKey(blobs, SECRET_KEY);
-        return secret.isEmpty() ? "" : new OpenPgpSigner(secret.get()).keyId();
     }
 
     // ---- shared response shapes ----
