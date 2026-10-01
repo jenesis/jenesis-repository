@@ -1,10 +1,7 @@
 /**
- * The npm registry format as a plugin module: it provides
- * {@link build.jenesis.repository.format.RepositoryFormat} for the {@code /npm/...} layout, storing each published
- * version and tarball and maintaining the stored packument on publish. It parses the publish document and emits the packument
- * with the Jackson databind already on the server's module path. The importer reads a tarball's
- * {@code package/package.json} with Commons Compress ({@code TarArchiveInputStream}), so PAX/GNU long-name entries are
- * decoded rather than dropped by a hand-walk. Discovered through {@code provides}.
+ * The npm registry format as a plugin module: a {@link build.jenesis.repository.format.RepositoryFormat} for
+ * {@code /npm/...}, storing each published version and tarball and maintaining the packument on publish, with Jackson
+ * for the documents and Commons Compress for a tarball's {@code package/package.json}.
  *
  * @jenesis.release 25
  * @jenesis.bom pin-repository.properties

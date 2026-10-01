@@ -13,14 +13,12 @@ import tools.jackson.databind.node.ObjectNode;
 import build.jenesis.repository.format.Semver;
 
 /**
- * An npm package's packument as a stored listing: the entries are the version documents the publish stored
- * ({@code v:<version>}, completed with their tarball URL and lifecycle deprecation) and the dist-tags
- * ({@code tag:<tag>}). The tarball URL names the host the registry is reached at, so it is stored as the
- * {@value #BASE} placeholder and completed on the way out.
+ * An npm package's packument as a stored listing: the entries are the stored version documents ({@code v:<version>},
+ * completed with their tarball URL and deprecation) and the dist-tags ({@code tag:<tag>}). The tarball URL names the
+ * registry's host, so it is stored as the {@value #BASE} placeholder and completed on the way out.
  *
- * <p>A version is listed exactly when its tarball pointer is not withheld, and a dist-tag exactly when its target
- * version is listed - the screens the on-read generation applied. A package with no stored dist-tags document gets
- * a computed {@code latest}, the highest listed semantic version, as before.
+ * <p>A version is listed exactly when its tarball pointer is not withheld, a dist-tag when its target is listed. A
+ * package with no stored dist-tags gets a computed {@code latest}, the highest listed version.
  */
 final class NpmListings {
 
@@ -42,7 +40,7 @@ final class NpmListings {
     }
 
     /** The packument codec of one package: {@code {"name":..,"versions":{..},"dist-tags":{..}}}. With
-     *  {@code computeLatest}, the dist-tags are not entries but the highest listed version, computed on join. */
+     *  {@code computeLatest}, the dist-tags are the highest listed version, computed on join. */
     static StoredListing.Codec codec(String name, boolean computeLatest) {
         return new StoredListing.Codec() {
             @Override
@@ -58,11 +56,8 @@ final class NpmListings {
                 return entries;
             }
 
-            /** The versions - and, when the tags are stored, the tags - one member at a time through a streaming
-             *  parser: the listing mechanism reads the packument through this on every publish into the package,
-             *  and without it falls back to reading the whole document into heap and splitting it as a tree - a
-             *  package's every version several times over in heap per publish, a failed publish at fifty thousand
-             *  versions in a 512 MiB container. */
+            /** The versions, and stored tags, one member at a time through a streaming parser, since the packument is
+             *  read on every publish into the package. */
             @Override
             public Reader read(InputStream in, long ignored) throws IOException {
                 JsonParser parser = NpmFormat.MAPPER.createParser(in);
@@ -111,21 +106,10 @@ final class NpmListings {
                 };
             }
 
-            /**
-             * The packument, written as the entries arrive.
-             *
-             * <p>Two sections and a summary, none of which forces the document to be held. A {@code Sink}
-             * delivers one ascending run, and {@code TAG } sorts before {@code VERSION }, so every tag arrives
-             * before the first version - which is the opposite of the order they are written in. That inversion
-             * is what to design around, and it costs less here than {@code CondaListings} pays: a package has a
-             * handful of dist-tags, so the ones that arrive early are held in a map rather than spooled to a
-             * file, while the versions - the part that grows - stream straight out as they come.
-             *
-             * <p>What is still held is one <em>name</em> per version, because a tag is disclosed only when its
-             * target is a listed version and that cannot be known until the versions have gone by. A name is not
-             * a version's metadata: this holds a set of short strings where {@link #join} held every version
-             * object in the package.
-             */
+            /** The packument, written as the entries arrive. A {@code Sink} delivers one ascending run, and
+             *  {@code TAG } sorts before {@code VERSION }, so the tags arrive first though they are written last; a
+             *  package has a handful, so they are held in a map while the versions stream out. One name per version is
+             *  held, since a tag is disclosed only when its target was listed. */
             @Override
             public Appender append(OutputStream out) {
                 return new Appender() {
@@ -264,17 +248,15 @@ final class NpmListings {
                 NpmFormat.MAPPER.readTree(buffer.toByteArray()).properties().forEach(tag ->
                         tags.put(TAG + tag.getKey(), NpmFormat.MAPPER.writeValueAsBytes(tag.getValue())));
             } catch (RuntimeException malformed) {
-                // a dist-tags document that is not a JSON object lists no tags, as before
+                // A dist-tags document that is not a JSON object lists no tags.
             }
         }
         return tags;
     }
 
-    /** A version's packument entry: its stored metadata with the tarball URL (the placeholder base) and the
-     *  lifecycle deprecation; {@code null} when the stored metadata is not a JSON object. The {@code deprecated}
-     *  string is the mark's alone: whatever the stored document says was written by the client's own
-     *  {@code npm deprecate}, which set the mark as it did, so a mark cleared anywhere - the console, the API, an
-     *  empty {@code npm deprecate} - leaves no warning behind in the stored text. */
+    /** A version's packument entry: its metadata with the tarball URL (the placeholder base) and the lifecycle
+     *  deprecation; {@code null} when the metadata is not a JSON object. The {@code deprecated} string is the mark's
+     *  alone, so a mark cleared anywhere leaves no warning in the stored text. */
     private static byte[] render(byte[] metadata, String shortName, String version, Lifecycle.Flag flag)
             throws IOException {
         if (!(NpmFormat.MAPPER.readTree(metadata) instanceof ObjectNode object)) {
@@ -298,7 +280,7 @@ final class NpmListings {
         return true;
     }
 
-    /** An envelope was indexed: its versions and (when it carried them) its dist-tags join the stored packument. */
+    /** An envelope was indexed: its versions and, when carried, its dist-tags join the stored packument. */
     void published(String name, Map<String, byte[]> versions, boolean distTags) throws IOException {
         String shortName = NpmFormat.shortName(name);
         StoredListing.Changes changes = new StoredListing.Changes();
@@ -306,8 +288,7 @@ final class NpmListings {
         for (String version : versions.keySet()) {
             listed |= change(changes, name, shortName, version);
         }
-        // Dist-tags join the document only once it lists a version: an envelope that published no tarball has no
-        // packument, so its tags alone must not bring one into being.
+        // Dist-tags alone never bring a packument into being.
         if (distTags && (listed || StoredListing.present(store, packument(name)))) {
             changes.removePrefix(TAG);
             storedTags(name).forEach(changes::put);
@@ -317,8 +298,8 @@ final class NpmListings {
         }
     }
 
-    /** Re-decide one version's entry from the store's current state - after a hold, a release or a mark - and
-     *  re-admit the stored dist-tags, so a tag screened out while its target was held returns with it. */
+    /** Re-decide one version's entry from the store's current state and re-admit the stored dist-tags, so a tag
+     *  screened out while its target was held returns with it. */
     void refresh(String name, String version) throws IOException {
         StoredListing.Changes changes = new StoredListing.Changes();
         change(changes, name, NpmFormat.shortName(name), version);

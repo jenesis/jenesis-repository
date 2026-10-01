@@ -30,23 +30,21 @@ import tools.jackson.core.JsonToken;
 import build.jenesis.repository.format.Semver;
 
 /**
- * The npm registry format, so {@code npm publish} and {@code npm install} work over the same store. It owns
- * {@code /npm/...} (the registry is configured at that base). A publish ({@code PUT /npm/<package>}) carries the
- * new version's metadata and the tarball base64-encoded under {@code _attachments}; each version's metadata is
- * stored under {@code npm/<package>/versions/<version>} and the tarball under {@code npm/<package>/tarballs/<file>},
- * exactly as the Maven format keeps per-version folders. The packument ({@code GET /npm/<package>}) is served from a
- * stored document the publish maintains, with each version's {@code dist.tarball} completed to this
- * registry's URL while npm's own integrity and shasum (which match the stored tarball) are kept. The tarball is
- * served verbatim, so npm's integrity check passes.
+ * The npm registry format: {@code npm publish} and {@code npm install} over the same store, under {@code /npm/...}. A
+ * publish ({@code PUT /npm/<package>}) carries the version's metadata and its tarball base64-encoded under
+ * {@code _attachments}; the metadata is stored under {@code npm/<package>/versions/<version>} and the tarball under
+ * {@code npm/<package>/tarballs/<file>}. The packument ({@code GET /npm/<package>}) is a stored document the publish
+ * maintains, each version's {@code dist.tarball} completed to this registry's URL with npm's integrity and shasum kept;
+ * the tarball is served verbatim, so the client's integrity check passes.
  */
 public final class NpmFormat implements RepositoryFormat, ProxyLeg, BlobLayout, RepositoryImporter,
         ArtifactSignatures, RepositoryExporter {
 
     static final ObjectMapper MAPPER = new ObjectMapper();
 
-    /** The most version metadata one publish envelope may carry, every version together. A version's metadata is its
-     *  {@code package.json} with the readme folded in - kilobytes, a megabyte for a long readme - and a publish carries
-     *  one version, so this is generous; it is what keeps an envelope from being a way to fill the heap. */
+    /** The most version metadata one publish envelope may carry, all versions together: a version's metadata is its
+     *  {@code package.json} with the readme, kilobytes to a megabyte, so this is generous and keeps an envelope from
+     *  filling the heap. */
     static final int LARGEST_VERSIONS = 16 * 1024 * 1024;
 
     /** The most a publish envelope's {@code dist-tags} may carry: a handful of tag names and versions. */
@@ -75,9 +73,7 @@ public final class NpmFormat implements RepositoryFormat, ProxyLeg, BlobLayout, 
 
     @Override
     public List<String> blobKeys(String coordinate, String version, ArtifactStore store) throws IOException {
-        // A version's per-version metadata pointer plus its tarball(s); dist-tags and the package root are shared
-        // across versions and left. The stored tarball filename (an _attachments key) is not always derivable, so it
-        // is discovered by listing and matched on the conventional <shortName>-<version>.tgz suffix.
+        // A version's metadata pointer and its tarball; dist-tags and the package root are shared and left.
         if (!BlobLayout.addressable(coordinate, version)) {
             return List.of();   // a traversal-shaped coordinate maps nowhere - these keys are what an eviction DELETES
         }
@@ -86,8 +82,8 @@ public final class NpmFormat implements RepositoryFormat, ProxyLeg, BlobLayout, 
         if (store.readVersioned(versionKey).isPresent()) {
             keys.add(versionKey);
         }
-        // The tarball a version serves from is the one its packument entry points at - the conventional
-        // <shortName>-<version>.tgz key - so it is probed, never found by scanning the package's tarballs.
+        // The tarball is the one the packument entry points at, the conventional <shortName>-<version>.tgz key, probed
+        // rather than found by scanning.
         String tarball = tarballKey(coordinate, shortName(coordinate), version);
         if (store.readVersioned(tarball).isPresent()) {
             keys.add(tarball);
@@ -95,9 +91,8 @@ public final class NpmFormat implements RepositoryFormat, ProxyLeg, BlobLayout, 
         return keys;
     }
 
-    /** The request paths this coordinate version's tarball(s) serve at ({@code /npm/<name>/-/<file>}), the inverse of
-     *  {@link #describe} - a retroactive hold links a {@code /quarantine} review handle at each. The per-version
-     *  metadata pointer is not a served download and carries no {@code /-/} path, so only tarballs map. */
+    /** The request paths this version's tarballs serve at ({@code /npm/<name>/-/<file>}), where a retroactive hold
+     *  links its {@code /quarantine} handles; the metadata pointer is not a download. */
     @Override
     public List<String> servedPaths(String coordinate, String version, ArtifactStore store) throws IOException {
         if (!BlobLayout.addressable(coordinate, version)) {
@@ -109,13 +104,10 @@ public final class NpmFormat implements RepositoryFormat, ProxyLeg, BlobLayout, 
                 : List.of();
     }
 
-    /** The coordinate a tarball request path carries ({@code /npm/<name>/-/<shortName>-<version>.tgz}, the name kept
-     *  whole with its {@code @scope} - the coordinate {@link #blobKeys} and the npm compliance inspector key on), so
-     *  the inventory records the release the retroactive enforcement sweeps enumerate the version
-     *  by. A packument or publish path ({@code /npm/<name>}) and the dist-tags carry no single version and stay
-     *  empty; a tarball filename off the conventional {@code <shortName>-<version>} shape describes coordinate-less
-     *  rather than guessing a wrong version. A {@code -} suffix in the version marks a prerelease, the same
-     *  convention {@link Semver#compare} ranks by. */
+    /** The coordinate a tarball path carries ({@code /npm/<name>/-/<shortName>-<version>.tgz}), the name kept whole
+     *  with its {@code @scope}. A packument path and the dist-tags carry no version and stay empty, as does a filename
+     *  off the convention, rather than guessing. A {@code -} in the version marks a prerelease, as
+     *  {@link Semver#compare} ranks it. */
     @Override
     public Optional<ArtifactDescriptor> describe(String path) {
         if (!path.startsWith("/npm/")) {
@@ -136,18 +128,15 @@ public final class NpmFormat implements RepositoryFormat, ProxyLeg, BlobLayout, 
         }
         String version = file.substring(prefix.length(), file.length() - ".tgz".length());
         if (version.indexOf('/') >= 0) {
-            // A tarball filename is a single path segment, so a '/' in the parsed version means the source path leaked
-            // into it - describe coordinate-less rather than emit a slash-bearing version the store's traversal-free
-            // segment check would later reject (the PyPI import defect, whose fix this mirrors). The /-/ split above
-            // makes this unreachable from a well-formed registry path, so it is defence in depth, the guard GoFormat:84
-            // keeps on its own parsed version.
+            // A '/' in the parsed version means the source path leaked into it: described coordinate-less rather than
+            // as a version the store's segment check would refuse. Unreachable from a well-formed path; a second guard.
             return Optional.of(ArtifactDescriptor.at("npm", path));
         }
         return Optional.of(new ArtifactDescriptor("npm", name, version, path,
                 "application/octet-stream", version.contains("-"), null, -1L));
     }
 
-    // An original CC0 line glyph (a bracketed package block) drawn for this project.
+    // An original CC0 line glyph (a bracketed package block).
     private static final IconResource ICON = IconResource.svg("""
             <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round">
               <rect x="3" y="3" width="18" height="18" rx="2"/><path d="M8 8v8M12 8v8M16 8v8"/>
@@ -163,13 +152,9 @@ public final class NpmFormat implements RepositoryFormat, ProxyLeg, BlobLayout, 
         return Optional.of(URI.create("https://registry.npmjs.org/"));
     }
 
-    /**
-     * Demo-mode suggestions: two old, benign-but-vulnerable npm tarballs - {@code lodash 4.17.11} (the prototype
-     * pollution before 4.17.12) and {@code minimist 1.2.0} (the prototype pollution before 1.2.3) - so a fresh
-     * repository's browse rows and, after a vulnerability sweep, its advisory panel carry npm data. The bytes are
-     * ordinary libraries, pulled through this format's own {@link #defaultUpstream() upstream}; nothing malicious is
-     * fetched.
-     */
+    /** Demo-mode suggestions: {@code lodash 4.17.11} and {@code minimist 1.2.0}, old benign-but-vulnerable tarballs, so
+     *  a fresh repository's browse rows and advisory panel carry npm data; pulled through this format's own
+     *  {@link #defaultUpstream() upstream}. */
     @Override
     public List<String> demoArtifacts() {
         return List.of(
@@ -182,19 +167,6 @@ public final class NpmFormat implements RepositoryFormat, ProxyLeg, BlobLayout, 
         return path.startsWith("/npm/");
     }
 
-    /**
-     * An {@code npm publish} wraps its artifact in a JSON document, so this format is <b>not</b> edge-screened:
-     * the request body is an <em>envelope</em> - a packument carrying the tarball base64-encoded under
-     * {@code _attachments} - and gating it at the shared single-body edge would hash and assess that document while the
-     * bytes that later serve are the {@code .tgz} inside it, a second content-addressed object under a hash no
-     * interceptor ever saw. That is {@code RepositoryFormat} clause 14's fail-open direction: "we screened the request
-     * that contained it" is not a claim anyone can act on. The shared edge ({@code ScreenedDispatch}) takes the request
-     * body verbatim and offers no seam to unwrap one, so this format is in the {@code screened() == false} case the
-     * clause names and screens at its own documented choke point: {@link #parse} base64-decodes each attachment
-     * ({@link #commitTarball}) through the shared {@code Publication.commit} - with the <em>discovered</em> interceptor
-     * chain and observers - so the chain assesses the tarball's own bytes, under the tarball's own request path. The package root {@code PUT} is the only way a tarball is hosted-published here, so declaring
-     * {@code false} does not leave the format unscreened.
-     */
     /** The encoded slash of a scoped package name, {@code @scope%2Fname}: after a scope, and nowhere else. */
     private static final Pattern SCOPED_SEPARATOR = Pattern.compile("(@[A-Za-z0-9._~-]+)%2[Ff]");
 
@@ -205,6 +177,14 @@ public final class NpmFormat implements RepositoryFormat, ProxyLeg, BlobLayout, 
         exchange.respond(500, MAPPER.writeValueAsBytes(Map.of("error", sentence)));
     }
 
+    /**
+     * Not edge-screened: an {@code npm publish} body is an envelope carrying the tarball base64-encoded under
+     * {@code _attachments}, and screening it at the shared edge would assess the document while the bytes that serve
+     * are the {@code .tgz} inside it ({@code RepositoryFormat} clause 14). This format screens at its own choke point:
+     * {@link #parse} decodes each attachment through the shared {@code Publication.commit} ({@link #commitTarball})
+     * with the discovered chain and observers, under the tarball's own path. The package root {@code PUT} is the only
+     * way a tarball is hosted-published here.
+     */
     @Override
     public boolean screened() {
         return false;
@@ -213,9 +193,8 @@ public final class NpmFormat implements RepositoryFormat, ProxyLeg, BlobLayout, 
     @Override
     public void serve(FormatExchange exchange, ArtifactStore store) throws IOException {
         Blobs blobs = new Blobs(store);
-        // npm sends a scoped package's name with its slash encoded (@scope%2Fname), on a publish, a packument read and
-        // the tarball URL a packument read completes. Only that separator is decoded: an encoded slash anywhere else -
-        // "..%2f" among them - stays the literal name it is, so no decoding here can compose a traversal.
+        // npm encodes a scoped name's slash (@scope%2Fname). Only that separator is decoded, so an encoded slash
+        // elsewhere, "..%2f" among them, stays literal and cannot compose a traversal.
         String rest = SCOPED_SEPARATOR.matcher(exchange.path().substring("/npm/".length())).replaceAll("$1/");
         String method = exchange.method();
         if (rest.startsWith(DIST_TAGS_API)) {
@@ -225,8 +204,7 @@ public final class NpmFormat implements RepositoryFormat, ProxyLeg, BlobLayout, 
         int tarball = rest.indexOf("/-/");
         if (tarball >= 0) {
             if (!method.equals("GET") && !method.equals("HEAD")) {
-                // A tarball path is read-only; a publish is a PUT to the package root, not to /-/. Gate the write verbs
-                // so a PUT/DELETE is a 405 rather than being answered as a download, like the other formats do.
+                // A tarball path is read-only; a write verb is a 405.
                 exchange.respond(405);
                 return;
             }
@@ -245,32 +223,20 @@ public final class NpmFormat implements RepositoryFormat, ProxyLeg, BlobLayout, 
         }
     }
 
-    /**
-     * The documents npm updates in place for a version that already exists, which are last-writer-wins and always
-     * have been: the dist-tags ({@code npm dist-tag add} re-points {@code latest}) and a version's own index entry,
-     * which {@code npm deprecate} rewrites with no tarball attached at all. What must not change under a published
-     * version is its <em>bytes</em>, and those are governed by {@link #republish} below.
-     */
+    /** The documents npm updates in place for an existing version, last-writer-wins: the dist-tags and a version's
+     *  index entry, which {@code npm deprecate} rewrites with no tarball. A published version's bytes are governed by
+     *  {@link #republish}. */
     private static final Publication.Republish METADATA = Publication.Republish.overwrite();
 
     /**
-     * What a publish of an already-published version does. npm's own registry refuses it, and this product documents
-     * release-version immutability as on by default with {@code allow-redeploy} as the operator's opt-out.
+     * What a publish of an already-published version does. npm's registry refuses it, and release immutability is on by
+     * default with {@code allow-redeploy} as the opt-out, honoured here as the edge resolved it for the tenant
+     * ({@link Publication#redeployAllowed()}), since a publish PUTs the packument root, which names no version for the
+     * edge to protect.
      *
-     * <p>Not {@link Publication.Republish#overwrite()} unconditionally, which would quietly exempt npm from
-     * that guarantee: {@code ReleaseImmutability} keys on the request path, and an npm publish PUTs the packument
-     * root, which carries no version for it to protect. The versioned writes happen inside this format, so this is
-     * where the dial is honoured - as the edge resolved it for the publishing tenant
-     * ({@link Publication#redeployAllowed()}), rather than read here deployment-wide.
-     *
-     * <p>The probe is the format's <em>own</em> serving pointer, not the publication's request path: an npm publish
-     * addresses the packument, which legitimately changes on every publish as a version joins it. The key that must
-     * not move twice is the tarball's - the version's <em>bytes</em>. Its metadata document is a different thing and
-     * stays mutable, because that is what {@code npm deprecate} rewrites.
-     *
-     * <p>Idempotent rather than refused, because a replay of <em>identical</em> bytes is how a publish that crashed
-     * mid-layout is repaired - a documented property of this product, and one that a flat refusal would have taken
-     * away. What is refused is different bytes at a version already published, which is the hole.
+     * <p>The probe is the tarball's serving pointer, the version's bytes, not the packument, which changes with every
+     * publish. A replay of identical bytes is idempotent, which is how a publish that crashed mid-layout is repaired;
+     * different bytes at a published version are refused.
      */
     private static Publication.Republish republish(String pointer) {
         return Publication.redeployAllowed()
@@ -279,43 +245,25 @@ public final class NpmFormat implements RepositoryFormat, ProxyLeg, BlobLayout, 
     }
 
     /**
-     * Publish streaming, so the tarball is never materialised. npm's publish protocol carries the tarball inline
-     * (base64 under {@code _attachments.<file>.data}) in one JSON document; reading the whole body into a
-     * {@code byte[]}, building a tree over it, pulling the base64 out as a {@code String} and decoding that to another
-     * {@code byte[]} would be four copies of the tarball on the heap ({@code ~3-4x}), unable to even represent a
-     * package past the array limit. Instead the body is parsed with the streaming
-     * {@link JsonParser}: the small metadata subtrees ({@code versions}, {@code dist-tags}) are read whole (index
-     * metadata, allowed), while each attachment's {@code data} value is base64-decoded straight into the
-     * shared commit operation's hash-on-write ({@link #commitTarball}), never held whole. A multi-gigabyte tarball
-     * therefore publishes in bounded heap, with no size cap.
+     * Publish streaming, so the tarball is never materialised: the body is parsed with {@link JsonParser}, the small
+     * metadata subtrees ({@code versions}, {@code dist-tags}) read whole, while each attachment's {@code data} is
+     * base64-decoded straight into the shared commit's hash-on-write ({@link #commitTarball}). A tarball of any size
+     * publishes in bounded heap.
      *
-     * <h2>The tarball is the screened body, and it is written once</h2>
-     * Each attachment's {@code data} is base64-decoded <em>through</em> the shared hosted-publish operation
-     * ({@code Publication.commit}): the decoded stream is the operation's accepted body, so the tarball flows through
-     * {@code writeBlob} exactly once and <b>the hash the interceptor chain assesses is the hash {@code npm install}
-     * downloads</b>, never the surrounding packument - the envelope-vs-artifact gap. Re-reading the stored blob to
-     * feed a second commit is rejected here: it would double the write of a multi-gigabyte tarball, which
-     * {@code NpmPublishStreamingTest} pins against ("streamed through the store exactly once").
+     * <h2>The tarball is the screened body, written once</h2>
+     * The decoded stream is the commit's accepted body, so the tarball crosses {@code writeBlob} once and <b>the hash
+     * the interceptor chain assesses is the hash {@code npm install} downloads</b>, never the surrounding packument.
      *
      * <h2>Content first, index after</h2>
-     * An npm publish envelope is a JSON object whose field order is the <em>client's</em>, and writing as it parses
-     * would let a client that puts {@code versions} before {@code _attachments} (which every npm CLI does) have its
-     * per-version pointer written <em>permanently</em> before the tarball it names existed, so a publish that failed
-     * in between would leave a package whose packument advertised a version {@code npm install} could only 404 on.
+     * The envelope's field order is the client's, and every npm CLI sends {@code versions} before {@code _attachments},
+     * so writing as it parses would index a version before its tarball existed. The order is the operation's instead:
+     * {@link #parse} commits each attachment as it streams, linking the tarball pointer only, and every index write
+     * waits for {@link #index} after the whole envelope is read. A version is indexed only when its bytes are servable
+     * - published now or already stored, so an {@code npm deprecate} with no attachments still updates its versions.
      *
-     * <p>So the ordering is the operation's, not the client's, expressed as two phases of a single pass:
-     * {@link #parse} walks the envelope and commits each attachment as its bytes stream by - linking the tarball
-     * pointer and nothing else - while every <em>index</em> write is deferred to {@link #index}, which runs only once
-     * the whole envelope has been read. So a version's index entry can never precede the tarball it names, whichever
-     * order the client's fields arrived in, and a version is indexed <b>only</b> when its bytes are servable -
-     * published in this request or already stored (so an {@code npm deprecate}, which PUTs a packument with no
-     * attachments, still updates its versions). A version whose tarball never arrives is not indexed at all.
-     *
-     * <p>The one thing the single pass gives up: a tarball pointer now lands before the envelope's <em>tail</em> has
-     * been read, so a malformed tail (an unsafe version key, a truncated document) answers {@code 400} with a
-     * downloadable tarball that no packument lists. That is the benign half of the crash window the operation's own
-     * contract already names - a stored, servable artifact nothing indexes, never an index entry with no bytes - and
-     * those bytes were screened, so it admits nothing unassessed.
+     * <p>A malformed envelope tail answers {@code 400} after a tarball pointer has landed, leaving a screened, servable
+     * artifact no packument lists - the benign half of the operation's crash window, never an index entry without
+     * bytes.
      */
     private void publish(String name, FormatExchange exchange, Blobs blobs, ArtifactStore store) throws IOException {
         Envelope envelope;
@@ -332,20 +280,15 @@ public final class NpmFormat implements RepositoryFormat, ProxyLeg, BlobLayout, 
             exchange.respond(400);   // not a JSON object, or an unsafe version / attachment key - nothing was indexed
             return;
         }
-        // The strongest verdict any tarball in this envelope drew. A publish normally carries one version, so this is
-        // one commit's disposition; a multi-version envelope answers by its worst, since a client told 201 while one of
-        // its versions was held would believe it published something that 404s. A REFUSED tarball stops the index
-        // phase outright; a HELD one does not - it was laid out under its withhold marker, so it must be indexed like
-        // any other stored version and is screened back out of the packument until it is released.
+        // The strongest verdict any tarball drew: a multi-version envelope answers by its worst, so no client is told
+        // 201 for a version that 404s. A refusal stops the index phase; a hold does not, since a held version is laid
+        // out behind its marker and screened out of the packument until released.
         if (envelope.strongest() != null) {
             switch (envelope.strongest().disposition()) {
                 case ACCEPT -> {
                 }
-                // The chain HELD a tarball. Its layout was still written - behind the withhold marker
-                // {@link #commitTarball} set before it linked the pointer - so the version exists exactly as a
-                // retroactively-held one does and a review release is the marker clear. Index it here for
-                // the same reason: the packument screens every version on its tarball's marker, so a held version is
-                // laid out and listed nowhere until it is released.
+                // Held: the layout was written behind the withhold marker commitTarball set, so it is indexed like any
+                // stored version and the packument screens it out until a release clears the marker.
                 case QUARANTINE -> {
                     try {
                         index(name, envelope, blobs, store);
@@ -356,8 +299,8 @@ public final class NpmFormat implements RepositoryFormat, ProxyLeg, BlobLayout, 
                     exchange.respond(202);
                     return;
                 }
-                // Refused outright: no pointer, no marker, no index entry - the stored blob is the usual unreferenced
-                // content-addressed object a collection reclaims. A refusal is never released, so it is never laid out.
+                // Refused: no pointer, marker or index entry; the stored blob is an unreferenced object the collector
+                // reclaims.
                 case REJECT -> {
                     exchange.respond(422);
                     return;
@@ -375,30 +318,20 @@ public final class NpmFormat implements RepositoryFormat, ProxyLeg, BlobLayout, 
         exchange.respond(201, MAPPER.writeValueAsString(Map.of("ok", true)).getBytes(StandardCharsets.UTF_8));
     }
 
-    /**
-     * A version's tarball, and the document and attestations it was published with, never change once published, and
-     * npm's registry answers a second publish of it this way rather than with a bare conflict. The words go in the
-     * JSON document's error field, the one place {@code npm publish} reads a refusal's reason from; any other body
-     * leaves it printing a generic 403 that reads as a missing permission.
-     */
+    /** A published version's tarball, document and attestations never change, and the refusal says so in the JSON error
+     *  field, the one place {@code npm publish} reads a reason from; any other body prints as a missing permission. */
     private static void publishedOver(FormatExchange exchange) throws IOException {
         exchange.setResponseHeader("Content-Type", "application/json");
         exchange.respond(403, MAPPER.writeValueAsBytes(
                 Map.of("error", "You cannot publish over the previously published versions.")));
     }
 
-    /**
-     * {@code npm deprecate <pkg>@<range> "<message>"}: the client rewrites the package document with a
-     * {@code deprecated} message on each version the range names - an empty one to undo it - and PUTs it back. Each
-     * stored version whose message changed becomes the product's own lifecycle mark, written through the one path the
-     * console and the API use ({@link Lifecycle#mark(FormatExchange, ArtifactStore, String, String, Lifecycle.Flag)}),
-     * so {@code jenrepo lifecycle} and the console show a deprecation whichever surface made it, and a later mark
-     * never silently replaces the client's text.
-     *
-     * <p>A client sends back every version's {@code deprecated} as it read it, so a message equal to what the version
-     * already renders is no change; a version absent the field says nothing; and a yank, which npm can only render as
-     * a deprecation, is never turned into one or undone from here.
-     */
+    /** {@code npm deprecate <pkg>@<range> "<message>"}: the client PUTs the package document back with a
+     *  {@code deprecated} message on each version the range names, empty to undo it. Each stored version whose message
+     *  changed becomes the product's lifecycle mark, through the path the console and API use
+     *  ({@link Lifecycle#mark(FormatExchange, ArtifactStore, String, String, Lifecycle.Flag)}). A message equal to what
+     *  the version renders is no change, an absent field says nothing, and a yank, which npm can only render as a
+     *  deprecation, is never made or undone here. */
     private static void deprecations(String name, Envelope envelope, Blobs blobs, ArtifactStore store,
                                      FormatExchange exchange) throws IOException {
         String shortName = shortName(name);
@@ -427,9 +360,8 @@ public final class NpmFormat implements RepositoryFormat, ProxyLeg, BlobLayout, 
         }
     }
 
-    /** The stronger of two commits' verdicts ({@code null} - no commit at all - loses to any present one): the
-     *  reduction a multi-attachment envelope folds its per-tarball verdicts with, mirroring the way the interceptor
-     *  chain itself keeps the strongest disposition across its members. */
+    /** The stronger of two commits' verdicts, {@code null} losing to any: how a multi-attachment envelope folds its
+     *  verdicts, as the interceptor chain does. */
     private static Publication.Commit stronger(Publication.Commit held, Publication.Commit next) {
         if (next == null) {
             return held;
@@ -437,32 +369,28 @@ public final class NpmFormat implements RepositoryFormat, ProxyLeg, BlobLayout, 
         return held == null || next.disposition().compareTo(held.disposition()) > 0 ? next : held;
     }
 
-    /** One walked publish envelope: the per-version index documents keyed by version, the attachment filenames whose
-     *  tarballs this request made servable, the verbatim {@code dist-tags} document ({@code null} when the envelope
-     *  carries none), and the strongest verdict the screened tarballs drew ({@code null} when the envelope carried
-     *  none). Only the small index documents are held - a tarball is already in the content-addressed store and
-     *  already linked by its own commit. */
+    /** One walked envelope: the per-version index documents, the attachment filenames this request made servable, the
+     *  verbatim {@code dist-tags} ({@code null} when absent), the strongest verdict ({@code null} when no tarball was
+     *  carried), and the attestations. Only the small index documents are held. */
     private record Envelope(Map<String, byte[]> versions, Set<String> published, byte[] distTags,
                             Publication.Commit strongest, byte[] attestations) {
     }
 
-    /** Whether an attachment read produced a usable result, and the strongest verdict its tarballs drew: {@code safe}
-     *  is false for a filename that would forge a pointer key, which fails the whole publish. */
+    /** Whether an attachment read was usable, and the strongest verdict its tarballs drew; {@code safe} is false for a
+     *  filename that would forge a pointer key, failing the publish. */
     private record Attachments(boolean safe, Publication.Commit strongest) {
     }
 
-    /** Walk the whole publish envelope in one pass: each attachment's tarball is screened and linked as its bytes
-     *  stream by ({@link #commitTarball}), each version's metadata subtree is held as the small index document it is,
-     *  and <em>no index write happens here</em> - that is {@link #index}'s, so a version's entry can never precede the
-     *  tarball it names. {@code null} (a {@code 400}) when the body is not a JSON object, or when a version key /
-     *  attachment filename would forge a pointer key with {@code /} or {@code ..}. */
+    /** Walk the envelope in one pass: each attachment is screened and linked as it streams ({@link #commitTarball}),
+     *  each version's metadata is held, and no index write happens here ({@link #index}). {@code null}, a {@code 400},
+     *  when the body is not a JSON object or a version key or filename would forge a pointer key. */
     private Envelope parse(String name, FormatExchange exchange, Blobs blobs, ArtifactStore store) throws IOException {
         Map<String, byte[]> versions = new LinkedHashMap<>();
         Set<String> published = new LinkedHashSet<>();
         byte[] distTags = null;
         byte[] attestations = null;
         Publication.Commit strongest = null;
-        // The artifact screen: the discovering constructor, because this format IS the choke point now (screened()).
+        // The discovering constructor: this format is its own screening choke point (screened()).
         Publication screening = new Publication(store);
         try (JsonParser parser = MAPPER.createParser(exchange.requestStream())) {
             if (parser.nextToken() != JsonToken.START_OBJECT) {
@@ -502,12 +430,9 @@ public final class NpmFormat implements RepositoryFormat, ProxyLeg, BlobLayout, 
         return new Envelope(versions, published, distTags, strongest, attestations);
     }
 
-    /**
-     * The Sigstore bundles a provenance-publishing client sends beside its tarball ({@code npm publish
-     * --provenance}): {@code _attestations} as the registry's {@code {"attestations":[{"predicateType","bundle"}]}}
-     * envelope, or the bare list. Held whole - a bundle is a few kilobytes of certificate, log entry and statement -
-     * and bounded at the signature limit, past which the publish carries none rather than an unbounded document.
-     */
+    /** The Sigstore bundles {@code npm publish --provenance} sends: {@code _attestations} as the registry's
+     *  {@code {"attestations":[{"predicateType","bundle"}]}} envelope or the bare list. Held whole, being kilobytes,
+     *  and bounded at the signature limit, past which the publish carries none. */
     private static byte[] readAttestations(JsonParser parser) throws IOException {
         JsonToken token = parser.currentToken();
         if (token != JsonToken.START_OBJECT && token != JsonToken.START_ARRAY) {
@@ -530,17 +455,13 @@ public final class NpmFormat implements RepositoryFormat, ProxyLeg, BlobLayout, 
         return bytes.length > ArtifactSignatures.Material.LARGEST_SIGNATURE ? null : bytes;
     }
 
-    /** The stored attestations of a version: the envelope as published, served at {@code /-/attestations/<version>}
-     *  under the package. */
+    /** The stored attestations of a version, as published, served at {@code /-/attestations/<version>}. */
     static String attestationsKey(String name, String version) {
         return "npm/" + name + "/attestations/" + version;
     }
 
-    /**
-     * A version's stored metadata with {@code dist.attestations} naming where the registry serves its bundles - the
-     * placeholder base the packument completes on the way out - and the provenance predicate a client asks for
-     * first, as registry.npmjs.org writes it.
-     */
+    /** A version's metadata with {@code dist.attestations} naming where the bundles are served - the placeholder base
+     *  the packument completes - and the provenance predicate, as registry.npmjs.org writes it. */
     private static byte[] withAttestations(byte[] metadata, String version, byte[] attestations) throws IOException {
         if (!(MAPPER.readTree(metadata) instanceof ObjectNode object)) {
             return metadata;
@@ -558,11 +479,12 @@ public final class NpmFormat implements RepositoryFormat, ProxyLeg, BlobLayout, 
         return MAPPER.writeValueAsBytes(object);
     }
 
-    /** Hold each version's metadata subtree against its version, all of them together within
-     *  {@link #LARGEST_VERSIONS}; the key is validated here, before anything can be written from it. False on an unsafe
-     *  version that would forge a pointer key with {@code /} or {@code ..}.
+    /**
+     * Hold each version's metadata subtree against its version, all within {@link #LARGEST_VERSIONS}, the key validated
+     * before anything is written from it. False on a version that would forge a pointer key.
      *
-     *  @throws TooLarge when the envelope's version metadata grows past the bound */
+     * @throws TooLarge when the version metadata grows past the bound
+     */
     private static boolean readVersions(JsonParser parser, Map<String, byte[]> versions) throws IOException {
         if (parser.currentToken() != JsonToken.START_OBJECT) {
             parser.skipChildren();
@@ -585,12 +507,8 @@ public final class NpmFormat implements RepositoryFormat, ProxyLeg, BlobLayout, 
         return true;
     }
 
-    /**
-     * The subtree the parser is on, as the bytes of its JSON, or {@code null} when those grew past {@code limit} - read
-     * to its end either way, one token at a time, so what an envelope costs in memory is the limit and one token
-     * rather than the whole subtree it sent. Every field of a publish envelope but the tarball is small metadata, and
-     * reading one whole before measuring it let a publisher make the node hold whatever it chose to send.
-     */
+    /** The subtree the parser is on as its JSON bytes, or {@code null} when past {@code limit}, read to its end one
+     *  token at a time, so an envelope field costs the limit and a token whatever was sent. */
     private static byte[] bounded(JsonParser parser, int limit) throws IOException {
         Bounded out = new Bounded(limit);
         try (JsonGenerator generator = MAPPER.createGenerator(out)) {
@@ -636,11 +554,9 @@ public final class NpmFormat implements RepositoryFormat, ProxyLeg, BlobLayout, 
         }
     }
 
-    /** Screen and link each attachment's tarball as its bytes stream by. The tarball is the one unbounded field, so it
-     *  is base64-decoded chunk-by-chunk through the shared commit operation, never buffered and never written twice;
-     *  the filename is validated before its bytes are read, so no body-supplied name reaches a pointer key. Not safe on
-     *  an unsafe attachment filename - the strongest verdict read so far is still carried back, since a tarball
-     *  committed before the bad name was reached has already been judged. */
+    /** Screen and link each attachment's tarball as it streams, base64-decoded through the shared commit, never
+     *  buffered or written twice; the filename is validated before its bytes are read. Not safe on an unsafe filename,
+     *  still carrying the strongest verdict read so far, since a tarball before it was already judged. */
     private static Attachments readAttachments(JsonParser parser, String name, Blobs blobs, Publication screening,
                                                Set<String> published) throws IOException {
         if (parser.currentToken() != JsonToken.START_OBJECT) {
@@ -649,8 +565,8 @@ public final class NpmFormat implements RepositoryFormat, ProxyLeg, BlobLayout, 
         }
         Publication.Commit strongest = null;
         while (parser.nextToken() == JsonToken.PROPERTY_NAME) {
-            // npm names a scoped package's tarball after the whole name - "@scope/name-1.0.0.tgz" - and it is stored
-            // and served under the unscoped file name the packument's tarball URL uses; any other slash is unsafe.
+            // npm names a scoped tarball after the whole name ("@scope/name-1.0.0.tgz"); it is stored under the
+            // unscoped file name the packument URL uses, and any other slash is unsafe.
             String sent = parser.currentName();
             String scope = name.contains("/") ? name.substring(0, name.indexOf('/') + 1) : "";
             String file = !scope.isEmpty() && sent.startsWith(scope) ? sent.substring(scope.length()) : sent;
@@ -680,21 +596,14 @@ public final class NpmFormat implements RepositoryFormat, ProxyLeg, BlobLayout, 
     }
 
     /**
-     * The index phase: every write that makes a version <em>discoverable</em>, run once the whole envelope has been
-     * read, so nothing here can precede the tarball it names. One commit per indexable version, in envelope order,
-     * then the package-level {@code dist-tags} document - which is committed last, so a {@code latest} tag can never
-     * resolve to a version whose index entry has not landed.
+     * The index phase: every write that makes a version discoverable, after the whole envelope is read. One commit per
+     * indexable version in envelope order, then the {@code dist-tags} last, so {@code latest} never resolves to a
+     * version whose entry has not landed. A version is indexable when its bytes are servable, published now or already
+     * stored.
      *
-     * <p>A version is indexable when its bytes are servable: published in this request (and accepted by the chain) or
-     * already stored, so an {@code npm deprecate} - a packument with no {@code _attachments} - still updates its
-     * versions, while a version whose tarball never arrived is not indexed at all.
-     *
-     * <p>These commits pass an <b>explicitly empty</b> chain and observer list, and that is the whole difference from
-     * the artifact commits {@link #parse} drives: an index document is not an artifact. There is nothing new to screen
-     * (its tarball was screened as it streamed in) and nothing new to notify (the tarball's own commit already fired
-     * the one after-commit event for this publish), so running the discovered chain here would be a second gate over
-     * bytes that are not the artifact and a second publish event for one upload. The operation is used purely for the
-     * ordering and idempotency it guarantees.
+     * <p>These commits pass an explicitly empty chain and observer list: an index document is not an artifact, its
+     * tarball was screened as it streamed and its commit already fired the publish event. The operation is used for its
+     * ordering and idempotency.
      */
     private void index(String name, Envelope envelope, Blobs blobs, ArtifactStore store) throws IOException {
         String shortName = shortName(name);
@@ -708,19 +617,18 @@ public final class NpmFormat implements RepositoryFormat, ProxyLeg, BlobLayout, 
             String versionKey = "npm/" + name + "/versions/" + version.getKey();
             boolean attached = envelope.published().contains(file);
             if (!attached && blobs.exists(versionKey)) {
-                // A version this request carries no tarball for keeps the document it was published with: a client
-                // PUTs the whole package document back to deprecate, and the deprecation reaches the version through
-                // its lifecycle mark below, never by rewriting what the release says it depends on.
+                // A version without a tarball in this request keeps the document it was published with; a deprecation
+                // reaches it through its lifecycle mark.
                 continue;
             }
             if (envelope.attestations() != null && attached) {
-                // The bundles land before the version is discoverable, and the version's own entry names them, so
-                // no client reads a version whose attestations are still to come.
+                // The bundles land before the version is discoverable, so no client reads a version whose attestations
+                // are to come.
                 blobs.writeRelease(attestationsKey(name, version.getKey()), envelope.attestations());
                 version.setValue(withAttestations(version.getValue(), version.getKey(), envelope.attestations()));
             }
-            // The document is the release's own: written where none stands, kept where the same one stands, and a
-            // re-publish of the same tarball with another one is refused rather than rewriting the release.
+            // The release's own document: written where none stands, kept where the same stands, and refused when a
+            // re-publish of the tarball carries another.
             indexing.commit(
                     new ArtifactDescriptor("npm", name, version.getKey(), "/npm/" + name,
                             "application/json", version.getKey().contains("-"), null, -1L),
@@ -734,21 +642,17 @@ public final class NpmFormat implements RepositoryFormat, ProxyLeg, BlobLayout, 
                     _ -> Publication.Visibility
                             .through((hash, _, _) -> blobs.link("npm/" + name + "/dist-tags", hash)));
         }
-        // The served packument is written here, on the publish: the envelope's versions (those that are servable)
-        // and dist-tags join the stored document rather than being enumerated and screened on every read.
+        // The packument is maintained on the publish: the servable versions and the dist-tags join the stored document.
         new NpmListings(blobs).published(name, envelope.versions(), envelope.distTags() != null);
     }
 
     /** Where {@code npm dist-tag} addresses a package's tags: {@code -/package/<name>/dist-tags[/<tag>]}. */
     private static final String DIST_TAGS_API = "-/package/";
 
-    /**
-     * {@code npm dist-tag ls|add|rm}: {@code GET -/package/<name>/dist-tags} answers the tags the packument carries,
-     * {@code PUT} (or {@code POST}) {@code .../dist-tags/<tag>} with a JSON string body points a tag at a listed
-     * version, and {@code DELETE .../dist-tags/<tag>} removes one other than {@code latest}, which npm's own registry
-     * refuses to remove. A package whose tags were never written has a computed {@code latest}, and a first change
-     * keeps it: the stored document starts from the tags the packument shows, not from nothing.
-     */
+    /** {@code npm dist-tag ls|add|rm}: {@code GET -/package/<name>/dist-tags} answers the packument's tags, {@code PUT}
+     *  or {@code POST} {@code .../dist-tags/<tag>} with a JSON string points a tag at a listed version, and
+     *  {@code DELETE} removes one other than {@code latest}, as npm's registry does. A first change starts from the
+     *  tags the packument shows, a computed {@code latest} included. */
     private void distTags(String rest, FormatExchange exchange, Blobs blobs, ArtifactStore store) throws IOException {
         int marker = rest.lastIndexOf("/dist-tags");
         String name = marker > 0 ? rest.substring(0, marker) : "";
@@ -808,8 +712,8 @@ public final class NpmFormat implements RepositoryFormat, ProxyLeg, BlobLayout, 
         exchange.respond(200, document);
     }
 
-    /** The dist-tags a package's packument shows, read off the stored document without holding its versions; empty
-     *  when nothing of the package is listed. */
+    /** The dist-tags a packument shows, read without holding its versions; empty when nothing of the package is
+     *  listed. */
     private static Optional<ObjectNode> tags(String name, Blobs blobs, ArtifactStore store) throws IOException {
         if (!StoredListing.present(store, NpmListings.packument(name)) && blobs.isEmpty("npm/" + name + "/versions")) {
             return Optional.empty();
@@ -838,12 +742,9 @@ public final class NpmFormat implements RepositoryFormat, ProxyLeg, BlobLayout, 
 
     // ---- export: each version as npm publish sends it ----
 
-    /**
-     * One version as {@code npm publish} sends it: {@code PUT <name>} with the stored version document under
-     * {@code versions}, the tarball base64 under {@code _attachments}, and the dist-tags the source points at this
-     * version - streamed, so the tarball is never held. A target that already serves the tarball with the same
-     * SHA-256 has it.
-     */
+    /** One version as {@code npm publish} sends it: {@code PUT <name>} with the version document, the tarball base64
+     *  under {@code _attachments} and the dist-tags pointing at it, streamed. A target already serving the tarball with
+     *  the same SHA-256 has it. */
     @Override
     public Exported export(ArtifactStore repository, String coordinate, String version, ExportTarget target)
             throws IOException {
@@ -906,7 +807,7 @@ public final class NpmFormat implements RepositoryFormat, ProxyLeg, BlobLayout, 
                         }
                         out.write(suffix);
                     } catch (IOException _) {
-                        // the reader sees the pipe close early and the request fails with the target's answer
+                        // The reader sees the pipe close early and the request fails with the target's answer.
                     }
                 });
                 return in;
@@ -924,10 +825,8 @@ public final class NpmFormat implements RepositoryFormat, ProxyLeg, BlobLayout, 
                 + response.body());
     }
 
-    /**
-     * After a package's last version, every tag the source carries is set as {@code npm dist-tag add} sets it, since
-     * a registry that replaces a package's tags on publish (as this one does) keeps only the last version's.
-     */
+    /** After a package's last version, every source tag is set as {@code npm dist-tag add} sets it, since a registry
+     *  replacing tags on publish keeps only the last version's. */
     @Override
     public void exported(ArtifactStore repository, String coordinate, ExportTarget target) throws IOException {
         Blobs blobs = new Blobs(repository);
@@ -962,9 +861,8 @@ public final class NpmFormat implements RepositoryFormat, ProxyLeg, BlobLayout, 
         return name.contains("/") ? name.substring(name.indexOf('/') + 1) : name;
     }
 
-    /** The version an attachment filename carries under the conventional {@code <shortName>-<version>.tgz} shape -
-     *  the same convention {@link #tarballKey} builds and the packument's {@code dist.tarball} points at - or the empty
-     *  string when the filename does not follow it (which matches no published version). */
+    /** The version an attachment filename carries under the {@code <shortName>-<version>.tgz} convention
+     *  ({@link #tarballKey}), or empty when it does not follow it. */
     private static String versionOf(String shortName, String file) {
         String prefix = shortName + "-";
         if (!file.startsWith(prefix) || !file.endsWith(".tgz")) {
@@ -974,23 +872,16 @@ public final class NpmFormat implements RepositoryFormat, ProxyLeg, BlobLayout, 
     }
 
     /**
-     * Base64-decode the {@code data} string the parser is positioned on <em>through</em> the shared hosted-publish
-     * operation, so the tarball is screened and linked in one streamed pass. The tarball is never held whole in heap,
-     * nor even as a base64 {@code String}, and it crosses {@code writeBlob} exactly once: Jackson's
-     * {@link JsonParser#readBinaryValue} decodes the base64 in its bounded read buffer on a helper thread, pushing the
-     * decoded bytes through a pipe whose consumer is {@code Publication.commit}'s own hash-on-write. A multi-gigabyte
-     * tarball therefore flows decode-to-screen-to-store in bounded chunks, with no size cap.
+     * Base64-decode the {@code data} string the parser is on through the shared hosted-publish operation, so the
+     * tarball is screened and linked in one streamed pass: {@link JsonParser#readBinaryValue} decodes on a helper
+     * thread into a pipe consumed by {@code Publication.commit}'s hash-on-write, so it crosses {@code writeBlob} once
+     * and is never held.
      *
-     * <p>The descriptor is the tarball's own: the request path it will download from, and - when the filename follows
-     * the conventional {@code <shortName>-<version>.tgz} shape - the coordinate and version too, so a deny-list, a
-     * {@code /quarantine} review handle and an inspector's artifact leg all key on the artifact rather than the publish
-     * endpoint. A filename off that shape is screened coordinate-less rather than under a guessed version.
-     *
-     * <p>The accepted layout links the tarball pointer and nothing else: every index write is deferred to
-     * {@link #index}. Before it declares, it joins the decoder and checks its outcome - a base64 run that broke
-     * mid-stream would otherwise reach the store as a self-consistent <em>truncated</em> tarball and be linked before
-     * the failure surfaced, so a failed decode declares nothing and the error is rethrown here (a publish never
-     * answers success having stored something else). Any failure on the helper thread is carried back the same way.
+     * <p>The descriptor is the tarball's own - its download path and, under the conventional filename, its coordinate
+     * and version - so a deny-list, a review handle and an inspector key on the artifact; another filename is screened
+     * coordinate-less. The accepted layout links the tarball pointer only, and joins the decoder first: a base64 run
+     * that broke mid-stream would otherwise store and link a self-consistent truncated tarball. A failed decode
+     * declares nothing and is rethrown.
      */
     private static Publication.Commit commitTarball(JsonParser parser, String name, String file, Blobs blobs,
                                                     Publication screening) throws IOException {
@@ -1015,19 +906,16 @@ public final class NpmFormat implements RepositoryFormat, ProxyLeg, BlobLayout, 
         Publication.Commit commit;
         try (InputStream decoded = in) {
             commit = screening.commit(descriptor, decoded, republish(key), _ -> {
-                // The body reached EOF, so the decoder has closed its sink and is done; join it before declaring so a
-                // broken decode links nothing.
+                // The body reached EOF; join the decoder before declaring, so a broken decode links nothing.
                 join(decoder);
-                // The version's bytes are linked once, decided inside the pointer's compare-and-set: the probe above
-                // reads before the layout, so two first publishes of one version with different bytes both pass it,
-                // and only the link can tell them apart.
+                // Decided inside the pointer's compare-and-set: two first publishes with different bytes both pass the
+                // earlier probe, and only the link tells them apart.
                 return failure.get() == null
                         ? Publication.Visibility.through((hash, size, _) -> blobs.linkRelease(key, hash, size))
                         : Publication.Visibility.declined();
             });
         } finally {
-            // Idempotent after the layout's join, and the escape hatch for a commit that threw before reaching it: the
-            // pipe is closed by now, so a decoder still pushing bytes is released rather than left parked.
+            // Idempotent after the layout's join, and releases a decoder still pushing when the commit threw before it.
             join(decoder);
         }
         Throwable failed = failure.get();
@@ -1039,18 +927,13 @@ public final class NpmFormat implements RepositoryFormat, ProxyLeg, BlobLayout, 
             case Error error -> throw error;
             default -> throw new IOException("could not store the npm tarball", failed);
         }
-        // The held tarball's layout, written here because the operation's accepted layout above never runs on a
-        // non-ACCEPT verdict. It comes AFTER the decode outcome is checked, for the reason the accepted layout joins
-        // the decoder before it declares: a base64 run that broke mid-stream stored a self-consistent TRUNCATED tarball,
-        // and laying that out - even withheld - would give a reviewer a release that materialises the wrong bytes.
-        // The withhold marker goes FIRST and the pointer only after it, so no window exists in which the held tarball is
-        // downloadable; every npm read keys on that marker - the download ({@link Blobs#size}/{@link Blobs#read}), the
-        // packument's per-version screen and the dist-tags screen - so the version is stored, reviewable and invisible
-        // until {@code HoldLifecycle.release} lifts it. Without the layout a release would have nothing to make
-        // servable; without the marker-first order the layout is the disclosure.
+        // The held layout, written here because the accepted one never runs on a hold, and after the decode is checked,
+        // so a reviewer never releases a truncated tarball. The marker goes first and the pointer after it, so the held
+        // tarball is never downloadable; every npm read - download, packument and dist-tags - screens on that marker
+        // until HoldLifecycle.release lifts it.
         switch (commit.disposition()) {
             case QUARANTINE -> {
-                // A hold never replaces a released tarball: refused before the mark, so nothing is left held.
+                // A hold never replaces a released tarball: refused before the mark.
                 blobs.refuseReplacement(key, commit.hash());
                 Withheld.mark(blobs.store(), commit.hash(), descriptor);
                 blobs.linkRelease(key, commit.hash(), -1L);
@@ -1061,8 +944,8 @@ public final class NpmFormat implements RepositoryFormat, ProxyLeg, BlobLayout, 
         return commit;
     }
 
-    /** Wait for the base64 decoder to finish, translating an interrupt into the {@code IOException} the publish path
-     *  reports - never swallowing it, and never leaving the interrupt flag cleared. */
+    /** Wait for the base64 decoder, turning an interrupt into an {@code IOException} and keeping the interrupt flag
+     *  set. */
     private static void join(Thread decoder) throws IOException {
         try {
             decoder.join();
@@ -1081,8 +964,7 @@ public final class NpmFormat implements RepositoryFormat, ProxyLeg, BlobLayout, 
         long size = located.get().size();
         exchange.setResponseHeader("Content-Type", "application/octet-stream");
         if (exchange.method().equals("HEAD")) {
-            // Answer HEAD from the stored blob size (Content-Length, 200, no body) rather than streaming the whole
-            // tarball just to discard it - npm issues HEADs to probe a tarball's size and existence.
+            // HEAD answers from the stored size; npm probes a tarball's size and existence with it.
             if (size >= 0) {
                 exchange.setResponseHeader("Content-Length", Long.toString(size));
             }
@@ -1092,8 +974,8 @@ public final class NpmFormat implements RepositoryFormat, ProxyLeg, BlobLayout, 
         blobs.serve(located.get(), exchange);
     }
 
-    /** The attestations a version was published with, as the envelope the client sent - what a client that read
-     *  {@code dist.attestations.url} fetches to verify provenance; a version published without any is a 404. */
+    /** The attestations a version was published with, what a client following {@code dist.attestations.url} fetches; a
+     *  version without any is a 404. */
     private void serveAttestations(String name, String version, Blobs blobs, FormatExchange exchange)
             throws IOException {
         Optional<Blobs.Located> located = Keys.unsafe(version) ? Optional.empty()
@@ -1112,11 +994,8 @@ public final class NpmFormat implements RepositoryFormat, ProxyLeg, BlobLayout, 
 
     // ---- the signature seam: Sigstore bundles published beside the tarball ----
 
-    /**
-     * A tarball may have been published with Sigstore attestations - provenance from a CI build, and the registry's
-     * own publish attestation - each a bundle over the tarball's digest; optional, since most packages carry none,
-     * and read from the attestations document the publish stored beside the tarball.
-     */
+    /** A tarball may carry Sigstore attestations - CI provenance and the registry's publish attestation - each a bundle
+     *  over its digest; optional, and read from the document the publish stored beside the tarball. */
     @Override
     public List<ArtifactSignatures.Expectation> expects(String path) {
         return describe(path).map(described -> described.coordinate() != null && described.version() != null)
@@ -1133,8 +1012,7 @@ public final class NpmFormat implements RepositoryFormat, ProxyLeg, BlobLayout, 
             return List.of();
         }
         String attestationsPath = "/npm/" + described.get().coordinate() + "/-/attestations/" + described.get().version();
-        // Whole or nothing: an attestations document past the signature bound is not read in part, since a bundle
-        // cut short verifies as nothing and would be reported as a signature that failed rather than one unread.
+        // Whole or nothing: a document cut at the bound would verify as nothing and read as a failed signature.
         Optional<byte[]> document = material.sibling(attestationsPath, ArtifactSignatures.Material.LARGEST_SIGNATURE)
                 .filter(bounded -> !bounded.truncated())
                 .map(PublishInterceptor.Content.Bounded::content);
@@ -1156,8 +1034,8 @@ public final class NpmFormat implements RepositoryFormat, ProxyLeg, BlobLayout, 
         return evidence;
     }
 
-    /** A request path's serving key, for the compliance screen's sibling read: a tarball, or a version's
-     *  attestations document, under the package that publishes them - when the pointer exists. */
+    /** A request path's serving key, for the compliance screen's sibling read: a tarball or a version's attestations,
+     *  when the pointer exists. */
     @Override
     public Optional<String> servingKey(String requestPath, ArtifactStore store) throws IOException {
         if (!requestPath.startsWith("/npm/")) {
@@ -1190,8 +1068,8 @@ public final class NpmFormat implements RepositoryFormat, ProxyLeg, BlobLayout, 
             exchange.respond(404);      // a structural emptiness probe: nothing published, so a proxy repo can fall through
             return;
         }
-        // The packument is a stored listing the publish maintains, completed with this registry's tarball base on the
-        // way out. The ETag is the stored document's digest, folded with the base it is completed for.
+        // The packument is a stored listing completed with this registry's tarball base on the way out; the ETag folds
+        // the base into the document's digest.
         String tarballBase = RequestBase.of(exchange) + exchange.requestUri();
         Optional<StoredListing.Served> served = StoredListing.open(store, new NpmListings(blobs).spec(name));
         if (served.isEmpty()) {
@@ -1210,38 +1088,22 @@ public final class NpmFormat implements RepositoryFormat, ProxyLeg, BlobLayout, 
                 exchange.respond(200, -1L).close();
                 return;
             }
-            // Streamed with the rewrite folded in, never as one byte array: a package's document is every version
-            // of it, and answering it whole would hold in heap what the publish had just streamed - an
-            // OutOfMemoryError on the read at fifty thousand versions under 512 MiB. The length is not declared,
-            // since the rewrite changes it.
+            // Streamed with the rewrite folded in: a package's document is every version of it. The length changes, so
+            // it is not declared.
             try (OutputStream out = exchange.respond(200, -1L)) {
                 document.copyTo(out, NpmListings.BASE, tarballBase);
             }
         }
     }
 
-    /** The served tarball pointer key a version's bytes live at - the identity the packument's screened enumeration
-     *  judges each version by, and the key the stored packument screens on, so the two can never drift. */
     /**
-     * The coordinate version a stored npm pointer serves, for the inventory back-fill - {@code BlobLayout}'s one
-     * backwards direction.
+     * The coordinate version a stored npm pointer serves, for the inventory back-fill. Only the metadata pointer
+     * {@code npm/<name>/versions/<version>} is read: a tarball filename's split is ambiguous when the short name ends
+     * in a digit, and every version has a metadata pointer.
      *
-     * <p>Only the per-version metadata pointer is read, {@code npm/<name>/versions/<version>}, because it is the one
-     * npm key whose two parts are unambiguous. A tarball key carries the version inside a filename
-     * ({@code <shortName>-<version>.tgz}) and a short name that ends in a digit makes that split ambiguous, so it is
-     * deliberately not decoded: every published version has a versions pointer, so nothing is lost by reading only
-     * the shape that cannot be misread.
-     *
-     * <p><b>Split on the LAST {@code /versions/}, not the first.</b> An npm coordinate is legitimately
-     * multi-segment - a scoped {@code @scope/name} - and may itself end in {@code versions}: a package literally
-     * called {@code @scope/versions} stores {@code npm/@scope/versions/versions/1.0.0}, where the first marker
-     * yields the coordinate {@code @scope} and a version of {@code versions/1.0.0}. Taking the last one yields the
-     * package and the version that were actually published.
-     *
-     * <p>Screened through {@link BlobLayout#addressable}, which applies the addressability rule to each part
-     * of the coordinate - the rule written for exactly this, a blobs-namespace coordinate that is legitimately
-     * multi-segment - so a traversal-shaped key decodes to nothing rather than to a row naming a coordinate this
-     * format would never have written.
+     * <p>Split on the last {@code /versions/}: a scoped {@code @scope/versions} stores
+     * {@code npm/@scope/versions/versions/1.0.0}. Screened through {@link BlobLayout#addressable} per part, so a
+     * traversal-shaped key decodes to nothing.
      */
     @Override
     public Optional<ArtifactDescriptor> describePointer(String key) {
@@ -1262,12 +1124,13 @@ public final class NpmFormat implements RepositoryFormat, ProxyLeg, BlobLayout, 
                 "application/octet-stream", version.contains("-"), null, 0L));
     }
 
+    /** The tarball pointer key a version's bytes live at, which the packument's screen judges each version by. */
     static String tarballKey(String name, String shortName, String version) {
         return "npm/" + name + "/tarballs/" + shortName + "-" + version + ".tgz";
     }
 
-    /** The npm {@code deprecated} warning string for a lifecycle flag: the operator's own message when they set one,
-     *  otherwise a default naming the state (npm has no distinct "yanked" signal, so a yank surfaces as a deprecation). */
+    /** The npm {@code deprecated} string for a lifecycle flag: the operator's message, else a default naming the state;
+     *  npm has no yank, so a yank surfaces as a deprecation. */
     static String deprecation(Lifecycle.Flag flag) {
         if (!flag.message().isEmpty()) {
             return flag.message();
@@ -1277,12 +1140,9 @@ public final class NpmFormat implements RepositoryFormat, ProxyLeg, BlobLayout, 
                 : "This version is deprecated.";
     }
 
-    /**
-     * Proxy an npm miss to the upstream registry (registry.npmjs.org). A tarball ({@code /-/}) is immutable, so it
-     * is fetched, cached and served locally. A packument is mutable: the upstream document is fetched and each
-     * version's {@code dist.tarball} rewritten to this registry's tarball URL (so the client fetches - and we cache -
-     * the tarball through us), then served fresh; npm's own integrity and shasum, which match the bytes, are kept.
-     */
+    /** Proxy an npm miss to the upstream registry. A tarball ({@code /-/}) is immutable, so it is fetched, cached and
+     *  served. A packument is mutable: fetched fresh, each {@code dist.tarball} rewritten to this registry so the
+     *  tarball is cached here, with npm's integrity and shasum kept. */
     @Override
     public boolean pullThrough(FormatExchange exchange, ArtifactStore store, URI upstream,
                                ProxyFormat.Fetcher fetcher) throws IOException {
@@ -1296,18 +1156,15 @@ public final class NpmFormat implements RepositoryFormat, ProxyLeg, BlobLayout, 
         if (tarball >= 0) {
             String name = rest.substring(0, tarball);
             String file = rest.substring(tarball + "/-/".length());
-            // Point-integrity: npm's packument declares each tarball's checksum (dist.integrity, a sha512, or the older
-            // dist.shasum, a sha1). Read it from the upstream packument and verify the streamed tarball against it,
-            // refusing a mismatch - the checksum parity the Maven proxy leg has (it fetches the .sha1 sibling). The
-            // packument is a SEPARATE fetch from the tarball below, so a packument this repository could not read is
-            // not "npm publishes no checksum for this tarball" and must not become an unverified fill.
+            // The packument declares each tarball's dist.integrity (sha512) or dist.shasum (sha1), and the streamed
+            // tarball is held to it. The packument is a separate fetch, and one that could not be read must not become
+            // an unverified fill.
             URI target = URI.create(root + name + "/-/" + file);
             ProxyRelay.Declared expected = tarballChecksum(root, name, file, fetcher);
             if (!expected.readable()) {
                 return ProxyRelay.unverifiable(target, expected);
             }
-            // The tarball is an immutable artifact of unbounded size: stream it from the network straight into the
-            // content-addressed store rather than buffering the whole body (fetch().body()), then re-serve it locally.
+            // Streamed from the network into the content-addressed store, since a tarball is unbounded.
             try (ProxyFormat.Download download = fetcher.download(target, Map.of()).orElse(null)) {
                 if (download == null || download.status() != 200) {
                     return false;
@@ -1320,15 +1177,11 @@ public final class NpmFormat implements RepositoryFormat, ProxyLeg, BlobLayout, 
             handle(exchange, store);
             return true;
         }
-        // Forward the client's conditional-request validators so a 304-capable client's revalidation reaches the origin
-        // rather than being dropped and forcing a full packument re-download on every read.
+        // The client's validators are forwarded, so a revalidation reaches the origin.
         Map<String, String> request = ProxyRelay.conditionalHeaders(exchange);
         request.put("Accept", "application/json");
-        // The packument is npm's version list: it IS the enumeration a resolver reads to decide which versions of this
-        // package exist, so a 404 here is not "not cached, re-pull" but the registry's answer that the package has no
-        // versions - a "package not found" the client records, a lockfile resolves against, and a fallback registry
-        // chain moves past. Only an upstream that ANSWERED 404/410 may reach the client as one; an upstream this
-        // repository could not ask refuses visibly instead.
+        // The packument is the enumeration a resolver decides versions from, so a 404 means "no such package"; only an
+        // upstream that answered 404/410 may reach the client as one, and anything else refuses visibly.
         ProxyRelay.Answer answer = ProxyRelay.fetchFresh(fetcher, URI.create(root + rest), request, exchange,
                 ProxyRelay.Document.ENUMERATION);
         if (!answer.answered()) {
@@ -1340,18 +1193,16 @@ public final class NpmFormat implements RepositoryFormat, ProxyLeg, BlobLayout, 
         return true;
     }
 
-    /** The checksum npm's packument declares for a version's tarball: {@code dist.integrity} (a
-     *  {@code sha512-<base64>} Subresource-Integrity string, preferred) or the legacy {@code dist.shasum} (a sha1 hex).
-     *  The packument is a bounded metadata document, fetched buffered and only on a tarball miss (once per tarball,
-     *  since it is then cached), and the version is matched by its {@code dist.tarball} basename so a scoped or
-     *  odd-named package still resolves.
+    /**
+     * The checksum the packument declares for a version's tarball: {@code dist.integrity} ({@code sha512-<base64>},
+     * preferred) or {@code dist.shasum} (sha1 hex), the version matched by its {@code dist.tarball} basename. Fetched
+     * once per tarball miss.
      *
-     *  <p>{@link ProxyRelay.Declared#NONE} - cache without a point check, as Maven serves a jar with no {@code .sha1} -
-     *  when the registry <em>answered</em> and declares nothing: a {@code 404}/{@code 410} packument, a packument that
-     *  lists no version whose {@code dist.tarball} is this file, or one whose {@code dist} carries neither a parseable
-     *  {@code integrity} nor a 40-hex {@code shasum}. {@linkplain ProxyRelay.Declared#unreadable Unreadable} when the
-     *  packument could not be read at all - a transport failure, a {@code 429}/{@code 5xx}/auth challenge, or a
-     *  {@code 200} that is not a packument - because none of those is npm declaring anything. */
+     * <p>{@link ProxyRelay.Declared#NONE}, caching without a point check, when the registry answered and declares
+     * nothing: a {@code 404}/{@code 410} packument, no version for this file, or neither field parseable.
+     * {@linkplain ProxyRelay.Declared#unreadable Unreadable} when the packument could not be read: a transport failure,
+     * a {@code 429}/{@code 5xx}/challenge, or a {@code 200} that is no packument.
+     */
     private static ProxyRelay.Declared tarballChecksum(String root, String name, String file,
             ProxyFormat.Fetcher fetcher) throws IOException {
         URI packument = URI.create(root + name);
@@ -1382,7 +1233,7 @@ public final class NpmFormat implements RepositoryFormat, ProxyLeg, BlobLayout, 
                         return ProxyRelay.Declared.of("SHA-512", raw);
                     }
                 } catch (IllegalArgumentException _) {
-                    // a malformed integrity string: fall through to shasum / no-check
+                    // A malformed integrity string: fall through to the shasum.
                 }
             }
             JsonNode shasum = dist.get("shasum");
@@ -1438,8 +1289,7 @@ public final class NpmFormat implements RepositoryFormat, ProxyLeg, BlobLayout, 
 
 
 
-    /** The migration-import capability, delegated to the layout-only {@link NpmImporter} - the format IS the
-     *  discovered importer now (an {@code instanceof} capability), and the importer class stays as its delegate. */
+    /** The migration-import capability, delegated to {@link NpmImporter}. */
     private final NpmImporter importer = new NpmImporter();
 
     @Override

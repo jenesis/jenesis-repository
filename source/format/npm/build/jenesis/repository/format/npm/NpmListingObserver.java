@@ -9,10 +9,9 @@ import build.jenesis.repository.store.ArtifactStore;
 import build.jenesis.repository.store.StoredListing;
 
 /**
- * Keeps the npm {@linkplain NpmListings stored packuments} in step with the transitions that happen off the publish
- * path - a hold on a published version and its release, a lifecycle mark and its reversal, a removal - by
- * re-deciding the one version's entry. A transition whose subject names neither a tarball path nor a coordinate is
- * mapped to no entry, so every packument is rebuilt in place.
+ * Keeps the npm {@linkplain NpmListings stored packuments} in step with transitions off the publish path - a hold and
+ * its release, a lifecycle mark and its reversal, a removal - by re-deciding the one version's entry. A subject naming
+ * neither a tarball path nor a coordinate rebuilds every packument in place.
  */
 public final class NpmListingObserver extends BlobsListingObserver {
 
