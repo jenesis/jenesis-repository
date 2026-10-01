@@ -1,8 +1,7 @@
 /**
- * The RubyGems format as a plugin module: it provides {@link build.jenesis.repository.format.RepositoryFormat} for
- * the {@code /rubygems/...} layout - the compact index ({@code /info/<gem>}, {@code /versions}), a raw {@code .gem}
- * push and the gem downloads, plus pull-through proxying of an upstream compact index. The {@code .gem} tar is read
- * with Commons Compress and its gzipped YAML gemspec with SnakeYAML. Discovered through {@code provides}.
+ * The RubyGems format as a plugin module: a {@link build.jenesis.repository.format.RepositoryFormat} for
+ * {@code /rubygems/...} - the compact index, a raw {@code .gem} push, downloads, and pull-through of an upstream
+ * compact index - reading the gem with Commons Compress and its gemspec with SnakeYAML.
  *
  * @jenesis.release 25
  * @jenesis.bom pin-repository.properties

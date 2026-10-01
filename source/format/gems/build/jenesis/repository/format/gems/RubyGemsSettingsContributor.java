@@ -5,9 +5,8 @@ import build.jenesis.repository.settings.Setting;
 import build.jenesis.repository.settings.SettingsContributor;
 
 /**
- * The RubyGems format's own dials, so they appear in the settings screen and the generated reference exactly when
- * an image ships the format. One today: where a proxied gem's Sigstore attestations are fetched from, read off the
- * exchange by {@link RubyGemsFormat#companions} on every fill.
+ * The RubyGems format's dials, shown in the settings screen and reference when an image ships the format: where a
+ * proxied gem's Sigstore attestations are fetched from, read by {@link RubyGemsFormat#companions} on every fill.
  */
 public final class RubyGemsSettingsContributor implements SettingsContributor {
 

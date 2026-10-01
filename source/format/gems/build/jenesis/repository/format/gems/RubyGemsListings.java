@@ -9,15 +9,10 @@ import build.jenesis.repository.store.StoredListing;
 import build.jenesis.repository.walk.BoundedChildren;
 
 /**
- * The RubyGems compact index as stored listings: one {@code /info/<gem>} document per gem, whose entries are the
- * version lines the push stored, and the repository-wide {@code /versions} document, whose entries are one line per
- * gem naming its versions and the MD5 of its info document. A gem's info document re-derives its line in
- * {@code /versions} on every write - the MD5 is the stored document's own digest - so a push costs one rewrite of the
- * gem's info document and one of the compact index, never a scan of every gem.
- *
- * <p>A version is listed exactly when it is servable: its {@code .gem} pointer not withheld and the version carrying
- * no lifecycle mark - the screen the on-read generation applied per version, applied here to the one version a write
- * touches.
+ * The RubyGems compact index as stored listings: a {@code /info/<gem>} document per gem, whose entries are its version
+ * lines, and {@code /versions}, a line per gem naming its versions and its info document's MD5. A gem's info document
+ * re-derives its {@code /versions} line on every write, so a push rewrites two documents and scans no other gem. A
+ * version is listed exactly when servable: its {@code .gem} not withheld and the version unmarked.
  */
 final class RubyGemsListings {
 
@@ -31,15 +26,8 @@ final class RubyGemsListings {
     /** The compact index: its header, then one line per gem, keyed by the gem name (the line's first token). */
     static final StoredListing.Codec COMPACT = lines(VERSIONS_HEADER, line -> line.substring(0, line.indexOf(' ')));
 
-    /**
-     * A compact-index document: a fixed header, then one line per version.
-     *
-     * <p>{@link StoredListing#framed} with no footer, rather than the hand-written equivalent this was. The copy
-     * implemented {@code split} and {@code join} and nothing else, so it inherited the materialising {@code append}
-     * and {@code read} - which meant the streaming generator below wrote into a buffer and every version published
-     * rewrote the whole {@code versions} document in heap. Reaching for the shared frame is what fixes that,
-     * because the shared frame streams.
-     */
+    /** A compact-index document: a fixed header, then one line per entry, through the shared streaming
+     *  {@link StoredListing#framed} frame with no footer. */
     private static StoredListing.Codec lines(String header, Function<String, String> idOf) {
         return StoredListing.framed(header, "", StoredListing.Codec.delimited("\n", idOf));
     }
@@ -56,16 +44,15 @@ final class RubyGemsListings {
         return "rubygems/" + name + "/info";
     }
 
-    /** Whether a compact index body lists any gem - an empty one is served as a {@code 404}, not a header alone. */
+    /** Whether a compact index lists any gem; an empty one is served as a {@code 404}, not a header alone. */
     static boolean empty(StoredListing.Header header) {
         return header.size() <= VERSIONS_HEADER.length();
     }
 
     StoredListing.Spec infoSpec(String name) {
         return StoredListing.Spec.materialising(info(name), INFO, () -> generateInfo(name)).withMd5().deriving(document -> {
-            // Stated at the info document's sequence, so the rebuild pass's regeneration of the compact index -
-            // a walk over every gem's document, which can be a beat behind this write - never puts an older line
-            // over the one this derivation wrote.
+            // Stated at the info document's sequence, so the rebuild pass's regeneration of the compact index, which
+            // can lag this write, never puts an older line over this one.
             SortedMap<String, byte[]> versions = INFO.split(document.body());
             if (versions.isEmpty()) {
                 StoredListing.remove(store, versionsSpec(), name, document.header().seq());
@@ -96,17 +83,11 @@ final class RubyGemsListings {
         return entries;
     }
 
-    /**
-     * Emit a compact-index line per gem, in the order the scan yields them.
-     *
-     * <p>The compact index names every gem in the repository, so collecting the lines into a map would hold the
-     * repository. The scan's order is the sink's order - the store's lexicographic child order, which is the order
-     * the document needs.
-     */
+    /** Emit a compact-index line per gem in the scan's order, the store's lexicographic child order, which the document
+     *  needs; it is every gem in the repository, so it is never collected. */
     private void generateVersions(StoredListing.Generator.Sink sink) throws IOException {
         ENTRIES.scan(store, "rubygems", name -> {
-            // Each gem's info document, materialised if need be - without the derivation that would update the very
-            // document this generation is producing.
+            // Each gem's info document, materialised without the derivation that would update this very document.
             Optional<StoredListing.Document> document = StoredListing.read(store,
                     StoredListing.Spec.materialising(info(name), INFO, () -> generateInfo(name)).withMd5());
             if (document.isEmpty()) {
@@ -131,7 +112,7 @@ final class RubyGemsListings {
         }
     }
 
-    /** Re-decide one version's membership from the store's current state - after a hold, a release or a mark. */
+    /** Re-decide one version's membership from the store's current state. */
     void refresh(String name, String version) throws IOException {
         ByteArrayOutputStream buffer = new ByteArrayOutputStream();
         if (!blobs.read("rubygems/" + name + "/versions/" + version, buffer)) {
@@ -161,18 +142,15 @@ final class RubyGemsListings {
 
 
     /** The info document's MD5 the compact index names: from its header, or of its body when the header carries
-     *  none (a document stored through a spec that did not ask for it). */
+     *  none. */
     private static String md5(StoredListing.Derived document) throws IOException {
         return document.header().md5().isEmpty()
                 ? StoredListing.Header.of(document.header().seq(), document.body(), true).md5()
                 : document.header().md5();
     }
 
-    /** The stride the repository-wide index is enumerated in. It <b>drains</b>: the index names every package by
-     *  definition, so neither the names nor the round-trips that fetch them may cap it, and what is bounded is how
-     *  many names are in hand at once. Capping either one silently omits packages - or, once the entry cap alone was
-     *  lifted, stopped omitting them and started throwing instead, at exactly {@code steps x page} names. That is
-     *  the ceiling the OCI tag canary hit at a million: a generator that raises {@code TraversalException} does not
-     *  answer short, it never materialises the document at all. */
+    /** The stride the repository-wide index is enumerated in. It drains: the index names every gem, so neither names
+     *  nor round-trips are capped - a cap would omit gems or throw and never materialise the document - and only the
+     *  names in hand are bounded. */
     private static final BoundedChildren ENTRIES = BoundedChildren.draining();
 }

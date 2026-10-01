@@ -8,11 +8,10 @@ import build.jenesis.repository.store.ArtifactDescriptor;
 import build.jenesis.repository.store.ArtifactStore;
 
 /**
- * Keeps the RubyGems {@linkplain RubyGemsListings stored compact index} in step with the transitions that happen off
- * the push path - a hold on a pushed gem and its release, a lifecycle mark and its reversal, a removal - by
- * re-deciding the one version's membership in its gem's info document (which re-derives the gem's line in
- * {@code /versions}). A transition whose subject names neither a gem path nor a coordinate is mapped to no version,
- * so every listing is rebuilt in place.
+ * Keeps the RubyGems {@linkplain RubyGemsListings stored compact index} in step with transitions off the push path - a
+ * hold and its release, a lifecycle mark and its reversal, a removal - by re-deciding the one version in its gem's info
+ * document, which re-derives the gem's {@code /versions} line. A subject naming neither a gem path nor a coordinate
+ * rebuilds every listing in place.
  */
 public final class RubyGemsListingObserver extends BlobsListingObserver {
 

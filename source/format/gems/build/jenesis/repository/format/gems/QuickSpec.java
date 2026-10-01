@@ -3,14 +3,12 @@ package build.jenesis.repository.format.gems;
 import module java.base;
 
 /**
- * The legacy RubyGems quick spec, kept apart from the modern compact index that {@link RubyGemsFormat} otherwise
- * speaks. {@code bundle install} resolves entirely over the compact index ({@code /versions}, {@code /info}); plain
- * {@code gem install}, however, still fetches each gem's full {@code Gem::Specification} from the pre-compact-index
- * {@code /quick/Marshal.4.8/<name>-<version>.gemspec.rz} endpoint - a zlib-deflated Ruby Marshal of the spec, loaded
- * by the client through {@code Gem::SafeMarshal}. This class reproduces that Marshal from Java (via {@link
- * RubyMarshal}) so the endpoint can be served without a Ruby runtime; the format only needs to hand it the parsed
- * coordinate, its runtime dependencies and its Ruby constraint. Kept deliberately in one place so the legacy surface
- * is easy to see - and to drop, once no consumer needs bare {@code gem install}.
+ * The legacy RubyGems quick spec, apart from the compact index {@link RubyGemsFormat} otherwise speaks.
+ * {@code bundle install} resolves over the compact index alone; plain {@code gem install} still fetches each gem's
+ * {@code Gem::Specification} from {@code /quick/Marshal.4.8/<name>-<version>.gemspec.rz}, a zlib-deflated Ruby Marshal
+ * loaded through {@code Gem::SafeMarshal}. This reproduces that Marshal ({@link RubyMarshal}) without a Ruby runtime,
+ * from the parsed coordinate, runtime dependencies and Ruby constraint, in one place so the legacy surface is easy to
+ * see and to drop.
  */
 final class QuickSpec {
 
@@ -25,12 +23,9 @@ final class QuickSpec {
         return deflate(marshal.bytes());
     }
 
-    /**
-     * The gem's {@code Gem::Specification#_dump} payload: a self-contained Marshal stream of the 19-field attribute
-     * array the current spec version marshals, with only the fields {@code gem install} needs populated (name,
-     * version, the two requirements, platform, runtime dependencies, metadata) and the rest left empty or nil. The
-     * date is nil - the client defaults it on load - so no {@code Time} has to be marshaled.
-     */
+    /** The {@code Gem::Specification#_dump} payload: a Marshal stream of the 19-field attribute array, populated with
+     *  only what {@code gem install} needs (name, version, the two requirements, platform, runtime dependencies,
+     *  metadata). The date is nil, which the client defaults on load, so no {@code Time} is marshaled. */
     private static byte[] specification(RubyGemsFormat.Spec spec) {
         RubyMarshal m = new RubyMarshal();
         m.header();
@@ -68,7 +63,7 @@ final class QuickSpec {
     }
 
     /** {@code Gem::Requirement#marshal_dump} is {@code [[[op, Gem::Version], ...]]}; an empty one is the {@code >= 0}
-     *  default a bare requirement carries. */
+     *  default. */
     private static void requirement(RubyMarshal m, List<RubyGemsFormat.Constraint> constraints) {
         m.userMarshal("Gem::Requirement");
         m.array(1);

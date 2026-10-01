@@ -8,12 +8,8 @@ import build.jenesis.repository.store.ArtifactStore;
 import build.jenesis.repository.store.OwnerOnly;
 
 /**
- * Imports a RubyGems repository (Nexus {@code rubygems}) from an incumbent manager. A {@code .gem} is
- * self-describing - its gzipped YAML gemspec carries the name, version and dependencies - so the importer replays
- * it as a {@code gem push} through {@link RubyGemsFormat#handle}, which stores the gem and the precomputed compact
- * index line; each push rewrites the stored {@code /info} and {@code /versions} documents. The other compact-index
- * assets of the source repository are derived and skipped. One of the language importers, discovered
- * through the same {@code RepositoryImporter} SPI the built-in importers use.
+ * Imports a RubyGems repository from an incumbent manager. A {@code .gem} is self-describing, so it is replayed as a
+ * {@code gem push} through {@link RubyGemsFormat#handle}; the source's compact-index assets are derived and skipped.
  */
 public final class RubyGemsImporter implements RepositoryImporter {
 
@@ -24,41 +20,30 @@ public final class RubyGemsImporter implements RepositoryImporter {
 
     @Override
     public Optional<ArtifactDescriptor> importTarget(String path) {
-        // RepositoryImporter clause 4: a source path is as client-supplied as a request path, so a
-        // traversal-shaped one is refused by name rather than echoed into the descriptor the import edge
-        // screens and the trail records, as every importer does.
+        // RepositoryImporter clause 4: a traversal-shaped source path is refused by name.
         String relative = RepositoryImporter.importablePath(path, "rubygems");
         String file = relative.substring(relative.lastIndexOf('/') + 1);
-        // The gem's target coordinate under /rubygems/gems/<file>, so the edge screens the real RubyGems coordinate the
-        // format parses from the gem filename. Empty for a non-.gem source asset (the derived compact-index files),
-        // which the walk lays out unscreened and importArtifact then skips.
+        // The gem's coordinate from its filename, so the edge screens it; empty for the derived compact-index files.
         return new RubyGemsFormat().describe("/rubygems/gems/" + file);
     }
 
     @Override
     public void importArtifact(String path, InputStream content, ArtifactStore store) throws IOException {
-        // RepositoryImporter clause 4: a source path is as client-supplied as a request path, so a
-        // traversal-shaped one is refused by name rather than echoed into the descriptor the import edge
-        // screens and the trail records, as every importer does.
+        // RepositoryImporter clause 4: a traversal-shaped source path is refused by name.
         String relative = RepositoryImporter.importablePath(path, "rubygems");
         if (!relative.endsWith(".gem")) {
             return;
         }
-        // The coordinate the import edge screened this asset under is derived from the .gem FILENAME (importTarget); the
-        // name RubyGemsFormat stores/serves it under is read from the embedded gemspec. They MUST agree - otherwise a
-        // gem screened under one name (e.g. "innocent") would be stored and served under the gemspec's own name (e.g.
-        // "evil-payload"), a screen-label bypass, the way Composer/CocoaPods refuse a manifest that disagrees with the
-        // deploy path. The push endpoint carries no path coordinate (gem push is coordinate-less), so the check lives
-        // here, in the importer.
+        // The edge screened the name from the filename and the store keys the gemspec's; they must agree, or a gem
+        // screened as one name would serve as another. The push endpoint names no coordinate, so the check is here.
         Optional<ArtifactDescriptor> screened = importTarget(path);
         if (screened.isEmpty() || screened.get().coordinate() == null) {
-            // A filename with no version-looking suffix is not screened under a coordinate (describe returns the
-            // coordinate-less variant): replay unchanged - the walk lays such an asset out unscreened.
+            // A filename with no version-looking suffix was screened coordinate-less: replayed unchanged.
             new RubyGemsFormat().handle(ReplayExchange.post("/rubygems/api/v1/gems", content), store);
             return;
         }
-        // Spool the (unbounded) .gem to a temp file so its gemspec front can be read once and the body replayed once,
-        // without buffering it on the heap or writing a rejected gem into the store.
+        // Spooled to a temp file, so the gemspec is read once and the body replayed once without heap buffering or
+        // storing a rejected gem.
         Path spool = ownerOnlyTemp("gems-import-", ".gem");
         try {
             try (OutputStream out = Files.newOutputStream(spool)) {
@@ -69,8 +54,7 @@ public final class RubyGemsImporter implements RepositoryImporter {
                 spec = RubyGemsFormat.parse(RubyGemsFormat.gemspec(in));
             }
             if (spec == null || !spec.name().equals(screened.get().coordinate())) {
-                // The gemspec name disagrees with the name the edge screened from the filename: refuse rather than
-                // store it under a name the gate never saw (screen-label bypass).
+                // The gemspec name disagrees with the screened name: refused.
                 return;
             }
             try (InputStream in = Files.newInputStream(spool)) {
@@ -81,9 +65,8 @@ public final class RubyGemsImporter implements RepositoryImporter {
         }
     }
 
-    /** The owner-only import spool ({@link OwnerOnly}): the buffered {@code .gem} is the plaintext artifact body,
-     *  and must not sit world-readable in the shared temp directory for the import's life. The {@code newOutputStream}
-     *  write opens it in place (truncate), preserving the mode. */
+    /** The owner-only import spool ({@link OwnerOnly}): the buffered {@code .gem} must not sit world-readable in the
+     *  shared temp directory. The write truncates in place, keeping the mode. */
     private static Path ownerOnlyTemp(String prefix, String suffix) throws IOException {
         return OwnerOnly.createTempFile(prefix, suffix);
     }

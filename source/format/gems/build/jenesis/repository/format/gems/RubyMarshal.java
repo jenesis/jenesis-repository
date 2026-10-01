@@ -3,12 +3,10 @@ package build.jenesis.repository.format.gems;
 import module java.base;
 
 /**
- * A minimal Ruby Marshal 4.8 writer - just enough of the format to emit a RubyGems quick spec from Java rather than
- * shelling out to Ruby: fixnums, UTF-8 strings (with the encoding ivar), symbols (kept in the symbol table Marshal
- * requires), arrays, an empty hash, and the three object envelopes the gem objects use - user-marshal ({@code U}, for
- * {@code Gem::Version} / {@code Gem::Requirement}), plain object ({@code o}, for {@code Gem::Dependency}) and
- * user-defined ({@code u}, for {@code Gem::Specification}). It deliberately omits Marshal's object-link table (a
- * writer may always emit objects fresh), which a small, acyclic gem spec never needs; the loader accepts the result.
+ * A minimal Ruby Marshal 4.8 writer, enough to emit a RubyGems quick spec without Ruby: fixnums, UTF-8 strings with the
+ * encoding ivar, symbols in the table Marshal requires, arrays, an empty hash, and the user-marshal ({@code U}), plain
+ * object ({@code o}) and user-defined ({@code u}) envelopes the gem objects use. It omits the object-link table, which
+ * an acyclic spec never needs.
  */
 public final class RubyMarshal {
 
@@ -97,8 +95,8 @@ public final class RubyMarshal {
         return out.toByteArray();
     }
 
-    /** Marshal's variable-length signed integer encoding: a length byte then that many little-endian value bytes,
-     *  with small values (and zero) packed into the length byte itself. */
+    /** Marshal's variable-length signed integer: a length byte then that many little-endian bytes, small values and
+     *  zero packed into the length byte. */
     private void fixnum(long value) {
         if (value == 0) {
             out.write(0);

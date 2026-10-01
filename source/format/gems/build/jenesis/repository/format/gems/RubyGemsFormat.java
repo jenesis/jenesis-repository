@@ -32,20 +32,16 @@ import build.jenesis.repository.store.Publication;
 import build.jenesis.repository.store.Withheld;
 
 /**
- * The RubyGems format, so {@code gem push}, {@code bundle install} and {@code gem install} work over the same store.
- * It owns {@code /rubygems/...}: a push ({@code POST /rubygems/api/v1/gems}, the raw {@code .gem} as the body) reads
- * the gem's name, version, runtime dependencies and Ruby constraint from the {@code metadata.gz} gemspec inside the
- * gem (a tar of gzipped YAML, parsed with SnakeYAML) and stores the file under
- * {@code rubygemfiles/<name>-<version>.gem} with a precomputed compact-index line under
+ * The RubyGems format: {@code gem push}, {@code bundle install} and {@code gem install} over the same store, under
+ * {@code /rubygems/...}. A push ({@code POST /rubygems/api/v1/gems}) reads the name, version, runtime dependencies and
+ * Ruby constraint from the gem's {@code metadata.gz} gemspec (gzipped YAML in a tar, parsed with SnakeYAML) and stores
+ * the gem under {@code rubygemfiles/<name>-<version>.gem} with a compact-index line under
  * {@code rubygems/<name>/versions/<version>}.
  *
- * The modern compact index is served from stored listings the push maintains: the per-gem info
- * ({@code GET /rubygems/info/<name>}) and the {@code /rubygems/versions} list, which is all {@code bundle install}
- * needs. Plain {@code gem install} additionally
- * fetches each gem's full spec from the legacy {@code /rubygems/quick/Marshal.4.8/<name>-<version>.gemspec.rz}
- * endpoint; that one document - a Ruby Marshal of the {@code Gem::Specification} - is produced by {@link QuickSpec}
- * (kept apart so the legacy surface stays visible), precomputed at push and served as a plain streamed read. The gem
- * itself is served at {@code /rubygems/gems/<file>.gem}.
+ * <p>The compact index - {@code GET /rubygems/info/<name>} and {@code /rubygems/versions}, all {@code bundle install}
+ * needs - is served from stored listings the push maintains. {@code gem install} also fetches the legacy
+ * {@code /rubygems/quick/Marshal.4.8/<name>-<version>.gemspec.rz}, produced by {@link QuickSpec} at push. The gem is
+ * served at {@code /rubygems/gems/<file>.gem}.
  */
 public final class RubyGemsFormat implements RepositoryFormat, ProxyLeg, BlobLayout, RepositoryImporter, ArtifactSignatures,
         RepositoryExporter {
@@ -55,8 +51,8 @@ public final class RubyGemsFormat implements RepositoryFormat, ProxyLeg, BlobLay
 
 
 
-    // The gemspec YAML carries Ruby object tags (!ruby/object:Gem::Specification and friends) that no Java class
-    // matches; stripping them lets the SafeConstructor load the document as plain maps and lists. Compiled once.
+    // Ruby object tags (!ruby/object:Gem::Specification) are stripped so the SafeConstructor loads plain maps and
+    // lists.
     private static final Pattern RUBY_TAG = Pattern.compile("!ruby/\\S+");
 
     @Override
@@ -75,20 +71,11 @@ public final class RubyGemsFormat implements RepositoryFormat, ProxyLeg, BlobLay
         return "RubyGems";
     }
 
-    /**
-     * The coordinate version a stored RubyGems pointer serves - the backwards direction the inventory back-fill
-     * rebuilds a lost {@code published} record from.
-     *
-     * <p>Only {@code rubygems/<name>/versions/<version>} is decoded. The two {@code rubygemfiles/} keys spell the
-     * pair as {@code <name>-<version>}, and a gem name may itself contain a hyphen, so that split is ambiguous and
-     * is deliberately not attempted: every published version has a versions pointer, so nothing is lost by reading
-     * only the shape that cannot be misread. A wrong answer would not fail a read - it would write a row against a
-     * release that was never published, and retention ages artifacts by that row.
-     *
-     * <p>Simpler than npm's parse in one respect: a gem name is a single path segment, so the marker cannot be
-     * preceded by a slash-bearing coordinate. It is still screened through {@link BlobLayout#addressable}, which is
-     * what refuses a traversal-shaped key rather than decoding it into a coordinate this format never wrote.
-     */
+    /** The coordinate version a stored RubyGems pointer serves, from which the inventory back-fill rebuilds a lost
+     *  {@code published} record. Only {@code rubygems/<name>/versions/<version>} is decoded: the {@code rubygemfiles/}
+     *  keys spell {@code <name>-<version>} and a name may contain a hyphen, so that split is ambiguous, and a wrong row
+     *  would be aged by retention against a release never published. Every version has a versions pointer. Screened
+     *  through {@link BlobLayout#addressable}, so a traversal-shaped key decodes to nothing. */
     @Override
     public Optional<ArtifactDescriptor> describePointer(String key) {
         String marker = "rubygems/";
@@ -109,16 +96,14 @@ public final class RubyGemsFormat implements RepositoryFormat, ProxyLeg, BlobLay
 
     @Override
     public List<String> blobRoots() {
-        // rubygemsindex held the one precomputed compact-index /versions document (a pointer to its content-addressed
-        // body) before the stored listing under listing/ replaced it; naming it here keeps garbage collection from
-        // reclaiming such a cached blob out from under a store that still carries the pointer.
+        // rubygemsindex is a blob root so a store still carrying a pointer to a precomputed compact-index body there
+        // does not have the body collected under it.
         return List.of("rubygemfiles", "rubygems", "rubygemsindex");
     }
 
     @Override
     public List<String> blobKeys(String coordinate, String version, ArtifactStore store) throws IOException {
-        // The .gem file, its precomputed legacy quick-spec companion, and the compact-index line - all keyed
-        // deterministically by <name>-<version>.
+        // The .gem, its quick spec and its compact-index line, keyed by <name>-<version>.
         if (!BlobLayout.addressable(coordinate, version)) {
             return List.of();   // a traversal-shaped coordinate maps nowhere - these keys are what an eviction DELETES
         }
@@ -134,9 +119,8 @@ public final class RubyGemsFormat implements RepositoryFormat, ProxyLeg, BlobLay
         return keys;
     }
 
-    /** The request path this gem version serves at ({@code /rubygems/gems/<name>-<version>.gem}), the inverse of
-     *  {@link #describe} - a retroactive hold links a {@code /quarantine} review handle there. The quick-spec companion
-     *  and the compact-index line are not served downloads and stay out. */
+    /** The request path this gem version serves at ({@code /rubygems/gems/<name>-<version>.gem}), where a retroactive
+     *  hold links its {@code /quarantine} handle; the quick spec and the index line are not downloads. */
     @Override
     public List<String> servedPaths(String coordinate, String version, ArtifactStore store) throws IOException {
         if (!BlobLayout.addressable(coordinate, version)) {
@@ -148,13 +132,10 @@ public final class RubyGemsFormat implements RepositoryFormat, ProxyLeg, BlobLay
                 : List.of();
     }
 
-    /** The coordinate a gem request path carries ({@code /rubygems/gems/<name>-<version>.gem}), split at the
-     *  rightmost {@code -} followed by a digit - a gem version always starts with one, a name's own dashed segments
-     *  conventionally do not - reproducing the {@code <name>-<version>} the push stored and {@link #blobKeys}
-     *  rebuilds, so the inventory records the release the retroactive enforcement sweeps enumerate
-     *  the version by. The compact-index {@code versions}/{@code info} documents and the derived quick-spec
-     *  {@code .gemspec.rz} name no gem artifact and stay empty, as does the push endpoint (whose coordinate lives in
-     *  the gemspec, not the path) and a filename with no version-looking suffix - empty over a wrong coordinate. */
+    /** The coordinate a gem path carries ({@code /rubygems/gems/<name>-<version>.gem}), split at the rightmost
+     *  {@code -} followed by a digit, since a gem version starts with one and a name's segments conventionally do not.
+     *  The compact index, the quick spec, the push endpoint and a filename with no version-looking suffix describe
+     *  nothing, rather than a wrong coordinate. */
     @Override
     public Optional<ArtifactDescriptor> describe(String path) {
         if (!path.startsWith("/rubygems/gems/") || !path.endsWith(".gem")) {
@@ -175,7 +156,7 @@ public final class RubyGemsFormat implements RepositoryFormat, ProxyLeg, BlobLay
                 path, "application/octet-stream", false, null, -1L));
     }
 
-    // An original CC0 line glyph (a faceted gem) drawn for this project.
+    // An original CC0 line glyph (a faceted gem).
     private static final IconResource ICON = IconResource.svg("""
             <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round">
               <path d="M6 3h12l3 6-9 12L3 9z"/><path d="M3 9h18"/><path d="M9 3 6 9l6 12 6-12-3-6"/>
@@ -191,16 +172,14 @@ public final class RubyGemsFormat implements RepositoryFormat, ProxyLeg, BlobLay
         return Optional.of(URI.create("https://rubygems.org/"));
     }
 
-    /**
-     * Where a proxied gem's Sigstore attestations are fetched from: the base of an API answering
-     * {@code <base>/<name>-<version>.json} with an array of bundles, as rubygems.org does at
-     * {@code /api/v1/attestations/}. Empty by default, which reads that path under the proxied upstream; a mirror
-     * without the API answers 404, which is absence and never a failure.
-     */
+    /** Where a proxied gem's Sigstore attestations are fetched: the base of an API answering
+     *  {@code <base>/<name>-<version>.json} with an array of bundles, as rubygems.org does at
+     *  {@code /api/v1/attestations/}. Empty by default, meaning that path under the upstream; a mirror without it
+     *  answers 404, which is absence. */
     public static final String ATTESTATIONS_URL = "rubygems-attestations-url";
 
-    /** The stored attestations of a gem version, beside the gem's own key: the array rubygems.org answers, kept only
-     *  when it names at least one bundle. */
+    /** The stored attestations of a gem version, beside the gem: the array rubygems.org answers, kept only when it
+     *  names a bundle. */
     static String attestationsKey(String stem) {
         return "rubygemfiles/" + stem + ".attestations.json";
     }
@@ -208,21 +187,18 @@ public final class RubyGemsFormat implements RepositoryFormat, ProxyLeg, BlobLay
     /** Where a version's attestations serve, the path rubygems.org serves them at. */
     private static final String ATTESTATIONS_PATH = "/rubygems/api/v1/attestations/";
 
-    /** The reader of an attestations array, one bundle per element. */
+    /** The reader of an attestations array. */
     private static final JsonMapper MAPPER = JsonMapper.builder().build();
 
-    /** Whether a body is a JSON array naming at least one element - the shape an attestations answer has when it
-     *  carries provenance; rubygems.org answers {@code []} for a version pushed without any. */
+    /** Whether a body is a JSON array naming an element; rubygems.org answers {@code []} for a version pushed without
+     *  any. */
     private static boolean namesABundle(byte[] body) {
         String text = new String(body, StandardCharsets.UTF_8).strip();
         return text.startsWith("[") && text.endsWith("]") && !text.substring(1, text.length() - 1).isBlank();
     }
 
-    /**
-     * The attestations rubygems.org publishes for a version and no gem client fetches, named so the pull-through
-     * fetches them beside the gem and the screen judges the gem by them. Kept through {@link #keep} under a key of
-     * this format's own rather than linked at a served path.
-     */
+    /** The attestations rubygems.org publishes for a version and no client fetches, fetched beside the gem so the
+     *  screen judges it by them, and kept through {@link #keep} under this format's own key. */
     @Override
     public List<ProxyFormat.Companion> companions(FormatExchange exchange, URI upstream) {
         String path = exchange.path();
@@ -243,11 +219,8 @@ public final class RubyGemsFormat implements RepositoryFormat, ProxyLeg, BlobLay
                 URI.create(base + stem + ".json")));
     }
 
-    /**
-     * A fetched attestations array is kept beside the gem when it names at least one bundle - rubygems.org answers
-     * {@code []} for a version pushed without any, and an empty answer is not provenance. Always {@code true}: what
-     * is not kept is dropped rather than linked at a path nothing serves.
-     */
+    /** A fetched attestations array is kept beside the gem when it names a bundle; an empty one is not provenance.
+     *  Always {@code true}: what is not kept is dropped. */
     @Override
     public boolean keep(ArtifactStore store, ProxyFormat.Companion companion, byte[] body) throws IOException {
         String prefix = "/rubygems/api/v1/attestations/";
@@ -280,9 +253,7 @@ public final class RubyGemsFormat implements RepositoryFormat, ProxyLeg, BlobLay
         } else if (method.equals("DELETE") && rest.equals("api/v1/gems/yank")) {
             yank(exchange, blobs, store);
         } else if (!method.equals("GET") && !method.equals("HEAD")) {
-            // Every read route below serves a body; gate the write verbs so a PUT/DELETE (or a POST to a read path) is a
-            // 405 rather than being answered as a download, like the other formats do. The only writes are the gem push
-            // (POST api/v1/gems) and the yank (DELETE api/v1/gems/yank) handled above.
+            // Every route below reads; a write verb is a 405. The writes are the push and the yank, handled above.
             exchange.respond(405);
         } else if (rest.equals("versions")) {
             versions(blobs, exchange);
@@ -293,8 +264,8 @@ public final class RubyGemsFormat implements RepositoryFormat, ProxyLeg, BlobLay
         } else if (rest.startsWith("gems/") && rest.endsWith(".gem")) {
             serveFile("rubygemfiles/" + rest.substring("gems/".length()), blobs, exchange);
         } else if (rest.startsWith("api/v1/attestations/") && rest.endsWith(".json")) {
-            // The version's attestations as rubygems.org serves them: the stored array, or a 404 where none was
-            // pushed or fetched - never an empty array, which would claim the question was asked upstream.
+            // The version's attestations as rubygems.org serves them, or a 404 where none were kept - never an empty
+            // array, which would claim the upstream was asked.
             String stem = rest.substring("api/v1/attestations/".length(), rest.length() - ".json".length());
             if (stem.isEmpty() || Keys.unsafe(stem)) {
                 exchange.respond(404);
@@ -306,45 +277,34 @@ public final class RubyGemsFormat implements RepositoryFormat, ProxyLeg, BlobLay
         }
     }
 
-    /**
-     * The republish policy handed to the hosted-publish operation, which evaluates it before the layout runs:
-     * {@code OVERWRITE}, since a gem push is coordinate-<em>less</em> at the request path - the name and version live in
-     * the {@code metadata.gz} gemspec inside the uploaded {@code .gem}, which only that layout parses. rubygems.org
-     * refuses a version already pushed, and so does this: the refusal is taken at the link ({@link Blobs#linkOnce}),
-     * inside the pointer's compare-and-set, and answered with rubygems.org's {@code 409}. A re-push of the identical
-     * gem converges.
-     */
+    /** The republish policy for the hosted publish: {@code OVERWRITE}, since the coordinate lives in the gemspec the
+     *  layout parses. A version already pushed is refused at the link ({@link Blobs#linkOnce}) inside the pointer's
+     *  compare-and-set, with rubygems.org's {@code 409}; an identical re-push converges. */
     private static final Publication.Republish REPUBLISH = Publication.Republish.overwrite();
 
-    /**
-     * A push is the bare {@code .gem} or a multipart form around it ({@code gem push --attestations}), so the request
-     * body is not always the artifact, and an edge screening it would assess the form while clients download the gem
-     * inside it - {@code RepositoryFormat}'s envelope clause. So this format screens at its own choke point,
-     * {@link #push}, over the gem's own bytes whichever shape carried them.
-     */
+    /** Not edge-screened: a push is the bare {@code .gem} or a multipart form around it
+     *  ({@code gem push --attestations}), and screening the form would not screen the gem clients download
+     *  ({@code RepositoryFormat}'s envelope clause). The format screens at {@link #push}, over the gem's own bytes. */
     @Override
     public boolean screened() {
         return false;
     }
 
-    /** The attestations a push carried beside its gem, read only once the gem part has been consumed and stored -
-     *  a multipart client sends its parts in an order of its own, and the gem streams into the store unbuffered. */
+    /** The attestations a push carried, read only once the gem part is stored, since a client orders its parts as it
+     *  likes. */
     @FunctionalInterface
     private interface Attestations {
         byte[] read() throws IOException;
     }
 
-    /** The most a yank's form body may carry: a gem name, a version and a platform, with room to spare. */
+    /** The most a yank's form may carry: a gem name, a version and a platform. */
     private static final int YANK_FORM = 4096;
 
-    /**
-     * {@code gem yank <name> -v <version> [--platform <platform>]}: {@code DELETE api/v1/gems/yank} with the gem, the
-     * version and an optional platform as form fields. The yank is the product's own lifecycle mark, written through
-     * the one path the console and the API write it through ({@link Lifecycle#mark(FormatExchange, ArtifactStore,
-     * String, String, Lifecycle.Flag)}), so the version leaves the index a resolver reads and {@code jenrepo lifecycle}
-     * shows it, whichever surface yanked it. Answered as rubygems.org answers: {@code 200} with its sentence, {@code 404}
-     * for a version this repository does not hold, {@code 422} for one already yanked.
-     */
+    /** {@code gem yank <name> -v <version> [--platform <platform>]}: {@code DELETE api/v1/gems/yank} with form fields.
+     *  The yank is the product's lifecycle mark, through the path the console and API use
+     *  ({@link Lifecycle#mark(FormatExchange, ArtifactStore, String, String, Lifecycle.Flag)}), so the version leaves
+     *  the resolver's index whichever surface yanked it. Answered as rubygems.org does: {@code 200} with its sentence,
+     *  {@code 404} for a version not held, {@code 422} for one already yanked. */
     private static void yank(FormatExchange exchange, Blobs blobs, ArtifactStore store) throws IOException {
         Map<String, String> form = form(exchange);
         String name = form.get("gem_name"), version = form.get("version"), platform = form.get("platform");
@@ -369,7 +329,7 @@ public final class RubyGemsFormat implements RepositoryFormat, ProxyLeg, BlobLay
                 .getBytes(StandardCharsets.UTF_8));
     }
 
-    /** The fields a yank sends, from its form body and, where a client puts them there, its query string. */
+    /** The fields a yank sends, from its form body and, where a client puts them, its query string. */
     private static Map<String, String> form(FormatExchange exchange) throws IOException {
         Map<String, String> fields = new HashMap<>();
         for (String field : List.of("gem_name", "version", "platform")) {
@@ -392,12 +352,9 @@ public final class RubyGemsFormat implements RepositoryFormat, ProxyLeg, BlobLay
         return fields;
     }
 
-    /**
-     * A push is the raw {@code .gem} as the request body, or - {@code gem push --attestations}, rubygems 3.6 and
-     * later - a multipart form with the gem as its file part and an {@code attestations} field holding a JSON array
-     * of Sigstore bundles, in whichever order the client sends them. The bundles are kept beside the gem before the
-     * version is discoverable, exactly as the npm leg keeps a publish's attestations.
-     */
+    /** A push is the raw {@code .gem}, or ({@code gem push --attestations}) a multipart form with the gem as its file
+     *  part and an {@code attestations} field of Sigstore bundles, in either order. The bundles are kept beside the gem
+     *  before the version is discoverable. */
     private void push(FormatExchange exchange, Blobs blobs, ArtifactStore store) throws IOException {
         Optional<String> boundary = MultipartBody.boundary(exchange.requestHeader("Content-Type"));
         if (boundary.isEmpty()) {
@@ -422,8 +379,8 @@ public final class RubyGemsFormat implements RepositoryFormat, ProxyLeg, BlobLay
         exchange.respond(400);   // a form that carries no gem
     }
 
-    /** One small field of a push form: only {@code attestations} is read, bounded to the signature limit; an
-     *  oversized one is not kept, since an array longer than that is not one this repository can verify. */
+    /** One small field of a push form: only {@code attestations} is read, bounded to the signature limit; an oversized
+     *  one is not kept. */
     private static void field(MultipartBody.Part part, byte[][] attestations) throws IOException {
         if ("attestations".equals(part.name())) {
             attestations[0] = part.bytes(ArtifactSignatures.Material.LARGEST_SIGNATURE).orElse(null);
@@ -431,40 +388,25 @@ public final class RubyGemsFormat implements RepositoryFormat, ProxyLeg, BlobLay
     }
 
     /**
-     * The {@code gem push} endpoint, run through the one shared hosted-publish choreography
-     * ({@code Publication.commit}) rather than hand-assembled here. A {@code .gem} is an immutable artifact of
-     * unbounded size, so it is handed to the operation as the accepted body and streams straight into the
-     * content-addressed store (hash-on-write, never buffered), taking the SHA-256 the store computes on the way in as
-     * the compact-index checksum; the layout then reopens only the front of the <em>stored</em> gem to read the
-     * gemspec that names it (the {@code metadata.gz} that identifies the gem is the first tar entry, so the parse
-     * never pulls the artifact back whole).
+     * The {@code gem push} endpoint, through {@code Publication.commit}: the {@code .gem} streams into the store as the
+     * accepted body, its SHA-256 the compact-index checksum, and the layout reopens only the stored gem's front to read
+     * the gemspec ({@code metadata.gz} is the first tar entry).
      *
-     * <p><b>The commit point is the {@code rubygemfiles/<name>-<version>.gem} pointer link</b> - before it nothing
-     * serves, {@code /info/<name>} is a structural miss and the compact index does not name the gem; after the last
-     * declared step the gem downloads, {@code /info} lists it and {@code /versions} carries it.
-     *
-     * <p>The order matters, and every write is a step declared to the operation, so a failure in any of them fails
-     * the push loudly instead of answering {@code 200} over a half-built index:
+     * <p><b>The commit point is the {@code rubygemfiles/<name>-<version>.gem} pointer link.</b> Every write is a
+     * declared step, so a failure fails the push rather than answering {@code 200} over a half-built index:
      * <ol>
-     *   <li>the {@code .gem} pointer - the download, and the commit point. It goes first because it is where a
-     *       version already pushed refuses this one, so nothing keyed by the version is written for a refused push;</li>
-     *   <li>the quick spec - the precomputed {@code Gem::Specification} Marshal a plain {@code gem install} fetches -
-     *       and the attestations the push carried, both reachable only by a client that has already resolved the
-     *       version through {@code /info} or {@code /versions}, neither of which names it yet;</li>
-     *   <li>the compact-index line under {@code rubygems/<name>/versions/<version>} - what makes the version
-     *       <em>enumerable</em> ({@code /info}, {@code blobKeys}, the screened version scan);</li>
-     *   <li>the stored {@code /info/<name>} document and, derived from it, the gem's line in the stored
-     *       repository-wide {@code /versions} document ({@link RubyGemsListings}), written incrementally from the
-     *       line above, so a push costs one rewrite of each and never a scan of the other gems.</li>
+     *   <li>the {@code .gem} pointer, first because it is where a version already pushed refuses this one;</li>
+     *   <li>the quick spec and the attestations, reachable only once a client resolved the version;</li>
+     *   <li>the compact-index line under {@code rubygems/<name>/versions/<version>}, which makes the version
+     *       enumerable;</li>
+     *   <li>the stored {@code /info/<name>} and, derived from it, the gem's line in {@code /versions}
+     *       ({@link RubyGemsListings}), one rewrite of each.</li>
      * </ol>
-     * At the instant a version becomes listable its quick spec is already there, so {@code gem install} never sees a
-     * listed version whose spec fetch answers {@code 404}.
+     * So when a version becomes listable its quick spec already exists.
      *
-     * <p><b>This is the format's screening choke point.</b> A push may arrive as a multipart form around the gem, so
-     * the request body is not always the artifact and this format is not edge-screened ({@link #screened()}): the
-     * operation is constructed with the <em>discovered</em> interceptor chain and observer list, so the one screen runs
-     * here over the gem's own bytes, whichever shape carried them, and the one after-commit notification fires here
-     * once the gem is visible - refined to the gem's own coordinate, since the push endpoint names none.
+     * <p><b>This is the format's screening choke point</b> ({@link #screened()}): the operation carries the discovered
+     * chain and observers, which run over the gem's own bytes and are told the gem's coordinate, since the endpoint
+     * names none.
      */
     private void push(InputStream body, Attestations attestations, Blobs blobs, FormatExchange exchange,
                       ArtifactStore store) throws IOException {
@@ -484,34 +426,29 @@ public final class RubyGemsFormat implements RepositoryFormat, ProxyLeg, BlobLay
                 accepted -> {
                     Spec spec = pushed(store, accepted.hash());
                     if (spec == null) {
-                        // No parseable gemspec, or one naming a coordinate or a dependency that would forge a key or
-                        // an index line: nothing servable, so nothing is declared and nothing is linked.
+                        // No parseable gemspec, or a coordinate or dependency that would forge a key or index line:
+                        // nothing is declared.
                         return Publication.Visibility.declined();
                     }
                     String versionKey = "rubygems/" + spec.name() + "/versions/" + spec.version();
                     byte[] bundles = attestations.read();
                     return Publication.Visibility
-                            // The serving pointers live in this format's own namespaces rather than publish/, so they
-                            // are declared through Serving steps, not named with at(). The .gem pointer comes first:
-                            // it is where a version already pushed refuses this one, so nothing keyed by the version
-                            // - the quick spec, the attestations - is written before it and replaced by a refused push.
+                            // The pointers live in this format's namespaces, so they are Serving steps. The .gem
+                            // pointer comes first, where a version already pushed refuses this one, so nothing keyed by
+                            // the version is written for a refused push.
                             .through((hash, size, _) ->
                                     blobs.linkRelease(gemKey(spec.name(), spec.version()), hash, size))
-                            // The legacy quick spec gem install fetches, precomputed as the compact-index line is so
-                            // serving it is a plain streamed read; the Marshal encoding lives in QuickSpec.
+                            // The quick spec, precomputed so serving it is a streamed read.
                             .andThrough((_, _, _) -> blobs.write("rubygemfiles/" + spec.name() + "-" + spec.version()
                                     + ".gemspec.rz", QuickSpec.deflated(spec)))
-                            // The attestations the form carried after the gem, kept before the listings below so the
-                            // version is never discoverable without the provenance it was pushed with; an empty array
-                            // is not kept.
+                            // The attestations, kept before the listings so the version is never discoverable without
+                            // them.
                             .andThrough((_, _, _) -> keepAttestations(blobs, spec, bundles))
-                            // The compact-index line carries the artifact's content address as its checksum: the hash
-                            // the operation stored the body under, reused rather than hashing the blob a second time.
+                            // The index line's checksum is the content address the body was stored under.
                             .andThrough((hash, _, _) -> blobs.write(versionKey,
                                     line(spec, hash).getBytes(StandardCharsets.UTF_8)))
-                            // The served documents are written here, on the push: the version's line joins the
-                            // gem's stored /info document (if the version is servable), which re-derives the gem's
-                            // line in the stored compact index - no scan of the other gems.
+                            // The listings are maintained on the push: the line joins the gem's /info, which re-derives
+                            // its /versions line.
                             .andThrough((hash, _, _) -> new RubyGemsListings(blobs).published(spec.name(),
                                     spec.version(), line(spec, hash).getBytes(StandardCharsets.UTF_8)))
                             // The push endpoint names no gem, so the observers are told which one this laid out.
@@ -519,30 +456,21 @@ public final class RubyGemsFormat implements RepositoryFormat, ProxyLeg, BlobLay
                 });
         switch (commit.disposition()) {
             case ACCEPT -> exchange.respond(commit.visible() ? 200 : 400);
-            // The chain HELD the gem. Its layout is written all the same, behind the withhold marker (see
-            // {@link #held}), so a review release is the marker clear rather than a replay of a push whose envelope
-            // no longer exists.
+            // Held: the layout is written behind the withhold marker (see held), so a review release is the marker
+            // clear rather than a replay of a push whose envelope is gone.
             case QUARANTINE -> {
                 held(attestations, blobs, store, exchange.path(), commit.hash());
                 exchange.respond(202);
             }
-            // Refused outright: nothing is linked and no marker is set, so no index lists it and the stored blob is
-            // the usual unreferenced content-addressed object a collection reclaims.
+            // Refused: nothing linked or marked; the stored blob is an unreferenced object the collector reclaims.
             case REJECT -> exchange.respond(422);
         }
     }
 
-    /**
-     * The gem a stored push carries, parsed out of the stored blob - or {@code null} when nothing servable can be
-     * derived: no parseable gemspec, a name or version that would forge a pointer key, or a runtime dependency whose
-     * name or requirement carries a control character. The parse the accepted leg and the held leg share, so the two
-     * can never lay one push out under two coordinates.
-     *
-     * <p>The dependency check is there because a dependency name and requirement flow unescaped into the compact-index
-     * line ({@code <version> <deps>|<requirements>}), one version per newline in {@code /info}: a gemspec whose
-     * dependency carries a newline would inject a version line into the gem's {@code /info} and skew the
-     * {@code /versions} md5 computed over it. No control character is legitimate in either.
-     */
+    /** The gem a stored push carries, parsed from the stored blob, or {@code null} when nothing servable can be
+     *  derived: no parseable gemspec, a name or version that would forge a key, or a dependency carrying a control
+     *  character. Shared by the accepted and held legs. Dependencies flow unescaped into the index line, one version
+     *  per newline in {@code /info}, so a newline in one would inject a version line. */
     private Spec pushed(ArtifactStore store, String hash) throws IOException {
         Spec spec;
         try (InputStream stored = store.open("blobs/" + hash)) {
@@ -560,8 +488,8 @@ public final class RubyGemsFormat implements RepositoryFormat, ProxyLeg, BlobLay
         return spec;
     }
 
-    /** Keep the attestations a push carried, unless they name no bundle - an empty array is not kept. They are the
-     *  version's own, so a re-push of the same gem with others is refused rather than rewriting them. */
+    /** Keep the attestations a push carried, unless they name no bundle. They are the version's own, so a re-push with
+     *  others is refused. */
     private static void keepAttestations(Blobs blobs, Spec spec, byte[] bundles) throws IOException {
         if (bundles != null && namesABundle(bundles)) {
             blobs.writeRelease(attestationsKey(spec.name() + "-" + spec.version()), bundles);
@@ -576,18 +504,13 @@ public final class RubyGemsFormat implements RepositoryFormat, ProxyLeg, BlobLay
     }
 
     /**
-     * Lay a <em>held</em> gem out behind its withhold marker, so the review release that follows is the same marker
-     * clear a retroactive hold's release is - one hold-release mechanism for this format. The shared commit runs its
-     * accepted layout only on {@code ACCEPT}, so a screen-time {@code QUARANTINE} would otherwise store the gem and
-     * link nothing, and a release would materialise no version at all.
+     * Lay a held gem out behind its withhold marker, so its review release is a retroactive hold's marker clear; the
+     * shared commit lays out only on {@code ACCEPT}.
      *
-     * <p>The review pointer is re-keyed from the push endpoint, which every push shares, onto the gem's own download
-     * path, as NuGet's is: a second held push would otherwise overwrite the first one's shared handle, leaving the
-     * first gem's marker without a live review pointer for the reconcile backstop to lift as holderless - an
-     * unreviewed gem un-withheld.
-     *
-     * <p>The order is what keeps the held gem out of sight: the marker retracts the gem's hash before its pointer is
-     * linked, and the stored {@code /info} and {@code /versions} documents leave a version carrying the marker out.
+     * <p>The review pointer is re-keyed from the shared push endpoint onto the gem's download path: a second held push
+     * would otherwise overwrite the first one's handle, and the reconcile backstop would lift the first gem's marker as
+     * holderless, un-withholding it unreviewed. The marker retracts the hash before the pointer is linked, and the
+     * stored {@code /info} and {@code /versions} leave a marked version out.
      */
     private void held(Attestations attestations, Blobs blobs, ArtifactStore store, String endpoint, String hash)
             throws IOException {
@@ -598,8 +521,7 @@ public final class RubyGemsFormat implements RepositoryFormat, ProxyLeg, BlobLay
         }
         byte[] bundles = attestations.read();
         try {
-            // A hold never replaces a released gem nor its attestations: refused before the mark, so nothing is left
-            // held.
+            // A hold never replaces a released gem or its attestations: refused before the mark.
             blobs.refuseReplacement(gemKey(spec.name(), spec.version()), hash);
             if (bundles != null && namesABundle(bundles)) {
                 blobs.refuseReplacement(attestationsKey(spec.name() + "-" + spec.version()), bundles);
@@ -634,8 +556,7 @@ public final class RubyGemsFormat implements RepositoryFormat, ProxyLeg, BlobLay
         long size = located.get().size();
         exchange.setResponseHeader("Content-Type", contentType);
         if (exchange.method().equals("HEAD")) {
-            // Answer HEAD from the stored blob size (Content-Length, 200, no body) rather than streaming the whole
-            // .gem just to discard it - a gem/bundler client issues HEADs to probe a file's size and existence.
+            // HEAD answers from the stored size; a gem or bundler client probes a file's size and existence with it.
             if (size >= 0) {
                 exchange.setResponseHeader("Content-Length", Long.toString(size));
             }
@@ -662,28 +583,20 @@ public final class RubyGemsFormat implements RepositoryFormat, ProxyLeg, BlobLay
         }
     }
 
-    /** Stream a stored listing with the cheap revalidation bundler relies on: the ETag is the stored document's
-     *  digest, so a matching {@code If-None-Match} answers {@code 304} from the header alone. */
+    /** Stream a stored listing with the revalidation bundler relies on: the ETag is the document's digest, so a
+     *  matching {@code If-None-Match} answers {@code 304} from the header. */
     private static void respondListing(StoredListing.Served document, FormatExchange exchange) throws IOException {
         Listings.serve(exchange, document, "text/plain; charset=utf-8");
     }
 
-    /** The {@code .gem} pointer key a version's bytes serve from - the identity every version-enumerating gem surface
-     *  judges an enumerated version by, so /info, the compact index and the download cannot drift apart. */
+    /** The {@code .gem} pointer key a version serves from, by which every enumerating surface judges a version. */
     static String gemKey(String name, String version) {
         return "rubygemfiles/" + name + "-" + version + ".gem";
     }
 
-    /**
-     * Serve the compact-index {@code /versions} document: the stored listing every push maintains, streamed as is
-     * with the document's digest as its {@code ETag}, so a bundler that revalidates with a matching
-     * {@code If-None-Match} gets a {@code 304} that reads neither the body nor any per-gem document. An empty local
-     * compact index stays a {@code 404} (not a header-only {@code 200}), so a proxy repository falls through to the
-     * upstream's full {@code /versions} rather than shadowing it - the contract {@code info()} and the other formats'
-     * empty indexes follow, and the one a bundler needs (it selects the compact-index fetcher only when
-     * {@code /versions} parses to a non-empty set), while {@code gem install} reaches straight for the per-gem
-     * {@code /info}.
-     */
+    /** Serve the compact-index {@code /versions}: the stored listing, streamed with its digest as {@code ETag}. An
+     *  empty local index is a {@code 404}, not a header alone, so a proxy repository falls through to the upstream's:
+     *  bundler uses the compact index only when {@code /versions} parses non-empty. */
     private void versions(Blobs blobs, FormatExchange exchange) throws IOException {
         Optional<StoredListing.Served> served = StoredListing.open(blobs.store(),
                 new RubyGemsListings(blobs).versionsSpec());
@@ -701,25 +614,16 @@ public final class RubyGemsFormat implements RepositoryFormat, ProxyLeg, BlobLay
     }
 
     /**
-     * Proxy a RubyGems miss to the upstream compact index (rubygems.org). A {@code .gem} is immutable, so it is
-     * fetched, cached and served; an info, versions or quick-spec document is streamed through - the gems are
-     * addressed relative to the source, so the list needs no rewrite.
+     * Proxy a RubyGems miss to the upstream compact index. A {@code .gem} is immutable, so it is fetched, cached and
+     * served; an info, versions or quick-spec document is streamed through, needing no rewrite.
      *
-     * <p><b>Streamed, and the word is load-bearing.</b> The compact-index {@code /versions} is the one enumeration
-     * document in this product that is tens of megabytes - every gem the source has ever carried, one line per
-     * version - and bundler waits for its first byte under {@code BUNDLE_TIMEOUT}, ten seconds by default. Buffered
-     * whole before answering, the first byte would reach the client only after the whole upstream body had, and on a
-     * loaded machine that is longer than bundler waits: bundler drops the connection (a {@code Broken pipe} on this
-     * leg), falls back to the legacy full index it keeps for sources without a compact index, asks for
-     * {@code specs.4.8.gz} - which this leg does not serve, because no client reaches for it while the compact index
-     * answers - and exits 17 on the 404. Relayed through {@link ProxyRelay#streamFresh} the first byte leaves as soon
-     * as the upstream's does, which is what the streaming clause of {@link ProxyFormat.Fetcher} is for; the
-     * {@link ProxyRelay.Document} classification, the conditional-request forwarding and the {@code 304} relay run in
-     * the shared control flow.
+     * <p><b>Streamed, from the first byte.</b> {@code /versions} is tens of megabytes, and bundler waits for its first
+     * byte only {@code BUNDLE_TIMEOUT}, ten seconds by default; buffered whole, the first byte could arrive later than
+     * that, and bundler would drop the connection and fall back to the legacy full index.
+     * {@link ProxyRelay#streamFresh} sends the first byte as the upstream does.
      *
-     * <p>The legacy index ({@code specs.4.8.gz}, {@code latest_specs.4.8.gz}, {@code prerelease_specs.4.8.gz}) is
-     * deliberately still not proxied: a client only asks for it once the compact index has failed it, so serving it
-     * would paper over the failure that matters rather than answer a need.
+     * <p>The legacy index ({@code specs.4.8.gz} and its siblings) is not proxied: a client asks for it only once the
+     * compact index has failed, and serving it would hide that failure.
      */
     @Override
     public boolean pullThrough(FormatExchange exchange, ArtifactStore store, URI upstream,
@@ -732,20 +636,15 @@ public final class RubyGemsFormat implements RepositoryFormat, ProxyLeg, BlobLay
         }
         if (rest.startsWith("gems/") && rest.endsWith(".gem")) {
             String file = rest.substring("gems/".length());
-            // Point-integrity: the RubyGems compact index publishes every version's SHA-256 as the `checksum:<hex>`
-            // requirement of its /info/<gem> line, so a proxied .gem IS held to a digest its own ecosystem advertises -
-            // the parity npm (dist.integrity), PyPI (#sha256), NuGet (packageHash), Cargo, conda, CocoaPods, Conan and
-            // Hugging Face already have and this leg did not. Resolved on a miss only (once per gem, since the .gem is
-            // then cached).
-            // The /info/<gem> document is a SEPARATE fetch from the .gem below, so an index this repository could not
-            // read is not "this mirror publishes no checksum for the version" and must not become an unverified fill.
+            // The compact index publishes each version's SHA-256 as the checksum:<hex> requirement of its /info/<gem>
+            // line, so a proxied .gem is held to it. That is a separate fetch, and one that could not be read must not
+            // become an unverified fill.
             URI target = URI.create(root + rest);
             ProxyRelay.Declared expected = gemChecksum(root, file, fetcher);
             if (!expected.readable()) {
                 return ProxyRelay.unverifiable(target, expected);
             }
-            // A .gem is an immutable artifact of unbounded size: stream it from the network straight into the
-            // content-addressed store rather than buffering the whole body, then re-serve it locally.
+            // Streamed from the network into the content-addressed store, since a .gem is unbounded.
             try (ProxyFormat.Download download = fetcher.download(target, Map.of()).orElse(null)) {
                 if (download == null || download.status() != 200) {
                     return false;
@@ -759,42 +658,31 @@ public final class RubyGemsFormat implements RepositoryFormat, ProxyLeg, BlobLay
         }
         if (rest.startsWith("info/") || rest.equals("versions")
                 || (rest.startsWith(QUICK) && rest.endsWith(".gemspec.rz"))) {
-            // The compact index (/versions, /info/<gem>) is an ENUMERATION - it is precisely what bundler resolves
-            // against, /versions listing every gem the source carries and /info/<gem> every version of one, so an
-            // absent one is the answer "this source has no such gem" and a fetch that never landed must not be dressed
-            // as it. A /quick/Marshal.4.8/<gem>-<version>.gemspec.rz is PINNED: the client already fixed gem AND
-            // version, nothing about resolution turns on its absence, and the contract's "not cached here, re-pull"
-            // 404 stays right.
+            // /versions and /info/<gem> are what bundler resolves against, an ENUMERATION; a quick spec is PINNED, the
+            // gem and version already fixed, so its 404 means "re-pull".
             ProxyRelay.Document document = rest.startsWith(QUICK)
                     ? ProxyRelay.Document.PINNED
                     : ProxyRelay.Document.ENUMERATION;
-            // The shared streaming relay: the client's conditional-request validators go upstream so a 304-capable
-            // bundler's revalidation reaches the origin, a 304 comes back bare, and a 200 streams from the first
-            // byte - see the method javadoc for why the buffered twin was the wrong relay here.
+            // The shared streaming relay, with validators forwarded and a 304 relayed bare.
             return ProxyRelay.streamFresh(fetcher, URI.create(root + rest), "application/octet-stream", exchange,
                     document);
         }
         return false;
     }
 
-    /** The largest {@code /info/<gem>} document read to resolve a proxied gem's checksum. A compact-index line is one
-     *  short line per version, so even a gem with thousands of versions stays far below this; a hostile upstream past
-     *  it is a document this leg could not read through, so the fill is refused rather than downgraded to unverified -
-     *  a bound must never be able to answer "this index declares no checksum" (the rule the rpm leg's index bound and
-     *  go's archive-walk ceiling already follow). */
+    /** The largest {@code /info/<gem>} read to resolve a proxied gem's checksum, far past a gem of thousands of
+     *  versions. A body past it could not be read, so the fill is refused rather than downgraded: a bound never answers
+     *  "declares no checksum". */
     private static final int MAX_INFO = 8 * 1024 * 1024;
 
     /**
-     * The SHA-256 the upstream compact index declares for one {@code .gem}.
-     * The index line is {@code <version> <deps>|checksum:<sha256>[,ruby:<constraint>]}, so the version is matched
-     * exactly (never a prefix - {@code 1.0} must not take {@code 1.0.1}'s checksum) and the checksum is read out of
-     * the requirement list the format itself writes on the publish side, so the two spellings cannot drift.
+     * The SHA-256 the upstream compact index declares for one {@code .gem}. The line is
+     * {@code <version> <deps>|checksum:<sha256>[,ruby:<constraint>]}: the version matched exactly, never as a prefix,
+     * and the checksum read from the requirement list the publish side writes.
      *
-     * <p>{@link ProxyRelay.Declared#NONE} - cache unverified, exactly as Maven serves a jar whose {@code .sha1} sibling
-     * is missing - when the index <em>answered</em> and declares nothing: a filename off the
-     * {@code <name>-<version>.gem} convention (which names no line at all), a {@code 404}/{@code 410} (an index this
-     * mirror does not serve), no line for this version, or a line with no parseable {@code checksum:}.
-     * {@linkplain ProxyRelay.Declared#unreadable Unreadable} when the index could not be read - a transport failure, a
+     * <p>{@link ProxyRelay.Declared#NONE}, cached unverified, when the index answered and declares nothing: a filename
+     * off the {@code <name>-<version>.gem} convention, a {@code 404}/{@code 410}, no line for the version, or no
+     * parseable {@code checksum:}. {@linkplain ProxyRelay.Declared#unreadable Unreadable} on a transport failure, a
      * refusing status, or a body past {@link #MAX_INFO}.
      */
     private static ProxyRelay.Declared gemChecksum(String root, String file, ProxyFormat.Fetcher fetcher)
@@ -841,9 +729,8 @@ public final class RubyGemsFormat implements RepositoryFormat, ProxyLeg, BlobLay
         return ProxyRelay.Declared.NONE;
     }
 
-    /** The {@code <name>-<version>} a {@code .gem} filename carries, split at the rightmost {@code -} followed by a
-     *  digit - the same rule {@link #describe} applies, so the proxy and the layout read one coordinate out of one
-     *  filename. {@code null} when the filename does not follow the convention. */
+    /** The {@code <name>-<version>} a {@code .gem} filename carries, by {@link #describe}'s rule; {@code null} when it
+     *  does not follow the convention. */
     private static String[] coordinate(String file) {
         if (!file.endsWith(".gem")) {
             return null;
@@ -871,8 +758,8 @@ public final class RubyGemsFormat implements RepositoryFormat, ProxyLeg, BlobLay
         return spec.version() + " " + String.join(",", deps) + "|" + requirements;
     }
 
-    /** The compact-index rendering of a requirement: {@code op version} pairs joined with {@code &}, or null when
-     *  empty (the caller substitutes the {@code >= 0} default a bare dependency carries). */
+    /** The compact-index rendering of a requirement, {@code op version} pairs joined with {@code &}, or null when empty
+     *  (the caller writes the {@code >= 0} default). */
     private static String constraint(List<Constraint> constraints) {
         if (constraints.isEmpty()) {
             return null;
@@ -896,24 +783,21 @@ public final class RubyGemsFormat implements RepositoryFormat, ProxyLeg, BlobLay
     record Spec(String name, String version, List<Dependency> deps, List<Constraint> ruby) {
     }
 
-    /** Whether a string carries any control character (below {@code 0x20}, so including {@code \n}, {@code \r},
-     *  {@code \t}) - which a compact-index line, one entry per newline, must never let a dependency field smuggle. */
+    /** Whether a string carries a control character, which a dependency field must never smuggle into a
+     *  newline-separated index line. */
     private static boolean hasControlChar(String value) {
         return value.chars().anyMatch(c -> c < 0x20);
     }
 
-    /** The gem members RubyGems signs, each beside a {@code <member>.sig}: the signature is the leaf key's over the
-     *  member's bytes, the leaf and its chain the gemspec's {@code cert_chain}. */
+    /** The gem members RubyGems signs, each beside a {@code <member>.sig} made by the leaf key of the gemspec's
+     *  {@code cert_chain}. */
     private static final List<String> SIGNED_MEMBERS = List.of("metadata.gz", "data.tar.gz", "checksums.yaml.gz");
 
-    /**
-     * A gem may carry its signer's X.509 chain in its gemspec and a signature per member beside it - optional here,
-     * since most gems carry none, and read the way {@code gem install --trust-policy} reads it: each member's
-     * signature by the chain's leaf, the chain to a certificate the deployment trusts. Beside it, optional for the
-     * same reason, the Sigstore bundles rubygems.org publishes for a version pushed with attestations, kept under
-     * {@link #attestationsKey} by a push that carried them or by the pull-through that fetched them, and served back
-     * at {@code /rubygems/api/v1/attestations/<name>-<version>.json} as the upstream serves them.
-     */
+    /** A gem may carry its signer's X.509 chain in its gemspec and a signature per member, optional and read as
+     *  {@code gem install --trust-policy} reads it: each signature by the chain's leaf, the chain to a trusted
+     *  certificate. Beside it, also optional, the Sigstore bundles rubygems.org publishes, kept under
+     *  {@link #attestationsKey} by a push or the pull-through and served at
+     *  {@code /rubygems/api/v1/attestations/<name>-<version>.json}. */
     @Override
     public List<ArtifactSignatures.Expectation> expects(String path) {
         return describe(path).map(described -> described.coordinate() != null).orElse(false)
@@ -922,8 +806,8 @@ public final class RubyGemsFormat implements RepositoryFormat, ProxyLeg, BlobLay
                 : List.of();
     }
 
-    /** The gem an attestations document is about: {@code /rubygems/api/v1/attestations/<stem>.json} covers
-     *  {@code /rubygems/gems/<stem>.gem}, so a document that lands after its gem re-derives the gem's verdict. */
+    /** The gem an attestations document covers: {@code /rubygems/api/v1/attestations/<stem>.json} covers
+     *  {@code /rubygems/gems/<stem>.gem}, so a document landing after its gem re-derives the gem's verdict. */
     @Override
     public Optional<String> covers(String path) {
         if (!path.startsWith(ATTESTATIONS_PATH) || !path.endsWith(".json")) {
@@ -1042,18 +926,14 @@ public final class RubyGemsFormat implements RepositoryFormat, ProxyLeg, BlobLay
         return pem.isEmpty() ? null : pem.toString().getBytes(StandardCharsets.US_ASCII);
     }
 
-    /** Read the gzipped YAML gemspec from {@code metadata.gz} at the front of the gem's tar, using Commons Compress.
-     *  Only the {@code metadata.gz} entry's bytes are pulled (bounded to that small member by the tar stream, then
-     *  gunzipped) and the walk stops there, so the caller's reopened artifact stream is never drained whole. */
+    /** Read the gzipped YAML gemspec from {@code metadata.gz} at the front of the gem's tar; only that member is
+     *  pulled, so the caller's stream is never drained whole. */
     static String gemspec(InputStream gem) throws IOException {
         TarArchiveInputStream tar = new TarArchiveInputStream(gem, "UTF-8");
         for (TarArchiveEntry entry = tar.getNextEntry(); entry != null; entry = tar.getNextEntry()) {
             if (entry.getName().equals("metadata.gz")) {
-                // Both reads go through the product's one archive-inflation read, given RubyGems' own larger ceilings
-                // explicitly because a gemspec legitimately carries the gem's whole description and file list. Neither
-                // ever yields a prefix, so an over-ceiling member is "unindexable" and the publish is DECLINED - the
-                // fail-closed disposition this format expresses as a decline rather than as an exception (nothing is
-                // linked and nothing is served), never as "this gem declares nothing".
+                // Both reads use the shared inflation read with RubyGems' larger ceilings; neither yields a prefix, so
+                // an over-ceiling member declines the publish, never "this gem declares nothing".
                 byte[] metadata = ArchiveInflation.entry(tar, maxCompressedMetadata()).orNull();
                 if (metadata == null) {
                     return null;   // an over-large metadata.gz member is not a spec this parses - treat as unindexable
@@ -1067,21 +947,15 @@ public final class RubyGemsFormat implements RepositoryFormat, ProxyLeg, BlobLay
         return null;
     }
 
-    /** The compressed {@code metadata.gz} member and its gunzipped YAML are both attacker-supplied, so neither is read
-     *  whole: a member that would exceed its ceiling (a decompression bomb, or a tar entry declaring a vast size) is
-     *  reported as unparsable rather than buffered, and the caller rejects the publish.
-     *
-     *  <p>These are RubyGems' own ceilings rather than the shared archive-inflation default, and so are passed
-     *  explicitly to {@link build.jenesis.repository.store.ArchiveInflation#entry(InputStream, int)} at the call site
-     *  that chose them (the clause's own escape hatch): a gemspec legitimately carries the gem's whole
-     *  description and file list, which is why the {@code RubyGemsQualityInspector} states the identical reason for
-     *  its {@code MAX_GEMSPEC}. What is not negotiable, and is what changed here, is that the ceiling is applied by
-     *  the shared read - so it can never come back as a prefix, and reaching it is an outcome. */
+    /** The ceilings on the compressed {@code metadata.gz} and its gunzipped YAML, both attacker-supplied: a member past
+     *  one is unparsable and the publish is refused. They are RubyGems' own rather than the shared default, passed to
+     *  {@link build.jenesis.repository.store.ArchiveInflation#entry(InputStream, int)}, since a gemspec carries the
+     *  gem's whole description and file list; the shared read still never answers a prefix. */
     private static final int MAX_COMPRESSED_METADATA = 16 * 1024 * 1024;
     private static final int MAX_GEMSPEC_YAML = 8 * 1024 * 1024;
 
-    /** The keys an operator moves the two ceilings above with - format-local, for the registry whose gems are
-     *  legitimately larger than RubyGems' own conventions, and defaulting to the constants for everyone else. */
+    /** The keys an operator moves the two ceilings with, for a registry whose gems are larger than RubyGems'
+     *  conventions. */
     private static final String MAX_COMPRESSED_METADATA_KEY = "jenrepo.rubygems.compressed-metadata-bytes";
     private static final String MAX_GEMSPEC_YAML_KEY = "jenrepo.rubygems.gemspec-yaml-bytes";
 
@@ -1093,8 +967,7 @@ public final class RubyGemsFormat implements RepositoryFormat, ProxyLeg, BlobLay
         return Limits.positive(MAX_GEMSPEC_YAML_KEY, MAX_GEMSPEC_YAML);
     }
 
-    // Parse the gemspec YAML with SnakeYAML, stripping the Ruby object tags (see RUBY_TAG) so the SafeConstructor
-    // loads it as plain maps and lists without instantiating anything.
+    // SnakeYAML with the Ruby tags stripped (RUBY_TAG), so the SafeConstructor instantiates nothing.
     static Spec parse(String yaml) {
         if (yaml == null) {
             return null;
@@ -1140,8 +1013,7 @@ public final class RubyGemsFormat implements RepositoryFormat, ProxyLeg, BlobLay
 
 
 
-    /** The migration-import capability, delegated to the layout-only {@link RubyGemsImporter} - the format IS the
-     *  discovered importer now (an {@code instanceof} capability), and the importer class stays as its delegate. */
+    /** The migration-import capability, delegated to {@link RubyGemsImporter}. */
     private final RubyGemsImporter importer = new RubyGemsImporter();
 
     @Override
@@ -1159,12 +1031,9 @@ public final class RubyGemsFormat implements RepositoryFormat, ProxyLeg, BlobLay
         importer.importArtifact(path, content, store);
     }
 
-    /**
-     * The version's {@code .gem} is pushed as {@code gem push} pushes it: the raw gem posted to
-     * {@code api/v1/gems}, the key as the bare {@code Authorization} value the client sends, and asked for back at
-     * {@code gems/<name>-<version>.gem}, so a gem already there is not pushed again. A signed gem carries its
-     * signatures inside it, so they travel with the bytes.
-     */
+    /** The version's {@code .gem} is pushed as {@code gem push} does - posted to {@code api/v1/gems} with the key as
+     *  the bare {@code Authorization} value - unless {@code gems/<name>-<version>.gem} already answers. Signatures
+     *  travel inside the gem. */
     @Override
     public Exported export(ArtifactStore repository, String coordinate, String version, ExportTarget target)
             throws IOException {
