@@ -6,59 +6,41 @@ import build.jenesis.repository.store.Providers;
 
 /**
  * One build tool's cache wire protocol: which request paths it owns, and how to read a request of its shape as an
- * address in the shared cache.
- *
- * <p>A protocol translates and nothing else. Every protocol this product serves funnels into one read and one store
- * over the same cache, so what actually differs between them is the URL shape, where the project and the credential
- * are presented, and what a write to an address that already holds bytes should do. An implementation therefore
- * answers those three questions and is handed the rest.
+ * address in the shared cache. Every protocol funnels into one read and one store over the same cache, so a protocol
+ * answers only what differs - the URL shape, where project and credential are presented, and what a write to an
+ * occupied address does.
  *
  * <h2>Contract</h2>
  *
  * <ol>
- *   <li><b>A name is stable and lower case</b> - {@code jenesis}, {@code gradle}, {@code bazel} - because it is
- *       what a meter, a log line and an operator's toggle spell. Two implementations answering one name is a
- *       composition error and is refused when they are resolved, not when a request arrives.</li>
- *   <li><b>{@link #handles} is a pure function of the path</b>: no store read, no configuration lookup, no
- *       allocation a caller can observe. It is asked for every protocol on every cache request until one answers
- *       {@code true}, so it decides on the shape of the path and nothing else.</li>
- *   <li><b>Path ownership does not overlap, and {@link #RESERVED} is how.</b> A path at most one protocol claims
- *       is what makes dispatch order irrelevant - no protocol is asked to be more specific than another, and
- *       nothing has to be tried in sequence. A tenant's cache is one shared space, which makes that a real
- *       constraint rather than a hope: a foreign tool's layout is rooted at {@code /<its name>/}, and one of them -
- *       Gradle's {@code /gradle/<key>} - is shape-identical to the native {@code /<step>/<inputs>}. So the
- *       first segment of a native address may not be a reserved one, every foreign protocol's name is listed
- *       here, and a protocol claiming a path another owns is a composition error rather than a question of who
- *       wins.</li>
- *   <li><b>{@link #address} answers empty for a request it cannot read</b>, and the caller answers {@code 400}.
- *       It never throws for a malformed path: a client's bad request is an answer, not an exception. It may still
- *       throw for a genuinely broken composition.</li>
- *   <li><b>An address is complete or absent.</b> A protocol that can read the path but finds no project or no
- *       credential answers the address with those fields {@code null} rather than an empty optional, because the
- *       caller distinguishes "I could not read this request" from "this request presented no credential" and
- *       answers them differently.</li>
- *   <li><b>{@link Existing} is the protocol's statement about its own address space</b>, not an operator's
- *       preference, so it is answered per request rather than configured. An address that is a digest of the
- *       bytes may deduplicate; one that is a digest of anything else must not, or the first result an action ever
- *       produced is pinned and served forever.</li>
- *   <li><b>An implementation holds no per-request state</b> and is safe to call from many threads. One instance
- *       serves the life of the node.</li>
- *   <li><b>No dependency on a server.</b> An implementation reads the request through {@link Request} and answers
- *       a record; it does not reach a servlet, a framework or the cache itself. That is what lets a protocol be
- *       tested by calling it and lets a composition carry a subset of them.</li>
+ *   <li><b>A name is stable and lower case</b> - {@code jenesis}, {@code gradle}, {@code bazel} - since a meter, a log
+ *       line and a toggle spell it. Two implementations answering one name are refused at resolution.</li>
+ *   <li><b>{@link #handles} is a pure function of the path</b>: no store read, no configuration, no observable
+ *       allocation. It is asked of every protocol on every cache request until one answers {@code true}.</li>
+ *   <li><b>Path ownership does not overlap</b>, so dispatch order is irrelevant. A tenant's cache is one shared space
+ *       and a foreign tool's layout is rooted at {@code /<its name>/}, but Gradle's {@code /gradle/<key>} has the shape
+ *       of the native {@code /<step>/<inputs>} - so a native address's first segment may not be one of
+ *       {@link #RESERVED}, which lists every foreign protocol's name, and a protocol claiming another's path is a
+ *       composition error.</li>
+ *   <li><b>{@link #address} answers empty for a request it cannot read</b>, which the caller answers {@code 400}; a
+ *       malformed path never throws, though a broken composition may.</li>
+ *   <li><b>An address is complete or absent.</b> A readable path with no project or credential answers an address with
+ *       those fields {@code null}, so the caller tells "could not read this request" from "no credential
+ *       presented".</li>
+ *   <li><b>{@link Existing} is the protocol's statement about its own address space</b>, answered per request. An
+ *       address that digests the bytes may deduplicate; one that digests anything else must not, or an action's first
+ *       result is served forever.</li>
+ *   <li><b>An implementation holds no per-request state</b> and is thread-safe; one instance serves the node's
+ *       life.</li>
+ *   <li><b>No dependency on a server.</b> It reads the request through {@link Request} and answers a record - no
+ *       servlet, framework or cache - so it is tested by calling it and a composition can carry a subset.</li>
  * </ol>
  */
 public interface CacheProtocol {
 
-    /**
-     * Every protocol on this node's module path, in name order, with the answer held for the life of the JVM.
-     *
-     * <p>Held deliberately, which is the exception rather than this codebase's habit: dispatch asks for this on
-     * every cache request, and a cache request is the hottest path the product serves. What makes holding safe
-     * here is that the answer cannot change without the module path changing - a protocol declares no
-     * configuration and has no enablement of its own, so there is nothing a reconfiguring test could invalidate.
-     * A composition serves the protocols it puts on the path, which is the whole selection.
-     */
+    /** Every protocol on the module path, in name order, held for the life of the JVM. Held because dispatch asks on
+     *  every cache request, the hottest path, and safe because the answer changes only with the module path: a protocol
+     *  declares no configuration or enablement, so a composition serves the protocols it carries. */
     static List<CacheProtocol> installed() {
         return Installed.PROTOCOLS;
     }
@@ -73,43 +55,33 @@ public interface CacheProtocol {
         }
     }
 
-    /**
-     * The header the product's own cache presentation names a project in, used by the native protocol and by the
-     * node's own admin surface - one definition, because two spellings of one wire constant is how they drift.
-     * A foreign tool's protocol has no say in this: its own format decides where its identity rides.
-     */
+    /** The header the product's own cache presentation names a project in, for the native protocol and the node's admin
+     *  surface - one definition of a wire constant. A foreign protocol's format decides where its own identity
+     *  rides. */
     String PROJECT_HEADER = "Jenesis-Cache-Project";
 
     /** The header the product's own cache presentation names a credential in, beside the repository's own. */
     String KEY_HEADER = "Jenesis-Cache-Key";
 
-    /**
-     * The first segments of a tenant's cache that root a foreign tool's own layout rather than naming a build
-     * step, so the native protocol declines them and the claims stay disjoint (clause 3).
-     *
-     * <p>A constant rather than a question put to the installed set, because {@link #handles} is a pure function
-     * of the path (clause 2) and must answer the same way on a node that ships one protocol as on a node that
-     * ships four - otherwise removing a module would silently widen what another one claims. Each foreign
-     * protocol's name appears here, which is an invariant its own suite pins.
-     */
+    /** The first segments of a tenant's cache that root a foreign tool's layout rather than naming a build step, so the
+     *  native protocol declines them (clause 3). A constant rather than a question put to the installed set, because
+     *  {@link #handles} must answer the same with one protocol shipped as with four - removing a module must not widen
+     *  what another claims. Each foreign protocol's suite pins its name's presence here. */
     Set<String> RESERVED = Set.of("maven", "gradle", "bazel");
 
     /** This protocol's stable, lower-case name - what a meter, a log line and an operator's toggle spell. */
     String name();
 
-    /**
-     * Where a client of this tool is pointed, as a path within a tenant's cache - what follows {@code /build/<tenant>}
-     * - with {@code <project>} standing for a project the tool can only carry in the path. Empty where the tool is
-     * pointed at the tenant's cache itself. It is what an operator is told to configure: the root the tool appends
-     * its own addresses to, not an address.
-     */
+    /** Where a client of this tool is pointed, as a path within a tenant's cache (after {@code /build/<tenant>}), with
+     *  {@code <project>} for a project the tool can carry only in the path; empty where the tool is pointed at the
+     *  cache itself. It is the root an operator configures, not an address. */
     String endpoint();
 
     /** Whether this protocol owns the given request path. A pure function of the path (clause 2). */
     boolean handles(String path);
 
-    /** Read the request as an address in the shared cache, or empty when the path is one this protocol owns but
-     *  cannot parse - which the caller answers as a bad request (clause 4). */
+    /** Read the request as an address in the shared cache, or empty when this protocol owns the path but cannot parse
+     *  it - a bad request (clause 4). */
     Optional<Address> address(Request request);
 
     /** What a write to an address that already holds bytes does. */
@@ -122,19 +94,13 @@ public interface CacheProtocol {
         REWRITE
     }
 
-    /**
-     * The request as a protocol reads it: the path and method it dispatches on, the headers its own wire format
-     * names, and the project and credential the caller has already derived from the presentation every protocol
-     * here shares.
-     *
-     * <p>Both are offered because the protocols genuinely differ: the native one names a project in a header of
-     * its own, while a foreign layout has nowhere to put it and presents it as the user half of ordinary HTTP
-     * authentication. A protocol takes whichever its own specification says, and neither is computed twice.
-     */
+    /** The request as a protocol reads it: path, method, the headers its wire format names, and the project and
+     *  credential the caller derived from the shared presentation. Both are offered because the native protocol names a
+     *  project in its own header while a foreign layout presents it as the user half of HTTP authentication; a protocol
+     *  takes whichever its specification says. */
     interface Request {
 
-        /** The request path within the tenant's cache - what follows {@code /build/<tenant>} - from the leading
-         *  slash. */
+        /** The request path within the tenant's cache, after {@code /build/<tenant>}, from the leading slash. */
         String path();
 
         /** The HTTP method, upper case. */

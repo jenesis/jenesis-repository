@@ -1,14 +1,12 @@
 /**
- * The cache-protocol SPI: one build tool's cache wire protocol as a {@code CacheProtocol} that says which request
- * paths it owns and reads a request of its shape as an address in the shared cache. A protocol ships as its own
- * module that {@code provides} one, so which tools a node serves is which modules are on its path.
+ * The cache-protocol SPI: one build tool's cache wire protocol as a {@code CacheProtocol} that owns request paths and
+ * reads a request as an address in the shared cache. Each protocol is a module that {@code provides} one, so the tools
+ * a node serves are the modules on its path.
  *
- * <p>Deliberately lighter than the cache-storage SPI beside it: a protocol translates a path and answers a record,
- * so it reaches no servlet, no framework and not the cache itself. That is what lets one be driven by calling it,
- * and what keeps the serving - one read and one store over the same cache, the metering and the refusals - in the
- * one place every protocol funnels into rather than reimplemented per tool. The single dependency beyond
- * {@code java.base} is the {@code Providers}/{@code Features} resolution, so this family is discovered and
- * validated by the same primitives as every other (shared mechanism has one home and is reused, never copied).
+ * <p>Lighter than the cache-storage SPI: a protocol translates a path into a record and reaches no servlet, framework
+ * or cache, so it can be driven by calling it, and the serving - one read and one store, the metering, the refusals -
+ * stays in the one place every protocol funnels into. Beyond {@code java.base} it uses only the shared
+ * {@code Providers}/{@code Features} resolution.
  *
  * @jenesis.release 25
  * @jenesis.bom pin-repository.properties
