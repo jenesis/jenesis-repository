@@ -7,19 +7,11 @@ import build.jenesis.repository.store.ArtifactDescriptor;
 import build.jenesis.repository.store.ArtifactStore;
 
 /**
- * Imports an Alpine repository laid out the way Alpine's own mirrors and Artifactory's Alpine repositories lay one
- * out, {@code <branch>/<repository>/<architecture>/<name>-<version>.apk}, replaying each package through
- * {@link ApkFormat}'s own {@code PUT /apk/<repository>/<architecture>/<file>} so it is read, indexed and screened
- * exactly as a publish is.
- *
- * <p>Only the packages migrate. {@code APKINDEX.tar.gz} is derived, and signed with this repository's own key, so an
- * incumbent's index - signed with a key no client of this repository holds - is skipped with every other asset that
- * is not a package. The coordinate is the one {@link ApkFormat#describe} splits out of the file name, and the publish
- * refuses a package whose {@code .PKGINFO} disagrees with it.
- *
- * <p>The branch is not a level this format has, so the trailing three segments are what an import keys on: the same
- * repository and architecture from two branches land in one, where a version both hold with different bytes is
- * refused as the republish it is rather than one silently replacing the other.
+ * Imports an Alpine repository laid out as Alpine's mirrors and Artifactory lay one out,
+ * {@code <branch>/<repository>/<architecture>/<name>-<version>.apk}, replaying each package through {@link ApkFormat}'s
+ * {@code PUT} so it is read, indexed and screened as a publish is. Only packages migrate: the index is derived and
+ * signed with this repository's key. The branch is not a level here, so two branches' same repository and architecture
+ * land in one, and a version both hold with different bytes is refused as a republish.
  */
 public final class ApkImporter implements RepositoryImporter {
 
@@ -27,7 +19,7 @@ public final class ApkImporter implements RepositoryImporter {
 
     @Override
     public boolean imports(String format) {
-        // Artifactory names the package type after the distribution, this product after the client.
+        // Artifactory names the type after the distribution, this product after the client.
         return format.equals("apk") || format.equals("alpine");
     }
 

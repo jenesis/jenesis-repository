@@ -10,26 +10,18 @@ import build.jenesis.repository.store.StoredListing;
 import build.jenesis.repository.store.OwnerOnly;
 
 /**
- * {@code APKINDEX} as a stored listing, and the {@code APKINDEX.tar.gz} an apk client actually fetches.
+ * {@code APKINDEX} as a stored listing, and the {@code APKINDEX.tar.gz} a client fetches.
  *
- * <p>The index is one block per package version, blocks separated by a blank line - which is exactly the shape
- * {@link StoredListing.Codec#delimited} models. A publish rewrites the one block; nothing folds over the
- * repository.
+ * <p>The index is one block per package version separated by a blank line ({@link StoredListing.Codec#delimited}), so a
+ * publish rewrites one block. The archive is a derived twin: a block can be replaced in text but not inside a
+ * compressed archive, and the twin derives from the document's sequence, so a client never reads an archive older than
+ * its index.
  *
- * <p><b>The archive is a derived twin, not the document.</b> What a client downloads is a gzipped tar carrying an
- * {@code APKINDEX} member, so the served file wraps the stored text. Keeping the text as the document is what makes
- * an incremental write possible at all - a block can be replaced in a text file and cannot be replaced inside a
- * compressed archive without rewriting it - and the twin is derived from the document's own sequence, so the
- * archive a client reads never predates the index it was built from.
+ * <p>Each publish stores its rendered block at {@code apk/<repo>/<arch>/index/<file>} beside the pool pointer, the
+ * durable truth a hold, release or yank re-decides membership from, and the generator rebuilds from.
  *
- * <p><b>The per-package block is the durable truth.</b> Each publish writes its rendered block to
- * {@code apk/<repo>/<arch>/index/<file>} beside the pool pointer, the same shape the Debian format stores a stanza
- * in. That is what lets a hold, a release or a yank re-decide one package's membership without reopening the
- * {@code .apk} - and what the generator reads when the document has to be rebuilt.
- *
- * <p>Alpine's own index also carries a {@code DESCRIPTION} member, naming the branch it was built for. This one
- * does not: the description is Alpine's own release metadata and a repository that is not Alpine has nothing true
- * to put there. The signature member it also carries <em>is</em> written - see {@link ApkSigner}.
+ * <p>No {@code DESCRIPTION} member: that is Alpine's own release metadata. The signature member is written
+ * ({@link ApkSigner}).
  */
 final class ApkListings {
 
@@ -53,7 +45,7 @@ final class ApkListings {
 
     // ---- names ----
 
-    /** The index text of one repository and architecture - the client asks per architecture, so this is keyed so. */
+    /** The index text of one repository and architecture; the client asks per architecture. */
     static String index(String repo, String architecture) {
         return "apk/" + repo + "/" + architecture + "/APKINDEX";
     }
@@ -73,7 +65,7 @@ final class ApkListings {
         return "apk/" + repo + "/" + architecture + "/index";
     }
 
-    /** Where a package's rendered block is stored, so a later transition can re-decide it without the archive. */
+    /** Where a package's rendered block is stored, so a later transition re-decides it without the archive. */
     static String blockKey(String repo, String architecture, String file) {
         return "apk/" + repo + "/" + architecture + "/index/" + file;
     }
@@ -85,13 +77,8 @@ final class ApkListings {
 
     // ---- reading ----
 
-    /**
-     * Derive the archive from the index document, without holding either.
-     *
-     * <p>An {@code APKINDEX} is every package of one architecture, and the archive is a gzip of it - so the array
-     * form held the index, its tar blocks, its gzip and the assembled archive, four sizes of the same thing, on
-     * the write path of every publish. Each stage is a file now and the digests fall out of the assembly pass.
-     */
+    /** Derive the archive from the index document without holding either: each stage is a file, and the digests fall
+     *  out of the assembly pass. */
     private void derive(String repo, String architecture, StoredListing.Derived document) throws IOException {
         Path assembled = wrap(document::open, document.header().size());
         try {
@@ -119,17 +106,11 @@ final class ApkListings {
         }
     }
 
-    /**
-     * Re-derive the archive from the newest stored index - what a read inside the derivation's own window runs
-     * itself, so a client never fetches an archive older than the index beside it.
-     *
-     * <p>That matters more here than for a compressed twin elsewhere: an apk client verifies each downloaded
-     * package against the {@code C:} in the index it read, so an index older than the packages beside it is not a
-     * cosmetic staleness but a failed install.
-     */
+    /** Re-derive the archive from the newest stored index, which a read inside the derivation's window runs, so a
+     *  client never fetches an archive older than the index: a client checks each package against the {@code C:} it
+     *  read, so a stale index is a failed install. */
     void rederive(String repo, String architecture) throws IOException {
-        // Streamed from the stored index, never read whole: the same shape the Debian twin had on its rebuild leg,
-        // which the debian-gzip canary showed failing at three hundred thousand stanzas under 512 MiB.
+        // Streamed, never read whole: the index is every package of the architecture.
         Optional<StoredListing.Served> served = StoredListing.open(store, indexSpec(repo, architecture));
         if (served.isPresent()) {
             try (StoredListing.Served document = served.get()) {
@@ -141,18 +122,11 @@ final class ApkListings {
     /**
      * The archive a client downloads: a signature member, then an {@code APKINDEX} member.
      *
-     * <h2>The container, as an apk client reads it rather than as it looks</h2>
-     *
-     * <p>It is <b>one tar stream split across gzip members</b>, not two tars concatenated. The signature covers
-     * every byte after the first member, so the boundary has to be a gzip member boundary - but the tar inside runs
-     * straight through it, which means <b>only the last member carries the tar end-of-archive blocks</b> and none
-     * of them carries the 10 KiB record padding a tar writer adds by default.
-     *
-     * <p>Both were measured, and both are silent when wrong: an end-of-archive marker in the signature member makes
-     * a real {@code apk update} answer {@code BAD archive} while every Java tar reader parses the file happily,
-     * because a reader that opens each member separately never sees the seam. Alpine's own published index is two
-     * members of exactly 1024 and 2191872 uncompressed bytes - two blocks for the signature, and the index member
-     * ending in the two zero blocks - which is what this reproduces.
+     * <p>It is <b>one tar stream split across gzip members</b>, not two tars: the signature covers every byte after the
+     * first member, so the boundary is a gzip member boundary while the tar runs through it. <b>Only the last member
+     * carries the tar end-of-archive blocks</b>, and none the 10 KiB record padding. An end-of-archive marker in the
+     * signature member makes {@code apk update} answer {@code BAD archive} while every Java tar reader parses the file,
+     * since each opens the members separately.
      */
     byte[] wrap(byte[] index) throws IOException {
         Path assembled = wrap(() -> new ByteArrayInputStream(index), index.length);
@@ -163,13 +137,8 @@ final class ApkListings {
         }
     }
 
-    /**
-     * The signed archive as a file: the signature member, then the document member.
-     *
-     * <p>The signature is over the document member's bytes, so the document member is built first and then
-     * scanned by the signer - two passes over a file rather than one pass over four copies in heap. The signature
-     * member itself is a few hundred bytes and stays an array, which is what it is.
-     */
+    /** The signed archive as a file: the document member is built first and the signer scans it, two passes over a
+     *  file; the signature member is a few hundred bytes and stays an array. */
     private Path wrap(StoredListing.Body index, long size) throws IOException {
         Path document = member(APKINDEX, index, size, true);
         try {
@@ -190,13 +159,8 @@ final class ApkListings {
         }
     }
 
-    /**
-     * {@link #member(String, byte[], boolean)} over a body too large to hold, written to a file.
-     *
-     * <p>Identical output, and the same two corrections to {@link TarArchiveOutputStream}: the record padding and
-     * the end-of-archive blocks are cut by truncating the file where the array form truncated the array, and the
-     * entry's modification time is pinned so two archives derived from one unchanged document are byte-identical.
-     */
+    /** {@link #member(String, byte[], boolean)} over a body too large to hold, written to a file: the same output, with
+     *  the padding and end-of-archive blocks cut by truncating the file and the modification time pinned. */
     private static Path member(String name, StoredListing.Body content, long size, boolean end) throws IOException {
         Path blocks = OwnerOnly.createTempFile("jenrepo-apkindex", ".tar");
         try {
@@ -229,21 +193,16 @@ final class ApkListings {
         }
     }
 
-    /**
-     * One gzip member carrying one tar entry, cut to the exact block count it uses.
-     *
-     * <p>{@link TarArchiveOutputStream} pads its output to a 10 KiB record and writes the end-of-archive blocks on
-     * close, both of which are correct for a standalone tar and wrong for a member of this container - so the
-     * result is truncated to the header block plus the entry's own padded data, and the two zero blocks are kept
-     * only for the member that ends the stream.
-     */
+    /** One gzip member carrying one tar entry, cut to its block count: {@link TarArchiveOutputStream} pads to a 10 KiB
+     *  record and writes end-of-archive blocks on close, so the result is truncated to the header and the entry's
+     *  padded data, the two zero blocks kept only for the member ending the stream. */
     private static byte[] member(String name, byte[] content, boolean end) throws IOException {
         ByteArrayOutputStream raw = new ByteArrayOutputStream(content.length + 4 * BLOCK);
         try (TarArchiveOutputStream tar = new TarArchiveOutputStream(raw, "UTF-8")) {
             TarArchiveEntry entry = new TarArchiveEntry(name);
             entry.setSize(content.length);
-            // A tar entry's modification time defaults to now, which would make two archives derived from one
-            // unchanged document differ byte for byte - and every validator computed over them with it.
+            // Pinned, so two archives derived from one unchanged document are byte-identical, and so are their
+            // validators.
             entry.setModTime(0L);
             tar.putArchiveEntry(entry);
             tar.write(content);
@@ -266,12 +225,11 @@ final class ApkListings {
         refresh(repo, architecture, file, block);
     }
 
-    /** Re-decide one package's membership from the store's current state - after a hold, a release or a mark. */
+    /** Re-decide one package's membership from the store's current state. */
     void refresh(String repo, String architecture, String file) throws IOException {
         ByteArrayOutputStream buffer = new ByteArrayOutputStream();
         if (!blobs.read(blockKey(repo, architecture, file), buffer)) {
-            // No stored block: the package was never published through this format, or has been removed. Either way
-            // there is nothing to decide, and the key it would have been listed under is the file's own stem.
+            // No stored block: never published here, or removed; its key is the file's stem.
             StoredListing.remove(store, indexSpec(repo, architecture), stem(file));
             return;
         }
@@ -287,8 +245,7 @@ final class ApkListings {
         }
     }
 
-    /** Whether the package is served: its pointer is not withheld and its version is not yanked - the same screen
-     *  the download applies, so the index cannot advertise what the fetch refuses. */
+    /** Whether the package is served - pointer not withheld, version not yanked - the screen the download applies. */
     private boolean servable(String repo, String architecture, String file, String block) throws IOException {
         if (blobs.withheld(packageKey(repo, architecture, file))) {
             return false;
@@ -303,15 +260,9 @@ final class ApkListings {
                 .isEmpty();
     }
 
-    /**
-     * The index as it would be built from the stored blocks - the first materialisation and the repair path.
-     *
-     * <p><b>It collects deliberately.</b> Every other repository-wide generator streams into a {@code Sink},
-     * which owes ascending key order and takes that order from the scan. That does not hold here: the key is
-     * {@code ApkIndex.keyOf(block)}, read out of each file's <em>contents</em>, so the scan order and the key
-     * order are not two different orders - they are unrelated. The sorted map is what orders this document,
-     * and removing it would write a misordered one that nothing would report.
-     */
+    /** The index as built from the stored blocks: the first materialisation and the repair path. It collects: the key
+     *  is read from each block's contents, so scan order and key order are unrelated, and the sorted map is what orders
+     *  the document. */
     private SortedMap<String, byte[]> generate(String repo, String architecture) throws IOException {
         SortedMap<String, byte[]> entries = new TreeMap<>();
         String prefix = "apk/" + repo + "/" + architecture + "/index";

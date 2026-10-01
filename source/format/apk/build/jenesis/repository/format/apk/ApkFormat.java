@@ -26,32 +26,25 @@ import build.jenesis.repository.store.Publication;
 import build.jenesis.repository.format.Listings;
 
 /**
- * The Alpine {@code apk} repository - an {@code APKINDEX.tar.gz} beside {@code .apk} packages - so
- * {@code apk update} and {@code apk add} work over the shared store.
+ * The Alpine {@code apk} repository - an {@code APKINDEX.tar.gz} beside {@code .apk} packages - so {@code apk update}
+ * and {@code apk add} work over the shared store. It owns {@code /apk/<repo>/<arch>/...}: the index at
+ * {@code APKINDEX.tar.gz} and a package at {@code <name>-<version>.apk}. {@code /etc/apk/repositories} names
+ * {@code <base>/apk/<repo>} and the client appends {@code /<arch>/APKINDEX.tar.gz}, which is why the architecture is a
+ * path segment.
  *
- * <p>It owns {@code /apk/<repo>/<arch>/...}: the index at {@code APKINDEX.tar.gz} and a package at
- * {@code <name>-<version>.apk}. An operator points {@code /etc/apk/repositories} at {@code <base>/apk/<repo>} and
- * the client appends {@code /<arch>/APKINDEX.tar.gz} itself - which is why the architecture is a path segment here
- * rather than something this format chooses.
+ * <p><b>The coordinate comes from inside the package.</b> Name and version may both contain hyphens
+ * ({@code musl-1.2.5-r3} splits at neither the first nor the last), so the publish reads {@code pkgname} and
+ * {@code pkgver} from {@code .PKGINFO} and refuses a package whose metadata disagrees with its deploy path: a package
+ * screened under one name must not be served under another.
  *
- * <p><b>The coordinate comes from inside the package.</b> An {@code .apk} file name is {@code <name>-<version>.apk}
- * and both halves may contain hyphens - an Alpine version carries an {@code -rN} revision, so {@code musl-1.2.5-r3}
- * splits at neither the first hyphen nor the last. {@code .PKGINFO} states {@code pkgname} and {@code pkgver}
- * outright, so the publish reads them from there and refuses a package whose own metadata disagrees with the path
- * it was deployed to. That is the same screen-label rule the Debian, Composer and CocoaPods formats apply: a
- * package screened under one name must not be served under another.
+ * <p><b>The index is derived, not supplied.</b> Every field of an entry comes from the package's control segment or the
+ * stored bytes ({@link ApkIndex}, {@link ApkPackage}), so a publisher cannot describe an artifact as something other
+ * than what will be served.
  *
- * <p><b>What the index says is derived, not supplied.</b> Every field of an entry comes from the package's own
- * control segment or from the stored bytes, so a publisher cannot describe an artifact as something other than what
- * will be served. The derivation of each is recorded in {@link ApkIndex}, and both it and {@link ApkPackage} were
- * settled by rendering a real package and diffing the result against the block Alpine publishes for it.
- *
- * <p><b>The index is signed, and the key is the repository's own.</b> An {@code apk} client verifies
- * {@code APKINDEX.tar.gz} against a trusted RSA public key and reaches an unsigned repository only with
- * {@code --allow-untrusted}, which switches verification off for every repository that client uses. So the first
- * publish generates an RSA key pair, every derived archive carries a {@code .SIGN.RSA256.} member, and the public
- * half is served at {@code GET /apk/keys/jenesis.rsa.pub} for an operator to place in {@code /etc/apk/keys/}. See
- * {@link ApkSigner} for the scheme and how each part of it was checked against a real client.
+ * <p><b>The index is signed with the repository's own key.</b> A client reaches an unsigned repository only with
+ * {@code --allow-untrusted}, which disables verification for every repository it uses, so the first publish generates
+ * an RSA key pair, every archive carries a {@code .SIGN.RSA256.} member, and the public half is served at
+ * {@code GET /apk/keys/jenesis.rsa.pub} for {@code /etc/apk/keys/} ({@link ApkSigner}).
  */
 public final class ApkFormat implements RepositoryFormat, ArtifactLayout, BlobLayout, ArtifactSignatures, RepositoryExporter,
         RepositoryImporter, ProxyLeg {
@@ -66,20 +59,14 @@ public final class ApkFormat implements RepositoryFormat, ArtifactLayout, BlobLa
     /** The document a client fetches - the archive. */
     private static final String ARCHIVE = "APKINDEX.tar.gz";
 
-    /** The same index as plain text. No apk client asks for it; an operator diagnosing a repository does, and the
-     *  Debian format serves its {@code Packages} beside {@code Packages.gz} for the same reason. It is the stored
-     *  document itself, so the two can never disagree. */
+    /** The same index as plain text: no client asks for it, an operator diagnosing a repository does. It is the stored
+     *  document itself. */
     private static final String INDEX = "APKINDEX";
 
     private static final String APK = ".apk";
 
-    /**
-     * How much of a published package is read to find its control segment.
-     *
-     * <p>A control segment is a few kilobytes however large the payload - musl's is 523 compressed bytes behind a
-     * 666-byte signature - so this bounds the metadata read rather than the artifact. The package itself streams
-     * into the content-addressed store unbounded and is never held whole; only this prefix is.
-     */
+    /** How much of a published package is read to find its control segment, a few kilobytes whatever the payload: this
+     *  bounds the metadata read, while the package streams into the store unbounded. */
     private static final int CONTROL_PREFIX = 8 * 1024 * 1024;
 
     /** Where the public half of the repository's signing key is served, for {@code /etc/apk/keys/}. */
@@ -129,8 +116,7 @@ public final class ApkFormat implements RepositoryFormat, ArtifactLayout, BlobLa
         String rest = exchange.path().substring(PREFIX.length());
         String[] segments = rest.split("/");
         if (segments.length == 2 && segments[0].equals(KEYS) && segments[1].equals(ApkSigner.PUBLIC_KEY)) {
-            // Two segments, checked ahead of the repository routes below. A repository really called "keys" is
-            // unaffected: its own paths carry three segments and this one carries two.
+            // Two segments, checked first; a repository called "keys" has three-segment paths and is unaffected.
             servePublicKey(exchange, blobs);
             return;
         }
@@ -157,13 +143,9 @@ public final class ApkFormat implements RepositoryFormat, ArtifactLayout, BlobLa
 
     // ---- the write path ----
 
-    /**
-     * Publish one package.
-     *
-     * <p>The bytes stream straight into the content-addressed store, and only then is the stored blob reopened to
-     * read its control segment - the store-then-gate publish this product's packaged formats share. A package that
-     * fails a check is left as an orphan blob for the collector to reclaim, and nothing is pointed at it or listed.
-     */
+    /** Publish one package: the bytes stream into the content-addressed store, then the stored blob is reopened to read
+     *  its control segment. A package failing a check is an orphan blob for the collector, pointed at and listed by
+     *  nothing. */
     private void push(FormatExchange exchange, Blobs blobs, String repo, String architecture, String file)
             throws IOException {
         if (Keys.unsafe(repo) || Keys.unsafe(architecture) || Keys.unsafe(file)) {
@@ -175,8 +157,8 @@ public final class ApkFormat implements RepositoryFormat, ArtifactLayout, BlobLa
         try (InputStream stored = blobs.open(hash)) {
             read = ApkPackage.of(stored.readNBytes(CONTROL_PREFIX));
         } catch (RuntimeException | IOException malformed) {
-            // A package whose members do not parse within the bounded prefix is a malformed upload rather than a
-            // server error: nothing was pointed at, so answering 400 leaves the store exactly as it was.
+            // Members that do not parse within the bounded prefix are a malformed upload: a 400, with nothing pointed
+            // at.
             read = Optional.empty();
         }
         if (read.isEmpty()) {
@@ -190,9 +172,8 @@ public final class ApkFormat implements RepositoryFormat, ArtifactLayout, BlobLa
             return;
         }
         if (!file.equals(name.get() + "-" + version.get() + APK)) {
-            // The path is what a hold, a scan verdict and a licence screen name the artifact by; the index serves it
-            // under its .PKGINFO name. They must agree, or a package screened under one coordinate is served under
-            // another.
+            // The path names the artifact to holds, scans and licence screens, and the index serves the .PKGINFO name;
+            // they must agree.
             exchange.respond(400);
             return;
         }
@@ -204,10 +185,8 @@ public final class ApkFormat implements RepositoryFormat, ArtifactLayout, BlobLa
         long size = blobs.store().size("blobs/" + hash);
         String block = ApkIndex.entry(pkg, size);
         if (block.contains("\n\n")) {
-            // Blocks are separated by a blank line in the shared index, so a block carrying one would splice a
-            // second, fully publisher-chosen entry into it - a phantom package whose own C: and P: an apk client
-            // would trust. No .PKGINFO value can contain a newline (the file is parsed line by line), so this
-            // cannot trip on a real package; it refuses the shape rather than reasoning about who could reach it.
+            // A blank line separates blocks in the shared index, so a block carrying one would splice in a
+            // publisher-chosen entry. No .PKGINFO value can contain a newline, so a real package never trips this.
             exchange.respond(400);
             return;
         }
@@ -223,9 +202,8 @@ public final class ApkFormat implements RepositoryFormat, ArtifactLayout, BlobLa
 
     // ---- the read path ----
 
-    /** Whether nothing was ever published under this repository and architecture, so a read of its index is a local
-     *  miss - which is what lets a proxy repository fetch the upstream's - rather than an empty document materialised
-     *  for it. The structural probe is paid only until the index exists. */
+    /** Whether nothing was published under this repository and architecture, so an index read is a local miss a proxy
+     *  repository fills from upstream rather than an empty document. The probe is paid only until the index exists. */
     private static boolean unpublished(Blobs blobs, String repo, String architecture) throws IOException {
         return !StoredListing.present(blobs.store(), ApkListings.index(repo, architecture))
                 && blobs.isEmpty(ApkListings.blocks(repo, architecture));
@@ -238,8 +216,7 @@ public final class ApkFormat implements RepositoryFormat, ArtifactLayout, BlobLa
             return;
         }
         ApkListings listings = new ApkListings(blobs);
-        // The archive is derived off the index write; a read compares its sequence with the index's (one header
-        // read) and derives it itself, once, when it arrived inside that window.
+        // A read inside the derivation's window derives the archive once.
         Optional<StoredListing.Header> index = StoredListing.header(blobs.store(),
                 ApkListings.index(repo, architecture));
         Optional<StoredListing.Served> served = StoredListing.openDerived(blobs.store(),
@@ -248,9 +225,8 @@ public final class ApkFormat implements RepositoryFormat, ArtifactLayout, BlobLa
             if (served.isPresent()) {
                 served.get().close();
             }
-            // rederive() reads the index through its spec, which materialises a listing that was never written -
-            // so a repository whose packages predate the stored listing answers from a rebuilt one rather than a
-            // 404.
+            // rederive() materialises a listing never written, so a repository whose packages predate it answers from a
+            // rebuilt one.
             listings.rederive(repo, architecture);
             served = StoredListing.openDerived(blobs.store(), ApkListings.archive(repo, architecture));
         }
@@ -263,13 +239,8 @@ public final class ApkFormat implements RepositoryFormat, ArtifactLayout, BlobLa
         }
     }
 
-    /**
-     * The public half of the key this repository's indexes are signed with.
-     *
-     * <p>It answers {@code 404} until something has been published, because the key is generated by the first
-     * publish - a repository that has served nothing has signed nothing, and inventing a key for it on a read
-     * would be a write on a read path for no one's benefit.
-     */
+    /** The public half of the key this repository's indexes are signed with; a {@code 404} until the first publish
+     *  generates it, since inventing one on a read would be a write on a read path. */
     private void servePublicKey(FormatExchange exchange, Blobs blobs) throws IOException {
         if (!exchange.method().equals("GET") && !exchange.method().equals("HEAD")) {
             exchange.respond(405);
@@ -307,9 +278,8 @@ public final class ApkFormat implements RepositoryFormat, ArtifactLayout, BlobLa
         }
     }
 
-    /** Answer with a stored listing, with the revalidation {@code apk update} lives on: the ETag is the stored
-     *  document's own digest, so a matching {@code If-None-Match} is answered from the header alone and a repeated
-     *  {@code apk update} against an unchanged repository transfers nothing. */
+    /** Answer with a stored listing, with the revalidation {@code apk update} relies on: the ETag is the document's
+     *  digest, so a matching {@code If-None-Match} is answered from the header. */
     private static void respondListing(FormatExchange exchange, StoredListing.Served served, String contentType)
             throws IOException {
         Listings.serve(exchange, served, contentType);
@@ -338,24 +308,18 @@ public final class ApkFormat implements RepositoryFormat, ArtifactLayout, BlobLa
     // ---- proxy ----
 
     /**
-     * Proxy a miss to an upstream Alpine repository, the directory one {@code /etc/apk/repositories} line names -
-     * {@code https://dl-cdn.alpinelinux.org/alpine/v3.20/main}, say. The local repository name is a deployment's alias
-     * for it, so a request {@code /apk/<repo>/<architecture>/<file>} maps to {@code <upstream>/<architecture>/<file>}.
-     * Every target is composed that way, so nothing an upstream advertises is followed.
+     * Proxy a miss to an upstream Alpine repository, the directory one {@code /etc/apk/repositories} line names; the
+     * local repository name is an alias for it, so {@code /apk/<repo>/<architecture>/<file>} maps to
+     * {@code <upstream>/<architecture>/<file>} and nothing an upstream advertises is followed.
      *
-     * <p>{@code APKINDEX.tar.gz} is an ENUMERATION - every package a client can install - so it is fetched fresh on
-     * each read and only an upstream that answered 404/410 reaches the client as a 404. It is relayed as it is: it
-     * names no URLs, and it is signed with the upstream's key, which is the key a client of that upstream trusts.
+     * <p>{@code APKINDEX.tar.gz} is an ENUMERATION, fetched fresh, and only an upstream 404/410 reaches the client as a
+     * 404. It is relayed as is, signed with the upstream's key.
      *
-     * <p>A package is PINNED, and held to what that index declares for it - a separate document. Its {@code C:} is a
-     * checksum of the package's control member only, so a package is checked twice: the control member against
-     * {@code C:}, and the data member against the {@code datahash} the control member carries. Together they cover
-     * every byte a client installs. An index this repository could not read declines the fill; one that answered
-     * without listing the package leaves it unverified, as a package the index does not name is one no client
-     * resolves to; a mismatch is refused. The bytes are stored as they stream and linked only once they pass.
-     *
-     * <p>A proxied package does not join this repository's index, so the index a client reads through a proxy stays
-     * the upstream's.
+     * <p>A package is PINNED and held to that index: its control member against {@code C:}, and its data member against
+     * the {@code datahash} the control member carries, together covering every installed byte. An unreadable index
+     * declines the fill; one that does not list the package leaves it unverified, no client resolving to it; a mismatch
+     * is refused. The bytes are stored as they stream and linked only once they pass. A proxied package does not join
+     * this repository's index.
      */
     @Override
     public boolean pullThrough(FormatExchange exchange, ArtifactStore store, URI upstream,
@@ -477,11 +441,9 @@ public final class ApkFormat implements RepositoryFormat, ArtifactLayout, BlobLa
 
     // ---- layout ----
 
-    /**
-     * An {@code .apk} may carry a bare RSA signature as its first member, over the control segment's compressed
-     * bytes - optional here, since a package from a build with no key carries none, and what the client verifies
-     * against its {@code /etc/apk/keys/} this deployment verifies against its trusted public keys.
-     */
+    /** An {@code .apk} may carry a bare RSA signature as its first member, over the control segment's compressed bytes:
+     *  optional, and verified against this deployment's trusted public keys as a client verifies it against
+     *  {@code /etc/apk/keys/}. */
     @Override
     public List<ArtifactSignatures.Expectation> expects(String path) {
         return describe(path).map(described -> described.coordinate() != null)
@@ -524,8 +486,8 @@ public final class ApkFormat implements RepositoryFormat, ArtifactLayout, BlobLa
         if (segments.length != 3) {
             return Optional.empty();
         }
-        // The file name is not authoritative - .PKGINFO is - but the publish has already refused a package whose
-        // metadata disagrees with the path it was deployed to, so for a stored artifact the two are the same fact.
+        // .PKGINFO is authoritative, but the publish refused a package disagreeing with its path, so the name is the
+        // same fact.
         String[] split = split(ApkListings.stem(segments[2]));
         if (split == null) {
             return Optional.of(ArtifactDescriptor.at(ECOSYSTEM, path));
@@ -534,15 +496,10 @@ public final class ApkFormat implements RepositoryFormat, ArtifactLayout, BlobLa
                 "application/octet-stream", false, null, -1L));
     }
 
-    /**
-     * Split {@code <name>-<version>} the way Alpine's own grammar does.
-     *
-     * <p>An Alpine version is {@code <upstream>-r<build>}, always, so the version is the <em>last two</em>
-     * hyphen-separated segments when the final one is {@code r} and digits. Neither of the two rules that look
-     * obvious works: splitting at the first {@code -<digit>} breaks a name like {@code libx11-6}, and splitting at
-     * the last one puts the revision in the coordinate. A stem with no {@code -rN} tail is not an Alpine package
-     * file name and gets no coordinate rather than a guessed one.
-     */
+    /** Split {@code <name>-<version>} by Alpine's grammar: a version is always {@code <upstream>-r<build>}, so it is
+     *  the last two hyphen-separated segments when the final one is {@code r} and digits. Splitting at the first
+     *  {@code -<digit>} breaks {@code libx11-6}, at the last puts the revision in the coordinate; a stem with no
+     *  {@code -rN} tail gets no coordinate. */
     private static String[] split(String stem) {
         int revision = stem.lastIndexOf('-');
         if (revision <= 0 || revision + 2 >= stem.length() || stem.charAt(revision + 1) != 'r') {
@@ -562,8 +519,7 @@ public final class ApkFormat implements RepositoryFormat, ArtifactLayout, BlobLa
 
     @Override
     public List<String> paths(String coordinate, String version, ArtifactStore store) {
-        // An apk pointer lives in the blobs namespace rather than under publish/, so the coordinate seam this format
-        // really has is BlobLayout's - see blobKeys below, which is what an eviction and a compliance read follow.
+        // An apk pointer lives in the blobs namespace, so the coordinate seam is BlobLayout's (blobKeys).
         return List.of();
     }
 
@@ -593,20 +549,9 @@ public final class ApkFormat implements RepositoryFormat, ArtifactLayout, BlobLa
     /**
      * {@inheritDoc}
      *
-     * <p>This layout's pointer key <em>is</em> its served path without the leading slash - {@link #servedPaths}
-     * composes one from the other - so the request-path describer is already the parse, and writing a second one
-     * here would be two spellings of one grammar with nothing holding them together. The description is re-keyed to
-     * the pointer, because what a repair rebuilding the inventory row holds is the key, not the request path.
-     *
-     * <p><b>Only when the description actually names a version.</b> The two describers have different contracts:
-     * {@code describe} answers about any path this format serves and falls back to a coordinate-less descriptor for
-     * the indexes and checksums beside the artifacts, while this one must answer <em>empty</em> for those - a
-     * repair walking the blob root asks about every key it meets, and a present descriptor with no coordinate is
-     * an absence dressed as a claim. The filter is what keeps the delegation honest.
-     *
-     * <p>{@code BlobLayoutCoordinateSeamTest} drives this over keys this layout really wrote and over the folders
-     * above them, so both halves are checked rather than asserted: if the two shapes ever stop coinciding the round
-     * trip names the wrong coordinate, and if the filter goes the parent of a pointer is claimed as one.
+     * <p>The pointer key is the served path without its leading slash, so the request-path parse is reused and the
+     * description re-keyed to the pointer. Only when it names a version: {@code describe} falls back to a
+     * coordinate-less descriptor for indexes and checksums, which a repair walking the blob root must read as empty.
      */
     @Override
     public Optional<ArtifactDescriptor> describePointer(String key) {

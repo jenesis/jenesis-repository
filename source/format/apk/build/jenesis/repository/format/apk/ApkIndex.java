@@ -3,20 +3,11 @@ package build.jenesis.repository.format.apk;
 import module java.base;
 
 /**
- * One {@code APKINDEX} entry, rendered from a package's own {@code .PKGINFO}.
- *
- * <h2>The mapping, measured against Alpine's published index</h2>
- *
- * <p>Every field below was checked by rendering {@code musl-1.2.5-r3.apk} and comparing the result with the block
- * {@code dl-cdn.alpinelinux.org} publishes for it. Two are worth stating because they are easy to swap:
- * <b>{@code S:} is the size of the {@code .apk} file</b> (musl: 408308) while <b>{@code I:} is the installed
- * size</b>, which is {@code .PKGINFO}'s own {@code size} (musl: 667648). Taking either from the other produces an
- * index that parses and lies.
- *
- * <p>Key order follows Alpine's own, because an index is read by line prefix and not by position - so the order is
- * cosmetic to a client and load-bearing to a person diffing two indexes. {@code D:} and {@code p:} are
- * space-joined from the repeatable {@code depend} and {@code provides} entries; a package declaring none omits the
- * line rather than emitting an empty one, which is what Alpine does and what keeps a rendered block comparable.
+ * One {@code APKINDEX} entry, rendered from a package's {@code .PKGINFO}, matching the block Alpine publishes for the
+ * same package. <b>{@code S:} is the size of the {@code .apk} file</b> and <b>{@code I:} the installed size</b>,
+ * {@code .PKGINFO}'s {@code size}; swapping them gives an index that parses and lies. Keys follow Alpine's order, which
+ * a client ignores and a person diffing indexes does not. {@code D:} and {@code p:} join the repeatable {@code depend}
+ * and {@code provides}; a package declaring none omits the line, as Alpine does.
  */
 final class ApkIndex {
 
@@ -43,9 +34,8 @@ final class ApkIndex {
     /**
      * The block for one package.
      *
-     * @param pkg   the package, read from its own control segment.
-     * @param bytes the size of the {@code .apk} as stored - {@code S:}, which is a fact about the file rather than
-     *              anything the package declares about itself, so it is passed in rather than read.
+     * @param pkg the package, read from its control segment
+     * @param bytes the stored size of the {@code .apk}, {@code S:}, a fact about the file rather than the package
      */
     static String entry(ApkPackage pkg, long bytes) {
         StringBuilder block = new StringBuilder();
@@ -70,14 +60,9 @@ final class ApkIndex {
         }
     }
 
-    /**
-     * The key a block is listed under: {@code <name>-<version>}, which is exactly the {@code .apk} file's stem.
-     *
-     * <p>Not the package name alone. An {@code APKINDEX} carries a block per package <em>version</em> - a
-     * repository holding two versions of one package holds two blocks - so keying by {@code P:} would make the
-     * second publish replace the first, and the index would then advertise one version of a package the repository
-     * serves two of.
-     */
+    /** The key a block is listed under, {@code <name>-<version>}, the {@code .apk} file's stem. Not the name alone: an
+     *  {@code APKINDEX} carries a block per version, and keying by name would let a second version replace the
+     *  first. */
     static String keyOf(String block) {
         String name = field(block, "P"), version = field(block, "V");
         if (name == null) {

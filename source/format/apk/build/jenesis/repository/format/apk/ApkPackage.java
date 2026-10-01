@@ -7,36 +7,27 @@ import build.jenesis.repository.format.ArtifactSignatures;
 import build.jenesis.repository.store.ArchiveInflation;
 
 /**
- * What an {@code .apk} says about itself: the {@code .PKGINFO} in its control segment, and the checksum an index
- * entry is keyed by.
+ * What an {@code .apk} says about itself: the {@code .PKGINFO} in its control segment, and the checksum an index entry
+ * is keyed by.
  *
- * <h2>The file, as measured rather than remembered</h2>
+ * <p>An {@code .apk} is <b>concatenated gzip members</b>, each a tar: a signature, a control segment carrying
+ * {@code .PKGINFO}, and the data; an unsigned package, as {@code abuild} produces before signing, has two.
  *
- * <p>An {@code .apk} is not one archive. It is <b>concatenated gzip members</b>, each a tar: a signature, a
- * control segment carrying {@code .PKGINFO}, and the data. Measured against
- * {@code musl-1.2.5-r3.apk} from {@code dl-cdn.alpinelinux.org}: three members of 666, 523 and 407119 compressed
- * bytes. An unsigned package, which is what {@code abuild} produces before signing, has two.
+ * <p><b>The index checksum is over the control member's compressed bytes:</b> {@code C:} is
+ * {@code "Q1" + base64(SHA-1(...))} of the raw gzip bytes of the control member - not of the signature, nor of the tar
+ * it decompresses to - which is what reproduces the {@code C:} of Alpine's published index.
  *
- * <p><b>The index checksum is over the control member's compressed bytes.</b> {@code C:} is
- * {@code "Q1" + base64(SHA-1(...))} of the <em>raw gzip bytes of the control member</em> - not of the signature,
- * and not of the tar the member decompresses to. That was settled by computing all three candidates for musl and
- * comparing them with the {@code C:} Alpine's own published index carries: only the control member's compressed
- * bytes reproduce {@code Q1HKAydGWsHv3gc5d0f9s6k+BlyNY=}. It is the kind of detail that is easy to get plausibly
- * wrong, so the derivation is recorded here beside the code that does it.
- *
- * <p>Finding the member boundary needs the <em>compressed</em> length, which a decompressing stream does not
- * report. {@link Inflater#getRemaining()} does: after a member is inflated, what it has not consumed is the next
- * member, so the boundary is what it did consume. That is why this reads through {@link Inflater} directly rather
- * than through {@code GzipCompressorInputStream}, which buffers ahead and would overshoot.
+ * <p>Finding the member boundary needs the compressed length, which {@link Inflater#getRemaining()} gives: what it did
+ * not consume is the next member. Hence {@link Inflater} directly rather than {@code GzipCompressorInputStream}, which
+ * reads ahead.
  */
 final class ApkPackage {
 
-    /** The prefix Alpine gives a SHA-1 checksum in an index; the {@code 1} is the hash generation, not a version. */
+    /** The prefix Alpine gives a SHA-1 checksum; the {@code 1} is the hash generation. */
     private static final String Q1 = "Q1";
 
-    /** How much of a package this will read before giving up. A control segment is a few kilobytes - musl's is 523
-     *  compressed - so a package that has not produced one by here is not one this can describe, and reading further
-     *  would be reading a payload to find metadata that is not in it. */
+    /** How much of a package is read before giving up: a control segment is a few kilobytes, so one not found by here
+     *  is not there. */
     private static final int CONTROL_SEARCH_LIMIT = 8 * 1024 * 1024;
 
     private final Map<String, List<String>> fields;
@@ -65,25 +56,16 @@ final class ApkPackage {
         return checksum;
     }
 
-    /** Where the data member starts: the byte after the control member, from which to the end of the package the
-     *  {@code datahash} of {@code .PKGINFO} is computed. */
+    /** Where the data member starts, the byte after the control member, from which to the end the {@code datahash} is
+     *  computed. */
     int dataOffset() {
         return dataOffset;
     }
 
-    /**
-     * Read a package from the bytes of its front.
-     *
-     * <p>It takes an array rather than a stream because the checksum is over a byte <em>range</em>, which a reader
-     * only knows the end of once it has inflated past it. The caller passes a bounded prefix: the control segment is
-     * a few kilobytes whatever the payload weighs, so a prefix is all this needs and a package is never held whole.
-     *
-     * <p><b>The control is the first member carrying {@code .PKGINFO}</b>, not a member counted from either end. A
-     * signed package has three members and an unsigned one has two, so counting from the front is wrong for one of
-     * them; counting from the back is right for both but has to reach the back, which means inflating the payload to
-     * find metadata that is not in it. Asking each member in turn what it contains stops at the second member at the
-     * latest and never touches the data segment.
-     */
+    /** Read a package from the bytes of its front: an array, since the checksum covers a byte range whose end is known
+     *  only after inflating past it. The caller passes a bounded prefix. <b>The control is the first member carrying
+     *  {@code .PKGINFO}</b>, not one counted from an end: a signed package has three members and an unsigned one two,
+     *  and asking each in turn stops by the second without touching the data. */
     static Optional<ApkPackage> of(byte[] bytes) throws IOException {
         int offset = 0;
         while (offset < bytes.length && offset < CONTROL_SEARCH_LIMIT) {
@@ -100,9 +82,8 @@ final class ApkPackage {
         return Optional.empty();
     }
 
-    /** The {@code C:} of a control member: SHA-1 over its compressed bytes, base64, behind {@code Q1}. */
-    /** A package's signature member and what it covers: the member's name and bytes from the first (signature) gzip
-     *  member, and the offset and length of the control member's raw gzip bytes - which is what {@code apk} signs. */
+    /** A package's signature: the member's name and bytes from the first gzip member, and the offset and length of the
+     *  control member's raw gzip bytes, which is what {@code apk} signs. */
     record Signature(String member, byte[] bytes, int controlOffset, int controlLength) {
     }
 
@@ -144,6 +125,7 @@ final class ApkPackage {
         return Optional.empty();
     }
 
+    /** The {@code C:} of a control member: SHA-1 over its compressed bytes, base64, behind {@code Q1}. */
     private static String checksumOf(byte[] bytes, int offset, int length) {
         try {
             MessageDigest sha1 = MessageDigest.getInstance("SHA-1");

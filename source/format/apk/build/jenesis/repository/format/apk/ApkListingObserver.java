@@ -10,10 +10,9 @@ import build.jenesis.repository.store.ListingObserver;
 import build.jenesis.repository.store.StoredListing;
 
 /**
- * Keeps the {@linkplain ApkListings stored APKINDEX} in step with the transitions that happen off the publish path -
- * a hold on a published package and its release, a yank and its reversal, a removal - by re-deciding the one
- * package's block. A transition naming neither a package path nor an Alpine coordinate regenerates this format's
- * documents in place, which is the only honest answer to a subject that is a bare content hash.
+ * Keeps the {@linkplain ApkListings stored APKINDEX} in step with transitions off the publish path - a hold and its
+ * release, a yank and its reversal, a removal - by re-deciding the one package's block. A subject naming neither a
+ * package path nor an Alpine coordinate, such as a bare content hash, regenerates the documents in place.
  */
 public final class ApkListingObserver implements ListingObserver {
 
