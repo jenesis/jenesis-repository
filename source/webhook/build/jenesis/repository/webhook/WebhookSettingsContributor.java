@@ -5,14 +5,9 @@ import build.jenesis.repository.settings.Setting;
 import build.jenesis.repository.settings.SettingsContributor;
 
 /**
- * Describes the event-webhook settings, so they surface on the settings screens exactly when this module is
- * installed. The endpoints dial is {@link Setting.Scope#TENANT tenant-scoped} - webhooks are per-tenant, so a
- * tenant registers its own callbacks over its own artifact space - while the master switch and the drain's cadence
- * and retry cap are deployment-global. The {@code webhook} flag is the module's enablement {@link Setting#gate()
- * gate}, so the modules console pairs the module with its toggle without a maintained table.
- *
- * <p>The cadence entry renders its key and default straight off {@link WebhookDeliveryTaskProvider}'s
- * {@code IntervalSetting} constant, so the catalogue and the code cannot drift.
+ * Describes the webhook settings. The endpoints dial is {@link Setting.Scope#TENANT tenant-scoped}, a tenant
+ * registering its own callbacks; the switch, cadence and retry cap are deployment-global. The {@code webhook} flag is
+ * the module's {@link Setting#gate() gate}. The cadence renders from {@link WebhookDeliveryTaskProvider}'s constant.
  */
 public final class WebhookSettingsContributor implements SettingsContributor {
 

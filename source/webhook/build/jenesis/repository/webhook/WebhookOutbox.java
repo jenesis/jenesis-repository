@@ -8,13 +8,10 @@ import build.jenesis.repository.store.ArtifactStore;
 import tools.jackson.databind.json.JsonMapper;
 
 /**
- * The webhook outbox: the events still to be delivered to an endpoint, and the parked backlog of those that
- * terminally failed - one {@link build.jenesis.repository.outbox.Outbox} keyed by event id.
- *
- * <p>What is the webhook module's here is the {@link Entry} - the event, its detail and which endpoints have taken
- * it - and its identity, a stamp of the occurrence milli and a digest of the event so distinct events never collide
- * and an exact re-emit within the same milli dedupes to one entry. The id is already a safe object name, so it is
- * stored under itself. The protocol is the shared class's; this file carries no copy of it.
+ * The webhook outbox: the events still to deliver, and the parked backlog of those that terminally failed - one
+ * {@link build.jenesis.repository.outbox.Outbox} keyed by event id. This module's part is the {@link Entry} - the
+ * event, its detail and which endpoints took it - and its identity, the occurrence milli and a digest of the event, so
+ * distinct events never collide and an exact re-emit within the milli dedupes. The protocol is the shared class's.
  */
 public final class WebhookOutbox extends build.jenesis.repository.outbox.Outbox<WebhookOutbox.Entry> {
 
@@ -80,23 +77,20 @@ public final class WebhookOutbox extends build.jenesis.repository.outbox.Outbox<
                     event.path(), detail, occurredAt, 0, 0L, false, "", Set.of(), 0L);
         }
 
-        /** Whether this entry is still eligible for a delivery attempt at {@code nowMillis} - not parked and past
-         *  its backoff window. */
+        /** Whether this entry may be attempted at {@code nowMillis}: not parked and past its backoff. */
         public boolean eligible(long nowMillis) {
             return !parked && nowMillis >= nextAttemptMillis;
         }
 
-        /** This entry with its delivered-endpoint set replaced (delivery progress), every other field preserved. */
+        /** This entry with its delivered-endpoint set replaced. */
         Entry withDelivered(Set<String> endpoints) {
             return new Entry(id, type, ecosystem, coordinate, version, path, detailJson, occurredAt,
                     attempts, nextAttemptMillis, parked, lastError, endpoints, parkedAtMillis);
         }
 
-        /** This entry after a failed delivery pass: one attempt bumped, the backoff window extended exponentially
-         *  (doubling {@code baseMillis}, capped at {@code capMillis}) and the entry parked once the attempt cap is
-         *  hit, so a terminally-failing delivery stops retrying but stays queued for the status surface. The park
-         *  instant is stamped on the transition and then carried, never restamped: a parked entry that keeps being
-         *  written over must not have its retention window reset each time, or a backlog would never age out. */
+        /** This entry after a failed pass: an attempt bumped, the backoff doubled from {@code baseMillis} up to
+         *  {@code capMillis}, and parked at the attempt cap. The park instant is stamped on the transition and then
+         *  carried, so rewrites never reset its retention window. */
         Entry withFailure(long nowMillis, long baseMillis, long capMillis, int maxAttempts, String error) {
             int next = attempts + 1;
             long backoff = Math.min(capMillis, baseMillis * (1L << Math.min(next - 1, 20)));
@@ -106,9 +100,8 @@ public final class WebhookOutbox extends build.jenesis.repository.outbox.Outbox<
                     next, nowMillis + backoff, parking, error, delivered, parkedAt);
         }
 
-        /** This entry unparked for another try: the attempt count and backoff cleared and the park lifted, so the next
-         *  drain picks it up again - but its already-delivered endpoint set is kept, so an operator retry re-sends only
-         *  to the endpoints that never took it, never to those that already did. */
+        /** This entry unparked: attempts and backoff cleared, the delivered set kept, so a retry re-sends only where it
+         *  was not taken. */
         @Override
         public Entry unparked() {
             return new Entry(id, type, ecosystem, coordinate, version, path, detailJson, occurredAt,
@@ -116,14 +109,12 @@ public final class WebhookOutbox extends build.jenesis.repository.outbox.Outbox<
         }
     }
 
-    /** Queue an event for delivery; an exact re-emit (same identity within the same milli) replaces its own pending
-     *  note rather than duplicating it. */
+    /** Queue an event; an exact re-emit within the same milli replaces its own note. */
     public void record(RepositoryEvent event) throws IOException {
         record(Entry.fresh(event));
     }
 
-    /** A stable, traversal-free object name for an event: its occurrence milli and a digest of its identity, so
-     *  distinct events never collide and an exact-duplicate re-emit within the same milli dedupes to one entry. */
+    /** A stable, traversal-free object name for an event: its occurrence milli and a digest of its identity. */
     private static String identity(String type, String path, String coordinate, String version, String detail,
                                    long millis) {
         String material = type + '\0' + n(path) + '\0' + n(coordinate) + '\0' + n(version) + '\0' + n(detail);

@@ -1,21 +1,11 @@
 /**
- * Event webhooks as a plugin module: it turns the discovered {@link build.jenesis.repository.events.EventSink}
- * seam into per-tenant outbound HTTP callbacks, so an external system (CI, chat, a SIEM) reacts to a publish,
- * quarantine, finding or promotion without polling. It is a pure <em>delivery</em> module: every event reaches it
- * through the seam's own {@code emit} fan-out, including the publish and unpublish legs, whose producer lives beside
- * the seam where every installed sink can see it rather than in a
- * {@link build.jenesis.repository.store.PublicationObserver} of this module's own. It never blocks the request path -
- * the
- * {@link build.jenesis.repository.webhook.WebhookSink} it provides only leaves a small
- * note in a store-backed {@link build.jenesis.repository.webhook.WebhookOutbox} under the event's own scoped store
- * (store-only state, no database) - and a discovered {@link build.jenesis.repository.maintenance.MaintenanceTaskProvider}
- * answering to {@code webhook} drains it under an exclusive lease, delivering each queued event to the tenant's
- * configured endpoints over {@code java.net.http} with an HMAC-SHA256 signature, an event-type filter, exponential
- * backoff and a terminal park - at-least-once and idempotent, the delivered-endpoint set kept per entry so a retry
- * re-sends only to the endpoints that never took it. The event payload is small metadata (never an artifact body),
- * and the endpoints are one per-tenant {@link build.jenesis.repository.settings.SettingsContributor} dial, so a
- * deployment without this module emits nothing and a deployment with it but no configured endpoint delivers
- * nothing and accumulates no outbox state.
+ * Event webhooks as a plugin module: the discovered {@link build.jenesis.repository.events.EventSink} seam becomes
+ * per-tenant outbound HTTP callbacks, so CI, chat or a SIEM reacts to a publish, quarantine, finding or promotion
+ * without polling. The {@link build.jenesis.repository.webhook.WebhookSink} only writes a note in a store-backed
+ * {@link build.jenesis.repository.webhook.WebhookOutbox}, and a
+ * {@link build.jenesis.repository.maintenance.MaintenanceTaskProvider} answering to {@code webhook} drains it under an
+ * exclusive lease: HMAC-SHA256 signed, filtered by event type, with exponential backoff and a terminal park, at least
+ * once. The payload is small metadata and the endpoints a per-tenant setting.
  *
  * @jenesis.bom pin-repository.properties
  * @jenesis.signature signature-repository.properties
@@ -24,8 +14,7 @@
 module build.jenesis.repository.webhook {
     requires build.jenesis.repository.net.http;
     requires build.jenesis.repository.store;
-    // transitive: this module's Outbox IS an outbox.Outbox, so its Queued and Window are the shared
-    // module's nested types and every consumer that names them must read it.
+    // Transitive: this module's outbox is an outbox.Outbox, whose nested types consumers name.
     requires transitive build.jenesis.repository.outbox;
     requires build.jenesis.repository.events;
     requires build.jenesis.repository.maintenance;
