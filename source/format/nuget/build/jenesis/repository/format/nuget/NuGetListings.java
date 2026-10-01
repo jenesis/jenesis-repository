@@ -16,17 +16,13 @@ import tools.jackson.databind.JsonNode;
 import build.jenesis.repository.format.Semver;
 
 /**
- * A NuGet package's served documents as stored listings: the flat-container version list ({@code index.json},
- * entries by version), the registration index (one page, entries by version, each a leaf whose URLs name the
- * registry's base and so carry the {@value #BASE} placeholder completed on the way out), and the repository-wide
- * search document, whose entries are one record per package id naming its servable versions - the document the
- * search service filters and windows in memory instead of scanning the id space per request.
+ * A NuGet package's served documents as stored listings: the flat-container version list ({@code index.json}), the
+ * registration index (one page of version leaves whose URLs carry the {@value #BASE} placeholder, completed on the way
+ * out), and the repository-wide search document, a record per package id naming its servable versions.
  *
- * <p>A version is listed exactly when its {@code .nupkg} pointer is not withheld - the screen the on-read generation
- * applied per version; a lifecycle mark does not unlist a version but renders its registration leaf unlisted or
- * deprecated. A write to a package's version list re-derives its search record from the stored list, so a publish
- * costs one rewrite of the package's two documents and one of the search document, never a scan of the other
- * packages.
+ * <p>A version is listed exactly when its {@code .nupkg} pointer is not withheld; a lifecycle mark renders its leaf
+ * unlisted or deprecated. A write to a package's version list re-derives its search record, so a publish rewrites the
+ * package's two documents and the search document, never scanning other packages.
  */
 final class NuGetListings {
 
@@ -76,14 +72,8 @@ final class NuGetListings {
                         .getBytes(StandardCharsets.UTF_8);
             }
 
-            /**
-             * The same document, written as the elements arrive.
-             *
-             * <p>{@code RECORDS} is the search document, which is every package in the repository - so without
-             * this the inherited appender collected all of them into a map and joined that into one string. A
-             * codec implementing only {@code split} and {@code join} silently turns a streaming generator above it
-             * back into a buffering one, which is what made the streamed search generator worth nothing.
-             */
+            /** The same document, written as the elements arrive: the search document is every package in the
+             *  repository, so it is never collected into a map. */
             @Override
             public Appender append(OutputStream out) {
                 return new Appender() {
@@ -116,15 +106,9 @@ final class NuGetListings {
                 };
             }
 
-            /**
-             * The stored elements, one at a time, out of the parser's bounded buffer.
-             *
-             * <p>An element here is an arbitrary JSON value rather than a name, so each is read as a tree and
-             * written back compactly rather than cut out of the source text as {@link #split} cuts it. That is the
-             * same bytes for a document this codec wrote - {@link #join} emits compact JSON and Jackson preserves
-             * member order - and it is what lets the read stay bounded, which cutting from source text cannot,
-             * since the text is the document.
-             */
+            /** The stored elements one at a time out of the parser's bounded buffer, each read as a tree and written
+             *  back compactly. For a document this codec wrote that is the same bytes, since {@link #join} emits
+             *  compact JSON and Jackson keeps member order. */
             @Override
             public Reader read(InputStream in, long ignored) throws IOException {
                 JsonParser parser = NuGetFormat.JSON.createParser(in);
@@ -166,8 +150,8 @@ final class NuGetListings {
         };
     }
 
-    /** The registration index of one package: one page whose items are the version leaves, in semantic-version order,
-     *  with {@code lower}/{@code upper} and the counts computed on join. */
+    /** The registration index of one package: one page of version leaves in semantic-version order, with
+     *  {@code lower}/{@code upper} and the counts computed on join. */
     static StoredListing.Codec registrationCodec(String id) {
         String self = BASE + "/v3/registrations/" + id + "/index.json";
         return new StoredListing.Codec() {
@@ -183,10 +167,8 @@ final class NuGetListings {
                 return entries;
             }
 
-            /** The leaves one at a time through a streaming parser, page by page: the listing mechanism reads the
-             *  index through this on every publish of the package, and without it falls back to the whole document
-             *  in heap - a fallback that fails a publish at fifty thousand versions in a 512 MiB container. The join
-             *  still collects, for the reason below. */
+            /** The leaves one at a time through a streaming parser, since the index is read on every publish of the
+             *  package. The join still collects, for the reason below. */
             @Override
             public Reader read(InputStream in, long ignored) throws IOException {
                 JsonParser parser = NuGetFormat.JSON.createParser(in);
@@ -249,20 +231,10 @@ final class NuGetListings {
                 };
             }
 
-            /**
-             * <b>This one collects, and no appender can replace it.</b>
-             *
-             * <p>A registration index lists its leaves in {@link Semver} order rather than the ascending id order
-             * a {@code Sink} delivers, and its page object names its own {@code lower} and {@code upper} bounds
-             * and counts - so both the order and the frame are functions of every entry. {@code spooling} defers
-             * opening bytes and does not reorder a body, so it does not apply.
-             *
-             * <p>What is held is one package's registration, bounded by a publisher rather than by the
-             * repository. That bound is the reason this is acceptable, and it is stated because a codec quietly
-             * lacking an appender is exactly the oversight that turned a streaming generator into a buffered one
-             * in six other formats - including {@code RECORDS} in this same file, which is the repository-wide
-             * search document and does stream.
-             */
+            /** <b>This one collects, and no appender can replace it.</b> A registration lists its leaves in
+             *  {@link Semver} order, not the ascending order a {@code Sink} delivers, and its page names its own bounds
+             *  and counts, so order and frame depend on every entry. What is held is one package's registration,
+             *  bounded by a publisher rather than by the repository. */
             @Override
             public byte[] join(SortedMap<String, byte[]> entries) {
                 List<String> versions = new ArrayList<>(entries.keySet());
@@ -305,9 +277,8 @@ final class NuGetListings {
 
     StoredListing.Spec versionsSpec(String id) {
         return StoredListing.Spec.materialising(versions(id), VERSIONS, () -> generateVersions(id)).deriving(document -> {
-            // Stated at the version list's sequence, so the rebuild pass's regeneration of the search document - a
-            // walk over every package's list, which can be a beat behind this write - never puts an older record
-            // over the one this derivation wrote.
+            // Stated at the version list's sequence, so the rebuild pass's regeneration of the search document, which
+            // can lag this write, never puts an older record over this one.
             SortedMap<String, byte[]> listed = VERSIONS.split(document.body());
             if (listed.isEmpty()) {
                 StoredListing.remove(store, searchSpec(), id, document.header().seq());
@@ -347,20 +318,14 @@ final class NuGetListings {
         return entries;
     }
 
-    /**
-     * Emit a search record per package, in the order the scan yields them.
-     *
-     * <p>The search document names every package in the repository, so collecting the records into a map would hold
-     * the repository. The scan's order is the sink's order - the store's lexicographic child order, which is the order
-     * the document needs.
-     */
+    /** Emit a search record per package in the scan's order, the store's lexicographic child order, which is the order
+     *  the document needs; the document is every package, so it is never collected. */
     private void generateSearch(StoredListing.Generator.Sink sink) throws IOException {
         ENTRIES.scan(store, "nuget", id -> {
             if (id.startsWith(".") || !id.equals(id.toLowerCase(Locale.ROOT))) {
                 return;     // the reserved hosted-publish marker (nuget/.hosted) is not a package id
             }
-            // Each package's version list, materialised if need be - without the derivation that would update the
-            // very document this generation is producing.
+            // Each package's version list, materialised without the derivation that would update this very document.
             Optional<StoredListing.Document> document = StoredListing.read(store,
                     StoredListing.Spec.materialising(versions(id), VERSIONS, () -> generateVersions(id)));
             if (document.isEmpty()) {
@@ -375,12 +340,9 @@ final class NuGetListings {
         });
     }
 
-    /** The stride the repository-wide index is enumerated in. It <b>drains</b>: the search document names every
-     *  package by definition, so neither the names nor the round-trips that fetch them may cap it, and what is
-     *  bounded is how many names are in hand at once. Capping either one silently omits packages - or, once the
-     *  entry cap alone was lifted, stopped omitting them and started throwing instead, at exactly
-     *  {@code steps x page} names. That is the ceiling the OCI tag canary hit at a million: a generator that raises
-     *  {@code TraversalException} does not answer short, it never materialises the document at all. */
+    /** The stride the repository-wide index is enumerated in. It drains: the search document names every package, so
+     *  neither names nor round-trips are capped - a cap would omit packages or throw and never materialise the document
+     *  - and only the names in hand are bounded. */
     private static final BoundedChildren ENTRIES = BoundedChildren.draining();
 
     // ---- rendering ----

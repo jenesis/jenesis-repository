@@ -34,29 +34,18 @@ import build.jenesis.repository.format.Semver;
 import build.jenesis.repository.xml.Xml;
 
 /**
- * The NuGet v3 format, so {@code dotnet nuget push} and {@code dotnet restore} work over the same store. It owns
- * {@code /nuget/...}: the service index ({@code GET /nuget/v3/index.json}) advertises the package-base-address (flat
- * container) and the publish endpoint, their absolute URLs built from the request so the {@code /<repo>/} segment
- * survives multi-tenant routing. A push ({@code PUT /nuget/v3/package}, a multipart {@code .nupkg}) reads the
- * package id and version from the {@code .nuspec} inside the archive and stores it under
- * {@code nuget/<id>/<version>/}; the flat container enumerates a package's versions and serves each {@code .nupkg}.
- * The multipart body is read through the shared streaming reader ({@link build.jenesis.repository.multipart.MultipartBody},
- * the same cursor the PyPI upload walks), so no hand-scan walks the binary {@code .nupkg} bytes; the {@code .nuspec} is
- * read with the JDK XML.
+ * The NuGet v3 format: {@code dotnet nuget push} and {@code dotnet restore} over the same store, under
+ * {@code /nuget/...}. The service index ({@code GET /nuget/v3/index.json}) advertises the flat container and the
+ * publish endpoint with absolute URLs built from the request, so the {@code /<repo>/} segment survives routing. A push
+ * ({@code PUT /nuget/v3/package}, a multipart {@code .nupkg} read through
+ * {@link build.jenesis.repository.multipart.MultipartBody}) reads the id and version from the {@code .nuspec} inside
+ * the archive and stores the package under {@code nuget/<id>/<version>/}; the flat container lists a package's versions
+ * and serves each {@code .nupkg}.
  */
 public final class NuGetFormat implements RepositoryFormat, ProxyLeg, BlobLayout, RepositoryImporter, ArtifactSignatures,
         RepositoryExporter {
 
     static final JsonMapper JSON = JsonMapper.builder().build();
-
-    // A hostile .nupkg cannot force a large allocation: a .nuspec is small metadata XML, read under the product's one
-    // archive-inflation ceiling, ArchiveInflation.largestEntry(), settable at jenrepo.archive.largest-entry - the same
-    // bound the NuGetQualityInspector applies, because it is one bound rather than two constants that agree by
-    // convention (RepositoryFormat contract clause 15, cross-format parity).
-
-    // How far the walk for the .nuspec may run is the product's one archive-walk bound, ArchiveWalk.largestWalk(),
-    // settable at jenrepo.archive.largest-walk - not a private constant of this format's, and not a number the
-    // compliance inspector mirrors by hand either (RepositoryFormat contract clause 15).
 
     @Override
     public String name() {
@@ -80,21 +69,10 @@ public final class NuGetFormat implements RepositoryFormat, ProxyLeg, BlobLayout
         return "NuGet";
     }
 
-    /**
-     * The coordinate version a stored NuGet pointer serves - the backwards direction the inventory back-fill
-     * rebuilds a lost {@code published} record from.
-     *
-     * <p>Unusually easy here, because the version is its own path segment: {@code blobKeys} composes
-     * {@code nuget/<id>/<version>/<id>.<version>.nupkg}, so the pair is read off the key rather than out of a
-     * filename. The trailing filename is not parsed at all - it repeats what the two segments already said.
-     *
-     * <p><b>The id is lower-cased, and that is the right answer rather than a lossy one.</b> It looked like a
-     * hazard: a reverse that lower-cases would rebuild a row under a different case from the one the publish
-     * wrote, which is a second row rather than the missing one restored. It does not, because {@link #describe}
-     * lower-cases too - so the accept path already records the row under the lower-cased id and this matches what
-     * is there. The two must stay in step; that is what the shared round-trip property in the format contract
-     * checks, over a really published version.
-     */
+    /** The coordinate version a stored NuGet pointer serves, from which the inventory back-fill rebuilds a lost
+     *  {@code published} record. The version is its own segment of {@code nuget/<id>/<version>/<id>.<version>.nupkg},
+     *  so the pair is read off the key. The id is lower-cased, as {@link #describe} lower-cases it, so the rebuilt row
+     *  is the one the publish wrote. */
     @Override
     public Optional<ArtifactDescriptor> describePointer(String key) {
         String marker = "nuget/";
@@ -120,8 +98,7 @@ public final class NuGetFormat implements RepositoryFormat, ProxyLeg, BlobLayout
 
     @Override
     public List<String> blobKeys(String coordinate, String version, ArtifactStore store) throws IOException {
-        // The .nupkg pointer at nuget/<id>/<version>/<id>.<version>.nupkg (the id lower-cased as the store keys it) and
-        // its precomputed dependency sidecar, so evicting a version reclaims both.
+        // The .nupkg pointer and its dependency sidecar, so evicting a version reclaims both.
         if (!BlobLayout.addressable(coordinate, version)) {
             return List.of();   // a traversal-shaped coordinate maps nowhere - these keys are what an eviction DELETES
         }
@@ -138,10 +115,9 @@ public final class NuGetFormat implements RepositoryFormat, ProxyLeg, BlobLayout
         return keys;
     }
 
-    /** The request path this package version's {@code .nupkg} serves at
-     *  ({@code /nuget/v3-flatcontainer/<id>/<version>/<id>.<version>.nupkg}), the inverse of {@link #describe} - a
-     *  retroactive hold links a {@code /quarantine} review handle there. The dependency sidecar is not a served
-     *  download and stays out. */
+    /** The request path this version's {@code .nupkg} serves at
+     *  ({@code /nuget/v3-flatcontainer/<id>/<version>/<id>.<version>.nupkg}), where a retroactive hold links its
+     *  {@code /quarantine} handle; the dependency sidecar is not a download. */
     @Override
     public List<String> servedPaths(String coordinate, String version, ArtifactStore store) throws IOException {
         if (!BlobLayout.addressable(coordinate, version)) {
@@ -149,19 +125,13 @@ public final class NuGetFormat implements RepositoryFormat, ProxyLeg, BlobLayout
         }
         String id = coordinate.toLowerCase(Locale.ROOT);
         String key = "nuget/" + id + "/" + version + "/" + id + "." + version + ".nupkg";
-        // The path itself is the store-free derivation below, so the live answer and the "would serve at" answer
-        // cannot drift; only the liveness probe is this leg's own.
+        // The path is the store-free derivation below; only the liveness probe is this leg's.
         return store.readVersioned(key).isPresent() ? servedPaths(coordinate, version) : List.of();
     }
 
-    /**
-     * The path this package version serves at, from the coordinate alone - a NuGet {@code .nupkg} is filed under its
-     * own id and version, so it is derivable without a store read. That is what lets the gate key a
-     * screen-time hold's audit row and held-subject record on the PACKAGE rather than on {@code /nuget/v3/package},
-     * the one push endpoint every push shares and the only descriptor the format can build before the {@code .nuspec}
-     * inside the body has been read: the reviewer's handle - which {@link #held} re-keys here once the coordinate IS
-     * readable - and the reviewer's reasons then name the same path.
-     */
+    /** The path this package version serves at, derived from the coordinate alone. The push endpoint is the only
+     *  descriptor the screen has before the {@code .nuspec} is read, so this lets the gate key a screen-time hold's
+     *  audit row and held-subject record on the package, the handle {@link #held} re-keys to. */
     @Override
     public List<String> servedPaths(String coordinate, String version) {
         return BlobLayout.addressable(coordinate, version)
@@ -170,13 +140,9 @@ public final class NuGetFormat implements RepositoryFormat, ProxyLeg, BlobLayout
     }
 
     /** The coordinate a flat-container request path carries
-     *  ({@code /nuget/v3-flatcontainer/<id>/<version>/<file>.nupkg}, the id lower-cased exactly as the store and
-     *  {@link #blobKeys} key it - the nuspec's original casing is not derivable from the path), so the inventory
-     *  records the release the retroactive enforcement sweeps enumerate the version by. The
-     *  service index, search, registrations and the flat-container version list ({@code .../index.json}) name no
-     *  versioned artifact and stay empty, as does the push endpoint (whose coordinate lives in the {@code .nuspec},
-     *  not the path) and a non-{@code .nupkg} file like the dependency sidecar. A {@code -} suffix in the version
-     *  marks a prerelease, the same convention {@link Semver#compare} ranks by. */
+     *  ({@code /nuget/v3-flatcontainer/<id>/<version>/<file>.nupkg}), the id lower-cased as the store keys it. The
+     *  service index, search, registrations, the version list, the push endpoint and the dependency sidecar name no
+     *  versioned artifact. A {@code -} in the version marks a prerelease, as {@link Semver#compare} ranks it. */
     @Override
     public Optional<ArtifactDescriptor> describe(String path) {
         if (!path.startsWith("/nuget/v3-flatcontainer/") || !path.endsWith(".nupkg")) {
@@ -194,7 +160,7 @@ public final class NuGetFormat implements RepositoryFormat, ProxyLeg, BlobLayout
                 "application/octet-stream", version.contains("-"), null, -1L));
     }
 
-    // An original CC0 line glyph (a package hexagon with a core) drawn for this project.
+    // An original CC0 line glyph (a package hexagon with a core).
     private static final IconResource ICON = IconResource.svg("""
             <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round">
               <path d="M12 2.5 20 7v10l-8 4.5L4 17V7z"/><circle cx="12" cy="12" r="3"/>
@@ -210,9 +176,8 @@ public final class NuGetFormat implements RepositoryFormat, ProxyLeg, BlobLayout
         return Optional.of(URI.create("https://api.nuget.org/"));
     }
 
-    /** The one resource this format accepts a package push at, relative to {@code /nuget/} - the address
-     *  {@link #index} advertises as {@code PackagePublish/2.0.0} and the address {@link #handle} routes a {@code PUT}
-     *  to, named once so the two can never offer and accept different endpoints. */
+    /** The one resource a push is accepted at, relative to {@code /nuget/}: what {@link #index} advertises as
+     *  {@code PackagePublish/2.0.0} and {@link #handle} routes a {@code PUT} to. */
     private static final String PUSH = "v3/package";
 
     /** The push endpoint as a request path, which is what a descriptor handed to the screen carries. */
@@ -236,15 +201,10 @@ public final class NuGetFormat implements RepositoryFormat, ProxyLeg, BlobLayout
             return;
         }
         if (exchange.method().equals("PUT")) {
-            // A push goes to the one resource the service index advertises as PackagePublish/2.0.0, and nowhere else
-            // The coordinate comes from the .nuspec rather than from the path, so without this check EVERY PUT under
-            // /nuget/ would be a package push - one at a mistyped or invented endpoint, and one at a read address like
-            // v3/index.json or a flat-container file, all published and all answered 201. None of them is a traversal
-            // (those are 404'd above) and none of them lands a wrong key either, because the layout reads the
-            // coordinate out of the package. What it costs is the honest refusal: a client
-            // configured against an endpoint this repository never offered is told its push succeeded, and only much
-            // later does anyone notice the packages went somewhere nobody was pointed at. An unadvertised address
-            // names nothing here, so it is this format's own 404 (contract clause 6).
+            // A push goes to the one advertised PackagePublish/2.0.0 resource and nowhere else. The coordinate comes
+            // from the .nuspec, so without this any PUT under /nuget/ would publish and answer 201, telling a
+            // misconfigured client its push succeeded; an unadvertised address is this format's 404 (contract clause
+            // 6).
             if (rest.equals(PUSH) || rest.equals(PUSH + "/")) {
                 push(exchange, blobs, store);
             } else {
@@ -286,10 +246,8 @@ public final class NuGetFormat implements RepositoryFormat, ProxyLeg, BlobLayout
                 "resources", List.of(
                         Map.of("@id", base + "/v3-flatcontainer/", "@type", "PackageBaseAddress/3.0.0"),
                         Map.of("@id", base + "/v3/registrations/", "@type", "RegistrationsBaseUrl/3.6.0"),
-                        // The official client selects a search service by exact type name from its own short list -
-                        // SearchQueryService/Versioned, /3.4.0 and /3.0.0-beta - and a source advertising only the
-                        // bare name or /3.0.0-rc is told to have no search service at all, which is how `dotnet
-                        // package search` answered this feed until the two the client looks for were added.
+                        // The official client selects a search service by exact type from SearchQueryService/Versioned,
+                        // /3.4.0 and /3.0.0-beta, and finds none if only the bare name or /3.0.0-rc is advertised.
                         Map.of("@id", base + "/v3/search", "@type", "SearchQueryService"),
                         Map.of("@id", base + "/v3/search", "@type", "SearchQueryService/3.0.0-beta"),
                         Map.of("@id", base + "/v3/search", "@type", "SearchQueryService/3.0.0-rc"),
@@ -299,40 +257,26 @@ public final class NuGetFormat implements RepositoryFormat, ProxyLeg, BlobLayout
         exchange.respond(200, json.getBytes(StandardCharsets.UTF_8));
     }
 
-    /**
-     * The republish policy handed to the hosted-publish operation, which evaluates it before the layout runs:
-     * {@code OVERWRITE}, since a NuGet coordinate is only known once the stored {@code .nuspec} has been parsed inside
-     * that layout. nuget.org refuses a version already pushed, and so does this: the refusal is taken at the link
-     * ({@link Blobs#linkOnce}), inside the pointer's compare-and-set, and answered with nuget.org's {@code 409}, which
-     * {@code dotnet nuget push --skip-duplicate} recognises. A re-push of the identical package converges.
-     */
+    /** The republish policy for the hosted publish: {@code OVERWRITE}, since the coordinate is known only once the
+     *  layout has parsed the {@code .nuspec}. A version already pushed is refused at the link ({@link Blobs#linkOnce}),
+     *  inside the pointer's compare-and-set, with nuget.org's {@code 409}, which {@code --skip-duplicate} recognises;
+     *  an identical re-push converges. */
     private static final Publication.Republish REPUBLISH = Publication.Republish.overwrite();
 
-    /**
-     * A {@code dotnet nuget push} wraps its artifact in a multipart form, so this format is <b>not</b> edge-screened
-     * : the request body is an <em>envelope</em>, and gating it at the shared single-body edge would hash and
-     * assess the multipart while the bytes that later serve are the {@code .nupkg} inside it - a second
-     * content-addressed object under a hash no interceptor ever saw, which is {@code RepositoryFormat} clause 14's
-     * fail-open direction. The shared edge ({@code ScreenedDispatch}) takes the request body verbatim and offers no
-     * seam to unwrap one, so this format is in the {@code screened() == false} case the clause names and screens at its
-     * own documented choke point: {@link #push} peels the file part off the envelope while it streams and
-     * {@link #publish} drives the shared {@code Publication.commit} - with the <em>discovered</em> interceptor chain
-     * and observers - over the package's own bytes.
-     *
-     * <p>The declaration is about the protocol, not about the shape of one request: a client that {@code PUT}s a bare
-     * {@code .nupkg} body (no multipart) goes through the same choke point, so both push shapes screen the package
-     * itself and neither reaches {@link #handle} unscreened.
-     */
+    /** A push wraps its package in a multipart form, so this format is not edge-screened: the shared edge would assess
+     *  the envelope while the bytes that serve are the {@code .nupkg} inside it, a hash no interceptor saw
+     *  ({@code RepositoryFormat} clause 14). It screens at its own choke point instead: {@link #push} peels the file
+     *  part off the stream and {@link #publish} drives {@code Publication.commit} with the discovered interceptors and
+     *  observers over the package's own bytes. A bare {@code .nupkg} body takes the same path, so neither shape reaches
+     *  {@link #handle} unscreened. */
     @Override
     public boolean screened() {
         return false;
     }
 
     private void push(FormatExchange exchange, Blobs blobs, ArtifactStore store) throws IOException {
-        // A .nupkg is an immutable artifact of unbounded size: stream it straight into the content-addressed store
-        // (hash-on-write, never buffered) and only then reopen the stored blob to parse its front (the .nuspec that
-        // names it), the store-then-reopen pattern the gems push uses. There is no size cap: a multi-gigabyte package
-        // that no heap could hold still publishes, because no step ever materialises the body as a byte[].
+        // A .nupkg is streamed into the content-addressed store and only the stored blob is reopened for its .nuspec,
+        // so a package of any size publishes.
         String contentType = exchange.requestHeader("Content-Type");
         if (contentType != null && contentType.contains("multipart/form-data")) {
             Optional<String> boundary = MultipartBody.boundary(contentType);
@@ -340,16 +284,9 @@ public final class NuGetFormat implements RepositoryFormat, ProxyLeg, BlobLayout
                 exchange.respond(400);   // no boundary
                 return;
             }
-            // The first part carrying a filename is the uploaded .nupkg, read through the shared streaming reader
-            // (build.jenesis.repository.multipart - the same cursor the PyPI upload walks), which bounds the part to
-            // the next boundary so the store reads exactly the package's bytes without a hand-scan of the binary body.
-            //
-            // The unwrap this format's screening turns on: the envelope is peeled here, at the format's own choke point, and the part
-            // - the .nupkg itself - is what reaches the screen. Nothing content-addresses the multipart any more (this
-            // format opts out of the single-body edge, see screened()), so there is no second CAS object and no hash an
-            // interceptor never saw: the package is stored exactly once and the accepted hash is the package's own. The
-            // part stream stays open across the commit because the layout reopens the STORED blob, not the socket. It is
-            // never bounded: a multi-gigabyte package still publishes because no step ever materialises it.
+            // The first part carrying a filename is the .nupkg, bounded to the next boundary by the shared streaming
+            // reader. It is what reaches the screen, stored once under its own hash; the stream stays open across the
+            // commit since the layout reopens the stored blob.
             Optional<MultipartBody.Part> file =
                     MultipartBody.over(exchange.requestStream(), boundary.get()).nextFile();
             if (file.isEmpty()) {
@@ -360,37 +297,25 @@ public final class NuGetFormat implements RepositoryFormat, ProxyLeg, BlobLayout
                 publish(part, exchange, blobs, store);
             }
         } else {
-            // A bare .nupkg body (a client that PUTs the package directly, not as multipart form-data).
+            // A bare .nupkg body.
             publish(exchange.requestStream(), exchange, blobs, store);
         }
     }
 
     /**
-     * The hosted publish, run through the one shared choreography ({@code Publication.commit}) rather than
-     * hand-assembled here: the package is stored content-addressed, the accepted layout parses the {@code .nuspec} and
-     * writes the dependency sidecar, and only then does the operation link the serving pointer and stamp the hosted
-     * marker. <b>The commit point is the {@code .nupkg} pointer link</b> - before it nothing serves and the flat
-     * container answers a miss; after it the package is downloadable and its registration reads a precomputed sidecar.
+     * The hosted publish, through the shared {@code Publication.commit}: the package is stored content-addressed, the
+     * layout parses the {@code .nuspec}, and only then is the serving pointer linked. <b>The commit point is the
+     * {@code .nupkg} pointer link</b>; every parse result lands before it, and the sidecar, the hosted marker and the
+     * listings follow it, so nothing keyed by the version is written for a push the link refuses.
      *
-     * <p>The order matters: linking the {@code .nupkg} pointer <em>first</em> and only then writing
-     * {@code dependencies.json} and {@code nuget/.hosted} would let a crash in between leave a servable package whose
-     * registration read had to re-crack the archive, and a version index that had not yet been switched on. So every
-     * parse result lands before anything serves.
+     * <p><b>This is the format's screening choke point</b> ({@link #screened()}): the operation carries the discovered
+     * interceptor chain and observers, so the screen runs over the {@code .nupkg}'s bytes and the after-commit
+     * notification fires here.
      *
-     * <p><b>This is the format's screening choke point</b>. Because {@link #screened()} is {@code false} the
-     * shared ingress edge dispatches the push straight here, so the operation is constructed with the
-     * <em>discovered</em> interceptor chain and observer list rather than two empty ones: the one screen runs here, over
-     * the {@code .nupkg}'s own bytes, and the one after-commit notification fires here once the package is visible.
-     * That is the whole of the change - the choreography, the ordering and the layout below are unchanged; only the
-     * bytes the chain sees are now the package's rather than the envelope's.
-     *
-     * <p>The descriptor handed to the screen carries the push path and no coordinate, because a NuGet coordinate lives
-     * in the {@code .nuspec} <em>inside</em> the package and is only readable once the body has been stored - which the
-     * operation does before it gates. That is not a gap: the NuGet inspector reads the pushed body itself (it sniffs
-     * the ZIP magic and streams the {@code .nuspec}), so the coordinate and the declared licence the gate assesses come
-     * from the artifact rather than from an envelope field a publisher controls independently of it. Once the layout
-     * has parsed it, the real coordinate and the package's own download path are attached with
-     * {@link Publication.Visibility#describing}, so the after-commit observers key on the artifact, not the endpoint.
+     * <p>The screen's descriptor carries the push path and no coordinate, which lives inside the package; the NuGet
+     * inspector reads the stored body itself, so the coordinate and licence assessed come from the artifact. Once
+     * parsed, the coordinate and download path are attached with {@link Publication.Visibility#describing}, so the
+     * observers key on the artifact.
      */
     private void publish(InputStream nupkg, FormatExchange exchange, Blobs blobs, ArtifactStore store)
             throws IOException {
@@ -410,65 +335,51 @@ public final class NuGetFormat implements RepositoryFormat, ProxyLeg, BlobLayout
                 accepted -> {
                     Parsed parsed = parsed(store, accepted.hash());
                     if (parsed == null) {
-                        // No parseable .nuspec, or a nuspec-supplied id/version that would forge a pointer key with
-                        // '/' or '..': nothing servable, so nothing is declared and nothing is linked.
+                        // No parseable .nuspec, or an id/version that would forge a pointer key: nothing is declared or
+                        // linked.
                         return Publication.Visibility.declined();
                     }
                     String id = parsed.id();
                     String version = parsed.version();
                     String key = nupkgKey(id, version);
                     return Publication.Visibility
-                            // The serving pointer, in this format's own namespace rather than publish/ - so it is
-                            // declared through a Serving step, not named with at(). It is where a version already
-                            // pushed refuses this one, so nothing keyed by the version is written before it.
+                            // The serving pointer, in this format's namespace rather than publish/, so a Serving step.
+                            // A version already pushed refuses here, before anything keyed by the version is written.
                             .through((hash, size, _) -> blobs.linkRelease(key, hash, size))
                             .andThrough((_, _, _) -> parsed.write(blobs))
-                            // Stamp the hosted-publish marker, so a later flat-container version-index read serves the
-                            // local versions. A pull-through proxy repository (whose .nupkg is cached by proxy(), never
-                            // pushed) never writes it, so its version index misses locally and the pull-through streams
-                            // the authoritative upstream version list for an uncached version rather than shadowing it
-                            // with only the cached versions. Mirrors the RPM hosted gate. It gates a listing surface,
-                            // so it is a visibility write and is declared beside the pointer - after it, never before,
-                            // so the index is never switched on ahead of the bytes it would list.
+                            // The hosted marker switches on the local version index; a pull-through proxy never writes
+                            // it, so its index falls through to the upstream's list. Written after the pointer, never
+                            // ahead of the bytes it would list.
                             .andThrough((_, _, target) -> markHosted(target, HOSTED_KEY))
-                            // The served version list, registration index and search record are written here, on
-                            // the push, rather than enumerated and screened on every read.
+                            // The version list, registration index and search record are maintained on the push.
                             .andThrough((_, _, _) -> new NuGetListings(blobs).refresh(id, version))
-                            // The push endpoint carries no coordinate, so refine the neutral descriptor the observers
-                            // are notified with to the package's own coordinate and download path now that the .nuspec
-                            // has been read - the seam Publication.Visibility offers for exactly this shape.
+                            // The observers are notified with the package's own coordinate and download path.
                             .describing(new ArtifactDescriptor("NuGet", id, version, flatContainerPath(id, version),
                                     "application/octet-stream", version.contains("-"), null, -1L));
                 });
         switch (commit.disposition()) {
             case ACCEPT -> exchange.respond(commit.visible() ? 201 : 400);
-            // The chain HELD the package. Its layout is written all the same, behind the withhold marker (see
-            // {@link #held}), so a review release is the marker clear rather than a replay of a push whose multipart
-            // envelope no longer exists.
+            // Held: the layout is written behind the withhold marker (see held), so a review release is the marker
+            // clear rather than a replay of a push whose envelope is gone.
             case QUARANTINE -> {
                 held(blobs, store, exchange.path(), commit.hash());
                 exchange.respond(202);
             }
-            // Refused outright: nothing is linked and no marker is set, so no version index lists it and the stored
-            // blob is the usual unreferenced content-addressed object a collection reclaims. A refusal is never
-            // released, so it is never laid out.
+            // Refused: nothing is linked or marked, and the stored blob is an unreferenced object the collector
+            // reclaims.
             case REJECT -> exchange.respond(422);
         }
     }
 
     /**
-     * The parse half of the layout, shared by the accepted leg and the held leg so the two can never derive a
-     * different coordinate or a different sidecar for the same package. Reads the {@code .nuspec} out of the stored
-     * blob for the coordinate, refuses a nuspec-supplied id/version that would forge a pointer key, and precomputes the
-     * dependency groups (the debian/rpm precompute-a-per-package-stanza pattern) so a registration read concatenates
-     * stored sidecars instead of reopening and unzipping every version's {@code .nupkg} on every read. The stored blob
-     * is reopened and only its {@code .nuspec} streamed out, never the whole package pulled back into memory.
+     * The parse half of the layout, shared by the accepted and held legs so both derive the same coordinate and
+     * sidecar. Streams the {@code .nuspec} out of the stored blob, refuses an id or version that would forge a pointer
+     * key, and precomputes the dependency groups so a registration read concatenates sidecars rather than unzipping
+     * every version. Nothing is written: the sidecar is written by {@link Parsed#write} only after the pointer is
+     * linked, so a refused push never replaces a released version's dependencies.
      *
-     * <p>Nothing is written here: the sidecar is keyed by the version, so it is written only once the version's pointer
-     * has been linked ({@link Parsed#write}) - a push refused because the version is taken must not replace the
-     * released version's dependencies - and before the listings that make the version discoverable.
-     *
-     * @return the lower-cased coordinate and its dependency groups, or {@code null} when nothing servable can be derived
+     * @return the lower-cased coordinate and its dependency groups, or {@code null} when nothing servable can be
+     *     derived
      */
     private static Parsed parsed(ArtifactStore store, String hash) throws IOException {
         String[] coordinate;
@@ -493,42 +404,28 @@ public final class NuGetFormat implements RepositoryFormat, ProxyLeg, BlobLayout
     /** A pushed package's coordinate and the dependency-groups sidecar a registration read concatenates. */
     private record Parsed(String id, String version, byte[] dependencies) {
 
-        /** Store the sidecar, through {@link Blobs} as every document of this blobs-namespace format is. */
+        /** Store the sidecar through {@link Blobs}. */
         void write(Blobs blobs) throws IOException {
             blobs.write(dependenciesKey(id, version), dependencies);
         }
     }
 
     /**
-     * Lay a <em>held</em> package out behind its withhold marker, so the review release that follows is the same
-     * marker clear a retroactive KEV/licence hold's release is - one hold-release mechanism for this format, not two.
-     * The shared commit operation runs its accepted layout only on {@code ACCEPT}, so a screen-time {@code QUARANTINE}
-     * would otherwise store the package, link nothing and index nothing: {@code HoldLifecycle.release} would then
-     * resolve the hold and materialise no version at all.
+     * Lay a held package out behind its withhold marker, so its review release is the same marker clear a retroactive
+     * hold's release is. The shared commit lays out only on {@code ACCEPT}, so without this a release would materialise
+     * nothing.
      *
-     * <p><b>The review pointer is re-keyed onto the package, and that is load-bearing rather than cosmetic.</b> A NuGet
-     * coordinate lives in the {@code .nuspec} <em>inside</em> the package, so the descriptor the screen assessed carries
-     * the push ENDPOINT - one path every push shares - and {@code Publication.screen} therefore links the review
-     * pointer at {@code /quarantine/nuget/v3/package}. Since a held push lays the package out, that is not
-     * harmless. The withhold marker is content-addressed and the {@code withheld-reconcile} backstop lifts a marker
-     * that no live {@code /quarantine} pointer aliases once a live coordinate claims its bytes - which the layout below
-     * makes true - so a second held push, overwriting the shared endpoint pointer, would strand the first package's
-     * marker as "holderless" and the backstop would <em>un-withhold an unreviewed package</em>. Re-keying gives every
-     * held package the same stable, per-artifact review handle npm, PyPI and Cargo screen under natively: the pointer
-     * follows the artifact, two concurrent holds never share one handle, and the release resolves the coordinate
-     * (so it lifts the marker instead of stranding a phantom {@code publish/} pointer at the endpoint). The endpoint
-     * pointer is removed rather than kept beside it: the release's cross-alias guard treats any OTHER live pointer
-     * carrying the hash as a still-standing hold, so leaving it would block the very release the re-keying enables.
-     * The {@code QuarantineLog} row is still written by the gate under the endpoint path - the reviewer's reasons and
-     * the review handle disagree on the path for a held NuGet push, a separate consequence of the coordinate living
-     * inside the artifact.
+     * <p><b>The review pointer is re-keyed onto the package.</b> The screen's descriptor carries the push endpoint, so
+     * {@code Publication.screen} links the review pointer at {@code /quarantine/nuget/v3/package}, shared by every
+     * push. The withhold marker is content-addressed and {@code withheld-reconcile} lifts a marker no live
+     * {@code /quarantine} pointer aliases, so a second held push overwriting that pointer would release the first
+     * package unreviewed. Each held package gets its own handle at its download path, and the endpoint pointer is
+     * removed, since the release's cross-alias guard treats any other pointer carrying the hash as a standing hold. The
+     * {@code QuarantineLog} row stays under the endpoint path.
      *
-     * <p>The order is the load-bearing part of the layout itself: the dependency sidecar is written first (a derived
-     * document, nothing serves it), then {@link Withheld#mark} retracts the package's own hash, and only then is the
-     * {@code .nupkg} pointer linked and the hosted marker stamped - so at no instant is the held package downloadable or
-     * listed. The flat container, the registration index and the search all leave a version carrying that marker out of
-     * their stored documents, as the download screens on it, so the version is stored, reviewable and invisible until
-     * the release lifts it.
+     * <p>Order: the dependency sidecar first, then {@link Withheld#mark}, and only then the {@code .nupkg} pointer and
+     * the hosted marker, so the held package is never downloadable or listed. The stored listings leave a marked
+     * version out.
      */
     private static void held(Blobs blobs, ArtifactStore store, String endpoint, String hash) throws IOException {
         Parsed parsed = parsed(store, hash);
@@ -539,7 +436,7 @@ public final class NuGetFormat implements RepositoryFormat, ProxyLeg, BlobLayout
         String version = parsed.version();
         Publication publication = new Publication(store, List.of(), List.of());
         try {
-            // A hold never replaces a released package: refused before the mark, so nothing is left held.
+            // A hold never replaces a released package: refused before the mark.
             blobs.refuseReplacement(nupkgKey(id, version), hash);
         } catch (Publication.RepublishConflict taken) {
             publication.unpublish("/quarantine" + endpoint);
@@ -555,27 +452,24 @@ public final class NuGetFormat implements RepositoryFormat, ProxyLeg, BlobLayout
         publication.unpublish("/quarantine" + endpoint);
     }
 
-    /** The package's own served download path - the identity the flat container serves it under, the path
-     *  {@link #describe} parses back, and the path a held package's {@code /quarantine} review handle is re-keyed to. */
+    /** The package's served download path: what the flat container serves, what {@link #describe} parses, and where a
+     *  held package's review handle is re-keyed. */
     private static String flatContainerPath(String id, String version) {
         return "/nuget/v3-flatcontainer/" + id + "/" + version + "/" + id + "." + version + ".nupkg";
     }
 
-    /** The reserved store key of the deployment-wide hosted-publish marker (a bare presence flag, never a package id
-     *  - a NuGet id cannot start with {@code .}). {@link #search} skips it when it enumerates ids. */
+    /** The deployment-wide hosted-publish marker; a NuGet id cannot start with {@code .}, and {@link #search} skips
+     *  it. */
     private static final String HOSTED_KEY = "nuget/.hosted";
     private static final byte[] HOSTED = "1".getBytes(StandardCharsets.UTF_8);
 
-    /** Whether this repository has ever taken a hosted push - it then carries {@link #HOSTED_KEY}, which a pull-through
-     *  proxy never writes. The flat-container version-index gate keys on it so a proxy repository's version index
-     *  always misses locally and reproxies the upstream version list (every version) for an uncached version rather
-     *  than shadowing it with only the cached ones. */
+    /** Whether this repository has taken a hosted push. The version-index gate keys on it, so a proxy repository's
+     *  index misses locally and the upstream's full version list is relayed. */
     private static boolean hosted(Blobs blobs) throws IOException {
         return blobs.exists(HOSTED_KEY);
     }
 
-    /** Stamp the hosted-publish marker once, idempotently - a compare-and-set against an absent pointer, so a
-     *  concurrent push's lost race simply means a peer already set it. */
+    /** Stamp the hosted marker once, by compare-and-set against absence; a lost race means a peer set it. */
     private static void markHosted(ArtifactStore store, String key) throws IOException {
         if (store.readVersioned(key).isEmpty()) {
             store.writeVersioned(key, HOSTED, null);
@@ -604,9 +498,8 @@ public final class NuGetFormat implements RepositoryFormat, ProxyLeg, BlobLayout
         }
     }
 
-    /** Stream a stored listing as JSON; with a base, the stored placeholder is completed on the way out (so the length
-     *  is not known in advance and the body is sent without a {@code Content-Length}). The ETag is the stored document's
-     *  digest, folded with the base it is completed for. */
+    /** Stream a stored listing as JSON; with a base, the stored placeholder is completed on the way out, so no
+     *  {@code Content-Length} is sent. The ETag is the document's digest folded with the base. */
     private static void respondListing(StoredListing.Served document, FormatExchange exchange, String base)
             throws IOException {
         String etag = '"' + document.header().sha256() + (base == null ? "" : "-" + Integer.toHexString(base.hashCode()))
@@ -625,32 +518,24 @@ public final class NuGetFormat implements RepositoryFormat, ProxyLeg, BlobLayout
             return;
         }
         if (base == null) {
-            // Streamed rather than materialised: the document is the size of what it lists, so handing
-            // it over whole put the whole listing in heap on the request path.
+            // Streamed: the document is the size of what it lists.
             try (OutputStream out = exchange.respond(200, document.header().size())) {
                 document.body().transferTo(out);
             }
         } else {
-            // Streamed with the rewrite folded in, never as one byte array: a package's document is every version
-            // of it, and answering it whole would hold in heap what the publish had just streamed - an
-            // OutOfMemoryError on the read at fifty thousand versions under 512 MiB. The length is not declared,
-            // since the rewrite changes it.
+            // Streamed with the rewrite folded in: a package's document is every version of it. The length changes, so
+            // it is not declared.
             try (OutputStream out = exchange.respond(200, -1L)) {
                 document.copyTo(out, NuGetListings.BASE, base);
             }
         }
     }
 
-    /** The {@code .nupkg} pointer key a version's bytes live at - the identity every version-enumerating surface judges
-     *  an enumerated version folder by, so the stored listings and the download cannot drift apart. */
-    /**
-     * {@code dotnet nuget delete <id> <version>}: {@code DELETE} on the publish resource followed by
-     * {@code /<id>/<version>}, which nuget.org answers by unlisting the version rather than deleting it - and so does
-     * this repository. The unlisting is the product's own yanked mark, written through the one path the console and the
-     * API use ({@link Lifecycle#mark(FormatExchange, ArtifactStore, String, String, Lifecycle.Flag)}), so the
-     * registration leaf renders {@code listed: false} and {@code jenrepo lifecycle} shows it whichever surface set it.
-     * {@code 204} for a version this feed holds, already unlisted or not; {@code 404} for one it does not.
-     */
+    /** {@code dotnet nuget delete <id> <version>}: {@code DELETE} on the publish resource followed by
+     *  {@code /<id>/<version>}, which unlists the version as nuget.org does, through the product's yanked mark
+     *  ({@link Lifecycle#mark(FormatExchange, ArtifactStore, String, String, Lifecycle.Flag)}), so the registration
+     *  leaf renders {@code listed: false} whichever surface set it. {@code 204} for a version this feed holds,
+     *  {@code 404} otherwise. */
     private static void unlist(String rest, Blobs blobs, ArtifactStore store, FormatExchange exchange)
             throws IOException {
         int slash = rest.indexOf('/');
@@ -667,6 +552,8 @@ public final class NuGetFormat implements RepositoryFormat, ProxyLeg, BlobLayout
         exchange.respond(204);
     }
 
+    /** The {@code .nupkg} pointer key a version's bytes live at, by which every version-enumerating surface judges a
+     *  version, so the stored listings and the download cannot drift apart. */
     static String nupkgKey(String id, String version) {
         return "nuget/" + id + "/" + version + "/" + id + "." + version + ".nupkg";
     }
@@ -684,22 +571,12 @@ public final class NuGetFormat implements RepositoryFormat, ProxyLeg, BlobLayout
             exchange.respond(400);
             return;
         }
-        // The search document is a stored listing every push maintains - one record per package id with its
-        // servable versions. A search is one sequential pass over it through the codec's streaming reader, keeping
-        // only the page asked for and a count, so the query never holds the document, whose size is the feed's.
-        // Reading the document whole and splitting every record into a map before filtering would put three copies
-        // of the feed in heap per query - an OutOfMemoryError at half a million packages in a 512 MiB container.
+        // The search document holds a record per package id with its servable versions. A search is one streamed pass
+        // over it keeping only the requested page and a count, since the document is the size of the feed.
         Optional<StoredListing.Served> served = StoredListing.open(blobs.store(),
                 new NuGetListings(blobs).searchSpec());
-        // A repository that has never had a package answers 404 rather than an empty result set, which is the ruling
-        // for every drop-the-container route: an empty search document is the statement "there is nothing here to
-        // search", and dressing it as a successful empty answer tells a client the registry exists and is simply
-        // barren.
-        //
-        // The distinction that matters, and the one this must NOT collapse: a QUERY that matches nothing still
-        // answers 200 with an empty data array. "This registry holds nothing" and "your term found nothing" are
-        // different facts, and turning the second into a 404 would break search itself. So the test is on the record
-        // set before the needle is applied, never after - which, streamed, is whether the pass saw any record at all.
+        // A repository that never had a package answers 404, while a query matching nothing answers 200 with an empty
+        // array: the test is whether the pass saw any record at all, before the needle is applied.
         if (served.isEmpty()) {
             exchange.respond(404);
             return;
@@ -789,21 +666,9 @@ public final class NuGetFormat implements RepositoryFormat, ProxyLeg, BlobLayout
         }
     }
 
-    /** Locate the {@code .nuspec} inside a {@code .nupkg} ZIP and parse it as a bounded XML document, or {@code null}
-     *  when there is no {@code .nuspec} at all. An entry that inflates past the shared archive-inflation ceiling is a
-     *  different answer and raises rather than returning null - it is not a usable manifest (the deflate-bomb shape),
-     *  and it is never handed on as the prefix that was read before the ceiling. The walk to the entry runs under the
-     *  shared {@link build.jenesis.repository.store.ArchiveWalk#largestWalk()} bound and at most
-     *  {@link build.jenesis.repository.store.ArchiveInflation#largestEntry()} bytes reach the DOM builder, so both the
-     *  publish path ({@link #coordinate}, {@link #push}) and the unauthenticated registration read
-     *  ({@link #dependencyGroups} via {@link #dependencyGroupsFor}) stay bounded whatever a hostile package claims to
-     *  inflate to - the NuGet compliance inspector applies the same shared ceiling. The builder disables DTDs/external
-     *  entities (XXE), as the inspector and the archive-cracking peers do. */
-    /**
-     * A {@code .nupkg} may carry an author or repository signature as {@code .signature.p7s}, a PKCS#7 structure inside
-     * the archive whose signed content names the package's hash - optional, since most packages carry none, and the
-     * signed bytes are the package as it was before the signature entry was appended ({@link NuGetSignedArchive}).
-     */
+    /** A {@code .nupkg} may carry an author or repository signature as {@code .signature.p7s}, a PKCS#7 entry whose
+     *  signed content names the package's hash: optional, and over the package as it was before the entry was appended
+     *  ({@link NuGetSignedArchive}). */
     @Override
     public List<ArtifactSignatures.Expectation> expects(String path) {
         return signable(path)
@@ -811,27 +676,16 @@ public final class NuGetFormat implements RepositoryFormat, ProxyLeg, BlobLayout
                 : List.of();
     }
 
-    /**
-     * The two paths a package's own bytes are ever in hand at: the file it serves from, and the one endpoint every
-     * package is pushed to.
-     *
-     * <p>The push is the one that is easy to miss. A coordinate lives in the {@code .nuspec} inside the archive
-     * rather than in the path, so the descriptor a push hands the screen carries the endpoint's address and nothing
-     * else - {@value #PUSH_ROUTE}, the same string for every package there will ever be. Keyed on the served name
-     * alone, the expectation would be empty at the one moment the bytes are in front of the gate, and the signature
-     * entry inside the archive would go unread on every publish - a package whose chain reached a configured anchor
-     * and one signed by an authority nobody named would both serve with no recorded signature at all.
-     */
+    /** The two paths a package's bytes are in hand at: the file it serves from, and the push endpoint. The push
+     *  descriptor carries only {@value #PUSH_ROUTE}, the same for every package, so keyed on the served name alone the
+     *  signature entry would go unread on every publish. */
     private static boolean signable(String path) {
         return !path.contains("..")
                 && (path.endsWith(".nupkg") || path.equals(PUSH_ROUTE) || path.equals(PUSH_ROUTE + "/"));
     }
 
-    /**
-     * Yes: a NuGet signature is a {@code .signature.p7s} entry stored inside the package, so a screen deciding
-     * whether to claim a push cannot see it by looking beside the artifact. Declaring it is what makes the push
-     * claimed at all - see {@link ArtifactSignatures#embedsEvidence}.
-     */
+    /** Yes: the signature is an entry inside the package, so declaring it is what makes a screen claim the push
+     *  ({@link ArtifactSignatures#embedsEvidence}). */
     @Override
     public boolean embedsEvidence(String path) {
         return signable(path);
@@ -857,6 +711,14 @@ public final class NuGetFormat implements RepositoryFormat, ProxyLeg, BlobLayout
                 .orElse(List.of());
     }
 
+    /**
+     * The {@code .nuspec} of a {@code .nupkg}, parsed as a bounded XML document with DTDs and external entities
+     * disabled, or {@code null} when there is none. The walk runs under
+     * {@link build.jenesis.repository.store.ArchiveWalk#largestWalk()} and at most
+     * {@link build.jenesis.repository.store.ArchiveInflation#largestEntry()} bytes reach the parser, so the publish and
+     * the unauthenticated registration read ({@link #dependencyGroupsFor}) stay bounded; an entry past the ceiling
+     * raises rather than returning null or a prefix.
+     */
     private static Document nuspec(InputStream nupkg) throws IOException {
         return ArchiveWalk.walk(nupkg, NuGetFormat::declaredNuspec).orNull();
     }
@@ -867,19 +729,14 @@ public final class NuGetFormat implements RepositoryFormat, ProxyLeg, BlobLayout
         try (ZipInputStream zip = ArchiveWalk.zip(nupkg)) {
             for (ZipEntry entry; (entry = zip.getNextEntry()) != null; ) {
                 if (entry.getName().endsWith(".nuspec")) {
-                    // The .nuspec carries the package's id/version, so it is the fail-closed side of the shared bound:
-                    // an entry the ceiling stopped yields no bytes at all and raises, rather than coming back as the
-                    // same null a .nupkg carrying no .nuspec yields. The publish leg (coordinate) turns that into its
-                    // 400; the registration read leg (dependencyGroups) catches it and serves no dependency groups,
-                    // which is the degrade an already-published package's derived view is allowed.
+                    // The .nuspec carries the coordinate, so a read the ceiling stopped raises rather than returning
+                    // the null a package without one yields: the publish leg turns it into a 400, the registration read
+                    // into no dependency groups.
                     byte[] xml = ArchiveInflation.entry(zip).required("NuGet package", ".nuspec");
                     try {
                         return Xml.parse(xml);
                     } catch (SAXException unreadable) {
-                        // A .nuspec that will not parse is not a usable manifest. It is reported as the unreadable
-                        // archive member it is, so the walk bound and a corrupt member stay distinguishable: the
-                        // callers turn either into their 400 / no-dependency-groups degrade, but only a genuine bound
-                        // is ever reported as one.
+                        // An unparsable .nuspec is reported as an unreadable member, distinct from a bound.
                         throw new IOException("The NuGet package's .nuspec is not a readable XML document",
                                 unreadable);
                     }
@@ -889,8 +746,8 @@ public final class NuGetFormat implements RepositoryFormat, ProxyLeg, BlobLayout
         return null;
     }
 
-    // A .nuspec lists dependencies either grouped by target framework or flat directly under <dependencies>; both map
-    // to NuGet registration dependencyGroups (the flat ones as a single group with no targetFramework).
+    // Dependencies are grouped by target framework or flat under <dependencies>; a flat list is one group with no
+    // targetFramework.
     private static List<Map<String, Object>> groups(Document document) {
         NodeList blocks = document.getElementsByTagName("dependencies");
         if (blocks.getLength() == 0) {
@@ -943,8 +800,7 @@ public final class NuGetFormat implements RepositoryFormat, ProxyLeg, BlobLayout
         long size = located.get().size();
         exchange.setResponseHeader("Content-Type", "application/octet-stream");
         if (exchange.method().equals("HEAD")) {
-            // Answer HEAD from the stored blob size (Content-Length, 200, no body) rather than streaming the whole
-            // .nupkg just to discard it - a restore client issues HEADs to probe a package's size and existence.
+            // HEAD answers from the stored size; a restore client probes size and existence with it.
             if (size >= 0) {
                 exchange.setResponseHeader("Content-Length", Long.toString(size));
             }
@@ -954,19 +810,15 @@ public final class NuGetFormat implements RepositoryFormat, ProxyLeg, BlobLayout
         blobs.serve(located.get(), exchange);
     }
 
-    /**
-     * Proxy a NuGet flat-container miss to the upstream registry (api.nuget.org). The service index stays local
-     * (it advertises this registry's own flat container). A version index is mutable and a list of version strings
-     * with no URLs, so it is streamed through; a {@code .nupkg} is immutable, so it is fetched, cached and served.
-     */
+    /** Proxy a NuGet flat-container miss to the upstream registry. The service index stays local, advertising this
+     *  registry's flat container. A version index is a mutable list of version strings, streamed through; a
+     *  {@code .nupkg} is immutable, so it is fetched, cached and served. */
     @Override
     public boolean pullThrough(FormatExchange exchange, ArtifactStore store, URI upstream,
                                ProxyFormat.Fetcher fetcher) throws IOException {
         String path = exchange.path();
         if (!path.startsWith("/nuget/v3-flatcontainer/")) {
-            // ProxyLeg has screened the path already - this format claims it, and it carries no traversal
-            // segment, backslash or control character. What is left is this leg's own routing: only the
-            // subtree below proxies, and any other claimed path lets the local 404 stand.
+            // ProxyLeg has screened the path; only the flat-container subtree proxies.
             return false;
         }
         String after = path.substring("/nuget/v3-flatcontainer/".length());
@@ -975,12 +827,9 @@ public final class NuGetFormat implements RepositoryFormat, ProxyLeg, BlobLayout
             root += "/";
         }
         if (after.endsWith("/index.json")) {
-            // The version index is a small mutable list of version strings, streamed through fresh. Forward the client's
-            // conditional-request validators so a 304-capable client's revalidation reaches the upstream, and relay the
-            // upstream's validators back so its next read can revalidate rather than re-downloading the index.
-            // ENUMERATION: a flat-container index.json is literally {"versions":[...]} - the list NuGet restore resolves
-            // a floating version against - so an absent one is the answer "no such package" and an empty one "no
-            // version satisfies you". Only an upstream that ANSWERED 404/410 may reach the client as a 404.
+            // The version index is streamed through with conditional-request validators forwarded both ways. It is an
+            // enumeration restore resolves floating versions against, so only an upstream that answered 404/410 reaches
+            // the client as a 404.
             ProxyRelay.Answer answer = ProxyRelay.fetchFresh(fetcher, URI.create(root + "v3-flatcontainer/" + after),
                     ProxyRelay.conditionalHeaders(exchange), exchange, ProxyRelay.Document.ENUMERATION);
             if (!answer.answered()) {
@@ -999,19 +848,16 @@ public final class NuGetFormat implements RepositoryFormat, ProxyLeg, BlobLayout
         String id = after.substring(0, slash);
         String version = after.substring(slash + 1, next);
         String key = "nuget/" + id.toLowerCase(Locale.ROOT) + "/" + version + "/" + after.substring(next + 1);
-        // Point-integrity: NuGet publishes the .nupkg's SHA-512 package hash through its v3 registration/catalog, so
-        // resolve it via the service index and verify the streamed package against it, refusing a mismatch - the
-        // checksum parity the Maven proxy leg has. The registration chain is three SEPARATE documents from the
-        // flat-container download below, so a hop this repository could not read (or one the outbound screen refuses)
-        // is not "this upstream has no v3 chain" and must not downgrade the fill.
+        // NuGet publishes the .nupkg's SHA-512 through its registration and catalog, so the streamed package is
+        // verified against it. A hop that could not be read, or that the outbound screen refuses, must not downgrade
+        // the fill.
         URI target = URI.create(root + "v3-flatcontainer/" + after);
         ProxyRelay.Declared expected =
                 nupkgChecksum(root, id, version, fetcher, ProxyLeg.allowInternalTargets(exchange));
         if (!expected.readable()) {
             return ProxyRelay.unverifiable(target, expected);
         }
-        // A .nupkg is an immutable artifact of unbounded size: stream it from the network straight into the
-        // content-addressed store rather than buffering the whole body, then re-serve it locally.
+        // Streamed from the network into the content-addressed store, since a .nupkg is unbounded.
         try (ProxyFormat.Download download = fetcher.download(target, Map.of()).orElse(null)) {
             if (download == null || download.status() != 200) {
                 return false;
@@ -1024,21 +870,16 @@ public final class NuGetFormat implements RepositoryFormat, ProxyLeg, BlobLayout
         return true;
     }
 
-    /** The SHA-512 NuGet publishes as a package's {@code packageHash} (base64, {@code packageHashAlgorithm: SHA512}),
-     *  resolved through the v3 metadata chain so a proxied {@code .nupkg} can be verified against it: the service index
-     *  ({@code v3/index.json}) names the {@code RegistrationsBaseUrl}, whose leaf ({@code <id>/<version>.json}) carries
-     *  the hash inline or points at a catalog leaf that does. Each hop is a small bounded metadata read, only on a
-     *  package miss (once per package, since the {@code .nupkg} is then cached).
+    /**
+     * The SHA-512 NuGet publishes as a package's {@code packageHash}, resolved through the v3 chain: the service index
+     * names the {@code RegistrationsBaseUrl}, whose leaf ({@code <id>/<version>.json}) carries the hash or points at a
+     * catalog leaf that does. Each hop is a small bounded read, once per package miss.
      *
-     *  <p>{@link ProxyRelay.Declared#NONE} - falling back to plain caching, as Maven serves a jar with no
-     *  {@code .sha1} - when a hop <em>answered</em> and the chain declares nothing: a service index naming no
-     *  {@code RegistrationsBaseUrl}, a {@code 404}/{@code 410} registration or catalog leaf (an upstream without the
-     *  standard v3 chain), or a leaf carrying no SHA-512 {@code packageHash}.
-     *  {@linkplain ProxyRelay.Declared#unreadable Unreadable} when a hop could not be read - a transport failure, a
-     *  {@code 429}/{@code 5xx}/auth challenge, a body that is not JSON - and also when the outbound
-     *  screen <b>refuses</b> an advertised {@code @id}: that hop is chosen by the upstream, and a refused one read as
-     *  "this upstream publishes no hash" would be the fail-open the screen exists to prevent (the rpm leg's
-     *  {@code RefusedTarget} shape). */
+     * <p>{@link ProxyRelay.Declared#NONE}, plain caching, when a hop answered and the chain declares nothing: no
+     * {@code RegistrationsBaseUrl}, a {@code 404}/{@code 410} leaf, or no SHA-512 {@code packageHash}.
+     * {@linkplain ProxyRelay.Declared#unreadable Unreadable} when a hop could not be read, or the outbound screen
+     * refuses an advertised {@code @id}, since a refused hop read as "no hash" would fail open.
+     */
     private static ProxyRelay.Declared nupkgChecksum(String root, String id, String version,
             ProxyFormat.Fetcher fetcher, boolean allowInternal) throws IOException {
         Resolved index = fetchJson(root + "v3/index.json", fetcher);
@@ -1070,7 +911,7 @@ public final class NuGetFormat implements RepositoryFormat, ProxyLeg, BlobLayout
         if (direct != null) {
             return ProxyRelay.Declared.of("SHA-512", direct);
         }
-        // The hash lives in the catalog leaf the registration's catalogEntry points at (a URL, on nuget.org).
+        // The hash lives in the catalog leaf the registration's catalogEntry points at.
         JsonNode catalogEntry = registration.document().get("catalogEntry");
         if (catalogEntry == null || !catalogEntry.isString()) {
             return ProxyRelay.Declared.NONE;
@@ -1088,19 +929,10 @@ public final class NuGetFormat implements RepositoryFormat, ProxyLeg, BlobLayout
         return hash == null ? ProxyRelay.Declared.NONE : ProxyRelay.Declared.of("SHA-512", hash);
     }
 
-    /** Whether an upstream-ADVERTISED URL (the {@code RegistrationsBaseUrl} @id from the service index, a
-     *  {@code catalogEntry} link) is unsafe to fetch. Those hops are chosen by the upstream's own responses, like a
-     *  redirect Location, so they get the whole shared outbound screen
-     *  ({@link OutboundTargets#advertisedRefusal}) rather than a private copy of it. A malformed URL is unsafe, and so
-     *  is one this deployment could not issue a request to at all - the floor beneath the screen, which the dial does
-     *  not lift.
-     *
-     *  <p>The exemption is on the upstream's own ORIGIN rather than its bare host name: trusting any hop naming the
-     *  same HOST would let a compromised upstream pivot the proxy onto any other PORT of its own box
-     *  ({@code https://mirror.internal:9200/} under an {@code https://mirror.internal/} upstream), a real if narrow
-     *  SSRF. And a hop naming no
-     *  host is refused by the floor rather than by this leg's own null check, because whether a URL names a host is a
-     *  fact about {@code HttpRequest.newBuilder} and not a policy this leg gets to hold privately. */
+    /** Whether an upstream-advertised URL (the registrations {@code @id}, a {@code catalogEntry}) is unsafe to fetch,
+     *  by the shared outbound screen ({@link OutboundTargets#advertisedRefusal}). A malformed URL or one naming no host
+     *  is unsafe. The exemption is the upstream's own origin, not its host name, so a compromised upstream cannot pivot
+     *  onto another port of its own host. */
     private static boolean unsafeUpstreamUrl(String url, URI upstream, boolean allowInternal) {
         URI target;
         try {
@@ -1111,9 +943,8 @@ public final class NuGetFormat implements RepositoryFormat, ProxyLeg, BlobLayout
         return !OutboundTargets.mayFollow(target, upstream, allowInternal);
     }
 
-    /** The {@code RegistrationsBaseUrl} (or another named resource) advertised by an already-read v3 service index, or
-     *  {@code null} when it names none. Prefers a bare {@code RegistrationsBaseUrl}, else any versioned
-     *  variant ({@code RegistrationsBaseUrl/3.6.0}, ...), all of which resolve the same leaf. */
+    /** The resource of a type advertised by a v3 service index, or {@code null}: the bare type preferred, else any
+     *  versioned variant ({@code RegistrationsBaseUrl/3.6.0}, ...), all of which resolve the same leaf. */
     private static String resource(JsonNode index, String type) {
         if (!(index.get("resources") instanceof ArrayNode resources)) {
             return null;
@@ -1136,8 +967,8 @@ public final class NuGetFormat implements RepositoryFormat, ProxyLeg, BlobLayout
         return fallback;
     }
 
-    /** The raw SHA-512 bytes of a node's {@code packageHash} when {@code packageHashAlgorithm} is {@code SHA512} and the
-     *  hash is valid base64 of 64 bytes, else {@code null}. */
+    /** The raw SHA-512 of a node's {@code packageHash} when {@code packageHashAlgorithm} is {@code SHA512} and the hash
+     *  is base64 of 64 bytes, else {@code null}. */
     private static byte[] packageHash(JsonNode node) {
         JsonNode hash = node.get("packageHash");
         JsonNode algorithm = node.get("packageHashAlgorithm");
@@ -1153,14 +984,14 @@ public final class NuGetFormat implements RepositoryFormat, ProxyLeg, BlobLayout
         }
     }
 
-    /** One hop of the v3 metadata chain: the parsed document when the hop answered {@code 200}, {@code null} when it
-     *  answered a miss (so the chain declares nothing), or an {@linkplain ProxyRelay.Declared#unreadable unreadable}
-     *  verdict when it could not be read at all. The three are kept apart here rather than flattened into a
-     *  {@code null} {@code JsonNode}, because that flattening is exactly what let a {@code 429} on one hop read as
-     *  "this upstream publishes no package hash".
+    /**
+     * One hop of the v3 chain: the document when it answered {@code 200}, {@code null} on a miss (the chain declares
+     * nothing), or an {@linkplain ProxyRelay.Declared#unreadable unreadable} verdict when it could not be read. Kept
+     * apart so a {@code 429} never reads as "no package hash".
      *
-     *  @param document the hop's parsed body, or {@code null} when it answered a miss or could not be read
-     *  @param declared the verdict to return when {@link #readable()} is {@code false} */
+     * @param document the hop's parsed body, or {@code null} when it answered a miss or could not be read
+     * @param declared the verdict to return when {@link #readable()} is {@code false}
+     */
     private record Resolved(JsonNode document, ProxyRelay.Declared declared) {
 
         /** Whether the hop could be read at all; {@code false} means the caller returns {@link #declared()}. */
@@ -1174,7 +1005,7 @@ public final class NuGetFormat implements RepositoryFormat, ProxyLeg, BlobLayout
         }
     }
 
-    /** Fetch one bounded JSON hop of the v3 metadata chain, classified as {@link Resolved} documents. */
+    /** Fetch one bounded JSON hop of the v3 chain. */
     private static Resolved fetchJson(String url, ProxyFormat.Fetcher fetcher) throws IOException {
         URI target = URI.create(url);
         ProxyRelay.Sidecar sidecar = ProxyRelay.declaring(fetcher, target, Map.of("Accept", "application/json"));
@@ -1214,8 +1045,7 @@ public final class NuGetFormat implements RepositoryFormat, ProxyLeg, BlobLayout
 
 
 
-    /** The migration-import capability, delegated to the layout-only {@link NuGetImporter} - the format IS the
-     *  discovered importer now (an {@code instanceof} capability), and the importer class stays as its delegate. */
+    /** The migration-import capability, delegated to {@link NuGetImporter}. */
     private final NuGetImporter importer = new NuGetImporter();
 
     @Override
@@ -1233,12 +1063,9 @@ public final class NuGetFormat implements RepositoryFormat, ProxyLeg, BlobLayout
         importer.importArtifact(path, content, store);
     }
 
-    /**
-     * The version's {@code .nupkg} is pushed as {@code dotnet nuget push} pushes it: a multipart {@code PUT} to the
-     * service index's {@code PackagePublish} resource, the credential in {@code X-NuGet-ApiKey} rather than in an
-     * {@code Authorization} header, and asked for back at its flat-container path, so a package already there is
-     * not pushed again. A signed package carries its signature inside it, so it travels with the bytes.
-     */
+    /** The version's {@code .nupkg} is pushed as {@code dotnet nuget push} does - a multipart {@code PUT} to the
+     *  {@code PackagePublish} resource with the credential in {@code X-NuGet-ApiKey} - unless its flat-container path
+     *  already answers. A signature travels inside the package. */
     @Override
     public Exported export(ArtifactStore repository, String coordinate, String version, ExportTarget target)
             throws IOException {

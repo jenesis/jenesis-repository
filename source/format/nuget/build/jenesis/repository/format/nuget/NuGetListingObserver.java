@@ -9,10 +9,9 @@ import build.jenesis.repository.store.ArtifactStore;
 import build.jenesis.repository.store.StoredListing;
 
 /**
- * Keeps the NuGet {@linkplain NuGetListings stored documents} in step with the transitions that happen off the push
- * path - a hold on a pushed version and its release, a lifecycle mark and its reversal, a removal - by re-deciding
- * the one version's entries. A transition whose subject names neither a package path nor a coordinate is mapped to
- * no entry, so every document is rebuilt in place.
+ * Keeps the NuGet {@linkplain NuGetListings stored documents} in step with transitions off the push path - a hold and
+ * its release, a lifecycle mark and its reversal, a removal - by re-deciding the one version's entries. A subject
+ * naming neither a package path nor a coordinate rebuilds every document in place.
  */
 public final class NuGetListingObserver extends BlobsListingObserver {
 

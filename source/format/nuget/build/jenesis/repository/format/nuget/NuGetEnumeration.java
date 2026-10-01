@@ -6,16 +6,12 @@ import build.jenesis.repository.blobs.OutboundTargets;
 import build.jenesis.repository.format.ProxyFormat;
 
 /**
- * Walks a NuGet V3 repository rooted at an upstream - the same service index and flat container
- * {@link NuGetFormat} already speaks, pointed at "list everything": the service index names the resources, package
- * ids come from the catalog where one is advertised (nuget.org) or from the search service otherwise (jenesis's
- * own, Nexus), and each id's flat-container {@code index.json} names the versions that actually exist - so a
- * catalog id whose package was since deleted or unlisted contributes nothing rather than a failing download. Each
- * entry pairs the {@code <id>/<version>/<id>.<version>.nupkg} path {@link NuGetImporter} accepts (lowercase, the
- * flat-container convention) with its download URL. Not wired into {@code ProxyFormat.enumerate}; callers drive it
- * directly. The service index is read eagerly - one advertising neither a catalog nor a search service fails up front
- * with the honest constraint - and catalog pages, search pages and version lists read lazily as the stream advances,
- * failures surfacing as {@link UncheckedIOException}.
+ * Walks a NuGet V3 repository rooted at an upstream: the service index names the resources, package ids come from the
+ * catalog where one is advertised or from the search service otherwise, and each id's flat-container {@code index.json}
+ * names the versions that exist, so an id whose package was deleted or unlisted contributes nothing. Each entry pairs
+ * the lowercase {@code <id>/<version>/<id>.<version>.nupkg} path {@link NuGetImporter} accepts with its download URL.
+ * Callers drive it directly. The service index is read eagerly, so one advertising neither a catalog nor a search
+ * service fails up front; pages and version lists read lazily, failures surfacing as {@link UncheckedIOException}.
  */
 public final class NuGetEnumeration {
 
@@ -27,13 +23,9 @@ public final class NuGetEnumeration {
     }
 
     /**
-     * @param allowInternal the deployment's {@link build.jenesis.repository.blobs.ProxyLeg#ALLOW_INTERNAL} dial - the
-     *                      same one the proxy leg reads, so a walk and a pull-through of the same advertised {@code
-     *                      @id} cannot answer differently, and the one screen they both call
-     *                      is {@link build.jenesis.repository.blobs.OutboundTargets}. Off means a cross-origin hop must
-     *                      be {@code https} and public; one on the submitted upstream's own ORIGIN (scheme and
-     *                      authority) is operator-trusted either way, because it reaches no host, port or scheme the
-     *                      walk is not already reaching.
+     * @param allowInternal the deployment's {@link build.jenesis.repository.blobs.ProxyLeg#ALLOW_INTERNAL} dial, the
+     *     one the proxy leg reads, screened by {@link build.jenesis.repository.blobs.OutboundTargets}: off, a
+     *     cross-origin hop must be {@code https} and public; a hop on the upstream's own origin is trusted either way
      */
     public static Stream<Map.Entry<String, URI>> enumerate(ProxyFormat.Fetcher fetcher, URI upstream,
                                                            boolean allowInternal) throws IOException {
@@ -60,12 +52,8 @@ public final class NuGetEnumeration {
         if (flat == null) {
             throw new IOException("No flat container (PackageBaseAddress) advertised by " + root.resolve("v3/index.json"));
         }
-        // The flat-container, catalog and search @id values come from the untrusted upstream v3/index.json; each is an
-        // absolute URL (java.net.URI.resolve returns an absolute argument verbatim), and every one is fetched
-        // server-side below, so a hostile index advertising an @id at a loopback / 169.254.169.254 / CGNAT
-        // control-plane host is an SSRF. Screen each through the one shared OutboundTargets call the pypi/debian/rpm
-        // enumerate paths make too, before any fetch; the flat container also anchors the version-list and download
-        // URLs emitted below (same authority once screened), so screening it here covers those too.
+        // Every @id the service index advertises is untrusted upstream content fetched server-side, so each is screened
+        // before any fetch; the flat container also anchors the version-list and download URLs emitted below.
         URI container = URI.create(flat);
         if (!OutboundTargets.mayFollow(container, root, allowInternal)) {
             throw new IOException("Refusing a flat container at a private host: " + container);
@@ -99,8 +87,8 @@ public final class NuGetEnumeration {
                 });
     }
 
-    /** Every {@code nuget:id} the catalog's pages carry, page by page as the stream advances - ids repeat across
-     *  publish events and deletes are not tracked here; the flat-container read supplies the surviving truth. */
+    /** Every {@code nuget:id} the catalog's pages carry, page by page as the stream advances. Ids repeat across publish
+     *  events; the flat-container read decides what survives. */
     private static Stream<String> catalogIds(ProxyFormat.Fetcher fetcher, URI catalog, URI upstream,
                                             boolean allowInternal) throws IOException {
         JsonNode top = MAPPER.readTree(fetch(fetcher, catalog));
@@ -109,9 +97,7 @@ public final class NuGetEnumeration {
             String id = item.path("@id").asString(null);
             if (id != null) {
                 URI page = catalog.resolve(id);
-                // A catalog page @id is untrusted upstream content fetched server-side below; an absolute value
-                // replaces the host, so screen it through the one shared OutboundTargets call the sibling formats
-                // make - a hostile catalog pointing a page at a private control-plane host is skipped, not fetched.
+                // A catalog page @id is untrusted upstream content; one the screen refuses is skipped, not fetched.
                 if (OutboundTargets.mayFollow(page, upstream, allowInternal)) {
                     pages.add(page);
                 }
@@ -172,8 +158,8 @@ public final class NuGetEnumeration {
                 .flatMap(List::stream);
     }
 
-    /** One id's surviving versions from its flat-container {@code index.json}; a {@code 404} - the package was
-     *  deleted since the catalog recorded it - contributes nothing. */
+    /** One id's surviving versions from its flat-container {@code index.json}; a {@code 404}, a package deleted since
+     *  the catalog recorded it, contributes nothing. */
     private static List<Map.Entry<String, URI>> versions(ProxyFormat.Fetcher fetcher, URI container, String id)
             throws IOException {
         URI url = URI.create(container + id + "/index.json");

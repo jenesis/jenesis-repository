@@ -6,29 +6,24 @@ import build.jenesis.repository.store.ArchiveInflation;
 import build.jenesis.repository.store.ArchiveWalk;
 
 /**
- * The two things a signed {@code .nupkg} needs before the shared PKCS#7 verifier can judge it: the signature the
- * archive carries, and the bytes the signature's hash statement was computed over.
+ * What a signed {@code .nupkg} needs before the shared PKCS#7 verifier can judge it: the signature it carries, and the
+ * bytes the signature's hash statement covers.
  *
- * <h2>Where NuGet puts a signature, and what it signs</h2>
+ * <h2>What NuGet signs</h2>
  *
- * <p>A signed package carries one extra entry, {@value #SIGNATURE_ENTRY}, stored (never deflated) as the archive's
- * last local entry, directly before the central directory, with its record last in the central directory. The entry
- * is a CMS {@code SignedData} whose encapsulated content is a hash statement over <em>the package as it was before
- * that entry was appended</em>: the archive with the signature's local entry cut out, its central-directory record
- * cut out, and the end-of-central-directory record adjusted by one entry, the record's length and the local entry's
- * length. That is NuGet's own definition (the client hashes exactly that reconstruction when it verifies), so
- * {@link #unsigned} rebuilds it byte for byte and the verifier digests it as it would any covered content.
+ * <p>A signed package carries one extra entry, {@value #SIGNATURE_ENTRY}, stored (never deflated) as the last local
+ * entry and the last central-directory record. It is a CMS {@code SignedData} whose content is a hash statement over
+ * the package as it was before the entry was appended: the local entry and its record cut out, and the end record
+ * adjusted by one entry, the record's length and the entry's length. That is the client's own definition, so
+ * {@link #unsigned} rebuilds it byte for byte.
  *
- * <h2>Streamed, twice, and bounded</h2>
+ * <h2>Streamed twice, and bounded</h2>
  *
- * <p>The layout lives at the end of the archive and a {@link ArtifactSignatures.Signed} opens a fresh stream each time,
- * so the rebuild is two passes and never a copy of the package: the first streams the body to its end keeping only a
- * tail of {@value #TAIL} bytes (the central directory and end record of any package with fewer than tens of
- * thousands of entries fit in it several times over), reads the layout out of the tail and checks NuGet's placement
- * rules; the second streams the body again, copying around the two holes and emitting the adjusted end record. A
- * package whose central directory does not fit the tail, a zip64 archive, or a signature entry with a data
- * descriptor is reported as unreadable rather than guessed at - the verifier then answers "unreadable" for the
- * signature, which is the honest outcome for a shape the client itself refuses to sign.
+ * <p>A {@link ArtifactSignatures.Signed} opens a fresh stream each time, so the rebuild is two passes, never a copy:
+ * the first streams to the end keeping a tail of {@value #TAIL} bytes, reads the layout out of it and checks NuGet's
+ * placement rules; the second copies around the two holes and emits the adjusted end record. A central directory that
+ * does not fit the tail, a zip64 archive, or a signature entry with a data descriptor is reported as unreadable, a
+ * shape the client refuses to sign.
  */
 final class NuGetSignedArchive {
 
@@ -46,13 +41,9 @@ final class NuGetSignedArchive {
     private NuGetSignedArchive() {
     }
 
-    /**
-     * The signature entry's bytes, read under the seam's signature bound, or empty for an unsigned package. The walk is
-     * the archive's own order, so the signature - last by NuGet's rule - is reached only after every other entry has
-     * been passed over, and passing over an entry inflates it: the walk runs under the shared archive-walk bound,
-     * which counts those inflated bytes too, so a package cannot spend a decompressor's whole output on the way. A
-     * walk the bound stops reads as carrying no signature evidence, as any optional declaration past the bound does.
-     */
+    /** The signature entry's bytes, read under the seam's signature bound, or empty when unsigned. The signature is
+     *  last, so every other entry is inflated on the way, under the shared archive-walk bound; a walk the bound stops
+     *  reads as no evidence. */
     static Optional<byte[]> signature(InputStream nupkg) throws IOException {
         return Optional.ofNullable(ArchiveWalk.walk(nupkg, screened -> {
             ZipInputStream zip = ArchiveWalk.zip(screened);

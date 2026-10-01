@@ -1,11 +1,8 @@
 /**
- * The NuGet v3 format as a plugin module: it provides {@link build.jenesis.repository.format.RepositoryFormat} for
- * the {@code /nuget/...} layout - the service index, a multipart {@code .nupkg} push, the flat-container version list
- * and downloads, and the registration index (so {@code dotnet restore} resolves version ranges and the transitive
- * graph, reading each version's {@code dependencyGroups} from its {@code .nuspec}). The multipart push body is read
- * through the shared streaming reader ({@code build.jenesis.repository.multipart}, the one the PyPI upload and the
- * console's settings import also walk), the {@code .nuspec} with the JDK XML, and JSON is emitted with Jackson.
- * Discovered through {@code provides}.
+ * The NuGet v3 format as a plugin module: a {@link build.jenesis.repository.format.RepositoryFormat} for
+ * {@code /nuget/...} - the service index, a multipart {@code .nupkg} push, the flat-container version list and
+ * downloads, and the registration index, so {@code dotnet restore} resolves version ranges and the transitive graph.
+ * The {@code .nuspec} is read with the JDK XML and JSON written with Jackson.
  *
  * @jenesis.release 25
  * @jenesis.bom pin-repository.properties
