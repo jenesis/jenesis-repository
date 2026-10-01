@@ -8,10 +8,9 @@ import build.jenesis.repository.store.ArtifactDescriptor;
 import build.jenesis.repository.store.ArtifactStore;
 
 /**
- * Keeps {@code index.yaml} in step with the transitions that happen off the publish path - a hold on a published
- * chart and its release, a deprecation mark and its reversal, a removal - by re-deciding the affected chart's whole
- * block. The block is the unit because that is how the index is keyed; re-deciding it costs the chart's own versions
- * and never the repository's other charts.
+ * Keeps {@code index.yaml} in step with transitions off the publish path - a hold and its release, a deprecation mark
+ * and its reversal, a removal - by re-deciding the chart's whole block, the unit the index is keyed by; it costs the
+ * chart's own versions, never the repository's other charts.
  */
 public final class HelmListingObserver extends BlobsListingObserver {
 

@@ -1,42 +1,18 @@
 /**
- * The classic Helm chart repository as a plugin module: it provides
- * {@link build.jenesis.repository.format.RepositoryFormat} for the plain HTTP protocol {@code helm repo add} speaks,
- * so {@code helm install}, {@code helm pull} and {@code helm dependency update} resolve charts over the shared store.
+ * The classic Helm chart repository: a {@link build.jenesis.repository.format.RepositoryFormat} for the plain HTTP
+ * protocol {@code helm repo add} speaks, with a pull-through proxy leg. Charts pushed as OCI artifacts resolve through
+ * the {@code oci} format, so this is {@code index.yaml} plus {@code .tgz} charts under {@code /helm/<repo>/...},
+ * published by the ChartMuseum-compatible {@code POST api/charts} ({@code helm cm-push}) or a direct {@code PUT}.
  *
- * <p><b>Scope, deliberately narrow.</b> Only the classic repository is here. Charts pushed as OCI artifacts already
- * resolve through the {@code oci} format - that is the same registry protocol, not a second implementation of it - so
- * this module is {@code index.yaml} plus {@code .tgz} charts and nothing else. It owns {@code /helm/<repo>/...}: the
- * index at {@code index.yaml}, a chart at {@code charts/<name>-<version>.tgz}, and two publish routes - the
- * ChartMuseum-compatible {@code POST api/charts} with the archive as the body, which is what the {@code helm cm-push}
- * plugin sends, and a direct {@code PUT charts/<name>-<version>.tgz}, which is the path the importer replays through.
+ * <p>{@code index.yaml} is a {@link build.jenesis.repository.store.StoredListing}: a read streams it and a publish
+ * rewrites one chart's entry; its {@link build.jenesis.repository.store.StoredListing.Generator} is the repair path,
+ * and a {@code PublicationObserver} keeps it in step with holds, releases, marks and removals. It carries no
+ * {@code generated:} stamp, since it is amended per write.
  *
- * <p><b>The index is maintained, not generated.</b> {@code index.yaml} is a
- * {@link build.jenesis.repository.store.StoredListing} whose entry each publish re-decides and whose
- * {@link build.jenesis.repository.store.StoredListing.Generator} is the repair path, which is the shape
- * {@code StoredListing} exists for: a read streams the stored document as it is, and a publish rewrites one chart's
- * entry rather than folding over every chart in the repository. A {@code PublicationObserver} keeps it in step with a
- * hold, a release, a lifecycle mark and a removal.
- *
- * <p><b>Why the document carries no {@code generated:} stamp.</b> Helm's own index files record when the index was
- * generated, because they are produced in one pass by {@code helm repo index}. This one is not produced in a pass at
- * all - it is amended by each write - so there is no single moment it was generated and any timestamp would be a
- * fiction that a reader would take for a fact. The field is informational: Helm's index loader requires
- * {@code apiVersion} and reads {@code generated} only to display it.
- *
- * <p><b>The digest is the store's, not the publisher's.</b> Helm verifies a downloaded chart against the
- * {@code digest} in the index entry it read. That digest is written from the SHA-256 the content-addressed store
- * computed as the archive streamed in, so it describes the bytes this repository will actually serve. The chart's
- * metadata - its name, version, description, appVersion and {@code deprecated} flag - is read from the
- * {@code Chart.yaml} <i>inside</i> the archive, materialised alone through the product's shared archive bounds while
- * the chart's templates and values stream past, and parsed with SnakeYAML's {@code SafeConstructor}, which
- * instantiates nothing.
- *
- * <p>It also provides {@link build.jenesis.repository.format.ArtifactLayout}, declaring the {@code "Helm"} ecosystem,
- * and a {@link build.jenesis.repository.format.RepositoryImporter} that replays an exported chart repository through
- * the format's own publish path. {@code Chart.yaml} carries {@code deprecated}, so a deprecated chart is a lifecycle
- * mark this format has a native field for rather than one it has to declare away.
- *
- * <p>No pull-through proxy leg: that is a second change, and it is not implied by "serve the classic repository".
+ * <p>The index {@code digest} is the SHA-256 the store computed, so Helm verifies the bytes this repository serves; a
+ * chart's metadata, including {@code deprecated}, is read from the {@code Chart.yaml} inside the archive with
+ * SnakeYAML's {@code SafeConstructor}. It is also an {@link build.jenesis.repository.format.ArtifactLayout} for the
+ * {@code "Helm"} ecosystem and a {@link build.jenesis.repository.format.RepositoryImporter}.
  *
  * @jenesis.release 25
  * @jenesis.bom pin-repository.properties
@@ -51,8 +27,7 @@ module build.jenesis.repository.format.helm {
     requires org.apache.commons.compress;
     requires org.slf4j;
     requires org.yaml.snakeyaml;
-    // Exported to test modules only; the unit suite is named here because its assertions
-    // are about the path grammar, which belongs in the fastest lane.
+    // Exported to test modules only.
     exports build.jenesis.repository.format.helm to
             build.jenesis.repository.gateway.test,
             build.jenesis.repository.gateway.census.test,

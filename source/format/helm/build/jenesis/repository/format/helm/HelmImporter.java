@@ -8,17 +8,10 @@ import build.jenesis.repository.store.ArtifactStore;
 
 /**
  * Imports a classic Helm chart repository, replaying each {@code .tgz} through {@link HelmFormat}'s own
- * {@code PUT charts/<name>-<version>.tgz} path so an exported repository round-trips.
- *
- * <p>Only the archives migrate. {@code index.yaml} is derived - the format rebuilds it from each chart's stored
- * stanza - so importing one would overwrite a maintained document with a snapshot of somebody else's, and an asset
- * that is not a {@code .tgz} is skipped. Each chart's coordinate is read from the {@code Chart.yaml} inside it by the
- * publish path itself rather than parsed out of the file name here, which is the same reason the publish reads it
- * there: a chart name may contain hyphens, so the file name does not say where the version begins. The file name is
- * still carried through, because the publish checks the archive's metadata against it and refuses a mismatch.
- *
- * <p>All charts migrate into a single {@code /helm/helm/...} repository, the flat migration the RPM, Cargo, Conda and
- * Composer importers use. SPI-only: the importer reuses the format's publish path rather than reimplementing it.
+ * {@code PUT charts/<name>-<version>.tgz} path so an exported repository round-trips. Only the archives migrate:
+ * {@code index.yaml} is derived, so importing one would overwrite a maintained document. The coordinate is read from
+ * {@code Chart.yaml} by the publish, which also refuses an archive whose metadata disagrees with the file name. All
+ * charts land in one {@code /helm/helm/...} repository.
  */
 public final class HelmImporter implements RepositoryImporter {
 
@@ -36,8 +29,7 @@ public final class HelmImporter implements RepositoryImporter {
 
     @Override
     public Optional<ArtifactDescriptor> importTarget(String path) {
-        // RepositoryImporter clause 4: a source path is as client-supplied as a request path, so a traversal-shaped
-        // one is refused by name rather than echoed into the descriptor the import edge screens.
+        // RepositoryImporter clause 4: a traversal-shaped source path is refused by name.
         String relative = RepositoryImporter.importablePath(path, REPO);
         if (!relative.endsWith(TGZ)) {
             return Optional.empty();
@@ -47,15 +39,13 @@ public final class HelmImporter implements RepositoryImporter {
         if (file.isEmpty() || file.equals(TGZ)) {
             return Optional.empty();
         }
-        // The coordinate is deliberately left to the publish, which reads Chart.yaml; the descriptor names the path
-        // the replay PUTs to, and the archive's own metadata decides whether that path was the truth.
+        // The coordinate is left to the publish, which reads Chart.yaml and judges this path against it.
         return Optional.of(ArtifactDescriptor.at(HelmFormat.ECOSYSTEM, "/helm/" + REPO + "/charts/" + file));
     }
 
     @Override
     public void importArtifact(String path, InputStream content, ArtifactStore store) throws IOException {
-        // Replayed through the format's own PUT, which reads Chart.yaml out of the archive and refuses one whose
-        // metadata disagrees with the file name - so an import is screened exactly as a publish is.
+        // Replayed through the format's own PUT, so an import is screened exactly as a publish is.
         Optional<ArtifactDescriptor> target = importTarget(path);
         if (target.isEmpty()) {
             return;                 // index.yaml is derived, and a non-chart asset has no coordinate to file under
