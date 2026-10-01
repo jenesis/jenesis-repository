@@ -11,14 +11,13 @@
  * <p>It holds the credential model ({@code Authorization}) and the plugin seams the server
  * {@code uses} - the unique ones resolving through the shared {@code Providers} primitives, so an explicitly selected
  * implementation that no provider answers to fails at resolution rather than degrading to the seam's {@code NONE}
- * sentinel: the rate limiter ({@code RateLimiter} / {@code RateLimiterProvider}), the credential usage
- * tracker
+ * sentinel: the rate limiter ({@code RateLimiter} / {@code RateLimiterProvider}), the credential usage tracker
  * ({@code KeyUsageTracker} / {@code KeyUsageTrackerProvider}), the workload-identity token exchange
  * ({@code TokenExchange} / {@code TokenExchangeProvider}), the {@code /api/capabilities} contributor
  * ({@code CapabilityContributor}) and the import-edge ownership signal ({@code ImportEdgeProvider}). The
  * {@code resolve}/{@code installed} static discovery methods live on the provider types here, so the {@code uses}
- * clauses for them sit in this module; the server {@code requires transitive} this module, so every existing
- * {@code requires build.jenesis.repository.server} consumer still sees the moved types unchanged.
+ * clauses for them sit in this module; the server {@code requires transitive} this module, so a module that
+ * {@code requires build.jenesis.repository.server} sees these types too.
  *
  * <p>It is also launchable, for the one program the credential model needs outside a server: {@code MintKey} prints a
  * well-formed key for a tenant, which is how a deployment's bootstrap key comes to exist

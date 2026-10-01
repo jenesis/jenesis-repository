@@ -10,13 +10,13 @@ import build.jenesis.repository.store.StoreCache;
  * The credential model. A key is {@code jenk_<tenant>.<secret><checksum>} (see {@link #mint}): the {@code jenk_}
  * prefix and trailing checksum make a leaked key recognisable and offline-validatable by a secret scanner, the
  * tenant travels in the key so the deployment stays stateless and multi-tenant, and only the key's SHA-256 hash is
- * ever stored, never the secret. Under
- * {@code auth/<tenant>/<hash>/} sit two small objects: {@code grants} - a properties map of
+ * ever stored, never the secret. Under a subject's path in the credential space ({@link CredentialSpace},
+ * {@code .system/auth/<tenant>/<kind>/<id>}) sit two small objects: {@code grants} - a properties map of
  * {@code <scope> -> <rights>} where the scope is a named repository ({@code *} matching all) and the rights are
  * {@code <surface>:<verb>} tokens - and {@code metadata} (label, created, optional expiry, optional last-used).
- * The lookup tries the exact scope, then falls back to {@code *}; a re-read picks up a revoked grant at once because
- * the objects are read through the store on each check, and an expired key is rejected before its grants are
- * consulted.
+ * The lookup tries the exact scope, then falls back to {@code *}; the objects are read through the credential
+ * space's cache, which a change on any node invalidates within the space's epoch window, and an expired key is
+ * rejected before its grants are consulted.
  *
  * The rights a credential can carry are named here as {@code <surface>:<verb>} string constants rather than a closed
  * enum, so a deployment or a plugged-in surface can introduce a new surface (or a new verb on one) without changing
@@ -26,9 +26,10 @@ import build.jenesis.repository.store.StoreCache;
  *
  * <p>This type holds the credentials and subjects, their grants, and the decisions over them. The rest of the
  * credential space hangs off it, each concern its own type: how long a credential lives ({@link #lifetimes()}), a
- * tenant's OIDC trusts ({@link #trusts()}), its named roles ({@link #roles()}) and its groups ({@link #groups()}). They are reached through an authorization rather than built
- * on their own because every one of them reads and writes through the same cache and the same deployment-wide epoch,
- * so a change to any of them reaches every node the way a revocation does.
+ * tenant's OIDC trusts ({@link #trusts()}), its named roles ({@link #roles()}) and its groups ({@link #groups()}). They
+ * are reached through an authorization rather than built on their own because every one of them reads and writes
+ * through the same cache and the same deployment-wide epoch, so a change to any of them reaches every node the way a
+ * revocation does.
  */
 public final class Authorization {
 
@@ -108,7 +109,7 @@ public final class Authorization {
     /** The strictly-opt-in anonymous role: return a copy of this authorization that grants a keyless caller
      *  the rights in {@code rights} (a comma-list in the existing grant grammar - a bare {@code <surface>:<verb>} token
      *  granted on every repository, or a {@code <repository>=<token>} entry scoped to one named repository, or the
-     *  all-privileges {@code *}). A blank value grants nothing, so a keyless request is rejected exactly as it is today.
+     *  all-privileges {@code *}). A blank value grants nothing, so a keyless request is rejected.
      *  Only an enforcing authorization consults it; an anonymous (open) one already allows everything. */
     public Authorization withAnonymousRights(String rights) {
         return new Authorization(store, lifetimes.defaultLifetime(), lifetimes.maxLifetime(),
@@ -137,12 +138,7 @@ public final class Authorization {
      * the value's grammar, and what a malformed one means, belong to the type that owns the concept rather than to
      * whichever wiring layer happens to read the property.
      *
-     * <p>Both dials were honoured where they are read and reachable from no configuration at all - the withers were
-     * public, the mint path consulted them, nothing outside a test called them - so every deployment ran the 90-day
-     * default with no ceiling and no way to say otherwise, while a <em>tenant</em> policy could already narrow both.
-     * That made the missing deployment-wide floor and ceiling the odd gap rather than a deliberate omission.
-     *
-     * <p>A blank value leaves the shipped posture untouched, deliberately: a ceiling appearing on upgrade would cap
+     * <p>A blank value leaves the shipped posture untouched, deliberately: a ceiling nobody configured would cap
      * every tenant's credentials at once, and an operator who never asked for one would find keys expiring early
      * with nothing in their configuration to explain it. A malformed duration throws rather than falling back - a
      * lifetime silently reverting to 90 days because someone wrote {@code 30d} for {@code P30D} is only noticed when
@@ -208,10 +204,8 @@ public final class Authorization {
      * a holder with a small grant rather than a mechanism of its own, and a person's rights are written down the
      * way a key's are instead of inferred from the edition and the tenancy mode.
      *
-     * <p><strong>What is true today is the key, and only the key.</strong> This declares the vocabulary and keys
-     * the store by it; {@link #authorize} still resolves {@link Kind#CREDENTIAL} and nothing else, and a person is
-     * still authorized by the console's own mechanism. The other three kinds are the shape the rest is built into,
-     * and each becomes writable in the change that makes it enforceable - never before, because a stored grant
+     * <p>Every kind but {@link Kind#ANONYMOUS} is written and enforced here; the keyless caller's rights come from
+     * configuration ({@link Subject#ANONYMOUS}), so a grant to it is refused rather than stored - a stored grant
      * nothing consults reads as access granted.
      *
      * <p>A subject is one path segment pair, so a grant lookup stays the point read the cost model depends on.
@@ -230,7 +224,7 @@ public final class Authorization {
         /** A named collection of principals within a tenant, holding rights exactly as a person or key does. */
         GROUP,
 
-        /** The keyless caller - today a setting rather than a row; see {@link Subject#ANONYMOUS}. */
+        /** The keyless caller - a setting rather than a row; see {@link Subject#ANONYMOUS}. */
         ANONYMOUS;
 
         /** The path segment this kind's subjects live under. Lower case, so the store key reads as prose. */
@@ -297,11 +291,9 @@ public final class Authorization {
          * The keyless caller's subject: unnamed within its kind, so it takes a fixed id - {@code -} rather than a
          * word, because a word is a name a real subject could also be given.
          *
-         * <p><strong>Not yet the source of truth.</strong> A keyless caller's rights come from the
+         * <p><strong>Not the source of truth.</strong> A keyless caller's rights come from the
          * {@code anonymous-rights} setting, held in memory per node and deployment-wide, and {@link #authorize}
-         * still reads them from there. This subject is where they belong, and moving them is a decision rather
-         * than a refactor: it settles whether a grant may be expressed in configuration at all, and a keyless
-         * request names no tenant, so the row is deployment-wide until the request path carries one.
+         * reads them from there: a keyless request names no tenant, so no per-tenant row could hold them.
          */
         public static final Subject ANONYMOUS = new Subject(Kind.ANONYMOUS, "-");
     }
@@ -324,7 +316,7 @@ public final class Authorization {
         space.freshen();   // another node's grant or revocation, at most EPOCH_TTL old - see CredentialSpace
         // The one choke-point: an enforcing deployment that sees a request with NO credential decides it
         // against the strictly-opt-in anonymous grant set, reusing the exact matching a minted credential uses (no
-        // second code path). Default (empty grants) => UNAUTHORIZED, byte-for-byte today's keyless rejection. A
+        // second code path). Default (empty grants) => UNAUTHORIZED, the plain keyless rejection. A
         // present-but-malformed key is NOT keyless: it stays a failed authentication attempt below.
         if (key == null || key.isBlank()) {
             return anonymous.decide(scope, path, required);
@@ -727,10 +719,9 @@ public final class Authorization {
     /**
      * The same grant, ending at {@code expires} - so a right may be time-boxed and not only a key.
      *
-     * <p>Expiry was a field on a credential, which meant it could only ever time-box a <em>secret</em>. An identity
-     * is a session rather than a credential, so "a contractor until the end of March" or "an elevation that lapses
-     * on its own" had nothing to attach to: the only way to end a person's access was to remember to remove it.
-     * On the grant it applies to every holder, because the grant is what every holder holds.
+     * <p>An expiry on a credential time-boxes only a <em>secret</em>. An identity is a session rather than a
+     * credential, so "a contractor until the end of March" or "an elevation that lapses on its own" needs an expiry
+     * on the grant, where it applies to every holder, because the grant is what every holder holds.
      *
      * <p>{@code null} never expires, which is what an ordinary grant is.
      */

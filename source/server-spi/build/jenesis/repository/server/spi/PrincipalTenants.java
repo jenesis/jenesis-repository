@@ -32,12 +32,12 @@ import module java.base;
  * puts the tenant back if it finds any: every grant written before that second read is seen by it, and every grant
  * written after it reads an index that no longer names the tenant and adds it.
  *
- * <p><b>An index that does not exist yet</b> - a deployment whose principals were granted before it was kept - is
- * built by the start-up repair ({@link GroupMembership#repairDerivedGrants}), which already re-derives every principal
- * of every tenant and reconciles each one as it goes. It is built there rather than by a request that finds it
- * absent, because a request building it would have to probe every tenant, which is the unbounded read this document
- * exists to remove; the repair walks the store off the request path, runs on every start, and writes only the
- * tenants that are missing. A read therefore answers what the document says and never walks.
+ * <p><b>An index that does not exist yet</b> is built by the start-up repair
+ * ({@link GroupMembership#repairDerivedGrants}), which already re-derives every principal of every tenant and
+ * reconciles each one as it goes. It is built there rather than by a request that finds it absent, because a request
+ * building it would have to probe every tenant, which is the unbounded read this document exists to remove; the repair
+ * walks the store off the request path, runs on every start, and writes only the tenants that are missing. A read
+ * therefore answers what the document says and never walks.
  */
 final class PrincipalTenants {
 

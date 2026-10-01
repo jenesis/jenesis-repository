@@ -6,8 +6,7 @@ import module java.base;
  * A core extension point for the deployment-wide {@code /api/capabilities} surface, discovered at runtime with
  * {@link ServiceLoader} - so a richer distribution advertises its extra capabilities (its supported formats, import
  * sources, module flags) on the <em>one</em> free-served {@code /api/capabilities} endpoint without a
- * bean override and without a client change. This is exactly the intent the {@code RepositoryController#capabilities}
- * javadoc has always stated: "a distribution with more capabilities extends the map without a client change".
+ * bean override and without a client change.
  *
  * <p>The {@code RepositoryController} builds its base map ({@code readOnly}, {@code auth}, {@code anonymousRights}),
  * then {@link #merge merges} every discovered contributor into it. With no contributor installed - the product -
@@ -31,22 +30,13 @@ import module java.base;
  * outcome and additionally <b>names every contribution it refused</b>, in the returned {@link Merged} report and in the
  * served body itself, under {@value #CONFLICTS_KEY}.
  *
- * <p><b>Why it reports rather than throws.</b> Throwing on a collision is the other candidate, and on the face of it
- * the more fail-fast one. It loses on where this code runs. {@code merge} is not a resolution or startup step
- * that could refuse a bad deployment before it serves anything; it runs <em>inside the request</em>, on every GET of
- * {@code /api/capabilities}. An exception there is not a boot failure that an operator fixes once - it is a permanent
- * 500 on the one endpoint whose entire job is to tell a client what this deployment can do, and the first casualties
- * are the base flags the precedence rule exists to protect: a console could no longer learn that the deployment is
- * read-only or that auth is on, because an optional plugin misspelled a key. An optional module must never be able
- * to take a core surface down, its presence no more than its absence - and a
- * contributor's key-naming mistake is not worth the product's own capability advertisement.
- *
- * <p>Reporting satisfies fail-fast on its own terms: the forbidden silent drop is a failure whose loss changes what
- * is served with nothing logged, countered or surfaced, and this is logged, returned as data, and surfaced in the body.
- * It is also the shape the bound-visibility rule prescribes for exactly this class of outcome - an
- * explicit result the caller cannot miss, rather than an exception - and it leaves fail-fast available where fail-fast
- * is safe: a contributor that knows a priori which keys it may not claim can still refuse at the point it builds its
- * contribution, long before the merge sees it.
+ * <p><b>Why it reports rather than throws.</b> {@code merge} runs <em>inside the request</em>, on every GET of
+ * {@code /api/capabilities}, not at startup. An exception there would be a permanent 500 on the one endpoint whose
+ * job is to tell a client what this deployment can do, and the first casualties would be the base flags the
+ * precedence rule exists to protect: a console could not learn that the deployment is read-only or that auth is on,
+ * because an optional plugin misspelled a key. An optional module must never be able to take a core surface down.
+ * The report is logged, returned as data and surfaced in the body, so nothing is dropped in silence; a contributor
+ * that knows a priori which keys it may not claim can still refuse at the point it builds its contribution.
  *
  * <p>The same reasoning covers a contributor that <em>throws</em> from {@link #capabilities}: the exception is
  * contained, the contributor is named under {@value #FAILURES_KEY}, and the rest of the map is served. Containing it is
@@ -73,18 +63,12 @@ import module java.base;
  *       but that cannot be instantiated fails at {@link ServiceLoader} resolution and is not silently skipped;
  *       a contributor that instantiates but cannot compute is contained and reported (see above).
  *       <p>Unlike the named singleton SPIs beside it, this one does <em>not</em> resolve through the shared
- *       {@code Providers} primitives. Not because it could not be keyed: {@code Providers.all} takes the name as a
- *       function rather than requiring a {@code name()} method, and this merge already computes a per-contributor
- *       identity for its own reports, so keying it is available. What it must not adopt is
- *       {@code Providers.validated}'s refusal, which turns a duplicate provider class into a throw - and this
- *       merge runs inside the request, where throwing costs the endpoint (see above). The ordering those
- *       primitives give is adopted directly instead, by name-sorting here. Two consequences follow and are stated rather
- *       than assumed. First, the packaging guards {@code Providers} applies to every other family are absent here: a
- *       contributor registered twice, or two distributions shipping the same contribution, are not refused at
- *       resolution - they surface instead as this merge's own conflict report, which is the weaker but per-key
- *       signal. Second, the discovery site is this module's own {@link #resolve} static, like the sibling families'
- *       {@code resolve}/{@code installed} statics, so the {@code uses} clause lives in this module;
- *       a second load site for this SPI would be a second discovery pipeline and is forbidden.</li>
+ *       {@code Providers} primitives: {@code Providers.validated} turns a duplicate provider class into a throw, and
+ *       this merge runs inside the request, where throwing costs the endpoint (see above). It name-sorts instead, for
+ *       the same ordering. So the packaging guards {@code Providers} applies to every other family are absent here: a
+ *       contributor registered twice, or two distributions shipping the same contribution, surface as this merge's
+ *       own conflict report rather than being refused at resolution. The discovery site is this module's own
+ *       {@link #resolve} static, like the sibling families', so the {@code uses} clause lives in this module.</li>
  *   <li><b>Error visibility.</b> No outcome of a merge is silent. A contribution that loses a key to the base or to an
  *       earlier contributor is reported in {@link Merged#conflicts()} and under {@value #CONFLICTS_KEY}; a contributor
  *       that throws is reported in {@link Merged#failures()} and under {@value #FAILURES_KEY}. Both are additionally
@@ -99,13 +83,11 @@ import module java.base;
  *       holding it itself.</li>
  *   <li><b>Ordering / concurrency.</b> The base map's keys come first in their insertion order; contributed keys are
  *       appended in <b>contributor-class-name order</b>, then the diagnostic keys last. Among contributors the
- *       first in that order wins a contested key. The reports are deterministic: conflicts appear in contributor class-name order and, within one
- *       contribution, sorted by key, so an unordered contributed map cannot make the report shuffle between
- *       requests. The determinism holds <em>across module paths</em> too, which it would not if the winner were
- *       whichever module the loader happened to see first: two distributions claiming one key still must not, but
- *       when they do they disagree reproducibly rather than per deployment. The conflict report is emitted either
- *       way - it is not the alternative to a stable winner, only the thing that makes the collision visible once
- *       there is one.</li>
+ *       first in that order wins a contested key. The reports are deterministic: conflicts appear in contributor
+ *       class-name order and, within one contribution, sorted by key, so an unordered contributed map cannot make the
+ *       report shuffle between requests. The determinism holds <em>across module paths</em> too: two distributions
+ *       claiming one key disagree reproducibly rather than per deployment, and the conflict report makes the collision
+ *       visible.</li>
  *   <li><b>Bounded work / cancellation.</b> {@link #capabilities} is on the request path and must be cheap and
  *       bounded - a handful of already-known flags, not an enumeration of stored artifacts. It is given no
  *       cancellation signal, so it must not block.</li>
@@ -217,12 +199,9 @@ public interface CapabilityContributor {
 
         List<Conflict> conflicts = new ArrayList<>();
         List<Failure> failures = new ArrayList<>();
-        // Name-sorted, not discovery-ordered. Whoever wins a contested key must win it on every module path, and
-        // the sort key is the identity this merge already computes for its own reports - so a stable winner costs
-        // nothing that was not being calculated anyway. Discovery order made two distributions claiming one key
-        // disagree PER DEPLOYMENT, which is the hardest kind of disagreement to reproduce; the conflict report is
-        // emitted either way, so a stable winner plus the report is strictly better than an unstable one plus the
-        // report rather than an alternative to it.
+        // Name-sorted, not discovery-ordered: whoever wins a contested key wins it on every module path, rather than
+        // two distributions claiming one key disagreeing per deployment. The sort key is the identity this merge
+        // already computes for its own reports.
         List<CapabilityContributor> ordered = new ArrayList<>();
         contributors.forEach(ordered::add);
         ordered.sort(Comparator.comparing(contributor -> contributor.getClass().getName()));
@@ -277,7 +256,7 @@ public interface CapabilityContributor {
     /**
      * The outcome of a {@link #merge}: the map to serve, plus everything the precedence rule refused along the way.
      * The two report lists are the reason this is a record rather than a bare map - a caller that only took the map
-     * would be back to a silent drop, and the compiler now hands it the drops whether it looked for them or not.
+     * would be back to a silent drop, and the compiler hands it the drops whether it looked for them or not.
      */
     record Merged(Map<String, Object> capabilities, List<Conflict> conflicts, List<Failure> failures) {
 

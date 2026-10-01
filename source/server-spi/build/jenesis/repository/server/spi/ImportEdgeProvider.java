@@ -15,11 +15,9 @@ import build.jenesis.repository.store.Providers;
  * import controller - a composition's tenant-scoped {@code /api/repository/import} with its audited,
  * SSRF-screened choreography - is the <em>only</em> import edge at boot.
  *
- * <p>No cross-layer stopgap is needed: rather than dropping the free import mapping with a
- * {@code WebMvcRegistrations} bean (a bean/mapping override reaching across the layer), a distribution ships an
- * {@code ImportEdgeProvider} service - its mere presence on the module path
- * makes the built-in edge yield - and contributes its own controller bean, so the two contribute
- * <em>separate, non-colliding</em> controllers with no mapping-suppression bean and no endpoint-mapping collision.
+ * <p>A distribution ships an {@code ImportEdgeProvider} service - its mere presence on the module path makes the
+ * built-in edge yield - and contributes its own controller bean, so the two contribute <em>separate,
+ * non-colliding</em> controllers with no mapping-suppression bean reaching across the layer.
  *
  * <p>With no provider installed (the product) the built-in import edge serves - the same guarantee the
  * {@link CapabilityContributor} zero-contributor case gives. Discovery honours the
