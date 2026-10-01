@@ -10,6 +10,7 @@ import build.jenesis.repository.maintenance.MaintenanceTaskProvider;
 import build.jenesis.repository.maintenance.RepositoryContext;
 import build.jenesis.repository.maintenance.UnitFailures;
 import build.jenesis.repository.maintenance.TenantContext;
+import build.jenesis.repository.scope.Scopes;
 import build.jenesis.repository.server.NodeFingerprintPublisher;
 import build.jenesis.repository.store.ArtifactStore;
 import build.jenesis.repository.store.Requests;
@@ -972,6 +973,11 @@ public final class MaintenanceScheduler implements AutoCloseable {
         @Override
         public ArtifactStore store() {
             return root.scope(tenant);
+        }
+
+        @Override
+        public ArtifactStore system() {
+            return root.scope(Scopes.SYSTEM);
         }
 
         @Override

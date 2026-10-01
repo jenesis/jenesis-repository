@@ -26,6 +26,11 @@ public interface TenantContext {
      *  per-repository hook never visits. */
     ArtifactStore store();
 
+    /** The deployment's product space ({@code .system}), un-metered: the product data kept for each tenant at the
+     *  deployment level lives under it - a tenant's audit trail - so a tenant-wide pass that ages that data out
+     *  reaches it here. */
+    ArtifactStore system();
+
     /** The effective configuration lookup for {@link #tenant()}, {@code null} for an unset key - an operator's pin
      *  over this tenant's override over the deployment-wide override over the file/env default, exactly as
      *  {@link RepositoryContext#config()} resolves it. A global-only key resolves deployment-wide through it, so a
