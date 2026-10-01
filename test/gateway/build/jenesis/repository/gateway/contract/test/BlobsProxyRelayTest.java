@@ -112,6 +112,32 @@ class BlobsProxyRelayTest {
         }
     }
 
+    @Test
+    void a_tap_reads_the_body_once_the_client_has_all_of_it() throws IOException {
+        // A tap may be slow - Debian's writes a record per stanza of a Packages index - so it reads the body only
+        // after the response is complete, and the client never waits on it.
+        byte[] index = new byte[1024 * 1024];
+        new Random(7).nextBytes(index);
+        FormatDrive.Call exchange = new FormatDrive.Call("GET", "/debian/dists/stable/main/binary-amd64/Packages");
+        AtomicInteger relayedWhenTapped = new AtomicInteger(-1);
+        AtomicReference<byte[]> tapped = new AtomicReference<>();
+
+        boolean served = ProxyRelay.streamFresh(
+                (ProxyFormat.Fetcher.Buffered) (url, headers) -> Optional.of(new ProxyFormat.Fetched(200, index,
+                        Map.of())),
+                URI.create("https://upstream.example/index"), null, exchange, ProxyRelay.Document.ENUMERATION,
+                body -> {
+                    relayedWhenTapped.set(exchange.body().length);
+                    tapped.set(body.readAllBytes());
+                });
+
+        assertThat(served).isTrue();
+        assertThat(relayedWhenTapped.get()).as("the client had the whole body before the tap read a byte")
+                .isEqualTo(index.length);
+        assertThat(tapped.get()).as("and the tap read the body the client got").isEqualTo(index);
+        assertThat(exchange.body()).isEqualTo(index);
+    }
+
     /** An upstream that is never reached: the SPI's empty-{@link Optional} transport-failure sentinel. */
     private static ProxyFormat.Fetcher unreachable() {
         return (ProxyFormat.Fetcher.Buffered) (url, headers) -> Optional.empty();

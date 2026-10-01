@@ -4,6 +4,7 @@ import module java.base;
 import module org.slf4j;
 import build.jenesis.repository.format.FormatExchange;
 import build.jenesis.repository.format.ProxyFormat;
+import build.jenesis.repository.store.OwnerOnly;
 
 
 /**
@@ -381,12 +382,14 @@ public final class ProxyRelay {
      *
      * <p>For the leg that must LEARN something from a document it does not otherwise parse - Debian's {@code Packages}
      * index, whose per-package digests are the only place a pool {@code .deb}'s checksum is published. The document
-     * is still streamed, never buffered: the tap sees the same bytes on their way to the client, so a 45 MB index
-     * costs the reader's own bounded state and nothing more.
+     * is still streamed to the client, never buffered in memory, and at the upstream's pace: the bytes are copied to
+     * a spool file on their way, and the tap reads that file once the response is complete, so a tap that writes a
+     * record per stanza costs the client nothing. The relay returns when the tap has read the body, so what it
+     * records is there for the request that follows. A body that did not reach the client whole is not read.
      *
      * <p>A tap that throws does NOT fail the relay. What it records is an optimisation of a later request, while the
-     * response in flight is a client's read - failing that because a side task could not keep up would turn a
-     * bookkeeping problem into an outage. The failure is logged and the stream completes.
+     * response is a client's read - failing that because a side task failed would turn a bookkeeping problem into an
+     * outage. The failure is logged.
      */
     public static boolean streamFresh(ProxyFormat.Fetcher fetcher, URI url, String defaultContentType,
             FormatExchange exchange, Document document, Tap tap) throws IOException {
@@ -412,18 +415,33 @@ public final class ProxyRelay {
                 exchange.setResponseHeader("Content-Type", defaultContentType);
             }
             relayValidators(download, exchange);
-            try (OutputStream out = exchange.respond(200, length(download.header("Content-Length")))) {
-                if (tap == null) {
+            if (tap == null) {
+                try (OutputStream out = exchange.respond(200, length(download.header("Content-Length")))) {
                     download.body().transferTo(out);
-                } else {
-                    tap(download.body(), out, tap, url);
                 }
+                return true;
+            }
+            Path spool = OwnerOnly.createTempFile("jenrepo-relay-tap", ".body");
+            try {
+                boolean spooled;
+                try (OutputStream out = exchange.respond(200, length(download.header("Content-Length")))) {
+                    spooled = tee(download.body(), out, spool, url);
+                }
+                if (spooled) {
+                    try (InputStream body = Files.newInputStream(spool)) {
+                        tap.read(body);
+                    } catch (IOException | RuntimeException failed) {
+                        LOGGER.warn("Reading {} after it was relayed failed; the response is unaffected", url, failed);
+                    }
+                }
+            } finally {
+                Files.deleteIfExists(spool);
             }
             return true;
         }
     }
 
-    /** A reader of a relayed body, fed the bytes as they stream to the client. */
+    /** A reader of a relayed body, fed the whole body once the client has it. */
     @FunctionalInterface
     public interface Tap {
 
@@ -431,37 +449,36 @@ public final class ProxyRelay {
         void read(InputStream body) throws IOException;
     }
 
-    /** Stream the body to the client while a tap reads the same bytes, on a thread of its own so neither waits on
-     *  the other's pace beyond one pipe buffer. */
-    private static void tap(InputStream body, OutputStream out, Tap tap, URI url) throws IOException {
-        PipedOutputStream feed = new PipedOutputStream();
-        PipedInputStream copy = new PipedInputStream(feed, 64 * 1024);
-        Thread reader = Thread.ofVirtual().start(() -> {
-            try (InputStream in = copy) {
-                tap.read(in);
-            } catch (IOException | RuntimeException failed) {
-                LOGGER.warn("Reading {} while it streamed failed; the response is unaffected", url, failed);
-            }
-        });
-        try (OutputStream fed = feed) {
+    /**
+     * Stream the body to the client and copy it to {@code spool} on the way. A failure to write the client's copy
+     * propagates; a failure to write the spool stops the spooling and lets the client's copy finish.
+     *
+     * @return whether the spool holds the whole body
+     */
+    private static boolean tee(InputStream body, OutputStream out, Path spool, URI url) throws IOException {
+        OutputStream copy = Files.newOutputStream(spool);
+        boolean spooling = true;
+        try {
             byte[] buffer = new byte[16 * 1024];
             for (int read = body.read(buffer); read >= 0; read = body.read(buffer)) {
                 out.write(buffer, 0, read);
-                try {
-                    fed.write(buffer, 0, read);
-                } catch (IOException tapGone) {
-                    // The tap stopped reading (it had what it needed, or it failed): the client's copy continues.
-                    break;
+                if (spooling) {
+                    try {
+                        copy.write(buffer, 0, read);
+                    } catch (IOException full) {
+                        LOGGER.warn("Copying {} for a reader failed; the response is unaffected", url, full);
+                        spooling = false;
+                    }
                 }
             }
-            body.transferTo(out);
         } finally {
             try {
-                reader.join(Duration.ofSeconds(30));
-            } catch (InterruptedException interrupted) {
-                Thread.currentThread().interrupt();
+                copy.close();
+            } catch (IOException unflushed) {
+                spooling = false;
             }
         }
+        return spooling;
     }
 
     /**
