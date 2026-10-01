@@ -10,10 +10,9 @@ import build.jenesis.repository.store.ListingObserver;
 import build.jenesis.repository.store.StoredListing;
 
 /**
- * Keeps the RPM {@linkplain RpmListings stored metadata} in step with the transitions that happen off the publish
- * path - a hold on a published package and its release, a yank and its reversal, a removal - by re-deciding the one
- * stanza's membership. A transition whose subject names neither a pool path nor an RPM coordinate is mapped to no
- * stanza, so every repository's metadata is rebuilt in place.
+ * Keeps the RPM {@linkplain RpmListings stored metadata} in step with transitions off the publish path - a hold and its
+ * release, a yank and its reversal, a removal - by re-deciding the one stanza's membership. A subject naming neither a
+ * pool path nor an RPM coordinate rebuilds every repository's metadata in place.
  */
 public final class RpmListingObserver implements ListingObserver {
 

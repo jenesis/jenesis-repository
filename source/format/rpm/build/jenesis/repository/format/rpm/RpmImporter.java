@@ -7,18 +7,10 @@ import build.jenesis.repository.store.ArtifactDescriptor;
 import build.jenesis.repository.store.ArtifactStore;
 
 /**
- * Imports an RPM/yum repository (Nexus/Artifactory {@code yum}) from an incumbent manager. A {@code .rpm} is
- * self-describing - the RPM header at the front carries the name, version, release, epoch, architecture and license -
- * so the importer replays it as a push through {@link RpmFormat#handle}, which reads only that header, streams the
- * package into the content-addressed store and precomputes its {@code primary.xml} {@code <package>} stanza; the
- * replayed push joins that stanza into the stored {@code repodata} itself.
- *
- * <p>Unlike the buffered language importers (a {@code .gem}/{@code .nupkg} whose whole body is read to parse its
- * manifest), the {@code .rpm} body is <b>streamed</b> straight from the source into the CAS - the format materialises
- * only the header - so an arbitrarily large package never lands in heap. A yum layout has no standard sub-directory
- * convention (unlike apt's {@code pool/<component>}), and the filename is the NEVRA the repodata keys on, so the
- * package migrates to {@code /rpm/rpm/<file>.rpm} under a single repository. One of the format importers,
- * discovered through the same {@code RepositoryImporter} SPI the built-in importers use.
+ * Imports an RPM/yum repository from an incumbent manager. A {@code .rpm} is self-describing, so it is replayed as a
+ * push through {@link RpmFormat#handle}, which streams the body into the content-addressed store and reads only the
+ * header. A yum layout has no standard sub-directory convention and the filename is the NEVRA the repodata keys on, so
+ * a package migrates to {@code /rpm/rpm/<file>.rpm} under a single repository.
  */
 public final class RpmImporter implements RepositoryImporter {
 
@@ -29,23 +21,18 @@ public final class RpmImporter implements RepositoryImporter {
 
     @Override
     public Optional<ArtifactDescriptor> importTarget(String path) {
-        // RepositoryImporter clause 4: a source path is as client-supplied as a request path, so a
-        // traversal-shaped one is refused by name rather than echoed into the descriptor the import edge
-        // screens and the trail records, as every importer does.
+        // RepositoryImporter clause 4: a traversal-shaped source path is refused by name.
         String relative = RepositoryImporter.importablePath(path, "rpm");
         if (!relative.toLowerCase(Locale.ROOT).endsWith(".rpm")) {
             return Optional.empty();
         }
-        // The .rpm's target coordinate under /rpm/rpm/<file>, the same repo path importArtifact lays it out at, so the
-        // edge screens the real yum NEVRA coordinate RpmFormat parses from the filename.
+        // The path importArtifact lays the file out at, so the edge screens the NEVRA RpmFormat parses.
         return new RpmFormat().describe(publishPath(relative));
     }
 
     @Override
     public void importArtifact(String path, InputStream content, ArtifactStore store) throws IOException {
-        // RepositoryImporter clause 4: a source path is as client-supplied as a request path, so a
-        // traversal-shaped one is refused by name rather than echoed into the descriptor the import edge
-        // screens and the trail records, as every importer does.
+        // RepositoryImporter clause 4: a traversal-shaped source path is refused by name.
         String relative = RepositoryImporter.importablePath(path, "rpm");
         if (!relative.toLowerCase(Locale.ROOT).endsWith(".rpm")) {
             return;
@@ -53,8 +40,8 @@ public final class RpmImporter implements RepositoryImporter {
         new RpmFormat().handle(new ReplayExchange(publishPath(relative), content), store);
     }
 
-    /** The yum repository path a source {@code .rpm} migrates to: a single {@code rpm} repository keyed by its
-     *  filename NEVRA, so the {@code <location href>} the client follows matches where it is served. */
+    /** The path a source {@code .rpm} migrates to: the single {@code rpm} repository, by filename, so the
+     *  {@code <location href>} matches where it is served. */
     private static String publishPath(String path) {
         int slash = path.lastIndexOf('/');
         return "/rpm/rpm/" + (slash < 0 ? path : path.substring(slash + 1));

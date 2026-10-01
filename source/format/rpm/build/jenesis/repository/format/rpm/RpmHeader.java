@@ -4,18 +4,12 @@ import module java.base;
 
 /**
  * A minimal, read-only reader for the front of an RPM package: the 96-byte lead, the signature header and the main
- * header, from which the {@code repodata} the {@link RpmFormat} generates needs the name, version, release, epoch,
- * architecture and a few descriptive fields, plus the byte range the main header occupies (so {@code dnf} can fetch
- * just the header with a ranged request). Only the header region is materialised - a small, bounded, front-of-file
- * metadata parse, exactly the index parse the streaming principle allows - while the (arbitrarily large) cpio payload
- * streams past into the content-addressed store, never buffered.
+ * header, from which {@link RpmFormat}'s {@code repodata} takes the name, version, release, epoch, architecture and a
+ * few descriptive fields, plus the main header's byte range for {@code dnf}'s ranged header fetch. Only the header
+ * region is materialised; the cpio payload streams past.
  *
- * <p>The RPM header is a simple, stable, well-documented binary structure (an 8-byte magic, a count and a data-store
- * size, then fixed 16-byte index entries into a tagged data store). It is hand-read here rather than through a library
- * because no maintained RPM library fits the constraints the rest of this system is built on - a Java-module-path
- * artifact, native-image-friendly, permissively licensed - and a read-only header walk is small enough to keep
- * correct and pin to real output (the {@code rpmbuild}-gated case in {@code RpmFormatTest}), the same reasoning that
- * lets the RubyGems format hand-write its {@code Marshal} stream against real Ruby.
+ * <p>The header is an 8-byte magic, a count and a data-store size, then fixed 16-byte index entries into a tagged data
+ * store, read directly and pinned to real {@code rpmbuild} output by its test.
  */
 final class RpmHeader {
 
@@ -27,7 +21,7 @@ final class RpmHeader {
     private static final int INTRO_LENGTH = 16;
     private static final int INDEX_ENTRY_LENGTH = 16;
 
-    /** Sanity bounds on the declared header sizes, so a crafted upload can never make the bounded parse allocate wildly. */
+    /** Bounds on the declared header sizes, so a crafted upload cannot make the parse allocate wildly. */
     private static final int MAX_INDEX_ENTRIES = 100_000;
     private static final int MAX_STORE_BYTES = 64 * 1024 * 1024;
 
@@ -49,8 +43,8 @@ final class RpmHeader {
     private static final int TYPE_BIN = 7;
     private static final int TYPE_I18NSTRING = 9;
 
-    // Signature-header tags carrying an OpenPGP signature, and what each one covers. rpmsign writes the header-only
-    // pair by default and the header-and-payload pair for the older tools that check that; all four are read.
+    // Signature-header tags carrying an OpenPGP signature; rpmsign writes the header-only pair by default, older tools
+    // the header-and-payload pair, and all four are read.
     /** A DSA signature over the main header alone. */
     static final int SIGTAG_DSA = 267;
     /** An RSA signature over the main header alone - what a current {@code rpmsign} writes. */
@@ -63,10 +57,7 @@ final class RpmHeader {
     private RpmHeader() {
     }
 
-    /**
-     * A package's metadata plus the {@code [start, end)} byte offsets of its main header within the file, so the
-     * format can emit {@code <rpm:header-range>}.
-     */
+    /** A package's metadata and the {@code [start, end)} offsets of its main header, for {@code <rpm:header-range>}. */
     record Package(String name,
                    String epoch,
                    String version,
@@ -83,10 +74,7 @@ final class RpmHeader {
                    long headerEnd) {
     }
 
-    /**
-     * One OpenPGP signature the signature header carries: the tag that says what it covers, and the signature's own
-     * bytes as {@code rpmsign} wrote them (a binary OpenPGP packet, never armoured).
-     */
+    /** One OpenPGP signature from the signature header: the tag saying what it covers, and the binary packet. */
     record Signature(int tag, byte[] bytes) {
 
         /** Whether the signature is over the main header and the payload together, rather than the header alone. */
@@ -106,12 +94,9 @@ final class RpmHeader {
         }
     }
 
-    /**
-     * The OpenPGP signatures the signature header of {@code region} carries, in index order: the four tags above,
-     * each a {@code BIN} entry of at most {@code largest} bytes. An entry past that bound is a hostile package's
-     * rather than a usable signature and is left out, so a verifier is never handed it; a malformed index throws,
-     * as the rest of this reader does for a package that is not what it claims.
-     */
+    /** The OpenPGP signatures the signature header of {@code region} carries, in index order: the four tags above, each
+     *  a {@code BIN} entry of at most {@code largest} bytes. A larger entry is left out, never handed to a verifier; a
+     *  malformed index throws. */
     static List<Signature> signatures(byte[] region, int largest) throws IOException {
         int count = int32(region, LEAD_LENGTH + 8);
         int store = int32(region, LEAD_LENGTH + 12);
@@ -141,11 +126,8 @@ final class RpmHeader {
         return List.copyOf(found);
     }
 
-    /**
-     * Read exactly the lead + signature header + main header off the front of {@code in}, leaving it positioned at the
-     * first payload byte, and return the raw bytes read so the caller can restream them ahead of the untouched payload
-     * into storage. Throws when the bytes are not a well-formed RPM front.
-     */
+    /** Read exactly the lead, signature header and main header off {@code in}, leaving it at the first payload byte,
+     *  and return the bytes read so the caller can restream them ahead of the payload. Throws on a malformed front. */
     static byte[] readHeaderRegion(InputStream in) throws IOException {
         ByteArrayOutputStream region = new ByteArrayOutputStream();
         readInto(in, region, LEAD_LENGTH);
@@ -262,10 +244,8 @@ final class RpmHeader {
                 | ((bytes[offset + 2] & 0xFF) << 8) | (bytes[offset + 3] & 0xFF);
     }
 
-    /** Whether a 4-byte {@code int32} at a data-store offset stays within the header. A tag's data offset is checked
-     *  {@code [dataStart, headerEnd)} for the string reads, but a numeric read consumes four bytes, so an offset within
-     *  three bytes of {@code headerEnd} would run off the end - an {@link ArrayIndexOutOfBoundsException} (a 500) on a
-     *  crafted header rather than a clean rejection. A numeric tag that does not fit is treated as absent. */
+    /** Whether a 4-byte {@code int32} at a data-store offset fits inside the header; a numeric tag that does not fit is
+     *  absent, rather than an {@link ArrayIndexOutOfBoundsException} on a crafted header. */
     private static boolean int32Fits(int at, int headerEnd) {
         return at >= 0 && at + 4 <= headerEnd;
     }

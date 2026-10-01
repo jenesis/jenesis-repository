@@ -11,12 +11,10 @@ import build.jenesis.repository.format.signing.OpenPgpSigner;
 
 /**
  * An RPM repository's {@code primary.xml} as a stored listing, with {@code primary.xml.gz}, {@code repomd.xml} and
- * (when a signing key is provisioned) {@code repomd.xml.asc} derived from it on every write. The entries are the
- * {@code <package>} stanzas the publish stored, keyed by their pool location, and an entry exists exactly when the
- * package is servable - its pool pointer not withheld, its version not yanked - the screen the on-read generation
- * applied per stanza, applied here to the one stanza a write touches. The {@code <metadata>} wrapper's
- * {@code packages} count is the entry count, and {@code repomd.xml}'s revision and timestamp are the document's
- * sequence, so a re-read is byte-stable between writes.
+ * (with a signing key) {@code repomd.xml.asc} derived on every write. The entries are the stored {@code <package>}
+ * stanzas, keyed by pool location, present exactly when the package is servable - pool pointer not withheld, version
+ * not yanked. The wrapper's {@code packages} count is the entry count, and {@code repomd.xml}'s revision and timestamp
+ * are the document's sequence, so a re-read is byte-stable between writes.
  */
 final class RpmListings {
 
@@ -61,15 +59,9 @@ final class RpmListings {
             return body.append("</metadata>\n").toString().getBytes(StandardCharsets.UTF_8);
         }
 
-        /**
-         * The same document, written as the stanzas arrive - through a spool, because the root element carries the
-         * package count and so cannot be written until the last stanza has gone by.
-         *
-         * <p>{@code primary.xml} is every package in the repository. Without this the inherited appender collected
-         * all of them into a map and called {@link #join}, which is that document again as a {@code StringBuilder}
-         * and again as its {@code String} - so the streaming generator below wrote into a buffer, and every
-         * publish rewrote the repository's index in heap.
-         */
+        /** The same document, written as the stanzas arrive, through a spool because the root element carries the
+         *  package count and cannot be written before the last stanza; the document is every package in the repository,
+         *  so it is never held. */
         @Override
         public Appender append(OutputStream out) {
             return StoredListing.spooling(out,
@@ -85,23 +77,16 @@ final class RpmListings {
                     "</metadata>\n".getBytes(StandardCharsets.UTF_8));
         }
 
-        /**
-         * The stored stanzas, one at a time, scanned out of the stream rather than out of the whole document.
-         *
-         * <p>The same {@code <package>}...{@code </package>} scan {@link #split} performs, over a window that is
-         * refilled rather than over the document as a string. A stanza is bounded by what one package's metadata
-         * costs, so holding one is fine; holding the file they are all in is what this avoids.
-         */
+        /** The stored stanzas, scanned out of the stream one at a time through a refilled window, the scan
+         *  {@link #split} performs on a whole document. */
         @Override
         public Reader read(InputStream in, long ignored) {
             byte[] open = "<package".getBytes(StandardCharsets.UTF_8);
             byte[] shut = "</package>".getBytes(StandardCharsets.UTF_8);
             return new Reader() {
 
-                // Bytes, not characters. A window refilled from the stream splits multi-byte UTF-8 sequences at
-                // arbitrary points, so decoding each window as it arrives would mangle any non-ASCII summary or
-                // description a package carries. Both markers are ASCII and every continuation byte is >= 0x80,
-                // so searching the bytes cannot match inside a character; only the extracted stanza is decoded.
+                // Bytes, not characters: a window splits multi-byte UTF-8 sequences, and both markers are ASCII while
+                // every continuation byte is >= 0x80, so only the extracted stanza is decoded.
                 private byte[] pending = new byte[16384];
 
                 private int length;
@@ -147,8 +132,6 @@ final class RpmListings {
                 }
             };
         }
-
-        /** The first offset in {@code buffer[from, to)} where {@code pattern} occurs whole, or {@code -1}. */
     };
 
     private final Blobs blobs;
@@ -212,14 +195,8 @@ final class RpmListings {
         });
     }
 
-    /**
-     * Emit an entry per package, in the order the scan yields them.
-     *
-     * <p>The index names every package it covers, so collecting them into a sorted map held that whole set. The
-     * scan's order is the sink's order - the store's lexicographic child order, which is where the sorted map's
-     * ordering came from and is what now supplies it. The key here is the child name itself, which is what makes
-     * that substitution sound: a key composed across nested scans would not be in scan order.
-     */
+    /** Emit an entry per package in the scan's order, the store's lexicographic child order, which is the order the
+     *  sink needs since the key is the child name itself. */
     private void generate(String repo, StoredListing.Generator.Sink sink) throws IOException {
         String prefix = RpmFormat.indexPrefix(repo);
         ENTRIES.scan(store, prefix, name -> {
@@ -256,8 +233,7 @@ final class RpmListings {
 
     /** Re-derive {@code repomd.xml.asc} after a signing key is provisioned. */
     void rederive(String repo) throws IOException {
-        // Streamed from the stored primary, never read whole: the same shape the Debian twin had on its rebuild leg,
-        // which the debian-gzip canary showed failing at three hundred thousand stanzas under 512 MiB.
+        // Streamed, never read whole: the primary is every package in the repository.
         StoredListing.Spec spec = spec(repo);
         Optional<StoredListing.Served> served = StoredListing.open(store, spec);
         if (served.isPresent()) {
@@ -294,11 +270,8 @@ final class RpmListings {
                 || segments[3].equals("repomd.xml.asc");
     }
 
-    /** The stride the repository-wide index is enumerated in. It <b>drains</b>: the index names every package by
-     *  definition, so neither the names nor the round-trips that fetch them may cap it, and what is bounded is how
-     *  many names are in hand at once. Capping either one silently omits packages - or, once the entry cap alone was
-     *  lifted, stopped omitting them and started throwing instead, at exactly {@code steps x page} names. That is
-     *  the ceiling the OCI tag canary hit at a million: a generator that raises {@code TraversalException} does not
-     *  answer short, it never materialises the document at all. */
+    /** The stride the repository-wide index is enumerated in. It drains: the index names every package, so neither
+     *  names nor round-trips are capped - a cap would omit packages or throw and never materialise the document - and
+     *  only the names in hand are bounded. */
     private static final BoundedChildren ENTRIES = BoundedChildren.draining();
 }

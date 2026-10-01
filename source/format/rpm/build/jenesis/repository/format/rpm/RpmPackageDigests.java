@@ -10,53 +10,34 @@ import build.jenesis.repository.store.ArchiveWalk;
 
 /**
  * The per-package checksum a yum repository's own {@code repodata} declares, read for the one pool path a proxy fill is
- * about to cache - so an upstream {@code .rpm} is held to its declaring index instead of being cached on the upstream's
- * word.
+ * about to cache, so an upstream {@code .rpm} is held to its declaring index. The request names its repository, so the
+ * index is at {@code <upstream>/<repo>/repodata/repomd.xml}, which names the {@code primary} index, whose
+ * {@code <package>} at {@code <location href="<location>">} carries the {@code <checksum type="sha256" pkgid="YES">}.
  *
- * <h2>Why RPM can do what Debian cannot</h2>
- * Both ecosystems publish a per-package digest in an index rather than beside the artifact. Debian's is unreachable
- * from the request, because a {@code .deb} lives in a {@code pool/} tree shared by many suites and the pool {@code GET}
- * carries no suite, component or architecture with which to find the {@code Packages} file that declares it. An RPM
- * request does not have that problem: {@code /rpm/<repo>/<location>} names its repository in its first segment, so the
- * declaring index is at {@code <upstream>/<repo>/repodata/repomd.xml}, which names the {@code primary} index, whose
- * {@code <package>} carrying {@code <location href="<location>">} carries the
- * {@code <checksum type="sha256" pkgid="YES">} of exactly those bytes.
+ * <p><b>Read once and remembered.</b> A mirror's primary index runs to hundreds of megabytes decompressed, so the first
+ * fill streams it once into a compact {@code <type> <hex> <location>} map in the content-addressed store, keyed by the
+ * index's identity (the checksum {@code repomd.xml} publishes for it). A later fill reads {@code repomd.xml} and
+ * answers from the map while the identity holds; a moved index rebuilds the map, and the superseded blob is left to the
+ * collector.
  *
- * <h2>The index is huge, so it is read once and remembered</h2>
- * A distribution mirror's {@code primary.xml.gz} runs to tens of megabytes compressed and hundreds decompressed.
- * Re-reading it per package would make one {@code dnf install} of thirty packages pull the index thirty times, and a
- * verification an operator turns off is not a verification. So the first fill of a repository streams the index once
- * and writes a compact {@code <type> <hex> <location>} map into the content-addressed store, keyed by the index's own
- * identity (the {@code <checksum>} {@code repomd.xml} publishes for it); every later fill reads {@code repomd.xml}
- * (three kilobytes), finds the identity unchanged, and answers from the map. The index moves, the identity moves, and
- * the map is rebuilt - so a stale map cannot outlive the index that produced it, and the superseded blob becomes
- * unreferenced for the collector rather than accumulating a pointer per revision.
+ * <p><b>Streaming on both sides.</b> The index is parsed with StAX a {@code <package>} at a time and the map generated
+ * into the store as it reads ({@link LineStream}).
  *
- * <p><b>Streaming on both sides.</b> The index is parsed with StAX one {@code <package>} at a time and the map is
- * <em>generated</em> into the store as the store reads it ({@link LineStream}), so neither the index nor the map is
- * ever materialised. Nothing here holds more than one package's worth of strings.
- *
- * <p><b>Bounded.</b> The decompressed index is capped through the product's shared, operator-settable archive-walk
- * ceiling scaled by {@link #INFLATION_RATIO} - on the decompressed size, as {@code ProxyFormat} clause 7 requires,
- * because an upstream chooses the compression ratio. Reaching it is an {@link UnreadableIndex} that aborts the map and
- * therefore the fill: a map built from a truncated index would silently claim a package "is not in the index", which is
- * the one answer a bound must never be allowed to fabricate.
+ * <p><b>Bounded.</b> The decompressed index is capped by the shared archive-walk ceiling scaled by
+ * {@link #INFLATION_RATIO}, on the decompressed size (ProxyFormat clause 7). Reaching it is an {@link UnreadableIndex}
+ * that aborts the map and the fill, since a truncated index would claim a package "is not in the index".
  */
 final class RpmPackageDigests {
 
     private static final String REPODATA = "repodata/";
 
-    /**
-     * How far past its own transferred size the {@code primary} index may decompress before the read is cut off,
-     * applied through the shared {@link ArchiveWalk#largestWalk(long, long)} floor. The ratio is this format's own
-     * judgement about its own container and stays at the call site that applies it: {@code primary.xml} is XML and
-     * gzips at roughly ten to one, so twenty leaves an honest mirror ample room while a body claiming a hundred-to-one
-     * ratio is stopped.
-     */
+    /** How far past its transferred size the {@code primary} index may decompress, applied through
+     *  {@link ArchiveWalk#largestWalk(long, long)}. XML gzips at about ten to one, so twenty leaves an honest mirror
+     *  room and stops a hundred-to-one body. */
     private static final long INFLATION_RATIO = 20L;
 
-    /** The map's own pointer, one per proxied repository - a sibling of the generated {@code repodata}, so the pool
-     *  walks that build {@code blobKeys} (which skip the {@code repodata} subtree) never see it as a package. */
+    /** The map's pointer, one per proxied repository, beside the generated {@code repodata}, so the pool walks (which
+     *  skip that subtree) never see it as a package. */
     private static String mapKey(String repo) {
         return "rpm/" + repo + "/" + REPODATA + "proxy-digests";
     }
@@ -65,11 +46,10 @@ final class RpmPackageDigests {
         throw new UnsupportedOperationException("RpmPackageDigests is a static utility");
     }
 
-    /** An index this repository could not read <em>through</em> - a malformed {@code repomd.xml} or {@code primary},
-     *  a primary index that does not answer, or one that ran past the decompression bound. Its own type, because it
-     *  must never be confused with {@link ProxyRelay.Declared#NONE} ("the repodata declares no checksum", which caches
-     *  the fill unverified): {@link #declared} turns it into an {@linkplain ProxyRelay.Declared#unreadable unreadable}
-     *  verdict, so the fill is declined rather than either downgraded or thrown out of a proxy read as a {@code 500}. */
+    /** An index that could not be read through - malformed, unanswering, or past the decompression bound. Its own type
+     *  so it is never confused with {@link ProxyRelay.Declared#NONE}, which caches unverified: {@link #declared} turns
+     *  it into an {@linkplain ProxyRelay.Declared#unreadable unreadable} verdict, declining the fill rather than
+     *  downgrading it or answering a {@code 500}. */
     static sealed class UnreadableIndex extends IOException permits RefusedTarget {
 
         UnreadableIndex(String message) {
@@ -81,9 +61,8 @@ final class RpmPackageDigests {
         }
     }
 
-    /** The outbound screen refused an upstream-ADVERTISED index URL - the first of the unreadable shapes to be
-     *  given the refusal, and the reason it keeps its own name is that its message names the dial an operator would
-     *  set to permit the target. */
+    /** The outbound screen refused an upstream-advertised index URL; its message names the dial that would permit
+     *  it. */
     static final class RefusedTarget extends UnreadableIndex {
 
         RefusedTarget(String message) {
@@ -94,20 +73,16 @@ final class RpmPackageDigests {
     /**
      * The checksum the repository's {@code repodata} declares for {@code location}.
      *
-     * <p>{@link ProxyRelay.Declared#NONE} - the fill caches unverified - for the shapes {@link RpmFormat} states,
-     * every one of them the upstream <em>answering</em> that it declares nothing: a {@code <repo>/repodata/repomd.xml}
-     * that answers {@code 404}/{@code 410}, a {@code repomd.xml} naming no {@code primary} index, an index that lists
-     * no {@code <package>} at that {@code <location href>}, and a listed package whose {@code <checksum>} is absent,
-     * malformed, or of an algorithm this JVM has no digest for.
+     * <p>{@link ProxyRelay.Declared#NONE}, cached unverified, when the upstream answers that it declares nothing: a
+     * {@code repomd.xml} answering {@code 404}/{@code 410}, no {@code primary} index, no {@code <package>} at the
+     * location, or a {@code <checksum>} absent, malformed or of an algorithm this JVM cannot compute.
      *
-     * <p>{@linkplain ProxyRelay.Declared#unreadable Unreadable} - the fill is declined - when the declaring index could
-     * not be read at all: a {@code repomd.xml} the transport never reached or that answered a {@code 429}/{@code 5xx}/
-     * challenge, a malformed {@code repomd.xml} or {@code primary}, a primary index that does not answer, one past the
-     * decompression bound, and one whose URL the outbound screen refuses. None of those may answer the same "declares
-     * no checksum" as a plain file mirror, or the package would be cached with no point check at all.
+     * <p>{@linkplain ProxyRelay.Declared#unreadable Unreadable}, declining the fill, when the index could not be read:
+     * unreached, a {@code 429}/{@code 5xx}/challenge, malformed, unanswering, past the decompression bound, or refused
+     * by the outbound screen.
      *
-     * @throws IOException when the <em>store</em> fails while the index map is read or rebuilt - a real failure of this
-     *                     repository, not a statement about the upstream, so it is not folded into a verdict
+     * @throws IOException when the store fails reading or rebuilding the map, a failure of this repository rather than
+     *     a statement about the upstream
      */
     static ProxyRelay.Declared declared(ProxyFormat.Fetcher fetcher, URI upstream, String repo, String location,
                                         Blobs blobs, boolean allowInternal) throws IOException {
@@ -145,7 +120,7 @@ final class RpmPackageDigests {
         try {
             return ProxyRelay.Declared.of(algorithm, HexFormat.of().parseHex(parts[1]));
         } catch (IllegalArgumentException _) {
-            // a malformed digest declares nothing, exactly as a malformed npm integrity string does
+            // A malformed digest declares nothing.
             return ProxyRelay.Declared.NONE;
         }
     }
@@ -182,8 +157,8 @@ final class RpmPackageDigests {
                     }
                 }
                 if (primary && href != null) {
-                    // The index's own checksum identifies its revision; a repository that publishes none falls back on
-                    // the href, which createrepo's --unique-md-filenames already makes revision-specific.
+                    // The index's checksum identifies its revision; without one the href does, which createrepo's
+                    // --unique-md-filenames makes revision-specific.
                     return new Primary(href, identity == null ? "href:" + href : identity);
                 }
             }
@@ -218,11 +193,8 @@ final class RpmPackageDigests {
         return line == null || line.isEmpty() ? null : line;
     }
 
-    /**
-     * Scan a stored map for {@code location}: its map line, or {@code ""} when the map is current but lists no such
-     * package, or {@code null} when the map was built from a different index revision (so the caller rebuilds). Read a
-     * line at a time off the content-addressed store, so a map with a hundred thousand packages never lands in heap.
-     */
+    /** Scan a stored map for {@code location}: its line, {@code ""} when the map is current but lists no such package,
+     *  or {@code null} when it was built from another revision. Read a line at a time. */
     private static String read(Blobs blobs, String hash, String identity, String location) throws IOException {
         try (BufferedReader lines = new BufferedReader(
                 new InputStreamReader(blobs.open(hash), StandardCharsets.UTF_8))) {
@@ -232,8 +204,7 @@ final class RpmPackageDigests {
             }
             String suffix = " " + location;
             for (String line = lines.readLine(); line != null; line = lines.readLine()) {
-                // The cheap suffix test first, then the exact one: "hello.rpm" is a suffix of "Packages/hello.rpm",
-                // and a package must never be verified against a different package's digest.
+                // The suffix test first, then the exact one: a package must never be checked against another's digest.
                 if (line.endsWith(suffix)) {
                     String[] parts = line.split(" ", 3);
                     if (parts.length == 3 && parts[2].equals(location)) {
@@ -250,19 +221,12 @@ final class RpmPackageDigests {
     private static void rebuild(Blobs blobs, String repo, Primary primary, URI repository,
                                 ProxyFormat.Fetcher fetcher, boolean allowInternal) throws IOException {
         URI index = repository.resolve(primary.href());
-        // The href comes from an untrusted upstream repomd.xml, and java.net.URI.resolve returns an absolute argument
-        // as-is - so an index href pointing at a loopback, metadata or plaintext host would be fetched server-side from
-        // here. Screened by the one shared outbound call every peer leg makes: the http(s)/host
-        // capability floor no dial lifts, then the upstream's own ORIGIN admitted, then the full transport-and-host
-        // screen on anything cross-origin under the one ProxyLeg.ALLOW_INTERNAL dial. An index href naming NO host at
-        // all is refused - resolvesToPrivate(null) answers false, so a host screen alone would admit it and the
-        // importer's HttpRequest.newBuilder would throw on it - and the same-origin test is the shared one.
+        // The href is untrusted upstream content and an absolute value replaces the host on resolve, so it is screened
+        // by the shared outbound call; an href naming no host is refused.
         String refusal = OutboundTargets.advertisedRefusal(index, repository, allowInternal);
         if (refusal != null) {
-            // A distinct exception rather than a null Digest, because a null here means "the repodata declares no
-            // checksum" and downgrades the fill to UNVERIFIED caching - the one outcome a refused index must never
-            // produce. RpmFormat.cache turns it into the clause-2 decline: nothing cached,
-            // nothing served, the local 404 stands, and a WARN naming the dial.
+            // A distinct exception rather than NONE, which would cache unverified: RpmFormat.cache declines the fill
+            // and warns, naming the dial.
             throw new RefusedTarget("Refusing the primary index at " + index + ": " + refusal
                     + " (set proxy-allow-internal to permit an internal or http target)");
         }
@@ -270,9 +234,8 @@ final class RpmPackageDigests {
             if (download == null || download.status() != 200) {
                 throw new UnreadableIndex("The repodata names a primary index at " + index + " that does not answer");
             }
-            // The ratio scales the TRANSFERRED size into a budget on the DECOMPRESSED one, and the counter sits on the
-            // far side of the decompressor - a bound on the transferred bytes would be no bound at all, since the
-            // upstream chooses the ratio (ProxyFormat clause 7).
+            // The ratio scales the transferred size into a budget counted after the decompressor, since the upstream
+            // chooses the ratio (ProxyFormat clause 7).
             long ceiling = ArchiveWalk.largestWalk(length(download.header("Content-Length")), INFLATION_RATIO);
             InputStream inflated = primary.href().endsWith(".gz")
                     ? new GZIPInputStream(download.body())
@@ -300,7 +263,7 @@ final class RpmPackageDigests {
     }
 
     /** The {@link MessageDigest} name for a {@code repodata} checksum type, or {@code null} for one this JVM cannot
-     *  compute - which declares no check rather than a check that always passes. */
+     *  compute, which declares no check. */
     private static String algorithm(String type) {
         return switch (type.toLowerCase(Locale.ROOT)) {
             case "sha256", "sha-256" -> "SHA-256";
@@ -318,8 +281,8 @@ final class RpmPackageDigests {
         return factory;
     }
 
-    /** Pulls the map's identity line, then one {@code <type> <hex> <location>} line per indexed package, off the
-     *  streaming reader - so the map is produced exactly as fast as the store consumes it. */
+    /** Pulls the map's identity line, then a {@code <type> <hex> <location>} line per package, as fast as the store
+     *  consumes them. */
     private static final class Packages implements Iterator<String> {
 
         private final XMLStreamReader reader;
@@ -370,9 +333,8 @@ final class RpmPackageDigests {
                         }
                         case "location" -> {
                             String value = reader.getAttributeValue(null, "href");
-                            // A newline or a leading space would break the one-line-per-package encoding; such an href
-                            // simply does not enter the map, so the package it names stays unverified rather than
-                            // corrupting its neighbours' lines.
+                            // A newline or leading space would break the line encoding, so such an href stays out of
+                            // the map and its package unverified.
                             href = value == null || value.indexOf('\n') >= 0 || value.startsWith(" ") ? null : value;
                         }
                         default -> {
@@ -396,8 +358,7 @@ final class RpmPackageDigests {
         }
     }
 
-    /** An {@link InputStream} over an iterator of lines - the pull-based generator that lets the content-addressed
-     *  store read the map into existence rather than being handed a buffer someone built first. */
+    /** An {@link InputStream} over an iterator of lines, so the store reads the map into existence. */
     private static final class LineStream extends InputStream {
 
         private final Iterator<String> lines;
@@ -440,8 +401,7 @@ final class RpmPackageDigests {
         }
     }
 
-    /** Counts what the index read draws and fails, by name, at the ceiling - the visible bound {@code ProxyFormat}
-     *  clause 7 requires, applied where it belongs: on the bytes that come OUT of the decompressor. */
+    /** Counts the bytes out of the decompressor and fails, by name, at the ceiling (ProxyFormat clause 7). */
     private static final class Bounded extends FilterInputStream {
 
         private final long ceiling;

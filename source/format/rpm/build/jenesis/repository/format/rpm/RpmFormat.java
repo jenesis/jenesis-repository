@@ -35,61 +35,41 @@ import build.jenesis.repository.walk.Traversal;
 import build.jenesis.repository.walk.TraversalException;
 
 /**
- * The RPM/yum format, so {@code dnf} and {@code yum} install {@code .rpm} packages over the shared store. It owns
- * {@code /rpm/...}, where the first path segment is a yum repository: a package is pushed with
- * {@code PUT /rpm/<repo>/<path>/<name>-<ver>-<rel>.<arch>.rpm} (the raw {@code .rpm} as the body) and served back from
- * the same path, and the {@code repodata} a client reads ({@code /rpm/<repo>/repodata/repomd.xml} and a
- * {@code primary.xml[.gz]}) is served from a stored listing the publish maintains.
+ * The RPM/yum format: {@code dnf} and {@code yum} install {@code .rpm} packages over the shared store, under
+ * {@code /rpm/...}, where the first segment is a yum repository. A package is pushed with
+ * {@code PUT /rpm/<repo>/<path>/<name>-<ver>-<rel>.<arch>.rpm} and served from the same path, and the {@code repodata}
+ * ({@code /rpm/<repo>/repodata/repomd.xml} and {@code primary.xml[.gz]}) is a stored listing the publish maintains.
  *
- * <p><b>Streaming publish.</b> Only the RPM header at the front of the upload is materialised (the small metadata parse
- * the streaming principle allows); the (arbitrarily large) cpio payload streams straight through
- * {@link ArtifactStore#writeBlob} into the content-addressed store, hashed on the way, and never buffered. The SHA-256
- * the store returns is both the pointer's blob hash and the package's {@code pkgid} checksum in {@code primary.xml}, so
- * the file is read once. A precomputed {@code <package>} stanza is stored per package, exactly as the Debian format
- * stores a {@code Packages} stanza, so the stored {@code primary.xml} is joined from the stanzas rather than by
- * reopening every {@code .rpm}. The metadata revision is stamped on write, so a re-read of {@code repomd.xml} is
- * byte-stable and cacheable between pushes (read-first).
+ * <p><b>Streaming publish.</b> Only the RPM header at the front of the upload is materialised; the cpio payload streams
+ * through {@link ArtifactStore#writeBlob} into the content-addressed store, and the SHA-256 the store returns is both
+ * the blob hash and the package's {@code pkgid}. A {@code <package>} stanza is stored per package, so
+ * {@code primary.xml} is joined from stanzas rather than by reopening every {@code .rpm}.
  *
- * <p><b>Self-healing index.</b> The {@code <package>} stanza is a derived cache over the durable {@code .rpm} pointers,
- * so it reconstructs itself rather than assume it was always kept. When a hosted repository's {@code repodata} is read
- * but no stanzas exist for it - {@code .rpm} pointers that predate the stanza logic, an index enabled over packages a
- * prior build already stored, or a derived tree lost after the bytes were written - the read re-derives every stanza
- * from the live pointers by re-reading each package's header out of the content-addressed store, so the repository
- * converges to a complete {@code repodata} on its own, a config flip rather than a re-import or wipe-and-rebuild
- * ({@link #backfillStanzas}). It is bounded to that recovery path (an empty index on a hosted repository, never the
- * steady-state read once stanzas exist) and keyed on the hosted revision stamp, so a pull-through proxy repository -
- * which never stamps a revision - is untouched and still falls its local miss through to the authoritative upstream
- * {@code repodata} rather than shadowing it with a partial local index.
+ * <p><b>Self-healing index.</b> The stanza is derived from the durable {@code .rpm} pointers. When a hosted
+ * repository's {@code repodata} is read and no stanzas exist, the read re-derives them from each pointer's header
+ * ({@link #backfillStanzas}). Only on that recovery path, and only for a hosted repository: a pull-through proxy keeps
+ * falling through to the upstream's {@code repodata} rather than shadowing it with a partial local index.
  *
- * <p><b>Pull-through proxy.</b> The same layout is also a {@link ProxyFormat}: a local miss on a proxy repository is
- * served from an upstream yum repository - an immutable {@code .rpm} streams from upstream straight into the CAS and is
- * cached (a later read is a local hit), while the mutable {@code repodata} is streamed through fresh. RPM has no single
- * canonical upstream, so a deployment names one per repository ({@link #defaultUpstream()} stays empty).
+ * <p><b>Pull-through proxy.</b> A local miss is served from an upstream yum repository: an immutable {@code .rpm}
+ * streams into the content-addressed store and is cached, the mutable {@code repodata} streams through. RPM has no
+ * canonical upstream, so {@link #defaultUpstream()} is empty.
  *
- * <p><b>Signed metadata.</b> When a signing key is provisioned ({@code POST /rpm/keyring}, a deployment-global RSA key
- * mirroring the Debian one), the {@code repomd.xml} is OpenPGP-signed as it is derived: a detached armored signature is
- * served at {@code /rpm/<repo>/repodata/repomd.xml.asc} and the public key at {@code /rpm/keyring/public.asc}, so a
- * client with {@code repo_gpgcheck=1} and {@code gpgkey=} pointing at that key verifies the metadata - the yum
- * counterpart of apt's {@code Release.gpg}. Signing uses Bouncy Castle (the JDK has no OpenPGP) via
- * {@link OpenPgpSigner}, and a near-expiry key rotates the next time it is used, its retiring public half staying
- * in the served keyring during the overlap. Without a provisioned key the repository is unsigned and
- * {@code repomd.xml.asc} is a {@code 404}. That is the signature this deployment <em>puts on</em> its metadata; the
- * one the publisher put on the package - in the package's own signature header, what {@code gpgcheck=1} verifies -
- * is read through the {@link ArtifactSignatures} seam ({@link #expects}, {@link #evidence}, composed by
- * {@link RpmSignature}), so the gate's signature dimension judges a pushed or proxied {@code .rpm} as it judges a
- * Maven jar or a {@code .deb}.
+ * <p><b>Signed metadata.</b> With a signing key provisioned ({@code POST /rpm/keyring}), {@code repomd.xml} is
+ * OpenPGP-signed as it is derived: the detached signature is served at {@code /rpm/<repo>/repodata/repomd.xml.asc} and
+ * the public key at {@code /rpm/keyring/public.asc}, for a client with {@code repo_gpgcheck=1}. A near-expiry key
+ * rotates on use, its retiring public half staying in the keyring during the overlap; without a key
+ * {@code repomd.xml.asc} is a {@code 404}. The publisher's own signature in the package's signature header, what
+ * {@code gpgcheck=1} verifies, is read through the {@link ArtifactSignatures} seam ({@link #expects},
+ * {@link #evidence}, {@link RpmSignature}).
  *
- * <p>The layout declares its ecosystem ({@code "RPM"}) so a compliance inspector, the console and download tracking key
- * on it. Package pointers live in the shared {@code Blobs} namespace like the other language formats, so the
- * {@code publish/}-namespace eviction ({@link #paths}) stays empty; coordinate-scoped enforcement instead runs through
- * the {@code BlobLayout} seam - {@link #blobKeys}/{@link #servedPaths} walk the pool tree for a version's {@code .rpm}
- * pointers, so a retroactive KEV/license hold withholds their content hashes and retracts serving. {@link #describe}
- * resolves a {@code .rpm} path to its NEVRA coordinate for read-side download tracking and the enforcement round-trip.
+ * <p>The ecosystem is {@code "RPM"}. Package pointers live in the shared {@code Blobs} namespace, so {@link #paths} is
+ * empty and a coordinate is reached through {@link #blobKeys} and {@link #servedPaths}, which walk the pool for a
+ * version's {@code .rpm} pointers; {@link #describe} resolves a {@code .rpm} path to its NEVRA coordinate.
  */
 public final class RpmFormat implements RepositoryFormat, ArtifactLayout, ProxyLeg, BlobLayout, RepositoryImporter,
         ArtifactSignatures, RepositoryExporter {
 
-    /** The OSV-style ecosystem name this format's artifacts report (distinct from {@link #name()}, the routing id). */
+    /** The ecosystem name this format's artifacts report, distinct from {@link #name()}, the routing id. */
     public static final String ECOSYSTEM = "RPM";
 
     private static final String PREFIX = "/rpm/";
@@ -125,17 +105,11 @@ public final class RpmFormat implements RepositoryFormat, ArtifactLayout, ProxyL
         return List.of("rpm");
     }
 
-    /**
-     * RPM's inbound signature story: the publisher's OpenPGP signature in the package's own signature header, and
-     * <em>optional</em> rather than expected, for Debian's reason with RPM's names. A dnf client's trust runs
-     * through {@code repo_gpgcheck} over the signed {@code repomd.xml}, which commits to the hashes of the
-     * {@code primary.xml} that commits to each package - the signature this format itself writes - so a repository
-     * of unsigned packages behind signed metadata is an ordinary, well-run one, and demanding a per-package
-     * signature would report every such archive as unsigned. {@code gpgcheck=1} exists, distributions sign every
-     * package they ship, and where a package carries one it is worth checking; that is exactly what
-     * {@code OPTIONAL} says. A {@code .rpm} is signable wherever it lives under a repository's pool; the generated
-     * {@code repodata} is not a package and carries no expectation.
-     */
+    /** RPM's inbound signature: the publisher's OpenPGP signature in the package's signature header, optional rather
+     *  than expected, since dnf's trust runs through {@code repo_gpgcheck} over the signed {@code repomd.xml}, which
+     *  commits to {@code primary.xml}, which commits to each package; unsigned packages behind signed metadata are
+     *  ordinary. A {@code .rpm} under a repository's pool is signable; the generated {@code repodata} carries no
+     *  expectation. */
     @Override
     public List<ArtifactSignatures.Expectation> expects(String path) {
         return path.startsWith(PREFIX) && path.endsWith(".rpm") && !path.contains(REPODATA)
@@ -152,17 +126,12 @@ public final class RpmFormat implements RepositoryFormat, ArtifactLayout, ProxyL
 
     @Override
     public List<String> blobKeys(String coordinate, String version, ArtifactStore store) throws IOException {
-        // An RPM package is keyed on its request pool path (rpm/<repo>/<path>/<file>.rpm), where the filename NEVRA is
-        // <name>-<version>-<release>.<arch>.rpm. describe() maps that path to the coordinate (<repo>/<name>) and version
-        // (<version>-<release>.<arch>); recover the coordinate-scoped keys by walking the repo's pool tree for every
-        // .rpm whose filename NEVRA re-describes to the SAME (coordinate, version) - a NEVRA may sit under several pool
-        // locations, and all are the version's keys - so blobHashes/servedPaths/eviction reach a hosted RPM version and
-        // a retroactive KEV/license hold actually retracts serving (an unconditional empty would make the hold a
-        // silent no-op).
+        // A package is keyed on its pool path rpm/<repo>/<path>/<name>-<version>-<release>.<arch>.rpm; describe() maps
+        // it to <repo>/<name> and <version>-<release>.<arch>. A NEVRA may sit at several pool locations, and all are
+        // the version's keys, found through the reverse index or the pool walk.
         if (!BlobLayout.addressable(coordinate, version)) {
-            // A traversal-shaped repo, package name or NEVRA maps nowhere: these keys are what an eviction DELETES,
-            // and ArtifactStore.delete is not screened. The shared per-part screen, so the two-segment <repo>/<name>
-            // coordinate is judged part by part rather than as a whole.
+            // A traversal-shaped repo, name or NEVRA maps nowhere: these keys are what an eviction deletes, unscreened.
+            // Each part of the two-segment coordinate is judged on its own.
             return List.of();
         }
         int slash = coordinate.indexOf('/');
@@ -177,8 +146,8 @@ public final class RpmFormat implements RepositoryFormat, ArtifactLayout, ProxyL
         String base = "rpm/" + repo;
         List<String> keys = new ArrayList<>();
         if (!store.isEmpty(base + REPODATA + "by")) {
-            // The reverse index a publish writes answers without a walk; a repository from before it is walked as
-            // before, until the rebuild pass has backfilled it.
+            // The reverse index a publish writes answers without a walk; a repository without one is walked until the
+            // rebuild pass has written it.
             for (String encoded : store.list(base + REPODATA + "by/" + name + "/" + version)) {
                 String key = base + "/" + URLDecoder.decode(encoded, StandardCharsets.UTF_8);
                 if (store.readVersioned(key).isPresent()) {
@@ -192,8 +161,7 @@ public final class RpmFormat implements RepositoryFormat, ArtifactLayout, ProxyL
         eachPoolLocation(store, base, location -> {
             String file = location.substring(location.lastIndexOf('/') + 1);
             String[] nevra = nevra(file);
-            // Mirror describe() EXACTLY: coordinate <repo>/<name> (name = nevra[0]), version
-            // <version>-<release>.<arch>, so a coordinate describe() produced is one blobKeys resolves.
+            // Exactly describe()'s mapping, so every coordinate it produces resolves here.
             if (nevra != null && nevra[0].equals(name)
                     && (nevra[1] + "-" + nevra[2] + "." + nevra[3]).equals(version)) {
                 keys.add(base + "/" + location);
@@ -202,10 +170,8 @@ public final class RpmFormat implements RepositoryFormat, ArtifactLayout, ProxyL
         return keys;
     }
 
-    /** The served request paths one RPM coordinate version occupies - each {@code .rpm} pool pointer key mapped back to
-     *  its download request path ({@code /rpm/<repo>/<location>} = {@code /} + the store key, the inverse of
-     *  {@link #describe}), so a retroactive hold links a {@code /quarantine} review handle at each and serving retracts.
-     *  Derived from {@link #blobKeys}, so it is non-empty exactly when the coordinate-scoped pool walk resolves keys. */
+    /** The request paths one RPM coordinate version serves: its pool keys from {@link #blobKeys} as request paths,
+     *  where a retroactive hold links its {@code /quarantine} handles. */
     @Override
     public List<String> servedPaths(String coordinate, String version, ArtifactStore store) throws IOException {
         List<String> paths = new ArrayList<>();
@@ -215,24 +181,10 @@ public final class RpmFormat implements RepositoryFormat, ArtifactLayout, ProxyL
         return paths;
     }
 
-    /**
-     * Deliver every {@code .rpm} pool location under a repository - the key's tail below {@code rpm/<repo>/}, with the
-     * generated {@code repodata} subtree excluded because it is metadata rather than a package - to {@code locations},
-     * driving {@link #POOL} to exhaustion.
-     *
-     * <p>This is the format's <em>only</em> descent of a pool tree. It has two consumers with nothing else in common -
-     * the stanza back-fill, which re-reads each package's header, and the {@link BlobLayout} coordinate seam, which
-     * matches each filename's NEVRA - and both are descents of the same tree, so both run on the shared
-     * {@link PagedTreeWalk} primitive. A hand-rolled cursor stack over {@code store.page} would be a second
-     * implementation of a shared mechanism without its bounds - no step budget and no depth ceiling, so a
-     * pathological pool tree would cost an unbounded number of store round-trips silently, where {@link #POOL}
-     * refuses it by name.
-     *
-     * <p>The pool tree is publish-plantable to arbitrary depth and width, so the descent stays the shared iterative,
-     * paged one - never self-recursion over an unpaged {@code list()}. A caller accumulating what it is handed is
-     * bounded by its own filter rather than by the tree: {@code blobKeys} keeps only the locations one NEVRA occupies,
-     * which is the handful of pool paths one package version was published under.
-     */
+    /** Deliver every {@code .rpm} pool location under a repository - relative to {@code rpm/<repo>/}, the
+     *  {@code repodata} subtree excluded - to {@code locations}, driving {@link #POOL} to exhaustion. The one descent
+     *  of a pool tree, for the stanza back-fill and the {@link BlobLayout} seam alike; the tree is publish-plantable to
+     *  any depth and width, so the descent is the shared iterative, paged and bounded one. */
     private static void eachPoolLocation(ArtifactStore store, String base, PoolLocations locations)
             throws IOException {
         String cursor = null;
@@ -293,13 +245,9 @@ public final class RpmFormat implements RepositoryFormat, ArtifactLayout, ProxyL
         return method.equals("POST") && path.equals(PREFIX + "keyring");
     }
 
-    /**
-     * Ensure a signing key exists, generating one on the first call, and answer its public key at once. The key signs
-     * the {@code repomd.xml} of every hosted RPM repository under this one ({@link #keys}). The signed
-     * {@code repomd.xml.asc} is derived on metadata writes, so the repositories indexed before the key existed are
-     * signed now rather than on their next publish - on the node's derivation thread, a page of them at a time, so
-     * the answer costs one key and never a walk of every repository this one holds.
-     */
+    /** Ensure a signing key exists, generating one on the first call, and answer its public key. The key signs the
+     *  {@code repomd.xml} of every hosted RPM repository under this one ({@link #keys}); those indexed before it
+     *  existed are re-signed on the node's derivation thread, a page at a time, so the answer never costs a walk. */
     private void provisionKey(Blobs blobs, FormatExchange exchange) throws IOException {
         if (keys(blobs).signer().isEmpty()) {
             keys(blobs).provision();
@@ -347,9 +295,8 @@ public final class RpmFormat implements RepositoryFormat, ArtifactLayout, ProxyL
         exchange.answer(keyring.get());
     }
 
-    /** The current signer, or {@code null} when no key is provisioned (the repository serves unsigned metadata and no
-     *  {@code repomd.xml.asc}). A near-expiry key rotates as it is asked for, in the one write that also publishes
-     *  its successor's public half. */
+    /** The current signer, or {@code null} when none is provisioned. A near-expiry key rotates as it is asked for, in
+     *  the write that publishes its successor. */
     private OpenPgpSigner signer(Blobs blobs) throws IOException {
         return keys(blobs).signer().orElse(null);
     }
@@ -369,10 +316,8 @@ public final class RpmFormat implements RepositoryFormat, ArtifactLayout, ProxyL
         String repo = rest.substring(0, slash);
         String location = rest.substring(slash + 1);
         if (Keys.unsafe(repo) || unsafeLocation(location)) {
-            // Validate the repo and each location segment BEFORE any store write, so an unsafe coordinate cannot splice
-            // a key (the .rpm pointer goes through the local pointer() helper, which does not pass Blobs.requireSafeKey)
-            // and a rejected key can never land the pointer first and then fail the stanza write, leaving a dangling
-            // pointer. Mirrors the segment guard every sibling format applies to its coordinate.
+            // Validated before any store write: an unsafe segment cannot splice a key, and a refusal never leaves a
+            // pointer without its stanza.
             exchange.respond(400);
             return;
         }
@@ -388,22 +333,17 @@ public final class RpmFormat implements RepositoryFormat, ArtifactLayout, ProxyL
         }
         String[] nevra = nevra(location.substring(location.lastIndexOf('/') + 1));
         if (nevra != null && !nevra[0].equals(pkg.name())) {
-            // The RPM header names a different package than the filename it deploys under: refuse rather than let it be
-            // screened under the filename NEVRA yet served (the primary.xml <name>) under the header name (a screen-
-            // label bypass), the way Composer/CocoaPods refuse a manifest that disagrees with the deploy path. The
-            // importer screens on the filename coordinate, so the two must agree.
+            // The header must name the package the filename deploys: the edge screens the filename, and primary.xml
+            // serves the header's name.
             exchange.respond(400);
             return;
         }
         if (hasControlChar(pkg.summary()) || hasControlChar(pkg.description()) || hasControlChar(pkg.license())
                 || hasControlChar(pkg.group()) || hasControlChar(pkg.version()) || hasControlChar(pkg.release())
                 || hasControlChar(pkg.epoch()) || hasControlChar(pkg.sourceRpm())) {
-            // An RPM header text field carrying an XML-1.0-illegal control char would be emitted raw by XMLStreamWriter
-            // into this package's primary.xml <package> stanza (the writer escapes < > & but passes control chars
-            // through unescaped). Because primary() concatenates EVERY package's stanza into one served primary.xml, a
-            // single such field makes the whole repo's metadata unparseable to dnf/yum - a repo-wide availability DoS
-            // from one crafted upload. Refuse at publish, before the poison is stored, the way the Debian Packages
-            // injection is refused at push.
+            // XMLStreamWriter escapes < > & but not control characters, and every package's stanza is joined into one
+            // primary.xml, so a header field with an XML-illegal control character would make the repository's metadata
+            // unparseable for everyone.
             exchange.respond(400);
             return;
         }
@@ -412,10 +352,8 @@ public final class RpmFormat implements RepositoryFormat, ArtifactLayout, ProxyL
             hash = store.writeBlob(full);
         }
         long size = store.size("blobs/" + hash);
-        // Route the .rpm pointer through Blobs.link (not the local pointer() helper): besides the compare-and-set retry,
-        // link clears any gc/condemned/<hash> marker a collector set, so republishing a package byte-identical to a
-        // condemned one un-condemns it before the sweep deletes it - otherwise a 201 publish is GC-deleted to a
-        // permanent 404. The repo/location segments are validated above, so the key is safe.
+        // Blobs.link retries the compare-and-set and clears any gc/condemned marker on a byte-identical blob, so a
+        // republish is not collected after its 201.
         Blobs blobs = new Blobs(store);
         try {
             blobs.linkRelease("rpm/" + rest, hash, size);
@@ -433,9 +371,8 @@ public final class RpmFormat implements RepositoryFormat, ArtifactLayout, ProxyL
         if (!store.exists("rpm/" + repo + REPODATA + "hosted")) {
             store.write("rpm/" + repo + REPODATA + "hosted", new ByteArrayInputStream(new byte[0]));
         }
-        // The served metadata is written here, on the publish, rather than generated on every read: the stanza joins
-        // the stored primary.xml (if the package is servable), which re-derives primary.xml.gz, repomd.xml and its
-        // signature.
+        // The served metadata is maintained here, on the publish: the stanza joins primary.xml if servable, which
+        // re-derives primary.xml.gz, repomd.xml and its signature.
         listings(blobs).published(repo, location, stanza);
         exchange.respond(201);
     }
@@ -462,9 +399,7 @@ public final class RpmFormat implements RepositoryFormat, ArtifactLayout, ProxyL
         return false;
     }
 
-    /** Whether a coordinate segment must not be spliced into a store key - empty, a dot segment, or carrying a path
-     *  separator or control character. Mirrors the guard the sibling formats (debian/npm/…) apply. */
-
+    /** Serve a stored {@code .rpm}: HEAD from the pointer's recorded size, GET streamed from its blob. */
     private void serve(String rest, Blobs blobs, FormatExchange exchange) throws IOException {
         if (unsafeLocation(rest)) {
             exchange.respond(404);   // a traversal path names no served .rpm
@@ -488,40 +423,27 @@ public final class RpmFormat implements RepositoryFormat, ArtifactLayout, ProxyL
     }
 
     /**
-     * Proxy an RPM/yum miss to an upstream yum repository. A {@code .rpm} package is immutable, so it streams from
-     * upstream straight into the content-addressed store (never buffered) and is served, so a later read is a local
-     * hit that never touches the upstream. The {@code repodata} a client reads ({@code repomd.xml},
-     * {@code primary.xml[.gz]}, {@code filelists}, ...) is mutable and is streamed through fresh - a package's
-     * {@code <location>} href is relative to the repo root, which maps onto this repository's {@code /rpm/} prefix,
-     * so the index needs no rewrite. RPM has no single canonical upstream (CentOS, Fedora, Rocky, EPEL, ...), so a
-     * deployment always names one per repository and {@link #defaultUpstream()} stays empty.
+     * Proxy an RPM/yum miss to an upstream yum repository. A {@code .rpm} is immutable, so it streams into the
+     * content-addressed store and is cached; the {@code repodata} is mutable and streams through, needing no rewrite
+     * since a {@code <location>} href is relative to the repository root. RPM has no canonical upstream, so a
+     * deployment names one per repository.
      *
      * <h2>Upstream integrity ({@code ProxyFormat} clause 5)</h2>
-     * A cached {@code .rpm} is held to the checksum its own declaring index publishes for it. The request path names
-     * its repository, so that index is addressable: {@code <upstream>/<repo>/repodata/repomd.xml} names the
-     * {@code primary} index, whose {@code <package>} at this {@code <location href>} carries the
-     * {@code <checksum type="sha256" pkgid="YES">} of exactly these bytes ({@link RpmPackageDigests}, which reads the
-     * index once per revision and remembers it). The body is digested as it streams into the content-addressed store
-     * and the serving pointer is linked only on a match; on a <b>mismatch nothing is linked and nothing is served</b>,
-     * the local {@code 404} stands so a later pull re-hits the upstream, and the refusal is logged with the location
-     * and both digests.
+     * A cached {@code .rpm} is held to the checksum its declaring index publishes:
+     * {@code <upstream>/<repo>/repodata/repomd.xml} names the {@code primary} index, whose {@code <package>} at this
+     * {@code <location href>} carries the {@code <checksum type="sha256" pkgid="YES">} of these bytes
+     * ({@link RpmPackageDigests}). The body is digested as it streams and the pointer linked only on a match; on a
+     * mismatch nothing is cached or served, the local {@code 404} stands, and the refusal is logged with both digests.
      *
-     * <p>Three request shapes stay unverified, and each one says so in the log line it emits. All three are the
-     * upstream <em>answering</em> that it declares nothing here:
+     * <p>Three shapes stay unverified, each logged, each the upstream answering that it declares nothing:
      * <ul>
-     * <li>an upstream root that <b>answers {@code 404}/{@code 410} for {@code <repo>/repodata/repomd.xml}</b> - a plain
-     *     file mirror declares nothing, and this leg refuses to fabricate a check;</li>
-     * <li>a pool path the index <b>lists no {@code <package>} for</b> - a package that outlived its index entry, or one
-     *     the repository never offered;</li>
-     * <li>a listed package whose {@code <checksum>} is <b>absent, malformed, or of an algorithm</b> this JVM has no
-     *     digest for.</li>
+     *   <li>{@code <repo>/repodata/repomd.xml} answers {@code 404}/{@code 410}, as a plain file mirror does;</li>
+     *   <li>the index lists no {@code <package>} at the pool path;</li>
+     *   <li>the listed {@code <checksum>} is absent, malformed, or of an algorithm this JVM cannot compute.</li>
      * </ul>
-     * An index this repository <b>could not read</b> is not one of them and never downgrades the fill: a
-     * {@code repomd.xml} the transport never reached or that answered a {@code 429}/{@code 5xx}/challenge, a
-     * {@code repomd.xml} or {@code primary} index that is malformed or ran past the decompression bound, a primary
-     * index that does not answer, and a primary index URL the outbound screen refuses. Each of those declines
-     * the fill with a {@code WARN} - nothing cached, nothing served, the local {@code 404} standing - because a bound,
-     * a blip or a screen must never be able to answer "this package is not in the index".
+     * An index that could not be read - unreached, a {@code 429}/{@code 5xx}/challenge, malformed, past the
+     * decompression bound, or refused by the outbound screen - declines the fill with a {@code WARN} instead, since a
+     * bound, a blip or a screen must never answer "this package is not in the index".
      */
     @Override
     public boolean pullThrough(FormatExchange exchange, ArtifactStore store, URI upstream,
@@ -536,32 +458,22 @@ public final class RpmFormat implements RepositoryFormat, ArtifactLayout, ProxyL
         if (rest.endsWith(".rpm")) {
             return cache(rest, target, exchange, store, upstream, fetcher);
         }
-        // Everything that is not a .rpm is repodata - repomd.xml and the primary/filelists/other indexes it names -
-        // and that is an ENUMERATION: it is the document dnf resolves against, listing which packages a repository
-        // carries and at which versions. An absent repomd is the answer "this is not a repository / it is empty", so a
-        // fetch this deployment could not make must not be served as one; only an upstream that ANSWERED 404/410
-        // reaches the client as a 404. The hand-written streaming loop this replaces was the shared one line
-        // for line - forward the client's validators, relay a 304, relay the upstream Content-Type with no default of
-        // its own - so it now runs the shared one and gains the split with it.
+        // repodata is an enumeration dnf resolves against, where an absent repomd means "not a repository", so a fetch
+        // that could not be made must not be served as one; only an upstream that answered 404/410 reaches the client
+        // as a 404.
         return ProxyRelay.streamFresh(fetcher, target, null, exchange, ProxyRelay.Document.ENUMERATION);
     }
 
     private static final Logger LOGGER = LoggerFactory.getLogger(RpmFormat.class);
 
-    /**
-     * Fetch, verify and cache one upstream {@code .rpm}, then serve it - the integrity half of {@link #proxy}. The
-     * digest its declaring index publishes is read first (a bounded metadata read, remembered per index revision), so
-     * the body itself is one streamed pass into the content-addressed store with the digest computed on the way and
-     * the serving pointer written only once it matches.
-     */
+    /** Fetch, verify and cache one upstream {@code .rpm}, then serve it. The declared digest is read first, a bounded
+     *  metadata read remembered per index revision, so the body is one streamed pass with the pointer written only on a
+     *  match. */
     private boolean cache(String rest, URI target, FormatExchange exchange, ArtifactStore store, URI upstream,
                           ProxyFormat.Fetcher fetcher) throws IOException {
         Blobs blobs = new Blobs(store);
         int slash = rest.indexOf('/');
-        // This leg first had the refusal shape for one of the ways the declaring index cannot be read (an index
-        // URL the outbound screen rejects); every one of them now reaches it, so a repomd behind a shared-egress 429
-        // and a primary index past its decompression bound decline the fill exactly as a refused target does instead
-        // of returning the "declares no checksum" that caches the package unverified.
+        // Every unreadable shape of the declaring index declines the fill rather than caching unverified.
         ProxyRelay.Declared declared = slash <= 0 || Keys.unsafe(rest.substring(0, slash))
                 ? ProxyRelay.Declared.NONE
                 : RpmPackageDigests.declared(fetcher, upstream, rest.substring(0, slash),
@@ -602,8 +514,8 @@ public final class RpmFormat implements RepositoryFormat, ArtifactLayout, ProxyL
             exchange.respond(404);
             return;
         }
-        // The metadata is a stored listing the publish maintains: primary.xml is the document, the rest its derived
-        // twins, all streamed as stored. A repository read before its listing was materialised generates it now, once.
+        // primary.xml is a stored listing the publish maintains and the rest its derived twins; a repository read
+        // before its listing exists generates it once.
         RpmListings listings = listings(blobs);
         StoredListing.Spec spec = listings.spec(repo);
         Optional<StoredListing.Served> served;
@@ -641,8 +553,8 @@ public final class RpmFormat implements RepositoryFormat, ArtifactLayout, ProxyL
         }
     }
 
-    /** The {@code repomd.xml} index of indices: the {@code primary} data with its compressed and open checksums, sizes
-     *  and the metadata revision - stamped on write so a re-read is byte-stable and revalidatable. */
+    /** The {@code repomd.xml}: the {@code primary} data with its checksums, sizes and the metadata revision, stamped on
+     *  write so a re-read is byte-stable. */
     static byte[] repomd(long revision, StoredListing.Header primary, StoredListing.Header gzip) throws IOException {
         String href = "repodata/" + gzip.sha256() + "-primary.xml.gz";
         ByteArrayOutputStream out = new ByteArrayOutputStream();
@@ -681,13 +593,9 @@ public final class RpmFormat implements RepositoryFormat, ArtifactLayout, ProxyL
         xml.writeEndElement();
     }
 
-    /**
-     * One {@code primary.xml} {@code <package>} stanza, precomputed at publish from the header and stored blob. Built
-     * with {@link XMLStreamWriter} (the writer {@code maven-metadata} uses), so
-     * arbitrary header text is escaped by the writer rather than a hand-rolled escaper. The stanza is a fragment: the
-     * {@code rpm:} prefix is bound but left undeclared here, since the {@code <metadata>} wrapper that concatenates the
-     * stanzas declares {@code xmlns:rpm}.
-     */
+    /** One {@code primary.xml} {@code <package>} stanza, precomputed at publish from the header and stored blob and
+     *  written with {@link XMLStreamWriter}, which escapes the header text. A fragment: the {@code rpm:} prefix is
+     *  declared by the {@code <metadata>} wrapper. */
     private static String primaryPackage(RpmHeader.Package pkg, String hash, long size, String location) {
         StringWriter out = new StringWriter();
         try {
@@ -747,9 +655,8 @@ public final class RpmFormat implements RepositoryFormat, ArtifactLayout, ProxyL
         return out.toString();
     }
 
-    /** Whether a header text field carries an XML-1.0-illegal C0 control char - anything below {@code 0x20} except tab,
-     *  newline and carriage return - that {@link XMLStreamWriter} would emit raw into primary.xml, corrupting the
-     *  concatenated repo-wide index. */
+    /** Whether a header text field carries an XML-1.0-illegal C0 control character (below {@code 0x20} except tab,
+     *  newline and carriage return), which {@link XMLStreamWriter} would emit raw into primary.xml. */
     private static boolean hasControlChar(String value) {
         return value != null && value.chars().anyMatch(c -> c < 0x20 && c != '\t' && c != '\n' && c != '\r');
     }
@@ -787,24 +694,15 @@ public final class RpmFormat implements RepositoryFormat, ArtifactLayout, ProxyL
     }
 
     /**
-     * The package version a stored RPM pointer serves - the backwards direction the inventory back-fill rebuilds a
-     * lost {@code published} record from.
+     * The package version a stored RPM pointer serves, from which the inventory back-fill rebuilds a lost
+     * {@code published} record.
      *
-     * <p>Like Debian's, the pair lives in a <em>filename</em> rather than in path segments, and like Debian's the
-     * only thing that makes decoding it safe is a rule of the ecosystem rather than of this store: an RPM file is
-     * {@code <name>-<version>-<release>.<arch>.rpm}, and neither a version nor a release may contain a hyphen. So
-     * {@link #nevra}'s right-to-left split is exact even where the package name holds several of them
-     * ({@code python3-requests-2.31.0-1.noarch.rpm}), which is what npm's {@code <shortName>-<version>.tgz} and
-     * Cargo's {@code <crate>-<version>} cannot say, and why those two are deliberately left undecoded.
+     * <p>An RPM file is {@code <name>-<version>-<release>.<arch>.rpm} and neither version nor release may contain a
+     * hyphen, so {@link #nevra}'s right-to-left split is exact even for {@code python3-requests-2.31.0-1.noarch.rpm}.
+     * It is {@link #describe} run on the request path this key serves, so the row rebuilt is the row the publish wrote.
      *
-     * <p>It is {@link #describe} run on the request path this key serves - {@code servedPaths} is exactly
-     * {@code "/" + key} - so the row this rebuilds is the row the accept path wrote rather than a second parse
-     * that has to be kept in step with it.
-     *
-     * <p>Only a {@code .rpm} pool pointer is claimed. The repodata documents and the {@code by/} reverse index
-     * under the same root name no version, and a filename that does not parse as a NEVRA is left unnamed: there
-     * {@code describe} answers a coordinate-less descriptor, which is the right answer for a request and the wrong
-     * one for a durable row that retention would then age by.
+     * <p>Only a {@code .rpm} pool pointer is claimed: the repodata documents and the {@code by/} reverse index name no
+     * version, and a filename that is no NEVRA is left unnamed, since a coordinate-less row would be aged by retention.
      */
     @Override
     public Optional<ArtifactDescriptor> describePointer(String key) {
@@ -814,10 +712,8 @@ public final class RpmFormat implements RepositoryFormat, ArtifactLayout, ProxyL
         }
         int slash = key.indexOf('/', root.length());
         if (slash < 0 || key.startsWith(key.substring(0, slash) + REPODATA)) {
-            // The by/ reverse index stores a URL-ENCODED pool location, so its leaf really does end in .rpm and
-            // really does parse as a NEVRA - describing one would record a row whose package name is the encoded
-            // path. eachPoolLocation excludes the same subtree for the same reason: a pointer is a pool location
-            // or it is nothing, and the difference is invisible in the filename alone.
+            // A by/ reverse-index leaf is a URL-encoded pool location that ends in .rpm and parses as a NEVRA, so it is
+            // excluded here as eachPoolLocation excludes it.
             return Optional.empty();
         }
         return describe("/" + key)
@@ -829,8 +725,7 @@ public final class RpmFormat implements RepositoryFormat, ArtifactLayout, ProxyL
 
     @Override
     public List<String> paths(String coordinate, String version, ArtifactStore store) {
-        // RPM package pointers live in the shared Blobs namespace (like npm/pypi/go/debian), not the Publication
-        // namespace coordinate-based eviction walks, so nothing is enumerable from the coordinate alone here.
+        // Package pointers live in the shared Blobs namespace, so the coordinate enumerates nothing in publish/.
         return List.of();
     }
 
@@ -853,40 +748,30 @@ public final class RpmFormat implements RepositoryFormat, ArtifactLayout, ProxyL
                 stem.substring(release + 1, arch), stem.substring(arch + 1)};
     }
 
-    /** Whether a repository has ever taken a hosted publish - it then carries the marker {@link #publish} writes (or
-     *  the revision stamp earlier publishes wrote), which a pull-through proxy repository (whose {@code .rpm} bytes are
-     *  cached, not published) never does.
-     *  The self-healing stanza back-fill keys on this so it reconstructs a hosted repo's lost or late index but never
-     *  shadows a proxy repo's authoritative upstream repodata with a partial local one. */
+    /** Whether a repository has taken a hosted publish: it carries the marker {@link #publish} writes or a revision
+     *  stamp, which a pull-through proxy never does. The stanza back-fill runs only for a hosted repository. */
     private static boolean hosted(String repo, ArtifactStore store) throws IOException {
         return store.exists("rpm/" + repo + REPODATA + "hosted")
                 || store.readVersioned("rpm/" + repo + REPODATA + "revision").isPresent();
     }
 
-    /** Rebuild the per-package {@code primary.d} stanzas of a hosted repo from its live {@code .rpm} pointers: each
-     *  package's header is re-read from the content-addressed store (the same bounded metadata parse a publish makes)
-     *  and its stanza written where one is missing. Idempotent - a stanza that already exists is left alone and the
-     *  compare-and-set pointer write dedupes a concurrent reader's identical rebuild - so a repository converges on a
-     *  read with no re-import. A pointer whose blob is gone or whose header no longer parses is skipped rather than
-     *  failing the whole read: that one package degrades out of the index, the rest of the repository still serves. */
+    /** Rebuild a hosted repository's missing {@code primary.d} stanzas from its {@code .rpm} pointers, re-reading each
+     *  header from the content-addressed store. Idempotent: an existing stanza is left alone and a concurrent identical
+     *  rebuild dedupes on the compare-and-set. A pointer whose blob is gone or whose header no longer parses is
+     *  skipped, so that package drops out of the index and the rest still serves. */
     private void backfillStanzas(String repo, Blobs blobs, ArtifactStore store) throws IOException {
         String base = "rpm/" + repo;
         eachPoolLocation(store, base, location -> backfillStanza(repo, blobs, store, base, location));
     }
 
-    /** The bounds every descent of a repository's pointer tree runs under - the stanza back-fill's and the
-     *  {@link BlobLayout} coordinate seam's alike, through {@link #eachPoolLocation}. Both are answers that must be
-     *  <em>complete</em>: a back-fill that stopped early would leave a package permanently out of
-     *  {@code primary.xml} while reporting a rebuilt index, and a short {@code blobKeys} would make a retroactive hold
-     *  a silent partial no-op. So the entry cap is only a per-call continuation the caller follows to exhaustion, and
-     *  the binding bound is the step budget (one {@link ArtifactStore#exists} probe per opened node), which raises a
-     *  named {@link TraversalException} rather than answering short. Replaces a self-recursion that also buffered
-     *  every {@code .rpm} location of the whole repository into one list before writing the first stanza. */
+    /** The bounds every descent of a repository's pointer tree runs under ({@link #eachPoolLocation}). Both callers
+     *  need a complete answer - a short back-fill leaves a package out of {@code primary.xml}, a short {@code blobKeys}
+     *  a hold partial - so the entry cap is only a continuation followed to exhaustion, and the step budget (one
+     *  {@link ArtifactStore#exists} probe per node) raises a {@link TraversalException} rather than answering short. */
     private static final PagedTreeWalk POOL = PagedTreeWalk.bounded().steps(1_000_000).page(BoundedChildren.DRAIN_PAGE);
 
-    /** Write the missing {@code primary.d} stanza of one {@code .rpm} pointer, or leave the repository as it is when
-     *  the stanza already exists, the blob is gone, or the header no longer parses - that one package degrades out of
-     *  the index, the rest of the repository still serves. */
+    /** Write the missing {@code primary.d} stanza of one {@code .rpm} pointer, or nothing when it exists, the blob is
+     *  gone or the header no longer parses. */
     private void backfillStanza(String repo, Blobs blobs, ArtifactStore store, String base, String location)
             throws IOException {
         String stanzaKey = indexKey(repo, location);
@@ -912,11 +797,8 @@ public final class RpmFormat implements RepositoryFormat, ArtifactLayout, ProxyL
     }
 
     static String indexKey(String repo, String location) {
-        // Flatten the location into one traversal-free stanza-object name with a reversible encoding, not a raw
-        // '/'->'~' swap: that swap collided any location already containing a '~' (a legal .rpm character, e.g. a
-        // '~rc1' pre-release) with a different slashed location, so one package's stanza overwrote another's in the
-        // primary.d index. URL-encoding is injective, and the location is carried inside the stanza body, so the key
-        // never needs decoding back.
+        // A reversible encoding of the location into one traversal-free name: injective, so '~' in a location (a '~rc1'
+        // pre-release) cannot collide with another's. The location is in the stanza body, so the key is never decoded.
         return indexPrefix(repo) + "/" + URLEncoder.encode(location, StandardCharsets.UTF_8);
     }
 
@@ -928,8 +810,7 @@ public final class RpmFormat implements RepositoryFormat, ArtifactLayout, ProxyL
         return out.toByteArray();
     }
 
-    /** The migration-import capability, delegated to the layout-only {@link RpmImporter} - the format IS the
-     *  discovered importer now (an {@code instanceof} capability), and the importer class stays as its delegate. */
+    /** The migration-import capability, delegated to {@link RpmImporter}. */
     private final RpmImporter importer = new RpmImporter();
 
     @Override
