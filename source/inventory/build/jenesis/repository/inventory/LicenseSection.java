@@ -116,12 +116,11 @@ public final class LicenseSection {
 
     /**
      * The rollup-identity fingerprint of a licenses section - the bytes {@link InventoryIdentity#member} folds into the
-     * per-version member digest. It is
-     * a <em>canonical</em>, order-independent encoding of the declared set (sorted, length-delimited), so an incremental
-     * re-fold and a full {@link StoreRepositoryInventory#rebuildIdentity} agree on the member regardless of the order
-     * two sibling publishes happened to union in. Returns empty for an absent section (never inspected), and a present
-     * (possibly empty) byte array for a present section - so the member digest keeps distinguishing absent from
-     * present-but-empty exactly as before.
+     * per-version member digest. It is a <em>canonical</em>, order-independent encoding of the declared set (sorted,
+     * length-delimited), so an incremental re-fold and a full {@link StoreRepositoryInventory#rebuildIdentity} agree on
+     * the member regardless of the order two sibling publishes happened to union in. Returns empty for an absent
+     * section (never inspected), and a present (possibly empty) byte array for a present section - so the member digest
+     * distinguishes absent from present-but-empty.
      */
     public static Optional<byte[]> fingerprint(Optional<Section> section) {
         return fingerprintOf(section.map(present -> declared(Optional.of(present))));

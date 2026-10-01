@@ -46,8 +46,8 @@ public final class DependencySection {
         }
     }
 
-    /** What a section records, or empty when the version has no such section - an artifact published before
-     *  dependencies were recorded, or one whose format reads none. An empty list is a manifest that declared none. */
+    /** What a section records, or empty when the version has no such section - its publish recorded none, or its
+     *  format reads none. An empty list is a manifest that declared none. */
     public static Optional<List<Declared>> declared(Optional<Section> section) {
         if (section.isEmpty()) {
             return Optional.empty();

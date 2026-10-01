@@ -76,8 +76,8 @@ public final class AboutSection {
         }
     }
 
-    /** What a section records, or empty when the version has none - one published before this was recorded, or by a
-     *  format whose inspector reads no manifest. */
+    /** What a section records, or empty when the version has none - its publish recorded none, or its format's
+     *  inspector reads no manifest. */
     public static Optional<About> about(Optional<Section> section) {
         if (section.isEmpty()) {
             return Optional.empty();

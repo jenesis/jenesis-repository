@@ -11,10 +11,10 @@ import build.jenesis.repository.walk.WalkPass;
  * The inventory reconcile as a listener of the one walk: the forward leg on every served pointer, withheld ones
  * included (a held artifact still has its facts), the reverse leg on every row under the published root, the
  * derived leg on every download stamp, license record, override and pin - and, once a pass completed, the rollup
- * identity rebuilt from the converged set. It rides the walk rather than running three walks of its own every hour;
- * a healthy repository never needs any of them, and a crash asks for the walk that carries this.
+ * identity rebuilt from the converged set. It rides the walk rather than running walks of its own: a healthy
+ * repository never needs any of them, and a crash asks for the walk that carries this.
  *
- * <p>Per key it does exactly what the three legs did, through {@link InventoryReconciler}; per store it keeps the
+ * <p>Per key it runs the three legs through {@link InventoryReconciler}; per store it keeps the
  * inventory it judges through for the length of one pass, keyed by the store's identity, and lets it go at the end.
  */
 public final class InventoryReconcileConsumer implements WalkConsumer {
@@ -58,7 +58,7 @@ public final class InventoryReconcileConsumer implements WalkConsumer {
 
     private void restore(ArtifactDescriptor artifact, ArtifactStore store) throws IOException {
         // The forward leg reads the publish/ namespace only: a blobs-namespace root's raw key is not a request path
-        // and its lost section is not rebuilt here - the gap the walk-based leg documented, unchanged.
+        // and its lost section is not rebuilt here - the inventory back-fill rebuilds those.
         if (!artifact.path().startsWith("/")) {
             return;
         }
@@ -79,7 +79,7 @@ public final class InventoryReconcileConsumer implements WalkConsumer {
     @Override
     public void onPassCompleted(WalkPass pass, ArtifactStore store) {
         // The published set is converged for this store: recompute the rollup identity from that truth, so a lost
-        // incremental fold is repaired on the schedule the sidecars are - what the walk-based reconcile did last.
+        // incremental fold is repaired on the schedule the sidecars are, as the last step of the pass.
         StoreRepositoryInventory inventory = inventories.remove(store.identity());
         if (inventory == null) {
             inventory = new StoreRepositoryInventory(store);   // an empty pass delivered nothing; the identity still converges

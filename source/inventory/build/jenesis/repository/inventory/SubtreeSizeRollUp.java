@@ -14,7 +14,7 @@ import build.jenesis.repository.walk.WalkSegment;
 import build.jenesis.repository.walk.Trees;
 
 /**
- * The subtree-size roll-up subsystem extracted from {@link StoreRepositoryInventory}: a self-contained algorithm with
+ * The subtree-size roll-up subsystem behind {@link StoreRepositoryInventory}: a self-contained algorithm with
  * its own durable {@code sizes/} state format, invisible from the inventory's public surface. It recomputes every
  * browse folder's total subtree size so the console reads a folder's size with one direct key lookup
  * ({@link #subtreeSize}) instead of re-walking the tree on every request. Constructed with the shared
@@ -69,8 +69,7 @@ final class SubtreeSizeRollUp {
             Set<String> live = new HashSet<>();
             long total = rollUp(live);
             // Paged through the same bounded ROWS enumeration the walk-riding compaction drives: a repository has one
-            // roll-up row per browse folder, so listing the namespace whole was the flat half of the same
-            // unbounded-work defect the descent above carried.
+            // roll-up row per browse folder, so listing the namespace whole would be unbounded work.
             ROWS.scan(store, ROOT, name -> {
                 String path = name.equals("~") ? "" : StoreRepositoryInventory.decode(name);
                 if (!live.contains(path)) {
@@ -164,16 +163,16 @@ final class SubtreeSizeRollUp {
         });
     }
 
-    /** The roll-up row namespace. A compaction that stopped early would leave stale rows standing while reporting a
-     *  finished pass, so the entry cap is OFF and the binding bound is the round-trip budget - raised here, because a
-     *  large repository has a roll-up row per browse folder, to 10^5 round-trips of the drain page - which raises a named
-     *  {@code TraversalException} rather than silently shortening the sweep. Deleting a row behind the cursor is safe:
-     *  the enumeration only ever pages forward from the last name it delivered, so a removed earlier name can never
-     *  displace a later one. */
     /** The {@code sizes/} space's root, and this class is its single composer: every cached-total key is
      *  built from it here and the manifest declares this constant rather than re-spelling the literal. */
     static final String ROOT = "sizes";
 
+    /** The roll-up row namespace. A compaction that stopped early would leave stale rows standing while reporting a
+     *  finished pass, so the entry cap is OFF and the binding bound is the round-trip budget - raised here, because a
+     *  large repository has a roll-up row per browse folder, to 10^5 round-trips of the drain page - which raises a
+     *  named {@code TraversalException} rather than silently shortening the sweep. Deleting a row behind the cursor is
+     *  safe: the enumeration only ever pages forward from the last name it delivered, so a removed earlier name can
+     *  never displace a later one. */
     private static final BoundedChildren ROWS =
             BoundedChildren.bounded().entries(Integer.MAX_VALUE).steps(100_000).page(BoundedChildren.DRAIN_PAGE);
 
@@ -195,8 +194,7 @@ final class SubtreeSizeRollUp {
      *  {@link ArtifactStore#exists} probe per opened node), which raises a named
      *  {@link build.jenesis.repository.walk.TraversalException} rather than answering short. Depth stays at the
      *  primitive's {@link ArtifactStore#MAX_SEGMENTS} default, so a request path deeper than the store's own write
-     *  ceiling fails by name where the previous recursion would have descended it (and, past a few thousand segments,
-     *  overflowed the stack). */
+     *  ceiling fails by name rather than being descended. */
     private static final PagedTreeWalk TREE = PagedTreeWalk.bounded().steps(5_000_000).page(BoundedChildren.DRAIN_PAGE);
 
     /** Post-order roll-up of the whole {@code publish/} subtree: an artifact leaf contributes its blob's recorded size,
@@ -206,7 +204,7 @@ final class SubtreeSizeRollUp {
      *  <p>Driven by the shared bounded descent ({@link PagedTreeWalk}) rather than a self-recursion per path segment:
      *  the leaf stream arrives in {@linkplain build.jenesis.repository.walk.Trees#order path order}, which is
      *  subtree-contiguous, so the post-order folder totals fold over it with an O(depth) frame stack - the same shape
-     *  {@link RollUpVisitor} folds the resumable pass with, now shared with the walk-less path. A wide folder is paged
+     *  {@link RollUpVisitor} folds the resumable pass with, shared with the walk-less path. A wide folder is paged
      *  rather than listed whole, and the descent is iterative, so neither a million-sibling level nor a client-planted
      *  path depth is held in heap or on the call stack. */
     private long rollUp(Set<String> live) throws IOException {
@@ -286,8 +284,7 @@ final class SubtreeSizeRollUp {
         }
 
         /** Close every still-open frame and answer the repository total. A {@code publish/} tree that held no pointer
-         *  at all leaves no frame open and writes nothing - the previous recursion's behaviour, where an empty root
-         *  was a childless leaf that committed no roll-up object. */
+         *  at all leaves no frame open and writes nothing, so an empty repository commits no roll-up object. */
         private long finish() throws IOException {
             if (!any) {
                 return 0;

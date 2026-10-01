@@ -13,8 +13,9 @@ import build.jenesis.repository.store.Names;
  * collector reclaims a <em>blob no pointer references</em> (an orphan), this reconciles a <em>pointer whose blob is not
  * stored</em> (a dangling pointer), so between them every torn write converges to <em>fully published</em> (both the
  * blob and its pointer present) or <em>fully absent</em> (the serving pointer gone, any residual blob left for the
- * collector), never a half-visible artifact. It opens a walk of its own rather than riding the shared rebuild
- * pass because it must see every pointer, withheld ones included: a torn write under quarantine is still torn.
+ * collector), never a half-visible artifact. Deployed, it judges through {@link TornWriteConsumer}, a listener of the
+ * one walk that hears withheld pointers too - a torn write under quarantine is still torn; {@link #reconcile} runs the
+ * same judgement as one whole pass of its own over a single repository.
  *
  * <p>Because every ordered write lands the blob before the pointer that names it (see {@code Publication.storeBlob}
  * then {@code Publication.link}, and every layout / staging / promotion path built on them), a crash can only ever
@@ -52,7 +53,6 @@ public final class TornWriteReconciler {
     private static final String PUBLISH = "publish";
     private static final String BLOBS = "blobs";
 
-    /** Names fetched per {@link ArtifactStore#page} call when streaming the flat {@code blobs/} namespace. */
     /**
      * The hashes the pointer walk saw a stored blob for, held to judge the blob walk against - as sixty-four-bit
      * prefixes in one sorted primitive array rather than as a hash set of strings. As strings a referenced blob would
@@ -140,8 +140,8 @@ public final class TornWriteReconciler {
         // whose blob is missing, and remember every hash a pointer resolves to whose blob IS stored - the referenced
         // set the orphan pass judges against. Each pointer is handled inside the walk's bounded strides, so the whole
         // leaf set is never buffered in memory; only sha256-shaped pointer contents are trusted as naming a blob,
-        // anything else is left be. The task holds the single-writer lease, so the walk claims every segment and this
-        // pass runs to completion in one invocation - the referenced set the orphan pass reads is whole.
+        // anything else is left be. The referenced set the orphan pass reads is whole only when this walk claims every
+        // segment, which holds while no other worker joins the same pass.
         ReferencedHashes referenced = new ReferencedHashes();
         long[] counts = new long[2]; // [0] dangling, [1] removed - carried into the walk's visitor
         walk.walk(store, "reconcile-torn", List.of(PUBLISH), pointer -> {
@@ -185,10 +185,9 @@ public final class TornWriteReconciler {
         return new Result(dangling, removed, orphans);
     }
 
-    /** Remove a dangling pointer, but only after re-reading it under the pass's single-writer lease and confirming it
-     *  still names the <em>same</em> missing blob: a concurrent republish that re-linked the path (or re-stored the
-     *  blob) between the scan and here means the pointer is no longer dangling, so it is left untouched. Idempotent -
-     *  a pointer already gone returns false. */
+    /** Remove a dangling pointer, but only after re-reading it and confirming it still names the <em>same</em> missing
+     *  blob: a concurrent republish that re-linked the path (or re-stored the blob) between the scan and here means the
+     *  pointer is no longer dangling, so it is left untouched. Idempotent - a pointer already gone returns false. */
     boolean removeDangling(String pointer, String hash) throws IOException {
         Optional<ArtifactStore.Versioned> current = store.readVersioned(pointer);
         if (current.isEmpty()) {

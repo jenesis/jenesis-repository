@@ -29,21 +29,20 @@ import build.jenesis.repository.walk.WalkPass;
 import build.jenesis.repository.store.SingleFlight;
 
 /**
- * A {@link RepositoryInventory} over the artifact store, keyed by the format-neutral {@code ecosystem} and coordinate
- * a format supplies rather than any layout this code parses. Publish times are recorded in the {@code published}
- * section of each version's document (the store's version token is opaque, so the time cleanup orders and ages by is
- * kept explicitly, alongside the format-supplied prerelease flag); enumeration reads those documents, and an eviction
- * unpublishes every pointer a
- * version occupies - the paths resolved by the owning format's {@link ArtifactLayout}, including any cross-published
- * mirror it recorded - each removal observed ({@code PublicationObserver.onDeleted}) with the coordinate this
- * eviction already resolved. The now-unreferenced content blobs are reclaimed by the discovered
+ * A {@link RepositoryInventory} over the artifact store, keyed by the format-neutral {@code ecosystem} and coordinate a
+ * format supplies rather than any layout this code parses. Publish times are recorded in the {@code published} section
+ * of each version's document (the store's version token is opaque, so the time cleanup orders and ages by is kept
+ * explicitly, alongside the format-supplied prerelease flag); enumeration reads those documents, and an eviction
+ * unpublishes every pointer a version occupies - the paths resolved by the owning format's {@link ArtifactLayout},
+ * including any cross-published mirror it recorded - each removal observed ({@code PublicationObserver.onDeleted}) with
+ * the coordinate this eviction already resolved. The now-unreferenced content blobs are reclaimed by the discovered
  * {@code GarbageCollector} (resolved through its provider with the {@link #pointerRoots} this inventory derives from
  * the installed formats), never by any enumeration of this class - with no collector installed nothing is ever
- * reclaimed, and the capability surfaces say so. Only versions the repository recorded, through a format that
- * describes its coordinates, are seen.
+ * reclaimed, and the capability surfaces say so. Only versions the repository recorded, through a format that describes
+ * its coordinates, are seen.
  *
  * <p><strong>Composed of subsystem collaborators.</strong> This class is the {@link RepositoryInventory} facade:
- * it holds the store and the collaborators each cohesive concern was extracted into - {@link InventoryRecording}
+ * it holds the store and the collaborators each cohesive concern lives in - {@link InventoryRecording}
  * (publish/provenance/download recording and the publish-facts point reads), {@link InventoryPins} (force-keeps),
  * {@link InventoryRetention} (the retention-policy object), {@link InventoryBrowse} (children/describe/locate/paths),
  * {@link InventoryReleases} (the release/coordinate enumerations and blobs-namespace queries),
@@ -61,12 +60,12 @@ public final class StoreRepositoryInventory implements RepositoryInventory {
      * edge and in the collector's reference lenders - the documented "as if it were not installed". The filter runs
      * per call rather than at class load, so a toggle applied by a settings refresh is honoured live.
      *
-     * <p>This alignment is load-bearing for the reclaiming passes. The layout consulted off the raw graph while
-     * {@code BlobReferences.installed()} honoured the toggle made a toggled-off format placeable without a lender:
-     * {@link #pointerRoots(ArtifactStore)} then answered complete, the mark scanned an OCI tag pointer without
-     * expanding the manifest it names, and the layers only that manifest references read as unreferenced - condemned
-     * by one sweep and deleted by the next. With the toggle honoured here, such an ecosystem is unplaceable and every
-     * reclaiming pass refuses it whole, exactly as for a module that is not on the graph.
+     * <p>This alignment is load-bearing for the reclaiming passes. Consulted off the raw graph while
+     * {@code BlobReferences.installed()} honours the toggle, a toggled-off format would be placeable without a lender:
+     * {@link #pointerRoots(ArtifactStore)} would answer complete, the mark would scan an OCI tag pointer without
+     * expanding the manifest it names, and the layers only that manifest references would read as unreferenced -
+     * condemned by one sweep and deleted by the next. With the toggle honoured here, such an ecosystem is unplaceable
+     * and every reclaiming pass refuses it whole, exactly as for a module that is not on the graph.
      */
     static List<RepositoryFormat> formats() {
         return RepositoryFormat.installed();
@@ -78,11 +77,10 @@ public final class StoreRepositoryInventory implements RepositoryInventory {
 
     /** The consolidated metadata store the publish facts live in. The {@code published} section is the source of
      *  truth and the only one read: the publish instant, the prerelease flag and the pin, with set completeness
-     *  back-filled by the reconcile
-     *  forward-repair. */
+     *  back-filled by the reconcile forward-repair. */
     private final MetadataStore metadata;
 
-    /** The subtree-size roll-up subsystem - its ~450-line CAS-fenced fold lives in a sibling class; the public
+    /** The subtree-size roll-up subsystem - its CAS-fenced fold lives in a sibling class; the public
      *  {@link #rollUpSizes}/{@link #subtreeSize} seam delegates here. */
     private final SubtreeSizeRollUp rollUp;
 
@@ -196,9 +194,6 @@ public final class StoreRepositoryInventory implements RepositoryInventory {
         recording.recordProvenance(ecosystem, coordinate, version, verified, sha256);
     }
 
-    /** Record when a coordinate version was last downloaded - the timestamp the not-downloaded-for rule ages by,
-     *  written best-effort off the request path. A marker-less version is treated as never-downloaded-since-publish,
-     *  which biases toward deletion, not away from it. */
     /** One publish's inventory facts in one write - see {@link Recording} - for the coordinate and version an
      *  installed format describes {@code path} to; empty when none describes it that far. */
     public Optional<Recording> recording(String path, Instant published) {
@@ -212,6 +207,9 @@ public final class StoreRepositoryInventory implements RepositoryInventory {
         return recording.recording(ecosystem, coordinate, version, prerelease, published);
     }
 
+    /** Record when a coordinate version was last downloaded - the timestamp the not-downloaded-for rule ages by,
+     *  written best-effort off the request path. A version with no download record is treated as
+     *  never-downloaded-since-publish, which biases toward deletion, not away from it. */
     public void recordDownload(String ecosystem, String coordinate, String version, Instant when) throws IOException {
         recording.recordDownload(ecosystem, coordinate, version, when);
     }
@@ -231,8 +229,8 @@ public final class StoreRepositoryInventory implements RepositoryInventory {
     }
 
     /** What a coordinate version's manifest declared it depends on, as its inspector read it at publish, or empty
-     *  where nothing was recorded - a format whose inspector reads no dependency list, a version published before
-     *  they were recorded, or no consolidated store. An empty list is a manifest that declared none. */
+     *  where nothing was recorded - a format whose inspector reads no dependency list, a publish that recorded none,
+     *  or no consolidated store. An empty list is a manifest that declared none. */
     public Optional<List<DependencySection.Declared>> dependencies(String ecosystem, String coordinate,
                                                                    String version) throws IOException {
         return recording.dependencies(ecosystem, coordinate, version);
@@ -241,8 +239,8 @@ public final class StoreRepositoryInventory implements RepositoryInventory {
     /**
      * What a version's document records that a full-text index reads beside the coordinate: the licences it declares
      * and what its manifest says about it, from one read of the document. Empty when the version has no document;
-     * either part is empty when the document has no such section - a version published before it was recorded, or by
-     * a format whose inspector reads no manifest - which a caller may fill another way or leave out.
+     * either part is empty when the document has no such section - a publish that recorded none, or a format whose
+     * inspector reads no manifest - which a caller may fill another way or leave out.
      */
     public Optional<Searchable> searchable(String ecosystem, String coordinate, String version) throws IOException {
         return recording.searchable(ecosystem, coordinate, version);
@@ -264,9 +262,9 @@ public final class StoreRepositoryInventory implements RepositoryInventory {
         return recording.lastDownloaded(ecosystem, coordinate, version);
     }
 
-    /** Pin a coordinate version - mark it force-kept, immune to every retention rule. The pin is a field
-     *  of the document's {@code published} section (preserving the publish instant/prerelease), so it evicts with the
-     *  version's document instead of dangling as its own {@code pinned/} sidecar. */
+    /** Pin a coordinate version - mark it force-kept, immune to every retention rule. The pin is a field of the
+     *  document's {@code published} section (preserving the publish instant/prerelease), so it evicts with the
+     *  version's document; the {@code pinned/} marker beside it is only the index pins are enumerated from. */
     public void pin(String ecosystem, String coordinate, String version) throws IOException {
         pinning.pin(ecosystem, coordinate, version);
     }
@@ -343,8 +341,8 @@ public final class StoreRepositoryInventory implements RepositoryInventory {
      *  any of its {@link BlobLayout#blobKeys} resolves to a withheld hash (the retroactive sweeps mark every hash of a
      *  held version); an ecosystem <em>no installed format can place at all</em> is screened against the durable,
      *  coordinate-keyed {@link HoldMarkers hold records} instead, because both of those faces are layout-resolved and
-     *  neither could be asked - reading that silence as "nothing withholds it" let removing a format module disclose,
-     *  by name, every version its sweeps were holding. Both other contracts are unchanged: under an installed
+     *  neither could be asked - reading that silence as "nothing withholds it" would let removing a format module
+     *  disclose, by name, every version its sweeps were holding. Two other contracts hold: under an installed
      *  layout a coordinate recorded with no blob stored is still disclosable (the ghost-coordinate contract), and a
      *  version of an ecosystem no installed format serves is still listed, rendered as an orphan, as long as nothing
      *  holds it. Under {@link ServableNames.Policy#HIDE_WITHHELD} this stats no blob at all: it reads only the tiny
@@ -493,17 +491,18 @@ public final class StoreRepositoryInventory implements RepositoryInventory {
         return browse.knownPaths(ecosystem, coordinate, version);
     }
 
-    /** The retention policy this repository stored before retention was a repository setting, or empty if it stored
-     *  none - read only by the one-time move of it into the repository's settings, which leaves it in place. A stored
-     *  policy that cannot be parsed fails loudly (a contained {@link IOException}) rather than reading as "no policy". */
+    /** The retention policy this repository holds as a stored object rather than as repository settings, or empty if it
+     *  holds none - read only by the one-time move of it into the repository's settings, which leaves it in place. A
+     *  stored policy that cannot be parsed fails loudly (a contained {@link IOException}) rather than reading as "no
+     *  policy". */
     public Optional<RetentionPolicy> formerRetention() throws IOException {
         return retention.readRetention();
     }
 
     /** Compare-and-set a small pointer under {@link Retries}: re-read the opaque version token and write against it,
-     *  so a concurrent writer's conflict is a retry rather than a silently lost update. These pointers (publish time,
-     *  last-download, pin, retention policy) are load-bearing, so a lost update is a durable drift and the exhaustion
-     *  throws. Package-private so the extracted subsystems commit their small objects through the same fenced write. */
+     *  so a concurrent writer's conflict is a retry rather than a silently lost update. These pointers (the
+     *  {@code pinned/} markers) are load-bearing, so a lost update is a durable drift and the exhaustion throws.
+     *  Package-private so the subsystem collaborators commit their small objects through the same fenced write. */
     void writeVersioned(String key, byte[] value) throws IOException {
         Retries.update(store, key, current -> value);
     }
@@ -539,7 +538,7 @@ public final class StoreRepositoryInventory implements RepositoryInventory {
         return recording.publishedFacts(ecosystem, coordinate, version);
     }
 
-    /** See {@link InventoryRecording#membership}. Package-private so the extracted {@link InventoryReconciler} - the
+    /** See {@link InventoryRecording#membership}. Package-private so the {@link InventoryReconciler} - the
      *  one sweep that deletes on a non-membership - and the eviction's rollup fold-out judge through the same
      *  three-valued read. */
     Known<PublishedSection.Facts> membership(String ecosystem, String coordinate, String version) throws IOException {
@@ -651,18 +650,18 @@ public final class StoreRepositoryInventory implements RepositoryInventory {
         return enumeration.versions(ecosystem, coordinate);
     }
 
+    /** One coordinate version as a point read - its publish facts, pin and download facts - or empty when it is
+     *  not a published member. Never a listing of the coordinate's versions. */
+    public Optional<Release> release(String ecosystem, String coordinate, String version) throws IOException {
+        return enumeration.release(ecosystem, coordinate, version);
+    }
+
     /**
      * One bounded page of a coordinate's published versions, in version-key order, resumable from the bare version
      * name the previous page ended on ({@code null} from the top): the face a screen reads through, since a
      * coordinate's version set grows without bound and {@link #versions(String, String)} materialises all of it.
      * Reads at most {@code limit + 1} names and one publish document per version returned.
      */
-    /** One coordinate version as a point read - its publish facts, pin and download marker - or empty when it is
-     *  not a published member. Never a listing of the coordinate's versions. */
-    public Optional<Release> release(String ecosystem, String coordinate, String version) throws IOException {
-        return enumeration.release(ecosystem, coordinate, version);
-    }
-
     public ReleasePage versions(String ecosystem, String coordinate, String after, int limit) throws IOException {
         return enumeration.versions(ecosystem, coordinate, after, limit);
     }
@@ -824,8 +823,8 @@ public final class StoreRepositoryInventory implements RepositoryInventory {
      * Every content hash a live coordinate version claims: the blobs-namespace hashes its {@link BlobLayout} resolves
      * ({@link #blobHashes}), and the hashes the {@code publish/} pointers of a version served through an
      * {@link ArtifactLayout} (Maven, the module view) name. The withhold-marker backstop judges a stranded marker by
-     * this claim, and the blobs-namespace answer alone left a {@code publish/}-served version unable to make it: a
-     * marker on its bytes - written for a byte-identical blobs-namespace alias that has since gone - kept it
+     * this claim, and with the blobs-namespace answer alone a {@code publish/}-served version could not make it: a
+     * marker on its bytes - written for a byte-identical blobs-namespace alias that has since gone - would keep it
      * withheld for good, with nothing holding it and nothing an operator could see. Read from the small pointers,
      * never a blob body; a pointer whose body is not a bare content hash claims nothing.
      */
@@ -853,9 +852,10 @@ public final class StoreRepositoryInventory implements RepositoryInventory {
     }
 
     /** Evict a blobs-namespace version's served content on discard: delete every blob pointer key the version holds so
-     *  serving {@code 404}s and no later enforce pass re-holds a version with no blobs, and lift the withhold markers on
-     *  those hashes. This is the destroy leg a blobs-namespace discard needs - the counterpart of unpublishing a
-     *  {@code publish/} release pointer. A no-op for an ecosystem with no installed {@link BlobLayout}. */
+     *  serving {@code 404}s and no later enforce pass re-holds a version with no blobs, leaving the withhold markers on
+     *  those hashes standing - a release is the only path that lifts one. This is the destroy leg a blobs-namespace
+     *  discard needs - the counterpart of unpublishing a {@code publish/} release pointer. A no-op for an ecosystem
+     *  with no installed {@link BlobLayout}. */
     public void discardBlobs(String ecosystem, String coordinate, String version) throws IOException {
         eviction.discardBlobs(ecosystem, coordinate, version);
     }
@@ -865,11 +865,11 @@ public final class StoreRepositoryInventory implements RepositoryInventory {
      *
      * <p><b>Refused, loudly, when this deployment cannot enumerate the version's pointers</b> - no installed
      * {@link ArtifactLayout} resolves a layout prefix for the coordinate and no installed {@link BlobLayout} owns its
-     * ecosystem. Which keys a version's pointers live under is layout knowledge and nothing durable records it,
-     * so with the owning module absent the unpublish legs silently found nothing while every derived-row delete under
-     * them ran: the artifact kept serving with its publish facts, pin, licenses, meta document and hold-override
+     * ecosystem. Which keys a version's pointers live under is layout knowledge and nothing durable records it, so with
+     * the owning module absent the unpublish legs would silently find nothing while every derived-row delete under them
+     * ran: the artifact would keep serving with its publish facts, pin, licenses, meta document and hold-override
      * markers destroyed. There is no "do the whole thing including the pointers" to choose here - the pointers are
-     * precisely what cannot be named - so the only answers were a half-done destroy and a refusal, and a destroy is the
+     * precisely what cannot be named - so the only answers are a half-done destroy and a refusal, and a destroy is the
      * irreversible act. The refusal is a named {@link IOException}: the on-demand sweep answers it to the operator who
      * asked, the scheduled pass logs it per repository and moves on to the next one, and neither leaves a version
      * evicted-but-serving.
@@ -897,11 +897,10 @@ public final class StoreRepositoryInventory implements RepositoryInventory {
     }
 
     /** Reclaim a re-heatable cached fallback blob under quota/disk pressure while retaining its {@code origin} and
-     *  {@code verdict} meta-document sections: the bytes are discarded (pointers
-     *  unpublished, the blob garbage-collected) but the audit records survive, so a pull-through can re-heat the
-     *  entry. Returns {@code true} when the blob was reclaimed; {@code false} when the version is <b>not</b>
-     *  re-heatable -
-     *  a {@code local-upload}-origin blob is system-of-record and is never cache-evicted, and a version with no origin
+     *  {@code verdict} meta-document sections: the bytes are discarded (pointers unpublished, the blob
+     *  garbage-collected) but the audit records survive, so a pull-through can re-heat the entry. Returns {@code true}
+     *  when the blob was reclaimed; {@code false} when the version is <b>not</b> re-heatable - a
+     *  {@code local-upload}-origin blob is system-of-record and is never cache-evicted, and a version with no origin
      *  record is not a recognised cache entry - in which case nothing is touched. Like {@link #evict}, it is
      *  <b>refused</b> with a named {@link IOException} when no installed format can place the ecosystem: every
      *  {@code false} above is a decision read off a durable record, and folding "I could not tell which pointers this
@@ -909,6 +908,12 @@ public final class StoreRepositoryInventory implements RepositoryInventory {
      *  reported {@code true} - "bytes reclaimed" - with the format's pointers still standing. */
     public boolean reclaimFallbackCache(String ecosystem, String coordinate, String version) throws IOException {
         return eviction.reclaimFallbackCache(ecosystem, coordinate, version);
+    }
+
+    /** The roots of the per-coordinate derived rows a walk's {@code DERIVED} family enumerates: the override records
+     *  and the pins - what the reconcile's derived-row leg judges. */
+    public static List<String> derivedRoots() {
+        return List.of(OverrideRecords.ROOT, PINNED);
     }
 
     /**
@@ -925,12 +930,6 @@ public final class StoreRepositoryInventory implements RepositoryInventory {
      * whether this deployment can enumerate everything the store holds; a non-reclaiming reader (the rebuild pass,
      * which only re-derives from what it can see) is served correctly by this list.
      */
-    /** The roots of the per-coordinate derived rows a walk's {@code DERIVED} family enumerates: the override records
-     *  and the pins - what the reconcile's derived-row leg judges. */
-    public static List<String> derivedRoots() {
-        return List.of(OverrideRecords.ROOT, PINNED);
-    }
-
     public static List<String> pointerRoots() {
         // The one computation of this set, not a second one filtered differently: derived independently - asking
         // the discovered formats which wear BlobRoots while the collector asks BlobReferences.installed() - a
@@ -1072,18 +1071,16 @@ public final class StoreRepositoryInventory implements RepositoryInventory {
      * more; {@code ecosystem()} arrives with {@link EcosystemLayout}, which {@link BlobRoots} extends and a bare
      * lender does not. There is nothing to compare an ecosystem against on a plain {@code BlobReferences}.
      *
-     * <p>The case such a widening would address is also unreachable, for a reason worth writing down rather than
-     * re-deriving:
-     * the one root-lending format that does not wear {@code BlobRoots} - the {@code OciFormat} - declares no
-     * ecosystem <em>at all</em>. Nothing it publishes records one, so no ecosystem of its arrives in the set this
-     * test is asked about, and there is no refusal for it to cause.
+     * <p>The case such a widening would address is also unreachable: the one root-lending format that does not wear
+     * {@code BlobRoots} - the {@code OciFormat} - declares no ecosystem <em>at all</em>. Nothing it publishes records
+     * one, so no ecosystem of its arrives in the set this test is asked about, and there is no refusal for it to cause.
      *
      * <p>What is real is the shape of a <em>future</em> format that lends roots and declares an ecosystem without
      * being a {@code BlobRoots}: its roots would be scanned while its ecosystem read as unplaceable, and the
      * collector would refuse over content it can in fact account for. So the test matches on exactly the two
      * things it means - it lends roots, and it says which ecosystem those coordinates are - which is strictly
      * wider than {@code BlobRoots} (that interface is their conjunction) and admits nothing whose pointers the
-     * scan does not already enumerate. A roots-only format still counts as placeable, deliberately, as before.
+     * scan does not already enumerate. A roots-only format counts as placeable, deliberately.
      */
     private static boolean placeable(String ecosystem) {
         if (!layoutsFor(ecosystem).isEmpty()) {
@@ -1100,7 +1097,7 @@ public final class StoreRepositoryInventory implements RepositoryInventory {
 
     /** Whether a pointer's content is the lower-case SHA-256 hex a blob pointer names - the only shape carried into
      *  a removal descriptor's blob identity, so a format's small timestamp or revision marker under the same root never
-     *  masquerades as a hash. Package-private so the extracted subsystems test a pointer the same way. */
+     *  masquerades as a hash. Package-private so the subsystem collaborators test a pointer the same way. */
     static boolean hash(String value) {
         if (value.length() != 64) {
             return false;
@@ -1159,8 +1156,8 @@ public final class StoreRepositoryInventory implements RepositoryInventory {
      * every reader that arrives while it does waits for that rebuild's accumulator instead of starting its own.
      * Without it, fifty conditional reads arriving at once against an absent rollup would each stream the whole
      * coordinate set, fifty rebuilds' worth of store operations for one answer. A rebuild that fails hands its failure
-     * to the readers that waited on it; a
-     * rebuild that outlives the stale horizon leaves a waiting reader to rebuild for itself.
+     * to the readers that waited on it; a rebuild that outlives the stale horizon leaves a waiting reader to rebuild
+     * for itself.
      */
     private byte[] rebuildIdentityOnce() throws IOException {
         return switch (REBUILDING.run(store.identity(), this::rebuildIdentity,
@@ -1203,14 +1200,13 @@ public final class StoreRepositoryInventory implements RepositoryInventory {
      * {@linkplain InventoryIdentity#settle settle} combines the two under compare-and-set. Without the stamp a rebuild
      * in flight would be a window in which every fold is a no-op - the rollup is absent - and the walk stores what it
      * has seen, so a publish landing during the walk would be folded by nobody until the next reconcile. A round the
-     * storm
-     * defeats (an exhausted fold dropped the stamped object, a peer took it over) is claimed again, and the walk is
-     * run again when a fold declines a member to it WHILE it is enumerating - the classification is on the member's
+     * storm defeats (an exhausted fold dropped the stamped object, a peer took it over) is claimed again, and the walk
+     * is run again when a fold declines a member to it WHILE it is enumerating - the classification is on the member's
      * publish instant and the walk's coverage is on where the member's key sorts, so neither half can say afterwards
      * whether that member was folded, and a second walk over the same boundary, replacing the first's digest rather
-     * than combining with it, covers it for certain. The {@linkplain InventoryIdentity#handedOver handoff counter}
-     * read before the walk and required unchanged at the settle is what makes that case visible;
-     * {@code InventoryIdentity} carries the argument.
+     * than combining with it, covers it for certain. The {@linkplain InventoryIdentity#handedOver handoff counter} read
+     * before the walk and required unchanged at the settle is what makes that case visible; {@code InventoryIdentity}
+     * carries the argument.
      *
      * <p>Both losses spend from ONE budget of {@value #REBUILD_ROUNDS} attempts, so a rebuild walks at most that
      * many times whatever mix of them it meets; after that the walk's own digest is stored as it stands, a bounded
@@ -1331,7 +1327,7 @@ public final class StoreRepositoryInventory implements RepositoryInventory {
     }
 
     /** Every installed format that maps this ecosystem's coordinates back to layout paths, matched on the format's
-     *  own {@link ArtifactLayout#ecosystem()}. Package-private so the extracted subsystems judge pointer liveness
+     *  own {@link ArtifactLayout#ecosystem()}. Package-private so the subsystem collaborators judge pointer liveness
      *  through the same discovered-format lookup.
      *
      *  <p><b>All of them, unioned - an ecosystem is a vocabulary rather than an owner.</b> The value a format
@@ -1378,10 +1374,6 @@ public final class StoreRepositoryInventory implements RepositoryInventory {
         return List.copyOf(planned);
     }
 
-    /** The installed format that owns this ecosystem and stores its artifacts in the shared {@code Blobs} namespace
-     *  (npm, PyPI, Cargo, ...), matched on the format's own {@link BlobLayout#ecosystem()}. Package-private so the
-     *  extracted subsystems share the same blobs-namespace liveness lookup. At most one format can match, for the
-     *  reason {@link #layoutsFor} gives. */
     /** Every installed blobs-namespace layout, whatever ecosystem it declares - the enumeration a repair that works
      *  back from a stored pointer needs, since the ecosystem is what it is trying to find out. */
     static List<BlobLayout> blobLayouts() {
@@ -1394,6 +1386,10 @@ public final class StoreRepositoryInventory implements RepositoryInventory {
         return List.copyOf(layouts);
     }
 
+    /** Every installed format that owns this ecosystem and stores its artifacts in the shared {@code Blobs} namespace
+     *  (npm, PyPI, Cargo, ...), matched on the format's own {@link BlobLayout#ecosystem()} - all of them, unioned, for
+     *  the reason {@link #layoutsFor} gives. Package-private so the subsystem collaborators share the same
+     *  blobs-namespace liveness lookup. */
     static List<BlobLayout> blobLayoutsFor(String ecosystem) {
         List<BlobLayout> layouts = new ArrayList<>();
         for (RepositoryFormat format : formats()) {
@@ -1410,7 +1406,7 @@ public final class StoreRepositoryInventory implements RepositoryInventory {
      *  name this constant, because a reaper composing its own spelling reaps a key no writer wrote. */
     static final String PINNED = "pinned";
 
-    /** Package-private so the extracted subsystems read and write a marker under the identical key. */
+    /** Package-private so the subsystem collaborators read and write a marker under the identical key. */
     static String pinnedKey(String ecosystem, String coordinate, String version) {
         return PINNED + "/" + ArtifactStore.segment(ecosystem) + "/" + encode(coordinate)
                 + "/" + ArtifactStore.segment(version);
@@ -1418,8 +1414,8 @@ public final class StoreRepositoryInventory implements RepositoryInventory {
 
     /** Encode a coordinate to a single path segment, so a {@code group:artifact} or a scoped package name never splits
      *  the {@code <ecosystem>/<coordinate>/<version>} key. The ecosystem and version segments are instead validated
-     *  traversal-free ({@link ArtifactStore#segment}) where the keys are built. Package-private so the extracted
-     *  subsystems key their objects and decode the coordinates of the keys they walk the same way. */
+     *  traversal-free ({@link ArtifactStore#segment}) where the keys are built. Package-private so the subsystem
+     *  collaborators key their objects and decode the coordinates of the keys they walk the same way. */
     static String encode(String coordinate) {
         return URLEncoder.encode(coordinate, StandardCharsets.UTF_8);
     }
@@ -1456,7 +1452,7 @@ public final class StoreRepositoryInventory implements RepositoryInventory {
      *  iterative, paged descent ({@link PagedTreeWalk}), so a wide level is paged rather than listed whole and
      *  an attacker-shaped key depth cannot overflow a thread stack. The per-call entry cap is a continuation this
      *  method follows to exhaustion, so the sweep stays complete; the step and depth caps have no continuation and
-     *  surface as a {@link build.jenesis.repository.walk.TraversalException}. Package-private so the extracted
+     *  surface as a {@link build.jenesis.repository.walk.TraversalException}. Package-private so the
      *  enumeration and pin subsystems stream the same subtree. */
     void walk(String root, KeyVisitor visitor) throws IOException {
         String cursor = null;

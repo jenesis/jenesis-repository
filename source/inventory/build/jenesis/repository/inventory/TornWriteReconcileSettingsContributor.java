@@ -6,12 +6,12 @@ import build.jenesis.repository.settings.SettingsContributor;
 
 /**
  * Describes the write-ordering reconcile settings, so they surface on the settings screens exactly when this module is
- * installed. All three are deployment-wide (a background sweep, not a per-repository dial) and take effect on the next
- * pass, so flipping one needs no restart. The pass is off by default and, when on, a dry run by default - a removal of
+ * installed. Both are deployment-wide (a listener of the walk, not a per-repository dial) and take effect on the next
+ * walk, so flipping one needs no restart. The reconcile is on by default and a dry run by default - a removal of
  * pointer objects is opted into deliberately, never automatic.
  *
- * {@link TornWriteConsumer#NAME} and {@link TornWriteConsumer#APPLY} constants, so the catalogue and the consumer cannot drift.
- * {@code IntervalSetting} constant, so the catalogue and the code cannot drift.
+ * <p>The keys render straight off the {@link TornWriteConsumer#NAME} and {@link TornWriteConsumer#APPLY} constants,
+ * so the catalogue and the consumer cannot drift.
  */
 public final class TornWriteReconcileSettingsContributor implements SettingsContributor {
 

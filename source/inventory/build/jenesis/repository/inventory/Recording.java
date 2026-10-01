@@ -89,7 +89,7 @@ public final class Recording {
      *
      * <p>Recorded for every outcome rather than only for a good one. "Nobody signed this" and "somebody we do not
      * know signed this" are facts a console has to be able to show, and a record written only on success would leave
-     * a screen unable to tell them from a version published before signatures were being checked at all.
+     * a screen unable to tell them from a version with no signature record at all.
      *
      * <p>{@code source} is where the signer's trust came from - a configured key or pin, a discovered key, the
      * provenance of the declared repository - and {@code details} what else the material stated that an operator

@@ -16,7 +16,7 @@ import build.jenesis.repository.store.ServedAliases;
 import build.jenesis.repository.format.ArtifactLayout;
 
 /**
- * The eviction subsystem extracted from {@link StoreRepositoryInventory}: the destroy leg that unpublishes every pointer
+ * The eviction subsystem behind {@link StoreRepositoryInventory}: the destroy leg that unpublishes every pointer
  * a version occupies and reaps its derived per-version rows. {@link #evict} unpublishes the {@code publish/} pointers a
  * Publication-namespace format's {@link ArtifactLayout} resolves (each removal observed with the coordinate this
  * eviction already resolved) and the blob pointers a {@link BlobLayout blobs-namespace} format holds, then deletes the
@@ -214,8 +214,8 @@ final class InventoryEviction {
                 HealthLedger.evictions(store).bump();
             }
         }
-        // Every kind's hold-override marker goes with the version (overrides/kev, overrides/license,
-        // overrides/reachability, any future kind): an override records a human's clearance of a hold for THIS stored
+        // Every kind's hold-override marker goes with the version (overrides/kev, overrides/license, any other
+        // kind): an override records a human's clearance of a hold for THIS stored
         // version, so if the version is ever re-published it is re-screened and re-reviewed, the conservative
         // direction. Composed through OverrideRecords, the one owner of that key space - a reaper spelling the key
         // its own way would silently STRAND a marker written in another spelling, which would then suppress the
@@ -231,8 +231,8 @@ final class InventoryEviction {
         // nor its artifact. Neither is a sweep: this runs on an eviction that has already proved it can place the
         // version's pointers (the refusal above), so no row is ever removed because a module is absent.
         HeldSubjects.forget(store, release.ecosystem(), release.coordinate(), release.version());
-        // The AI outcome caches and the reachability engine's fingerprint live in sections of the per-version meta
-        // document deleted just above, so that one delete is their reclamation.
+        // Whatever else a plug-in keeps per version lives in a section of the per-version meta document deleted just
+        // above, so that one delete is its reclamation.
         if (published) {
             identity.foldOut(InventoryIdentity.member(
                     release.ecosystem(), release.coordinate(), release.version(), evictedLicenses), release.published());
@@ -275,17 +275,17 @@ final class InventoryEviction {
         // already carries three distinct "I will not touch this" answers, and every one of them is a decision read off
         // a durable record; a quota sweep consumes false as "try the next candidate", so folding "I could not tell
         // which pointers this version occupies" into it would make an unplaceable ecosystem's entries silently and
-        // permanently unreclaimable. Worse, without this the trim below ran anyway: the meta document lost its
-        // published/licenses/findings sections and this returned true - "bytes reclaimed" - while the format's
-        // pointers, and the blob they name, still stood.
+        // permanently unreclaimable. Worse, without it the trim below would run anyway: the meta document would lose
+        // its published/licenses/findings sections and this would return true - "bytes reclaimed" - while the
+        // format's pointers, and the blob they name, still stood.
         if (!pointersEnumerable(ecosystem, coordinate, version)) {
             throw refusal("cache reclamation", ecosystem, coordinate, version);
         }
         // The two things this destroy needs off the version's durable publish facts, read once: whether it is a
         // published member (the identity fold-out below) and whether it is a prerelease (the flag every observer of
-        // the pointer removals is handed). They are different questions with different answers, and handing the
-        // membership one to unpublishPointers as its prerelease argument told every PublicationObserver of a cache
-        // reclaim that every published version was a prerelease and every unpublished one was not. An evict
+        // the pointer removals is handed). They are different questions with different answers: handing the
+        // membership one to unpublishPointers as its prerelease argument would tell every PublicationObserver of a
+        // cache reclaim that every published version was a prerelease and every unpublished one was not. An evict
         // has the Release to read the flag off; this path has only the recorded facts, so it reads them.
         Known<PublishedSection.Facts> membership = inventory.membership(ecosystem, coordinate, version);
         boolean published = foldsOut(membership);

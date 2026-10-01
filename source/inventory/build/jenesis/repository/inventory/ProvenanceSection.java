@@ -20,7 +20,7 @@ import build.jenesis.repository.metadata.Signal;
  * signal, a verified one is neutral. The {@link Severity} enum has no {@code WARNING} band, so the warning maps to
  * {@link Severity#LOW} - the lowest visible band, deliberately below any "reject HIGH and above" gate threshold, so the
  * signal surfaces and can contribute to a verdict without ever hard-failing a release on its own. Admission enforcement
- * (holding an unsigned artifact) stays the gate's own {@code AttestationPolicy} hold path, untouched; this summary is a
+ * (holding an unsigned artifact) stays the gate's own {@code AttestationPolicy} hold path; this summary is a
  * durable, GUI-facing fact plus a soft signal, not a second blocking verdict. All methods are pure and return a fresh
  * {@link Section}.
  */

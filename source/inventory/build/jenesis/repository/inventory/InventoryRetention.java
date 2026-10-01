@@ -5,18 +5,15 @@ import build.jenesis.repository.cleanup.RetentionPolicy;
 import build.jenesis.repository.store.ArtifactStore;
 
 /**
- * The retention policy a repository stored before its rules were repository settings: a small {@link #KEY}
- * properties object nothing writes any more. The one-time move of each such policy into its repository's settings
+ * The retention policy a repository may hold as a small {@link #KEY} properties object rather than as repository
+ * settings; nothing in the product writes one. The one-time move of each such policy into its repository's settings
  * reads it through here ({@code StoreRepositoryInventory.formerRetention}) and leaves it in place - nothing deletes
  * data automatically. A stored policy that cannot be parsed fails loudly rather than reading as "no policy" - silence
  * around a deletion policy is exactly what an operator must never get.
  *
- * <p><strong>The key sits at repository scope, where the data does.</strong> Spelled under {@code config/} - the
- * name of the deployment-global reserved root - it would read like a shared claim while being nothing of the kind,
- * and no {@link InventoryStorageNamespace} declaration could describe it, since {@code config/} is not a
- * per-repository space. Under {@code retention} it is an ordinary owned prefix beside {@code downloaded},
- * {@code identity} and {@code sizes}, so
- * purging the inventory module reclaims every repository's deletion policy instead of leaving it behind.
+ * <p><strong>The key sits at repository scope, where the data does.</strong> Under {@code retention} it is an ordinary
+ * owned prefix that {@link InventoryStorageNamespace} declares beside {@code identity} and {@code sizes}, so purging
+ * the inventory module reclaims every repository's deletion policy instead of leaving it behind.
  */
 final class InventoryRetention {
 

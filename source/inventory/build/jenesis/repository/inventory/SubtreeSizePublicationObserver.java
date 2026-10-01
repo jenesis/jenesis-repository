@@ -11,12 +11,12 @@ import build.jenesis.repository.store.ServableNames;
 
 /**
  * The after-commit hook that maintains {@link SubtreeSizeRollUp}'s cached browse-folder sizes as running counters on
- * every publish and delete, so the retention sweep's {@link StoreRepositoryInventory#rollUpSizes full walk} is no
- * longer the only thing that keeps a folder's rolled-up subtree size current - it becomes the periodic reconcile
- * backstop, exactly as {@code QuotaArtifactStore.recompute} backstops the running quota counter its {@code adjust}
- * maintains on each write and delete. A publish adds the published blob's size to every ancestor folder's cached
- * {@code sizes/<enc(path)>} object up the publish-relative chain (O(depth) compare-and-set increments, not a tree
- * walk), the repository root {@code sizes/~} among them - the single O(1) per-repo/tenant total read back through
+ * every publish and delete, so the retention sweep's {@link StoreRepositoryInventory#rollUpSizes full walk} is not the
+ * only thing that keeps a folder's rolled-up subtree size current but the periodic reconcile backstop, as
+ * {@code QuotaArtifactStore.recompute} backstops the running quota counter its {@code adjust} maintains on each write
+ * and delete. A publish adds the published blob's size to every ancestor folder's cached {@code sizes/<enc(path)>}
+ * object up the publish-relative chain (O(depth) deferred counter deltas, not a tree walk), the repository root
+ * {@code sizes/~} among them - the single O(1) per-repo/tenant total read back through
  * {@link StoreRepositoryInventory#subtreeSize subtreeSize("")}; a delete subtracts the same up the chain.
  *
  * <p><b>The two-route derived-metadata contract</b> ({@link PublicationObserver}): this observer is the live-event
@@ -43,13 +43,10 @@ public final class SubtreeSizePublicationObserver implements PublicationObserver
 
     private static final String BLOBS = "blobs/";
 
-    /** The compare-and-set retry budget per folder counter - the same bounded, best-effort budget
-     *  {@code QuotaArtifactStore.adjust} spends before it logs a dropped delta and leaves the reconcile to heal it. */
-
     /** Add the published blob's size to every ancestor folder's cached roll-up (the root total included), but only for a
      *  {@code publish/} leaf - the same artifacts the full-walk reconcile counts. The publish-pointer membership test is
      *  one O(1) point read of the just-linked pointer; the chain is derived from the path string alone. Neither lists
-     *  nor walks the tree, so the hot path stays free of the whole-tree walk this observer exists to retire. */
+     *  nor walks the tree, so the hot path stays free of any whole-tree walk. */
     @Override
     public void onPublished(ArtifactDescriptor artifact, ArtifactStore store) throws IOException {
         if (artifact.path() == null) {
@@ -73,7 +70,7 @@ public final class SubtreeSizePublicationObserver implements PublicationObserver
         // path's earlier contribution is still counted in every ancestor - so adding the whole size again counts the
         // artifact twice, byte-identical re-publish or not, until the next rollUpSizes() sweeps the drift away. A
         // descriptor that says nothing about a replacement is no information rather than a first publish (see
-        // ArtifactDescriptor.replaced), so it folds the whole size exactly as before: that is the shape the two
+        // ArtifactDescriptor.replaced), so it folds the whole size: that is the shape the two
         // ingress edges produce, and guessing a subtraction there would trade a double-count for a phantom one.
         long delta = size - replacedSize(artifact, store);
         if (delta == 0) {
@@ -184,8 +181,8 @@ public final class SubtreeSizePublicationObserver implements PublicationObserver
      *  and reads, so the incremental fold and the full-walk reconcile share the one {@code sizes/<enc(path)>} object
      *  format. */
     private void adjust(ArtifactStore store, String key, long delta) throws IOException {
-        // Deferred: five or six ancestor folders per publish were five or six compare-and-sets, each a round trip and
-        // a write-class call on an object store; the flusher folds a node's deltas into one write per folder per
+        // Deferred: a direct fold would be a compare-and-set per ancestor folder per publish, each a round trip and a
+        // write-class call on an object store; the flusher folds a node's deltas into one write per folder per
         // cadence, and a delta that never lands is the drift the next rollUpSizes() reconcile already heals.
         new StoredCounter(store, key).addLater(delta);
     }

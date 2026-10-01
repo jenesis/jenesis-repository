@@ -7,7 +7,7 @@ import build.jenesis.repository.store.ArtifactStore;
  * The single owner of the durable {@code overrides/<kind>/<eco>/<coord>/<ver>} key space - the marker a human's
  * release of a hold writes, saying "this kind's finding on this stored version has been cleared, do not re-hold it".
  *
- * <p><b>Why one owner.</b> The writers ({@code KevHold}, {@code LicenseHold}, {@code ReachabilityHold}), the
+ * <p><b>Why one owner.</b> The writers (each hold kind, {@code KevHold} and {@code LicenseHold} among them), the
  * eviction reaper and the reconcile parser all need the same key. With a spelling each, evicting a version would
  * <em>strand</em> an override: the reaper would compose a key the writer never wrote, delete nothing, and leave a
  * marker behind that outlived the version it was about - and would silently suppress the re-screen of a later

@@ -3,12 +3,12 @@ package build.jenesis.repository.inventory;
 import module java.base;
 
 /**
- * Opt-in download tracking: a successful read offers a {@link Hit} and an implementation writes the coordinate's
- * last-downloaded marker into the repository inventory, off the request path - the signal the retention criterion
- * {@code not-downloaded-for} evicts by. How hits are batched and written is the implementation's part, supplied by
- * a {@link DownloadTrackerProvider} module discovered with {@link ServiceLoader}; with none installed {@link #NONE}
- * stands in - nothing records, a health surface reports the worker as off, and {@code not-downloaded-for} falls
- * back to judging by publish age. {@link #record} must never block or fail the read it observes.
+ * Opt-in download tracking: a successful read offers a {@link Hit} and an implementation records the coordinate's
+ * downloads - a count and the newest instant - in the repository inventory, off the request path - the signal the
+ * retention criterion {@code not-downloaded-for} evicts by. How hits are batched and written is the implementation's
+ * part, supplied by a {@link DownloadTrackerProvider} module discovered with {@link ServiceLoader}; with none installed
+ * {@link #NONE} stands in - nothing records, a health surface reports the worker as off, and {@code not-downloaded-for}
+ * falls back to judging by publish age. {@link #record} must never block or fail the read it observes.
  */
 public interface DownloadTracker extends AutoCloseable {
 

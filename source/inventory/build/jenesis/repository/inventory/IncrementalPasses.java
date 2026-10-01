@@ -53,8 +53,8 @@ import build.jenesis.repository.store.StoredCounter;
  *
  * <p>What it costs is bounded and self-healing, which is the difference from the identity's version of this gap:
  * the next FULL pass visits every published version whatever its instant, so the exposure is at most
- * {@value #FULL_EVERY} passes - a day at the default dial and an hourly cadence. For the passes that ride this (the
- * advisory scan, KEV enforcement, reanalysis, the signature sweep, health and reachability) that is a published
+ * {@value #DEFAULT_FULL_EVERY} passes at the default dial - a day at an hourly cadence. For the passes that ride this
+ * (the advisory scan, KEV enforcement, reanalysis, the signature sweep and health, among others) that is a published
  * artifact going unscanned for up to a day, not a wrong answer served to a client.
  *
  * <p><strong>Closed by a LOOKBACK</strong> ({@value #LOOKBACK}, {@value #DEFAULT_LOOKBACK}): an incremental pass
@@ -64,13 +64,10 @@ import build.jenesis.repository.store.StoredCounter;
  * work and changes nothing - which is why no handoff counter is needed and a plain window does.
  *
  * <p><b>Where else this shape lives.</b> Two things have to meet for it: derived state whose coverage is claimed
- * by an INSTANT, and a walk that establishes that coverage by a LIVE, KEY-ORDERED enumeration. The probe that
- * finds them is a comparison between an item's publish instant and a coverage floor - {@code grep -rn
- * "published()\.isBefore\|published()\.isAfter"} over both source trees - which finds this one and
- * {@code InventoryIdentity}'s rebuild boundary, both closed. Every other stamp in the build is either a freshness label
- * a view renders, or a composite cache token compared
- * for EQUALITY so that a mismatch rebuilds the whole generation rather than filtering by instant - which is the
- * shape that cannot have this defect, and the one to prefer when the choice is open.
+ * by an INSTANT, and a walk that establishes that coverage by a LIVE, KEY-ORDERED enumeration - here and in
+ * {@code InventoryIdentity}'s rebuild boundary. A freshness label a view renders cannot have it, and neither can a
+ * composite cache token compared for EQUALITY, so that a mismatch rebuilds the whole generation rather than
+ * filtering by instant - which is the shape to prefer when the choice is open.
  *
  * <p>The early return in {@link #recent} rests on the index being ordered by publish instant rather than by
  * insertion - {@code NewestFirst} keys it by the instant inverted, so once a row is below the floor every row
@@ -94,7 +91,7 @@ public final class IncrementalPasses {
     public static final int DEFAULT_FULL_EVERY = 24;
 
     /** The lookback dial, shared the same way: {@code jenrepo.scan-lookback}. How far BEFORE the last full pass's
-     *  stamp an incremental pass still looks - see the finding above, which it closes. */
+     *  stamp an incremental pass still looks - see the gap described above, which it closes. */
     public static final String LOOKBACK = "scan-lookback";
 
     /** A minute: long enough to cover a publish that was in flight when a full pass began, short enough that the
@@ -273,7 +270,7 @@ public final class IncrementalPasses {
     }
 
     /** Every release published since the last full pass LESS the lookback, newest first out of the recent index -
-     *  the window that carries a row which landed behind a full pass, per the finding on this class. */
+     *  the window that carries a row which landed behind a full pass, per the gap described on this class. */
     private void recent(StoreRepositoryInventory inventory, RepositoryInventory.ReleaseVisitor visitor)
             throws IOException {
         Instant floor = since.orElseThrow().minus(lookback);

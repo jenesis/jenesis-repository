@@ -13,7 +13,7 @@ import build.jenesis.repository.walk.ArtifactWalk;
 import build.jenesis.repository.walk.WalkPass;
 
 /**
- * The release-enumeration subsystem extracted from {@link StoreRepositoryInventory}: the read side that streams the
+ * The release-enumeration subsystem behind {@link StoreRepositoryInventory}: the read side that streams the
  * published releases retention, garbage collection and the search/license sweeps all run over - the whole-store {@link
  * #releases} enumerations (the plain buffered form, the {@link RepositoryInventory.ReleaseVisitor} stream, and the
  * shared-{@link ArtifactWalk} form a scheduled surface rides), the cheaper coordinate-only {@link #coordinates}
@@ -97,7 +97,7 @@ final class InventoryReleases {
     }
 
     /** Parse one {@link StoreRepositoryInventory#publishedRoot} row into its {@link Release} - the publish-time facts
-     *  plus the last-download and pin markers, tiny reads, never an artifact blob - or {@code null} for a key that is
+     *  plus the download facts and the pin, tiny reads, never an artifact blob - or {@code null} for a key that is
      *  no release row. A row whose timestamp cannot be read is skipped (conservative), not defaulted to EPOCH. */
     Release release(String key) throws IOException {
         Optional<StoreRepositoryInventory.PublishedAt> published = readPublished(key);
@@ -108,9 +108,7 @@ final class InventoryReleases {
         return release(at.ecosystem(), at.coordinate(), at.version(), at.facts());
     }
 
-    /** The last-download instant, or {@code fallback} when the marker is absent or unreadable - the marker is
-     *  best-effort by design, so a corrupt one reads as "not downloaded since publish", never as an error. */
-    /** One coordinate version as a point read of its publish facts and download marker - empty when it is not a
+    /** One coordinate version as a point read of its publish facts and download facts - empty when it is not a
      *  published member. */
     Optional<Release> release(String ecosystem, String coordinate, String version) throws IOException {
         Optional<PublishedSection.Facts> facts = inventory.publishedFacts(ecosystem, coordinate, version);

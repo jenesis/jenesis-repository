@@ -17,9 +17,8 @@ import build.jenesis.repository.walk.WalkPass;
  * {@code jenrepo.torn-write-apply} removed through the guarded delete. The judgement cannot be read off the
  * descriptor's size: the blob's length rides the pointer, so the size is the pointer's own and says nothing about the
  * pool, and a pointer whose blob had been deleted would never be flagged, every pointer reading as referenced. The
- * probe is the reconcile's own cost, paid only where the reconcile is
- * switched on. An orphan blob - one no
- * pointer references - is judged at the end of the pass from two sets of hash prefixes, the pointers' and the
+ * probe is the reconcile's own cost, paid only where the reconcile is switched on. An orphan blob - one no pointer
+ * references - is judged at the end of the pass from two sets of hash prefixes, the pointers' and the
  * pool's, gathered from the pointer and blob streams in whichever order the walk delivers them; counted, never
  * removed, since reclaiming it is the collector's. The counts are on the observability report as
  * {@code jenrepo.reconcile.torn.*}, summed over the last pass of every repository.
@@ -101,7 +100,7 @@ public final class TornWriteConsumer implements WalkConsumer {
 
     private void judge(ArtifactDescriptor artifact, ArtifactStore store) throws IOException {
         if (!artifact.path().startsWith("/") || !TornWriteReconciler.isHash(artifact.hash())) {
-            return;   // the publish/ namespace only, and only a content-addressed pointer - as the walk of its own did
+            return;   // the publish/ namespace only, and only a content-addressed pointer
         }
         Judging state = judging.computeIfAbsent(store.identity(), _ -> new Judging(store));
         if (store.exists(BLOBS_PREFIX + artifact.hash())) {

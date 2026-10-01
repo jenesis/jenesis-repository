@@ -9,26 +9,24 @@ import build.jenesis.repository.walk.Traversal;
 
 /**
  * The single owner of the durable {@code subjects/} key space: <b>what a held request path is a path to</b>, written
- * where the hold is placed and reclaimed with it. This is the format-independent path &rarr; (ecosystem, coordinate,
- * version) record the hold paths kept failing against.
+ * where the hold is placed and reclaimed with it: the format-independent path &rarr; (ecosystem, coordinate, version)
+ * record the hold paths answer from.
  *
  * <p><b>The gap it closes.</b> Every path-keyed hold question - "which kinds hold this path", "may this name be
  * disclosed", "what does discarding this path destroy" - has to turn a request path into a coordinate first, and the
  * only route from a path to a coordinate is the owning format's {@code ArtifactLayout}/{@code BlobLayout} reverse
- * mapping. So uninstalling a <em>format</em> module made every one of them answer as though nothing was held, while
- * the coordinate-keyed {@code holds/<kind>/} records ({@link HoldMarkers}) sat there intact and unreachable. Nothing
- * else in the store could stand in: {@code publish/<path>} is a bare content hash by design, {@code holds/dispatch}
- * carries a format name and a body hash but no coordinate and is written only by the screen-time legs, the quarantine
- * index fuses coordinate and version into one string with no ecosystem and is best-effort and age-pruned, and every
- * other per-version space is keyed <em>by</em> the triple with no reverse index. So the record had to be invented, and
- * this is it.
+ * mapping. Without this record, uninstalling a <em>format</em> module would make every one of them answer as though
+ * nothing was held, while the coordinate-keyed {@code holds/<kind>/} records ({@link HoldMarkers}) sat there intact and
+ * unreachable. Nothing else in the store can stand in: {@code publish/<path>} is a bare content hash by design,
+ * {@code holds/dispatch} carries a format name and a body hash but no coordinate and is written only by the screen-time
+ * legs, the quarantine index fuses coordinate and version into one string with no ecosystem and is best-effort and
+ * age-pruned, and every other per-version space is keyed <em>by</em> the triple with no reverse index.
  *
- * <p><b>Why it is affordable: bounded by holds, not by artifacts.</b> The objection that kept this open was that a
- * path &rarr; coordinate index means a new durable key space written for every artifact. It does not, because every
- * consumer of it is a <em>hold</em> path. A row is written when a hold is placed - a screen-time QUARANTINE, a
- * retroactive enforcement sweep, a proxied body withheld for review - and never on an ordinary publish, so the space
- * is the size of the review queue rather than the size of the repository. A repository with no holds carries no rows
- * at all.
+ * <p><b>Why it is affordable: bounded by holds, not by artifacts.</b> A path &rarr; coordinate index need not be a
+ * durable key space written for every artifact, because every consumer of it is a <em>hold</em> path. A row is written
+ * when a hold is placed - a screen-time QUARANTINE, a retroactive enforcement sweep, a proxied body withheld for
+ * review - and never on an ordinary publish, so the space is the size of the review queue rather than the size of the
+ * repository. A repository with no holds carries no rows at all.
  *
  * <p><b>Both directions, because the question is asked both ways.</b> One row would not do, and neither direction may
  * be a scan of the other:
@@ -41,25 +39,23 @@ import build.jenesis.repository.walk.Traversal;
  * </ul>
  * Deriving the second from the first would mean descending the whole review queue per enumerated name; deriving the
  * first from the second would mean scanning the whole space per path. Both are written and reclaimed together, by this
- * class and nowhere else - the one-owner rule {@link OverrideRecords} and {@link HoldMarkers} are the
- * precedent for, and the reason the four {@code overrides/} spellings could not happen again here.
+ * class and nowhere else - the one-owner rule {@link OverrideRecords} and {@link HoldMarkers} follow too.
  *
  * <p><b>A row is a statement made when the format was installed.</b> {@link #record} is called at hold time, which is
  * exactly when the owning format is by construction present: something had to place the path to screen or sweep it. So
  * the record captures the answer while it can still be got, and every later reader gets that answer whether or not the
  * module survives. A path a format placed but that names no versioned artifact (a checksum, generated metadata, a raw
  * upload) is recorded too, with a null coordinate: <em>"asked, and the answer is: no coordinate"</em> is a fact a
- * reader needs, and it is not the same fact as an absent row. The three-valued shape is the theme's own idiom -
- * spelled as the one {@link build.jenesis.repository.store.Known} type the reconcile
- * sweep's liveness, {@code knownPaths} and the reclaiming pass's pointer roots all answer in - applied to the one
- * question this space answers.
+ * reader needs, and it is not the same fact as an absent row. The three-valued shape is the one
+ * {@link build.jenesis.repository.store.Known} type the reconcile sweep's liveness, {@code knownPaths} and the
+ * reclaiming pass's pointer roots all answer in, applied to the one question this space answers.
  *
  * <p><b>Reclaimed with what it describes, by the existing lifecycle.</b> A row lives exactly as long as its hold: the
  * release and discard legs of {@code HoldLifecycle} drop it beside the {@code /quarantine} pointer they clear, the
  * gate's accepted-re-publish clear drops it with the pointer it supersedes, the re-analysis auto-release drops it with
  * the hold it lifts, and a version's {@link InventoryEviction eviction} takes the whole version face with the version.
  * There is no sweep for it and there must not be one - a periodic pass that reaped rows it could not explain would be
- * exactly the absence-triggered deletion this whole theme exists to remove. Nothing here is ever deleted because a
+ * an absence-triggered deletion, which the product never makes. Nothing here is ever deleted because a
  * module is missing.
  *
  * <p><b>Fail-closed, and self-correcting where it can be.</b> Every read propagates its {@link IOException} rather
@@ -213,8 +209,8 @@ public final class HeldSubjects {
         publication.link("/quarantine" + path, hash);
     }
 
-    /** What the hold at {@code path} is a hold on, or empty when no row was ever written for it - a hold placed before
-     *  this space existed, or a path that was never held. Empty is <em>not</em> "no coordinate": a recorded path with
+    /** What the hold at {@code path} is a hold on, or empty when no row was ever written for it - a hold placed with
+     *  no record, or a path that was never held. Empty is <em>not</em> "no coordinate": a recorded path with
      *  no coordinate returns a present {@link Subject} whose {@link Subject#versioned()} is {@code false}. */
     public static Optional<Subject> read(ArtifactStore store, String path) throws IOException {
         return store.readVersioned(pathKey(path)).map(versioned -> parse(versioned.content()));

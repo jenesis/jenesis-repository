@@ -9,7 +9,7 @@ import build.jenesis.repository.store.RecentIndex;
  * A newest-first index of a repository's holdings: one small object per coordinate version, keyed by the instant it
  * arrived inverted, so that a plain ordered page of the namespace is the most recent first. It exists so that a
  * screen asking "what arrived lately" reads one bounded page instead of walking every version document to keep the
- * newest two hundred, which is what the repository hub did before and what made it cost a minute over a large store.
+ * newest two hundred, a read that grows with the store.
  *
  * <p>There are two, one per kind of holding, each a namespace of its own so that neither pays for the other's rows:
  * {@link #RELEASES}, keyed by the publish instant - written on a first publish ({@link InventoryRecording}), removed

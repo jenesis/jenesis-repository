@@ -26,7 +26,7 @@ import build.jenesis.repository.metadata.State;
  *
  * <p><b>One row per distinct {@code (source, sha256)}</b> - not per request. A repeated no-copy serve of the
  * <em>same</em> bytes updates the fallback row's {@code lastServed}/{@code serves}; a digest <em>change</em> appends a
- * <em>new</em> row, so the origin trail doubles as the visible drift history beside the /verdict. The row's
+ * <em>new</em> row, so the origin trail doubles as the visible drift history beside the verdict. The row's
  * {@code sha256} reconciles with the sibling {@code verdict} section's digest-pinned record (both name the same bytes),
  * so verdict ("what the screen decided about digest D") and origin ("where D came from") point at each other by digest
  * rather than duplicating source/validators.

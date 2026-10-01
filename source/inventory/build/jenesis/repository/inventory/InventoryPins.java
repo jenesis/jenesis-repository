@@ -9,12 +9,11 @@ import build.jenesis.repository.metadata.MetadataStore;
 import build.jenesis.repository.metadata.Section;
 
 /**
- * The pin subsystem extracted from {@link StoreRepositoryInventory}: force-keep markers that make a coordinate version
- * immune to every retention rule. A pin is a field of the document's {@code published} section (preserving the
- * publish instant/prerelease), and the {@code pinned/} marker beside it is the index the set of pins is enumerated
- * from. The facade owns
- * the seam - {@code pin}/{@code unpin}/{@code pins}/{@code pinned} delegate here - and this class shares the facade's
- * subtree {@code walk} and its store-key/codec helpers rather than duplicating them.
+ * The pin subsystem behind {@link StoreRepositoryInventory}: force-keep markers that make a coordinate version immune
+ * to every retention rule. A pin is a field of the document's {@code published} section (preserving the publish
+ * instant/prerelease), and the {@code pinned/} marker beside it is the index the set of pins is enumerated from. The
+ * facade owns the seam - {@code pin}/{@code unpin}/{@code pins}/{@code pinned} delegate here - and this class shares
+ * the facade's subtree {@code walk} and its store-key/codec helpers rather than duplicating them.
  */
 final class InventoryPins {
 

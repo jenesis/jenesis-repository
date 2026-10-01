@@ -15,7 +15,7 @@ import build.jenesis.repository.walk.ScreenedNames;
 import build.jenesis.repository.walk.Traversal;
 
 /**
- * The browse / describe subsystem extracted from {@link StoreRepositoryInventory}: the read-only navigation the two
+ * The browse / describe subsystem behind {@link StoreRepositoryInventory}: the read-only navigation the two
  * consoles' tree browse and artifact-detail views use - the immediate {@code children} under a layout prefix, the
  * format-neutral {@link ArtifactDescriptor} a request path maps to ({@link #describe}), the layout folder a coordinate
  * version occupies ({@link #locate}), and every served request path it currently occupies ({@link #paths}). All are
@@ -144,10 +144,10 @@ final class InventoryBrowse {
             // The screen falls back to the one statement of a hold that survives a format's absence: the durable
             // holds/<kind>/<eco>/<coord>/<ver> records, which are keyed by the coordinate and answer with no format,
             // no provider and no discovery at all (and the reason HoldMarkers owns that space here). So a
-            // retroactively held version stays withheld, and the orphaned-format contract is kept exactly as the owner
-            // asked for it: a version of an ecosystem no installed format serves is still LISTED - rendered as an
-            // orphan, named as such - as long as nothing holds it. Membership stays the only truth about EXISTENCE
-            // there; it was never the answer to "may this name be disclosed".
+            // retroactively held version stays withheld, and the orphaned-format contract holds: a version of an
+            // ecosystem no installed format serves is still LISTED - rendered as an orphan, named as such - as long as
+            // nothing holds it. Membership stays the only truth about EXISTENCE there; it is not the answer to "may
+            // this name be disclosed".
             return coordinateKeyedDisclosable(ecosystem, coordinate, version);
         }
         // publish/-namespace face: the version folder is undisclosable iff it is held (a /quarantine<folder> pointer or a
@@ -183,7 +183,7 @@ final class InventoryBrowse {
         // "nothing withholds it". It is what a layout whose path mapping is configured per repository answers when it
         // is asked purely (the store-free overload above cannot read that configuration), and what any layout answers
         // for a coordinate it cannot place. Reading that silence as a disclosure is the same defect the absent-format
-        // branch above was written to close, arriving through a different door: a withheld version would publish its
+        // branch above guards against, arriving through a different door: a withheld version would publish its
         // own name through search, the browse, the lifecycle listing and the forwarding queue, and a leaked name
         // cannot be unleaked. So the same coordinate-keyed backstop answers here, for the same reason.
         return examined || coordinateKeyedDisclosable(ecosystem, coordinate, version);
@@ -274,10 +274,10 @@ final class InventoryBrowse {
         // never claim a /v2/ path in FormatDispatcher (that would steal live serving from the real, proxy-capable OCI
         // format in unspecified ServiceLoader order), yet the inventory must still resolve /v2/<name>/manifests/<ref> to
         // its ("oci", name, ref) coordinate so the describe-dependent seams (HoldLifecycle release/discard/clearVersion-
-        // Withholds, HoldReleaseObserver laundering guard, the record(path) worklist row) reach an OCI hold. Consult
+        // Withholds, HoldReleaseObserver laundering guard, the record(path) published row) reach an OCI hold. Consult
         // every non-handling BlobLayout after the handles-gated pass, accepting only a descriptor whose ecosystem the
-        // layout itself owns - so a future lax parser cannot mis-describe a foreign path, and today only the OCI layout
-        // ever matches a /v2/ path.
+        // layout itself owns - so a lax parser cannot mis-describe a foreign path, and only the OCI layout matches a
+        // /v2/ path.
         for (RepositoryFormat format : StoreRepositoryInventory.formats()) {
             if (format.handles(path) || !(format instanceof BlobLayout layout)) {
                 continue;
@@ -336,7 +336,6 @@ final class InventoryBrowse {
                 .orElse(List.of());
     }
 
-    /** The three-valued form - see {@link StoreRepositoryInventory#knownPaths}. */
     /**
      * The most served paths one version may be enumerated over on a request path, past which the answer is UNKNOWN.
      *
@@ -349,6 +348,7 @@ final class InventoryBrowse {
      */
     private static final int PATH_CAP = 512;
 
+    /** The three-valued form - see {@link StoreRepositoryInventory#knownPaths}. */
     Known<List<String>> knownPaths(String ecosystem, String coordinate, String version) throws IOException {
         List<String> paths = new ArrayList<>();
         boolean asked = false;

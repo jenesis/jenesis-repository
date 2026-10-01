@@ -16,16 +16,15 @@ import build.jenesis.repository.walk.WalkPass;
  *
  * <p><strong>The gap this closes.</strong> The reconcile's forward-repair leg walks {@code publish/}, so it covers
  * the Publication-namespace layouts only - Maven and the raw layout. Every blobs-namespace format keeps its serving
- * pointers under its own roots, which that walk never visits, so a release of theirs whose row went missing was
- * never rebuilt. The row goes missing through an ordinary window rather than an upgrade: the accept path records it
+ * pointers under its own roots, which that walk never visits, so without this a release of theirs whose row went
+ * missing would never be rebuilt. The row goes missing through an ordinary window: the accept path records it
  * <em>after</em> the artifact is committed, so anything stopping the process in between leaves a pointer with no
  * row. The artifact keeps serving and stays enumerable through its own format; what stops is a retroactive sweep
  * seeing it, so it can carry a later-listed CVE while the held gauge reads clean.
  *
- * <p><strong>Why one consumer rather than one per format.</strong> {@code oci} had a repair of its own, which
- * worked by parsing OCI keys inside a consumer written for OCI. Nineteen other layouts had none, and each would
- * have needed the same consumer again around its own parse. The parse is the only part that differs, so it moved
- * to the layout as {@link BlobLayout#describePointer} and this walks every pointer once for all of them.
+ * <p><strong>Why one consumer rather than one per format.</strong> The parse of a pointer key is the only part that
+ * differs between formats, and a consumer per format would repeat everything else around its own parse. So the parse
+ * lives on the layout as {@link BlobLayout#describePointer} and this walks every pointer once for all of them.
  *
  * <p><strong>A layout that cannot name a key is not a failure.</strong> {@code describePointer} answers empty by
  * default, so a format that has not implemented it is simply not repaired here - which is the honest position,
@@ -64,11 +63,11 @@ public final class InventoryBackfillConsumer implements WalkConsumer {
      * walk. {@code StoreRepositoryInventory.blobLayouts()} filters the declared formats through the deployment's
      * feature toggles on <em>every</em> call - around twenty formats, each with a settings lookup and its
      * required-config keys - and this consumer is handed every serving pointer in the store. Asking per delivery
-     * put that whole filter on the hot path of the one pass the cost model is built around; asking per pass makes
-     * it one resolution however many pointers there are.
+     * would put that whole filter on the hot path of the one pass the cost model is built around; asking per pass
+     * makes it one resolution however many pointers there are.
      *
      * <p>The set cannot meaningfully change under a pass: a format toggled off mid-walk would change what the
-     * <em>walk itself</em> enumerates, so re-reading it per pointer would not have been more correct either.
+     * <em>walk itself</em> enumerates, so re-reading it per pointer would not be more correct either.
      */
     private volatile List<BlobLayout> layouts = List.of();
 

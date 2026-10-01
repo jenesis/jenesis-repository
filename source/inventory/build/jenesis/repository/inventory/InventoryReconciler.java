@@ -29,9 +29,10 @@ import build.jenesis.repository.walk.ArtifactWalk;
  * an upstream and as a release otherwise, a cached copy whose pointers are gone stops being held, and a release that
  * is really a copy recorded as a release becomes the cached copy it is.
  *
- * <p>It opens walks of its own rather than riding the shared rebuild pass: the reverse leg walks the derived roots,
- * which that pass never visits, and the forward leg must see every {@code publish/} pointer including the withheld
- * ones that pass screens out - a held version is still a published one.
+ * <p>Deployed, its legs run per key in {@link InventoryReconcileConsumer}, a listener of the one walk, which hands the
+ * forward leg withheld pointers too - a held version is still a published one. {@link #reconcile} runs the same legs
+ * as walks of its own: the reverse leg over the published root and the derived roots, the forward leg over every
+ * {@code publish/} pointer.
  */
 final class InventoryReconciler {
 
@@ -55,11 +56,11 @@ final class InventoryReconciler {
      * eviction, never accelerates it. The reverse orphan - a section whose coordinate has no live pointer left, the
      * residue of a crashed {@link StoreRepositoryInventory#evict} - is removed. The same orphan rule then sweeps the
      * derived per-version key spaces - the {@code overrides/<kind>/} hold-overrides and the {@code pinned/} markers -
-     * deleting every row whose
-     * version is no longer published <em>and</em> whose absence an installed format can positively confirm; a row
-     * nothing installed can judge is left alone. Reads only the tiny pointers and documents, never an artifact blob, and commits
-     * through the store's compare-and-set, so it runs identically on filesystem and every object store. Idempotent: a
-     * section that already exists is left untouched and a re-run over a converged repository restores and removes nothing.
+     * deleting every row whose version is no longer published <em>and</em> whose absence an installed format can
+     * positively confirm; a row nothing installed can judge is left alone. Reads only the tiny pointers and documents,
+     * never an artifact blob, and commits through the store's compare-and-set, so it runs identically on filesystem
+     * and every object store. Idempotent: a section that already exists is left untouched and a re-run over a
+     * converged repository restores and removes nothing.
      *
      * <p>Each leg rides the shared {@link ArtifactWalk} as its own pass, inheriting the walk's resumable, segmented,
      * multi-node guarantees, and every leg is idempotent per row so a replayed visit after a crash-resume converges to
@@ -71,7 +72,7 @@ final class InventoryReconciler {
         // After the published set is converged, judge the derived rows against it: a row whose version is no longer a
         // published member MAY belong to an evicted release - for a publish/-namespace format the section of anything
         // that still serves was just restored above, and for a blobs-namespace format (whose lost section the forward
-        // leg cannot yet rebuild) removeOrphanDerived additionally spares any version still live under its format's
+        // leg does not rebuild) removeOrphanDerived additionally spares any version still live under its format's
         // pointers, and any version whose format is not installed at all, so deleting a row can never orphan a live
         // version's bookkeeping (a human pin especially).
         return new StoreRepositoryInventory.Reconciliation(restored, removed, removeOrphanDerived(walk));
@@ -180,22 +181,13 @@ final class InventoryReconciler {
      *  nothing twice. Covers Publication-namespace formats only (Maven, the raw layout): it walks {@code publish/}, so a
      *  blobs-namespace format's pointers are not visited and such a release's lost section is not rebuilt here.
      *
-     *  <p>Stated precisely, because "a known gap" understated it. The exposure is generic - a crash between writing
-     *  a serving pointer and writing its {@code published} section leaves a row nothing repairs - and it applies to
-     *  every blobs-namespace format, of which the product installs around twenty. Only {@code oci} is covered, by
-     *  {@code InventoryBackfillConsumer}, which reads the coordinate back out of each stored pointer through
-     *  {@code BlobLayout.describePointer} - so a format that can name its own keys is repaired and one that cannot
-     *  is not. A missing row does not make the artifact disappear - it stays enumerable through its own format
-     *  and the derived-row sweep spares its live rows - but a retroactive sweep does not see it, so it can keep
-     *  serving a later-listed CVE while the held gauge reads clean.
-     *
-     *  <p>The reason it is not simply generalised is that the SPI has no reverse mapping. {@code BlobLayout} maps a
-     *  coordinate forward ({@code blobKeys}, {@code blobHashes}, {@code servedPaths}) and a request path to a store
-     *  key ({@code servingKey}); nothing maps a stored pointer back to the coordinate and version it belongs to,
-     *  and the {@code by/} indexes are per-format answers to other questions rather than a general one. Closing it
-     *  therefore means a new defaulted clause on {@code BlobLayout} - which coordinate version is this pointer -
-     *  plus an implementation per format, on a path that writes the rows retention ages by. That is its own change
-     *  with its own tests, not a line added here. */
+     *  <p>The blobs-namespace formats are repaired by {@link InventoryBackfillConsumer}, which reads the coordinate
+     *  back out of each stored pointer through {@code BlobLayout.describePointer} - so a format that can name its own
+     *  keys is repaired and one that cannot is not. For one that cannot, a crash between writing a serving pointer and
+     *  writing its {@code published} section leaves a row nothing repairs. A missing row does not make the artifact
+     *  disappear - it stays enumerable through its own format and the derived-row sweep spares its live rows - but a
+     *  retroactive sweep does not see it, so it can keep serving a later-listed CVE while the held gauge reads
+     *  clean. */
     private int restoreMissingPublished(ArtifactWalk walk, Instant now) throws IOException {
         int[] restored = {0};
         walk.walk(store, "reconcile-publish", List.of("publish"), pointer -> {
@@ -230,8 +222,8 @@ final class InventoryReconciler {
                         artifact.prerelease(), document, now);
             }
             case RELEASE -> {
-                // The facts just read also backfill the two bounded listing faces for a release recorded before
-                // they existed: the newest-first index row and the pinned/ marker. No further read: both are
+                // The facts just read also backfill the two bounded listing faces for a release that lacks them:
+                // the newest-first index row and the pinned/ marker. No further read: both are
                 // idempotent writes guarded by a presence probe of their own small key. A release the reverse leg
                 // is about to turn into a cached copy is left to it, so the pass does not write a row it removes.
                 PublishedSection.Facts facts = PublishedSection.facts(document.section(PublishedSection.TAG))
@@ -260,8 +252,8 @@ final class InventoryReconciler {
      * Record a live pointer's version that nothing records as held, from what its document already says: a version
      * whose origin trail shows it was fetched from an upstream is a cached copy whose fill's notice was lost or never
      * sent, and anything else is a release whose record was lost, recorded at {@code now}, the conservative publish
-     * instant. Returns {@code true} when a record was written. Shared by the forward leg over {@code publish/} and the inventory back-fill over the
-     * blobs-namespace pointers, so the two decide it the same way.
+     * instant. Returns {@code true} when a record was written. Shared by the forward leg over {@code publish/} and the
+     * inventory back-fill over the blobs-namespace pointers, so the two decide it the same way.
      */
     boolean holdMissing(String ecosystem, String coordinate, String version, boolean prerelease,
                         MetadataDocument document, Instant now) throws IOException {
@@ -275,8 +267,9 @@ final class InventoryReconciler {
     /**
      * Whether a release is really a copy of an upstream's artifact that a repair recorded as a release: its origin
      * trail names fetches through a fallback and no hand upload, and nobody pinned it. While such a row stands,
-     * retention ages the copy as if it had been published here and every reader of the published set counts it. A pinned one is left as it is, since a pin is an operator's decision about that
-     * release and turning it into a copy would drop it.
+     * retention ages the copy as if it had been published here and every reader of the published set counts it. A
+     * pinned one is left as it is, since a pin is an operator's decision about that release and turning it into a copy
+     * would drop it.
      */
     private static boolean copyRecordedAsRelease(MetadataDocument document, PublishedSection.Facts facts) {
         return Holdings.fetched(document) && !facts.pinned();
@@ -330,8 +323,7 @@ final class InventoryReconciler {
      *  kept: an ecosystem with no installed format, or a roots-only format whose version pointers are not enumerable
      *  from the coordinate - removing on "found nothing" there would wipe the retention books of every live release.
      *  One shared-walk pass over the {@link StoreRepositoryInventory#publishedRoot} tree; a replayed visit re-judges
-     *  the row and a removed one is
-     *  no longer a member. */
+     *  the row and a removed one is no longer a member. */
     private int removeOrphanPublished(ArtifactWalk walk) throws IOException {
         int[] removed = {0};
         walk.walk(store, "reconcile-published", List.of(inventory.publishedRoot()), key -> {
@@ -417,8 +409,8 @@ final class InventoryReconciler {
                     recordAsCopy(ecosystem, coordinate, version, facts.get(), Holdings.upstream(document));
                     return false;
                 }
-                // The document already read backfills the two bounded listing faces for a live release recorded
-                // before they existed.
+                // The document already read backfills the two bounded listing faces for a live release that lacks
+                // them.
                 backfillFaces(ecosystem, coordinate, version, facts.get());
             }
             if (!judgeable || live) {

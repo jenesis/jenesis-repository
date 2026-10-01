@@ -24,7 +24,7 @@ import build.jenesis.repository.store.ArtifactStore;
  * document transition it made has committed, from the section it replaced to the one it wrote, so concurrent records
  * of one version telescope (old→a, a→b) instead of cancelling; an eviction folds out after the member is gone. A
  * fold grouped into the publish's own batch as a single compare-and-set attempt whose outcome nobody read would
- * lose the race under concurrent publishers and be dropped, and every conditional read until the daily reconcile
+ * lose the race under concurrent publishers and be dropped, and every conditional read until the next reconcile
  * would answer <em>not modified</em> after a publish had landed. So a fold retries through
  * {@link Retries#COMPARE_AND_SET} with backoff, and a fold that still loses drops the rollup rather than leaving it
  * stale, so the next read rebuilds from truth.
@@ -54,11 +54,10 @@ import build.jenesis.repository.store.ArtifactStore;
  * enumerates it, and without the guard below the rollup would be short by that member until something rebuilt from
  * truth. Two nodes with skewed clocks reach it as an ordinary race.
  *
- * <p>It is reproduced by HOLDING the walk rather than by racing it: a seed sized so the walk "takes real time"
- * enumerates well inside the grace-plus-a-second, so the publish lands after the settle and is folded normally by
- * its own publish. The test holds the store's read of the LAST seeded key instead, which is a point at which the
- * walk has provably passed every earlier one, lands the member at a version that sorts first, and carries a vacuity
- * guard that fails if the walk was not actually held.
+ * <p>A race does not provoke it reliably - even a large seed enumerates well inside the grace-plus-a-second, so the
+ * publish lands after the settle and is folded normally by its own publish. HOLDING the walk does: held at the
+ * store's read of the LAST seeded key, a point at which it has provably passed every earlier one, a member landed at
+ * a version that sorts first is the case above.
  *
  * <p>The fold classifies on the member's PUBLISHED INSTANT; the walk's coverage depends on WHEN THE ROW WAS WRITTEN
  * and WHERE ITS KEY SORTS. Those are three different things, and no ordering between them can be recovered after
@@ -79,7 +78,7 @@ import build.jenesis.repository.store.ArtifactStore;
  * counter is read and costs nothing, which is where a well-clocked publisher's declines all land; a decline during
  * the walk means a publish whose instant is at or before a boundary the walk has already outlived by
  * {@value #GRACE_SECONDS} seconds, which is a skewed peer clock or a write that outlived its grace. A storm that
- * keeps producing them exhausts the rebuild's rounds as before, and the walk's own digest is stored as it stands -
+ * keeps producing them exhausts the rebuild's rounds, and the walk's own digest is stored as it stands -
  * the bounded drift the next reconcile heals.
  *
  * <p>A second node that finds the rollup stamped waits for the rebuild in flight rather than walking beside it, and
@@ -144,7 +143,7 @@ final class InventoryIdentity {
     /** The current accumulator, or empty when none can be answered for this repository scope yet: nothing has been
      *  built, a rebuild that found nothing settled is in flight, or the object is of no width this class writes (a
      *  corrupt one reads as absent, so the next read rebuilds it). A rebuild in flight over a settled value answers
-     *  that value with the folds since its boundary applied - the maintained identity, as before the rebuild began. */
+     *  that value with the folds since its boundary applied - the maintained identity, unaffected by the rebuild. */
     Optional<byte[]> current() throws IOException {
         Optional<byte[]> content = store.readVersioned(KEY).map(ArtifactStore.Versioned::content);
         if (content.isEmpty()) {
@@ -192,10 +191,9 @@ final class InventoryIdentity {
      *  derived, revalidatable cache. Leaving the fold "to the reconcile rebuild" and returning would leave the
      *  accumulator that tags the SBOM, the NOTICE and every conditional read missing this member until that pass ran,
      *  so a client would be told "not modified" after a publish had landed. So the rollup is dropped instead: the next
-     *  read
-     *  finds it absent and rebuilds it from truth, single-flighted, which costs that read one walk and costs nobody a
-     *  stale answer. A genuine store {@link IOException} still propagates (the store is down; the primary write would
-     *  have failed too). */
+     *  read finds it absent and rebuilds it from truth, single-flighted, which costs that read one walk and costs
+     *  nobody a stale answer. A genuine store {@link IOException} still propagates (the store is down; the primary
+     *  write would have failed too). */
     private void combine(byte[] out, byte[] in, Instant published) throws IOException {
         boolean landed = Retries.tryUpdate(store, KEY, current -> {
             if (current.isEmpty()) {

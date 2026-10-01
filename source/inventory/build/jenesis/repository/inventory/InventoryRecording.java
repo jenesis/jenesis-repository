@@ -17,8 +17,8 @@ import build.jenesis.repository.metadata.Section;
 import build.jenesis.repository.metadata.SectionMutation;
 
 /**
- * The publish-facts recording subsystem extracted from {@link StoreRepositoryInventory}: the write side of the inventory
- * that records when a coordinate version was published (the timestamp retention orders and ages by, plus the
+ * The publish-facts recording subsystem behind {@link StoreRepositoryInventory}: the write side of the inventory that
+ * records when a coordinate version was published (the timestamp retention orders and ages by, plus the
  * format-supplied prerelease flag), its provenance summary, and its last-download marker, and answers the point reads
  * those facts back ({@link #publishedAt}, {@link #lastDownloaded}, {@link #publishedFacts}, {@link #membership}). The
  * publish facts land in the consolidated metadata document's {@code published} section (its presence is membership

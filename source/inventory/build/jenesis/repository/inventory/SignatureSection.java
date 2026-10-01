@@ -19,8 +19,8 @@ import build.jenesis.repository.metadata.Signal;
  * present one.
  *
  * <p>The {@code data} payload is {@code {"outcome":<name>, "signer":<wire>, "grade":<name>, "location":<path>,
- * "source":<trust source>, "details":{<name>:<value>}}} - the last two since keyless signatures were shown apart,
- * so a record from before carries neither and reads as unknown rather than as a signature that said nothing. The
+ * "source":<trust source>, "details":{<name>:<value>}}} - the last two optional, so a record carrying neither reads
+ * as unknown rather than as a signature that said nothing. The
  * section's {@link Signal} realises the gate-mirror at the envelope: a signature that verified by a trusted signer is
  * neutral, and anything else carries a non-blocking signal. {@link Severity} has no WARNING band, so an untrusted,
  * absent or unreadable signature maps to {@link Severity#LOW} - visible, below any "reject HIGH and above" threshold,
@@ -78,7 +78,7 @@ public final class SignatureSection {
      *
      * <p>{@code source} is where the signer's trust came from and {@code details} what else the material stated -
      * a keyless signer's issuer and subject, its transparency-log index and integration time - each {@code null} or
-     * empty on a record from before they were kept, which a reader shows as unknown rather than as absent.
+     * empty on a record that does not carry them, which a reader shows as unknown rather than as absent.
      */
     public record Summary(String outcome, String signer, String grade, String location, String source,
                           Map<String, String> details) {
@@ -95,7 +95,7 @@ public final class SignatureSection {
         /**
          * How the signer came to be believed, in the operator's words - the one wording every surface renders,
          * so the console panel, the API and the CLI cannot say it three ways; {@code null} where the record does
-         * not say: a summary from before the source was kept, or a signature nobody admitted.
+         * not say: a summary that carries no source, or a signature nobody admitted.
          */
         public String admittedBy() {
             if (source == null) {

@@ -9,9 +9,8 @@ import build.jenesis.repository.store.ArtifactStore;
  * The one read behind every surface that reports a publisher's signature - the console's panel and the API alike.
  *
  * <p>It exists so the two cannot drift. They are the same capability seen twice, and a second copy of "resolve the
- * path to a coordinate, then read the version document's signature section" is a second place for the answer to
- * change: this codebase has already paid for that shape more than once, most memorably with an authorization matrix
- * written twice and kept in step by a comment naming a class that had since been renamed.
+ * path to a coordinate, then read the version document's signature section" would be a second place for the answer
+ * to change.
  *
  * <p>It re-verifies nothing and walks nothing. One point read of the coordinate the path resolves to, then one
  * bounded read of that version document's own section - no artifact body, no cryptography - so asking costs the same
@@ -36,9 +35,9 @@ public final class SignatureSummaries {
      * The signature summary recorded for a coordinate version.
      *
      * <p>Best-effort in the render-what-you-have sense: a coordinate that carries no version, or a read that fails,
-     * yields empty, and the caller says there is none rather than failing
-     * the page. Empty is genuinely "nothing was recorded" - a version published before signatures were checked here -
-     * which a caller must not present as a signature that was checked and found wanting.
+     * yields empty, and the caller says there is none rather than failing the page. Empty is genuinely "nothing was
+     * recorded" - a version whose document carries no signature section - which a caller must not present as a
+     * signature that was checked and found wanting.
      */
     public static Optional<SignatureSection.Summary> of(ArtifactStore store, String ecosystem, String coordinate,
                                                         String version) {
