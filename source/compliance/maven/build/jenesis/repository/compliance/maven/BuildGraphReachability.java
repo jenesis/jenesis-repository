@@ -11,21 +11,15 @@ import build.jenesis.repository.dependency.DependencyEdge;
 import build.jenesis.repository.dependency.DependencyGraph;
 
 /**
- * Build-graph reachability over a resolved Maven closure: for every resolved dependency, the shortest dependency
- * path from the artifact to it, so a compliance finding about a transitive dependency can be marked with whether -
- * and how directly - the vulnerable component is actually reachable on the build graph (a direct dependency, a
- * deep transitive one, or - defensively - not connected at all). This is the "reachable on the build graph"
- * signal after-the-fact SCA scanners can only approximate; here it is read straight off the closure the
- * publishing gate already resolves, so it costs no extra resolution.
+ * Build-graph reachability over a resolved Maven closure: for every resolved dependency, the shortest path from the
+ * artifact to it, so a finding about a transitive dependency says whether, and how directly, the component is reachable
+ * on the build graph. It reads the closure the gate already resolves, costing no extra resolution.
  *
- * <p>The graph is reconstructed from {@link MavenResolver.Closure#edges()}: an edge with a {@code null} parent is a
- * direct dependency of the artifact (depth one), every other edge is a {@code parent -> child} relationship. Edge
- * coordinates carry the version declared at that edge, but a resolved closure collapses each coordinate to a single
- * version, so nodes are matched on their {@link MavenDependencyKey} (group/artifact/type/classifier) and the
- * resolved version is read back from the closure for the human-readable path. A breadth-first walk from the direct
- * dependencies yields each node's shortest depth and path; a resolved dependency the walk never reaches (which a
- * well-formed compile closure does not produce, but a partially-resolved tree can) stays {@link
- * ComplianceGate.Reachability#UNKNOWN} rather than being asserted reachable.</p>
+ * <p>The graph comes from {@link MavenResolver.Closure#edges()}: a {@code null} parent marks a direct dependency (depth
+ * one), every other edge is {@code parent -> child}. A closure resolves each coordinate to one version, so nodes match
+ * on {@link MavenDependencyKey} and the resolved version is read back for the path. A breadth-first walk from the
+ * direct dependencies gives each node's shortest depth and path; one the walk never reaches stays
+ * {@link ComplianceGate.Reachability#UNKNOWN}.
  */
 public final class BuildGraphReachability {
 
@@ -78,17 +72,10 @@ public final class BuildGraphReachability {
         return reachability;
     }
 
-    /**
-     * The same signal read off a <em>declared</em> graph - the {@code dependencies} relationships a CycloneDX document
-     * already records - keyed by the component's {@code bom-ref}. The walk is identical (breadth-first from the root's
-     * direct edges, shortest depth and the path that reached it), which is the point: a closure resolved over the
-     * network and one read out of a published SBOM produce the same reachability shape, so a finding's "how directly
-     * is this reachable" reads the same whichever source answered.
-     *
-     * <p>Unreached components stay absent rather than being asserted reachable - a BOM that names components but
-     * declares no {@code dependencies} block gives every one of them {@link ComplianceGate.Reachability#UNKNOWN},
-     * which is the honest answer for a document that lists a closure without saying how it hangs together.
-     */
+    /** The same signal from a declared graph - a CycloneDX document's {@code dependencies} - keyed by {@code bom-ref},
+     *  with the same breadth-first walk, so a resolved closure and a published SBOM give one reachability shape. An
+     *  unreached component stays absent; a BOM declaring no {@code dependencies} leaves every component
+     *  {@link ComplianceGate.Reachability#UNKNOWN}. */
     public static Map<String, ComplianceGate.Reachability> of(DependencyGraph graph) {
         String rootRef = graph.rootRef();
         if (rootRef == null) {
@@ -125,9 +112,8 @@ public final class BuildGraphReachability {
         return reachability;
     }
 
-    /** The chain of coordinates from the artifact's direct dependency down to {@code ref}, labelled with each
-     *  component's own coordinate. The root itself is left off, matching the resolved-closure walk above, whose paths
-     *  begin at the direct dependency rather than repeating the artifact being published. */
+    /** The chain of coordinates from the artifact's direct dependency down to {@code ref}; the root is left off, as in
+     *  the resolved walk. */
     private static List<String> declaredPath(String ref, String rootRef, Map<String, String> predecessor,
                                              Map<String, DependencyComponent> byRef) {
         Deque<String> chain = new ArrayDeque<>();
@@ -140,10 +126,8 @@ public final class BuildGraphReachability {
         return List.copyOf(chain);
     }
 
-    /** A declared component's path label in the SAME shape the resolved walk writes - {@code group:artifact:version} -
-     *  so a finding's dependency path reads identically whether the closure came off the network or out of a published
-     *  document. Falls back to the component's canonical coordinate (its purl) when the BOM records no split parts,
-     *  and to the bare {@code bom-ref} when the edge points at a component the document never described. */
+    /** A declared component's path label in the resolved walk's {@code group:artifact:version} shape, else its purl,
+     *  else the bare {@code bom-ref} of a component the document never described. */
     private static String label(DependencyComponent component, String ref) {
         if (component == null) {
             return ref;

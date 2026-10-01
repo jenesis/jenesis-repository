@@ -1,19 +1,10 @@
 /**
- * The JVM publishing quality gate as a plugin module: it provides
- * {@link build.jenesis.repository.compliance.QualityInspector} for the two JVM layouts - Maven's
- * {@code /maven/...} and the Jenesis module layout's {@code /module/...} - reading a coordinate and its declared
- * licenses out of a POM or jar so the shared compliance gate can assess them. Licences are taken from the first
- * declaration source that declares anything: the POM, then the CycloneDX SBOM a Jenesis build publishes beside the
- * artifact or embeds in the jar, then the OSGi {@code Bundle-License} header. For a POM it also yields a subject per
- * dependency in the closure - read hermetically out of the published SBOM when one is stored, and only otherwise
- * resolved through the Jenesis Maven resolver from the one repository an operator named for it, within a bound, which
- * this module's settings declare; with none named nothing is fetched. Discovered through {@code provides}; npm, PyPI,
- * NuGet and Go each add their own inspector module the same way.
- *
- * <p>{@code build.jenesis.repository.dependency} is the shared SBOM primitive - the CycloneDX/SPDX parsers and the
- * {@code Sbom-Location}-driven embedded-document extractor the reverse-dependency index and the reachability engine
- * already read artifacts through. Required rather than re-implemented: a second SBOM locator or parser in a
- * compliance module is precisely the copied mechanism the thin-core rule forbids.
+ * The JVM publishing quality gate as a plugin module: a {@link build.jenesis.repository.compliance.QualityInspector}
+ * for Maven's {@code /maven/...} and the module layout's {@code /module/...}, reading a coordinate and its declared
+ * licences - from the POM, then a CycloneDX SBOM beside or inside the artifact, then {@code Bundle-License} - and for a
+ * POM a subject per dependency of its closure, read from a published SBOM or resolved through the one repository an
+ * operator named, within a bound. {@code build.jenesis.repository.dependency} supplies the shared SBOM parsers and
+ * extractor.
  *
  * @jenesis.release 25
  * @jenesis.alias build.jenesis build.jenesis/build.jenesis
@@ -30,7 +21,7 @@ module build.jenesis.repository.compliance.maven {
     requires build.jenesis.repository.settings;
     requires build.jenesis.repository.observation;
     requires org.slf4j;
-    // Gradle Module Metadata is a JSON descriptor; a maintained parser rather than a hand-rolled one.
+    // Gradle Module Metadata is JSON.
     requires tools.jackson.databind;
     exports build.jenesis.repository.compliance.maven to build.jenesis.repository.gateway.test,
             build.jenesis.repository.compliance.maven.test;

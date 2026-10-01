@@ -20,170 +20,110 @@ import build.jenesis.repository.dependency.DependencyLicense;
 import build.jenesis.repository.xml.Xml;
 
 /**
- * The JVM quality inspector: the publishing quality gate for the two JVM layouts, as a plugin of its own. It claims
- * {@code .pom} and {@code .jar} uploads under {@code /maven/...} and jars under the Jenesis module layout's
- * {@code /module/...}, reads the coordinate from the path and the declared licenses from the artifact's declaration
- * sources, and - for a POM - yields a compliance subject for each dependency in the resolved closure as well as for
- * the artifact itself. The shared {@link ComplianceGate} then assesses every subject, so a disallowed license or a
- * known vulnerability anywhere in the tree is caught at ingestion, not just in the artifact itself. Each subject is
- * marked with where it sits on the dependency graph ({@link BuildGraphReachability}): the artifact is the root, and
- * every dependency carries the shortest dependency path from the artifact to it, so a finding can say <em>how</em> -
- * and how directly - a vulnerable component is reachable.
+ * The JVM quality inspector for the two JVM layouts: {@code .pom} and {@code .jar} under {@code /maven/...} and jars
+ * under the module layout's {@code /module/...}. It reads the coordinate from the path and the declared licences from
+ * the artifact's declaration sources, and for a POM yields a subject per dependency in the resolved closure as well, so
+ * the shared {@link ComplianceGate} catches a disallowed licence or a known vulnerability anywhere in the tree. Each
+ * subject is placed on the dependency graph ({@link BuildGraphReachability}), the artifact as root.
  *
  * <h2>The declaration sources, in order</h2>
- * A Maven artifact can declare its licences six ways and they do not always agree, so the order is explicit, is a
- * literal list in {@link #ownLicenses}, and takes the <em>first source that declares anything</em> rather than
- * merging them - a union would let a stale or generated document add a licence the publisher never claimed, turning
- * a permitted artifact into a held one:
- *
+ * A Maven artifact can declare its licences six ways, and they do not always agree, so {@link #ownLicenses} takes the
+ * <em>first source that declares anything</em> rather than a union, which would let a stale document add a licence the
+ * publisher never claimed:
  * <ol>
  *   <li>the artifact's own {@code <licenses>}, for a {@code .pom};</li>
- *   <li>for a jar, its <b>sibling POM</b>'s {@code <licenses>} - the ecosystem's canonical declaration for the
- *       coordinate, written by the publisher and the document every other Maven consumer reads;</li>
- *   <li>for a jar, the <b>POM embedded in the jar itself</b> at {@code META-INF/maven/<groupId>/<artifactId>/pom.xml},
- *       which {@code maven-archiver} writes by default - the same document as the rung above, carried inside the
- *       artifact, so it ranks directly below it and above every derived one;</li>
- *   <li>the <b>sibling CycloneDX attachment</b> {@code <artifact>-<version>-cyclonedx.json} (or {@code .xml}) that a
- *       Jenesis build publishes beside the pom and jar, read through the very same {@code lookup.fetch} seam and so
- *       needing no archive read at all;</li>
- *   <li>the <b>embedded</b> CycloneDX copy at the path the jar's {@code Sbom-Location} manifest header names
- *       (falling back to the {@code META-INF/sbom/} convention), located and bounded by {@link ArtifactSbom};</li>
- *   <li>the jar's single-string OSGi {@code Bundle-License} header.</li>
+ *   <li>for a jar, its <b>sibling POM</b>'s {@code <licenses>}, the coordinate's canonical declaration;</li>
+ *   <li>for a jar, the <b>POM embedded in it</b> at {@code META-INF/maven/<groupId>/<artifactId>/pom.xml}, the same
+ *       document carried inside;</li>
+ *   <li>the <b>sibling CycloneDX attachment</b> {@code <artifact>-<version>-cyclonedx.json} (or {@code .xml}), read
+ *       through {@code lookup.fetch};</li>
+ *   <li>the <b>embedded</b> CycloneDX copy the {@code Sbom-Location} header names (or {@code META-INF/sbom/}), located
+ *       and bounded by {@link ArtifactSbom};</li>
+ *   <li>the jar's OSGi {@code Bundle-License} header.</li>
  * </ol>
  *
- * <p><b>Why the SBOM ranks below the POM and above {@code Bundle-License}.</b> The POM is the coordinate's canonical
- * metadata document: it is what the publisher wrote, what Maven and Gradle read, and what Central indexes - a
- * CycloneDX document is a build tool's <em>rendering</em> of that same fact and can lag a POM edited at release time,
- * so it must not overrule it. It outranks {@code Bundle-License} decisively in the other direction: CycloneDX records
- * licences <em>per component</em> and names them with SPDX identifiers where the emitter matched one, where
- * {@code Bundle-License} is one free-text OSGi header describing the bundle, frequently absent and never
- * policy-comparable.
- *
- * <p><b>Every SBOM read is optional-degrading</b>, exactly as the POM read is: for Maven the archive is not
- * the manifest source (the coordinate comes from the request path), so an attachment that is not there, one past the
- * bounded-read ceiling, a jar whose prefix does not reach its SBOM entry, and a document that will not parse all
- * degrade to "this source declares nothing" and hand over to the next one. None of them fails a publish.
+ * <p>A CycloneDX document renders the POM's facts and can lag a POM edited at release, so it ranks below; it records
+ * licences per component with SPDX identifiers, so it ranks above the single free-text {@code Bundle-License}. Every
+ * SBOM read is optional: absent, over the bound, past a prefix, or unparsable, it declares nothing and the next source
+ * answers. None fails a publish.
  *
  * <h2>The closure: declared first, resolved second</h2>
- * For a POM the dependency closure is taken from the sibling CycloneDX attachment when one is published - the
- * document already lists every resolved component with its purl, its version and its own licences, so the closure is
- * read <b>hermetically</b>, out of the store, with no network at all. Only when no such document is stored is the
- * closure resolved over the network ({@link ClosureResolution}), the SPI's single declared read-purity exception: and
- * only through the Maven repository an operator named for it, within a bound on the documents read and the time
- * taken. With none named nothing is fetched. A closure that is not resolved - nothing named, a failed walk, a bound
- * reached - yields no transitive subjects rather than blocking the publish, and is counted and, where it failed, logged.
+ * For a POM the closure is read hermetically from the sibling CycloneDX attachment when one is stored, which lists
+ * every component with its purl, version and licences. Only otherwise is it resolved over the network
+ * ({@link ClosureResolution}), the SPI's one read-purity exception, through the repository an operator named and within
+ * a bound. An unresolved closure yields no transitive subjects rather than blocking the publish, and is counted.
  *
  * <h2>Gradle Module Metadata ({@code .module})</h2>
- * Gradle publishes a JSON descriptor beside the POM from version 6 onward, and every Gradle consumer of that
- * coordinate reads it in preference to the POM. It is claimed here rather than left un-inspected, so the descriptor is
- * screened under the same Maven coordinate as its POM and its jar - the operator deny-list, the immaturity hold and
- * the advisory dimensions all bite on it - instead of streaming through as unclaimed content.
- *
- * <h3>What the descriptor feeds, and what it does not</h3>
- * It feeds <b>nothing</b> into licence or dependency derivation. That is a decision, not an omission, and it rests on
- * three facts:
+ * Gradle publishes a JSON descriptor beside the POM, which Gradle consumers prefer. It is claimed so it is screened
+ * under the same coordinate as its POM and jar, but it feeds nothing into licence or dependency derivation:
  * <ol>
- *   <li><b>The licence axis has nothing to gain.</b> Gradle Module Metadata declares no licence: the schema has no
- *       field for one. The POM remains the coordinate's canonical declaration, and the ranked list above is
- *       unchanged; a {@code .module} simply takes its licences from its sibling POM, which is the very rung a jar
- *       already uses.</li>
- *   <li><b>Its dependency data is not a property of the artifact.</b> {@code variants[].dependencies} are
- *       <em>variant-scoped</em>, and which variant applies is decided by the <em>consumer's</em> requested attributes
- *       and capabilities. A publish-time screen has no consumer. Folding them in would therefore mean either unioning
- *       every variant - holding a publish over a dependency no consumer of that artifact will ever resolve, a false
- *       hold that breaks publishers - or picking one arbitrarily, which is an under-screen that hides a real
- *       vulnerability. Both are a wrong answer served as a right one, in opposite directions. The two closure
- *       sources this
- *       inspector already has (the sibling CycloneDX attachment, then the resolver) are consumer-independent and stay
- *       the answer.</li>
- *   <li><b>Capabilities are a resolution concept, not a compliance one.</b> They express which components conflict
- *       with which; nothing in the gate keys on them.</li>
+ *   <li>its schema has no licence field, so its licences come from the sibling POM, as a jar's do;</li>
+ *   <li>{@code variants[].dependencies} are variant-scoped, chosen by the consumer's attributes, and a publish-time
+ *       screen has no consumer: a union would hold publishes over dependencies no consumer resolves, one variant would
+ *       hide real vulnerabilities, and the consumer-independent closure sources stay the answer;</li>
+ *   <li>capabilities express conflicts for resolution, which nothing in the gate keys on.</li>
  * </ol>
- * Revisit this only if a <em>resolve-time</em> gate ever exists - there, and only there, the consumer's attributes are
- * known and a variant can be named.
  *
- * <h3>Why an unreadable descriptor is not a hold</h3>
- * A {@code .module} that will not parse, that declares a format version this repository does not read, or whose
- * {@code component} disagrees with its path costs only the derived declaration: the path coordinate still screens, and
- * the bytes are still stored and served. It is therefore <b>not</b> a {@code MalformedArtifactException}, for the same
- * reason an unparseable POM is not (the coordinate comes from the path, not the body) - and for one further reason
- * specific to this file. Withholding a {@code .module} is not a safe default: its POM keeps serving, and Gradle then
- * <em>silently</em> resolves the POM's variant instead of the descriptor's, which is a wrong answer with no error
- * anywhere. Serving a broken descriptor, by contrast, makes Gradle refuse it and fail the build loudly: with the
- * real client a missing {@code .module} changes the resolved artifact and the resolved dependency set with a
- * {@code BUILD SUCCESSFUL}, while a corrupt one fails the build outright. So a repository must never turn "this
- * descriptor is broken" into "this descriptor is absent"; the failure is logged here and left visible to the client.
+ * <p>An unreadable descriptor - unparsable, an unread format version, or a {@code component} disagreeing with its path
+ * - costs only the derived declaration and is no {@code MalformedArtifactException}, since the coordinate comes from
+ * the path. Withholding it would be worse: Gradle would silently resolve the POM's variant instead, while a corrupt one
+ * served makes Gradle fail the build loudly. The failure is logged and left visible to the client.
  *
  * <h2>The Jenesis module layout</h2>
- * A modular jar published under the Maven layout is cross-published into the {@code /module/} view over the same
- * content-addressed blob, so it is screened once, here, under its Maven coordinate. A jar <em>published directly</em>
- * to {@code /module/} has no Maven coordinate and no sibling POM at all, and its embedded CycloneDX document is
- * therefore its <b>only</b> declaration source - which is exactly the artifact class that always carries one, since
- * the Jenesis build emits it by default. Both JVM layouts are owned by this one inspector for the same reason the
- * {@code build.jenesis.repository.format.jvm} module describes both: they are one ecosystem's two addressing
- * conventions, not two ecosystems. Module subjects carry the {@code Jenesis} ecosystem the module layout's own
- * {@code ArtifactLayout} reports, so a screened coordinate and a served one are looked up under the same name.
+ * A modular jar published under the Maven layout is cross-published into {@code /module/} over the same blob and
+ * screened once, here, under its Maven coordinate. A jar published directly to {@code /module/} has no coordinate or
+ * sibling POM, so its embedded CycloneDX document is its only declaration, which a Jenesis build always emits. Module
+ * subjects carry the {@code Jenesis} ecosystem the module layout reports.
  */
 public final class MavenQualityInspector implements QualityInspector {
 
     private static final Logger LOGGER = LoggerFactory.getLogger(MavenQualityInspector.class);
 
-    /** The advisory-feed namespace Maven coordinates report - what the feeds and the gate key on for JVM artifacts. */
+    /** The advisory namespace Maven coordinates report. */
     private static final String ECOSYSTEM = "Maven";
 
-    /** The ecosystem the Jenesis module layout reports for a module-view coordinate.
-     *
-     *  <p>Read from the shared Java-layout module rather than spelled here: the edge is to the layout
-     *  <em>grammar</em> ({@code format.java}, which requires only the store and format SPIs) rather than to a format
-     *  implementation, so a describing module does not take a compile-time edge to the layout it describes. */
+    /** The ecosystem the module layout reports, read from the shared Java-layout grammar rather than a format
+     *  implementation. */
     private static final String MODULE_ECOSYSTEM = JavaLayout.MODULE_ECOSYSTEM;
 
     private static final String MAVEN_ROUTE = JavaLayout.MAVEN_ROUTE;
 
     private static final String MODULE_ROUTE = JavaLayout.MODULE_ROUTE;
 
-    /** Gradle Module Metadata's file extension - the JSON descriptor Gradle publishes <em>beside</em> the POM, at
-     *  {@code <artifact>-<version>.module}. Not a layout of its own: it lives in the Maven layout, under the Maven
-     *  coordinate the request path already yields. */
+    /** Gradle Module Metadata's extension: the descriptor published beside the POM at
+     *  {@code <artifact>-<version>.module}, under the Maven coordinate its path yields. */
     private static final String GRADLE_MODULE_METADATA = ".module";
 
-    /** The Gradle Module Metadata format versions this inspector reads. The document declares its own
-     *  {@code formatVersion}; 1.0 and 1.1 are the versions Gradle publishes, and the schema is additive within a
-     *  major, so the major is what is checked. Reading it is not a gate: a version outside the range costs only the
-     *  derived declaration, and the bytes are served either way. */
+    /** The Gradle Module Metadata major this inspector reads: 1.0 and 1.1 are what Gradle publishes and the schema is
+     *  additive within a major. A version outside it costs only the derived declaration. */
     private static final String GRADLE_MODULE_MAJOR = "1.";
 
-    /** The parser for the {@code .module} descriptor - publisher-authored JSON reaching a screening path. */
+    /** The parser for the publisher-authored {@code .module} JSON. */
     private static final JsonMapper JSON = JsonMapper.builder().build();
 
-    /** The Maven attachment a Jenesis build publishes beside the pom and jar, in both serialisations the emitter
-     *  writes. Tried in this order; the first that is stored and parses wins. */
+    /** The attachment a Jenesis build publishes beside the pom and jar, in both serialisations; the first stored and
+     *  parsable wins. */
     private static final List<String> SBOM_ATTACHMENTS = List.of("-cyclonedx.json", "-cyclonedx.xml");
 
     /** The Maven descriptor suffix, for {@link JavaLayout#attachment}. */
     private static final String POM = ".pom";
 
-    /** The ceiling on a sibling declaration document read into heap. A CycloneDX BOM for a real closure is tens to a
-     *  few hundred kilobytes; the shared manifest tier is already the product's answer to "a small metadata document
-     *  beside the artifact", so this reads it live off {@link ArchiveInflation#largestEntry()} - the same number, and
-     *  the same operator key, as the members a format inflates - rather than restating it. Reading it through
-     *  {@link QualityInspector.Lookup#fetchBounded} rather than {@code fetch} matters: {@code fetch} <em>throws</em>
-     *  past the gateway's sibling cap, which would turn an oversized optional declaration into a failed publish. Past
-     *  this bound the source declares nothing. */
+    /** The ceiling on a sibling declaration read into heap: the shared manifest tier,
+     *  {@link ArchiveInflation#largestEntry()}. Read through {@link QualityInspector.Lookup#fetchBounded}, since
+     *  {@code fetch} throws past the gateway's sibling cap and would fail a publish over an optional document; past
+     *  this the source declares nothing. */
     private static int sbomLimit() {
         return ArchiveInflation.largestEntry();
     }
 
-    /** One ranked declaration source. Ordered attempts are expressed as a list of these so {@link #ownLicenses}'s
-     *  precedence is a literal, readable sequence rather than a nest of conditionals. */
+    /** One ranked declaration source, so {@link #ownLicenses}'s precedence is a literal list. */
     @FunctionalInterface
     private interface Declaration {
         ManifestSubjectBuilder read() throws IOException;
     }
 
-    /** A truncated SBOM attachment leaves this inspection incomplete: the dependency and licence facts that
-     *  declaration would have carried are unknown, not absent, and the attachment read is bounded separately from
-     *  the artifact body the bridge's own test covers. */
+    /** A truncated SBOM attachment leaves this inspection incomplete: what it would have declared is unknown, not
+     *  absent. */
     @Override
     public boolean incompleteOnTruncatedSibling() {
         return true;
@@ -196,16 +136,10 @@ public final class MavenQualityInspector implements QualityInspector {
                 || path.startsWith(MODULE_ROUTE) && path.endsWith(".jar");
     }
 
-    /**
-     * A published POM completes its own version directory. Maven's deploy is several requests and the jar goes first,
-     * so a jar with no licence of its own - no {@code <licenses>} reachable, no embedded descriptor, no SBOM, no
-     * {@code Bundle-License}, which is what a Gradle-built jar looks like - is screened while the coordinate's only
-     * licence document is still in flight. The POM arriving is the evidence that was missing, and the version
-     * directory is where its neighbours are.
-     *
-     * <p>Only a {@code .pom} answers. A jar completes nothing: the licence flows from the POM to its siblings, never
-     * the other way, and having the jar re-assess the POM would be a re-decision of unchanged evidence.
-     */
+    /** A published POM completes its own version directory. Maven deploys the jar first, so a jar declaring no licence
+     *  of its own, as a Gradle-built jar does, is screened while the coordinate's licence document is in flight, and
+     *  the POM arriving is the evidence that was missing. Only a {@code .pom} answers: licences flow from the POM to
+     *  its siblings. */
     @Override
     public Optional<String> completes(String path) {
         if (!path.startsWith(MAVEN_ROUTE) || !path.endsWith(".pom")) {
@@ -226,28 +160,15 @@ public final class MavenQualityInspector implements QualityInspector {
         return subjects;
     }
 
-    /**
-     * It reads a jar as a stream wherever a screen offers one, and the reason is where a jar keeps its descriptor.
-     *
-     * <p>Every other format this product screens puts its declaration at a place the container fixes - a
-     * {@code .nuspec} at the zip root, a gem's metadata as the first tar member, a wheel's {@code METADATA}. A jar
-     * has no such rule: {@code META-INF/maven/<group>/<artifact>/pom.xml} is written wherever the packager wrote
-     * it, and on a large artifact that can be anywhere at all. Twenty-one formats read a licence out of an
-     * archive, and this is the one where a bounded prefix is a guess rather than a convention.
-     */
+    /** A jar is read as a stream wherever a screen offers one: its descriptor sits wherever the packager wrote it, so
+     *  unlike every other container a bounded prefix is a guess rather than a convention. */
     @Override
     public boolean streams() {
         return true;
     }
 
-    /**
-     * The streamed leg, for the artifacts it can reach further into: a jar.
-     *
-     * <p>A descriptor - a {@code .pom}, a {@code .module} - is a small document by its own nature, and one past the
-     * inspection prefix is pathological rather than large; there is nothing in it an archive walk could reach that a
-     * bounded read cannot, so it takes the SPI's bridge and reports the read that bridge made. The module-view route
-     * is bridged for the same reason its coordinate comes from the path.
-     */
+    /** The streamed leg, for a jar. A {@code .pom} or {@code .module} is small by nature, so it takes the SPI's bridge
+     *  and reports that bridge's read; the module-view route is bridged since its coordinate comes from the path. */
     @Override
     public QualityInspector.Inspection inspectArtifact(String path, QualityInspector.Content body,
                                                        QualityInspector.Lookup lookup) throws IOException {
@@ -263,9 +184,8 @@ public final class MavenQualityInspector implements QualityInspector {
         List<ComplianceGate.Subject> subjects = jarLicenses(path, archive, coordinate, lookup)
                 .maintainers(maintainers(path, archive, null, coordinate, lookup))
                 .subject(canonical, coordinate[2], ComplianceGate.Reachability.root(canonical + ":" + coordinate[2]));
-        // A walk the full-body tier stopped may have passed the descriptor without reading it, so an empty licence
-        // list over this artifact is "we stopped looking" rather than "it declares nothing", and the screen behind
-        // this leg must hear the difference.
+        // A walk the full-body tier stopped may have passed the descriptor, so an empty licence list is "we stopped
+        // looking", which the screen must hear.
         return new QualityInspector.Inspection(subjects, !archive.cut());
     }
 
@@ -306,13 +226,10 @@ public final class MavenQualityInspector implements QualityInspector {
                 ComplianceGate.Reachability.root(canonical + ":" + coordinate[2]));
     }
 
-    /**
-     * What a published POM declares the artifact depends on: its own {@code <dependencies>} - never those under
-     * {@code <dependencyManagement>}, which pin versions without adding anything - as {@code group:artifact} and the
-     * version it states, which may be a range or a property the POM's parents resolve. A test, provided or system
-     * dependency, or an optional one, is not something depending on the artifact brings in. Only the POM's own
-     * publish reads it, so a jar's publish records nothing and leaves what the POM recorded.
-     */
+    /** What a POM declares the artifact depends on: its own {@code <dependencies>}, never
+     *  {@code <dependencyManagement>}, as {@code group:artifact} and the stated version, possibly a range or property.
+     *  Test, provided, system and optional dependencies are not brought in by depending on it. Only the POM's own
+     *  publish records them. */
     private static ManifestSubjectBuilder dependenciesFromPom(ManifestSubjectBuilder declared, byte[] pom) {
         try {
             Element project = Xml.parse(pom).getDocumentElement();
@@ -337,10 +254,8 @@ public final class MavenQualityInspector implements QualityInspector {
         }
     }
 
-    /**
-     * What a published POM says the artifact is for: the project's own {@code <description>}, or its {@code <name>}
-     * where it gives none. Maven has no keywords. Only the POM's own publish reads it, as the dependencies are read.
-     */
+    /** What a POM says the artifact is for: its {@code <description>}, else its {@code <name>}; Maven has no
+     *  keywords. */
     private static ManifestSubjectBuilder aboutFromPom(ManifestSubjectBuilder declared, byte[] pom) {
         try {
             Element project = Xml.parse(pom).getDocumentElement();
@@ -365,14 +280,10 @@ public final class MavenQualityInspector implements QualityInspector {
         return children;
     }
 
-    /**
-     * Whom the POM names: its {@code developers} and {@code contributors} - name, e-mail, and a profile url that
-     * is a GitHub login - and the owner of the repository its {@code scm} points at when that is GitHub, in the two
-     * spellings a key can be looked up by ({@link Maintainer}). The POM is the artifact's own for a {@code .pom},
-     * the deployed sibling for a jar or a Gradle descriptor, else the descriptor the jar carries - the same order
-     * the licence takes - and, being optional beside a coordinate the path yields, a POM that is not there or will
-     * not parse names nobody rather than failing the publish.
-     */
+    /** Whom the POM names: its {@code developers} and {@code contributors} - name, e-mail, a GitHub login from a
+     *  profile url - and the owner of its {@code scm} repository on GitHub, in the two spellings a key is looked up by
+     *  ({@link Maintainer}). The POM is taken in the licences' order, and one absent or unparsable names nobody rather
+     *  than failing the publish. */
     private static List<Maintainer> maintainers(String path, Archive archive, byte[] own, String[] coordinate,
                                                 QualityInspector.Lookup lookup) throws IOException {
         Optional<byte[]> pom = path.endsWith(".pom")
@@ -413,20 +324,14 @@ public final class MavenQualityInspector implements QualityInspector {
         }
     }
 
-    /**
-     * The licences the artifact itself declares, taken from the first source in the documented order that declares
-     * anything. Each is an OPTIONAL declaration beside a coordinate the request path already yields, so a sibling
-     * that is not there, a document that will not parse, one past the bounded read and a {@code Bundle-License} that
-     * is not present all degrade to "declares nothing" rather than failing the publish.
-     */
+    /** The licences the artifact declares, from the first source in the documented order that declares anything; every
+     *  source is optional, so an absent, unparsable or over-bound one declares nothing. */
     private static ManifestSubjectBuilder ownLicenses(String path, Archive archive, byte[] own,
                                                       String[] coordinate,
                                                       QualityInspector.Lookup lookup) throws IOException {
         if (path.endsWith(GRADLE_MODULE_METADATA)) {
-            // The descriptor itself declares no licence - the Gradle Module Metadata schema has no field for one - so the
-            // sibling POM is the FIRST source, not the second, and the two archive rungs below (an embedded CycloneDX
-            // document, an OSGi Bundle-License header) have nothing to read in a JSON document and are left out
-            // rather than run against bytes that can never be an archive.
+            // The descriptor has no licence field, so the sibling POM is the first source, and the archive rungs do not
+            // apply to JSON.
             return firstDeclaring(List.of(
                     () -> lookup.fetch(JavaLayout.attachment(path, POM))
                             .map(MavenQualityInspector::licensesFromPom)
@@ -445,10 +350,8 @@ public final class MavenQualityInspector implements QualityInspector {
         return jarLicenses(path, archive, coordinate, lookup);
     }
 
-    /** The order a JAR's licence is looked for in, which both legs take: the deployed sibling POM, the descriptor the
-     *  jar carries, the sibling SBOM attachment, the SBOM the jar carries, and the OSGi {@code Bundle-License}
-     *  header. Stated once because the two legs differ in how far they may read into the archive and in nothing
-     *  else - a second copy of this list is how they would come to disagree about where a licence comes from. */
+    /** The order a jar's licence is looked for in, shared by both legs: the sibling POM, the embedded descriptor, the
+     *  sibling SBOM, the embedded SBOM, then {@code Bundle-License}. The legs differ only in how far they read. */
     private static ManifestSubjectBuilder jarLicenses(String path, Archive archive, String[] coordinate,
                                                       QualityInspector.Lookup lookup) throws IOException {
         return firstDeclaring(List.of(
@@ -465,9 +368,7 @@ public final class MavenQualityInspector implements QualityInspector {
                 () -> bundle(archive, ECOSYSTEM)));
     }
 
-    /** The first source in the list that declares anything, else "declares nothing" - the shared walk of a ranked
-     *  declaration list, so the {@code .module}, {@code .pom} and jar orders stay three literal lists rather than
-     *  three copies of this loop. */
+    /** The first source in the list that declares anything, else "declares nothing". */
     private static ManifestSubjectBuilder firstDeclaring(List<Declaration> sources) throws IOException {
         for (Declaration source : sources) {
             ManifestSubjectBuilder declared = source.read();
@@ -479,15 +380,12 @@ public final class MavenQualityInspector implements QualityInspector {
     }
 
     /**
-     * Read a {@code .module} descriptor far enough to know it really is Gradle Module Metadata for the coordinate its
-     * path names, logging - never throwing - when it is not. This is the whole of what parsing the descriptor is
-     * <em>for</em>: see the class documentation's "What the descriptor feeds, and what it does not" for why its
-     * variants and capabilities are deliberately not folded into licence or dependency derivation, and
-     * "Why an unreadable descriptor is not a hold" for why this returns quietly instead of raising
-     * {@code MalformedArtifactException} the way an inspector whose coordinate comes from the body does.
+     * Read a {@code .module} far enough to know it is Gradle Module Metadata for the coordinate its path names, logging
+     * and never throwing when it is not; the class comment says why its variants are not folded in and why an
+     * unreadable one is no hold.
      *
-     * @return the {@code group:artifact} and version the document declares for itself, or empty when it is not a
-     *         readable Gradle Module Metadata document
+     * @return the {@code group:artifact} and version it declares, or empty when it is no readable Gradle Module
+     *     Metadata
      */
     private static Optional<String[]> gradleModuleMetadata(String path, byte[] content) {
         try {
@@ -518,11 +416,8 @@ public final class MavenQualityInspector implements QualityInspector {
         }
     }
 
-    /**
-     * The dependency closure, declared-first: the sibling CycloneDX attachment when one is stored - a hermetic read
-     * through the store, no network - and only otherwise the bounded walk through the repository an operator named,
-     * if one is named.
-     */
+    /** The closure, declared first: the sibling CycloneDX attachment when stored, read from the store, else the bounded
+     *  walk through the named repository, if one is named. */
     private static List<ComplianceGate.Subject> closure(String path, byte[] pom, String[] coordinate,
                                                         QualityInspector.Lookup lookup) throws IOException {
         Optional<DependencyGraph> declared = siblingSbom(path, coordinate, lookup);
@@ -535,8 +430,8 @@ public final class MavenQualityInspector implements QualityInspector {
         return ClosureResolution.dependencies(path, pom, ECOSYSTEM, lookup.settings());
     }
 
-    /** Every dependency the SBOM already resolved, as gate subjects: the component's Maven coordinate and version,
-     *  the licences <em>it</em> declares, and its shortest path from the root on the declared dependency graph. */
+    /** Every dependency the SBOM resolved, as gate subjects: its Maven coordinate and version, its own licences, and
+     *  its shortest path on the declared graph. */
     private static List<ComplianceGate.Subject> declaredClosure(DependencyGraph graph) {
         Map<String, ComplianceGate.Reachability> reachability = BuildGraphReachability.of(graph);
         List<ComplianceGate.Subject> subjects = new ArrayList<>();
@@ -552,22 +447,16 @@ public final class MavenQualityInspector implements QualityInspector {
         return subjects;
     }
 
-    /**
-     * The CycloneDX attachment published beside this artifact, parsed. Read through
-     * {@link QualityInspector.Lookup#fetchBounded} so an oversized document answers "declares nothing" instead of
-     * throwing out of the gateway's sibling cap, and parsed fail-soft, so a truncated or malformed BOM yields no
-     * graph rather than an exception on the publish path.
-     */
+    /** The CycloneDX attachment beside this artifact, parsed: read through {@link QualityInspector.Lookup#fetchBounded}
+     *  so an oversized one declares nothing rather than throwing, and parsed fail-soft. */
     private static Optional<DependencyGraph> siblingSbom(String path, String[] coordinate,
                                                          QualityInspector.Lookup lookup) throws IOException {
         for (String suffix : SBOM_ATTACHMENTS) {
             Optional<QualityInspector.Lookup.Bounded> attachment =
                     lookup.fetchBounded(JavaLayout.attachment(path, suffix), sbomLimit());
             if (attachment.isEmpty() || attachment.get().truncated()) {
-                // Absent, or past the bound. Carrying on is right - the attachment is optional - but the two are
-                // not the same fact, and the second makes this inspection incomplete rather than clean: the
-                // dependency and licence facts that declaration would have carried are unknown, not absent. The
-                // truncation is reported through the watching bridge below rather than swallowed here.
+                // Absent and over the bound differ: the second leaves the inspection incomplete, reported through the
+                // bridge below.
                 continue;
             }
             DependencyGraph graph = CycloneDxParser.parse(attachment.get().content());
@@ -578,14 +467,9 @@ public final class MavenQualityInspector implements QualityInspector {
         return Optional.empty();
     }
 
-    /**
-     * The licences the jar's own embedded CycloneDX document declares for itself, located through the
-     * {@code Sbom-Location} manifest header (or the {@code META-INF/sbom/} convention) and bounded by
-     * {@link ArtifactSbom} - never an unbounded inflate. Only attempted when the inspector holds the COMPLETE
-     * artifact: a bounded prefix that stops short of the SBOM entry would read as "carries none", and asserting a
-     * whole-artifact fact off a prefix is exactly what the SPI's streaming clause forbids. Any read or parse failure
-     * degrades to no declaration, so an artifact whose archive will not open still publishes on its path coordinate.
-     */
+    /** The licences the jar's embedded CycloneDX document declares, located through {@code Sbom-Location} (or
+     *  {@code META-INF/sbom/}) and bounded by {@link ArtifactSbom}. Only on the complete artifact, since a prefix short
+     *  of the entry would read as "carries none". A failure declares nothing. */
     private static Optional<ManifestSubjectBuilder> embeddedSbom(Archive archive, String ecosystem) {
         if (!archive.whole()) {
             return Optional.empty();
@@ -598,29 +482,13 @@ public final class MavenQualityInspector implements QualityInspector {
     }
 
     /**
-     * The POM a jar carries inside itself, at the {@code META-INF/maven/<groupId>/<artifactId>/pom.xml} path
-     * {@code maven-archiver} writes by default - or empty when the jar carries none for the coordinate its request
-     * path names.
+     * The POM a jar carries at {@code META-INF/maven/<groupId>/<artifactId>/pom.xml}, or empty.
      *
-     * <p><b>Why a jar needs a licence source that is not its sibling.</b> A Maven deploy is several requests, and the
-     * client sends the jar <em>before</em> the POM: {@code mvn deploy} and {@code deploy:deploy-file} both PUT the
-     * artifact first. So at the moment the jar is screened its sibling POM is not in the store yet and the rung
-     * above finds nothing: on a deployment that has set {@code license-unknown=QUARANTINE} the main artifact of an
-     * ordinary release is then held for a licence its publisher did declare - in the document arriving one request
-     * later. That this race is so ordinary is exactly why the shipped default is {@code ALLOW}.
-     * The embedded descriptor is that same declaration, present in the bytes already in hand, so the common case
-     * needs no cross-request ordering to screen correctly.
-     *
-     * <p>The entry name is matched against the coordinate the <em>request path</em> yields, never against whatever
-     * the archive happens to contain: a jar cannot declare a licence under another coordinate's descriptor and have
-     * it counted for this one.
-     *
-     * <p>Walked under {@link ArchiveWalk#largestWalk()} and inflated at the shared entry tier, exactly as the
-     * {@code Bundle-License} rung is, so a descriptor that is a deflate bomb is refused within the cap rather than
-     * inflated on the publish thread. Only attempted on the COMPLETE artifact, for the same reason
-     * {@link #embeddedSbom} is: a bounded prefix stopping short of the entry would read as "carries none", and
-     * asserting a whole-artifact fact off a prefix is what the SPI's streaming clause forbids. Every failure degrades
-     * to no declaration and hands on to the next rung.
+     * <p>A Maven deploy sends the jar before the POM, so when the jar is screened its sibling POM is not stored yet;
+     * the embedded descriptor is the same declaration already in hand, so the common case screens correctly with no
+     * ordering. The entry is matched against the request path's coordinate, so a jar cannot claim another coordinate's
+     * descriptor. Walked under {@link ArchiveWalk#largestWalk()} and inflated at the shared entry tier, and only on the
+     * complete artifact, as {@link #embeddedSbom} is; a failure declares nothing.
      */
     private static Optional<byte[]> embeddedPom(Archive archive, String[] coordinate) {
         if (!archive.whole()) {
@@ -637,13 +505,12 @@ public final class MavenQualityInspector implements QualityInspector {
         }
     }
 
-    /** The named descriptor entry of an already-bounded jar stream, or null when the archive carries no such entry. */
+    /** The named descriptor entry of a bounded jar stream, or null when absent. */
     private static byte[] descriptorEntry(InputStream jar, String descriptor) throws IOException {
         try (ZipInputStream zip = ArchiveWalk.zip(jar)) {
             for (ZipEntry entry = zip.getNextEntry(); entry != null; entry = zip.getNextEntry()) {
                 if (!entry.isDirectory() && entry.getName().equals(descriptor)) {
-                    // An OPTIONAL declaration: a descriptor the inflation ceiling stopped degrades to "declares
-                    // nothing" rather than to the prefix that was read before the ceiling.
+                    // Optional: a descriptor the ceiling stopped declares nothing, never a prefix.
                     return ArchiveInflation.entry(zip).orNull();
                 }
             }
@@ -651,15 +518,15 @@ public final class MavenQualityInspector implements QualityInspector {
         }
     }
 
-    /** The licences the BOM's {@code metadata.component} - the artifact the document is about - declares. */
+    /** The licences the BOM's {@code metadata.component}, the artifact itself, declares. */
     private static Optional<ManifestSubjectBuilder> rootLicenses(DependencyGraph graph, String ecosystem) {
         return graph.root()
                 .map(root -> licenses(ManifestSubjectBuilder.of(ecosystem), root))
                 .filter(declared -> !declared.declared().isEmpty());
     }
 
-    /** A component's CycloneDX licences folded onto a subject builder: an SPDX {@code id} (or expression) as an
-     *  identifier, otherwise the free-text {@code name}/{@code url} pair. */
+    /** A component's CycloneDX licences on a subject builder: an SPDX {@code id} or expression as an identifier, else
+     *  the free-text {@code name}/{@code url} pair. */
     private static ManifestSubjectBuilder licenses(ManifestSubjectBuilder builder, DependencyComponent component) {
         ManifestSubjectBuilder declared = builder;
         for (DependencyLicense license : component.licenses()) {
@@ -670,9 +537,8 @@ public final class MavenQualityInspector implements QualityInspector {
         return declared;
     }
 
-    /** Deliberately without the whole-artifact guard the two rungs above carry: the manifest is a jar's FIRST
-     *  member, so a bounded prefix that reaches it has read the real header rather than a piece of one, and losing
-     *  the rung on every truncated body would give up a declaration that was there to be read. */
+    /** Without the whole-artifact guard: the manifest is a jar's first member, so a prefix reaching it read the real
+     *  header. */
     private static ManifestSubjectBuilder bundle(Archive archive, String ecosystem) {
         ComplianceGate.DeclaredLicense declared;
         try (InputStream jar = archive.open()) {
@@ -685,17 +551,10 @@ public final class MavenQualityInspector implements QualityInspector {
                 : ManifestSubjectBuilder.of(ecosystem).license(declared.name(), declared.url());
     }
 
-    /**
-     * What a rung may read, and how far: the body, whether it is the WHOLE artifact, and the ceiling a walk of it
-     * stops at.
-     *
-     * <p>The two legs differ in exactly these three things and in nothing else, which is why they are one object
-     * rather than two code paths. A bounded leg holds at most a prefix and walks it at the flat archive-walk tier;
-     * a streamed leg holds the artifact and walks it at the shared full-body tier. A rung that must not conclude
-     * from a prefix asks {@link #whole()}; one that walks asks {@link #ceiling()} and reports back through
-     * {@link #note}, because a walk the ceiling stopped means the declaration may be past it and an empty answer is
-     * then "we stopped looking" rather than "it declares nothing".
-     */
+    /** What a rung may read and how far: the body, whether it is the whole artifact, and the walk's ceiling. A bounded
+     *  leg holds a prefix walked at the flat tier, a streamed leg the artifact at the full-body tier. A rung that must
+     *  not conclude from a prefix asks {@link #whole()}; one that walks asks {@link #ceiling()} and reports through
+     *  {@link #note}, since a walk the ceiling stopped means "we stopped looking". */
     private static final class Archive {
 
         private final BoundedBodyReader.Source body;
@@ -743,22 +602,15 @@ public final class MavenQualityInspector implements QualityInspector {
         }
     }
 
-    /** The {@code [groupId, artifactId, version]} of a Maven request path - the layout's own split, not a second
-     *  copy of it. This inspector describes the Maven layout; it does not get to have its own opinion about what a
-     *  Maven path means. */
+    /** The {@code [groupId, artifactId, version]} of a Maven path, by the layout's own split. */
     private static String[] coordinate(String path) {
         return JavaLayout.mavenCoordinate(path);
     }
 
 
-    /**
-     * A component's Maven {@code group:artifact} and version. The purl is preferred where the document carries one -
-     * it is the canonical, cross-repository identity and is what the emitter writes - and the split
-     * {@code group}/{@code name}/{@code version} fields are the fallback for a BOM that omits it. A component that is
-     * neither a Maven purl nor a complete triple yields {@code null} and is skipped: the gate keys Maven coordinates
-     * in the Maven ecosystem, so inventing one from a partial record would query the feeds for a package that does
-     * not exist under that name.
-     */
+    /** A component's Maven {@code group:artifact} and version: the purl preferred, the split fields as fallback. A
+     *  component that is neither yields {@code null} and is skipped, rather than querying feeds for a package that does
+     *  not exist. */
     private static String[] mavenCoordinate(DependencyComponent component) {
         String purl = component.purl();
         if (purl != null && purl.startsWith("pkg:maven/")) {
@@ -802,11 +654,8 @@ public final class MavenQualityInspector implements QualityInspector {
             }
             return licenses;
         } catch (Exception _) {
-            // Maven derives the artifact's coordinate from the request PATH, not the POM content - the POM is read only
-            // for its declared licenses (like Conda/Composer/CocoaPods read a manifest for licenses while the coordinate
-            // comes from the path). A POM that will not parse therefore costs only the license, not the coordinate: the
-            // path coordinate still screens, so this is NOT a MalformedArtifactException (which is reserved for
-            // inspectors whose coordinate itself comes from unparseable content). Returns no license, as before.
+            // The coordinate comes from the path and the POM is read for licences only, so an unparsable POM costs the
+            // licences, not the coordinate, and is no MalformedArtifactException.
             return ManifestSubjectBuilder.of(ECOSYSTEM);
         }
     }

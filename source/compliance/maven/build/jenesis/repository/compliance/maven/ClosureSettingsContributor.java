@@ -5,8 +5,7 @@ import build.jenesis.repository.settings.Setting;
 import build.jenesis.repository.settings.SettingsContributor;
 
 /**
- * Describes where a published POM's dependency closure is resolved from and how far, so the settings surface exactly
- * when the Maven inspector is installed. The defaults are {@link ClosureResolution}'s.
+ * Describes where a published POM's closure is resolved from and how far; the defaults are {@link ClosureResolution}'s.
  */
 public final class ClosureSettingsContributor implements SettingsContributor {
 
