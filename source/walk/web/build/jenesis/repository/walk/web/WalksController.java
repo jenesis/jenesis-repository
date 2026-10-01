@@ -3,6 +3,7 @@ package build.jenesis.repository.walk.web;
 import module java.base;
 import module spring.web;
 
+import org.springframework.core.env.Environment;
 import org.springframework.stereotype.Controller;
 import org.springframework.ui.Model;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -13,6 +14,7 @@ import org.springframework.web.servlet.mvc.support.RedirectAttributes;
 import build.jenesis.repository.audit.AuditTrail;
 import build.jenesis.repository.server.kernel.MaintenanceScheduler;
 import build.jenesis.repository.server.RepositoryProperties;
+import build.jenesis.repository.server.kernel.PinnedSettings;
 import build.jenesis.repository.server.kernel.Settings;
 import build.jenesis.repository.server.kernel.TaskSchedule;
 import build.jenesis.repository.store.ArtifactStore;
@@ -34,6 +36,9 @@ public class WalksController {
 
     private final Settings settings;
 
+    /** The walks document as the node runs it: an operator's pin over the stored value over the environment. */
+    private final UnaryOperator<String> effective;
+
     private final ArtifactStore root;
 
     private final AuditTrail audit;
@@ -42,9 +47,10 @@ public class WalksController {
 
     private final String operatorTenant;
 
-    public WalksController(Settings settings, ArtifactStore root, AuditTrail audit, MaintenanceScheduler maintenance,
-                           RepositoryProperties properties) {
+    public WalksController(Settings settings, PinnedSettings pinned, Environment environment, ArtifactStore root,
+                           AuditTrail audit, MaintenanceScheduler maintenance, RepositoryProperties properties) {
         this.settings = settings;
+        this.effective = pinned.effective(settings, environment);
         this.root = root;
         this.audit = audit;
         this.maintenance = maintenance;
@@ -56,7 +62,7 @@ public class WalksController {
     @GetMapping("/ui/walks")
     public String walks(Model model) throws IOException {
         Map<String, TaskSchedule.TaskRun> runs = maintenance.taskRuns();
-        model.addAttribute("overview", WalkRuns.overview(key -> settings.getOrDefault(key, null), root,
+        model.addAttribute("overview", WalkRuns.overview(effective, root,
                 name -> lastRun(runs.get(name)), Instant.now()));
         model.addAttribute("defaultDocument", WalkSchedules.DEFAULT);
         return "walks-screen/list";
@@ -70,7 +76,7 @@ public class WalksController {
                        @RequestParam(value = "consumers", required = false) List<String> consumers,
                        RedirectAttributes redirect) throws IOException {
         try {
-            String document = WalkRuns.upsert(settings.getOrDefault(WalkSchedules.SETTING, null), name.trim(),
+            String document = WalkRuns.upsert(effective.apply(WalkSchedules.SETTING), name.trim(),
                     cron.trim(), enabled != null, consumers == null ? List.of() : consumers);
             settings.set(WalkSchedules.SETTING, document);
             redirect.addFlashAttribute("message", "Saved the walk '" + name.trim() + "'. It runs at " + cron.trim()
@@ -84,7 +90,7 @@ public class WalksController {
     /** Remove one entry; the consumers it carried ride no walk until another entry names them. */
     @PostMapping("/ui/walks/remove")
     public String remove(@RequestParam("name") String name, RedirectAttributes redirect) throws IOException {
-        settings.set(WalkSchedules.SETTING, WalkRuns.remove(settings.getOrDefault(WalkSchedules.SETTING, null),
+        settings.set(WalkSchedules.SETTING, WalkRuns.remove(effective.apply(WalkSchedules.SETTING),
                 name.trim()));
         redirect.addFlashAttribute("message", "Removed the walk '" + name.trim() + "'.");
         return "redirect:/ui/walks";

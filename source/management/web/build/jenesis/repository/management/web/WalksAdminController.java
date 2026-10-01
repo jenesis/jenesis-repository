@@ -7,6 +7,8 @@ import build.jenesis.repository.audit.AuditTrail;
 import build.jenesis.repository.server.kernel.MaintenanceScheduler;
 import build.jenesis.repository.server.RepositoryRouting;
 import jakarta.servlet.http.HttpServletRequest;
+import org.springframework.core.env.Environment;
+import build.jenesis.repository.server.kernel.PinnedSettings;
 import build.jenesis.repository.server.kernel.Settings;
 import build.jenesis.repository.server.kernel.TaskSchedule;
 import build.jenesis.repository.server.spi.Authorization;
@@ -27,17 +29,18 @@ public class WalksAdminController {
 
     private final AuditTrail audit;
 
-    private final Settings settings;
+    /** The walks document as the node runs it: an operator's pin over the stored value over the environment. */
+    private final UnaryOperator<String> effective;
 
     private final MaintenanceScheduler maintenance;
 
     private final RepositoryRouting routing;
 
-    public WalksAdminController(ArtifactStore root, AuditTrail audit, Settings settings,
-                                MaintenanceScheduler maintenance, RepositoryRouting routing) {
+    public WalksAdminController(ArtifactStore root, AuditTrail audit, Settings settings, PinnedSettings pinned,
+                                Environment environment, MaintenanceScheduler maintenance, RepositoryRouting routing) {
         this.root = root;
         this.audit = audit;
-        this.settings = settings;
+        this.effective = pinned.effective(settings, environment);
         this.maintenance = maintenance;
         this.routing = routing;
     }
@@ -58,7 +61,7 @@ public class WalksAdminController {
 
     private WalkRuns.Overview overview() throws IOException {
         Map<String, TaskSchedule.TaskRun> runs = maintenance.taskRuns();
-        return WalkRuns.overview(key -> settings.getOrDefault(key, null), root, name -> lastRun(runs.get(name)),
+        return WalkRuns.overview(effective, root, name -> lastRun(runs.get(name)),
                 Instant.now());
     }
 

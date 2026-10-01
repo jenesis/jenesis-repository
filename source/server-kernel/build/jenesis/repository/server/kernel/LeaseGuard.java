@@ -73,7 +73,7 @@ public final class LeaseGuard implements AutoCloseable {
     private final ScheduledExecutorService renewer;
 
     LeaseGuard(ArtifactStore root, Duration ttl) {
-        this(root, ttl, node());
+        this(root, ttl, Lease.processHolder());
     }
 
     LeaseGuard(ArtifactStore root, Duration ttl, String holder) {
@@ -95,22 +95,6 @@ public final class LeaseGuard implements AutoCloseable {
             timer.setDaemon(true);
             return timer;
         });
-    }
-
-    /** This node's lease holder id - hostname plus a per-incarnation uuid, so a restarted node never mistakes a
-     *  previous incarnation's lease for its own. The hostname is the one the operating system was given, read from
-     *  {@code HOSTNAME} when the resolver cannot map it to an address: a container named by its deployment on a host
-     *  network has a name nothing resolves, and a fleet whose lease holders all read {@code node/...} would tell an
-     *  operator nothing about which node holds a pass. */
-    private static String node() {
-        String host;
-        try {
-            host = InetAddress.getLocalHost().getHostName();
-        } catch (UnknownHostException _) {
-            String named = System.getenv("HOSTNAME");
-            host = named == null || named.isBlank() ? "node" : named.strip();
-        }
-        return host + "/" + UUID.randomUUID();
     }
 
     /** The lease object one named pass locks on - {@code locks/<task-name>} at the deployment root. Stable across

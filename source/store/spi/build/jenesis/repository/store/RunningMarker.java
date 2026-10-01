@@ -9,7 +9,10 @@ import build.jenesis.repository.scope.Scopes;
  * down cleanly. A node that boots and finds its own marker already there did not shut down cleanly last time -
  * whatever it held in memory when it died (a deferred counter delta, a buffered derived write, an observer's work
  * after a commit) is gone, and that is exactly the case a walk of the store repairs; so the driver that finds the
- * marker {@linkplain Requests#request requests} one, and a healthy node that comes and goes cleanly never does.
+ * marker {@linkplain Requests#request requests} one, and a healthy node that comes and goes cleanly never does. The
+ * marker also names the lease holder the incarnation ran as ({@link Lease#processHolder}), and a boot that finds a
+ * dead incarnation's marker releases the leases it held, so the restarted node's passes run at once rather than one
+ * lease ttl later.
  */
 public final class RunningMarker {
 
@@ -21,21 +24,29 @@ public final class RunningMarker {
     /** Record that {@code nodeId} is running on {@code root}; {@code true} when it already was according to the
      *  store, which is to say the previous run of this node did not shut down cleanly. */
     public static boolean boot(ArtifactStore root, String nodeId) throws IOException {
-        return boot(root, nodeId, process());
+        return boot(root, nodeId, process(), Lease.processHolder());
     }
 
     /**
-     * {@link #boot(ArtifactStore, String)} on behalf of the named process. A marker names the process that wrote
+     * {@link #boot(ArtifactStore, String)} on behalf of the named process and lease holder. A marker names the process that wrote
      * it, and only a marker another process left behind is an unclean shutdown: a node that boots twice inside one
      * process - a test's second Spring context over the same store, a driver restarted in place - finds its own
      * marker standing, and that is the same process still running, not a crash. A crash that came back with the
      * same process id is told apart by the process's start instant, which the id alone would not.
      */
-    public static boolean boot(ArtifactStore root, String nodeId, String process) throws IOException {
+    public static boolean boot(ArtifactStore root, String nodeId, String process, String holder)
+            throws IOException {
         String key = key(nodeId);
         Optional<ArtifactStore.Versioned> standing = root.readVersioned(key);
-        boolean unclean = standing.isPresent() && !process.equals(processOf(standing.get()));
-        root.write(key, new ByteArrayInputStream((process + "\n" + Instant.now()).getBytes(StandardCharsets.UTF_8)));
+        boolean unclean = standing.isPresent() && !process.equals(line(standing.get(), 0));
+        if (unclean) {
+            String previous = line(standing.get(), 2);
+            if (!previous.isEmpty() && !previous.equals(holder)) {
+                Lease.releaseAll(root, previous, Instant.now());
+            }
+        }
+        root.write(key, new ByteArrayInputStream((process + "\n" + Instant.now() + "\n" + holder)
+                .getBytes(StandardCharsets.UTF_8)));
         return unclean;
     }
 
@@ -45,10 +56,10 @@ public final class RunningMarker {
         return current.pid() + "@" + current.info().startInstant().map(Instant::toString).orElse("unknown");
     }
 
-    private static String processOf(ArtifactStore.Versioned marker) {
-        String body = new String(marker.content(), StandardCharsets.UTF_8);
-        int end = body.indexOf('\n');
-        return end < 0 ? body.trim() : body.substring(0, end).trim();
+    /** Line {@code index} of a marker - the process, the instant, the lease holder - or empty when it has none. */
+    private static String line(ArtifactStore.Versioned marker, int index) {
+        List<String> lines = new String(marker.content(), StandardCharsets.UTF_8).lines().toList();
+        return index < lines.size() ? lines.get(index).trim() : "";
     }
 
     /** Whether {@code nodeId} is recorded as running. */

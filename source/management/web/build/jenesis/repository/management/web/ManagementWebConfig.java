@@ -91,8 +91,9 @@ public class ManagementWebConfig {
      */
     @Bean
     public WalksAdminController walksAdminController(ArtifactStore root, AuditTrail audit, Settings settings,
+                                                     PinnedSettings pinned, Environment environment,
                                                      MaintenanceScheduler maintenance,
                                                      RepositoryRouting routing) {
-        return new WalksAdminController(root, audit, settings, maintenance, routing);
+        return new WalksAdminController(root, audit, settings, pinned, environment, maintenance, routing);
     }
 }

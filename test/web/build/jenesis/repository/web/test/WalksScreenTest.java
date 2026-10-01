@@ -5,6 +5,7 @@ import module org.junit.jupiter.api;
 import build.jenesis.repository.audit.AuditActions;
 import build.jenesis.repository.management.web.WalksAdminController;
 import build.jenesis.repository.server.RepositoryProperties;
+import build.jenesis.repository.server.kernel.PinnedSettings;
 import build.jenesis.repository.server.kernel.Repositories;
 import build.jenesis.repository.server.kernel.Settings;
 import build.jenesis.repository.store.ArtifactStore;
@@ -13,6 +14,8 @@ import build.jenesis.repository.walk.task.WalkSchedules;
 import build.jenesis.repository.walk.web.WalksController;
 import build.jenesis.repository.servlet.testkit.Servlets;
 import build.jenesis.repository.web.testkit.Web;
+import org.springframework.core.env.MapPropertySource;
+import org.springframework.core.env.StandardEnvironment;
 import org.springframework.ui.ExtendedModelMap;
 import org.springframework.web.servlet.mvc.support.RedirectAttributesModelMap;
 
@@ -29,6 +32,8 @@ class WalksScreenTest {
     @TempDir
     Path root;
 
+    private ArtifactStore store;
+    private Repositories repositories;
     private Settings settings;
     private Web.Recording audit;
     private WalksController screen;
@@ -36,16 +41,32 @@ class WalksScreenTest {
 
     @BeforeEach
     void wire() throws IOException {
-        ArtifactStore store = Web.store(root);
-        Repositories repositories = Web.repositories(store);
+        store = Web.store(root);
+        repositories = Web.repositories(store);
+        StandardEnvironment environment = new StandardEnvironment();
         settings = new Settings(store);
         audit = Web.audit();
         // The operator scope a walk request is recorded in, named rather than inherited from the default tenant.
         RepositoryProperties properties = new RepositoryProperties();
         properties.setOperatorTenant("ops");
-        screen = new WalksController(settings, store, audit, Web.scheduler(repositories, store), properties);
-        api = new WalksAdminController(store, audit, settings, Web.scheduler(repositories, store),
+        screen = new WalksController(settings, new PinnedSettings(environment), environment, store, audit,
+                Web.scheduler(repositories, store), properties);
+        api = new WalksAdminController(store, audit, settings, new PinnedSettings(environment), environment,
+                Web.scheduler(repositories, store), Web.routing(repositories, "acme", "ops"));
+    }
+
+    @Test
+    void the_overview_is_the_schedule_the_node_runs_when_the_environment_sets_it() throws IOException {
+        // An operator's variable outranks the stored document and the default, so the scheduler runs it - and the
+        // overview, which an operator reads to learn when the next walk is, says the same.
+        StandardEnvironment environment = new StandardEnvironment();
+        environment.getPropertySources().addFirst(new MapPropertySource("operator", Map.of("jenrepo.walks",
+                "[{\"name\":\"rebuild\",\"cron\":\"*/2 * * * * *\",\"consumers\":[\"*\"]}]")));
+        WalksAdminController pinned = new WalksAdminController(store, audit, settings,
+                new PinnedSettings(environment), environment, Web.scheduler(repositories, store),
                 Web.routing(repositories, "acme", "ops"));
+
+        assertThat(pinned.walks().entries()).extracting(WalkRuns.Entry::cron).containsExactly("*/2 * * * * *");
     }
 
     @Test

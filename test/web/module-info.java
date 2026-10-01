@@ -47,6 +47,7 @@ open module build.jenesis.repository.web.test {
     requires build.jenesis.repository.ui;
     requires micrometer.observation;
     requires spring.context;
+    requires spring.core;
     requires spring.web;
     requires spring.webmvc;
     requires org.junit.jupiter;

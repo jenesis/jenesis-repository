@@ -40,6 +40,9 @@ public final class Lease {
         void run() throws IOException;
     }
 
+    /** This process's holder id - its host name and an id of its own, made once per process. */
+    private static final String PROCESS_HOLDER = host() + "/" + UUID.randomUUID();
+
     private final ArtifactStore store;
     private final String root;
     private final Duration ttl;
@@ -162,6 +165,41 @@ public final class Lease {
                     store.delete(key(name));
                 }
             }
+        }
+    }
+
+    /**
+     * The holder id this process takes leases under: the host name the operating system was given and an id made once
+     * per process, so a restarted node never mistakes a previous incarnation's lease for its own, and the running
+     * marker can name the incarnation whose leases a crash left standing ({@link RunningMarker#boot}). The host name
+     * is read from {@code HOSTNAME} when the resolver cannot map it to an address: a container named by its
+     * deployment on a host network has a name nothing resolves, and a fleet whose holders all read {@code node/...}
+     * would tell an operator nothing about which node holds a pass.
+     */
+    public static String processHolder() {
+        return PROCESS_HOLDER;
+    }
+
+    private static String host() {
+        try {
+            return InetAddress.getLocalHost().getHostName();
+        } catch (UnknownHostException _) {
+            String named = System.getenv("HOSTNAME");
+            return named == null || named.isBlank() ? "node" : named.strip();
+        }
+    }
+
+    /**
+     * Release every lease in the deployment's {@code locks} space that {@code holder} holds - what a node that
+     * finds its previous incarnation's running marker does, since that incarnation is gone and its passes would
+     * otherwise stand still until their leases lapse. A lease another holder has since taken is left alone, as
+     * {@link #release} leaves it.
+     */
+    public static void releaseAll(ArtifactStore root, String holder, Instant now) throws IOException {
+        Lease leases = new Lease(root, Duration.ZERO);
+        Names names = Names.over(root, leases.root);
+        for (String name = names.next(); name != null; name = names.next()) {
+            leases.release(name, holder, now);
         }
     }
 

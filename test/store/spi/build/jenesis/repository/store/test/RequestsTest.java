@@ -4,6 +4,7 @@ import module java.base;
 import module org.junit.jupiter.api;
 import build.jenesis.repository.store.ArtifactStore;
 import build.jenesis.repository.store.ArtifactStoreProvider;
+import build.jenesis.repository.store.Lease;
 import build.jenesis.repository.store.Requests;
 import build.jenesis.repository.store.RunningMarker;
 import org.junit.jupiter.api.io.TempDir;
@@ -64,7 +65,7 @@ class RequestsTest {
         assertThat(RunningMarker.boot(store, "node-a"))
                 .as("a boot over this process's own standing marker is the same process still running, not a crash")
                 .isFalse();
-        assertThat(RunningMarker.boot(store, "node-a", "4242@2026-09-06T00:00:00Z"))
+        assertThat(RunningMarker.boot(store, "node-a", "4242@2026-09-06T00:00:00Z", "old-host/1"))
                 .as("a boot over a marker another process left behind is an unclean one").isTrue();
         assertThat(RunningMarker.boot(store, "node-a"))
                 .as("and so is this process's boot over that other process's marker").isTrue();
@@ -73,6 +74,28 @@ class RequestsTest {
         assertThat(RunningMarker.boot(store, "node-a")).as("after a clean shutdown the next boot is clean").isFalse();
         assertThat(RunningMarker.boot(store, "host.example/with:odd chars")).as("an id is reduced to a key segment")
                 .isFalse();
+    }
+
+    @Test
+    void an_unclean_boot_releases_the_leases_its_dead_incarnation_held_and_no_others() throws IOException {
+        Instant now = Instant.now();
+        Lease leases = new Lease(store, Duration.ofMinutes(10));
+        RunningMarker.boot(store, "node-a", "4242@2026-09-06T00:00:00Z", "node-a-host/dead");
+        assertThat(leases.acquire("rebuild", "node-a-host/dead", now)).isTrue();
+        assertThat(leases.acquire("cleanup", "node-b-host/alive", now)).isTrue();
+
+        assertThat(RunningMarker.boot(store, "node-a", "4343@2026-09-06T01:00:00Z", "node-a-host/new"))
+                .as("the dead incarnation's marker is standing").isTrue();
+        assertThat(leases.holder("rebuild", Instant.now())).as("the dead incarnation's lease is handed back").isEmpty();
+        assertThat(leases.acquire("rebuild", "node-a-host/new", Instant.now()))
+                .as("so the restarted node takes the pass at once rather than a ttl later").isTrue();
+        assertThat(leases.holder("cleanup", Instant.now())).as("a live node's lease is left alone")
+                .contains("node-b-host/alive");
+
+        assertThat(RunningMarker.boot(store, "node-a", "4343@2026-09-06T01:00:00Z", "node-a-host/new"))
+                .as("a boot over this process's own marker is no crash").isFalse();
+        assertThat(leases.holder("rebuild", Instant.now())).as("and releases nothing")
+                .contains("node-a-host/new");
     }
 
     @Test
