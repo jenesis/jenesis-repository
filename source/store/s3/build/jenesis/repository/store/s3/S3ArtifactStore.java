@@ -19,15 +19,12 @@ import build.jenesis.repository.store.s3compatible.S3CompatibleArtifactStore;
 import build.jenesis.repository.store.OwnerOnly;
 
 /**
- * An {@link ArtifactStore} backed by an S3-compatible bucket (AWS S3, GCS via the XML API, MinIO,
- * LocalStack) on the AWS SDK v2. A blob is the object at its key; a tenant or repository is a key
- * prefix (see {@link #scope}). The version token is the object ETag, so {@link #writeVersioned} is a
- * true cross-node compare-and-set: {@code expected == null} maps to a conditional {@code If-None-Match: *}
- * put (write only if the key is still absent) and a non-null token to an {@code If-Match: <etag>} put
- * (write only if the stored object is unchanged); a {@code 412 Precondition Failed} (or the {@code 409}
- * a concurrent conditional write can raise) becomes a {@code false} return, so the caller re-reads and
- * retries. Concurrent {@code maven-metadata.xml} edits and lock acquisitions across many nodes therefore
- * resolve through S3 itself, with no database or lock service.
+ * An {@link ArtifactStore} over an S3-compatible bucket (AWS S3, GCS through the XML API, MinIO, LocalStack) on the AWS
+ * SDK v2. A blob is the object at its key; a tenant or repository is a key prefix ({@link #scope}). The version token
+ * is the ETag, so {@link #writeVersioned} is a cross-node compare-and-set: {@code expected == null} is a conditional
+ * {@code If-None-Match: *} put and a token an {@code If-Match: <etag>} put; a {@code 412}, or the {@code 409} a
+ * concurrent conditional write can raise, becomes {@code false}, so the caller re-reads and retries. Concurrent writers
+ * across nodes resolve through S3 itself.
  */
 public final class S3ArtifactStore extends S3CompatibleArtifactStore {
 
@@ -42,14 +39,13 @@ public final class S3ArtifactStore extends S3CompatibleArtifactStore {
         this(s3, null, bucket, "", null, true);
     }
 
-    /** As {@link #S3ArtifactStore(S3Client, String)} but with a {@link S3Presigner} - built by the provider from the
-     *  same region, credentials and endpoint as {@code s3} - so {@link #presign} can mint a direct-fetch GET URL. */
+    /** As {@link #S3ArtifactStore(S3Client, String)} with a {@link S3Presigner}, built from the client's region,
+     *  credentials and endpoint, so {@link #presign} can mint a direct-fetch GET URL. */
     public S3ArtifactStore(S3Client s3, S3Presigner presigner, String bucket) {
         this(s3, presigner, bucket, "", null, true);
     }
 
-    /** The provider's constructor, which is the only one that decides {@code streamingWrites}; the public ones
-     *  above take the default, since a caller building a store by hand is not the case the switch exists for. */
+    /** The provider's constructor, the only one deciding {@code streamingWrites}; the others take the default. */
     public S3ArtifactStore(S3Client s3, S3Presigner presigner, String bucket, String kmsKeyId,
                            boolean streamingWrites) {
         this(s3, presigner, bucket, "", kmsKeyId, streamingWrites);
@@ -76,7 +72,7 @@ public final class S3ArtifactStore extends S3CompatibleArtifactStore {
 
     @Override
     public Optional<URI> presign(String key, Duration ttl) {
-        // No presigner configured (the two-arg constructor, or a store built without one): degrade to streaming.
+        // No presigner: degrade to streaming.
         if (presigner == null) {
             return Optional.empty();
         }
@@ -90,13 +86,10 @@ public final class S3ArtifactStore extends S3CompatibleArtifactStore {
         }
     }
 
-    /**
-     * Applies the store's server-side encryption to an object write. Every {@code PutObject} the store issues -
-     * plain, content-addressed or conditional - is built through here, so an object is never written unencrypted:
-     * SSE-S3 ({@link ServerSideEncryption#AES256}) by default, or {@code aws:kms} with {@code kmsKeyId} when one is
-     * configured ({@code jenrepo.s3.sse-kms-key-id}). There is deliberately no way to switch encryption off
-     * - a blank or absent key simply falls back to the AES256 default rather than disabling it.
-     */
+    /** Applies server-side encryption to an object write; every {@code PutObject} the store issues is built through
+     *  here, so nothing is written unencrypted: SSE-S3 ({@link ServerSideEncryption#AES256}) by default, or
+     *  {@code aws:kms} with {@code kmsKeyId} ({@code jenrepo.s3.sse-kms-key-id}). There is no way to switch it off; a
+     *  blank key means AES256. */
     public static PutObjectRequest.Builder encrypt(PutObjectRequest.Builder builder, String kmsKeyId) {
         if (kmsKeyId != null && !kmsKeyId.isBlank()) {
             return builder.serverSideEncryption(ServerSideEncryption.AWS_KMS).ssekmsKeyId(kmsKeyId);
@@ -104,8 +97,9 @@ public final class S3ArtifactStore extends S3CompatibleArtifactStore {
         return builder.serverSideEncryption(ServerSideEncryption.AES256);
     }
 
-    /** The owner-only upload spool ({@link OwnerOnly}): the XML API's {@code PutObject} needs a content length up front (and a content-addressed write its SHA-256), so a PUT body is buffered here first, and a shared {@code /tmp} spool would
-     *  leave the plaintext artifact bytes world-readable for the life of the upload. */
+    /** The owner-only upload spool ({@link OwnerOnly}): {@code PutObject} needs the length up front (and a
+     *  content-addressed write its SHA-256), so a body is buffered here, never world-readable in a shared
+     *  {@code /tmp}. */
     private static Path spool() throws IOException {
         return OwnerOnly.createTempFile("s3-artifact-", null);
     }
@@ -113,14 +107,11 @@ public final class S3ArtifactStore extends S3CompatibleArtifactStore {
     @Override
     public void write(String key, InputStream in) throws IOException {
         ArtifactStore.key(key);
-        // S3 PutObject needs the content length up front, so buffer the (possibly large) body to an owner-only
-        // temp file rather than into memory, then upload from the file.
+        // PutObject needs the length up front, so the body is buffered to an owner-only file, not memory.
         Path temporary = spool();
         try {
-            // Write through the already-0600 spool with a TRUNCATE_EXISTING open, NOT Files.copy(REPLACE_EXISTING):
-            // the latter deletes the target and recreates it CREATE_NEW under the process umask (typically world-
-            // readable 0644), silently undoing spool()'s owner-only attribute for the life of the upload. Opening the
-            // existing file WRITE+TRUNCATE_EXISTING preserves its 0600 permissions (writeBlob already does this).
+            // Written through the 0600 spool with WRITE+TRUNCATE_EXISTING, not Files.copy(REPLACE_EXISTING), which
+            // would recreate the file under the umask and undo its owner-only permission.
             try (OutputStream out = Files.newOutputStream(temporary,
                     StandardOpenOption.WRITE, StandardOpenOption.TRUNCATE_EXISTING)) {
                 in.transferTo(out);
@@ -135,9 +126,8 @@ public final class S3ArtifactStore extends S3CompatibleArtifactStore {
 
     @Override
     public String writeBlob(InputStream in) throws IOException {
-        // S3 PutObject needs the content length and the key up front, but a content-addressed key is the hash of
-        // the very bytes being written; buffer the (possibly large) body to a temp file while digesting it, then
-        // upload from the file under blobs/<hash> - never holding the whole artifact in memory.
+        // PutObject needs the length and key up front, but a content-addressed key is the hash of the bytes, so the
+        // body is spooled while digested and uploaded from the file under blobs/<hash>.
         Path temporary = spool();
         try {
             MessageDigest digest = MessageDigest.getInstance("SHA-256");
@@ -160,7 +150,7 @@ public final class S3ArtifactStore extends S3CompatibleArtifactStore {
 
     @Override
     public Optional<Object> version(String key) throws IOException {
-        // A metadata request, where the inherited default would download the object to read its ETag.
+        // A metadata request rather than the inherited download.
         try {
             return Optional.of(s3.headObject(b -> b.bucket(bucket).key(keyPrefix + key)).eTag());
         } catch (NoSuchKeyException _) {
@@ -169,7 +159,7 @@ public final class S3ArtifactStore extends S3CompatibleArtifactStore {
             if (e.statusCode() == 404) {
                 return Optional.empty();
             }
-            // Only a 404 is absence. A throttle or an auth failure must surface, not read as "unchanged".
+            // Only a 404 is absence; a throttle or auth failure surfaces rather than reading as "unchanged".
             throw new IOException("Could not read the version of " + key, e);
         }
     }
@@ -186,22 +176,16 @@ public final class S3ArtifactStore extends S3CompatibleArtifactStore {
         }
     }
 
-        /**
-     * The streaming compare-and-set: the same {@code If-Match} / {@code If-None-Match} precondition, with the body
-     * as a stream of known length rather than an array. S3 needs the length to start the upload, which is why the
-     * caller supplies one.
-     */
+        /** The streaming compare-and-set: the same {@code If-Match} / {@code If-None-Match} precondition over a stream
+         *  of known length, which S3 needs to start the upload. */
     @Override
     public boolean writeVersioned(String key, InputStream content, long length, Object expected) throws IOException {
         if (!streamingWrites) {
             return put(key, RequestBody.fromBytes(content.readAllBytes()), expected);
         }
-        // Spooled to an owner-only file first, as write(..) is, never handed to the SDK as the stream it came as: the
-        // SDK retries a PutObject the service refused with a retryable status - a 503 under load, a dropped
-        // connection - by reading the body again, and a plain stream has nothing left to give: a retried PUT fails
-        // with "Content input stream does not support mark/reset, and was already read once" and the publish answers
-        // 500. The file gives every
-        // attempt the whole body and the heap holds none of it, which is what the streaming clause is for.
+        // Spooled to an owner-only file first, as write(..) is: the SDK retries a PutObject refused with a retryable
+        // status (a 503, a dropped connection) by re-reading the body, which a plain stream cannot give. The file gives
+        // every attempt the whole body and the heap none of it.
         Path temporary = spool();
         try {
             try (OutputStream out = Files.newOutputStream(temporary,
@@ -219,7 +203,7 @@ public final class S3ArtifactStore extends S3CompatibleArtifactStore {
         return put(key, RequestBody.fromBytes(content), expected);
     }
 
-    /** Both conditional writes, which differ only in how the body is carried. */
+    /** Both conditional writes, differing only in how the body is carried. */
     private boolean put(String key, RequestBody body, Object expected) throws IOException {
         ArtifactStore.key(key);
         try {
@@ -230,10 +214,9 @@ public final class S3ArtifactStore extends S3CompatibleArtifactStore {
             }
             return true;
         } catch (S3Exception e) {
-            // A bucket-level 404 (NoSuchBucket) is a misconfiguration or outage, not a CAS conflict: mapping it to a
-            // false return would turn a missing/renamed bucket into silent retry-exhaustion at the caller. Surface it
-            // as a real IOException. Only a key-level 404 (the object an If-Match refers to has been deleted) is the
-            // benign conflict a re-read-and-retry resolves, alongside the 412/409 precondition rejections.
+            // A NoSuchBucket is a misconfiguration or outage, not a CAS conflict: as false it would become silent retry
+            // exhaustion. Only a key-level 404 (the If-Match target deleted), a 412 or a 409 is a conflict a retry
+            // resolves.
             if (e.awsErrorDetails() != null && "NoSuchBucket".equals(e.awsErrorDetails().errorCode())) {
                 throw new IOException("Could not write " + key + ": bucket " + bucket + " does not exist", e);
             }

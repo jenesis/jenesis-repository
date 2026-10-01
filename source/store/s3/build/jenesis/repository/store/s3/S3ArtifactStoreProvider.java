@@ -20,52 +20,42 @@ import software.amazon.awssdk.services.s3.model.S3Exception;
 import software.amazon.awssdk.services.s3.presigner.S3Presigner;
 
 /**
- * The {@code s3} artifact-store backend over any S3-compatible bucket (AWS S3, GCS via the XML API,
- * MinIO, LocalStack). Selected with {@code jenrepo.store=s3}; configured by
- * {@code jenrepo.s3.bucket} (required), {@code jenrepo.s3.region} (default {@code us-east-1}) and
- * an optional {@code jenrepo.s3.endpoint} (an S3-compatible endpoint, enabling path-style access; required
- * to be {@code https} unless {@code jenrepo.s3.allow-insecure-endpoint=true} explicitly permits a plaintext
- * one). Credentials come from the standard AWS chain (environment, profile or instance role) unless
- * {@code jenrepo.s3.access-key-id} and {@code jenrepo.s3.secret-access-key} are both supplied through
- * the config lookup, in which case those static keys are used - the path a self-hosted S3-compatible store (MinIO,
- * Ceph) takes, and the seam that lets a test drive {@code create()} end to end against a container through an injected
- * config lookup, without touching the process environment. Every object is written server-side encrypted: SSE-S3
- * (AES256) by default, or {@code aws:kms} when an optional {@code jenrepo.s3.sse-kms-key-id} names a key -
- * encryption cannot be turned off. The blob I/O and the conditional compare-and-set semantics live in {@link
- * S3ArtifactStore}.
+ * The {@code s3} artifact-store backend over any S3-compatible bucket (AWS S3, GCS through the XML API, MinIO,
+ * LocalStack), selected with {@code jenrepo.store=s3} and configured by {@code jenrepo.s3.bucket} (required),
+ * {@code jenrepo.s3.region} (default {@code us-east-1}) and an optional {@code jenrepo.s3.endpoint} (enabling
+ * path-style access; {@code https} unless {@code jenrepo.s3.allow-insecure-endpoint=true}). Credentials come from the
+ * standard AWS chain unless {@code jenrepo.s3.access-key-id} and {@code jenrepo.s3.secret-access-key} are both supplied
+ * through the config lookup - the path a self-hosted store (MinIO, Ceph) takes, and how a test drives {@code create()}
+ * without touching the environment. Every object is encrypted server-side: SSE-S3 by default, {@code aws:kms} when
+ * {@code jenrepo.s3.sse-kms-key-id} names a key; encryption cannot be turned off. Blob I/O and compare-and-set are
+ * {@link S3ArtifactStore}'s.
  */
 public final class S3ArtifactStoreProvider implements ArtifactStoreProvider {
 
-    /** The one setting with no ambient fallback, so it is the one this backend declares as required config.
-     *  Composed through {@link Features#key} rather than written out, so the namespace has a single definition. */
+    /** The one setting with no ambient fallback, so the one declared required; composed through
+     *  {@link Features#key}. */
     public static final String BUCKET_KEY = Features.key("s3.bucket");
 
-    /** The config key an {@code s3} endpoint override is read from - named here so the screen's refusal and the
-     *  resolution that applies it cannot drift into naming different keys. */
+    /** The config key an {@code s3} endpoint override is read from, named once for the screen and the resolution. */
     public static final String ENDPOINT_KEY = Features.key("s3.endpoint");
 
     /** The config key that opts {@link #ENDPOINT_KEY} out of the https-only transport screen. */
     public static final String ALLOW_INSECURE_KEY = Features.key("s3.allow-insecure-endpoint");
 
-    /** The config key that switches the boot-time conditional-write probe off ({@code false}); on by default.
-     *  The probe refuses to start a node over an endpoint that ignores a write precondition, which is how two
-     *  nodes would lose each other's writes silently; switching it off is for an endpoint a deployment has
-     *  satisfied itself about by other means, and the node then warns on every start. */
+    /** The config key that switches off the boot-time conditional-write probe ({@code false}); on by default. The probe
+     *  refuses to start over an endpoint that ignores a write precondition, under which two nodes would silently lose
+     *  each other's writes; off, the node warns on every start. */
     public static final String PROBE_KEY = Features.key("s3.conditional-write-probe");
 
 
     /**
-     * Whether a conditional write may stream its body ({@code true} by default).
+     * Whether a conditional write may stream its body ({@code true} by default). Some listings written under
+     * compare-and-set are proportional to the repository - a catalogue, a Simple index, a folder page - and buffering
+     * puts such a document whole in memory on the write path. Turn it off only to work around a storage implementation,
+     * expecting the memory ceiling to fall with it.
      *
-     * <p><b>Setting this to {@code false} restores a heap cost, and that is the whole of what it does.</b> A
-     * listing is one object written under compare-and-set, and some listings are proportional to the repository -
-     * a catalogue, a Simple index, a folder page. Streaming the write is what keeps such a document out of memory;
-     * buffering puts it back, whole, on the path that writes it. Turn this off to work around a storage
-     * implementation, never to change anything else, and expect the repository's memory ceiling to fall with it.
-     *
-     * <p>It exists because "S3-compatible" is a spectrum. AWS, MinIO and Azurite are all proven against the store
-     * contract's streamed compare-and-set, but Ceph, Wasabi and older MinIO builds implement the conditional
-     * headers to varying degrees, and an operator meeting one of those needs a way past it that is not a fork.
+     * <p>"S3-compatible" is a spectrum: AWS, MinIO and Azurite pass the store contract's streamed compare-and-set,
+     * while Ceph, Wasabi and older MinIO builds implement the conditional headers to varying degrees.
      */
     public static final String STREAMING_WRITES_KEY = Features.key("s3.streaming-writes");
 
@@ -83,8 +73,7 @@ public final class S3ArtifactStoreProvider implements ArtifactStoreProvider {
 
     @Override
     public Set<String> requiredConfig() {
-        // The credentials may come from the ambient AWS chain (environment, profile, instance role), so only the
-        // bucket is required configuration.
+        // The credentials may be ambient, so only the bucket is required.
         return Set.of(BUCKET_KEY);
     }
 
@@ -99,8 +88,8 @@ public final class S3ArtifactStoreProvider implements ArtifactStoreProvider {
                 .region(Region.of(region))
                 .httpClient(new AwsHttpClient())
                 .credentialsProvider(credentials(config));
-        // The presigner mints direct-fetch GET URLs (ArtifactStore.presign); it must sign against the same region,
-        // credentials and endpoint/path-style as the client, or a presigned URL would point at the wrong host.
+        // The presigner signs against the client's region, credentials and endpoint/path style, or its URLs would point
+        // at the wrong host.
         S3Presigner.Builder presignerBuilder = S3Presigner.builder()
                 .region(Region.of(region))
                 .credentialsProvider(credentials(config));
@@ -116,17 +105,15 @@ public final class S3ArtifactStoreProvider implements ArtifactStoreProvider {
         try {
             s3.createBucket(b -> b.bucket(bucket));
         } catch (S3Exception ignored) {
-            // The bucket may already exist or the credentials may not permit creation; the operations
-            // below surface a clear error if the bucket is truly unusable.
+            // The bucket may exist or creation may not be permitted; the operations below report a truly unusable one.
         }
-        // Server-side encryption is always on: SSE-S3 (AES256) by default, upgraded to aws:kms with the operator's
-        // key when s3.sse-kms-key-id is supplied. There is no key that turns encryption off. The presigner
-        // rides alongside so this store can also mint direct-fetch GET URLs.
+        // Encryption is always on: SSE-S3 by default, aws:kms with the operator's key when s3.sse-kms-key-id is
+        // supplied.
         String kmsKeyId = config.apply(Features.key("s3.sse-kms-key-id"));
         S3ArtifactStore store = new S3ArtifactStore(s3, presigner, bucket, kmsKeyId,
                 !"false".equalsIgnoreCase(config.apply(STREAMING_WRITES_KEY)));
-        // Every compare-and-set below rests on the endpoint refusing a write whose precondition fails, and not every
-        // S3-compatible endpoint does; the one boot-time question that settles it, answered by refusing to start.
+        // Every compare-and-set rests on the endpoint refusing a write whose precondition fails, which not every
+        // S3-compatible endpoint does: asked once at boot, answered by refusing to start.
         try {
             ConditionalWrites.probe(store, endpoint == null || endpoint.isBlank() ? "the S3 endpoint for bucket " + bucket
                     : "the S3-compatible endpoint " + endpoint, config.apply(PROBE_KEY));
@@ -137,25 +124,16 @@ public final class S3ArtifactStoreProvider implements ArtifactStoreProvider {
         return store;
     }
 
-    /**
-     * The endpoint override, required to be {@code https} by default so credentials and artifact bytes are not sent
-     * over a plaintext transport a MITM can read or tamper with. A plaintext {@code http} endpoint - a local MinIO or
-     * LocalStack container, say - is an explicit opt-out: set
-     * {@code jenrepo.s3.allow-insecure-endpoint=true}.
-     *
-     * <p>The rule itself is {@link Endpoints#secure}, shared with the {@code gcs} and {@code azure-blob} backends;
-     * what is this backend's own is the pair of config keys it names, and this method is where they are
-     * bound to the screen.
-     */
+    /** The endpoint override, {@code https} unless {@code jenrepo.s3.allow-insecure-endpoint=true} (a local MinIO or
+     *  LocalStack, say), so credentials and artifact bytes never cross a plaintext transport. The rule is
+     *  {@link Endpoints#secure}, shared with {@code gcs} and {@code azure-blob}; this binds this backend's keys to
+     *  it. */
     public static URI secureEndpoint(String endpoint, String allowInsecure) {
         return Endpoints.secure(ENDPOINT_KEY, endpoint, ALLOW_INSECURE_KEY, allowInsecure);
     }
 
-    /**
-     * Static keys when both {@code jenrepo.s3.access-key-id} and
-     * {@code jenrepo.s3.secret-access-key} are present in the config lookup, otherwise the standard AWS chain
-     * (environment, profile, instance role).
-     */
+    /** Static keys when both {@code jenrepo.s3.access-key-id} and {@code jenrepo.s3.secret-access-key} are in the
+     *  config lookup, otherwise the standard AWS chain (environment, profile, instance role). */
     private static AwsCredentialsProvider credentials(UnaryOperator<String> config) {
         String accessKey = config.apply(Features.key("s3.access-key-id"));
         String secretKey = config.apply(Features.key("s3.secret-access-key"));

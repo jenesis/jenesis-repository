@@ -1,17 +1,11 @@
 /**
- * The S3-compatible artifact-store backend (AWS S3, GCS via the XML API, MinIO, LocalStack). A pure
- * storage provider: it implements the {@code ArtifactStore} SPI and is discovered through {@code provides},
- * so the server adds it to its module graph at deploy time and selects it with
- * {@code jenrepo.store=s3}, with no compile-time dependency from the server. The version token
- * is the object ETag, giving a true cross-node compare-and-set on conditional writes (see
- * {@code S3ArtifactStore}). The rest of the AWS SDK closure resolves transitively through Maven (no
- * exclusions are possible under the module resolver, so the full closure is pulled and pinned here).
+ * The S3-compatible artifact-store backend (AWS S3, GCS through the XML API, MinIO, LocalStack), discovered through
+ * {@code provides} and selected with {@code jenrepo.store=s3}. The version token is the ETag, a cross-node
+ * compare-and-set ({@code S3ArtifactStore}). The AWS SDK closure is pinned.
  *
- * <p>Netty 4.2 split {@code netty-codec} into codecs whose descriptors require their optional peers without
- * {@code static} - {@code netty-codec-marshalling} wants {@code org.jboss.marshalling}, {@code netty-codec-protobuf}
- * wants {@code protobuf.javanano} - so a module-path boot layer carrying them fails on the missing module. The S3 SDK
- * pulls netty for its async client,
- * which this store never uses; the exclusion below drops the two codecs from what it brings in.
+ * <p>Netty 4.2's {@code netty-codec-marshalling} and {@code netty-codec-protobuf} require their optional peers
+ * ({@code org.jboss.marshalling}, {@code protobuf.javanano}) without {@code static}, failing a boot layer that carries
+ * them; the SDK pulls Netty for an async client this store never uses, so the two codecs are excluded.
  *
  * @jenesis.release 25
  * @jenesis.exclude software.amazon.awssdk.services.s3 io.netty/netty-codec-marshalling io.netty/netty-codec-protobuf
