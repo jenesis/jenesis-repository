@@ -9,23 +9,18 @@ import build.jenesis.repository.metadata.Signal;
 import build.jenesis.repository.metadata.State;
 
 /**
- * The {@code health} section codec of the consolidated per-<em>coordinate</em> metadata document: the
- * maintainer-health a source scored for a coordinate's project - version-independent, so it lives in the
- * {@code @coordinate} document rather than a version document - consolidated out of the separate {@code health/}
- * sidecar this section replaces. The payload is exactly the fields the sidecar carried
- * ({@code {"sourceRepository"?:.., "overall":.., "maintenance":.., "review":.., "provenance":..}}); the instant the
- * health was scored rides the envelope's {@code updated} field, the same freshness instant that gates the merge.
+ * The {@code health} section codec of the per-coordinate metadata document: the maintainer health a source scored for a
+ * coordinate's project - version-independent, so it lives in the {@code @coordinate} document. The payload is
+ * {@code {"sourceRepository"?:.., "overall":.., "maintenance":.., "review":.., "provenance":..}}; the instant it was
+ * scored rides the envelope's {@code updated}.
  *
- * <p><strong>The monotonic guard is the section's merge semantics.</strong> A record already carrying a
- * {@code scannedAt} (its {@code updated}) newer than or equal to an incoming write is left standing - a stale refresh
- * (a slow sweep finishing after a fresh rescan) never rolls a coordinate's health backwards - preserving the
- * {@code StoreHealthLedger} guard exactly, as the section owner's own merge inside the shared section-scoped
- * compare-and-set. Idempotent and re-derivable each CAS attempt, as {@link SectionMutation} requires. All methods are
- * pure and never touch their argument.
+ * <p><strong>The monotonic guard is the section's merge.</strong> A stored record scored at or after an incoming write
+ * stands, so a stale refresh (a slow sweep finishing after a rescan) never rolls health backwards. Re-derivable on
+ * every CAS attempt, as {@link SectionMutation} requires; all methods are pure.
  */
 public final class HealthSection {
 
-    /** The section tag - the short built-in name the maintainer-health subsystem owns in the coordinate document. */
+    /** The section tag the maintainer-health subsystem owns in the coordinate document. */
     public static final String TAG = "health";
 
     /** The contributor-owned section schema version. */
@@ -42,8 +37,8 @@ public final class HealthSection {
     private HealthSection() {
     }
 
-    /** A coordinate's scored health located in a health section - the record and the instant it was scored (the
-     *  section's {@code updated}) - or empty when the section is absent or does not carry a health payload. */
+    /** A coordinate's scored health and the instant it was scored (the section's {@code updated}), or empty when the
+     *  section is absent or carries no health payload. */
     public static Optional<Stored> stored(Optional<Section> section) {
         if (section.isEmpty() || section.get().state() != State.DERIVED) {
             return Optional.empty();
@@ -61,12 +56,9 @@ public final class HealthSection {
         });
     }
 
-    /**
-     * Upsert a coordinate's health under the monotonic-{@code scannedAt} guard: keep the current section when its
-     * scored instant is at least as fresh as this write (a stale refresh must not roll the health backwards), else
-     * write the new record stamped at {@code scannedAt}. Last-writer-wins by the scored instant, not by who reaches
-     * the store last - the guard {@code StoreHealthLedger.record} enforced, now as section merge.
-     */
+    /** Upsert a coordinate's health under the monotonic {@code scannedAt} guard: keep the current section when it is at
+     *  least as fresh, else write the new record. Last-writer-wins by scored instant, not by who reaches the store
+     *  last. */
     public static SectionMutation record(Health health, Instant scannedAt) {
         return current -> {
             Optional<Stored> existing = stored(current);

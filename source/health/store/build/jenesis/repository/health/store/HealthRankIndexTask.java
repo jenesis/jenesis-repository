@@ -7,31 +7,19 @@ import build.jenesis.repository.maintenance.MaintenanceTask;
 import build.jenesis.repository.maintenance.RepositoryContext;
 
 /**
- * The scheduled maintainer-health rank-index pass: it keeps each repository's durable weakest-first health index current
- * with the records the {@link HealthScanTask health sweep} (and an explicit rescan) persist, so the console panel serves
- * a bounded, ordered page rather than buffering and sorting every scored coordinate in heap on each render. It is the
- * index sibling of the search and dependents index passes - a derived view rebuilt from durable truth on the maintenance
- * cadence, off the request path.
+ * The scheduled maintainer-health rank-index pass: it keeps each repository's weakest-first index current with the
+ * records the {@link HealthScanTask health sweep} and explicit rescans persist - a derived view rebuilt from durable
+ * state off the request path.
  *
- * <p>Cheap in the steady state: the rebuild is a no-op whenever the records have not moved since the last build (it
- * compares the freshness stamp the index carries against the live one), so a pass that finds nothing changed writes
- * nothing. When they have moved, the records are streamed - never buffered whole - into a fresh index generation and
- * published with one atomic marker flip; a failed rebuild <em>throws</em>, so the scheduler logs it, counts it on
- * {@code jenrepo.maintenance.failures} and reports the pass FAILED ({@link MaintenanceTask} clause 4). That
- * is a visibility decision, not a serving one: a rebuild that failed never reached the marker flip, so the previous
- * generation still stands and the panel keeps paging it (or, before the first successful build, reports that no ranking
- * exists yet - never a ranking derived on the request thread) - always correct, never stale. The read path degrading
- * gracefully is exactly why the failure has to be counted: an index that has not rebuilt for a week is otherwise
- * indistinguishable from a healthy one, and a repository whose FIRST build keeps failing shows an operator a panel
- * that says "not yet ranked" indefinitely, which only this counter explains. With no health-ledger module installed there is nothing
- * to index and the pass is a no-op.
+ * <p>The rebuild is a no-op when the stamp has not moved. Otherwise the records stream into a fresh generation
+ * published by one marker flip; a failed rebuild throws, so the scheduler logs and counts it and reports the pass
+ * FAILED ({@link MaintenanceTask} clause 4). The previous generation keeps serving - or, before the first build, the
+ * panel says "not yet ranked" - so the counted failure is what tells an index that has not rebuilt for a week from a
+ * healthy one. Without a health-ledger module the pass is a no-op.
  *
- * <p><strong>Exclusive.</strong> The rebuild mutates shared durable state - it reclaims a superseded generation and
- * flips the marker with a plain write, neither guarded by a compare-and-set - so it must be the <em>single writer</em>
- * across the fleet (the {@link MaintenanceTask.Exclusion#LEASE lease-owned} contract for a durable-state mutator): two
- * concurrent rebuilds could otherwise target the same generation and interleave their writes, or one reclaim the
- * generation the other just published while a reader pages it. The scheduler serialises exclusive passes through a
- * single-writer lease, so exactly one node rebuilds at a time.
+ * <p><strong>Exclusive</strong> ({@link MaintenanceTask.Exclusion#LEASE}): the rebuild reclaims a generation and flips
+ * the marker with plain writes, so two concurrent rebuilds could interleave on one generation or reclaim the one the
+ * other just published.
  */
 public final class HealthRankIndexTask implements MaintenanceTask {
 
@@ -42,8 +30,8 @@ public final class HealthRankIndexTask implements MaintenanceTask {
         this(interval, HealthLedgerProvider.installed());
     }
 
-    /** Embedding/test seam: bind an explicit health-ledger provider (empty to disable indexing) rather than discovering
-     *  one through {@link HealthLedgerProvider#installed()}. */
+    /** Bind an explicit health-ledger provider (empty disables indexing) rather than discovering one through
+     *  {@link HealthLedgerProvider#installed()}. */
     public HealthRankIndexTask(Duration interval, Optional<HealthLedgerProvider> ledgerProvider) {
         this.interval = interval;
         this.ledgerProvider = ledgerProvider;
@@ -61,14 +49,12 @@ public final class HealthRankIndexTask implements MaintenanceTask {
 
     @Override
     public Exclusion exclusion() {
-        // A durable-state mutator (reclaims a generation, flips the marker with a plain write) must be the fleet's
-        // single writer, so two rebuilds never target the same generation or one reclaim the other's live generation.
+        // Plain writes on shared state: the fleet's single writer.
         return Exclusion.LEASE;
     }
 
-    /** Rebuild this repository's health rank index. A failure propagates: the scheduler logs it, counts it and reports
-     *  the pass FAILED (clause 4), while the un-flipped marker leaves the previous generation serving - a failed rebuild
-     *  is a visible <em>write</em> failure, never a read outage. */
+    /** Rebuild this repository's health rank index. A failure propagates and the pass reports FAILED (clause 4), while
+     *  the unflipped marker leaves the previous generation serving. */
     @Override
     public void repository(RepositoryContext context) throws IOException {
         Optional<HealthLedger> ledger = ledgerProvider.map(provider -> provider.over(context.store()));

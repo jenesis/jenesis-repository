@@ -5,8 +5,8 @@ import build.jenesis.repository.health.HealthLedgerProvider;
 import build.jenesis.repository.store.ArtifactStore;
 
 /**
- * Discovers the store-backed health ledger: stateless, binding the per-request scoped store on each call, so one
- * instance serves every tenant and repository.
+ * Discovers the store-backed health ledger: stateless, binding the scoped store per call, so one instance serves every
+ * tenant and repository.
  */
 public final class StoreHealthLedgerProvider implements HealthLedgerProvider {
 

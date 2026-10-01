@@ -8,33 +8,28 @@ import build.jenesis.repository.health.HealthLedger;
 import build.jenesis.repository.store.ArtifactStore;
 
 /**
- * A durable weakest-first rank index over one repository's stored maintainer-health, so the console panel serves a
- * bounded, ordered page rather than buffering every scored coordinate and sorting the whole set in heap on each render.
+ * A durable weakest-first rank index over one repository's stored maintainer health, so the console panel serves a
+ * bounded, ordered page instead of sorting every scored coordinate in heap per render.
  *
- * <p><strong>Shape.</strong> Each scored coordinate is one flat child of a generation directory,
- * {@code healthrank/g<gen>/<pad>-<sha>}, where {@code pad} is the coordinate's overall score scaled to
- * {@code [00000..10000]} (worst first, so lexicographic order over the flat child set <em>is</em> ascending-overall
- * order) and {@code sha} is a content hash of {@code ecosystem\0coordinate} - a stable, unique tie-break within an
- * equal-score band. The child's body is the whole record, so a page read reconstructs each {@link HealthLedger.Located}
- * from the body without decoding the key. A page is {@link ArtifactStore#page a single ordered, seekable, bounded read}
- * of that flat child set - never a whole-tree list, never an in-heap sort.
+ * <p><strong>Shape.</strong> Each scored coordinate is one flat child {@code healthrank/g<gen>/<pad>-<sha>}, where
+ * {@code pad} is the overall score scaled to {@code [00000..10000]} (so lexicographic order is ascending-overall) and
+ * {@code sha} is a hash of {@code ecosystem\0coordinate}, a stable tie-break within a score band. The body is the whole
+ * record, so a page reconstructs each {@link HealthLedger.Located} without decoding keys, in one
+ * {@link ArtifactStore#page ordered, seekable, bounded read}.
  *
- * <p><strong>Generations.</strong> The whole generation lifecycle - the fresh generation, the atomic flip, the reclaim
- * of the superseded one and of a crashed orphan - is {@link GenerationIndex}, shared with the findings-filter and
- * vulnerability-rank indexes; this class is the health bucket: the row body, the weakest-first key and the read.
+ * <p><strong>Generations</strong> are {@link GenerationIndex}'s, shared with the findings-filter and vulnerability-rank
+ * indexes; this class is the row body, the key and the read.
  *
- * <p><strong>Freshness.</strong> The marker records the {@link build.jenesis.repository.health.HealthLedger#scanned health stamp} the records
- * carried when it was built. The stamp drives the <em>rebuild</em> decision only - a rebuild whose stamp already matches
- * the marker is a no-op, so a pass rebuilds exactly when the records moved (and never skips one while they have, so it
- * re-derives from truth and cannot miss a change). The <em>read</em> is eventually consistent - it serves the last built
- * generation regardless of the stamp - so a request never pays an in-heap sort once an index stands. The page carries
- * the index's own build-time freshness (its build stamp), so a surface renders the ranking's honest as-of instant and
- * never shows it fresher than it is. Before the first generation is committed there is nothing to serve and the read
- * says exactly that ({@link HealthLedger.Ranking.NotBuilt}) rather than recomputing a ranking on the request thread.
+ * <p><strong>Freshness.</strong> The marker records the
+ * {@link build.jenesis.repository.health.HealthLedger#scanned health stamp} the records carried when built; a rebuild
+ * whose stamp matches is a no-op, so a pass rebuilds exactly when the records moved. The read serves the last built
+ * generation whatever the stamp, carrying that generation's own build-time freshness so it is never shown fresher than
+ * it is. Before the first generation there is nothing to serve, and the read says so
+ * ({@link HealthLedger.Ranking.NotBuilt}) rather than ranking on the request thread.
  */
 final class HealthRankIndex {
 
-    /** The repository-scope key root the rank index owns - declared in the storage manifest by the persistence module. */
+    /** The repository-scope key root the rank index owns. */
     static final String PREFIX = "healthrank";
 
     private static final JsonMapper JSON = JsonMapper.builder().build();
@@ -50,14 +45,13 @@ final class HealthRankIndex {
     }
 
     /**
-     * Rebuild the index from the ledger's current records if they have moved since the last build, else do nothing. The
-     * records are streamed (never buffered whole) into a fresh generation the {@link GenerationIndex} then flips to.
+     * Rebuild the index if the records have moved since the last build, else do nothing. The records stream into a
+     * fresh generation that {@link GenerationIndex} then flips to.
      *
-     * @param ledger       the records to index, streamed through {@link HealthLedger#all(HealthLedger.LedgerVisitor)}
-     * @param currentStamp the composite build stamp - the live scan freshness ({@code ""} when never scanned) followed
-     *                     by the {@link HealthLedger#evictions eviction epoch}, so an eviction that did not move the
-     *                     scan stamp still moves this composite and so triggers a rebuild; its leading token is the scan
-     *                     freshness a read surfaces, the trailing epoch never leaking into what a surface renders
+     * @param ledger the records to index, streamed through {@link HealthLedger#all(HealthLedger.LedgerVisitor)}
+     * @param currentStamp the composite build stamp - the scan freshness ({@code ""} when never scanned) followed by
+     *     the {@link HealthLedger#evictions eviction epoch}, so an eviction alone triggers a rebuild; only the leading
+     *     token is ever surfaced
      */
     void rebuild(HealthLedger ledger, String currentStamp) throws IOException {
         index.rebuild(currentStamp, generationPrefix -> {
@@ -71,17 +65,13 @@ final class HealthRankIndex {
     }
 
     /**
-     * One weakest-first page of the built index, or {@link Optional#empty()} when <em>no generation has ever been
-     * committed</em> - the caller then answers {@link HealthLedger.Ranking.NotBuilt}, because there is no ranking to
-     * page and no honest way to invent one on the request thread. Built-ness is the marker's presence and nothing else:
-     * an empty ranking and an unbuilt one are different facts, and the records cannot separate them.
+     * One weakest-first page of the built index, or {@link Optional#empty()} when no generation has been committed -
+     * the caller then answers {@link HealthLedger.Ranking.NotBuilt}. Built-ness is the marker's presence: an empty
+     * ranking and an unbuilt one are different facts.
      *
-     * <p>The read is <strong>eventually consistent</strong>: it serves the last built generation whenever one stands
-     * and does <em>not</em> fall back on a moved freshness stamp, so a request never pays an in-heap sort once an index
-     * stands. The page carries the index's own build-time freshness
-     * ({@link HealthLedger.Ranking#scannedAt()}), the honest as-of instant a surface renders rather than the live scan
-     * stamp the records may have moved past. It is a single ordered, seekable, bounded read of the live generation's
-     * flat child set followed by a bounded body read per row; no whole-tree list and no in-heap sort.
+     * <p>Eventually consistent: it serves the last built generation and never falls back on a moved stamp. The page
+     * carries the index's build-time freshness ({@link HealthLedger.Ranking#scannedAt()}). One ordered, bounded read of
+     * the flat child set, then one body read per row.
      */
     Optional<HealthLedger.Ranking.Ranked> read(String cursor, int limit) throws IOException {
         Optional<GenerationIndex.Marker> marker = index.marker();
@@ -100,19 +90,15 @@ final class HealthRankIndex {
         for (String name : names) {
             located(generationPrefix + "/" + name).ifPresent(entries::add);
         }
-        // A short page is the last page (the ordered child set is exhausted); a full page resumes strictly after its
-        // last child's name, the same seek-resume cursor the shared artifact walk uses.
+        // A short page is the last; a full page resumes strictly after its last child's name.
         String nextCursor = names.size() < limit ? null : names.getLast();
         return Optional.of(new HealthLedger.Ranking.Ranked(entries, nextCursor, count,
                 builtScanStamp(marker.get().stamp())));
     }
 
-    /** The ledger scan freshness the index was built at - the leading token of the composite build stamp, the honest
-     *  as-of instant a surface renders for the eventually-consistent ranking rather than the live scan stamp the
-     *  records may have moved past. Empty for a generation built over a never-scanned repository, and empty for a torn
-     *  or foreign token that does not parse (built, as-of unknown - the honest degrade, never a fabricated instant);
-     *  either way the generation still stands, so this can never turn a built ranking into an unbuilt one. The trailing
-     *  token is the eviction epoch (folded in so an eviction rebuilds the ranking) and is deliberately never surfaced. */
+    /** The scan freshness the index was built at - the composite stamp's leading token - which a surface renders as the
+     *  ranking's as-of instant. Empty for a never-scanned repository or a token that does not parse; the generation
+     *  still stands either way. The trailing eviction epoch is never surfaced. */
     private static Optional<Instant> builtScanStamp(String stamp) {
         String scan = stamp.isBlank() ? "" : stamp.split(" ", 2)[0];
         if (scan.isBlank()) {
@@ -129,8 +115,7 @@ final class HealthRankIndex {
         if (!store.exists(key)) {
             return Optional.empty();
         }
-        // Parsed straight off the stream (never a whole-blob read into a heap buffer): an index row is a small bounded
-        // record, and the ordered page reads them one at a time.
+        // Parsed off the stream: an index row is a small record, read one at a time.
         try (InputStream in = store.open(key)) {
             JsonNode document = JSON.readTree(in);
             JsonNode overall = document.path("overall");
@@ -150,8 +135,8 @@ final class HealthRankIndex {
         }
     }
 
-    /** The flat child key of a record in a generation: the score band (worst first) and a stable content tie-break, so
-     *  the ordered child set reads back ascending-overall with a deterministic order within an equal-score band. */
+    /** The flat child key of a record: the score band (worst first) and a stable tie-break, so the set reads back
+     *  ascending-overall in a deterministic order. */
     private static String entryKey(String generationPrefix, HealthLedger.Located located) {
         double overall = located.health().overall();
         int scaled = (int) Math.round(Math.max(0.0, Math.min(10.0, overall)) * 1000.0);
@@ -159,8 +144,7 @@ final class HealthRankIndex {
         return generationPrefix + "/" + band + "-" + tieBreak(located.ecosystem(), located.coordinate());
     }
 
-    /** A fixed-width, URL-safe, deterministic per-coordinate tie-break within an equal-score band - the SHA-256 of the
-     *  ecosystem and coordinate, so two coordinates never collide and the same coordinate always lands in the same slot. */
+    /** A fixed-width, URL-safe tie-break within a score band: the SHA-256 of the ecosystem and coordinate. */
     private static String tieBreak(String ecosystem, String coordinate) {
         try {
             MessageDigest digest = MessageDigest.getInstance("SHA-256");

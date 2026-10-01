@@ -8,11 +8,9 @@ import build.jenesis.repository.maintenance.MaintenanceTask;
 import build.jenesis.repository.maintenance.MaintenanceTaskProvider;
 
 /**
- * Discovers the scheduled maintainer-health sweep: it rides the same {@code scheduled-scan} enablement and
- * {@code scan-interval-millis} cadence as the advisory scan and re-analysis passes (the sibling sweeps a deployment
- * turns on together), and additionally requires a health source to be enabled - with no {@link HealthSource} resolved
- * (the scorecard module absent or disabled) there is nothing to probe, so this pass builds nothing. The source itself is
- * the discovered maintainer-health plugin, resolved from the same configuration, so this pass names no backend.
+ * Discovers the scheduled maintainer-health sweep, on the same {@code scheduled-scan} enablement and
+ * {@code scan-interval-millis} cadence as the advisory scan. It also needs an enabled {@link HealthSource}, the
+ * discovered maintainer-health plugin; with none there is nothing to probe and no task.
  */
 public final class HealthScanTaskProvider implements MaintenanceTaskProvider {
 

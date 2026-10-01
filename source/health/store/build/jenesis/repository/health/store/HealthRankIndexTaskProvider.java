@@ -7,10 +7,9 @@ import build.jenesis.repository.maintenance.MaintenanceTask;
 import build.jenesis.repository.maintenance.MaintenanceTaskProvider;
 
 /**
- * Discovers the scheduled maintainer-health rank-index pass: it rides the same {@code scheduled-scan} enablement and
- * {@code scan-interval-millis} cadence as the health sweep it keeps the index current with. Unlike the sweep it requires
- * no live health source - it indexes the records already durably stored, so it runs for a records-only deployment whose
- * live source is off, and is a cheap no-op when the records have not moved since the last build.
+ * Discovers the health rank-index pass, on the same {@code scheduled-scan} enablement and {@code scan-interval-millis}
+ * cadence as the health sweep. It needs no live health source - it indexes stored records - so it runs for a
+ * records-only deployment too.
  */
 public final class HealthRankIndexTaskProvider implements MaintenanceTaskProvider {
 

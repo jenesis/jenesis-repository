@@ -1,14 +1,11 @@
 /**
- * The store-backed maintainer-health ledger as a plugin module: it provides
- * {@link build.jenesis.repository.health.HealthLedgerProvider}, keeping each coordinate's health as one small JSON
- * document at the {@code health/<ecosystem>/<coordinate>} key the SPI contract fixes (version-independent - health is a
- * property of the project), upserted last-writer-wins under the store's compare-and-set so concurrent writers (the
- * health sweep, the publish-time persistence, an on-demand rescan) converge on the freshest answer. It also provides the
- * scheduled {@link build.jenesis.repository.health.store.HealthScanTask} that populates the ledger from the live health
- * source and stamps its freshness, and the {@link build.jenesis.repository.maintenance.StorageNamespace} declaring the
- * key-space in the storage manifest; its reclamation rides the artifact's own lifecycle - the inventory's
- * {@code evict} deletes a coordinate's record when its last published version goes. With this module absent the health
- * SPI resolves to nothing and every writer and surface degrades to the live-probe behaviour.
+ * The store-backed maintainer-health ledger: a {@link build.jenesis.repository.health.HealthLedgerProvider} keeping
+ * each coordinate's health as the {@code health} section of its per-coordinate metadata document (health is a property
+ * of the project), upserted under compare-and-set so concurrent writers converge on the freshest score. It also
+ * provides the scheduled {@link build.jenesis.repository.health.store.HealthScanTask} that fills the ledger, the
+ * rank-index pass, and the {@link build.jenesis.repository.maintenance.StorageNamespace} for what lives outside the
+ * document. Reclamation rides eviction of a coordinate's last version. Without this module the health SPI resolves to
+ * nothing and every surface falls back to the live probe.
  *
  * @jenesis.release 25
  * @jenesis.bom pin-repository.properties
