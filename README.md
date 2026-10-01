@@ -16,6 +16,10 @@ Jenesis build finds them, and under the Jenesis module layout, so a modular buil
 name - publish a modular jar once and both ecosystems resolve it. It is also a standards-compliant OCI
 registry over the same store, so `docker push` works against it too.
 
+Beside the repository it serves a remote build cache over the same store, in the Jenesis build tool's own
+protocol, Gradle's HTTP build cache, the Maven build-cache extension's layout and Bazel's HTTP remote cache, so a
+build on a second machine takes a step's output from the cache instead of running the step again.
+
 A publish can be screened against OSV, the GitHub Advisory Database and the OpenSSF malicious-packages records -
 each switched on in the first boot's wizard, since none reaches out unasked: a package at or above the configured
 severity, or one a malicious-package record names, is refused or withheld for review, the console's review queue
@@ -124,6 +128,7 @@ seam: a plugin implements an SPI and is discovered by `ServiceLoader`, never by 
 | `source/gate/store`, `source/gate-wiring`, `source/compliance/*` | The publish gate: the Maven and OCI inspectors that name what a publish is, the OSV, GitHub and OpenSSF feeds (off until an operator switches them on), policy-as-code and attestation admission, the scheduled rescan, signature verification, and the review queue where a hold is released. |
 | `source/webhook`, `source/webhook-web`, `source/outbox` | Signed, retried webhooks for what was published, held, released or refused, and the surface that retries a parked delivery. |
 | `source/findings/store`, `source/health/store` | The findings and maintainer-health ledgers the gate and its screens read. |
+| `source/cache/{server,storage,protocol}` | The build cache, served beside the repository: the server, its storage in a segment of the artifact store, and one module per wire protocol it speaks - the Jenesis build tool's, Gradle's HTTP build cache, the Maven build-cache extension's and Bazel's HTTP remote cache. |
 | `source/feed`, `source/bundle` | The advisory feed, and the launchable module. |
 | `test/kit/*` | The contract test kits: `test/kit/contract` is the shared census, and `store`, `walk`, `format`, `importer` and the rest each carry one family's contract. |
 

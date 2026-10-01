@@ -1,7 +1,7 @@
 /**
  * The carrier: one launchable module whose {@code requires} closure is every free SPI implementation -
  * all twenty-five layouts, retention, staging, the scheduled walk, search, the settings and management APIs, the build cache
- * for Jenesis builds, all four store backends
+ * for Jenesis, Gradle, Maven and Bazel builds, all four store backends
  * ({@code filesystem}, {@code s3}, {@code gcs}, {@code azure}), all five import connectors, the upstream HTTP
  * fetcher ({@code proxy}), the OIDC token exchange ({@code oidc}), the token-bucket rate limiter, the credential
  * usage tracker, the publish gate with its review screens (screening against OSV, the GitHub Advisory Database
@@ -140,9 +140,13 @@ open module build.jenesis.repository.bundle {
     // Credentials for a private upstream, and the tokens AWS registries issue in place of one.
     requires build.jenesis.repository.upstream.store;
     requires build.jenesis.repository.upstream.aws;
-    // The build cache for Jenesis builds, served beside the repository.
+    // The build cache, served beside the repository, in every wire protocol it speaks: the Jenesis build tool's own,
+    // Gradle's HTTP build cache, the Maven build-cache extension's layout and Bazel's HTTP remote cache.
     requires build.jenesis.repository.cache.server;
     requires build.jenesis.repository.cache.protocol.jenesis;
+    requires build.jenesis.repository.cache.protocol.gradle;
+    requires build.jenesis.repository.cache.protocol.maven;
+    requires build.jenesis.repository.cache.protocol.bazel;
     requires spring.boot;
     requires spring.context;
 }

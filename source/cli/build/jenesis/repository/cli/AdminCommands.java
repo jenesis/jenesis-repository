@@ -296,6 +296,13 @@ final class AdminCommands {
         System.out.println("rate-limit:     " + (features.rateLimit() ? "installed" : "not installed"));
         System.out.println("dependents:     " + (capabilities.dependents() ? "installed" : "not installed"));
         System.out.println("search:         " + (capabilities.search() ? "installed" : "not installed"));
+        List<RepositoryClient.CacheProtocol> protocols = capabilities.cacheProtocols() == null ? List.of()
+                : capabilities.cacheProtocols();
+        System.out.println("build cache:    " + names(protocols.stream().map(RepositoryClient.CacheProtocol::name)
+                .toList()));
+        for (RepositoryClient.CacheProtocol protocol : protocols) {
+            System.out.printf("  %-14s%s%n", protocol.name(), protocol.endpoint());
+        }
         if (capabilities.modules() != null && !capabilities.modules().isEmpty()) {
             System.out.println("modules:");
             for (RepositoryClient.Module module : capabilities.modules()) {

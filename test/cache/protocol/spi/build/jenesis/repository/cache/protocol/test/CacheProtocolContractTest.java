@@ -23,6 +23,11 @@ class CacheProtocolContractTest {
         }
 
         @Override
+        public String endpoint() {
+            return "";
+        }
+
+        @Override
         public boolean handles(String path) {
             return path.startsWith("/") && path.chars().filter(c -> c == '/').count() == 2;
         }

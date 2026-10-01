@@ -45,7 +45,7 @@ import build.jenesis.repository.store.Providers;
  *       serves the life of the node.</li>
  *   <li><b>No dependency on a server.</b> An implementation reads the request through {@link Request} and answers
  *       a record; it does not reach a servlet, a framework or the cache itself. That is what lets a protocol be
- *       tested by calling it and lets an edition ship a subset of them.</li>
+ *       tested by calling it and lets a composition carry a subset of them.</li>
  * </ol>
  */
 public interface CacheProtocol {
@@ -57,7 +57,7 @@ public interface CacheProtocol {
      * every cache request, and a cache request is the hottest path the product serves. What makes holding safe
      * here is that the answer cannot change without the module path changing - a protocol declares no
      * configuration and has no enablement of its own, so there is nothing a reconfiguring test could invalidate.
-     * An edition ships the protocols it sells by putting them on the path, which is the whole selection.
+     * A composition serves the protocols it puts on the path, which is the whole selection.
      */
     static List<CacheProtocol> installed() {
         return Installed.PROTOCOLS;
@@ -96,6 +96,14 @@ public interface CacheProtocol {
 
     /** This protocol's stable, lower-case name - what a meter, a log line and an operator's toggle spell. */
     String name();
+
+    /**
+     * Where a client of this tool is pointed, as a path within a tenant's cache - what follows {@code /build/<tenant>}
+     * - with {@code <project>} standing for a project the tool can only carry in the path. Empty where the tool is
+     * pointed at the tenant's cache itself. It is what an operator is told to configure: the root the tool appends
+     * its own addresses to, not an address.
+     */
+    String endpoint();
 
     /** Whether this protocol owns the given request path. A pure function of the path (clause 2). */
     boolean handles(String path);

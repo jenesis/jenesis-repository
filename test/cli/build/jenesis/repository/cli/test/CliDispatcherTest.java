@@ -39,7 +39,9 @@ public class CliDispatcherTest {
             + "\"enableKey\":\"search\",\"enabled\":true,\"live\":false}],"
             + "\"features\":{\"advisories\":true,\"advisoriesEnabled\":true,\"staging\":true,\"retention\":true,"
             + "\"scan\":false,\"provenance\":false,\"provenanceEnabled\":false,\"audit\":true,\"upstream\":true,"
-            + "\"tokenExchange\":false,\"rateLimit\":true,\"dependents\":true,\"search\":true}}";
+            + "\"tokenExchange\":false,\"rateLimit\":true,\"dependents\":true,\"search\":true},"
+            + "\"cacheProtocols\":[{\"name\":\"gradle\",\"endpoint\":\"/build/<tenant>/gradle/\"},"
+            + "{\"name\":\"maven\",\"endpoint\":\"/build/<tenant>/maven/<project>\"}]}";
     private static final String ASSETS_PAGE1 = "{\"repository\":\"releases\",\"assets\":[{"
             + "\"path\":\"/maven/org/acme/lib/1.0/lib-1.0.jar\",\"size\":13,\"sha256\":\"abc123\","
             + "\"format\":\"maven\",\"ecosystem\":\"Maven\",\"coordinate\":\"org.acme:lib\",\"version\":\"1.0\","
@@ -320,6 +322,13 @@ public class CliDispatcherTest {
     public void capabilities_renders_the_module_list() throws Exception {
         String out = capture(() -> assertThat(Cli.run(new String[] {"capabilities"})).isZero());
         assertThat(out).contains("build.jenesis.repository.search").contains("search:");
+    }
+
+    @Test
+    public void capabilities_lists_the_build_tools_the_cache_serves_and_where_each_is_pointed() throws Exception {
+        String out = capture(() -> assertThat(Cli.run(new String[] {"capabilities"})).isZero());
+        assertThat(out).contains("build cache:    gradle, maven")
+                .contains("/build/<tenant>/gradle/").contains("/build/<tenant>/maven/<project>");
     }
 
     @Test

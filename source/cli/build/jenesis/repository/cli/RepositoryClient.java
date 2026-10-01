@@ -150,7 +150,12 @@ public final class RepositoryClient extends ClientCalls {
     public record Capabilities(int version, List<Format> formats, List<ImportSource> importSources,
                                List<RiskClient.Signal> signals, List<Module> modules, Features features,
                                boolean scan, boolean provenance, boolean audit, boolean dependents,
-                               boolean search, boolean walk, boolean gc) {
+                               boolean search, boolean walk, boolean gc, List<CacheProtocol> cacheProtocols) {
+    }
+
+    /** A build tool the deployment's cache serves, and the endpoint its client is pointed at - {@code <tenant>} and
+     *  {@code <project>} left for the reader to fill in. Contributed by the cache, so absent where it is not served. */
+    public record CacheProtocol(String name, String endpoint) {
     }
 
     public record Format(String name, String ecosystem) {

@@ -17,7 +17,7 @@ import org.springframework.web.bind.annotation.RestController;
  *
  * <p>It speaks no wire format itself. Each one - the product's own, Gradle's, Bazel's, the Maven build-cache
  * extension's - is a discovered {@code CacheProtocol} in a module of its own, so which formats a node serves is
- * which modules it carries and an edition ships a subset by shipping fewer. What stays here is everything they
+ * which modules it carries and a composition serves a subset by carrying fewer. What stays here is everything they
  * share and would otherwise each reimplement: the existence probe a HEAD pays, the read that streams a hit and
  * turns a concurrently reaped entry into the miss it really is, the length and capacity refusals a PUT makes
  * before reading a body, the outcome counters and the challenge.
@@ -95,7 +95,7 @@ public class CacheController {
      * Find the protocol that owns this path and serve the address it reads.
      *
      * <p>One mapping rather than eight: the protocols are discovered, so which wire formats a node speaks is
-     * which modules it carries, and an edition ships a subset by shipping fewer of them. Order is irrelevant
+     * which modules it carries, and a composition serves a subset by carrying fewer of them. Order is irrelevant
      * because claims are disjoint by contract - {@code CacheProtocol.RESERVED} is what makes that true of a
      * tenant's shared cache, where Gradle's layout is otherwise shape-identical to the native one. The tenant is the
      * URL's, {@code /build/<tenant>/...}, and the key presented decides whether it may be addressed.

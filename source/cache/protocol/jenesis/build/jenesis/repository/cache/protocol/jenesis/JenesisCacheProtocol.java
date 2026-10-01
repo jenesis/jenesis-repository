@@ -34,6 +34,11 @@ public final class JenesisCacheProtocol implements CacheProtocol {
     }
 
     @Override
+    public String endpoint() {
+        return "";
+    }
+
+    @Override
     public boolean handles(String path) {
         // Exactly two segments under the prefix, which is what keeps this off /gradle/<key> and the other
         // foreign layouts: they are claimed by their own protocols, and an overlap would be a composition error

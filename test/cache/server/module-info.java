@@ -12,6 +12,13 @@
  */
 open module build.jenesis.repository.cache.server.contract.test {
     requires build.jenesis.repository.cache.server;
+    // Every protocol the free bundle carries, so the capability the cache contributes is read over the set an image
+    // serves rather than over the one the server itself needs.
+    requires build.jenesis.repository.cache.protocol;
+    requires build.jenesis.repository.cache.protocol.jenesis;
+    requires build.jenesis.repository.cache.protocol.gradle;
+    requires build.jenesis.repository.cache.protocol.maven;
+    requires build.jenesis.repository.cache.protocol.bazel;
     requires build.jenesis.repository.cache.storage;
     requires build.jenesis.repository.settings;
     requires build.jenesis.repository.cache.storage.testkit;

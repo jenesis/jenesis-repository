@@ -39,4 +39,6 @@ open module build.jenesis.repository.cache.server {
     exports build.jenesis.repository.cache.server;
     requires build.jenesis.repository.settings;
     provides build.jenesis.repository.settings.SettingsContributor with build.jenesis.repository.cache.server.CacheNodeSettingsContributor;
+    provides build.jenesis.repository.server.spi.CapabilityContributor
+            with build.jenesis.repository.cache.server.CacheProtocolsCapabilityContributor;
 }

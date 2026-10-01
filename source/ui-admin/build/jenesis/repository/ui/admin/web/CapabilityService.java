@@ -110,7 +110,10 @@ public class CapabilityService {
             ImportSourceProvider.declared().stream()
                     .map(provider -> new ImportSourceView(
                             provider.name(), provider.label(), provider.requiresFormat()))
-                    .toList());
+                    .toList(),
+            // The build tools the cache serves, as the cache contributes them to /api/capabilities - read rather
+            // than discovered again, so the projects page and the API name one set.
+            cacheProtocols(contributed));
         this.named = named(capabilities);
         // The pages the imported console modules contribute, discovered once at startup like every other capability
         // signal (a module's providers are static for a JVM). The shell filters these by the caller's role and the
@@ -179,6 +182,21 @@ public class CapabilityService {
         return contributed.get(name) instanceof Boolean value && value;
     }
 
+    /** The contributed {@code cacheProtocols} list, empty where the cache contributed none. */
+    private static List<CacheProtocolView> cacheProtocols(Map<String, Object> contributed) {
+        if (!(contributed.get("cacheProtocols") instanceof List<?> protocols)) {
+            return List.of();
+        }
+        List<CacheProtocolView> views = new ArrayList<>();
+        for (Object protocol : protocols) {
+            if (protocol instanceof Map<?, ?> entry && entry.get("name") instanceof String name
+                    && entry.get("endpoint") instanceof String endpoint) {
+                views.add(new CacheProtocolView(name, endpoint));
+            }
+        }
+        return List.copyOf(views);
+    }
+
     /** Whether a named console module is among the ones this deployment imported. */
     private static boolean enabled(List<ConsoleModuleProvider> modules, String name) {
         return modules.stream().map(ConsoleModuleProvider::name).anyMatch(name::equals);
@@ -238,11 +256,24 @@ public class CapabilityService {
                                boolean provenance, boolean upstream, boolean upstreamCredentials, boolean rateLimit,
                                boolean dependents, boolean search, boolean index, boolean licensePolicy,
                                boolean findings, boolean maintainerHealth, boolean hardening, boolean scim,
-                               boolean leakWebhook, boolean aiReview, List<ImportSourceView> importSources) {
+                               boolean leakWebhook, boolean aiReview, List<ImportSourceView> importSources,
+                               List<CacheProtocolView> cacheProtocols) {
 
         /** An import needs both a source connector and the upstream fetcher on the module path. */
         public boolean importAvailable() {
             return upstream && !importSources.isEmpty();
+        }
+    }
+
+    /**
+     * A build tool the cache serves, as the projects page lists it: its name, and the endpoint its client is pointed
+     * at with {@code <tenant>} and {@code <project>} left to fill in.
+     */
+    public record CacheProtocolView(String name, String endpoint) {
+
+        /** The endpoint within {@code tenant}'s cache. */
+        public String endpointFor(String tenant) {
+            return endpoint.replace("<tenant>", tenant);
         }
     }
 

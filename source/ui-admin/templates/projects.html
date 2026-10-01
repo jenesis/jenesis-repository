@@ -51,6 +51,25 @@
     </article>
     </div>
 
+    <!--/* The build tools this node's cache serves and where each is pointed, as the cache reports them on
+         /api/capabilities - so the page, the API and `jenrepo capabilities` name one set. */-->
+    <section class="app-divide" th:unless="${capabilities.cacheProtocols().isEmpty()}" aria-labelledby="build-tools">
+        <h2 id="build-tools">Build tools</h2>
+        <p><small>A build reaches its project at its tool's endpoint on this server, presenting a key granted the
+            project.</small></p>
+        <figure>
+            <table class="app-list">
+                <thead><tr><th scope="col">Tool</th><th scope="col">Endpoint</th></tr></thead>
+                <tbody>
+                <tr th:each="protocol : ${capabilities.cacheProtocols()}">
+                    <td th:text="${protocol.name()}">gradle</td>
+                    <td><code th:text="${protocol.endpointFor(tenant)}">/build/default/gradle/</code></td>
+                </tr>
+                </tbody>
+            </table>
+        </figure>
+    </section>
+
     <!--/* The volume every tenant's projects share: a super-admin's, set apart under a rule of its own because what it
          reclaims crosses every tenant rather than belonging to the projects listed above. */-->
     <section class="app-divide" th:if="${superadmin}" aria-labelledby="volume">

@@ -41,6 +41,13 @@ class JenesisCacheProtocolTest {
     }
 
     @Test
+    void a_client_pointed_at_the_endpoint_lands_on_a_path_this_claims() {
+        // A build tool's cache.uri is the tenant's cache itself, and the tool appends the step and the inputs.
+        assertThat(protocol.endpoint()).isEmpty();
+        assertThat(protocol.handles(protocol.endpoint() + "/compile/abc123")).isTrue();
+    }
+
+    @Test
     void reads_the_address_and_both_headers() {
         assertThat(protocol.address(request("/compile/abc123",
                 Map.of(CacheProtocol.PROJECT_HEADER, "checkout", CacheProtocol.KEY_HEADER, "jenk_x"))))

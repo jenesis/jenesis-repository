@@ -1,5 +1,6 @@
 package build.jenesis.repository.bundle;
 
+import build.jenesis.repository.cache.server.CacheNode;
 import build.jenesis.repository.server.RepositoryApplication;
 import build.jenesis.repository.ui.admin.AdminConsoleNode;
 import org.springframework.context.annotation.ComponentScan;
@@ -12,20 +13,21 @@ import org.springframework.context.ConfigurableApplicationContext;
 import org.springframework.context.annotation.Import;
 
 /**
- * Boots the repository AND the console as one application, off the bundle module path.
+ * Boots the repository, the console and the build cache as one application, off the bundle module path.
  *
  * <p>One image that has to be told which half to be is an indirection nobody wants - so there is one entry point,
  * one config file
  * ({@code bundle.properties}, named explicitly because two modules on this path carry a root
  * {@code application.properties}) and one port.
  *
- * <p><b>How the two halves compose.</b> The repository needs no scanning: {@link RepositoryApplication} is a bare
+ * <p><b>How the halves compose.</b> The repository needs no scanning: {@link RepositoryApplication} is a bare
  * {@code @SpringBootConfiguration @EnableAutoConfiguration} launcher carrying no beans of its own, so its
  * auto-configurations are picked up by any such class in the context - this one. The console does need scanning,
  * and its own {@code @SpringBootApplication} entry point is excluded so its auto-configuration is not re-triggered.
- * Their security chains compose rather than collide: the console's is named, ordered and matched over
- * {@code ConsoleUrlSpace}, and the repository's is the unmatched fall-through, because its space carries arbitrary
- * artifact coordinates and cannot be enumerated.
+ * The cache is imported the same way, its endpoint under {@code /build/<tenant>/}. Their security chains compose
+ * rather than collide: the console's is named, ordered and matched over {@code ConsoleUrlSpace}, the cache's is
+ * matched over its own path, and the repository's is the unmatched fall-through, because its space carries
+ * arbitrary artifact coordinates and cannot be enumerated.
  *
  * <p>Every capability on the module path runs until configured off - {@code jenrepo.<feature>=false} degrades an
  * implementation exactly like a missing module, {@code jenrepo.<spi>=<feature>} selects among exclusive ones - so
@@ -35,13 +37,14 @@ import org.springframework.context.annotation.Import;
 @EnableAutoConfiguration
 @ConfigurationPropertiesScan(basePackages = {"build.jenesis.repository.ui",
         "build.jenesis.repository.ui.identity"})
-// The console arrives as one importable thing that knows its own gate, rather than as a scan this launcher spells
-// out. A launcher cannot make its own @ComponentScan conditional, so a console that could be switched off had to
-// become a configuration that can be.
+// The console and the build cache each arrive as one importable thing that knows its own gate, rather than as a
+// scan this launcher spells out. A launcher cannot make its own @ComponentScan conditional, so a console and a cache
+// that can be switched off had to become configurations that can be.
 // It is the admin console: there is one console, and what an edition adds to it arrives through the seams it
 // declares rather than as a second console beside it. A capability this image does not carry reports itself
-// not installed, which is what every absent module already does.
-@Import(AdminConsoleNode.class)
+// not installed, which is what every absent module already does. The cache's module on the path is not the cache
+// served: without the import its endpoint is never registered and every build tool's request is a 404.
+@Import({AdminConsoleNode.class, CacheNode.class})
 // The composition itself is scanned rather than imported: it is not optional, it is what this image is. Its
 // own launcher class is excluded so its auto-configuration is not re-triggered by the one this launcher is.
 @ComponentScan(basePackages = "build.jenesis.repository.application",
