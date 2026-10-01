@@ -19,6 +19,7 @@ open module build.jenesis.repository.gateway.contract.test {
     requires build.jenesis.repository.server;
     requires build.jenesis.repository.store;
     requires build.jenesis.repository.store.filesystem;
+    requires build.jenesis.repository.store.testkit;
     requires build.jenesis.repository.gc.store;
     requires build.jenesis.repository.staging.store;
     requires build.jenesis.repository.metadata.store;

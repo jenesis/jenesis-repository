@@ -4,6 +4,7 @@ import module java.base;
 import build.jenesis.repository.format.RepositoryFormat;
 import build.jenesis.repository.format.RepositoryType;
 import build.jenesis.repository.importer.ImportSource;
+import build.jenesis.repository.store.JobState;
 import build.jenesis.repository.store.ArtifactDescriptor;
 import build.jenesis.repository.store.ArtifactStore;
 import build.jenesis.repository.store.RepositoryDocument;
@@ -30,9 +31,8 @@ public final class ImportJobs {
     /** Start an import in the background, seeded with the given counts (non-zero for a resume), and return at once.
      *  The convenience arm: no edition listener and no job-scope decorator, so the job runs exactly as the free
      *  import walk does. */
-    public void submit(ArtifactStore store, ImportSource source, String jobId, int baseImported, int baseSkipped)
-            throws IOException {
-        submit(store, source, jobId, baseImported, baseSkipped, RepositoryImport.Listener.NONE, UnaryOperator.identity());
+    public void submit(ArtifactStore store, ImportSource source, String jobId, Snapshot prior) throws IOException {
+        submit(store, source, jobId, prior, RepositoryImport.Listener.NONE, UnaryOperator.identity());
     }
 
     /** As above, with two seams an edition binds around the background job. {@code listener} rides every imported,
@@ -43,11 +43,17 @@ public final class ImportJobs {
      *  deployment-wide policy rather than the tenant's. The default {@link UnaryOperator#identity() identity} leaves
      *  the behaviour unchanged. This job's own progress accounting (counts, cursor, status JSON) always runs;
      *  {@code listener} is notified in addition to it. */
-    public void submit(ArtifactStore store, ImportSource source, String jobId, int baseImported, int baseSkipped,
+    public void submit(ArtifactStore store, ImportSource source, String jobId, Snapshot prior,
                        RepositoryImport.Listener listener, UnaryOperator<Runnable> jobScope) throws IOException {
         List<RepositoryFormat> formats = formats(store);
-        write(store, jobId, "running", baseImported, baseSkipped, 0, 0, new LinkedHashSet<>(), Map.of(),
-                null, null, null);
+        int baseImported = prior == null ? 0 : prior.imported();
+        int baseSkipped = prior == null ? 0 : prior.skipped();
+        // The claim: a new job's record is created, a resumed one's replaced only while it is the record the resume
+        // read - a reap that dismissed it since wins, and the resume says so rather than reviving a deleted job.
+        if (!store.writeVersioned("imports/" + jobId, body("running", baseImported, baseSkipped, 0, 0,
+                new LinkedHashSet<>(), Map.of(), null, null, null), prior == null ? null : prior.token())) {
+            throw new JobState.Dismissed(jobId);
+        }
         Runnable body = () -> run(store, source, jobId, baseImported, baseSkipped, listener, formats);
         Thread.ofVirtual().name("import-" + jobId).start(jobScope.apply(body));
     }
@@ -143,13 +149,17 @@ public final class ImportJobs {
         return store.readVersioned("imports/" + jobId).map(ArtifactStore.Versioned::content);
     }
 
-    /** A job's state parsed for a status response or to seed a resume. */
+    /** A job's state parsed for a status response or to seed a resume; empty for a job there is none of, or one a
+     *  reap has dismissed. */
     public Optional<Snapshot> snapshot(ArtifactStore store, String jobId) throws IOException {
-        Optional<byte[]> bytes = status(store, jobId);
-        if (bytes.isEmpty()) {
+        Optional<ArtifactStore.Versioned> stored = store.readVersioned("imports/" + jobId);
+        if (stored.isEmpty()) {
             return Optional.empty();
         }
-        JsonNode state = JSON.readTree(bytes.get());
+        JsonNode state = JSON.readTree(stored.get().content());
+        if (JobState.DISMISSED.equals(state.path("state").asString(null))) {
+            return Optional.empty();
+        }
         List<String> formats = new ArrayList<>();
         for (JsonNode format : state.path("skippedFormats")) {
             formats.add(format.asString(null));
@@ -160,13 +170,20 @@ public final class ImportJobs {
         return Optional.of(new Snapshot(state.path("state").asString(null), state.path("imported").asInt(0),
                 state.path("skipped").asInt(0), state.path("held").asInt(0), state.path("rejected").asInt(0),
                 formats, Map.copyOf(drops), state.path("cursor").asString(null),
-                state.path("asset").asString(null), state.path("error").asString(null)));
+                state.path("asset").asString(null), state.path("error").asString(null), stored.get().token()));
     }
 
     private void write(ArtifactStore store, String jobId, String state, int imported, int skipped, int held,
                        int rejected, Set<String> skippedFormats, Map<ImportSource.Reason, Integer> dropped,
                        String cursor, String asset, String error)
             throws IOException {
+        store.write("imports/" + jobId, new ByteArrayInputStream(body(state, imported, skipped, held, rejected,
+                skippedFormats, dropped, cursor, asset, error)));
+    }
+
+    private static byte[] body(String state, int imported, int skipped, int held, int rejected,
+                               Set<String> skippedFormats, Map<ImportSource.Reason, Integer> dropped, String cursor,
+                               String asset, String error) throws IOException {
         Map<String, Object> job = new LinkedHashMap<>();
         job.put("state", state);
         job.put("imported", imported);
@@ -182,7 +199,7 @@ public final class ImportJobs {
         job.put("cursor", cursor);
         job.put("asset", asset);
         job.put("error", error);
-        store.write("imports/" + jobId, new ByteArrayInputStream(JSON.writeValueAsBytes(job)));
+        return JSON.writeValueAsBytes(job);
     }
 
     /** A parsed view of a job's persisted state; {@code held} and {@code rejected} are the assets the import edge
@@ -190,7 +207,7 @@ public final class ImportJobs {
      *  (which one the walk has reached), {@code null} before the first asset. */
     public record Snapshot(String state, int imported, int skipped, int held, int rejected,
                            List<String> skippedFormats, Map<String, Integer> dropped, String cursor, String asset,
-                           String error) {
+                           String error, Object token) {
 
         /** Every row the source offered that no connector would carry. A completed job with zero imported and a
          *  non-zero count here is a refused source, not an empty one - the distinction this record could not make. */

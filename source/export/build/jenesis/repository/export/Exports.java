@@ -5,6 +5,7 @@ import build.jenesis.repository.format.ExportTarget;
 import build.jenesis.repository.importer.ImportScreen;
 import build.jenesis.repository.scope.Scopes;
 import build.jenesis.repository.server.RepositoryRouting;
+import build.jenesis.repository.store.JobState;
 import build.jenesis.repository.store.ArtifactStore;
 import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.json.JsonMapper;
@@ -90,6 +91,8 @@ public final class Exports {
             jobs.submit(store.get(), new HttpExportTarget(target, credential), url, jobId, prior);
         } catch (IllegalArgumentException refused) {
             return new Started(400, null, refused.getMessage());
+        } catch (JobState.Dismissed dismissed) {
+            return new Started(409, null, dismissed.getMessage());
         }
         return new Started(202, jobId, null);
     }

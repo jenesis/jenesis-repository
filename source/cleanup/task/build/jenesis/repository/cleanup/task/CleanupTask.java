@@ -11,6 +11,7 @@ import build.jenesis.repository.maintenance.MaintenanceTask;
 import build.jenesis.repository.maintenance.RepositoryContext;
 import build.jenesis.repository.maintenance.TenantContext;
 import build.jenesis.repository.maintenance.RetentionSetting;
+import build.jenesis.repository.store.JobState;
 import build.jenesis.repository.store.ArtifactStore;
 import build.jenesis.repository.walk.ArtifactWalk;
 
@@ -45,6 +46,25 @@ public final class CleanupTask implements MaintenanceTask {
     private static final Logger LOGGER = LoggerFactory.getLogger(CleanupTask.class);
 
     private static final JsonMapper JSON = JsonMapper.builder().build();
+
+    /** The record a reap leaves for the moment between its compare-and-set and its delete. */
+    private static final byte[] DISMISSED = ("{\"state\":\"" + JobState.DISMISSED + "\"}")
+            .getBytes(StandardCharsets.UTF_8);
+
+    /** The names under {@code prefix}, drained a page at a time rather than listed whole. */
+    private static List<String> names(ArtifactStore store, String prefix) {
+        List<String> names = new ArrayList<>();
+        String after = "";
+        while (true) {
+            List<String> page = new ArrayList<>();
+            store.page(prefix, after, ArtifactStore.DRAIN_PAGE, page::add);
+            names.addAll(page);
+            if (page.size() < ArtifactStore.DRAIN_PAGE) {
+                return names;
+            }
+            after = page.getLast();
+        }
+    }
 
     private final Duration interval;
 
@@ -87,7 +107,13 @@ public final class CleanupTask implements MaintenanceTask {
      * ({@code import-expiry/<id>}, {@code export-expiry/<id>}) when it <em>first observes</em> the
      * terminal state and dismisses a full TTL later - conservative (never sooner than the TTL after finishing) and
      * idempotent. A marker whose job was manually dismissed is dropped; one whose job is running again (a resume)
-     * is reset. Each read is the small JSON status object, never an artifact.
+     * is reset. Each read is the small JSON status object, never an artifact, and both namespaces are drained a page
+     * at a time.
+     *
+     * <p>The store has no conditional delete, so the reap is decided by a compare-and-set rather than by a read: the
+     * record is first set to {@link JobState#DISMISSED} against the very record the age check read, and only then
+     * deleted. A resume that landed in between changed the record, so that compare-and-set loses and the job is left
+     * running; a resume that comes after finds the job dismissed (see {@link JobState}).
      */
     private void reapJobs(RepositoryContext context, Jobs jobs) throws IOException {
         Duration ttl = jobs.ttl().resolve(context.config()).orElse(null);
@@ -95,7 +121,7 @@ public final class CleanupTask implements MaintenanceTask {
             return;
         }
         ArtifactStore store = context.store();
-        for (String id : store.list(jobs.records())) {
+        for (String id : names(store, jobs.records())) {
             Optional<ArtifactStore.Versioned> job = store.readVersioned(jobs.records() + "/" + id);
             if (job.isEmpty()) {
                 continue;
@@ -127,22 +153,8 @@ public final class CleanupTask implements MaintenanceTask {
                 continue;
             }
             if (Duration.between(since, context.now()).compareTo(ttl) >= 0) {
-                // Re-read the job's state immediately before the destructive delete: a resume that landed in the window
-                // between the state read above and here rewrites state=running, and reaping it would destroy a now-live
-                // job record. The store has no conditional delete, so this re-read shrinks the lost-update window to the
-                // gap before the unconditional delete rather than the whole per-record scan (the marker-recheck pattern).
-                Optional<ArtifactStore.Versioned> fresh = store.readVersioned(jobs.records() + "/" + id);
-                if (fresh.isPresent()) {
-                    String freshState;
-                    try {
-                        freshState = JSON.readTree(new String(fresh.get().content(), StandardCharsets.UTF_8))
-                                .path("state").asString(null);
-                    } catch (RuntimeException _) {
-                        continue;                                // unreadable now - never delete a record we don't understand
-                    }
-                    if (freshState == null || freshState.equals("running")) {
-                        continue;                                // resumed since the age check - leave it; a later terminal pass reaps
-                    }
+                if (!store.writeVersioned(jobs.records() + "/" + id, DISMISSED, job.get().token())) {
+                    continue;                                    // resumed since it was read - a later pass reaps it
                 }
                 store.delete(jobs.records() + "/" + id);
                 for (String companion : jobs.companions()) {
@@ -151,7 +163,7 @@ public final class CleanupTask implements MaintenanceTask {
                 store.delete(expiry);
             }
         }
-        for (String id : store.list(jobs.expiry())) {
+        for (String id : names(store, jobs.expiry())) {
             if (store.readVersioned(jobs.records() + "/" + id).isEmpty()) {
                 store.delete(jobs.expiry() + "/" + id);          // the job was dismissed by hand; the marker goes too
             }

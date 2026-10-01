@@ -7,6 +7,7 @@ import build.jenesis.repository.format.RepositoryExporter;
 import build.jenesis.repository.format.RepositoryFormat;
 import build.jenesis.repository.format.RepositoryType;
 import build.jenesis.repository.inventory.StoreRepositoryInventory;
+import build.jenesis.repository.store.JobState;
 import build.jenesis.repository.store.ArtifactStore;
 import build.jenesis.repository.store.RepositoryDocument;
 import tools.jackson.databind.JsonNode;
@@ -68,7 +69,12 @@ public final class ExportJobs {
         List<RepositoryFormat> formats = exporting(store);
         Counts counts = prior == null ? new Counts() : new Counts(prior);
         String cursor = prior == null ? null : prior.cursor();
-        write(store, jobId, "running", url, counts, cursor, null, null);
+        // The claim: a new job's record is created, a resumed one's replaced only while it is the record the resume
+        // read - a reap that dismissed it since wins, and the resume says so rather than reviving a deleted job.
+        if (!store.writeVersioned("exports/" + jobId, body("running", url, counts, cursor, null, null),
+                prior == null ? null : prior.token())) {
+            throw new JobState.Dismissed(jobId);
+        }
         Thread.ofVirtual().name("export-" + jobId).start(() -> run(store, target, url, jobId, formats, counts, cursor));
     }
 
@@ -226,19 +232,27 @@ public final class ExportJobs {
 
     /** A job's state parsed, for a status answer or to seed a resume. */
     public Optional<Snapshot> snapshot(ArtifactStore store, String jobId) throws IOException {
-        Optional<byte[]> bytes = status(store, jobId);
-        if (bytes.isEmpty()) {
+        Optional<ArtifactStore.Versioned> stored = store.readVersioned("exports/" + jobId);
+        if (stored.isEmpty()) {
             return Optional.empty();
         }
-        JsonNode state = JSON.readTree(bytes.get());
+        JsonNode state = JSON.readTree(stored.get().content());
+        if (JobState.DISMISSED.equals(state.path("state").asString(null))) {
+            return Optional.empty();
+        }
         return Optional.of(new Snapshot(state.path("state").asString(null), state.path("target").asString(null),
                 state.path("published").asInt(0), state.path("present").asInt(0), state.path("withheld").asInt(0),
                 state.path("cursor").asString(null), state.path("reached").asString(null),
-                state.path("error").asString(null)));
+                state.path("error").asString(null), stored.get().token()));
     }
 
     private void write(ArtifactStore store, String jobId, String state, String url, Counts counts, String cursor,
                        String reached, String error) throws IOException {
+        store.write("exports/" + jobId, new ByteArrayInputStream(body(state, url, counts, cursor, reached, error)));
+    }
+
+    private static byte[] body(String state, String url, Counts counts, String cursor, String reached, String error)
+            throws IOException {
         Map<String, Object> job = new LinkedHashMap<>();
         job.put("state", state);
         job.put("target", url);
@@ -248,7 +262,7 @@ public final class ExportJobs {
         job.put("cursor", cursor);
         job.put("reached", reached);
         job.put("error", error);
-        store.write("exports/" + jobId, new ByteArrayInputStream(JSON.writeValueAsBytes(job)));
+        return JSON.writeValueAsBytes(job);
     }
 
     /** The running counts: versions sent, versions the target already held, versions with nothing servable. */
@@ -274,6 +288,6 @@ public final class ExportJobs {
      * failure.
      */
     public record Snapshot(String state, String target, int published, int present, int withheld, String cursor,
-                           String reached, String error) {
+                           String reached, String error, Object token) {
     }
 }

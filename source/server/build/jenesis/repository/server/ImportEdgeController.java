@@ -9,6 +9,7 @@ import build.jenesis.repository.importer.ImportScreen;
 import build.jenesis.repository.importer.ImportSource;
 import build.jenesis.repository.importer.ImportSourceProvider;
 import build.jenesis.repository.scope.Scopes;
+import build.jenesis.repository.store.JobState;
 import build.jenesis.repository.store.ArtifactStore;
 import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.json.JsonMapper;
@@ -149,9 +150,12 @@ public class ImportEdgeController {
         }
         String jobId = prior == null ? ImportJobs.newId() : resume;
         try {
-            jobs.submit(store, source, jobId, prior == null ? 0 : prior.imported(), prior == null ? 0 : prior.skipped());
+            jobs.submit(store, source, jobId, prior);
         } catch (IllegalArgumentException refused) {
             respond(response, 400, refused.getMessage());
+            return;
+        } catch (JobState.Dismissed dismissed) {
+            respond(response, 409, dismissed.getMessage());
             return;
         }
         response.setHeader("Content-Type", "application/json");

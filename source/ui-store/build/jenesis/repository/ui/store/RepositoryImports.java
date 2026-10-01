@@ -61,8 +61,7 @@ public class RepositoryImports extends TenantScope {
             }
             String jobId = prior == null ? ImportJobs.newId() : resume;
             writeSource(store, jobId, source, url, sourceRepository, format);
-            jobs.submit(store, importSource, jobId,
-                    prior == null ? 0 : prior.imported(), prior == null ? 0 : prior.skipped());
+            jobs.submit(store, importSource, jobId, prior);
             // Audit the migration trigger with the same repository.import event the /api ImportController emits, once
             // the job is actually submitted - a bulk migration is a privileged mutation that routes writes into the
             // hosted store.

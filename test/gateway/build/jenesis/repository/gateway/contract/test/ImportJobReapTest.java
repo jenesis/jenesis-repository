@@ -6,9 +6,14 @@ import build.jenesis.repository.cleanup.task.CleanupTask;
 import build.jenesis.repository.maintenance.RepositoryContext;
 import build.jenesis.repository.maintenance.UnitFailures;
 import build.jenesis.repository.store.ArtifactStore;
+import build.jenesis.repository.server.ImportJobs;
+import build.jenesis.repository.store.testkit.FaultInjectingStore;
+import build.jenesis.repository.store.RepositoryDocument;
+import build.jenesis.repository.store.JobState;
 import build.jenesis.repository.store.ArtifactStoreProvider;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 /**
  * Import- and export-job records stop growing: before this, only a manual dismiss removed a finished migration's
@@ -95,6 +100,45 @@ class ImportJobReapTest {
         assertThat(store.readVersioned("export-expiry/kept")).as("PT0S on the export dial disables it").isEmpty();
     }
 
+    @Test
+    void a_job_resumed_between_the_reaps_read_and_its_write_is_left_running() throws IOException {
+        job("race", "failed");
+        task.repository(context(NOW, null));
+        // The resume lands at the one moment a re-read cannot cover: after the reap has read the record, just before
+        // its first change to it - so only a compare-and-set in that change can tell.
+        AtomicBoolean resumed = new AtomicBoolean();
+        ArtifactStore racing = FaultInjectingStore.wrap(store).tracing((op, key) -> {
+            if ((op == FaultInjectingStore.Op.WRITE_VERSIONED || op == FaultInjectingStore.Op.DELETE)
+                    && key.equals("imports/race") && resumed.compareAndSet(false, true)) {
+                try {
+                    job("race", "running");
+                } catch (IOException e) {
+                    throw new UncheckedIOException(e);
+                }
+            }
+        });
+        task.repository(context(racing, NOW.plus(Duration.ofDays(8)), null, null));
+
+        assertThat(resumed).as("the reap reached its change to the record").isTrue();
+        assertThat(store.readVersioned("imports/race")).as("the resumed job is left running").get()
+                .satisfies(job -> assertThat(new String(job.content(), StandardCharsets.UTF_8)).contains("running"));
+    }
+
+    @Test
+    void a_resume_that_lost_to_a_reap_says_the_job_was_dismissed_and_revives_nothing() throws IOException {
+        new RepositoryDocument("maven", NOW).create(store);
+        job("gone", "failed");
+        ImportJobs jobs = new ImportJobs();
+        ImportJobs.Snapshot read = jobs.snapshot(store, "gone").orElseThrow();
+        task.repository(context(NOW, null));
+        task.repository(context(NOW.plus(Duration.ofDays(8)), null));
+
+        assertThatThrownBy(() -> jobs.submit(store, null, "gone", read)).isInstanceOf(JobState.Dismissed.class);
+        assertThat(store.readVersioned("imports/gone")).as("nothing revived").isEmpty();
+        job("tombstoned", JobState.DISMISSED);
+        assertThat(jobs.snapshot(store, "tombstoned")).as("a dismissed record is no job to resume").isEmpty();
+    }
+
     private void job(String id, String state) throws IOException {
         String json = "{\"state\":\"" + state + "\",\"imported\":3,\"skipped\":0,\"cursor\":null}";
         store.write("imports/" + id, new ByteArrayInputStream(json.getBytes(StandardCharsets.UTF_8)));
@@ -106,6 +150,10 @@ class ImportJobReapTest {
 
     /** A minimal pass context over the temp store; the two job TTLs are the only settings the reap reads. */
     private RepositoryContext context(Instant now, String ttl, String exportTtl) {
+        return context(store, now, ttl, exportTtl);
+    }
+
+    private RepositoryContext context(ArtifactStore over, Instant now, String ttl, String exportTtl) {
         return new RepositoryContext() {
             @Override
             public UnitFailures failures(String work, String consequence) {
@@ -124,7 +172,7 @@ class ImportJobReapTest {
 
             @Override
             public ArtifactStore store() {
-                return store;
+                return over;
             }
 
             @Override

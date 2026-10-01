@@ -20,6 +20,7 @@ import build.jenesis.repository.server.Observations;
 import build.jenesis.repository.server.RepositoryImport;
 import build.jenesis.repository.server.spi.Authorization;
 import build.jenesis.repository.settings.ImportHostGuard;
+import build.jenesis.repository.store.JobState;
 import build.jenesis.repository.store.ArtifactDescriptor;
 import build.jenesis.repository.store.ArtifactStore;
 import build.jenesis.repository.store.Features;
@@ -160,8 +161,7 @@ public class ImportController {
                     }
                 }
             };
-            jobs.submit(store, source, jobId, prior == null ? 0 : prior.imported(),
-                    prior == null ? 0 : prior.skipped(), listener, jobScope);
+            jobs.submit(store, source, jobId, prior, listener, jobScope);
             // A bulk migration is a privileged mutation that routes writes into the hosted store; audit the
             // trigger as its /api peers audit theirs (best-effort, so it never fails the started job). Recorded only
             // once the job is actually submitted, and naming the source and target the way the console leg does.
@@ -256,6 +256,14 @@ public class ImportController {
     @ExceptionHandler(IllegalArgumentException.class)
     public void badRequest(HttpServletResponse response) {
         response.setStatus(400);
+    }
+
+    /** A resume that lost to a reap: the job it named was dismissed meanwhile, and starting again is the answer. */
+    @ExceptionHandler(JobState.Dismissed.class)
+    public void dismissed(JobState.Dismissed dismissed, HttpServletResponse response) throws IOException {
+        response.setStatus(409);
+        response.setContentType("text/plain;charset=UTF-8");
+        response.getWriter().write(dismissed.getMessage());
     }
 
     /** The body of an import request: the source kind (an installed import-source module's name), its base URL and
