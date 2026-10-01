@@ -3,74 +3,43 @@ package build.jenesis.repository.observation;
 import module java.base;
 
 /**
- * The seam a plugin reports its observability signals through: {@link #healthChecks()}, {@link #metrics()} and
- * {@link #taskStatuses()}, each defaulting to empty so a provider adopts only what it has - the same optional
- * default-method pattern its provider SPI already uses for {@code requiredConfig()}. A plugin (or its provider) implements
- * this and is discovered with {@link ServiceLoader}; a <em>disabled or absent</em> plugin contributes an empty source, or
- * none at all, so the overview never lists a signal for something that is not running.
- *
- * <p>The signals are self-describing (name + description) and registry-free: the distribution collects the sources into an
- * {@link ObservabilityReport} and bridges them onto Actuator and the console, so the plugin never touches Micrometer.
+ * The seam a plugin reports its signals through: {@link #healthChecks()}, {@link #metrics()} and
+ * {@link #taskStatuses()}, each empty by default. Discovered with {@link ServiceLoader}; a disabled or absent plugin
+ * contributes nothing. The signals are self-describing and registry-free: the distribution bridges the
+ * {@link ObservabilityReport} onto Actuator and the console, so a plugin never touches Micrometer.
  *
  * <h2>Contract</h2>
  * <ol>
- *   <li><b>Thread-safety.</b> All three methods may be called concurrently and repeatedly - an Actuator scrape, a
- *       console overview render and a docs generation can overlap - so an implementation reads shared state without a
- *       lock or guards it itself. Implementations are effectively immutable views over already-computed state.</li>
- *   <li><b>Absence sentinel.</b> Every method returns an empty list, never {@code null} and never an exception, when
- *       the plugin reports nothing or is switched off. A disabled plugin contributes an empty source (or none at all)
- *       rather than a signal that reads as healthy; the report then simply does not list it.</li>
- *   <li><b>Selection failure.</b> There is nothing to select: the policy is additive, every discovered source is
- *       collected, and no configuration key names one. A source carries no {@code name()}, so it does not resolve
- *       through the shared {@code Providers} primitives and gets none of their packaging guards. Signal construction
- *       validates the {@link Signals} <em>grammar</em> and nothing else, so a source module registered twice really
- *       does contribute its signals twice and nothing refuses it - unlike a {@code Panel}, whose id collisions a
- *       build-time census ratchet catches, this SPI's duplicate-signal case is still open and waits on the naming
- *       decision an additive SPI needs before it can be guarded. The one discovery site is
- *       {@link ObservabilityReport#discover()}; a consumer that needs to control the set collects through
- *       {@link ObservabilityReport#from} with an explicit list instead of loading the service a second time.</li>
- *   <li><b>Tenant scoping.</b> The report is deployment-global: it is collected once per scrape or render with no
- *       tenant in scope and is served to an operator, so a signal's name, description and value must carry no
- *       tenant's artifact content and no per-tenant identifier. A plugin whose state is per-tenant reports the
- *       deployment-level roll-up here (a count, a worst-of health) and leaves the per-tenant breakdown to a
- *       tenant-scoped surface.</li>
- *   <li><b>Read purity.</b> These are read-path methods: they render state the plugin has already
- *       computed and must perform no external fetch, no scan, no store write and no blocking I/O. A health check
- *       reports what the last refresh recorded, so the overview still stands when the source it describes is down.</li>
- *   <li><b>Staleness.</b> A signal derived from a periodic refresh carries its own freshness rather than leaving an
- *       empty panel ambiguous between "clean" and "never scanned": a {@link TaskStatus} states {@code lastRun} (null
- *       when it has never run) and {@code outcome}, and a {@link HealthCheck} covering a refreshed source puts the
- *       last-refresh instant in its {@code detail}.</li>
- *   <li><b>Error visibility.</b> A throw is <b>contained to this source</b> and never reaches the reader as a broken
- *       report: {@link ObservabilityReport#from} collects through {@code Contributions}, so a source that throws (or
- *       answers {@code null}) contributes one {@link Health#UNKNOWN} check named
- *       {@code jenrepo.observation.unavailable.<source>} in place of its own signals, every other source is collected,
- *       and the failure is logged once with this class's name. Containment is not absolution: the substitute check
- *       names only the failing class and the exception <em>type</em> (the message goes to the log, never to an
- *       operator-facing detail), it says nothing about what the source was actually reporting, and it drops
- *       {@link ObservabilityReport#overall} to {@code UNKNOWN} for the whole deployment. An implementation that cannot
- *       determine a signal therefore still reports it <em>itself</em> as {@link Health#UNKNOWN} (or
- *       {@link TaskStatus.State#UNKNOWN}) with a plain-text detail rather than throwing, because only the
- *       implementation knows which signal is affected and why. Detail text is operator-facing and never carries a
- *       secret, a credential or a tenant's artifact content. An {@link Error} is <em>not</em> contained: a
- *       {@link LinkageError} from a half-installed plugin is a broken module graph, not a source failing to answer,
- *       and reporting it as one unknown row on an otherwise healthy page would misreport it.</li>
- *   <li><b>Lifecycle / ownership.</b> A discovered source's lifecycle is the distribution's: the report loads it
- *       through {@link ServiceLoader} and reads it, and never closes it, so a discovered source must not own a thread,
- *       a client or a scheduler - it observes something else's. An owned source is the component itself, and its
- *       context closes it with everything else it built.</li>
- *   <li><b>Where the state comes from.</b> A source is one of two things, and never a third. A <em>discovered</em>
- *       source is stateless and reads what this node has recorded - an accumulator every instance of a component
- *       adds to, such as the store's operation counts or the collector's reclaimed blobs. An <em>owned</em> source is
- *       an object a running context built, and it is reported from the context that built it
+ *   <li><b>Thread-safety.</b> All three may be called concurrently and repeatedly - a scrape, a render and a docs run
+ *       can overlap - so an implementation is an effectively immutable view over computed state.</li>
+ *   <li><b>Absence sentinel.</b> An empty list, never {@code null} or an exception, when the plugin reports nothing or
+ *       is off.</li>
+ *   <li><b>Selection failure.</b> Nothing to select: every discovered source is collected. A source has no
+ *       {@code name()}, so the {@code Providers} packaging guards do not apply and a module registered twice
+ *       contributes its signals twice; that case is open until an additive SPI has a naming rule. The one discovery
+ *       site is {@link ObservabilityReport#discover()}; a consumer controlling the set uses
+ *       {@link ObservabilityReport#from}.</li>
+ *   <li><b>Tenant scoping.</b> The report is deployment-global and served to an operator, so no signal carries tenant
+ *       content or a per-tenant identifier; a per-tenant plugin reports a roll-up here.</li>
+ *   <li><b>Read purity.</b> Read-path methods: no external fetch, scan, store write or blocking I/O. A health check
+ *       reports what the last refresh recorded, so the overview stands when its source is down.</li>
+ *   <li><b>Staleness.</b> A refreshed signal carries its freshness: a {@link TaskStatus} its {@code lastRun} (null when
+ *       never) and {@code outcome}, a {@link HealthCheck} its last refresh in {@code detail}.</li>
+ *   <li><b>Error visibility.</b> A throw is contained to this source: {@link ObservabilityReport#from} collects through
+ *       {@code Contributions}, so it becomes one {@link Health#UNKNOWN} check named
+ *       {@code jenrepo.observation.unavailable.<source>} with only the class and exception type, logged once, and drops
+ *       {@link ObservabilityReport#overall} to {@code UNKNOWN}. An implementation that cannot determine a signal
+ *       reports it itself as {@link Health#UNKNOWN} or {@link TaskStatus.State#UNKNOWN} with a detail, since only it
+ *       knows which signal and why. Detail text never carries a secret or tenant content. An {@link Error} is not
+ *       contained.</li>
+ *   <li><b>Lifecycle / ownership.</b> A discovered source is loaded and read, never closed, so it owns no thread,
+ *       client or scheduler. An owned source is a component its context built and closes.</li>
+ *   <li><b>Where the state comes from.</b> A discovered source is stateless and reads what this node recorded, such as
+ *       the store's operation counts. An owned source is reported from the context that built it
  *       ({@link ObservabilityReport#of}). Nothing hands an instance to a discovered source through a static: two
- *       contexts in one JVM would report each other's, and a component resolved only to ask whether it is installed
- *       would replace the one that is running.</li>
- *   <li><b>Ordering / concurrency.</b> Results must be deterministic and independent of discovery order:
- *       {@link ObservabilityReport} concatenates the sources and sorts by signal name, so two deployments with the
- *       same plugins render the same report whatever order the module path yields. Signal names are stable and unique
- *       across plugins ({@code jenrepo.<feature>.<signal>}, validated at construction) - a duplicate name is a
- *       collision between plugins, not a merge.</li>
+ *       contexts in one JVM would report each other's.</li>
+ *   <li><b>Ordering / concurrency.</b> The report sorts by signal name, so it is independent of discovery order. Names
+ *       are unique across plugins ({@code jenrepo.<feature>.<signal>}); a duplicate is a collision, not a merge.</li>
  * </ol>
  */
 public interface ObservabilitySource {

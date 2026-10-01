@@ -3,11 +3,9 @@ package build.jenesis.repository.observation;
 import module java.base;
 
 /**
- * One self-describing health check a plugin reports: a stable {@code jenrepo.<feature>.<check>} {@code name}, a
- * human-readable {@code description} (the same text Actuator and the console overview show, so the check explains
- * itself), a {@link Health} {@code status} and an optional plain-text {@code detail} explaining a degraded/down state
- * (never a secret). Immutable; the name is validated at construction against {@link Signals}, so a check that breaks the
- * grammar fails when it is built, not when it is scraped.
+ * One self-describing health check: a {@code jenrepo.<feature>.<check>} {@code name}, the {@code description} Actuator
+ * and the console show, a {@link Health} {@code status} and an optional plain-text {@code detail}, never a secret. The
+ * name is validated against {@link Signals} at construction, so a bad one fails when built, not when scraped.
  */
 public record HealthCheck(String name, String description, Health status, String detail) {
 

@@ -3,19 +3,13 @@ package build.jenesis.repository.observation;
 import module java.base;
 
 /**
- * The single collected view every consumer reads - the console overview page, the Actuator health/metrics contributors
- * and the reference docs all render <em>this</em>, so a signal is named and described in exactly one place. {@link #from}
- * merges the signals of a set of {@link ObservabilitySource}s (name-sorted for a stable ordering); {@link #discover} does
- * the same over the {@link ServiceLoader}-installed sources; {@link #overall} collapses the health checks into one
- * verdict. A source that reports nothing (a disabled plugin) simply adds nothing - the report degrades gracefully to
- * whatever is actually running.
+ * The one collected view every consumer reads - the console overview, the Actuator contributors and the reference docs
+ * - so a signal is named and described once. {@link #from} merges sources' signals name-sorted, {@link #discover} does
+ * it over the installed sources, {@link #overall} collapses the health checks. A source reporting nothing adds nothing.
  *
- * <p>A source that <em>fails</em> degrades too, but visibly: collection runs through {@link Contributions}, so a source
- * that throws is contained to its own rows and replaced by a {@link Health#UNKNOWN} health check named
- * {@code jenrepo.observation.unavailable.<source>} - the report stands, every other source is collected, and the
- * failure reaches both the reader and the log instead of degrading the whole overview. {@link #overall} therefore drops
- * to {@code UNKNOWN}: "a source could not determine its state" is exactly the truth about a report one of whose sources
- * threw, and it must never collapse back to {@code UP}.
+ * <p>A failing source degrades visibly: collected through {@link Contributions}, it is replaced by a
+ * {@link Health#UNKNOWN} check named {@code jenrepo.observation.unavailable.<source>}, every other source is collected,
+ * and {@link #overall} drops to {@code UNKNOWN}, never back to {@code UP}.
  */
 public record ObservabilityReport(List<HealthCheck> healthChecks, List<Metric> metrics, List<TaskStatus> tasks) {
 
@@ -25,15 +19,13 @@ public record ObservabilityReport(List<HealthCheck> healthChecks, List<Metric> m
         tasks = List.copyOf(tasks);
     }
 
-    /** Collect and name-sort the signals of {@code sources}; a source that throws contributes {@link #unavailable}
-     *  instead of taking the report down with it. */
+    /** Collect and name-sort the signals of {@code sources}; a source that throws contributes {@link #unavailable}. */
     public static ObservabilityReport from(Iterable<? extends ObservabilitySource> sources) {
         List<HealthCheck> health = new ArrayList<>();
         List<Metric> metrics = new ArrayList<>();
         List<TaskStatus> tasks = new ArrayList<>();
-        // One contained collection per source: its three signal lists are read together, so a source that throws from
-        // any of them (or answers null, which List.copyOf turns into a throw here) is one degraded row rather than a
-        // half-collected source silently contributing its metrics but not its health.
+        // One contained collection per source, its three lists read together, so a throw or a null from any is one
+        // degraded row rather than a half-collected source.
         for (ObservabilityReport contributed : Contributions.collect("observability source", sources,
                 source -> new ObservabilityReport(source.healthChecks(), source.metrics(), source.taskStatuses()),
                 ObservabilityReport::unavailable)) {
@@ -47,12 +39,9 @@ public record ObservabilityReport(List<HealthCheck> healthChecks, List<Metric> m
         return new ObservabilityReport(health, metrics, tasks);
     }
 
-    /**
-     * The report as every endpoint answers it - the repository's admin endpoint, the actuator endpoint, the cache
-     * node's - one document shape, rendered here once: the overall verdict, then the health checks, metrics and task
-     * statuses with their names and registration descriptions. {@code version} lets a client detect a future shape
-     * change; a metric's {@code limit} and {@code usage} are {@code null} where it has no ceiling.
-     */
+    /** The report as every endpoint answers it, in one shape: the overall verdict, then the health checks, metrics and
+     *  task statuses with their names and descriptions. {@code version} lets a client detect a shape change; a metric's
+     *  {@code limit} and {@code usage} are {@code null} without a ceiling. */
     public View view() {
         return new View(1, overall().name(),
                 healthChecks.stream().map(check -> new HealthView(check.name(), check.description(),
@@ -86,13 +75,9 @@ public record ObservabilityReport(List<HealthCheck> healthChecks, List<Metric> m
                            String outcome) {
     }
 
-    /**
-     * Collect the signals of the discovered sources and of the sources among {@code owned} - the objects a running
-     * context has built, of which every {@link ObservabilitySource} is one it owns. A context passes what it holds
-     * (its created singletons) and this keeps the sources, so asking never makes a context build anything. A
-     * discovered source of the same class as an owned one gives way to it, so a context reports its own instance and
-     * never a second, unconnected one.
-     */
+    /** Collect the signals of the discovered sources and of the sources among {@code owned}, the objects a running
+     *  context has built, so asking never makes a context build anything. A discovered source of the same class as an
+     *  owned one gives way to it, so a context reports its own instance. */
     public static ObservabilityReport of(Collection<?> owned) {
         Set<Class<?>> ownedClasses = new HashSet<>();
         List<ObservabilitySource> sources = new ArrayList<>();
@@ -116,15 +101,8 @@ public record ObservabilityReport(List<HealthCheck> healthChecks, List<Metric> m
         return from(Installed.SOURCES);
     }
 
-    /**
-     * The sources, discovered once for the life of the class loader.
-     *
-     * <p>Held because the callers are request handlers: the observability screen, the cache's own observability
-     * endpoint and the settings admin each asked for a report per request, and this static walked the module
-     * graph's service declarations and re-instantiated every source before collecting anything from it. What the
-     * sources <em>report</em> is read fresh on every call, which is the part that has to be; which sources exist
-     * is a property of what is installed and cannot change within a JVM.
-     */
+    /** The sources, discovered once for the life of the class loader, since request handlers ask for a report per
+     *  request. What they report is read fresh each call; which sources exist cannot change within a JVM. */
     private static final class Installed {
 
         private static final List<ObservabilitySource> SOURCES = ServiceLoader.load(ObservabilitySource.class)
@@ -137,14 +115,9 @@ public record ObservabilityReport(List<HealthCheck> healthChecks, List<Metric> m
         }
     }
 
-    /**
-     * The rows a source that threw is reported as: one {@link Health#UNKNOWN} check named for the failing source, and
-     * no metrics or tasks - the plugin reported none, and inventing values it never produced would be worse than
-     * saying so. The check names the source's implementation class and the <em>kind</em> of failure; the full
-     * exception is in the log ({@link Contributions#reason}), because a detail is operator-facing text that must carry
-     * no secret. A failed source is never simply dropped: on this surface an absent signal reads as "this plugin
-     * reports nothing", which is precisely what an operator must not conclude here.
-     */
+    /** The rows a source that threw is reported as: one {@link Health#UNKNOWN} check naming its class and the failure's
+     *  type ({@link Contributions#reason}), no metrics or tasks, since inventing values would be worse. Never dropped:
+     *  an absent signal would read as "this plugin reports nothing". */
     private static ObservabilityReport unavailable(ObservabilitySource source, Exception failure) {
         return new ObservabilityReport(List.of(HealthCheck.of(
                 Signals.name("observation", "unavailable", Contributions.segment(source)),
@@ -157,7 +130,7 @@ public record ObservabilityReport(List<HealthCheck> healthChecks, List<Metric> m
                 List.of(), List.of());
     }
 
-    /** The worst health across every check - {@link Health#UP} when nothing reports trouble. */
+    /** The worst health across every check, {@link Health#UP} when none reports trouble. */
     public Health overall() {
         Health overall = Health.UP;
         for (HealthCheck check : healthChecks) {

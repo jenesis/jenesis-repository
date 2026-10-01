@@ -3,21 +3,15 @@ package build.jenesis.repository.observation;
 import module java.base;
 
 /**
- * The plug-in surface grouped by SPI: every discovered {@code ServiceLoader} contract this deployment carries and the
- * installed implementations that {@code provide} it, so an operator sees the whole extension surface at a glance, one
- * SPI at a time. Pure discovery over the JPMS module graph - an implementation is a {@code provides} declaration in a
- * module descriptor and the SPI is that declaration's service - so it reports what is actually on the path rather than
- * what something believed was configured. Only this product's own contracts are listed, a service under the
- * {@code build.jenesis.} namespace, or the frameworks' own {@code ServiceLoader} plumbing would bury them.
+ * The plug-in surface grouped by SPI: every product {@code ServiceLoader} contract (under {@code build.jenesis.}) this
+ * deployment carries and the implementations that {@code provide} it, read from the module graph, so it reports what is
+ * on the path rather than what was believed configured.
  *
- * <p><b>The walk is here once, and what a deployment knows on top of it is a {@link Decoration}.</b> A console can
- * say only which providers exist; a deployment with settings also knows each module's installed and enabled state,
- * its enablement key and the settings it contributes. Both enumerate the same graph with the same product-namespace
- * filter and the same ordering, so one walk serves both: a deployment with no stored settings decorates with
- * {@link #ALWAYS_ON}; one that reads settings supplies a decoration. The screen does not know which it is looking at.
+ * <p>The walk is here once, and what a deployment knows beyond it is a {@link Decoration}: a console knows only the
+ * providers; a deployment with settings also knows each module's installed and enabled state, enablement key and
+ * settings. A deployment without stored settings decorates with {@link #ALWAYS_ON}.
  *
- * <p>It is a model rather than markup: a screen renders it through a template, so the escaping, the layout and the
- * accessibility of the result are the template engine's job.
+ * <p>A model rather than markup, rendered through a template.
  */
 public record SpiCatalog(String spi, List<Implementation> implementations) {
 
@@ -30,12 +24,9 @@ public record SpiCatalog(String spi, List<Implementation> implementations) {
         return simpleName(spi);
     }
 
-    /**
-     * One installed implementation of an SPI: the provider type that {@code provides} it, the JPMS module it came in,
-     * and what the deployment knows about that module - whether it is installed, whether it is enabled, the key that
-     * gates it and the settings it contributes. {@code enableKey} is {@code null} when the module is always on once
-     * installed, which is every module under {@link #ALWAYS_ON}.
-     */
+    /** One installed implementation: its provider type, its module, and what the deployment knows of that module -
+     *  installed, enabled, the key gating it and its settings. {@code enableKey} is {@code null} for a module always on
+     *  once installed. */
     public record Implementation(String type, String module, boolean installed, boolean enabled, String enableKey,
                                  List<Setting> settings) {
 
@@ -48,8 +39,8 @@ public record SpiCatalog(String spi, List<Implementation> implementations) {
             return SpiCatalog.simpleName(type);
         }
 
-        /** Whether this implementation's module carries an enablement gate, as opposed to being always on once
-         *  installed. The screen says "always on" for the second, which is a different statement from "enabled". */
+        /** Whether this implementation's module has an enablement gate; the screen says "always on" otherwise, which is
+         *  not the same as "enabled". */
         public boolean gated() {
             return enableKey != null;
         }
@@ -70,8 +61,8 @@ public record SpiCatalog(String spi, List<Implementation> implementations) {
         }
     }
 
-    /** The per-module lookup that decorates the walk - answer {@link Capability#ALWAYS_ON} for a module you know
-     *  nothing about, never {@code null}. */
+    /** The per-module lookup decorating the walk: {@link Capability#ALWAYS_ON} for an unknown module, never
+     *  {@code null}. */
     @FunctionalInterface
     public interface Decoration {
 
@@ -86,13 +77,8 @@ public record SpiCatalog(String spi, List<Implementation> implementations) {
         return of(ModuleLayer.boot(), ALWAYS_ON);
     }
 
-    /**
-     * Every product SPI in {@code layer} and its installed implementations, each decorated with what
-     * {@code decoration} knows about its declaring module.
-     *
-     * <p>SPIs are ordered by service name and each SPI's implementations by provider type, so a page rendered twice
-     * over an unchanged graph is the same page - which is what lets a screen be cached and revalidated at all.
-     */
+    /** Every product SPI in {@code layer} and its implementations, each decorated by {@code decoration}. SPIs are
+     *  ordered by service name and implementations by type, so an unchanged graph renders the same page. */
     public static List<SpiCatalog> of(ModuleLayer layer, Decoration decoration) {
         Map<String, List<Implementation>> byService = new TreeMap<>();
         for (Module module : layer.modules()) {

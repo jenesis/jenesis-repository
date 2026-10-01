@@ -3,12 +3,10 @@ package build.jenesis.repository.observation;
 import module java.base;
 
 /**
- * The status of one background task a plugin runs (GC / reclamation, the sizes and dependents sweeps, the scheduled
- * scan and cleanup, the forwarding watermark, the continuous re-analysis sweep): a stable {@code jenrepo.<feature>.<task>}
- * {@code name}, a human-readable {@code description}, its {@link State}, when it {@code lastRun} (null - never), how long
- * that run took ({@code lastDuration}, null when unknown) and the plain {@code outcome} of that run. So an operator - or a
- * headless agent following the console - sees each task's last-run and state rather than trusting a thread to stay up
- * unnoticed. Immutable; the name is validated at construction against {@link Signals}.
+ * The status of one background task a plugin runs: a {@code jenrepo.<feature>.<task>} {@code name}, a
+ * {@code description}, its {@link State}, its {@code lastRun} (null - never), how long it took ({@code lastDuration},
+ * null when unknown) and its {@code outcome}, so an operator sees each task's last run and state rather than trusting a
+ * thread. The name is validated against {@link Signals}.
  */
 public record TaskStatus(String name, String description, State state, Instant lastRun, Duration lastDuration,
                          String outcome) {

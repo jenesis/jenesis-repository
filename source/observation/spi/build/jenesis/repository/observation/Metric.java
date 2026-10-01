@@ -3,13 +3,10 @@ package build.jenesis.repository.observation;
 import module java.base;
 
 /**
- * One self-describing metric a plugin reports: a stable {@code jenrepo.<feature>.<signal>} {@code name}, a
- * human-readable {@code description}, its {@link Kind} (a monotonic {@code COUNTER} or a point-in-time {@code GAUGE}),
- * the current {@code value}, an optional {@code limit} (the ceiling the value is measured against, where the source
- * exposes one - quota bytes available, a rate-limit budget, a cache capacity) and a {@code unit} ({@code "bytes"},
- * {@code "requests"}, {@code ""} for a bare count). The optional limit is what lets the console show <em>data used vs
- * available</em> and <em>how close to the limit</em> without the reporter pre-computing a percentage. Immutable; the
- * name is validated at construction against {@link Signals}.
+ * One self-describing metric: a {@code jenrepo.<feature>.<signal>} {@code name}, a {@code description}, its
+ * {@link Kind}, the {@code value}, an optional {@code limit} it is measured against (quota available, a rate budget, a
+ * capacity) and a {@code unit} ({@code "bytes"}, {@code ""} for a bare count). The limit lets the console show used
+ * against available without the reporter computing a percentage. The name is validated against {@link Signals}.
  */
 public record Metric(String name, String description, Kind kind, double value, OptionalDouble limit, String unit) {
 
@@ -39,8 +36,7 @@ public record Metric(String name, String description, Kind kind, double value, O
         return new Metric(name, description, Kind.GAUGE, used, OptionalDouble.of(limit), unit);
     }
 
-    /** The fraction of the limit the value occupies ({@code 0..1+}) - how close to the ceiling the signal is; empty
-     *  when there is no limit or a non-positive one. */
+    /** The fraction of the limit the value occupies ({@code 0..1+}); empty without a positive limit. */
     public OptionalDouble usage() {
         return limit.isPresent() && limit.getAsDouble() > 0
                 ? OptionalDouble.of(value / limit.getAsDouble())
