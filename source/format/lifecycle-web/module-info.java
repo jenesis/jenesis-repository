@@ -1,21 +1,17 @@
 /**
- * The version-lifecycle HTTP surface as a removable server feature module: it provides
- * {@link build.jenesis.repository.server.kernel.ServerModuleProvider}, so the repository server imports its configuration
- * through {@code ServiceLoader} discovery and names no lifecycle endpoint. A thin Spring {@code web} adapter over the
- * framework-free {@link build.jenesis.repository.format.lifecycle.Lifecycle} deprecate/yank marks (small per-tenant
- * metadata objects written through the repository's scoped store) and the discovered
- * {@link build.jenesis.repository.audit.AuditTrail} that records the privileged mutations, each resolved per tenant
- * through {@code Repositories}. Every route is under {@code /api/} and is gated
- * {@code manage:read}/{@code manage:write} by the security chain before it is reached; with this module absent the
- * server carries none of the lifecycle surface and {@code /api/lifecycle} degrades to {@code 404}. Open so Spring can
- * reflect over the controller and its configuration.
+ * The version-lifecycle HTTP surface as a removable server module: a
+ * {@link build.jenesis.repository.server.kernel.ServerModuleProvider} the server imports by {@code ServiceLoader}. A
+ * thin Spring adapter over the {@link build.jenesis.repository.format.lifecycle.Lifecycle} marks and the discovered
+ * {@link build.jenesis.repository.audit.AuditTrail}, resolved per tenant through {@code Repositories}, every route
+ * under {@code /api/} and gated {@code manage:read}/{@code manage:write} by the security chain. Without it,
+ * {@code /api/lifecycle} is a {@code 404}. Open so Spring can reflect over the controller.
  *
  * @jenesis.release 25
  * @jenesis.bom pin-repository.properties
  * @jenesis.signature signature-repository.properties
  */
 open module build.jenesis.repository.format.lifecycle.web {
-    // The service the API answers from, to the console page that answers from it too.
+    // The service the API answers from, for the console page that answers from it too.
     exports build.jenesis.repository.format.lifecycle.web;
     requires build.jenesis.repository.server.kernel;
     requires build.jenesis.repository.server;

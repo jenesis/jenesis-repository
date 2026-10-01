@@ -18,20 +18,16 @@ import org.springframework.web.bind.annotation.RestController;
 
 /**
  * The operator's version-lifecycle surface: mark a hosted version <b>deprecated</b> or <b>yanked</b>, clear the mark,
- * or list what is marked, so a repository's own admins can warn consumers off a bad release (or withdraw it) without
- * unpublishing it. The mark is a small per-tenant metadata object written through the repository's scoped store
- * ({@link Lifecycle}), and the format the coordinate belongs to surfaces it natively on the next read - npm's
- * {@code deprecated} warning string, Cargo's {@code yanked} flag - so an ordinary client warns or skips the version
- * with no manager-specific protocol. The endpoint is format-agnostic: it takes the {@code coordinate} exactly as it
- * appears in that format's artifact path (an npm package name, a Cargo {@code <registry>/<crate>} pair) and stores the
- * flag beside the artifact; a format that has no native lifecycle signal simply ignores a mark it never reads.
+ * or list what is marked, so a repository's admins can warn consumers off a release, or withdraw it, without
+ * unpublishing it. The mark is a small object in the repository's scoped store ({@link Lifecycle}), surfaced natively
+ * by the coordinate's format on the next read - npm's {@code deprecated} string, Cargo's {@code yanked} flag. The
+ * endpoint takes the {@code coordinate} as it appears in the format's artifact path (an npm package name, a Cargo
+ * {@code <registry>/<crate>}).
  *
- * <p>Peeled out of the composition root into its own thin {@code web} adapter and contributed through the
- * {@code ServerModuleProvider} seam (see {@link LifecycleWebModule}); with this module absent the server carries none of
- * the lifecycle surface. Every route is under {@code /api/}, so the security chain requires {@code manage:read} (the
- * GET) or {@code manage:write} (the mark and clear) before the request is reached, and the tenant is the acting key's
- * own - a tenant marks its own repositories' versions, never another's. A mark and a clear are privileged mutations, so
- * each writes an audit event; a traversal-unsafe repository, coordinate or version name is a {@code 400}.
+ * <p>Contributed through the {@code ServerModuleProvider} seam ({@link LifecycleWebModule}). Every route is under
+ * {@code /api/}, so the security chain requires {@code manage:read} (GET) or {@code manage:write} (mark, clear) first,
+ * and the tenant is the acting key's own. A mark and a clear are audited; a traversal-unsafe repository, coordinate or
+ * version is a {@code 400}.
  */
 @RestController
 public class LifecycleController {
@@ -44,15 +40,10 @@ public class LifecycleController {
         this.routing = routing;
     }
 
-    /**
-     * List the marked versions of a repository - a page of the whole repository, or one coordinate when
-     * {@code coordinate} is given - so an operator can review the deprecations and yanks in place.
-     *
-     * <p>The whole-repository form is paged by {@code after}/{@code limit}: a mark exists per deprecated or yanked
-     * version, so the answer is sized by what the repository holds. It answers with the cursor that continues it, and
-     * a caller wanting everything follows that cursor - which is what the CLI does. One coordinate's marks are bounded
-     * by that coordinate's versions, so that form is answered whole and says so: no cursor, nothing cut short.
-     */
+    /** List a repository's marked versions - a page of the whole repository, or one coordinate when {@code coordinate}
+     *  is given. The whole-repository form is paged by {@code after}/{@code limit}, since marks grow with the
+     *  repository, and answers with the cursor that continues it (the CLI follows it). One coordinate's marks are
+     *  bounded by its versions, so that form is answered whole, with no cursor. */
     @GetMapping("/api/lifecycle")
     public LifecycleView list(@RequestParam("repository") String repository,
                               @RequestParam(value = "coordinate", required = false) String coordinate,
@@ -76,8 +67,8 @@ public class LifecycleController {
                 mark.state().name().toLowerCase(Locale.ROOT), mark.message())).toList();
     }
 
-    /** Mark a coordinate/version deprecated or yanked. {@code state} is {@code deprecated} or {@code yanked}; the
-     *  optional {@code message} is the operator's note surfaced to clients (npm's deprecation text). */
+    /** Mark a coordinate/version deprecated or yanked; {@code state} is {@code deprecated} or {@code yanked}, and the
+     *  optional {@code message} is the note surfaced to clients (npm's deprecation text). */
     @PostMapping("/api/lifecycle")
     public void mark(@RequestParam("repository") String repository,
                      @RequestParam("coordinate") String coordinate,
@@ -131,9 +122,8 @@ public class LifecycleController {
         return key == null ? "anonymous" : Authorization.hash(key);
     }
 
-    /** A page of a repository's marked versions (or, for a single coordinate, all of them). {@code next} carries the
-     *  cursor to continue from and is {@code null} at the end; {@code more} says the same thing where a caller finds
-     *  a flag easier to read than a null check. */
+    /** A page of a repository's marked versions, or all of one coordinate's. {@code next} continues it and is
+     *  {@code null} at the end; {@code more} says the same as a flag. */
     public record LifecycleView(List<FlagView> flags, boolean more, String next) {
     }
 

@@ -14,12 +14,12 @@ import build.jenesis.repository.store.ServableNames;
 
 /**
  * A repository's lifecycle marks as an operator reads and changes them, behind the API and the console's Lifecycle
- * page alike: what a listing discloses, which repositories refuse a mark, and the name each change is audited under
- * are said here once, so the two surfaces cannot answer differently.
+ * page: what a listing discloses, which repositories refuse a mark, and the audit name of each change are stated here
+ * once.
  *
- * <p>A listing discloses only what a pull would: a withheld version's mark is left out, judged by the inventory's
- * servable-name seam under {@code HIDE_WITHHELD}. A repository-wide listing is a page with a cursor, because a mark
- * exists per deprecated or yanked version; one coordinate's marks are bounded by its versions and answered whole.
+ * <p>A listing discloses only what a pull would: a withheld version's mark is left out, judged by the servable-name
+ * seam under {@code HIDE_WITHHELD}. A repository-wide listing is paged by cursor; one coordinate's marks are answered
+ * whole.
  */
 public final class LifecycleMarks {
 
@@ -83,11 +83,9 @@ public final class LifecycleMarks {
         return marks;
     }
 
-    /**
-     * The coordinate a mark names the version the inventory records as {@code coordinate}, served at {@code path} in
-     * {@code repository}: what the repository's format keys its marks by ({@link RepositoryFormat#lifecycleCoordinate}),
-     * so a page linking from a version to its mark names the mark the format's clients will see.
-     */
+    /** The coordinate a mark names for the version the inventory records as {@code coordinate}, served at {@code path}
+     *  - the repository format's own key ({@link RepositoryFormat#lifecycleCoordinate}), so a page linking a version to
+     *  its mark names the mark that format's clients see. */
     public String coordinateOf(String tenant, String repository, String coordinate, String path) throws IOException {
         Optional<RepositoryType> type = type(tenant, repository);
         if (type.isEmpty() || path == null || path.isBlank()) {
@@ -97,10 +95,8 @@ public final class LifecycleMarks {
                 .orElse(coordinate);
     }
 
-    /**
-     * Why {@code repository} takes no mark, or empty when it does: a repository whose format shows a mark to no client
-     * refuses one, since stored it would read as done while every client went on offering the version as before.
-     */
+    /** Why {@code repository} takes no mark, or empty when it does: a format that shows a mark to no client refuses
+     *  one, since stored it would read as done while every client went on offering the version. */
     public Optional<String> refusal(String tenant, String repository) throws IOException {
         Optional<RepositoryType> type = type(tenant, repository);
         if (type.isPresent() && type.get().formats().stream().noneMatch(RepositoryFormat::surfacesLifecycleMarks)) {
@@ -111,10 +107,8 @@ public final class LifecycleMarks {
         return Optional.empty();
     }
 
-    /**
-     * Mark a version, audited as {@code actor}; the refusal when the repository takes no mark, empty when marked. A
-     * traversal-unsafe coordinate or version is an {@link IllegalArgumentException}.
-     */
+    /** Mark a version, audited as {@code actor}: the refusal when the repository takes no mark, empty when marked. A
+     *  traversal-unsafe coordinate or version is an {@link IllegalArgumentException}. */
     public Optional<String> mark(String tenant, String repository, String coordinate, String version,
                                  Lifecycle.State state, String message, String actor) throws IOException {
         RepositoryRequests.rejectTraversal(coordinate);
