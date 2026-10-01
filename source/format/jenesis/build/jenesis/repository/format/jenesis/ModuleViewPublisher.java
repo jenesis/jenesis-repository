@@ -27,17 +27,19 @@ public final class ModuleViewPublisher implements ModuleView {
         if (!classifier.isEmpty()) {
             return;   // a classified jar is one of a version's files, never the module the latest view names
         }
-        // The "latest" pointers, and the reason publish and rebuild are two methods: they say "the most recently
-        // published version of this module", which is an ordering fact about publications rather than a fact about
-        // stored state. Only a publish knows it. A rebuild pass re-linking them would move them to whichever version
-        // the walk reached last, so the pass leaves them exactly as the last publish left them.
+        // The "latest" pointers, and the reason publish and rebuild are two methods: a publish moves them to its
+        // version when that is the highest yet (LatestView), and a rebuild pass re-linking them would move them to
+        // whichever version the walk reached last, so the pass leaves them as the publishes left them.
+        if (!LatestView.takes(store, JavaLayout.latestModule(moduleName), version)) {
+            return;
+        }
         Publication publication = new Publication(store);
         for (String latest : List.of(JavaLayout.latestModule(moduleName),
                 JavaLayout.latestArtifact(moduleName, "jar"))) {
             publication.link(latest, hash);
-            // REASSIGNED, not recorded: the latest view names whichever version published last, so this publish takes
-            // it off the version that held it. An append would leave a release of 1.0 lifting a view that has been
-            // 2.0's since 2.0 landed - and 2.0 may be held on its own account.
+            // REASSIGNED, not recorded: this publish takes the view off the version that held it. An append would
+            // leave a release of 1.0 lifting a view that has been 2.0's since 2.0 landed - and 2.0 may be held on its
+            // own account.
             ServedAliases.reassign(store, origin, latest);
         }
     }

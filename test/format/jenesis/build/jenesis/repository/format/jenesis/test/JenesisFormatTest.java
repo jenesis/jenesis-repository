@@ -88,20 +88,32 @@ class JenesisFormatTest {
     }
 
     @Test
-    void a_module_jar_moves_the_latest_pointer_and_a_classified_one_does_not() throws IOException {
+    void a_module_jar_moves_the_latest_pointer_to_the_highest_version_and_a_classified_one_does_not()
+            throws IOException {
         byte[] first = "1.0".getBytes(StandardCharsets.UTF_8), second = "2.0".getBytes(StandardCharsets.UTF_8);
         assertThat(put("/module/com.acme/1.0/com.acme.jar", first)).isEqualTo(201);
         assertThat(get("/module/com.acme/com.acme.jar").responseBytes()).isEqualTo(first);
 
         assertThat(put("/module/com.acme/2.0/com.acme.jar", second)).isEqualTo(201);
         assertThat(get("/module/com.acme/com.acme.jar").responseBytes())
-                .as("the latest pointer names the version published last").isEqualTo(second);
+                .as("the latest pointer names the highest version").isEqualTo(second);
+
+        byte[] backport = "1.5".getBytes(StandardCharsets.UTF_8);
+        assertThat(put("/module/com.acme/1.5/com.acme.jar", backport)).isEqualTo(201);
+        assertThat(get("/module/com.acme/1.5/com.acme.jar").responseBytes()).isEqualTo(backport);
+        assertThat(get("/module/com.acme/com.acme.jar").responseBytes())
+                .as("a backport published after it is served at its version and leaves the pointer where it was")
+                .isEqualTo(second);
+        byte[] third = "10.0".getBytes(StandardCharsets.UTF_8);
+        assertThat(put("/module/com.acme/10.0/com.acme.jar", third)).isEqualTo(201);
+        assertThat(get("/module/com.acme/com.acme.jar").responseBytes())
+                .as("versions order as versions, not as text").isEqualTo(third);
 
         byte[] classified = "2.0 sources".getBytes(StandardCharsets.UTF_8);
         assertThat(put("/module/com.acme/2.0/com.acme-sources.jar", classified)).isEqualTo(201);
         assertThat(get("/module/com.acme/2.0/com.acme-sources.jar").responseBytes()).isEqualTo(classified);
         assertThat(get("/module/com.acme/com.acme.jar").responseBytes())
-                .as("a classified jar is one of a version's files, not the module the pointer names").isEqualTo(second);
+                .as("a classified jar is one of a version's files, not the module the pointer names").isEqualTo(third);
     }
 
     private int put(String path, byte[] body) throws IOException {

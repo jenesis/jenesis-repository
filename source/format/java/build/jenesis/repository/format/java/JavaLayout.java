@@ -51,7 +51,7 @@ public final class JavaLayout {
         return MODULE_ROUTE + moduleName + "/" + version + "/" + moduleName + ".jar";
     }
 
-    /** The "latest" view of a module - the pointer that names whichever version published last. */
+    /** The "latest" view of a module - the pointer that names its highest version published. */
     public static String latestModule(String moduleName) {
         return MODULE_ROUTE + moduleName + "/" + moduleName + ".jar";
     }

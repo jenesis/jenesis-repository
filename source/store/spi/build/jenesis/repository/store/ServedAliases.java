@@ -119,7 +119,7 @@ public final class ServedAliases {
      *
      * <p><b>Each is confirmed against its own reverse entry before it is returned,</b> and that check is the one that
      * makes this safe rather than the bookkeeping that writes it. A group entry only ever grows; a moving alias - the
-     * "latest" view, which names whichever version published last - is taken off its previous origin by
+     * "latest" view, which names the highest version published - is taken off its previous origin by
      * {@link #reassign}, but a crash between the two writes, or any future writer that forgets, leaves the old
      * origin's group still naming it. Answering from the group alone would then hand a release of 1.0 an alias that
      * has been 2.0's since 2.0 published.
@@ -182,7 +182,7 @@ public final class ServedAliases {
      *
      * <p>This is the shape a "latest" view needs, and it is why recording an alias is not one operation. A
      * version-addressed pointer such as {@code /module/<name>/1.0/<name>.jar} belongs to version 1.0 for good, so it
-     * simply accumulates. {@code /module/<name>/<name>.jar} does not: it names whichever version published last, so
+     * simply accumulates. {@code /module/<name>/<name>.jar} does not: it names the highest version published, so
      * publishing 2.0 must take it away from 1.0. Left as an append, releasing 1.0 would lift a view that has been
      * 2.0's for some time - and 2.0 may be held on its own account, which makes that a disclosure rather than an
      * untidy record.

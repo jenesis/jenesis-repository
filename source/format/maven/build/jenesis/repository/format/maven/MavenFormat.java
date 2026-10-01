@@ -399,11 +399,12 @@ public final class MavenFormat implements RepositoryFormat, ProxyFormat, Artifac
         for (ModuleView view : MODULE_VIEWS) {
             view.publish(module, coordinate[2], classifier.get(), hash, store, path);
         }
-        // And the descriptor, when it arrived first.
+        // And the descriptor, when it arrived first - the latest one when this version's jar took the latest view.
         Optional<String> pomHash = classifier.get().isEmpty() ? publication.blob(pom) : Optional.empty();
         if (pomHash.isPresent()) {
+            boolean latest = publication.blob(JavaLayout.latestModule(module)).equals(Optional.of(hash));
             for (ModuleView view : MODULE_VIEWS) {
-                view.describe(module, coordinate[2], pomHash.get(), true, store, pom);
+                view.describe(module, coordinate[2], pomHash.get(), latest, store, pom);
             }
         }
         return hash;

@@ -44,6 +44,18 @@ class ModuleViewPublisherTest {
     }
 
     @Test
+    void a_lower_version_published_later_leaves_the_latest_view_on_the_highest() throws IOException {
+        String two = publication.storeBlob(new ByteArrayInputStream("2.0 jar".getBytes(StandardCharsets.UTF_8)));
+        String backport = publication.storeBlob(new ByteArrayInputStream("1.4 jar".getBytes(StandardCharsets.UTF_8)));
+
+        publisher.publish("com.acme.lib", "2.0", "", two, store, "/maven/com/acme/lib/2.0/lib-2.0.jar");
+        publisher.publish("com.acme.lib", "1.4", "", backport, store, "/maven/com/acme/lib/1.4/lib-1.4.jar");
+
+        assertThat(publication.located("/module/com.acme.lib/1.4/com.acme.lib.jar")).contains("blobs/" + backport);
+        assertThat(publication.located("/module/com.acme.lib/com.acme.lib.jar")).contains("blobs/" + two);
+    }
+
+    @Test
     void rebuild_restores_the_versioned_view_a_crashed_cross_publish_never_linked() throws IOException {
         // The repair seam, over the exact residue MavenFormat.layout can leave: the Maven coordinate is linked and the
         // cross-publish then failed, so no module view exists at all. A rebuild re-derives the version-addressed one.

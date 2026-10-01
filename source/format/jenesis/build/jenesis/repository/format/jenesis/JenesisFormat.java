@@ -202,8 +202,10 @@ public final class JenesisFormat implements RepositoryFormat, ArtifactLayout, Re
         publication.link(path, blob.hash(), blob.size());
         if (segments[2].equals(segments[0] + ".jar")) {
             String latest = JavaLayout.latestModule(segments[0]);
-            publication.link(latest, blob.hash(), blob.size());
-            ServedAliases.reassign(store, path, latest);
+            if (LatestView.takes(store, latest, segments[1])) {
+                publication.link(latest, blob.hash(), blob.size());
+                ServedAliases.reassign(store, path, latest);
+            }
         }
         exchange.respond(201);
     }
@@ -218,8 +220,8 @@ public final class JenesisFormat implements RepositoryFormat, ArtifactLayout, Re
     }
 
     /** A module version's jars, each put at its path under the repository URL a Jenesis build is pointed at. The
-     *  version-less latest pointer is not sent: the target keeps its own, moving it with each module jar it takes, and
-     *  versions arrive in the order they were published, so it ends where it does here. */
+     *  version-less latest pointer is not sent: the target keeps its own by the same rule, on the highest version it
+     *  takes, so it ends where it does here. */
     @Override
     public Exported export(ArtifactStore repository, String coordinate, String version, ExportTarget target)
             throws IOException {
