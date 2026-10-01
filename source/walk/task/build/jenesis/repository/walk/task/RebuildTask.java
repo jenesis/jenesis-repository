@@ -14,24 +14,23 @@ import build.jenesis.repository.walk.WalkConsumer;
 import build.jenesis.repository.walk.WalkPass;
 
 /**
- * One scheduled walk: per repository, join the pass named after this task ({@code walks/<name>}) over every key
- * family its consumers listen on - the pointer roots ({@code publish/} plus every installed blobs-namespace
- * format's declared roots, the same {@link StoreRepositoryInventory#pointerRoots() union} the garbage collector
- * judges references from), the inventory rows, the blob pool, the derived rows - and hand every member to the
- * consumers riding this walk: N rebuilders, one enumeration. The {@link RebuildPass} owns the delivery
- * contract (descriptor richness, exactly-once per pass, a consumer that fails failing alone and being redelivered
- * by the next generation); this task is the thin scheduled caller, and reads the pass's failure records afterwards
- * to report them. The {@code rebuild} task carries every consumer and is what a standing request runs; every other
- * task is one entry of the walks setting, on its cron, carrying the consumers it names. A pass another node still
- * holds segments of returns incomplete and simply resumes on the next run - the walk never restarts from scratch.
+ * One scheduled walk: per repository, join the pass named after this task ({@code walks/<name>}) over every key family
+ * its consumers listen on - the pointer roots ({@code publish/} plus every installed blobs-namespace format's roots,
+ * the {@link StoreRepositoryInventory#pointerRoots() union} the collector judges references from), the inventory rows,
+ * the blob pool, the derived rows - and hand each member to the consumers riding it: N rebuilders, one enumeration.
+ * {@link RebuildPass} owns the delivery contract (descriptor richness, once per pass, a failing consumer failing alone
+ * and redelivered next generation); this task schedules it and reports the pass's failure records. The {@code rebuild}
+ * task carries every consumer and is what a standing request runs; every other task is one entry of the walks setting,
+ * on its cron, carrying the consumers it names. A pass another node still holds segments of returns incomplete and
+ * resumes on the next run.
  */
 public final class RebuildTask implements MaintenanceTask {
 
     /** The task every consumer rides, and a request runs: its name, its lease and its pass scope. */
     public static final String REBUILD = "rebuild";
 
-    /** What a task with no schedule answers as its interval and as its next moment: far enough that the clock never
-     *  runs it, near enough to fit a duration - a request is what runs it. */
+    /** A schedule-less task's interval and next moment: far enough that the clock never runs it, near enough to fit a
+     *  duration - a request runs it. */
     private static final Duration NEVER = Duration.ofDays(3650);
 
     private final String name;
@@ -80,18 +79,13 @@ public final class RebuildTask implements MaintenanceTask {
         return schedule.next(after).orElse(after.plus(NEVER));
     }
 
-    /**
-     * Exclusive <em>as well as</em> walk-claimed - deliberately both, now declared rather than inherited from the SPI
-     * default, so the choice is a statement a reviewer can find instead of an absence they have to interpret. The
-     * walk's segment claims would keep every {@code PER_ITEM_DURABLE} and {@code STRIDE_DURABLE} consumer correct
-     * under fan-out, but the pass hooks are <b>per worker</b>: {@link WalkConsumer#onPassStarted} /
-     * {@link WalkConsumer#onPassCompleted} bracket one worker's share, so a {@code PASS_SNAPSHOT} rebuilder - one
-     * artifact committed at pass end from an accumulation spanning the whole pass - is only bracketed correctly by ONE
-     * scheduled worker driving the whole pass, which is the degrade {@link RebuildPass} records. Consumers are
-     * discovered, so this task cannot know whether the fleet currently carries a snapshot rebuilder; taking the lease
-     * is the answer that is correct for every delivery class. It costs only scale-out this once-a-day pass does not
-     * need, and a dead node's segments are still reclaimed by the next interval's holder.
-     */
+    /** Exclusive as well as walk-claimed. Segment claims keep {@code PER_ITEM_DURABLE} and {@code STRIDE_DURABLE}
+     *  consumers correct under fan-out, but the pass hooks are per worker - {@link WalkConsumer#onPassStarted} /
+     *  {@link WalkConsumer#onPassCompleted} bracket one worker's share - so a {@code PASS_SNAPSHOT} rebuilder,
+     *  committing one artifact from an accumulation over the whole pass, is bracketed correctly only when one worker
+     *  drives the whole pass, the degrade {@link RebuildPass} records. Consumers are discovered, so the lease is what
+     *  is correct for every delivery class; it costs only scale-out, and a dead node's segments are reclaimed by the
+     *  next interval's holder. */
     @Override
     public Exclusion exclusion() {
         return Exclusion.LEASE;
@@ -117,8 +111,8 @@ public final class RebuildTask implements MaintenanceTask {
 
     @Override
     public void repository(RepositoryContext context) throws IOException {
-        // Every family the deployment can name; the pass walks only the ones a consumer listens on. Each consumer is
-        // handed this repository's configuration first, so a rule set for the repository governs what it does here.
+        // Every family the deployment can name; the pass walks only those a consumer listens on. Each consumer gets
+        // this repository's configuration first, so the repository's own rules govern it here.
         ArtifactStore store = context.store();
         for (WalkConsumer consumer : consumers) {
             consumer.onRepository(store, context.config());
@@ -137,9 +131,8 @@ public final class RebuildTask implements MaintenanceTask {
             blobs.add(measured.blobs());
             derived.add(measured.derived());
         });
-        // A consumer that failed did so alone: the pass completed for the others, and this is where its failure
-        // becomes the pass's reported outcome - named, counted against this task, and the reason the next pass
-        // is asked for - rather than a marker nobody reads.
+        // A consumer that failed did so alone: here its failure becomes the pass's outcome - named, counted against
+        // this task, and the reason the next pass is asked for.
         UnitFailures failures = context.failures("The rebuild pass of " + context.tenant() + "/"
                 + context.repository(), "Each named consumer's projection is incomplete for this generation; the "
                 + "next pass redelivers every key to it.");

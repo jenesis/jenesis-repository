@@ -8,17 +8,13 @@ import build.jenesis.repository.walk.WalkConsumer;
 import build.jenesis.repository.walk.WalkProvider;
 
 /**
- * Discovers the scheduled walks: on by default when this module is installed ({@code rebuild=false} switches them
- * all off - the neutral scheduler's {@code Features} gate, checked before {@link #tasks(UnaryOperator)} is reached), each on the
- * cron its entry of {@code jenrepo.walks} gives it ({@link WalkSchedules}): the {@code rebuild} walk every consumer
- * rides and a standing request runs, weekly by default, and a walk of its own per further entry, carrying the
- * consumers the entry names. A walk is the repair for what a crash left behind and the back-fill for a consumer
- * installed late, never the steady state, which the publication events keep - so without a crash no walk is
- * necessary, and the cadence is for the case nobody noticed. Degrades gracefully, never silently: with no walk
- * implementation resolved there is nothing to enumerate with, so no pass schedules at all; with no
- * {@link WalkConsumer} discovered there is nothing to feed, so none does either - the capability surfaces say so
- * (the {@code walk} flag, this module's console row), and a consumer module installed later is picked up on the
- * next task re-resolve without a restart.
+ * Discovers the scheduled walks: on by default when installed ({@code rebuild=false} switches all off, the scheduler's
+ * {@code Features} gate), each on the cron its {@code jenrepo.walks} entry gives it ({@link WalkSchedules}): the
+ * {@code rebuild} walk every consumer rides and a request runs, weekly by default, and one walk per further entry
+ * carrying the consumers it names. A walk is the repair for what a crash left and the back-fill for a consumer
+ * installed late; publication events keep the steady state. With no walk implementation, or no {@link WalkConsumer},
+ * nothing schedules, and the capability surfaces say so; a consumer module installed later is picked up on the next
+ * re-resolve without a restart.
  */
 public final class RebuildTaskProvider implements MaintenanceTaskProvider {
 
@@ -34,12 +30,9 @@ public final class RebuildTaskProvider implements MaintenanceTaskProvider {
         return tasks(config).stream().findFirst();
     }
 
-    /**
-     * One task per scheduled walk: the {@code rebuild} task, which every consumer rides and a request runs, on the
-     * cron the entry of that name gives it (or never by the clock, when no entry names it); and a task of its own
-     * for every other enabled entry, carrying the consumers the entry names. An entry naming no installed consumer
-     * schedules nothing and says so once.
-     */
+    /** One task per scheduled walk: {@code rebuild}, which every consumer rides and a request runs, on its entry's cron
+     *  (or never by the clock without one), and one task per other enabled entry carrying its consumers. An entry
+     *  naming no installed consumer schedules nothing and says so once. */
     @Override
     public List<MaintenanceTask> tasks(UnaryOperator<String> config) {
         Optional<ArtifactWalk> walk = WalkProvider.resolve(config);

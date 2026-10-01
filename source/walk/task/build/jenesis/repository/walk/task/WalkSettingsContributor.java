@@ -5,12 +5,9 @@ import build.jenesis.repository.settings.Setting;
 import build.jenesis.repository.settings.SettingsContributor;
 
 /**
- * Describes the rebuild-pass settings, so they surface on the settings screens exactly when this module is
- * installed. Both are deployment-wide (a background sweep, not a per-repository dial) and take effect on the next
- * task re-resolve, so flipping one needs no restart.
- *
- * <p>The cadence entry renders its key and default straight off {@link RebuildTaskProvider}'s
- * {@link WalkSchedules#DEFAULT} constant, so the catalogue and the code cannot drift.
+ * Describes the walk settings - the {@code rebuild} gate and {@link WalkSchedules#SETTING} - so they appear exactly
+ * when this module is installed. Both are deployment-wide and apply on the next task re-resolve, without a restart. The
+ * schedule's default renders {@link WalkSchedules#DEFAULT}, so the catalogue cannot drift.
  */
 public final class WalkSettingsContributor implements SettingsContributor {
 

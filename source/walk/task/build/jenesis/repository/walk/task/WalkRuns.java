@@ -12,14 +12,13 @@ import build.jenesis.repository.store.Requests;
 import build.jenesis.repository.walk.WalkConsumer;
 
 /**
- * What the three surfaces do with the walks, once: ask for a walk now, read what the last run of each entry cost,
- * and assemble the overview a screen or an API answer renders - the entries, the consumers with their descriptions
- * and the dials that govern them, the standing requests. The console screen and the admin endpoint both reach this
- * class, which is what lets the parity rule see them as one capability; the CLI is the endpoint's client.
+ * What the three surfaces do with the walks, once: ask for a walk now, read what each entry's last run cost, and
+ * assemble the overview a screen or API answer renders - entries, consumers with their descriptions and dials, standing
+ * requests. The console screen and the admin endpoint both reach this class, and the CLI is the endpoint's client.
  */
 public final class WalkRuns {
 
-    /** The product-owned space the last run of each entry is recorded under, beside the other {@code .system} spaces. */
+    /** The product-owned space each entry's last run is recorded under. */
     static final String SPACE = "walks";
 
     private WalkRuns() {
@@ -31,11 +30,9 @@ public final class WalkRuns {
         audit.record(tenant, actor, AuditActions.WALKS_RUN, Requests.WALK);
     }
 
-    /**
-     * What the last run of one entry cost, summed over the repositories it walked: when it ran, how many
-     * repositories, and the objects the pass handed its consumers per family. The store operations it cost are the
-     * scheduler's figure for the run ({@link LastRun}), measured around it on the node that ran it.
-     */
+    /** What one entry's last run cost, summed over the repositories it walked: when, how many repositories, and the
+     *  objects handed to consumers per family. Its store operations are the scheduler's figure ({@link LastRun}),
+     *  measured on the node that ran it. */
     public record Cost(String name, Instant started, Instant finished, long repositories, long pointers,
                        long inventory, long blobs, long derived) {
 
@@ -70,8 +67,8 @@ public final class WalkRuns {
         return root.readVersioned(costKey(name)).map(versioned -> Cost.decode(name, versioned.content()));
     }
 
-    /** The scheduler's account of an entry's last run on this node: when it finished, how long it took, whether
-     *  it failed, and the read and write operations the node issued while it ran. */
+    /** The scheduler's account of an entry's last run on this node: when it finished, how long it took, whether it
+     *  failed, and the reads and writes the node issued meanwhile. */
     public record LastRun(Instant finished, Duration duration, boolean failed, long reads, long writes) {
     }
 
@@ -84,7 +81,7 @@ public final class WalkRuns {
     public record Dial(String key, String label, String description, String value, String defaultValue) {
     }
 
-    /** One installed consumer: its name, what it does and what it costs, and the dials that govern it. */
+    /** One installed consumer: its name, what it does and costs, and its dials. */
     public record Consumer(String name, String description, List<Dial> settings) {
     }
 
@@ -99,10 +96,10 @@ public final class WalkRuns {
     /**
      * Assemble the overview from the stored walks document, the installed consumers and the scheduler's runs.
      *
-     * @param config the effective configuration, the walks document and every consumer's dials read through it
-     * @param root   the root store the requests and the runs' accounts live on
-     * @param runs   the scheduler's last run of a task by name, as this node recorded it
-     * @param now    what "next" is measured from
+     * @param config the effective configuration, through which the walks document and every consumer's dials are read
+     * @param root the root store the requests and the runs' accounts live on
+     * @param runs the scheduler's last run of a task by name, as this node recorded it
+     * @param now what "next" is measured from
      */
     public static Overview overview(UnaryOperator<String> config, ArtifactStore root,
                                     Function<String, Optional<LastRun>> runs, Instant now) throws IOException {
@@ -137,11 +134,8 @@ public final class WalkRuns {
         return new Overview(List.copyOf(entries), List.copyOf(consumers), List.copyOf(pending));
     }
 
-    /**
-     * The walks document with one entry added or replaced, rendered for the settings store - validated the way
-     * the document is parsed on read, so a malformed cron expression or an unknown consumer is refused with the
-     * entry and the field named and nothing is written.
-     */
+    /** The walks document with one entry added or replaced, validated as the document is parsed, so a malformed cron or
+     *  an unknown consumer is refused naming the entry and the field, and nothing is written. */
     public static String upsert(String document, String name, String cron, boolean enabled, List<String> consumers) {
         List<WalkSchedules.Entry> entries = new ArrayList<>();
         boolean replaced = false;
