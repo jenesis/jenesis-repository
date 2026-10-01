@@ -35,6 +35,7 @@ module build.jenesis.repository.format.signing {
     requires transitive build.jenesis.repository.format;
     requires build.jenesis.repository.compliance;
     requires build.jenesis.repository.settings;
+    requires build.jenesis.repository.posture;
     requires org.bouncycastle.pg;
     requires org.bouncycastle.pkix;
     requires org.bouncycastle.provider;
@@ -45,4 +46,6 @@ module build.jenesis.repository.format.signing {
                     build.jenesis.repository.format.signing.Pkcs7Scheme,
                     build.jenesis.repository.format.signing.RsaDetachedScheme,
                     build.jenesis.repository.format.signing.X509DetachedScheme;
+    provides build.jenesis.repository.posture.SafetyAdvisor
+            with build.jenesis.repository.format.signing.UnsealedSigningKeysAdvisor;
 }
