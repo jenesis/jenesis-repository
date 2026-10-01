@@ -9,15 +9,11 @@ import org.apache.lucene.analysis.miscellaneous.PerFieldAnalyzerWrapper;
 import org.apache.lucene.analysis.pattern.PatternTokenizer;
 
 /**
- * The analyzers of the index's two text fields, each a {@link PatternTokenizer} followed by a {@link LowerCaseFilter}
- * so a query matches however it was cased.
- *
- * <p>A coordinate is split on its own separators ({@code :}, {@code .}, {@code /}, {@code -}, {@code @}, {@code +} and
- * whitespace), so {@code com.google.guava:guava}, {@code @angular/core} and {@code spring-boot-starter} tokenise into
- * their segments - the standard tokenizer keeps a dotted coordinate whole, which a coordinate index must not. Prose -
- * a description, keywords, a person's name - is split on everything that is not a letter or a digit, so a word
- * followed by a comma or wrapped in parentheses is still that word. A query runs through the analyzer of the field it
- * is matched against. The tokens are indexed and searched, never the artifact blob.
+ * The analyzers of the index's two text fields, each a {@link PatternTokenizer} and a {@link LowerCaseFilter}, so a
+ * query matches however it is cased. A coordinate is split on its separators ({@code :}, {@code .}, {@code /},
+ * {@code -}, {@code @}, {@code +} and whitespace), so {@code com.google.guava:guava} and {@code @angular/core} tokenise
+ * into their segments, which the standard tokenizer would keep whole. Prose is split on everything not a letter or
+ * digit. A query runs through the analyzer of the field it is matched against.
  */
 final class CoordinateAnalyzer extends Analyzer {
 

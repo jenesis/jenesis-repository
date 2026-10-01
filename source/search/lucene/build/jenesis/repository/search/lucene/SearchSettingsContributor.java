@@ -5,13 +5,10 @@ import build.jenesis.repository.settings.Setting;
 import build.jenesis.repository.settings.SettingsContributor;
 
 /**
- * Describes the dials that tune a repository's full-text index once it has one: how often the pass applies what
- * changed, how long a stalled rebuild's claim is honoured, the incremental safety valve, how often the pass
- * reconciles from truth by itself, and the reconcile riding the walk. Whether a repository has an index at all is its
- * {@code full-text-search} setting, declared beside the search that reads it.
- *
- * <p>The cadence entries render their keys and defaults straight off {@link SearchIndexTaskProvider}'s
- * {@code IntervalSetting} constants, so the catalogue and the code cannot drift.
+ * Describes the dials of a repository's full-text index: the apply cadence, the claim takeover, the incremental safety
+ * valve, the pass's own reconcile, and the reconcile riding the walk. Whether a repository has an index is its
+ * {@code full-text-search} setting, declared with the search. The cadences render from
+ * {@link SearchIndexTaskProvider}'s constants.
  */
 public final class SearchSettingsContributor implements SettingsContributor {
 

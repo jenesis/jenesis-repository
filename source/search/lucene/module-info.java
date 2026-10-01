@@ -1,17 +1,13 @@
 /**
- * The full-text search index, Apache Lucene as a library rather than a new stack, for the repositories that ask for
- * one ({@link build.jenesis.repository.search.SearchMode#FULL_TEXT}; off by default, when a repository answers by name
- * and none of this runs). It provides a {@link build.jenesis.repository.maintenance.MaintenanceTaskProvider} answering
- * to {@code search-index}: the {@code Lease}-guarded, single-writer background pass that bootstraps a repository's
- * index from its published versions - the version documents only, never an artifact blob - and then applies what the
- * publish observer marks, storing the index as content-addressed segment files under {@code index/search/segments}
- * and cutting a small {@code index/search/current} manifest over by compare-and-set. Beside it: the observer that
- * marks a publish or a removal, the walk consumer that rebuilds from truth when a walk carrying it completes (and
- * removes the index of a repository that has switched it off), its settings, and a
- * {@link build.jenesis.repository.search.SearchQueryProvider} whose per-repository searcher swaps a new generation in
- * behind a short refresh window. The index is derived data: a manifest of another format version is discarded and
- * rebuilt by the next pass, never migrated, and it lives in the same scoped store the repository already writes to -
- * no database, no second service.
+ * The full-text search index, on Apache Lucene, for the repositories that ask for one
+ * ({@link build.jenesis.repository.search.SearchMode#FULL_TEXT}; off by default). A
+ * {@link build.jenesis.repository.maintenance.MaintenanceTaskProvider} answering to {@code search-index} runs the
+ * lease-guarded single-writer pass that bootstraps an index from the version documents and applies what the publish
+ * observer marks, storing content-addressed segments under {@code index/search/segments} and cutting the
+ * {@code index/search/current} manifest over by compare-and-set. Beside it: the observer, the walk consumer that
+ * rebuilds from truth (and removes a switched-off index), the settings, and a
+ * {@link build.jenesis.repository.search.SearchQueryProvider}. The index is derived data in the repository's own store:
+ * another format version is rebuilt, never migrated.
  *
  * @jenesis.release 25
  * @jenesis.bom pin-repository.properties

@@ -14,17 +14,13 @@ import build.jenesis.repository.walk.WalkPass;
 import build.jenesis.repository.walk.WalkProvider;
 
 /**
- * The search index rebuilt from truth at the end of a walk: the full reconcile that heals whatever the change feed
- * missed and compacts the feed - a Lucene rebuild over every release, too costly to run every few hours. The pass
- * keeps its bootstrap (no usable index yet) and its steady state (the dirty feed); this consumer runs the reconcile
- * when a walk carrying it completes, weekly by default on the rebuild entry, and its own accumulation still rides the
- * index's own walk pass, whose completeness rule (one worker, a fresh generation) is bound to that pass.
+ * The search index rebuilt from truth when a walk carrying this consumer completes: the reconcile that heals what the
+ * change feed missed and compacts it, weekly by default. The pass keeps its bootstrap and its steady state, and the
+ * accumulation rides the index's own walk pass, whose completeness rule is bound to it.
  *
- * <p>It is also where an index a repository no longer asks for goes: a repository whose {@code full-text-search} is
- * off and still holds an index - it was on, and was switched off - has it removed here, which costs the walk one
- * existence probe per repository with full-text search off. The document
- * count and snapshot size are on the observability report as {@code jenrepo.search.*}. Listens on the pointer stream
- * only to be told which store's pass it is riding.
+ * <p>It also removes the index of a repository whose {@code full-text-search} was switched off, one existence probe per
+ * such repository. The document count and snapshot size are reported as {@code jenrepo.search.*}. It listens on the
+ * pointer stream only to learn which store's pass it rides.
  */
 public final class SearchRebuildConsumer implements WalkConsumer {
 

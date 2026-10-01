@@ -5,9 +5,7 @@ import module java.base;
 import build.jenesis.repository.maintenance.StorageNamespace;
 
 /**
- * The search module's storage manifest: it owns the per-repository {@code index/search} generations the
- * {@link SearchIndex} maintains, so the orphan diagnostic and the explicit operator purge know the key-space
- * without a hardcoded table.
+ * The search module's storage manifest: the per-repository {@code index/search} space {@link SearchIndex} maintains.
  */
 public final class SearchStorageNamespace implements StorageNamespace {
 

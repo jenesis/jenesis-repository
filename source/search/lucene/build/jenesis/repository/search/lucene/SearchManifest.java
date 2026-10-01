@@ -5,13 +5,11 @@ import module java.base;
 import build.jenesis.repository.store.LineDocument;
 
 /**
- * The head of the search index: the current snapshot generation a reader loads, the index format version (bumped on
- * an incompatible index-layout change so a stale reader discards rather than mis-reads), the document count, the
- * SHA-256 checksum of the generation it names, and when the index was last rebuilt from truth. Committed by the pass
- * through the store's compare-and-set, so a reader's refresh compares the generation - unchanged means it keeps the
- * loaded index untouched, changed means it opens the new one and swaps. {@code reconciled} is what makes the pass's own
- * reconcile due by time: every full rebuild writes it, and an incremental cutover carries it over, so an idle pass
- * decides from the manifest it had to read anyway and writes nothing. A small line-oriented document.
+ * The head of the search index: the generation a reader loads, the format version (a stale reader discards rather than
+ * mis-reads), the document count, the generation's SHA-256, and when the index was last rebuilt from truth. Committed
+ * by compare-and-set; a reader compares the generation to decide whether to swap. Every full rebuild writes
+ * {@code reconciled} and an incremental cutover carries it, so an idle pass decides from the manifest it read anyway. A
+ * line-oriented document.
  */
 public record SearchManifest(int generation, int format, long documents, String checksum, Instant reconciled) {
 
@@ -28,11 +26,8 @@ public record SearchManifest(int generation, int format, long documents, String 
                 .bytes();
     }
 
-    /** Parse a stored manifest document; a blank, corrupt or unrecognised body yields a format-{@code 0} sentinel a
-     *  reader treats as no usable index. A malformed value (a garbled generation, a {@code generation} line with no
-     *  number) is tolerated rather than thrown - the read path answers by name on an unusable manifest, and the
-     *  {@code Lease}-guarded pass parses the same object before rebuilding, so a {@code NumberFormatException} here
-     *  would otherwise make every pass throw and the index never self-heal. */
+    /** Parse a stored manifest; a blank, corrupt or unrecognised body, or a malformed value, yields a format-{@code 0}
+     *  sentinel read as no usable index, so the pass rebuilds rather than throwing on every run. */
     public static SearchManifest parse(byte[] bytes) {
         Optional<LineDocument> document = LineDocument.parse(bytes, HEADER);
         if (document.isEmpty()) {

@@ -6,36 +6,28 @@ import build.jenesis.repository.search.SearchQueryProvider;
 import build.jenesis.repository.store.ArtifactStore;
 
 /**
- * Binds the Lucene search index to a repository's scoped store, discovered through {@code ServiceLoader}. One instance
- * serves every tenant and repository, keeping a per-scope {@link LuceneSearcher} so a repository's loaded index and
- * its TTL refresh survive across requests - a caller resolves this once (a final field) and calls {@link #over} per
- * request. The searcher itself does the store reads, so a fresh per-request scoped store is fine.
+ * Binds the Lucene search index to a repository's scoped store. One instance serves every tenant and repository,
+ * keeping a {@link LuceneSearcher} per scope so a loaded index and its refresh window survive across requests; a caller
+ * resolves this once and calls {@link #over} per request.
  *
- * <p>The per-scope cache is <strong>bounded</strong>, never an unbounded map: each entry holds a whole
- * file-backed index over the node's segment cache, so a fleet that has ever searched thousands of repositories would
- * otherwise grow its heap to the sum of every index ever loaded. Instead the cache is a size- and count-weighted LRU
- * with an idle-TTL: an entry untouched for longer than the idle window is dropped, and when the resident set exceeds
- * either the scope-count cap or the resident-heap-byte cap the least-recently-used scopes are evicted until it fits.
- * An evicted searcher is {@link LuceneSearcher#close closed} so its buffers are freed at once rather than left for the
- * garbage collector. A re-queried scope simply reloads its index from the store snapshot on the next {@link #over} -
- * the index is derived data, and the reload is the same TTL refresh a cold scope already does.
+ * <p>The per-scope cache is bounded, since each entry holds a whole index: a count- and size-weighted LRU with an idle
+ * TTL. An entry idle past the window is dropped, and past the scope-count or resident-byte cap the least-recently-used
+ * scopes are evicted and {@link LuceneSearcher#close closed}. A re-queried scope reloads its index from the store.
  */
 public final class LuceneSearchQueryProvider implements SearchQueryProvider {
 
-    /** How long a loaded index serves before the reader re-checks the manifest generation; short, so a new snapshot
-     *  becomes visible within a query or two of a sweep without re-downloading an unchanged one. */
+    /** How long a loaded index serves before the reader re-checks the manifest generation: short, so a new snapshot is
+     *  visible within a query or two without re-downloading an unchanged one. */
     private static final Duration TTL = Duration.ofSeconds(30);
 
-    /** The most repository scopes kept resident at once - a hard ceiling on the number of loaded indexes so the heap
-     *  cannot grow with the number of repositories ever searched. */
+    /** The most repository scopes kept resident, so the heap cannot grow with the number of repositories ever
+     *  searched. */
     private static final int MAX_RESIDENT = 128;
 
-    /** The most resident index heap kept at once - the size half of the weighting, so a few very large indexes are
-     *  bounded even when the scope count is not near its cap. */
+    /** The most resident index bytes kept, so a few very large indexes are bounded too. */
     private static final long MAX_RESIDENT_BYTES = 512L << 20;
 
-    /** How long a scope may go unqueried before its loaded index is dropped, so an idle repository does not hold heap
-     *  indefinitely between the rare searches it sees. */
+    /** How long a scope may go unqueried before its loaded index is dropped. */
     private static final Duration IDLE_TTL = Duration.ofMinutes(15);
 
     private final Duration ttl;
@@ -44,7 +36,7 @@ public final class LuceneSearchQueryProvider implements SearchQueryProvider {
     private final long idleTtlNanos;
     private final ConcurrentMap<String, Entry> entries = new ConcurrentHashMap<>();
 
-    /** One resident scope: its searcher and the last time it was handed to a request, so the LRU can order and age it. */
+    /** One resident scope: its searcher and when it was last handed out. */
     private static final class Entry {
 
         private final LuceneSearcher searcher;
@@ -61,14 +53,13 @@ public final class LuceneSearchQueryProvider implements SearchQueryProvider {
         this(TTL, MAX_RESIDENT, MAX_RESIDENT_BYTES, IDLE_TTL);
     }
 
-    /** With an explicit refresh window - {@link Duration#ZERO} makes every query re-check the manifest generation,
-     *  which a test uses to observe a new generation the moment a sweep publishes it - and the default cache bounds. */
+    /** With an explicit refresh window ({@link Duration#ZERO} re-checks the manifest on every query) and the default
+     *  bounds. */
     public LuceneSearchQueryProvider(Duration ttl) {
         this(ttl, MAX_RESIDENT, MAX_RESIDENT_BYTES, IDLE_TTL);
     }
 
-    /** With explicit cache bounds, so a scale test can drive eviction at a small size without loading thousands of
-     *  indexes. */
+    /** With explicit cache bounds. */
     public LuceneSearchQueryProvider(Duration ttl, int maxResident, long maxResidentBytes, Duration idleTtl) {
         this.ttl = ttl;
         this.maxResident = Math.max(1, maxResident);
@@ -91,19 +82,14 @@ public final class LuceneSearchQueryProvider implements SearchQueryProvider {
         };
     }
 
-    /** The number of scopes currently resident - the observable the cache bound is asserted against; never grows past
-     *  {@code maxResident} once a sweep of {@link #over} calls has driven eviction. */
+    /** The number of scopes resident, never past {@code maxResident} once eviction has run. */
     public int residentScopes() {
         return entries.size();
     }
 
-    /**
-     * Drop resident scopes back within the bounds after a fresh {@link #over}: first every entry idle past the idle-TTL
-     * (the scope just handed back is exempt, it was touched now), then - if the resident set still exceeds the scope
-     * count cap or the resident-heap-byte cap - the least-recently-used scopes until it fits, never evicting the scope
-     * just returned. Serialised so two concurrent requests never double-close a searcher; the eviction scan is over at
-     * most {@code maxResident} small entries, far cheaper than the query it precedes.
-     */
+    /** Bring the resident scopes back within bounds after an {@link #over}: every entry idle past the idle TTL, then
+     *  the least-recently-used scopes until both caps hold, never the scope just returned. Serialised, so no searcher
+     *  is closed twice. */
     private synchronized void evict(String current, long nowNanos) {
         Iterator<Map.Entry<String, Entry>> idle = entries.entrySet().iterator();
         while (idle.hasNext()) {

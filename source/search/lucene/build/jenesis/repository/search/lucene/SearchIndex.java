@@ -14,22 +14,17 @@ import build.jenesis.repository.store.Names;
 /**
  * Where the search index lives: its segment files in the store, once each, and a generation as the list of them.
  *
- * <h2>Why segments and not a zip</h2>
- *
- * <p>A generation as one zip of the whole index, read back into a heap-held directory to apply a marker and written
- * out whole afterwards, would cost O(index) steps per pass whatever the marker count - about a minute for one marker
- * on a coordinate of a hundred thousand versions - and a heap-held copy that does not fit at a million documents.
- * Lucene already writes an index as immutable segment files that a later generation shares, so the store holds
- * each segment file once, under its content digest, and a generation is a manifest naming
- * the files it is made of. A pass fetches only the files its node's cache lacks, appends, and uploads only the
- * files it created; a reader opens the generation as a file-backed directory rather than a copy in heap.
+ * <p>Lucene writes an index as immutable segment files later generations share, so the store holds each file once under
+ * its content digest, and a generation is a manifest naming its files. A pass fetches only the files its node lacks,
+ * appends and uploads only what it created; a reader opens the generation as a file-backed directory. Rewriting a whole
+ * index per pass would cost O(index) steps for one marker and a heap copy that does not fit at a million documents.
  *
  * <h2>The node's cache</h2>
  *
- * <p>Segment files are cached under the JVM's temporary directory, by digest, one tree per store identity, and a
- * generation is opened as a directory of hard links onto them (a copy where the filesystem refuses a link). The
- * cache is rebuilt from the store when it is missing - a fresh node, a cleared temp - so nothing durable lives in
- * it, and a generation's link directory is removed when the generation is superseded.
+ * <p>Segment files are cached under the JVM's temporary directory by digest, one tree per store identity, and a
+ * generation opens as a directory of hard links onto them (a copy where links are refused). Nothing durable lives in
+ * the cache; it is rebuilt from the store when missing, and a generation's link directory is removed when it is
+ * superseded.
  *
  * <h2>Layout</h2>
  *
@@ -44,15 +39,15 @@ final class SearchIndex {
     static final String DIRECTORY = "index/search";
     static final String MANIFEST = DIRECTORY + "/current";
     static final String SEGMENTS = DIRECTORY + "/segments";
-    /** Bumped when the index's storage or document shape changes so that a reader of the old shape does not open the
-     *  new one; the first pass after an upgrade full-rebuilds. 6: the documents carry what a package's manifest says
-     *  about it, analysed word by word, and the manifest when the index was last reconciled. */
+    /** Bumped when the storage or document shape changes, so a reader of the old shape does not open the new one; the
+     *  first pass after an upgrade rebuilds fully. 6: documents carry the manifest's description, keywords and authors,
+     *  and when the index was last reconciled. */
     static final int FORMAT = 6;
 
     private final ArtifactStore store;
 
-    /** How long an uncommitted generation's claim blocks the next rebuild of that generation before it is taken over
-     *  as a dead rebuild's - the {@code search-index-claim} dial, {@link #STALE_CLAIM} when unset. */
+    /** How long an uncommitted generation's claim blocks the next rebuild of it: the {@code search-index-claim} dial,
+     *  {@link #STALE_CLAIM} when unset. */
     private final Duration staleClaim;
 
     SearchIndex(ArtifactStore store) {
@@ -73,11 +68,9 @@ final class SearchIndex {
         return store.exists(MANIFEST);
     }
 
-    /**
-     * Remove the whole index: the manifest first, so a reader and the publish observer stop seeing an index at once,
-     * then every generation, segment and change marker, a bounded page at a time. A removal that stops
-     * part way leaves no manifest, so nothing reads what is left, and the next removal finishes it.
-     */
+    /** Remove the whole index: the manifest first, so readers and the publish observer stop seeing it at once, then
+     *  every generation, segment and change marker, a page at a time. A removal that stops part way leaves no manifest,
+     *  and the next one finishes it. */
     void remove() throws IOException {
         store.delete(MANIFEST);
         Documents.over(store).deleteAll(DIRECTORY + "/");
@@ -91,11 +84,9 @@ final class SearchIndex {
     record Segment(String name, String digest, long length) {
     }
 
-    /**
-     * Record {@code directory} as {@code generation}: every file is digested, uploaded under its digest if the store
-     * lacks it, linked into the node's cache, and named in the generation's manifest. Returns the manifest's own
-     * digest, which is the checksum the current-manifest carries.
-     */
+    /** Record {@code directory} as {@code generation}: every file digested, uploaded under its digest if absent, linked
+     *  into the node's cache and named in the manifest. Returns the manifest's own digest, the checksum the current
+     *  manifest carries. */
     Optional<String> writeSnapshot(int generation, Directory directory) throws IOException {
         List<Segment> segments = new ArrayList<>();
         for (String file : directory.listAll()) {
@@ -119,25 +110,19 @@ final class SearchIndex {
         return Optional.of(HexFormat.of().formatHex(sha256().digest(manifest)));
     }
 
-    /** A claim on a generation's manifest older than this belongs to a rebuild that never cut over - a crash between
-     *  writing its manifest and advancing the current pointer - and the next rebuild of the generation takes it over.
-     *  A live rebuild cuts over within moments of claiming. */
-    /** The text spelling is the one the {@code search-index-claim} dial and the settings reference are built from;
-     *  the {@link Duration} derives from it, so there is one value and the published default is not {@code
-     *  (computed)}. */
+    /** A claim on a generation older than this belongs to a rebuild that never cut over - a crash between writing its
+     *  manifest and advancing the current pointer - and the next rebuild takes it over; a live rebuild cuts over within
+     *  moments. The text is what the {@code search-index-claim} dial and the settings reference read, and the
+     *  {@link Duration} derives from it. */
     static final String STALE_CLAIM_TEXT = "PT10M";
 
     static final Duration STALE_CLAIM = Duration.parse(STALE_CLAIM_TEXT);
 
-    /**
-     * Write {@code manifest} under the generation's key only if no rebuild holds the generation: a create-only
-     * compare-and-set, or a takeover of a claim older than {@link #STALE_CLAIM} whose generation was never committed.
-     * Two rebuilds racing to the same generation that both wrote the key with a plain put, last writer winning, and
-     * then raced the cutover of the current pointer under compare-and-set could leave the winner's committed checksum
-     * naming the loser's bytes, and a reader that fetched the generation would refuse it as foreign and serve nothing.
-     * The MinIO-backed cutover test races exactly this. A rebuild whose claim fails has written only
-     * content-addressed segments, which the segment collection reclaims; it commits nothing and cuts over nothing.
-     */
+    /** Write {@code manifest} under the generation's key only if no rebuild holds the generation: a create-only
+     *  compare-and-set, or a takeover of a claim older than {@link #STALE_CLAIM} that never committed. Otherwise two
+     *  rebuilds racing to one generation could leave the winner's committed checksum naming the loser's bytes, which a
+     *  reader refuses. A rebuild whose claim fails has written only content-addressed segments for the segment
+     *  collection, and commits nothing. */
     private boolean claim(int generation, byte[] manifest) throws IOException {
         Optional<ArtifactStore.Versioned> existing = store.readVersioned(generationKey(generation));
         if (existing.isEmpty()) {
@@ -155,20 +140,15 @@ final class SearchIndex {
         return store.writeVersioned(generationKey(generation), manifest, existing.get().token());
     }
 
-    /**
-     * Open {@code generation} as a file-backed directory: its manifest read, every file it names fetched into the
-     * node's cache if absent, and a generation directory of links onto them. The directory is the caller's to close;
-     * a writer may append to it and hand it back to {@link #writeSnapshot} as the next generation.
-     */
+    /** Open {@code generation} as a file-backed directory: its manifest read, every file fetched into the node's cache
+     *  if absent, and a generation directory of links onto them. The caller closes it, and may append and hand it to
+     *  {@link #writeSnapshot} as the next generation. */
     Directory openSnapshot(int generation) throws IOException {
         return openInto(generation, generationDirectory(generation));
     }
 
-    /**
-     * Open {@code generation}'s files as the working directory of the generation after it: the same links, in the
-     * next generation's own directory, so a writer that appends and hands the directory to {@link #writeSnapshot}
-     * never adds files to the directory a reader of {@code generation} may hold open.
-     */
+    /** Open {@code generation}'s files in the next generation's own directory, so a writer appending there never adds
+     *  files to a directory a reader of {@code generation} holds open. */
     Directory next(int generation) throws IOException {
         return openInto(generation, generationDirectory(generation + 1));
     }
@@ -184,12 +164,9 @@ final class SearchIndex {
                 fetch(segment.digest(), cached);
             }
             Path link = links.resolve(segment.name());
-            // A link is verified against the cached file it should be, never trusted by name: Lucene reuses segment
-            // names across lineages (every fresh writer starts at _0), so a generation directory left by an apply that
-            // did not commit can hold a _0.si from another index under the name this manifest wants - "file mismatch,
-            // expected id=..." one generation after a walk-riding apply is abandoned for a full rebuild. On a
-            // filesystem without hard links the fallback copy is never the same
-            // file, so it is re-copied on every open; that is the price of such a filesystem, not a defect.
+            // A link is verified against the cached file, not trusted by name: Lucene reuses segment names across
+            // lineages, so a directory left by an uncommitted apply can hold another index's _0.si. Without hard links
+            // the copy is never the same file and is re-copied on every open.
             if (Files.exists(link) && !Files.isSameFile(link, cached)) {
                 Files.delete(link);
             }
@@ -197,8 +174,8 @@ final class SearchIndex {
                 link(cached, link);
             }
         }
-        // A directory left by an apply that did not commit may hold files the manifest does not name; they would
-        // read as a newer commit than the generation asked for, so they go before the directory is opened.
+        // Files the manifest does not name, left by an uncommitted apply, would read as a newer commit, so they go
+        // first.
         try (Stream<Path> present = Files.list(links)) {
             for (Path file : present.toList()) {
                 if (!wanted.contains(file.getFileName().toString())) {
@@ -209,16 +186,13 @@ final class SearchIndex {
         return FSDirectory.open(links);
     }
 
-    /** A fresh, empty, file-backed directory for a full rebuild to accumulate into, so the index being built is never
-     *  held in heap; {@link #writeSnapshot} links its files into the cache when the generation is written, and the
-     *  builder removes the directory when it closes. */
+    /** A fresh, empty, file-backed directory for a full rebuild, so the index being built is never held in heap. */
     static Directory scratch() throws IOException {
         return FSDirectory.open(OwnerOnly.createTempDirectory("jenrepo-search-rebuild"));
     }
 
-    /** Close and remove a scratch directory a full rebuild accumulated into, once its files are linked into the
-     *  cache or the build is abandoned. The path is read before the close: a closed {@link FSDirectory} refuses to
-     *  say where it was. */
+    /** Close and remove a full rebuild's scratch directory once its files are linked or the build is abandoned. The
+     *  path is read first, since a closed {@link FSDirectory} will not say where it was. */
     static void discard(Directory directory) throws IOException {
         if (directory instanceof FSDirectory local) {
             Path root = local.getDirectory();
@@ -243,15 +217,14 @@ final class SearchIndex {
         return generations;
     }
 
-    /** Forget a generation: its manifest and its link directory go; the segment files it named stay until
-     *  {@link #gcSegments} finds no generation naming them. */
+    /** Forget a generation: its manifest and link directory go; its segment files stay until {@link #gcSegments} finds
+     *  no generation naming them. */
     void deleteSnapshot(int generation) throws IOException {
         store.delete(generationKey(generation));
         deleteTree(generationDirectory(generation));
     }
 
-    /** Remove every stored segment file no remaining generation names. Called after superseded generations are
-     *  deleted, by the pass that holds the index's lease. */
+    /** Remove every stored segment file no remaining generation names, by the pass holding the index's lease. */
     void gcSegments() throws IOException {
         Set<String> referenced = new HashSet<>();
         for (int generation : generations()) {
@@ -302,8 +275,8 @@ final class SearchIndex {
         return text.toString().getBytes(StandardCharsets.UTF_8);
     }
 
-    /** When a manifest's generation was claimed, or empty for a manifest written before claims carried an instant -
-     *  which a takeover treats as stale, there being no live rebuild that old. */
+    /** When a manifest's generation was claimed, or empty for a manifest without a claim instant, which a takeover
+     *  treats as stale. */
     private static Optional<Instant> claimedAt(byte[] manifest) {
         for (String line : new String(manifest, StandardCharsets.UTF_8).split("\n")) {
             if (line.startsWith(CLAIMED)) {
@@ -437,7 +410,7 @@ final class SearchIndex {
         }
     }
 
-    /** An {@link IndexInput} read as a stream, for a store write that takes one. */
+    /** An {@link IndexInput} as a stream, for a store write. */
     private static final class IndexInputStream extends InputStream {
 
         private final IndexInput input;

@@ -25,56 +25,39 @@ import org.apache.lucene.search.TopDocs;
 import org.apache.lucene.store.Directory;
 
 /**
- * The per-repository read side of the search index, following the {@code CisaKnownExploitedSource} volatile-swap
- * pattern: the loaded index sits behind a {@code volatile} reference, a query on the hot path reads it lock-free while
- * the TTL window holds, and on expiry one thread re-reads the manifest under a lock and compares the generation token
- * - an unchanged token keeps the loaded index untouched (no download), a changed token streams the new snapshot in and
- * swaps it whole. A load failure keeps the last-good index and shortens the retry, so a transient store hiccup never
- * blanks the search box. A superseded reader is left for the garbage collector rather than closed under a possible
- * concurrent query - the snapshot is a file-backed directory of links into the node's segment cache, closed
- * with the reader that opened it.
+ * The per-repository read side of the search index. The loaded index sits behind a {@code volatile} reference that a
+ * query reads lock-free while the refresh window holds; on expiry the manifest's generation token is compared, an
+ * unchanged one keeping the loaded index and a changed one streaming the new snapshot in and swapping it whole. A load
+ * failure keeps the last-good index and shortens the retry. A superseded reader is left to the garbage collector rather
+ * than closed under a concurrent query.
  *
  * <h2>A due refresh does not hold the request</h2>
  *
- * <p>"One thread re-reads under a lock" was true of the thread and not of the requests. The refresh was
- * {@code synchronized} and ran ON the request that found the window expired, and loading a changed generation means
- * fetching every segment file it names from the store - so that request waited for the whole download, and every
- * other search arriving meanwhile queued on the monitor behind it, while a perfectly good generation sat in memory
- * ready to answer them. Over a directory the download is milliseconds and nobody noticed. Over an object store it is
- * the size of the index in round trips, and the fleet's search-claim scenario spent a night reading it as the
- * emulator's throughput: a bare client timeout on {@code GET /api/search} over Azurite, "a search queued behind a
- * rebuild", which was precisely what it was - queued behind the download that rebuild's cutover had made due.
- *
- * <p>So a request that finds a refresh due asks for ONE load per scope, shared by every request that arrives while
- * it runs, and waits for it only {@link #FRESH_WAIT} before answering from the generation it already holds. A fast
- * store still reads its own writes - the load finishes inside the wait - and a slow one answers at once from the
- * last-good generation, which is at most the refresh window plus a load old: the staleness this class already
- * promised, rather than a request that outlives its client. The FIRST load is the exception, and deliberately: with
- * no generation to answer from, the caller would answer by name, which is not the answer a repository with full-text
- * search on asked for. A superseded or orphaned snapshot a background load publishes is left to the collector like
- * any other.
+ * <p>Loading a changed generation fetches every segment file it names, which over an object store is the index's size
+ * in round trips. So a request that finds a refresh due asks for one shared load per scope and waits only
+ * {@link #FRESH_WAIT} before answering from the generation it holds: a fast store still reads its own writes, and a
+ * slow one answers at once from a generation at most a refresh window plus a load old. The first load is the exception:
+ * with no generation to answer from, the caller would answer by name, which is not what a full-text repository asked
+ * for.
  */
 final class LuceneSearcher {
 
-    /** The field holding the display string as sorted doc values, so a page is taken in display order by the index
-     *  itself rather than by sorting a materialised result list. {@code display} is a stored/indexed
-     *  {@code StringField} and cannot be sorted on; this is its doc-values twin, written by the same sweep. */
+    /** The display string as sorted doc values, so the index itself takes a page in display order; {@code display} is a
+     *  {@code StringField} and cannot be sorted on. */
     static final String SORT_FIELD = "display_sort";
 
-    /** Cap on the MUST clauses one query contributes. A query is analyzed into one prefix/term clause per token, and
-     *  Lucene's {@code IndexSearcher} throws {@code TooManyClauses} (a {@code RuntimeException}) once a boolean query
-     *  reaches its default 1024-clause ceiling; a hostile ~2 KB query of separator-split segments would otherwise 500
-     *  the search endpoint. Keeping only the first {@value} tokens matches every realistic search and never trips the
-     *  ceiling. */
+    /** Cap on the MUST clauses one query contributes: Lucene throws {@code TooManyClauses} at 1024 clauses, so a
+     *  hostile query of many segments would otherwise fail the endpoint. The first {@value} tokens cover every
+     *  realistic search. */
     private static final int MAX_QUERY_CLAUSES = 64;
 
     private static final Duration FAILURE_BACKOFF = Duration.ofSeconds(15);
 
-    /** How long a request waits for a due refresh before answering from the generation it holds - long enough that a
-     *  load over a local store completes inside it, far short of any client's timeout. */
+    /** How long a request waits for a due refresh before answering from the generation it holds: long enough for a
+     *  local store's load, far short of a client's timeout. */
     private static final Duration FRESH_WAIT = Duration.ofSeconds(2);
 
-    /** Where a background load runs: a virtual thread per load, which holds no JVM open and needs no shutdown. */
+    /** Where a background load runs: a virtual thread per load, holding no JVM open. */
     private static final Executor LOADS = Executors.newThreadPerTaskExecutor(
             Thread.ofVirtual().name("search-index-load-", 0).factory());
 
@@ -86,10 +69,9 @@ final class LuceneSearcher {
     private volatile Snapshot snapshot;
     private volatile long refreshAt;
 
-    /** The load in flight for this scope, shared by every request that finds the refresh due while it runs; null or
-     *  done when none is. Guarded by {@link #loads}, NOT by {@code this}: {@link #refresh} holds {@code this} for the
-     *  whole download, so a request that took {@code this} to ask for the load would queue behind the very download
-     *  it exists to avoid waiting for. */
+    /** The load in flight for this scope, shared by every request that finds the refresh due; null or done when none
+     *  is. Guarded by {@link #loads}, not {@code this}, since {@link #refresh} holds {@code this} for the whole
+     *  download. */
     private CompletableFuture<Snapshot> loading;
 
     private final Object loads = new Object();
@@ -103,14 +85,10 @@ final class LuceneSearcher {
 
     /**
      * One bounded page of the coordinates matching {@code query}, in display order and resumable by cursor; an empty
-     * query pages everything. Empty {@link Optional} when no usable index exists yet, so the caller answers by name.
+     * query pages everything. Empty when no usable index exists yet, so the caller answers by name.
      *
-     * <p>The page is taken by the <em>index</em>, not by the caller: the cursor becomes an exclusive lower-bound range
-     * filter on the {@code display} term ANDed onto the parsed query, and the sort is over
-     * {@link #SORT_FIELD}'s doc values. That is what makes the answer a page rather than a slice - asking Lucene for
-     * the first {@code MAX_RESULTS} hits in score order and sorting the whole materialised list would hand the caller
-     * a silently clamped result with no way to ask for the rest. One extra row is requested so
-     * "more remain" is a fact about the index and not a guess from a full page.
+     * <p>The index takes the page: the cursor is an exclusive lower-bound range on {@code display} ANDed onto the
+     * query, and the sort is over {@link #SORT_FIELD}. One extra row is requested, so "more remain" is a fact.
      */
     Optional<SearchQuery.Hits> search(ArtifactStore store, String query, String cursor, int limit) throws IOException {
         Snapshot active = current(store);
@@ -122,11 +100,9 @@ final class LuceneSearcher {
             return Optional.of(SearchQuery.Hits.last(List.of()));   // a usable index, an empty page - not "no index"
         }
         IndexSearcher searcher = active.searcher();
-        // The free text is matched against the coordinate names first, and against the whole text (ecosystem,
-        // coordinate and version tokens) only when no name matches: a query that is a package's name answers that
-        // package's versions and nothing else, rather than every coordinate whose version happens to share a token
-        // - the page would otherwise fill with strangers on a large repository before the named package is reached.
-        // Both queries are bounded by the page; a query without free text (filters only, or empty) runs once.
+        // Free text is matched against the coordinate names first, and against the whole text only when no name
+        // matches, so a package's name answers that package rather than every coordinate sharing a token. A query
+        // without free text runs once.
         TopDocs top = searcher.search(paged(toQuery(query.trim(), NAME_FIELD, coordinates), cursor), rows + 1,
                 new Sort(new SortField(SORT_FIELD, SortField.Type.STRING)));
         if (top.scoreDocs.length == 0 && !analyze(freeText(query.trim()), words).isEmpty()) {
@@ -138,7 +114,7 @@ final class LuceneSearcher {
         var fields = searcher.storedFields();
         for (ScoreDoc hit : top.scoreDocs) {
             if (results.size() == rows) {
-                // The probe row proved the index holds more past this page; resume strictly after the last row served.
+                // The extra row proved more remain; resume after the last row served.
                 return Optional.of(new SearchQuery.Hits(results, Optional.of(last)));
             }
             Document document = fields.document(hit.doc);
@@ -168,7 +144,7 @@ final class LuceneSearcher {
         }
     }
 
-    /** The one load for this scope: the one in flight if there is one, otherwise a new one started in the background. */
+    /** The one load for this scope: the one in flight, or a new one started in the background. */
     private CompletableFuture<Snapshot> load(ArtifactStore store) {
         synchronized (loads) {
             if (loading == null || loading.isDone()) {
@@ -211,11 +187,8 @@ final class LuceneSearcher {
         }
     }
 
-    /** Release the loaded snapshot when the query cache evicts this scope, so an idle repository stops pinning its
-     *  whole index. Best-effort: the reader and its file-backed directory are closed to free
-     *  the buffers promptly, but a scope is only ever evicted when it is idle or the least-recently-used entry, never
-     *  one under an active query, so the close races nothing in practice - and should a straggling query still hold the
-     *  reference, it degrades that single request to an answer by name rather than corrupting a read. */
+    /** Release the loaded snapshot when the query cache evicts this scope. Best-effort: only an idle or
+     *  least-recently-used scope is evicted, and a straggling query holding it degrades to an answer by name. */
     void close() {
         Snapshot active = snapshot;
         snapshot = null;
@@ -234,11 +207,8 @@ final class LuceneSearcher {
         }
     }
 
-    /** The heap the loaded snapshot's in-memory index occupies - the summed segment-file lengths of its
-     *  file-backed directory (mapped or read from the node's cache, not heap) - so the query cache can weight
-     *  its LRU by real resident size, not entry count
-     *  alone. Zero when nothing is loaded yet (a scope resolved but not queried), and best-effort: a directory closed
-     *  under a concurrent eviction reports zero rather than throwing. */
+    /** The bytes the loaded snapshot's file-backed directory occupies, the summed segment lengths, for the cache's byte
+     *  weighting. Zero when nothing is loaded or the directory was closed under a concurrent eviction. */
     long residentBytes() {
         Snapshot active = snapshot;
         if (active == null) {
@@ -256,16 +226,12 @@ final class LuceneSearcher {
         }
     }
 
-    /** Turn the raw query into a Lucene query: {@code license:<spdx>} and {@code category:<class>} tokens become exact
-     *  keyword filters (an additional AND constraint each, matched case-insensitively against the lower-cased index
-     *  terms), and the remaining free text runs through the coordinate analyzer as prefix terms - so
-     *  {@code category:permissive commons} finds permissively-licensed coordinates whose segments start with
-     *  {@code commons}. A query that is all filters (no free text) still applies them; an empty query matches all. */
+    /** The query restricted to rows after {@code cursor} in display order. */
     private static Query paged(Query query, String cursor) {
         BooleanQuery.Builder paged = new BooleanQuery.Builder();
         paged.add(query, BooleanClause.Occur.MUST);
         if (cursor != null && !cursor.isEmpty()) {
-            // Strictly after the last row of the previous page, in the same order the sort imposes.
+            // Strictly after the last row of the previous page.
             paged.add(TermRangeQuery.newStringRange("display", cursor, null, false, false), BooleanClause.Occur.MUST);
         }
         return paged.build();
@@ -288,6 +254,10 @@ final class LuceneSearcher {
         return free.toString();
     }
 
+    /** Turn the raw query into a Lucene query: {@code license:<spdx>} and {@code category:<class>} tokens become exact
+     *  keyword filters, each an AND constraint matched case-insensitively, and the free text matches {@code field} as
+     *  prefix terms through {@code analyzer}, so {@code category:permissive commons} finds permissively-licensed
+     *  coordinates with a segment starting {@code commons}. Filters alone still apply; an empty query matches all. */
     private Query toQuery(String query, String field, Analyzer analyzer) throws IOException {
         BooleanQuery.Builder builder = new BooleanQuery.Builder();
         int clauses = 0;
@@ -304,29 +274,18 @@ final class LuceneSearcher {
                     builder.add(new TermQuery(new Term(filter, value)), BooleanClause.Occur.MUST);
                     clauses++;
                 } else {
-                    // A filter token with no value (e.g. "license:") is an explicit but empty filter, not a request
-                    // for everything. It must never be silently dropped into a match-all below - that would return the
-                    // whole repository for a malformed filter query. Record it so the empty result stands.
+                    // A filter token with no value ("license:") is an empty filter: it matches nothing rather than
+                    // everything.
                     emptyFilter = true;
                 }
             } else {
                 free.append(part).append(' ');
             }
         }
-        // The free text matches two ways, and a hit either way is a hit. Analysed TOKEN prefixes are the older of
-        // the two: `com.acme` is split by the coordinate analyser and every token is matched as a prefix, so it
-        // finds `org.example:acme-tool:2.0` as readily as `com.acme:lib:1.0`. What it cannot do is list a
-        // namespace - the thing an operator actually types a dotted prefix for - because it never looks at where
-        // in the display the tokens fall.
-        //
-        // So the whole DISPLAY is matched as a prefix beside it: `com.acme` lists `com.acme:lib:1.0` and
-        // `com.acme.util:x:2.0`, and `/raw/notes` lists everything served beneath that path. It needs no new field
-        // and no reindex - `display` is already the unanalysed term the sort field twins, so the prefix walks the
-        // term dictionary and the page comes back in display order like any other.
-        //
-        // Case-sensitive, deliberately and visibly: `display` carries the coordinate as published, and lower-casing
-        // it here would match nothing while looking like it should. A case-insensitive prefix wants its own folded
-        // field, which is an index-format change rather than a query one.
+        // The free text matches two ways. Analysed token prefixes: com.acme matches every coordinate with those tokens
+        // anywhere. And the whole display as a prefix, which lists a namespace (com.acme:lib, com.acme.util:x) or
+        // everything under a path (/raw/notes), walking the display term dictionary in display order. The display
+        // prefix is case-sensitive, since display is the coordinate as published; folding it would need its own field.
         String text = free.toString().trim();
         List<String> tokens = analyze(text, analyzer);
         if (!tokens.isEmpty() || !text.isEmpty()) {
@@ -355,8 +314,7 @@ final class LuceneSearcher {
             }
         }
         if (clauses == 0) {
-            // No clauses: an empty query lists everything (the default browse), but a present-but-empty filter token
-            // matches nothing rather than degrading to the whole repository.
+            // An empty query lists everything; a present-but-empty filter matches nothing.
             return emptyFilter ? new MatchNoDocsQuery() : new MatchAllDocsQuery();
         }
         return builder.build();
