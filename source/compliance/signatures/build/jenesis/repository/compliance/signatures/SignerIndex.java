@@ -14,8 +14,10 @@ import build.jenesis.repository.store.Retries;
  * <p>Two small key spaces under the continuity root. {@code signers/who/<signer hash>} holds the identity a hash
  * stands for, written once; {@code signers/by/<signer hash>/<coordinate hash>} holds one document per signer and
  * coordinate - ecosystem, coordinate, versions counted, since when, the last version counted - rewritten under
- * compare-and-set as versions land, with the same rule the continuity record applies: a version already counted is
- * not counted again, so a re-publish and a late sidecar re-derivation agree. The hashes keep a signer's own
+ * compare-and-set as versions land. A version is counted once: {@code signers/counted/<signer hash>/<coordinate
+ * hash>/<version hash>} is created the first time a signer is seen on that version, and only that creation counts it,
+ * here and in the continuity record alike - so a re-publish, a late sidecar re-derivation and a re-observed older
+ * version all agree. A crash between the marker and the count leaves that version one short, never counted twice. The hashes keep a signer's own
  * characters (a Sigstore subject is a URL, an OpenPGP fingerprint forty hex digits) and a coordinate's separators
  * out of the key space, the way the continuity document's key already does, and they are what a cursor names.
  *
@@ -30,6 +32,7 @@ public final class SignerIndex {
 
     static final String WHO = ContinuityTrust.ROOT + "/who";
     static final String BY = ContinuityTrust.ROOT + "/by";
+    static final String COUNTED = ContinuityTrust.ROOT + "/counted";
 
     /** The largest page a surface may ask for; a caller past it follows {@code next}. */
     public static final int MAX_PAGE = 1000;
@@ -80,6 +83,23 @@ public final class SignerIndex {
      */
     public static void observed(ArtifactStore store, String ecosystem, String coordinate, String version,
                                 SignerIdentity signer, Instant when) throws IOException {
+        observed(store, ecosystem, coordinate, version, signer, when,
+                counted(store, ecosystem, coordinate, version, signer));
+    }
+
+    /** Mark {@code version} of a coordinate as signed by {@code signer}: {@code true} the first time, which is the one
+     *  time the version is counted toward the signer, and {@code false} for every observation after. */
+    static boolean counted(ArtifactStore store, String ecosystem, String coordinate, String version,
+                           SignerIdentity signer) throws IOException {
+        String key = COUNTED + "/" + id(signer) + "/" + ContinuityTrust.coordinateId(ecosystem, coordinate) + "/"
+                + digest(version);
+        return store.writeVersioned(key, new byte[0], null);
+    }
+
+    /** {@link #observed(ArtifactStore, String, String, String, SignerIdentity, Instant)} with whether this is the
+     *  version's first count already decided. */
+    static void observed(ArtifactStore store, String ecosystem, String coordinate, String version,
+                         SignerIdentity signer, Instant when, boolean first) throws IOException {
         String id = id(signer);
         String who = WHO + "/" + id;
         if (store.readVersioned(who).isEmpty()) {
@@ -91,8 +111,7 @@ public final class SignerIndex {
             Signed next;
             if (stored.isPresent()) {
                 Signed same = stored.get();
-                next = version.equals(same.last()) ? same
-                        : new Signed(ecosystem, coordinate, same.versions() + 1, same.since(), version);
+                next = first ? new Signed(ecosystem, coordinate, same.versions() + 1, same.since(), version) : same;
             } else {
                 next = new Signed(ecosystem, coordinate, 1, when, version);
             }
@@ -103,9 +122,13 @@ public final class SignerIndex {
     /** The hash a signer is filed under: a digest of its wire form, so the identity's own characters never shape
      *  the key space. */
     public static String id(SignerIdentity signer) {
+        return digest(signer.wire());
+    }
+
+    private static String digest(String value) {
         try {
             return HexFormat.of().formatHex(MessageDigest.getInstance("SHA-256")
-                    .digest(signer.wire().getBytes(StandardCharsets.UTF_8)));
+                    .digest(value.getBytes(StandardCharsets.UTF_8)));
         } catch (NoSuchAlgorithmException impossible) {
             throw new IllegalStateException("SHA-256 is required of every JDK", impossible);
         }

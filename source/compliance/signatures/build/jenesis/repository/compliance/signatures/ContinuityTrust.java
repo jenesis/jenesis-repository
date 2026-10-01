@@ -14,8 +14,9 @@ import build.jenesis.repository.store.Retries;
  *
  * <p>One small document per coordinate, {@code signers/<sha256 of ecosystem and coordinate>}, read by point read
  * when a signature verified and rewritten under compare-and-set when an accepted version carried a signer: the
- * same signer counts one more version (a version already counted is not counted again, so a re-publish and a late
- * sidecar re-derivation agree); another signer replaces the expectation and starts its count at one. An accepted
+ * same signer counts one more version - once per version, decided by the marker {@link SignerIndex} creates for it, so
+ * a re-publish, a late sidecar re-derivation and a re-observed older version agree - and another signer replaces the
+ * expectation and starts its count at one. An accepted
  * version is what reaches here - a held one does not until an operator releases it - so the expectation follows
  * what the deployment actually admitted, and a change an operator waved through becomes the new expectation the
  * moment it lands. An operator's pin ({@code signature-trusted-signers}) is answered ahead of this by the configured
@@ -62,13 +63,13 @@ final class ContinuityTrust implements SignerTrust {
         if (store == null || ecosystem == null || coordinate == null || version == null || signer == null) {
             return;
         }
+        boolean first = SignerIndex.counted(store, ecosystem, coordinate, version, signer);
         Retries.update(store, key(ecosystem, coordinate, signer.scheme()), current -> {
             Optional<Record> stored = current.flatMap(versioned -> parse(versioned.content()));
             Record next;
             if (stored.isPresent() && stored.get().signer().equals(signer)) {
                 Record same = stored.get();
-                next = version.equals(same.last()) ? same
-                        : new Record(signer, same.versions() + 1, same.since(), version);
+                next = first ? new Record(signer, same.versions() + 1, same.since(), version) : same;
             } else {
                 next = new Record(signer, 1, when, version);
             }
@@ -76,7 +77,7 @@ final class ContinuityTrust implements SignerTrust {
         });
         // The same observation from the signer's side, so what one identity signed can be browsed and a revoked
         // key's blast radius read without a walk.
-        SignerIndex.observed(store, ecosystem, coordinate, version, signer, when);
+        SignerIndex.observed(store, ecosystem, coordinate, version, signer, when, first);
     }
 
     /**
