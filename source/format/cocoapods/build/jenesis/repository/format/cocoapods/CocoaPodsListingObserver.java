@@ -8,10 +8,9 @@ import build.jenesis.repository.store.ArtifactDescriptor;
 import build.jenesis.repository.store.ArtifactStore;
 
 /**
- * Keeps the CocoaPods {@linkplain CocoaPodsListings stored shard listings} in step with the transitions that happen
- * off the publish path - a hold on a published version and its release, a yank and its reversal, a removal - by
- * re-deciding the one version's membership. A transition whose subject names neither a pod path nor a coordinate is
- * mapped to no version, so every listing is regenerated in place.
+ * Keeps the CocoaPods {@linkplain CocoaPodsListings stored shard listings} in step with transitions off the publish
+ * path - a hold and its release, a yank and its reversal, a removal - by re-deciding the one version. A subject naming
+ * neither a pod path nor a coordinate regenerates every listing in place.
  */
 public final class CocoaPodsListingObserver extends BlobsListingObserver {
 

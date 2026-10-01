@@ -10,20 +10,15 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 /**
- * The CocoaPods CDN shard listings as stored listings: a per-pod version list (entries by version) from which the
- * pod's line in its shard's {@code all_pods_versions_<a>_<b>_<c>.txt} is derived on every write, so a publish costs
- * one rewrite of the pod's list and one of its shard, never a scan of the shard's other pods. A version is listed
- * exactly when its archive pointer is not withheld and it is not yanked - the screen the on-read generation applied.
+ * The CDN shard listings as stored listings: a per-pod version list from which the pod's line in its shard's
+ * {@code all_pods_versions_<a>_<b>_<c>.txt} is derived on every write, so a publish rewrites two documents and scans no
+ * other pod. A version is listed exactly when its archive pointer is not withheld and it is not yanked.
  */
 final class CocoaPodsListings {
 
-    /**
-     * Every write of a pod's shard line and every membership decision behind it, at DEBUG, so a shard line that
-     * lacks versions the pod document has can be traced to who wrote it and from which document sequence - a
-     * rebuild regenerating the pod document outside the listing's lane would race a publish's derivation into the
-     * shard, which is why a rebuild rides the lane ({@code StoredListing.rebuild}). Switched on for the soak's node;
-     * silent elsewhere.
-     */
+    /** Every write of a pod's shard line and the decision behind it, at DEBUG, so a shard line missing versions its pod
+     *  document has can be traced to the writer and document sequence; a rebuild rides the listing's lane
+     *  ({@code StoredListing.rebuild}) for that reason. */
     private static final Logger LOGGER = LoggerFactory.getLogger(CocoaPodsListings.class);
 
     static final StoredListing.Codec LINES = StoredListing.Codec.delimited("\n", Function.identity());
@@ -53,9 +48,8 @@ final class CocoaPodsListings {
         String[] shard = CocoaPodsFormat.shard(name);
         return StoredListing.Spec.materialising(pod(repo, name), LINES, () -> generatePod(repo, name)).deriving(document -> {
             SortedMap<String, byte[]> versions = LINES.split(document.body());
-            // The line carries the pod document's sequence as its source, so the rebuild pass's regeneration of
-            // the shard - a snapshot of every pod document, which can be a beat behind this write - keeps this
-            // line rather than the snapshot's older one, and a removal decided here stands against it too.
+            // The line carries the pod document's sequence, so the rebuild pass's regeneration of the shard, which can
+            // lag this write, keeps this line, and a removal decided here stands against it.
             if (versions.isEmpty()) {
                 LOGGER.debug("shard line of {} removed: pod document seq {} lists nothing", name,
                         document.header().seq());
@@ -87,13 +81,11 @@ final class CocoaPodsListings {
         return entries;
     }
 
-    /** The shard from every pod's document, each line stated at the sequence of the document it was read from -
-     *  so a regeneration merges into the stored shard rather than replacing it, and a line a publish derived from
-     *  a later write of its pod document than this walk read survives (the class comment of StoredListing). */
+    /** The shard from every pod's document, each line at its document's sequence, so a regeneration merges into the
+     *  stored shard and a line derived from a later write survives. */
     private void generateShard(String repo, String[] shard, StoredListing.Generator.Sink sink) throws IOException {
         for (String name : new TreeSet<>(blobs.list(CocoaPodsFormat.shardPrefix(repo, shard)))) {
-            // Each pod's list, materialised if need be - without the derivation that would update the very document
-            // this generation is producing.
+            // Each pod's list, materialised without the derivation that would update this very document.
             Optional<StoredListing.Document> document = StoredListing.read(store,
                     StoredListing.Spec.materialising(pod(repo, name), LINES, () -> generatePod(repo, name)));
             if (document.isEmpty()) {
@@ -131,8 +123,7 @@ final class CocoaPodsListings {
         return false;
     }
 
-    /** Re-decide one version's membership from the store's current state - after a publish, a hold, a release or a
-     *  mark. */
+    /** Re-decide one version's membership from the store's current state. */
     void refresh(String repo, String name, String version) throws IOException {
         boolean spec = blobs.exists(CocoaPodsFormat.specKey(repo, CocoaPodsFormat.shard(name), name, version));
         boolean withheld = spec && blobs.withheld(CocoaPodsFormat.blobKey(repo, name, version));

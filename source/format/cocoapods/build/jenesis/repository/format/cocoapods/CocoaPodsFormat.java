@@ -28,72 +28,47 @@ import build.jenesis.repository.store.StoredListing;
 import build.jenesis.repository.store.Publication;
 
 /**
- * The CocoaPods registry format (the CocoaPods CDN protocol), so {@code pod install} and {@code pod update} resolve
- * Swift/Objective-C pods over the shared store. It owns {@code /cocoapods/...}, where the first path segment is a
- * registry: a pod is pushed with {@code PUT /cocoapods/<repo>/<name>/<version>} (the pod's zip archive as the raw body)
- * and downloaded from {@code /cocoapods/<repo>/pods/<name>/<version>/<name>.zip}. The CDN metadata a client reads - the
- * root {@code CocoaPods-version.yml}, the sharded {@code all_pods_versions_<a>_<b>_<c>.txt} listings, and each version's
- * {@code Specs/<a>/<b>/<c>/<name>/<version>/<name>.podspec.json} - is generated on read, except the sharded
- * listings, which stream from the stored listings every publish maintains.
+ * The CocoaPods registry format (the CocoaPods CDN protocol): {@code pod install} and {@code pod update} over the
+ * shared store, under {@code /cocoapods/...}, the first segment a registry. A pod is pushed with
+ * {@code PUT /cocoapods/<repo>/<name>/<version>} (its zip as the body) and downloaded from
+ * {@code /cocoapods/<repo>/pods/<name>/<version>/<name>.zip}. Of the CDN metadata a client reads, the root
+ * {@code CocoaPods-version.yml} and each {@code Specs/<a>/<b>/<c>/<name>/<version>/<name>.podspec.json} are generated
+ * on read and the sharded {@code all_pods_versions_<a>_<b>_<c>.txt} are stored listings every publish maintains.
  *
- * <p><b>The CDN shard.</b> The CocoaPods CDN buckets a pod into a directory shard derived from the pod name: the
- * first three hex characters of {@code MD5(name)} (the default {@code prefix_lengths: [1, 1, 1]} this format advertises
- * in {@code CocoaPods-version.yml}). A client computes the same shard to find a pod's version listing and its podspecs,
- * so this format stores each podspec under that shard ({@code cocoapods/<repo>/spec/<a>/<b>/<c>/<name>/<version>}) and a
- * read of the shard's version file or a podspec is a direct prefix listing / key lookup, never a scan of every pod
- * (read-first). {@code MD5} here is the CDN's shard function, mandated by the protocol - not a security digest.
+ * <p><b>The CDN shard.</b> A pod lives in the shard named by the first three hex characters of {@code MD5(name)} (the
+ * {@code prefix_lengths: [1, 1, 1]} advertised in {@code CocoaPods-version.yml}), which a client computes too, so each
+ * podspec is stored under {@code cocoapods/<repo>/spec/<a>/<b>/<c>/<name>/<version>} and a read is a direct lookup.
+ * {@code MD5} here is the protocol's shard function, not a security digest.
  *
- * <p><b>Streaming publish.</b> The uploaded zip streams straight through {@link ArtifactStore#writeBlob} into the
- * content-addressed store, hashed on the way and never buffered; the SHA-256 the store returns is the download
- * pointer's blob hash. A CocoaPods package keeps its coordinate, license and dependency metadata in a
- * {@code <name>.podspec.json} <i>inside</i> the archive, so - exactly as the store-then-gate publish path reads a
- * just-stored artifact back rather than buffering it from the network - the stored blob is reopened
- * ({@link ArtifactStore#open}) and only that small podspec is materialised (at the archive root or one directory deep
- * as a VCS export files it, walked with {@code java.util.zip} and parsed with the Jackson databind on the server's
- * module path; the large payload streams past or is skipped, bounded so a hostile archive cannot force a large
- * allocation or an unbounded inflate). The podspec, with its {@code name}/{@code version} normalised to the deploy path
- * and its original {@code source} removed, is stored per version; a read serves it back with a fresh {@code source}
- * pointing the download at this registry, so the stored stanza carries no request host and an imported pod (stored with
- * no request host) still resolves to a reachable download.
+ * <p><b>Streaming publish.</b> The zip streams through {@link ArtifactStore#writeBlob} into the content-addressed
+ * store. The coordinate, licence and dependencies live in a {@code <name>.podspec.json} inside the archive, so the
+ * stored blob is reopened ({@link ArtifactStore#open}) and only the podspec - at the root or one directory deep - is
+ * read, bounded. It is stored per version with {@code name}/{@code version} normalised to the deploy path and its
+ * {@code source} removed; a read adds a {@code source} pointing the download here, so an imported pod still resolves.
  *
- * <p>The layout declares its ecosystem ({@code "CocoaPods"}) so a compliance inspector, the console and download
- * tracking key on it; {@link #describe} resolves a pod download path to its {@code <name>} coordinate and version. OSV
- * carries no dedicated CocoaPods advisory feed today, so vulnerability screening is a graceful no-op while license and
- * malicious-package screening still key on the coordinate. Pod pointers live in the shared {@code Blobs} namespace like
- * the other language formats, so the {@code publish/}-namespace eviction ({@link #paths}) stays empty; coordinate-scoped
- * enforcement runs through the {@code BlobLayout} seam ({@link #blobKeys}/{@link #servedPaths}) instead.
+ * <p>The ecosystem is {@code "CocoaPods"}, and {@link #describe} maps a download path to its {@code <name>} coordinate
+ * and version. OSV has no CocoaPods feed, so vulnerability screening finds nothing while licence and malicious-package
+ * screening key on the coordinate. Pointers live in the shared {@code Blobs} namespace, so {@link #paths} is empty and
+ * a coordinate is reached through {@link #blobKeys} and {@link #servedPaths}.
  *
- * <p><b>Pull-through proxy.</b> The same layout is also a {@link ProxyFormat}: a local miss on a proxy registry is
- * served from an upstream CocoaPods CDN (the trunk CDN at {@code cdn.cocoapods.org} by default,
- * {@link #defaultUpstream()}). The root {@code CocoaPods-version.yml} is always generated locally (it advertises the
- * sharding) and never proxied. A sharded {@code all_pods_versions_<a>_<b>_<c>.txt} listing is mutable, so it streams
- * through fresh on every read (never cached) - it carries only {@code <name>/<version>...} lines and no URLs, so it
- * needs no rewrite. A per-version {@code Specs/.../<name>.podspec.json} is mutable, so it is fetched fresh and streamed
- * through; when its {@code source} is an {@code :http} zip (a stable URL this registry can cache and re-serve as a
- * {@code .zip}) the {@code source} is rewritten to route the download back through this registry, and any other source
- * (a git checkout, an http tarball) is passed through unchanged so the client fetches it directly - the CocoaPods CDN
- * hosts only metadata, not artifacts, so only an http-zip source is one this registry can cache. A pod archive
- * ({@code pods/<name>/<version>/<name>.zip}) is immutable, so on the first download its upstream http-zip URL is
- * resolved from the upstream podspec (at the pod's CDN shard), the archive is streamed into the CAS
- * ({@link ProxyRelay#fill}, never buffered) and served, so a later read is a local hit that never
- * touches the upstream. The request path {@code /cocoapods/<repo>/<sub>} maps to {@code <upstream>/<sub>} (the local
- * repo name is a deployment alias, stripped), which is the CDN's own layout, so no path rewrite is needed beyond the
- * {@code source} routing. An upstream miss lets the local {@code 404} stand.
+ * <p><b>Pull-through proxy.</b> A local miss is served from an upstream CDN, {@code cdn.cocoapods.org} by default,
+ * {@code /cocoapods/<repo>/<sub>} mapping to {@code <upstream>/<sub>}. {@code CocoaPods-version.yml} is always local. A
+ * shard listing is mutable and streamed fresh, carrying no URLs. A podspec is mutable and fetched fresh, an
+ * {@code :http} zip {@code source} rewritten to route the download here and any other source passed through, since the
+ * CDN hosts only metadata and only an http zip is a URL this registry can cache. A pod archive is immutable: on its
+ * first download its URL is resolved from the upstream podspec, and it streams into the store ({@link ProxyRelay#fill})
+ * and is served.
  */
 public final class CocoaPodsFormat implements RepositoryFormat, ArtifactLayout, ProxyLeg, BlobLayout, RepositoryImporter,
         RepositoryExporter {
 
-    /** The package-ecosystem name this format's artifacts report (distinct from {@link #name()}, the routing id). OSV
-     *  has no dedicated CocoaPods feed, so vulnerability lookups on it simply find nothing; the coordinate still drives
-     *  license and malicious-package screening. */
+    /** The ecosystem name this format's artifacts report, distinct from {@link #name()}, the routing id. */
     public static final String ECOSYSTEM = "CocoaPods";
 
     private static final ObjectMapper MAPPER = new ObjectMapper();
 
-    /** The canonical public CocoaPods CDN this format mirrors when a deployment enables proxying without naming one:
-     *  the trunk CDN at {@code cdn.cocoapods.org}, where {@code CocoaPods-version.yml}, the sharded
-     *  {@code all_pods_versions_*} listings and the {@code Specs/.../<name>.podspec.json} files live (like crates.io
-     *  for Cargo, Packagist for Composer). A deployment can always set a different upstream per repository. */
+    /** The canonical public CDN mirrored when a deployment names no upstream: the trunk CDN at
+     *  {@code cdn.cocoapods.org}. */
     private static final URI CDN = URI.create("https://cdn.cocoapods.org");
 
     private static final String PREFIX = "/cocoapods/";
@@ -105,20 +80,10 @@ public final class CocoaPodsFormat implements RepositoryFormat, ArtifactLayout, 
     private static final String PODSPEC_SUFFIX = ".podspec.json";
     private static final String ZIP = ".zip";
 
-    /** The CDN version document, advertising the default {@code [1, 1, 1]} sharding a client uses to locate a pod. The
-     *  {@code min}/{@code last} are the CocoaPods client versions the CDN reports; a fixed, tiny document, so it is
-     *  emitted literally rather than through a YAML library. */
+    /** The CDN version document advertising the default {@code [1, 1, 1]} sharding; {@code min} and {@code last} are
+     *  the client versions the CDN reports. A fixed document, written literally. */
     private static final byte[] VERSION_YML = ("---\nmin: 1.0.0\nlast: 1.16.2\nprefix_lengths:\n- 1\n- 1\n- 1\n")
             .getBytes(StandardCharsets.UTF_8);
-
-    // A hostile archive cannot force a large allocation: the podspec read is bounded by the product's one
-    // archive-inflation ceiling, ArchiveInflation.largestEntry(), settable at jenrepo.archive.largest-entry - not by a
-    // private constant of this format's (RepositoryFormat contract clause 15).
-
-    // How far the walk for the podspec may run is the product's one archive-walk bound, ArchiveWalk.largestWalk(),
-    // settable at jenrepo.archive.largest-walk - not a private constant of this format's (RepositoryFormat contract
-    // clause 15 /, one dimension over from the inflation ceiling). An archive that will not yield its podspec
-    // inside it is treated as unindexable (a 400 publish).
 
     @Override
     public String name() {
@@ -144,19 +109,14 @@ public final class CocoaPodsFormat implements RepositoryFormat, ArtifactLayout, 
     @Override
     public List<String> blobKeys(String coordinate, String version, ArtifactStore store) throws IOException {
         if (!BlobLayout.addressable(coordinate, version)) {
-            // A traversal-shaped coordinate or version maps nowhere: these keys are what an eviction DELETES, and
-            // ArtifactStore.delete is not screened. The shared per-part screen, so a legitimately
-            // multi-segment coordinate still resolves.
+            // A traversal-shaped coordinate or version maps nowhere, since an eviction deletes these keys; judged part
+            // by part.
             return List.of();
         }
-        // A pod version's served content is its download pointer (cocoapods/<repo>/blob/<name>/<version>) plus its
-        // podspec stanza (under the MD5(name) CDN shard, cocoapods/<repo>/spec/<a>/<b>/<c>/<name>/<version>); both are
-        // Blobs.write pointers with bare-hex bodies, so the BlobLayout.blobHashes default resolves the withhold set from
-        // them. Discovered per registry: the coordinate names the pod but not which registries hold it, so probe each.
-        // A retroactive hold marks the resolved hashes (the download serve + versions listing + podspec read all gate on
-        // that marker) and an eviction deletes these exact pointer keys - closing the silent no-op where a KEV-listed pod
-        // kept serving. The registry set is operator-configured (bounded), so a bare store.list is right here; the pod's
-        // two pointer keys are exact lookups, never a large child listing.
+        // A pod version is its download pointer cocoapods/<repo>/blob/<name>/<version> and its podspec stanza under the
+        // MD5 shard, both bodies being blob hashes from which the withhold set derives; a hold marks those hashes and
+        // eviction deletes these keys. Each registry is probed, the set being operator-configured; the two keys are
+        // exact lookups.
         String[] shard = shard(coordinate);
         List<String> keys = new ArrayList<>();
         for (String repo : store.list("cocoapods")) {
@@ -172,11 +132,10 @@ public final class CocoaPodsFormat implements RepositoryFormat, ArtifactLayout, 
         return keys;
     }
 
-    /** The request paths this pod version's download serves at ({@code /cocoapods/<repo>/pods/<name>/<version>/<name>.zip})
-     *  for each registry whose download pointer is live - the inverse of {@link #describe}, so a retroactive hold links a
-     *  {@code /quarantine} review handle per served path exactly as {@code ArtifactLayout.paths} does for a publish/
-     *  layout. The podspec stanza pointer is withheld (it is served content) but carries no {@code pods/} download path,
-     *  so only the archive maps to a served path. Reads only the tiny pointers, never a blob body. */
+    /** The request paths this pod version's download serves at
+     *  ({@code /cocoapods/<repo>/pods/<name>/<version>/<name>.zip}) in every registry holding it, where a retroactive
+     *  hold links its {@code /quarantine} handles. The podspec stanza is withheld but has no download path. Only
+     *  pointers are read. */
     @Override
     public List<String> servedPaths(String coordinate, String version, ArtifactStore store) throws IOException {
         if (!BlobLayout.addressable(coordinate, version)) {
@@ -226,15 +185,10 @@ public final class CocoaPodsFormat implements RepositoryFormat, ArtifactLayout, 
         }
     }
 
-    /**
-     * Stream a pod upload into the CAS while materialising only its {@code .podspec.json}, then record the download
-     * pointer and its podspec stanza under the pod's CDN shard. The archive streams straight through
-     * {@link ArtifactStore#writeBlob}, so an arbitrarily large pod never lands in heap; the just-stored blob is reopened
-     * to read its metadata.
-     */
+    /** Stream a pod upload into the store while reading only its {@code .podspec.json}, then record the download
+     *  pointer and the podspec stanza under the pod's shard. */
     private void publish(String repo, String sub, FormatExchange exchange, ArtifactStore store) throws IOException {
-        // A publish coordinate is <name>/<version>; the CDN read routes (all_pods_versions_*, Specs/, pods/,
-        // CocoaPods-version.yml) are never exactly two segments, so a two-segment PUT is unambiguous.
+        // A publish is <name>/<version>; no read route is exactly two segments.
         String[] parts = sub.split("/", -1);
         if (parts.length != 2) {
             exchange.respond(404);
@@ -261,23 +215,19 @@ public final class CocoaPodsFormat implements RepositoryFormat, ArtifactLayout, 
         String declaredVersion = text(podspec, "version");
         if ((declaredName != null && !declaredName.equals(name))
                 || (declaredVersion != null && !declaredVersion.equals(version))) {
-            // The archive's podspec claims a different name/version than the deploy path: refuse rather than let a pod
-            // publish itself under another's coordinate (a metadata-poisoning route the store's tenant root check does
-            // not close within this format's namespace).
+            // The podspec's name and version must match the deploy path, or a pod could publish under another's
+            // coordinate.
             exchange.respond(400);
             return;
         }
         ObjectNode stanza = podspec.deepCopy();
         stanza.put("name", name);
         stanza.put("version", version);
-        // The download source is generated on read from the serving request (host-portable), so nothing host-specific
-        // is baked into the stored stanza - what lets an imported pod, stored with no request host, resolve correctly.
+        // The download source is generated on read from the serving request, so the stored stanza carries no host.
         stanza.remove("source");
         String[] shard = shard(name);
-        // Route the download pointer through Blobs.link (not a bare writeVersioned): besides the compare-and-set retry,
-        // link clears any gc/condemned/<hash> marker a collector set, so republishing a pod byte-identical to a
-        // condemned one un-condemns it before the sweep deletes it - otherwise a 201 publish is GC-deleted to a
-        // permanent 404. The pointer stores exactly that blob hash, so the marker key matches.
+        // Blobs.link retries the compare-and-set and clears any gc/condemned marker on a byte-identical blob, so a
+        // republish is not collected after its 201.
         Blobs blobs = new Blobs(store);
         try {
             blobs.linkRelease(blobKey(repo, name, version), hash, -1L);
@@ -286,18 +236,15 @@ public final class CocoaPodsFormat implements RepositoryFormat, ArtifactLayout, 
             return;
         }
         blobs.write(specKey(repo, shard, name, version), MAPPER.writeValueAsBytes(stanza));
-        // The served shard listing is written here, on the publish: the version joins the pod's stored list, which
-        // re-derives the pod's line in its shard rather than scanning the shard on every read.
+        // The shard listing is maintained on the publish: the version joins the pod's list, which re-derives its shard
+        // line.
         new CocoaPodsListings(blobs).refresh(repo, name, version);
         exchange.respond(201);
     }
 
-    /**
-     * The sharded pod-versions listing: the stored listing every publish maintains. {@code <a>_<b>_<c>} is a CDN
-     * shard (three hex characters of {@code MD5(pod)}); the file lists one line per pod in that shard,
-     * {@code <name>/<v1>/<v2>/...}. An empty shard is a {@code 404} (the pod is not here), so a proxy registry can
-     * later fill it from upstream.
-     */
+    /** The sharded pod-versions listing, the stored listing every publish maintains: {@code <a>_<b>_<c>} is a shard,
+     *  and the file has a line per pod in it, {@code <name>/<v1>/<v2>/...}. An empty shard is a {@code 404}, which a
+     *  proxy fills from upstream. */
     private void allPodsVersions(String repo, String suffix, Blobs blobs, FormatExchange exchange) throws IOException {
         String[] shard = suffix.split("_", -1);
         if (shard.length != 3 || !hex(shard[0]) || !hex(shard[1]) || !hex(shard[2]) || Keys.unsafe(repo)) {
@@ -319,12 +266,9 @@ public final class CocoaPodsFormat implements RepositoryFormat, ArtifactLayout, 
         }
     }
 
-    /**
-     * Serve a version's podspec, generated on read from the stored stanza with a fresh {@code source} pointing the
-     * download at this registry. The path is {@code Specs/<a>/<b>/<c>/<name>/<version>/<name>.podspec.json}; the stanza
-     * key is built from the same {@code <a>/<b>/<c>/<name>/<version>}, so a client's own shard (computed from the pod
-     * name) resolves to exactly where the pod was stored, or a {@code 404} if nothing is published there.
-     */
+    /** Serve a version's podspec from the stored stanza with a fresh {@code source} pointing the download here. The
+     *  path is {@code Specs/<a>/<b>/<c>/<name>/<version>/<name>.podspec.json}, keyed like the stanza, so a client's own
+     *  shard resolves to where the pod was stored, or a {@code 404}. */
     private void spec(String repo, String sub, Blobs blobs, FormatExchange exchange) throws IOException {
         String[] parts = sub.split("/", -1);
         if (parts.length != 7) {
@@ -339,9 +283,8 @@ public final class CocoaPodsFormat implements RepositoryFormat, ArtifactLayout, 
             exchange.respond(404);
             return;
         }
-        // Screen a withheld version's podspec, the way OCI screens a held image out of its tags: the pod archive a
-        // compliance hold withholds 404s on download, so serving its podspec (source, license, dependencies) would
-        // disclose a quarantined pod a client then cannot fetch. The same marker check the download serve makes.
+        // A withheld version's podspec is screened out, since its archive 404s and the podspec would disclose a
+        // quarantined pod.
         if (blobs.withheld(blobKey(repo, name, version))) {
             exchange.respond(404);
             return;
@@ -356,17 +299,14 @@ public final class CocoaPodsFormat implements RepositoryFormat, ArtifactLayout, 
             exchange.respond(404);
             return;
         }
-        // Generate the download source from the serving request (host + routing prefix), not a value baked in at write
-        // time, so the pod resolves to whatever host serves this registry.
+        // The download source comes from the serving request, so the pod resolves to whatever host serves this
+        // registry.
         ObjectNode source = MAPPER.createObjectNode();
         source.put("http", downloadUrl(repo, name, version, exchange));
         podspec.set("source", source);
-        // An operator's DEPRECATED mark, surfaced the one way this ecosystem has: a podspec's own `deprecated` flag,
-        // which `pod install` prints. CocoaPods has no second native - no unlist, no yank - so a YANKED mark is not
-        // rendered here as if it were a deprecation; it takes the ecosystem's only "gone" signal instead and drops
-        // the version out of the sharded listing (see allPodsVersions), which is the same absence RubyGems uses for
-        // a yank. An unmarked podspec is untouched: emitting `deprecated: false` would put a field in every response
-        // that the publisher never wrote.
+        // A DEPRECATED mark surfaces as the podspec's own deprecated flag, which pod install prints. CocoaPods has
+        // nothing else, so a YANKED mark instead drops the version from the shard listing. An unmarked podspec gets no
+        // field the publisher did not write.
         Lifecycle.read(blobs.store(), name, version)
                 .filter(flag -> flag.state() == Lifecycle.State.DEPRECATED)
                 .ifPresent(flag -> podspec.put("deprecated", true));
@@ -374,7 +314,7 @@ public final class CocoaPodsFormat implements RepositoryFormat, ArtifactLayout, 
         exchange.answer(MAPPER.writeValueAsBytes(podspec));
     }
 
-    /** Serve a pod archive from the CAS. The path is {@code <name>/<version>/<file>.zip}. */
+    /** Serve a pod archive from the store; the path is {@code <name>/<version>/<file>.zip}. */
     private void download(String repo, String tail, Blobs blobs, FormatExchange exchange) throws IOException {
         if (!tail.endsWith(ZIP)) {
             exchange.respond(404);
@@ -403,23 +343,17 @@ public final class CocoaPodsFormat implements RepositoryFormat, ArtifactLayout, 
         blobs.serve(located.get(), exchange);
     }
 
-    /** The canonical public CocoaPods CDN this format mirrors when a deployment enables proxying without naming one:
-     *  the trunk CDN. A deployment can always set a different upstream per repository. */
+    /** The trunk CDN, mirrored when a deployment names no upstream; a repository can set another. */
     @Override
     public Optional<URI> defaultUpstream() {
         return Optional.of(CDN);
     }
 
-    /**
-     * Proxy a CocoaPods CDN miss to an upstream CocoaPods CDN. The root {@code CocoaPods-version.yml} is always
-     * generated locally (never proxied); a mutable sharded {@code all_pods_versions_<a>_<b>_<c>.txt} listing is
-     * streamed through fresh; a mutable per-version {@code Specs/.../<name>.podspec.json} is fetched fresh and its
-     * {@code source} rewritten to route an http-zip download back through this registry (any other source passed
-     * through); and an immutable pod archive is fetched, cached into the CAS and served, with its upstream URL resolved
-     * from the upstream podspec. The request path {@code /cocoapods/<repo>/<sub>} maps to {@code <upstream>/<sub>} - a
-     * CocoaPods CDN serves its metadata under the same layout this registry exposes, so no path rewrite is needed
-     * beyond the {@code source} routing. Returns {@code false} to let the local {@code 404} stand.
-     */
+    /** Proxy a CocoaPods CDN miss to an upstream CDN: {@code CocoaPods-version.yml} is always local; a shard listing
+     *  streams fresh; a podspec is fetched fresh with an http-zip {@code source} rewritten through this registry; a pod
+     *  archive is fetched, cached and served, its URL resolved from the upstream podspec.
+     *  {@code /cocoapods/<repo>/<sub>} maps to {@code <upstream>/<sub>}. {@code false} lets the local {@code 404}
+     *  stand. */
     @Override
     public boolean pullThrough(FormatExchange exchange, ArtifactStore store, URI upstream,
                                ProxyFormat.Fetcher fetcher) throws IOException {
@@ -435,7 +369,7 @@ public final class CocoaPodsFormat implements RepositoryFormat, ArtifactLayout, 
             root = root.substring(0, root.length() - 1);
         }
         if (sub.equals(VERSION_FILE)) {
-            // The local version document is always generated (it advertises the sharding), so it never misses.
+            // The local version document never misses.
             return false;
         }
         if (sub.startsWith(ALL_PODS) && sub.endsWith(TXT)) {
@@ -450,12 +384,8 @@ public final class CocoaPodsFormat implements RepositoryFormat, ArtifactLayout, 
         return false;
     }
 
-    /**
-     * Stream an upstream sharded pod-versions listing through fresh (mutable, never cached). The file carries only
-     * {@code <name>/<version>...} lines and no URLs, so it needs no rewrite; it can be large, so it is streamed with
-     * {@link ProxyFormat.Download} rather than materialised. The target is reconstructed from validated hex shard
-     * segments, so a crafted request path cannot steer the upstream fetch off the shard-listing route.
-     */
+    /** Stream an upstream shard listing fresh, never cached: it carries no URLs and can be large. The target is rebuilt
+     *  from validated hex shard segments, so a crafted path cannot steer the fetch. */
     private boolean proxyShardListing(String sub, String root, FormatExchange exchange, ProxyFormat.Fetcher fetcher)
             throws IOException {
         String[] shard = sub.substring(ALL_PODS.length(), sub.length() - TXT.length()).split("_", -1);
@@ -463,21 +393,14 @@ public final class CocoaPodsFormat implements RepositoryFormat, ArtifactLayout, 
             return false;
         }
         URI target = URI.create(root + "/" + ALL_PODS + shard[0] + "_" + shard[1] + "_" + shard[2] + TXT);
-        // The sharded listing is a plain-text mutable index: stream it through fresh, never cached, defaulting the
-        // served type to text/plain (the CDN serves these .txt listings as text/plain). ENUMERATION: this file IS the
-        // pod-version list a Podfile resolves against, so an absent one is an answer ("no such pod, no such version")
-        // and only an upstream that ANSWERED it may reach the client as a 404.
+        // The shard listing is the pod-version list a Podfile resolves against, an ENUMERATION: only an upstream that
+        // answered 404/410 reaches the client as one. Served as text/plain by default, as the CDN serves it.
         return ProxyRelay.streamFresh(fetcher, target, "text/plain", exchange, ProxyRelay.Document.ENUMERATION);
     }
 
-    /**
-     * Fetch an upstream per-version podspec, rewrite an http-zip {@code source} to route the download back through this
-     * registry (so the archive is cached here) and stream it through fresh (mutable, never cached). A podspec is a
-     * small bounded metadata document, not an artifact, so it may be materialised to rewrite. A non-zip source (a git
-     * checkout, an http tarball) is left unchanged so the client fetches it directly - the CDN hosts only metadata, and
-     * only an http zip is a stable URL this registry serves back as a {@code .zip}. The shard, name and version are
-     * validated exactly as the local {@link #spec} read, so a crafted path cannot steer the upstream fetch.
-     */
+    /** Fetch an upstream podspec, rewrite an http-zip {@code source} through this registry, and stream it fresh; a
+     *  podspec is small metadata, so it may be held to rewrite. Another source is left for the client to fetch
+     *  directly. Shard, name and version are validated as the local {@link #spec} validates them. */
     private boolean proxySpec(String repo, String sub, String root, FormatExchange exchange,
                               ProxyFormat.Fetcher fetcher) throws IOException {
         String[] parts = sub.split("/", -1);
@@ -487,9 +410,7 @@ public final class CocoaPodsFormat implements RepositoryFormat, ArtifactLayout, 
         }
         String name = parts[4];
         String version = parts[5];
-        // PINNED, not ENUMERATION: the request already names the pod AND the version, so this document decides nothing
-        // about what exists - the shard listing above is where a Podfile resolves. Its absence therefore keeps the
-        // contract's "not cached here, re-pull" meaning and stays a plain decline.
+        // PINNED: the request names the pod and version, so its absence decides nothing about what exists.
         ProxyRelay.Answer answer = ProxyRelay.fetchFresh(fetcher, URI.create(root + "/" + sub), Map.of(), exchange,
                 ProxyRelay.Document.PINNED);
         if (!answer.answered()) {
@@ -509,13 +430,9 @@ public final class CocoaPodsFormat implements RepositoryFormat, ArtifactLayout, 
         return true;
     }
 
-    /**
-     * Fetch, cache and serve an immutable pod archive: resolve the upstream http-zip {@code source} from the upstream
-     * podspec, stream the archive into the CAS ({@link ProxyRelay#fill}, never buffered), then serve
-     * it from the local hit. Only reached on a miss, and the archive is then cached, so a later read never re-resolves.
-     * A pod whose source is not an http zip is not one this registry rewrote a local download for, so the miss is
-     * declined (the client fetches such a pod from its own git/tarball source).
-     */
+    /** Fetch, cache and serve an immutable pod archive: its http-zip {@code source} resolved from the upstream podspec,
+     *  the archive streamed into the store ({@link ProxyRelay#fill}), then served locally. A pod whose source is not an
+     *  http zip was never rewritten to a local download, so the miss is declined. */
     private boolean proxyDownload(String repo, String tail, String root, FormatExchange exchange, ArtifactStore store,
                                   ProxyFormat.Fetcher fetcher) throws IOException {
         String[] parts = tail.split("/", -1);
@@ -528,14 +445,9 @@ public final class CocoaPodsFormat implements RepositoryFormat, ArtifactLayout, 
         if (source == null) {
             return false;
         }
-        // Point-integrity: the podspec's http source may declare the archive's checksum (:sha256 / :sha1), so verify the
-        // streamed archive against it and refuse a mismatch - the Maven proxy leg's checksum parity.
-        //
-        // Like Composer and PyPI and unlike npm/cargo/nuget/conan/rubygems/conda/rpm/go, this leg has no split to
-        // make: the podspec is the SAME document that resolves the download URL, so a podspec this repository could not
-        // read leaves nothing to fetch and sourceUrl already declines the whole fill above. The only fall-back
-        // reachable here is the documented one - a podspec that answered and declares no checksum, which CocoaPods
-        // leaves optional.
+        // The podspec's http source may declare the archive's :sha256 or :sha1, and the streamed archive is held to it.
+        // The podspec is the same document that locates the download, so an unreadable one already declined above; a
+        // podspec declaring no checksum, which CocoaPods allows, caches unverified.
         try (ProxyFormat.Download download = fetcher.download(source.url(), Map.of()).orElse(null)) {
             if (download == null || download.status() != 200) {
                 return false;
@@ -551,15 +463,13 @@ public final class CocoaPodsFormat implements RepositoryFormat, ArtifactLayout, 
         return true;
     }
 
-    /** A resolved pod download: the archive URL and, when the podspec declared one, the checksum to verify it against. */
+    /** A resolved pod download: the archive URL and, when declared, the checksum to verify it against. */
     private record Source(URI url, String algorithm, byte[] expected) {
     }
 
-    /** Resolve the upstream download for a pod version by reading the upstream podspec (at the pod's CDN shard) and
-     *  taking its http-zip {@code source} - and, where the podspec declares one, the source's {@code :sha256} /
-     *  {@code :sha1} checksum so the fetched archive can be verified. A small bounded metadata read, only on a
-     *  pod-archive miss (once per version, since the archive is then cached). Returns {@code null} when the upstream
-     *  podspec is absent or its source is not an http zip this registry serves. */
+    /** Resolve a pod version's upstream download from the upstream podspec at its shard: its http-zip {@code source}
+     *  and, where declared, its {@code :sha256} or {@code :sha1}. A bounded read once per archive miss; {@code null}
+     *  when the podspec is absent or its source is no http zip. */
     private static Source sourceUrl(String root, String name, String version, ProxyFormat.Fetcher fetcher,
                                     boolean allowInternal) throws IOException {
         String[] shard = shard(name);
@@ -579,15 +489,12 @@ public final class CocoaPodsFormat implements RepositoryFormat, ArtifactLayout, 
         }
         try {
             URI source = URI.create(http);
-            // The source.http comes from untrusted upstream podspec metadata (an attacker can publish a pod to the
-            // public CDN whose source points at an internal service, or at a plaintext host of their choosing), so an
-            // unguarded fetch would be an SSRF and an unguarded http one would put the archive and any per-host
-            // upstream credential in front of every observer. The one shared outbound screen decides it;
-            // a refused target is declined so the miss falls through to a 404, never a throw (ProxyLeg clause 2).
+            // source.http is untrusted upstream metadata - a publisher could point it at an internal or plaintext host
+            // - so it is screened, and a refused target falls through to a 404 (ProxyLeg clause 2).
             if (!OutboundTargets.mayFollow(source, URI.create(root), allowInternal)) {
                 return null;
             }
-            // A podspec's http source may carry the archive checksum: `:sha256` (preferred) or the older `:sha1`.
+            // The archive checksum: :sha256 preferred, else :sha1.
             JsonNode declared = podspec.path("source");
             byte[] sha256 = decodeHex(text(declared, "sha256"), 32);
             if (sha256 != null) {
@@ -615,11 +522,9 @@ public final class CocoaPodsFormat implements RepositoryFormat, ArtifactLayout, 
         }
     }
 
-    /** The {@code source.http} URL of a podspec when it is an http zip archive (a stable URL this registry can cache
-     *  and re-serve as a {@code .zip}), or {@code null} for a git checkout, an http tarball, or an absent/other source
-     *  - which the proxy passes through unchanged for the client to fetch directly. The extension is matched on the
-     *  URL path (ignoring any {@code ?query}/{@code #fragment}), so a {@code .tar.gz} that would be mis-unarchived as a
-     *  zip is not routed through the local {@code .zip} download. */
+    /** The {@code source.http} of a podspec when it is an http zip, a URL this registry can cache and serve as a
+     *  {@code .zip}, else {@code null} for a git checkout, a tarball or another source, which the proxy passes through.
+     *  The extension is matched on the URL path, so a {@code .tar.gz} is never served as a zip. */
     private static String httpZipSource(JsonNode podspec) {
         String http = text(podspec.path("source"), "http");
         if (http == null) {
@@ -637,9 +542,8 @@ public final class CocoaPodsFormat implements RepositoryFormat, ArtifactLayout, 
         return bare.toLowerCase(Locale.ROOT).endsWith(ZIP) ? http : null;
     }
 
-    /** Parse an upstream metadata document as a JSON object, or {@code null} when it is malformed or not an object
-     *  (Jackson signals a parse failure with an unchecked exception) - a malformed upstream podspec is treated as a
-     *  miss rather than a {@code 500}. */
+    /** Parse an upstream document as a JSON object, or {@code null} when malformed or not an object, read as a miss
+     *  rather than a {@code 500}. */
     private static ObjectNode parse(byte[] body) {
         try {
             return MAPPER.readTree(body) instanceof ObjectNode object ? object : null;
@@ -660,9 +564,8 @@ public final class CocoaPodsFormat implements RepositoryFormat, ArtifactLayout, 
         }
         String sub = rest.substring(slash + 1);
         if (!sub.startsWith(PODS) || !sub.endsWith(ZIP)) {
-            // The publish path, <name>/<version>: what a pod is pushed at, and so the path the gate links a review
-            // pointer at when it holds one. A release's cross-alias guard asks every review pointer's path to be
-            // placed, or it fails every release's guard closed. The served path below carries the same coordinate.
+            // The publish path <name>/<version> is where the gate links a review pointer when it holds one, so a
+            // release's cross-alias guard asks for it; the served path carries the same coordinate.
             String[] pushed = sub.split("/", -1);
             if (pushed.length == 2 && !pushed[0].startsWith(ALL_PODS) && ArtifactLayout.addressable(pushed[0], pushed[1])) {
                 return Optional.of(new ArtifactDescriptor(ECOSYSTEM, pushed[0], pushed[1], path,
@@ -680,21 +583,11 @@ public final class CocoaPodsFormat implements RepositoryFormat, ArtifactLayout, 
                 "application/zip", prerelease(version), null, -1L));
     }
 
-    /**
-     * The pod version a stored CocoaPods pointer serves - the backwards direction the inventory back-fill rebuilds a
-     * lost {@code published} record from.
-     *
-     * <p>Both of this format's pointer shapes carry the pair in <em>path segments</em>, which is the easy case: the
-     * download pointer is {@code cocoapods/<repo>/blob/<name>/<version>} and the podspec stanza is
-     * {@code cocoapods/<repo>/spec/<a>/<b>/<c>/<name>/<version>} under the CDN's three-character MD5 shard. A pod
-     * name and a pod version are each a single key segment by construction - {@code blobKey} and {@code specKey}
-     * compose them as one - so counting segments decides both, and nothing is split on a character a name may
-     * contain.
-     *
-     * <p>Both are claimed rather than just the download, because they are not always both present: a pod whose
-     * source is external has a podspec and no stored archive, and that version is exactly as much a published
-     * release as one that has both.
-     */
+    /** The pod version a stored CocoaPods pointer serves, from which the inventory back-fill rebuilds a lost
+     *  {@code published} record. Both pointer shapes carry the pair in segments: the download
+     *  {@code cocoapods/<repo>/blob/<name>/<version>} and the podspec stanza
+     *  {@code cocoapods/<repo>/spec/<a>/<b>/<c>/<name>/<version>}, a name and a version each one segment by
+     *  construction. Both are claimed, since a pod with an external source has a podspec and no stored archive. */
     @Override
     public Optional<ArtifactDescriptor> describePointer(String key) {
         String[] parts = key.split("/", -1);
@@ -717,16 +610,13 @@ public final class CocoaPodsFormat implements RepositoryFormat, ArtifactLayout, 
 
     @Override
     public List<String> paths(String coordinate, String version, ArtifactStore store) {
-        // CocoaPods pod pointers live in the shared Blobs namespace (like npm/pypi/go/rpm/cargo/conda/composer), not the
-        // Publication namespace coordinate-based eviction walks, so nothing is enumerable from the coordinate alone.
+        // Pointers live in the shared Blobs namespace, so the coordinate enumerates nothing in publish/.
         return List.of();
     }
 
-    /** Read the pod's {@code .podspec.json} from a just-stored archive, inflating only as far as it: a root
-     *  {@code <name>.podspec.json} is preferred, else the first one directory deep ({@code <prefix>/*.podspec.json}, as
-     *  a VCS-exported archive files it); a podspec deeper than that belongs to a bundled dependency and is ignored.
-     *  Only the small JSON is materialised (bounded), and the whole scan is bounded so a hostile archive cannot drive
-     *  an unbounded inflate. Returns {@code null} when no usable podspec is found. */
+    /** Read the pod's {@code .podspec.json} from a stored archive, inflating only as far as it: at the root, else one
+     *  directory deep, as a VCS export files it; one deeper belongs to a bundled dependency. Bounded; {@code null} when
+     *  none is usable. */
     private static ObjectNode readPodspec(InputStream blob) throws IOException {
         return ArchiveWalk.walk(blob, CocoaPodsFormat::declaredPodspec).orNull();
     }
@@ -753,23 +643,15 @@ public final class CocoaPodsFormat implements RepositoryFormat, ArtifactLayout, 
         return nested;
     }
 
-    /**
-     * Parse the current zip entry as a JSON object under the shared archive-inflation ceiling, or {@code null} when it
-     * is not a JSON object (an unusable manifest).
-     *
-     * <p>The podspec is this publish's <b>guard input</b> - {@link #publish} checks the declared name/version against
-     * the deploy path so a pod cannot publish itself under another's coordinate - so a read the ceiling stopped takes
-     * {@code required(...)} and fails closed rather than answering "this entry declares nothing". Degrading it would
-     * be worse here than a lost declaration: the walk would fall through to the fallback one directory deep, which
-     * belongs to a <em>bundled dependency</em>, and the pod would be checked against that podspec instead.
-     */
+    /** Parse the current zip entry as a JSON object under the shared inflation ceiling, or {@code null} when it is
+     *  none. The podspec is the publish's guard input, so a read the ceiling stopped fails closed: degrading it would
+     *  fall through to a bundled dependency's podspec one directory deeper. */
     private static ObjectNode parse(InputStream entry) throws IOException {
         byte[] json = ArchiveInflation.entry(entry).required("CocoaPods pod", "podspec");
         try {
             return MAPPER.readTree(json) instanceof ObjectNode object ? object : null;
         } catch (RuntimeException e) {
-            // A malformed podspec (Jackson signals a parse failure with an unchecked exception) is not a usable
-            // manifest: treat it as absent rather than let the 500 escape.
+            // A malformed podspec is no usable manifest: treated as absent rather than a 500.
             return null;
         }
     }
@@ -785,8 +667,7 @@ public final class CocoaPodsFormat implements RepositoryFormat, ArtifactLayout, 
         return depth;
     }
 
-    /** The CDN shard for a pod: the first three hex characters of {@code MD5(name)} (the default {@code [1, 1, 1]}
-     *  prefix lengths), which is the CDN's own bucketing so a client computing the same shard finds the pod. */
+    /** The CDN shard of a pod: the first three hex characters of {@code MD5(name)}, the CDN's own bucketing. */
     static String[] shard(String name) {
         try {
             String hex = HexFormat.of().formatHex(
@@ -797,7 +678,7 @@ public final class CocoaPodsFormat implements RepositoryFormat, ArtifactLayout, 
         }
     }
 
-    /** Whether a value is a single lower-case hex character (a valid CDN shard segment, as {@code MD5} hex is emitted). */
+    /** Whether a value is one lower-case hex character, a valid shard segment. */
     private static boolean hex(String value) {
         if (value.length() != 1) {
             return false;
@@ -815,8 +696,7 @@ public final class CocoaPodsFormat implements RepositoryFormat, ArtifactLayout, 
         return node == null ? null : node.path(field).asString(null);
     }
 
-    /** The absolute download URL for a pod version, generated from the serving request so it routes back to whatever
-     *  host serves this registry. */
+    /** The absolute download URL of a pod version, from the serving request. */
     private static String downloadUrl(String repo, String name, String version, FormatExchange exchange) {
         return repoBase(repo, exchange) + "/" + PODS + name + "/" + version + "/" + name + ZIP;
     }
@@ -826,13 +706,7 @@ public final class CocoaPodsFormat implements RepositoryFormat, ArtifactLayout, 
         return RequestBase.of(exchange) + exchange.external(PREFIX + repo);
     }
 
-    /**
-     * A {@code name} or {@code version} becomes store-key path segments (the download pointer {@link #blobKey} and the
-     * podspec stanza {@link #specKey}) and a routed request path, so a value that is empty, carries a path separator or
-     * control character, or is a {@code .}/{@code ..} traversal segment could steer a write or read outside the pod's
-     * key space and is refused. Real CocoaPods pod names are identifiers and versions carry no {@code /}, so no
-     * legitimate value is rejected.
-     */
+    /** The store key prefix of a shard's podspec stanzas. */
 
     static String shardPrefix(String repo, String[] shard) {
         return "cocoapods/" + repo + "/spec/" + shard[0] + "/" + shard[1] + "/" + shard[2];
@@ -846,8 +720,7 @@ public final class CocoaPodsFormat implements RepositoryFormat, ArtifactLayout, 
         return "cocoapods/" + repo + "/blob/" + name + "/" + version;
     }
 
-    /** The migration-import capability, delegated to the layout-only {@link CocoaPodsImporter} - the format IS the
-     *  discovered importer now (an {@code instanceof} capability), and the importer class stays as its delegate. */
+    /** The migration-import capability, delegated to {@link CocoaPodsImporter}. */
     private final CocoaPodsImporter importer = new CocoaPodsImporter();
 
     @Override
@@ -865,8 +738,8 @@ public final class CocoaPodsFormat implements RepositoryFormat, ArtifactLayout, 
         importer.importArtifact(path, content, store);
     }
 
-    /** Each registry's pod archive of the version is put where a pod push goes - {@code <repo>/<name>/<version>} - and
-     *  asked for back at the path it is served from; the target derives its own podspec stanza from the archive. */
+    /** Each registry's pod archive of the version is put where a push goes, {@code <repo>/<name>/<version>}, unless its
+     *  served path already answers; the target derives its own stanza. */
     @Override
     public Exported export(ArtifactStore repository, String coordinate, String version, ExportTarget target)
             throws IOException {
