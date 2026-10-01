@@ -3,15 +3,9 @@ package build.jenesis.repository.posture;
 import module java.base;
 
 /**
- * The core security-posture seeder: the {@link SafetyAdvisor} that owns the <em>deployment-cross-cutting</em>
- * advisories - the ones that belong to no single feature module because they are properties of the whole deployment
- * (authorization off, the dev profile active, an SSRF allowlist disabled, no rate limit, a wide-open console, a writable
- * public demo). A feature module owns the advisories about its own settings; this seeds only the shared ones, each
- * grounded in a <em>real</em> {@code jenrepo.*} (or Spring) key an operator can actually set, so the fix is copy-and-go.
- *
- * <p>It is {@code provides}-declared in this module's descriptor, so it is discovered automatically wherever the posture
- * module is on the graph. It holds no state and reads configuration only to decide <em>whether</em> a condition holds -
- * an advisory's text never repeats a read value, so this surface cannot leak a secret.
+ * The {@link SafetyAdvisor} for the deployment-cross-cutting advisories - properties of the whole deployment rather
+ * than of one feature (authorization off, the dev profile, the import screen off, no rate limit, a writable demo,
+ * anonymous rights). Each is grounded in a real {@code jenrepo.*} or Spring key, so the fix can be copied as written.
  */
 public final class SecurityPosture implements SafetyAdvisor {
 
@@ -22,8 +16,8 @@ public final class SecurityPosture implements SafetyAdvisor {
     public List<SecurityAdvisory> advise(Configuration config) {
         List<SecurityAdvisory> advisories = new ArrayList<>();
 
-        // 1. Per-credential authorization disabled: the instance serves every request anonymously. This is the single
-        //    source of truth for the boot "running ANONYMOUS/OPEN" warning, which is not logged ad hoc.
+        // Per-credential authorization disabled: every request is served anonymously. This is the single source of the
+        // boot "running ANONYMOUS/OPEN" warning.
         if (!config.flag("jenrepo.auth", true)) {
             advisories.add(SecurityAdvisory.deployment("jenrepo.auth.open", Severity.CRITICAL,
                     "Authorization is disabled - the instance is fully open",
@@ -34,10 +28,8 @@ public final class SecurityPosture implements SafetyAdvisor {
                     "jenrepo.auth", "true", DOCS + "#jenrepo.auth.open"));
         }
 
-        // 2. Import screen disabled: the one dial covers both halves, so turning it off lets an import URL reach
-        //    internal addresses (link-local, RFC1918, loopback) AND travel in cleartext with the upstream credentials
-        //    attached. The advisory names both, because an operator who took the dial for the host half alone has
-        //    opted out of the transport half without being told.
+        // Import screen disabled: the one dial covers both halves, so an import URL may reach internal addresses AND
+        // travel in cleartext with the upstream credentials attached. The advisory names both.
         if (!config.flag("jenrepo.block-private-import-hosts", true)) {
             advisories.add(SecurityAdvisory.deployment("jenrepo.importer.ssrf", Severity.WARN,
                     "Import screen is disabled",
@@ -50,9 +42,8 @@ public final class SecurityPosture implements SafetyAdvisor {
                     "jenrepo.block-private-import-hosts", "true", DOCS + "#jenrepo.importer.ssrf"));
         }
 
-        // 3. No rate limit: a public instance with no throttle is trivially exhausted by a single abusive client.
-        //    Only an explicit 0 switches the limiter off - unset is the server's default ceiling, and an unparseable
-        //    value falls back to it too - so the advisory reads the value as set and never invents one for absence.
+        // No rate limit. Only an explicit 0 switches the limiter off - unset, or unparseable, is the server's default
+        // ceiling - so the advisory reads the value as set.
         if (config.optional("jenrepo.rate-limit").isPresent() && config.number("jenrepo.rate-limit", 1) <= 0) {
             advisories.add(SecurityAdvisory.deployment("jenrepo.ratelimit.unset", Severity.WARN,
                     "The request rate limit is switched off",
@@ -63,12 +54,11 @@ public final class SecurityPosture implements SafetyAdvisor {
                     "jenrepo.rate-limit", "600", DOCS + "#jenrepo.ratelimit.unset"));
         }
 
-        // 4. No advisory about jenrepo.ui.admins=*: both consoles refuse that value at startup, so a deployment
-        //    carrying it does not run to be advised about. An advisory about an impossible configuration is worse
-        //    than none - it reads as a live risk somebody must weigh.
+        // No advisory about jenrepo.ui.admins=*: both consoles refuse that value at startup, so no running deployment
+        // carries it.
 
-        // 5. The dev security profile active: DevSecurityConfig replaces the production chain with a permissive
-        //    local-only one (form login, in-memory users). Never intended outside a developer laptop.
+        // The dev security profile replaces the production chain with a permissive local-only one (form login,
+        // in-memory users).
         if (springProfiles(config).contains("dev")) {
             advisories.add(SecurityAdvisory.deployment("jenrepo.profile.dev", Severity.CRITICAL,
                     "The 'dev' security profile is active",
@@ -80,8 +70,7 @@ public final class SecurityPosture implements SafetyAdvisor {
                     "spring.profiles.active", "<remove dev>", DOCS + "#jenrepo.profile.dev"));
         }
 
-        // 6. A writable demo: the demo seeding is on but the instance is not read-only, so a public demo anyone can
-        //    browse is also one anyone can write to.
+        // A writable demo: anyone who can browse it can write to it.
         if (config.flag("jenrepo.demo", false) && !config.flag("jenrepo.read-only", false)) {
             advisories.add(SecurityAdvisory.deployment("jenrepo.demo.writable", Severity.WARN,
                     "The demo instance is writable",
@@ -92,12 +81,9 @@ public final class SecurityPosture implements SafetyAdvisor {
                     "jenrepo.read-only", "true", DOCS + "#jenrepo.demo.writable"));
         }
 
-        // 7. Anonymous role enabled: under an enforcing deployment a non-empty anonymous-rights grants a
-        //    keyless caller a defined set of rights instead of rejecting it. Read-only anonymous (the public-mirror
-        //    pattern) is a WARN; anonymous write or any manage/admin right is a governance-level CRITICAL - a keyless
-        //    caller that can mutate or administer. Silent when unset (the default) or under auth=false (already open,
-        //    where jenrepo.auth.open above is the advisory and anonymous-rights is redundant). The text names the risk,
-        //    never the configured grant value.
+        // Anonymous rights under an enforcing deployment grant a keyless caller a defined set of rights. Read-only is a
+        // WARN, write or any manage right a CRITICAL. Silent when unset, or under auth=false where jenrepo.auth.open
+        // applies.
         if (config.isSet("jenrepo.anonymous-rights") && config.flag("jenrepo.auth", true)) {
             if (grantsWriteOrAdmin(config.value("jenrepo.anonymous-rights"))) {
                 advisories.add(SecurityAdvisory.deployment("jenrepo.anonymous.write", Severity.CRITICAL,
@@ -123,10 +109,9 @@ public final class SecurityPosture implements SafetyAdvisor {
         return advisories;
     }
 
-    /** Whether an {@code anonymous-rights} value would let a keyless caller write or administer - it grants the
-     *  all-privileges {@code *}, any {@code <surface>:write} (or a {@code <surface>:*} wildcard covering write), or any
-     *  {@code manage:<verb>} admin right. Mirrors {@code AnonymousRights.grantsWriteOrAdmin} (the posture SPI cannot
-     *  depend on the server module), so anonymous read is a WARN and anonymous write/admin a CRITICAL. */
+    /** Whether an {@code anonymous-rights} value lets a keyless caller write or administer: the all-privileges
+     *  {@code *}, any {@code <surface>:write} or {@code <surface>:*}, or any {@code manage:<verb>}. Mirrors
+     *  {@code AnonymousRights.grantsWriteOrAdmin}, which this {@code java.base}-tier module cannot depend on. */
     private static boolean grantsWriteOrAdmin(String rights) {
         if (rights == null || rights.isBlank()) {
             return false;

@@ -6,51 +6,38 @@ import build.jenesis.repository.observation.Contributions;
 
 /**
  * The single collected view every consumer reads - the console's Security-posture panel, the admin API and the boot log
- * all render <em>this</em>, so an advisory is defined in exactly one place. {@link #from} evaluates a set of
- * {@link SafetyAdvisor}s against the effective {@link Configuration} and sorts the result critical-first (then by id, a
- * stable order); {@link #discover} does the same over the {@link ServiceLoader}-installed advisors. A module that raises
- * nothing (a disabled feature, a safe configuration) simply adds nothing - the report degrades gracefully to whatever is
- * actually unsafe, and an empty report is the healthy state.
+ * all render this, so an advisory is defined in one place. {@link #from} evaluates a set of {@link SafetyAdvisor}s
+ * against the effective {@link Configuration} and sorts the result critical-first, then by id; {@link #discover} does
+ * the same over the installed advisors. An empty report is the healthy state.
  *
- * <p><strong>Silence is load-bearing here, so a failure is never silent.</strong> An empty report means "checked, and
- * nothing is unsafe" - which is why an advisor that throws must not simply vanish, and must certainly not take the
- * report down: every console view renders {@code postureCount} and {@code GET /api/posture} reads the same collection.
- * {@link #from} therefore collects through {@code Contributions}: an advisor that throws (or answers {@code null}) is
- * contained to its own rows and replaced by a {@link Severity#WARN} {@code jenrepo.posture.unavailable.<advisor>}
- * advisory saying that whatever it checks is unreported, every other advisor is evaluated, and the failure is logged
- * once with the advisor's class. The badge count rises rather than falls, because a deployment whose posture is
- * partially unknown is not a deployment with less to worry about.
+ * <p><strong>Silence is load-bearing, so a failure is never silent.</strong> {@link #from} collects through
+ * {@code Contributions}: an advisor that throws or answers {@code null} is contained to its own rows and replaced by a
+ * {@link Severity#WARN} {@code jenrepo.posture.unavailable.<advisor>} advisory, every other advisor is evaluated, and
+ * the failure is logged once. The badge count rises rather than falls, because a partially unknown posture is not one
+ * with less to worry about.
  *
- * <p>The same rule covers the collision this additive SPI has no {@code name()} to refuse: two advisories sharing an id
- * (and, for a tenant-scoped row, a tenant) are both kept - dropping one would hide a real advisory - and a
- * {@code jenrepo.posture.collision} advisory reports the duplicated ids, so a packaging accident is visible on the
- * surface instead of rendering as two identically-anchored rows nobody can tell apart. <b>The collision row is filed at
- * the scope it is about</b>: ids that clashed deployment-wide become one {@link Scope#DEPLOYMENT} row, and ids
- * that clashed <em>for a tenant</em> become one {@link Scope#TENANT} row per tenant, carrying that tenant in
- * {@link SecurityAdvisory#tenant()} and naming no tenant in its text. A report is a fan-out that may carry rows for
- * several tenants at once, which is why a row's scope is the only thing a tenant-facing consumer may route on -
- * {@link #forTenant} and {@link #scoped} here, the console's {@code ScopedPosture} and {@code GET /api/admin/posture}
- * downstream - and a deployment-wide row that interpolates one tenant's name defeats every one of them at once.
- * Filing it at tenant scope keeps it diagnosable where it can be acted on and routable everywhere
- * else. (The deployment-wide {@code GET /api/posture} renders whatever the report holds without scoping it, so it
- * shows a {@code TENANT} row to any {@code repository:read} caller - true of every tenant-scoped advisory, not of this
- * one in particular, and a property of that endpoint rather than of the collection.)
+ * <p>Two advisories sharing an id (and, for a tenant-scoped row, a tenant) are both kept, and a
+ * {@code jenrepo.posture.collision} advisory names the duplicated ids. <b>The collision row is filed at the scope it is
+ * about</b>: a deployment-wide clash is one {@link Scope#DEPLOYMENT} row, a clash for a tenant one {@link Scope#TENANT}
+ * row for that tenant, naming no tenant in its text. A row's scope is the only thing a tenant-facing consumer may route
+ * on ({@link #forTenant}, {@link #scoped}, the console's {@code ScopedPosture}), so a deployment-wide row interpolating
+ * one tenant's name would defeat all of them.
  */
 public record PostureReport(List<SecurityAdvisory> advisories) {
 
-    /** How many clashing ids the collision row names before it starts counting - a row an operator can read. */
+    /** How many clashing ids a collision row names before it counts the rest. */
     private static final int COLLISIONS_NAMED = 5;
 
     public PostureReport {
         advisories = List.copyOf(advisories);
     }
 
-    /** Evaluate {@code advisors} against {@code config} and sort critical-first (ties broken by id); an advisor that
-     *  throws contributes {@link #unavailable} instead of taking the report down with it. */
+    /** Evaluate {@code advisors} against {@code config} and sort critical-first, ties by id; an advisor that throws
+     *  contributes {@link #unavailable} instead. */
     public static PostureReport from(Iterable<? extends SafetyAdvisor> advisors, Configuration config) {
         List<SecurityAdvisory> collected = new ArrayList<>();
-        // List.copyOf inside the contribution is deliberate: a null list, or a null advisory inside one, becomes a
-        // contained failure of that advisor rather than an NPE out of the collection that every console view runs.
+        // List.copyOf inside the contribution makes a null list, or a null advisory in one, a contained failure of that
+        // advisor rather than an NPE out of the collection.
         for (List<SecurityAdvisory> advised : Contributions.collect("safety advisor", advisors,
                 advisor -> List.copyOf(advisor.advise(config)), PostureReport::unavailable)) {
             collected.addAll(advised);
@@ -61,13 +48,10 @@ public record PostureReport(List<SecurityAdvisory> advisories) {
         return new PostureReport(collected);
     }
 
-    /**
-     * The row an advisor that threw is reported as. It is filed under the advisor's own implementation class
-     * ({@code jenrepo.posture.unavailable.<advisor>}), so two failing advisors are two rows rather than one merged
-     * one, and it names the <em>kind</em> of failure only - an exception message can quote a configured value, and
-     * this surface enumerates a deployment's weaknesses to an operator, so the message goes to the log and never into
-     * an advisory (see {@link Contributions#reason}).
-     */
+    /** The row a throwing advisor is reported as, filed under the advisor's implementation class
+     *  ({@code jenrepo.posture.unavailable.<advisor>}) so two failing advisors are two rows. It names the kind of
+     *  failure only: an exception message can quote a configured value, so the message goes to the log (see
+     *  {@link Contributions#reason}). */
     private static List<SecurityAdvisory> unavailable(SafetyAdvisor advisor, Exception failure) {
         return List.of(SecurityAdvisory.deployment(
                 "jenrepo.posture.unavailable." + Contributions.segment(advisor),
@@ -83,34 +67,24 @@ public record PostureReport(List<SecurityAdvisory> advisories) {
     }
 
     /**
-     * The duplicate refusal this SPI has no {@code name()} to inherit from the shared provider primitives, applied
-     * where it is actually observable: over the collected advisories rather than over the advisors. A row is keyed by
-     * its id, plus its tenant when it is tenant-scoped - the same advisory legitimately raised for two tenants is two
-     * rows, not a collision. Both duplicates stay in the report (an id clash must never cost an operator a real
-     * advisory) and one extra row names the clashing ids, because a duplicate id is a collision between modules
-     * rather than a merge, and it silently ruins the row key the docs anchor and the API consumer use.
+     * Reports duplicated advisories, since this SPI has no {@code name()} for a provider-level refusal. A row is keyed
+     * by its id, plus its tenant when tenant-scoped - the same advisory raised for two tenants is two rows, not a
+     * collision. Both duplicates stay in the report and one extra row names the clashing ids, because a duplicate id
+     * breaks the row key the docs anchor and the API consumer use.
      *
-     * <p><strong>Each collision row is filed at the scope of the rows that collided</strong>, so reporting the
-     * clash never widens who can see it. A clash between deployment-wide rows is one {@link Scope#DEPLOYMENT} row
-     * naming the ids; a clash between one tenant's rows is a {@link Scope#TENANT} row for <em>that</em> tenant, which
-     * carries the tenant in {@link SecurityAdvisory#tenant()} and names it nowhere in its text. The alternative - the
-     * single deployment-wide row whose message interpolates {@code "<id> (tenant <name>)"} - is a
-     * tenant name and an advisory id handed to every other tenant's viewer by a fan-out that is explicitly allowed to
-     * return rows for more than one tenant. Keying without the tenant instead would have kept one
-     * row at the price of the diagnosis: an id that legitimately holds for several tenants would report a clash with
-     * no way to tell which tenant's rows actually duplicated it.
+     * <p><strong>Each collision row is filed at the scope of the rows that collided</strong>, so reporting a clash
+     * never widens who can see it: a deployment-wide clash is one {@link Scope#DEPLOYMENT} row naming the ids, a clash
+     * between one tenant's rows is a {@link Scope#TENANT} row for that tenant that names the tenant nowhere in its
+     * text.
      *
-     * <p>The work stays bounded (clause 12), which one row per scope is worth arguing rather than assuming: a scope
-     * only enters the map by contributing <em>at least two</em> rows of its own, so the rows added here are at most
-     * half the duplicates the fan-out already returned - the report grows in proportion to its own input, never faster
-     * - and each row's message still names at most {@link #COLLISIONS_NAMED} ids and counts the rest.
+     * <p>The work is bounded (clause 12): a scope only gets a row by contributing at least two rows of its own, so the
+     * added rows are at most half the duplicates already returned, and each names at most {@link #COLLISIONS_NAMED}
+     * ids.
      */
     private static List<SecurityAdvisory> collisions(List<SecurityAdvisory> advisories) {
-        // The row key is the (scope, id) pair rather than a concatenation of the two, so no tenant name or id can be
-        // spelled to forge another's key.
+        // Keyed by the (scope, id) pair rather than a concatenation, so no name can be spelled to forge another's key.
         Set<Map.Entry<String, String>> seen = new HashSet<>();
-        // Keyed by the scope the clash belongs to: "" is the deployment-wide bucket, a tenant name its own bucket.
-        // A SortedMap of SortedSets so both the rows emitted and the ids each names are in a stable, readable order.
+        // "" is the deployment-wide bucket, a tenant name its own; sorted so rows and the ids each names are stable.
         SortedMap<String, SortedSet<String>> duplicated = new TreeMap<>();
         for (SecurityAdvisory advisory : advisories) {
             String scope = advisory.scope() == Scope.TENANT ? advisory.tenant() : "";
@@ -123,10 +97,9 @@ public record PostureReport(List<SecurityAdvisory> advisories) {
         return List.copyOf(rows);
     }
 
-    /** One collision row for one scope: deployment-wide when {@code tenant} is blank, otherwise that tenant's own row.
-     *  The ids are named in the message (bounded to {@link #COLLISIONS_NAMED}, the rest counted) because a collision
-     *  report that cannot say what collided is not a report; the tenant is carried by the row's scope rather than by
-     *  its text, so the diagnosis reaches the viewer who can act on it and nobody else. */
+    /** One collision row for one scope: deployment-wide when {@code tenant} is blank, otherwise that tenant's row. The
+     *  ids are named (bounded to {@link #COLLISIONS_NAMED}, the rest counted); the tenant is carried by the scope, not
+     *  the text. */
     private static SecurityAdvisory collision(String tenant, SortedSet<String> ids) {
         List<String> named = ids.stream().limit(COLLISIONS_NAMED).toList();
         String listed = String.join(", ", named)
@@ -144,25 +117,14 @@ public record PostureReport(List<SecurityAdvisory> advisories) {
                         "", "", "");
     }
 
-    /** Evaluate every {@link ServiceLoader}-discovered {@link SafetyAdvisor} against {@code config}. */
+    /** Evaluate every installed {@link SafetyAdvisor} against {@code config}. */
     public static PostureReport discover(Configuration config) {
         return from(Installed.ADVISORS, config);
     }
 
-    /**
-     * The advisors, discovered once for the life of the class loader.
-     *
-     * <p>Held because the callers are request handlers. {@code GET /api/posture}, its admin twin and the console's
-     * posture badge each asked for a report per request, and this static walked the whole module graph's service
-     * declarations and re-instantiated every advisor before a single one was asked anything. The advisor set is a
-     * property of what is installed, so it cannot differ between two requests of one JVM; the <em>answer</em>
-     * depends on the configuration handed in, which is why only the discovery is held and {@link #from} still runs
-     * per call.
-     *
-     * <p>Safe to hold because the contract already requires it: an advisor "holds no mutable state", answers from
-     * what it is given, and must stand when every external source is down - so one instance answering many
-     * configurations is the shape the contract describes rather than an assumption about the implementations.
-     */
+    /** The advisors, discovered once for the life of the class loader. Callers are request handlers, and the installed
+     *  set cannot differ between two requests of one JVM; the answer depends on the configuration, so {@link #from}
+     *  still runs per call. Holding the instances is safe because the contract makes an advisor stateless. */
     private static final class Installed {
 
         private static final List<SafetyAdvisor> ADVISORS = ServiceLoader.load(SafetyAdvisor.class).stream()
@@ -202,19 +164,14 @@ public record PostureReport(List<SecurityAdvisory> advisories) {
     }
 
     /**
-     * Everything a caller belonging to {@code tenant} may be shown: every deployment-wide advisory, plus that
-     * tenant's own. A {@code null} or blank tenant - an anonymous read, or a key that belongs to no tenant - sees
-     * the deployment-wide rows alone.
+     * Everything a caller belonging to {@code tenant} may be shown: every deployment-wide advisory plus that tenant's
+     * own. A {@code null} or blank tenant - an anonymous read, or a key belonging to no tenant - sees the
+     * deployment-wide rows alone.
      *
-     * <p>The composition lives here rather than at each read surface, because getting it wrong is a disclosure and
-     * there is more than one surface. This report enumerates a deployment's weaknesses by design, so a surface that
-     * renders {@link #advisories()} whole hands one tenant's unsafe settings to every other tenant's readers -
-     * which is exactly what the {@code /api/posture} did while the downstream console composed the same two
-     * calls correctly one edition over.
-     *
-     * <p>Callers that need the two halves apart - a console rendering "your tenant" and "this deployment" as
-     * separate panels - keep using {@link #scoped} and {@link #forTenant} directly; this is for the surfaces that
-     * serve one flat list.
+     * <p>The composition lives here rather than at each read surface because getting it wrong is a disclosure: this
+     * report enumerates a deployment's weaknesses, so a surface rendering {@link #advisories()} whole hands one
+     * tenant's unsafe settings to every other tenant's readers. A console showing the two halves as separate panels
+     * uses {@link #scoped} and {@link #forTenant}; this is for surfaces that serve one flat list.
      */
     public List<SecurityAdvisory> visibleTo(String tenant) {
         if (tenant == null || tenant.isBlank()) {

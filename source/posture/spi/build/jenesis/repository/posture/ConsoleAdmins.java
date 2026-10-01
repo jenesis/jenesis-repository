@@ -3,31 +3,20 @@ package build.jenesis.repository.posture;
 import module java.base;
 
 /**
- * How {@code jenrepo.ui.admins} is read: one rule, for everything that reads it.
+ * How {@code jenrepo.ui.admins} is read, by everything that reads it.
  *
- * <p>It is a comma-separated list of provider-qualified ids, trimmed, with empty entries dropped, and
- * {@link #EVERYONE} is meaningful within it - {@code alice,*} carries the wildcard exactly as a bare {@code *} does,
- * so a rule that only matched the whole value would miss one hidden in a list.
+ * <p>A comma-separated list of provider-qualified ids, trimmed, empty entries dropped. {@link #EVERYONE} is meaningful
+ * anywhere in it - {@code alice,*} carries the wildcard as a bare {@code *} does.
  *
- * <p><b>It lives here so the readers cannot drift.</b> Parsed separately by the console's authority policy, the
- * deployment's super-admin set and the security advisory, one documented key could mean "everyone is an admin" in
- * one console and "nobody is" in another. A key an operator sets for a security decision cannot mean two things.
- *
- * <p>This module is the shared home because it is {@code java.base}-only and every console already requires it for
- * the advisory that reads the same key. What each reader does with the wildcard is still its own decision - the
- * grant it represents is not the same size everywhere - but they agree on what was written.
+ * <p>The console's authority policy, the deployment's super-admin set and the security advisory all parse through here,
+ * so one key cannot mean "everyone is an admin" to one reader and "nobody" to another. What each reader does with the
+ * wildcard is its own decision; what was written is not.
  */
 public final class ConsoleAdmins {
 
-    /**
-     * The wildcard entry, kept so it can be <em>refused</em> rather than honoured.
-     *
-     * <p>It would mean "every authenticated user is an admin". It is refused at boot everywhere, because an
-     * administrator is a holder of rights and a
-     * wildcard names no holder: there is no principal to grant to, so there is nothing an operator could later
-     * read back, revoke, or see in a list. "Everyone this deployment authenticates holds X" is a real and
-     * legitimate need, but it belongs to a holder of its own rather than to a magic value inside a list of ids.
-     */
+    /** The wildcard entry, kept so it can be refused. It would mean "every authenticated user is an admin", and it is
+     *  refused at boot everywhere: an administrator is a holder of rights, and a wildcard names no principal an
+     *  operator could read back, revoke or see in a list. */
     public static final String EVERYONE = "*";
 
     private ConsoleAdmins() {
@@ -48,9 +37,8 @@ public final class ConsoleAdmins {
         return Collections.unmodifiableSet(ids);
     }
 
-    /** Whether the configured list carries the wildcard, alone or among named ids - which is a configuration a
-     *  console refuses to start on. Named {@code carries} rather than {@code grantsEveryone} because it does not
-     *  grant anything: it is the shape of a value, not a decision about access. */
+    /** Whether the configured list carries the wildcard, alone or among named ids - a configuration a console refuses
+     *  to start on. It describes the shape of a value, not a decision about access. */
     public static boolean carriesWildcard(Set<String> ids) {
         return ids.contains(EVERYONE);
     }

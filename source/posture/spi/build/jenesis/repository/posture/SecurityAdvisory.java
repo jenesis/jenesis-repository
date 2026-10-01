@@ -3,16 +3,13 @@ package build.jenesis.repository.posture;
 import module java.base;
 
 /**
- * One self-describing security-posture advisory: a potentially-unsafe configuration a module wants an operator to know
- * about. It carries a stable {@link #id} ({@code jenrepo.<feature>.<signal>}, the {@link Advisories} grammar), a
- * {@link #severity}, a {@link #scope} (deployment-wide vs a named {@link #tenant}), a short {@link #title}, a plain
- * {@link #why} it is unsafe, a suggested safer {@link #fix} (best practice in prose), the <em>exact</em> setting to
- * change ({@link #settingKey} / {@link #settingValue}, so an operator can copy it straight into config) and a
- * {@link #docs} link. Immutable; the id is validated at construction against {@link Advisories}.
+ * One security-posture advisory: a potentially unsafe configuration a module wants an operator to know about. It
+ * carries a stable {@link #id} (the {@link Advisories} grammar, validated at construction), a {@link #severity}, a
+ * {@link #scope} with its {@link #tenant}, a {@link #title}, {@link #why} it is unsafe, a safer {@link #fix}, the exact
+ * setting to change ({@link #settingKey} / {@link #settingValue}) and a {@link #docs} link.
  *
- * <p><strong>The advisory names the risk, never the secret.</strong> An advisor decides whether to raise an advisory by
- * reading configuration, but the text here describes the condition and the fix - it never embeds a credential, a key or
- * any read secret value, so the posture surface (which enumerates a deployment's weaknesses) cannot itself leak one.
+ * <p><strong>The advisory names the risk, never the secret</strong>: its text never embeds a credential or any read
+ * value, so the posture surface cannot leak one.
  */
 public record SecurityAdvisory(String id, Severity severity, Scope scope, String tenant, String title, String why,
                                String fix, String settingKey, String settingValue, String docs) {
@@ -36,7 +33,7 @@ public record SecurityAdvisory(String id, Severity severity, Scope scope, String
         }
     }
 
-    /** A deployment-wide advisory (the common case for a core seed). */
+    /** A deployment-wide advisory. */
     public static SecurityAdvisory deployment(String id, Severity severity, String title, String why, String fix,
                                               String settingKey, String settingValue, String docs) {
         return new SecurityAdvisory(id, severity, Scope.DEPLOYMENT, "", title, why, fix, settingKey, settingValue, docs);
