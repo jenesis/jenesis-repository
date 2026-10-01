@@ -3,6 +3,7 @@ package build.jenesis.repository.gate.store;
 import module java.base;
 import module org.slf4j;
 import build.jenesis.repository.events.EventSink;
+import build.jenesis.repository.format.OciTagIndex;
 import build.jenesis.repository.events.RepositoryEvent;
 import build.jenesis.repository.format.FormatExchange;
 import build.jenesis.repository.format.RepositoryFormat;
@@ -514,6 +515,9 @@ public final class HoldLifecycle {
             leaveOciTag(key, digest, present.get());
             return;
         }
+        // The digest-to-tags index is entered before the pointer, so it never misses a live tag; a lost race leaves
+        // an entry the index's readers confirm against the pointer and find stale.
+        OciTagIndex.enter(store, key, digest.substring(digest.indexOf(':') + 1));
         if (!store.writeVersioned(key, value, null)) {
             // A concurrent linker won the create race; re-read and leave whatever landed alone (never roll it back).
             store.readVersioned(key).ifPresent(raced -> leaveOciTag(key, digest, raced));

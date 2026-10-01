@@ -11,6 +11,8 @@ import build.jenesis.repository.store.ArtifactStore;
 import build.jenesis.repository.store.ArtifactStoreProvider;
 import build.jenesis.repository.store.Known;
 import build.jenesis.repository.store.Withheld;
+import build.jenesis.repository.format.OciTagIndex;
+import build.jenesis.repository.store.testkit.FaultInjectingStore;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
@@ -198,6 +200,74 @@ class OciDeleteTest {
         assertThat(new String(send("GET", "/v2/app/referrers/sha256:" + subject).body(), StandardCharsets.UTF_8))
                 .doesNotContain(referrer);
         assertThat(store.isEmpty("oci/app/manifests/" + subject + "/referrers")).isTrue();
+    }
+
+    @Test
+    void the_digest_to_tags_index_follows_a_retag_and_a_delete() throws IOException {
+        String first = image("app", "one", "1.0", "latest");
+        String second = image("app", "two", "latest");
+
+        assertThat(OciTagIndex.current(store, first)).as("a re-tag moves the tag off the first manifest")
+                .containsExactly(new OciTagIndex.Tag("app", "1.0"));
+        assertThat(OciTagIndex.entered(store, first)).as("and retires its entry there")
+                .containsExactly(new OciTagIndex.Tag("app", "1.0"));
+        assertThat(OciTagIndex.current(store, second)).containsExactly(new OciTagIndex.Tag("app", "latest"));
+
+        assertThat(send("DELETE", "/v2/app/manifests/sha256:" + first).status()).isEqualTo(202);
+        assertThat(OciTagIndex.entered(store, first)).as("a delete retires the entries of the tags it removed")
+                .isEmpty();
+        assertThat(new String(send("GET", "/v2/_catalog").body(), StandardCharsets.UTF_8))
+                .as("the index is no image").doesNotContain(".tagged");
+    }
+
+    @Test
+    void a_tag_the_index_never_heard_of_keeps_its_manifest_s_record() throws IOException {
+        String manifest = image("app", "one", "1.0", "latest");
+        // A store written before the index existed: its tags have no entries.
+        for (OciTagIndex.Tag tag : OciTagIndex.entered(store, manifest)) {
+            OciTagIndex.retire(store, tag.pointer(), manifest);
+        }
+
+        inventory.evict(inventory.release("oci", "app", "latest").orElseThrow());
+
+        assertThat(store.exists("oci/types/" + manifest))
+                .as("an index that cannot speak for the tag's siblings keeps the record they may still need").isTrue();
+        assertThat(send("GET", "/v2/app/manifests/1.0").status()).isEqualTo(200);
+    }
+
+    @Test
+    void a_delete_reads_the_same_however_many_tags_the_repository_holds() throws IOException {
+        assertThat(deleteReads(10)).as("the reads of the same deletes over ten other tags and over a thousand")
+                .isEqualTo(deleteReads(1_000));
+    }
+
+    /** The store reads a delete by tag of a tag with a sibling, and a delete by digest of an image with one tag, cost
+     *  in a repository that also holds {@code others} tags of another image. */
+    private int deleteReads(int others) throws IOException {
+        ArtifactStore plain = ArtifactStoreProvider.resolve("filesystem",
+                key -> "jenrepo.filesystem.root".equals(key) ? root.resolve("bound-" + others).toString() : null);
+        store = plain;
+        inventory = new StoreRepositoryInventory(store);
+        image("app", "one", "1.0", "latest");
+        String solo = image("solo", "solo", "1.0");
+        String config = blob("bulk", "bulk config".getBytes(StandardCharsets.UTF_8));
+        String layer = blob("bulk", "bulk layer".getBytes(StandardCharsets.UTF_8));
+        byte[] bulk = manifest(config, layer);
+        for (int index = 0; index < others; index++) {
+            push("bulk", "t" + index, bulk);
+        }
+        FaultInjectingStore counted = FaultInjectingStore.wrap(plain);
+        store = counted;
+        assertThat(send("DELETE", "/v2/app/manifests/1.0").status()).isEqualTo(202);
+        assertThat(send("DELETE", "/v2/solo/manifests/sha256:" + solo).status()).isEqualTo(202);
+        assertThat(send("GET", "/v2/solo/manifests/1.0").status()).isEqualTo(404);
+        int reads = 0;
+        for (FaultInjectingStore.Op op : List.of(FaultInjectingStore.Op.READ, FaultInjectingStore.Op.OPEN,
+                FaultInjectingStore.Op.READ_VERSIONED, FaultInjectingStore.Op.EXISTS, FaultInjectingStore.Op.LIST,
+                FaultInjectingStore.Op.PAGE, FaultInjectingStore.Op.SIZE)) {
+            reads += counted.calls(op);
+        }
+        return reads;
     }
 
     // ---- helpers ----

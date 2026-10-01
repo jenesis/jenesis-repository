@@ -2,7 +2,6 @@ package build.jenesis.repository.format.oci.inventory;
 
 import module java.base;
 import module org.slf4j;
-import build.jenesis.repository.walk.BoundedChildren;
 import build.jenesis.repository.blobs.BlobLayout;
 import build.jenesis.repository.blobs.BlobRoots;
 import build.jenesis.repository.format.BlobReferences;
@@ -10,9 +9,8 @@ import build.jenesis.repository.format.FormatExchange;
 import build.jenesis.repository.format.RepositoryFormat;
 import build.jenesis.repository.store.ArtifactDescriptor;
 import build.jenesis.repository.store.ArtifactStore;
-import build.jenesis.repository.walk.PagedTreeWalk;
-import build.jenesis.repository.walk.Traversal;
 import build.jenesis.repository.format.OciTags;
+import build.jenesis.repository.format.OciTagIndex;
 import build.jenesis.repository.format.Checksums;
 
 /**
@@ -187,12 +185,10 @@ public final class OciBlobLayout implements RepositoryFormat, BlobLayout {
      * that fails <em>closed</em> - anything it cannot read leaves the sidecar in place, because retaining it wastes one
      * small object while deleting it early un-marks a live sibling image's layers and strips its served media type.
      *
-     * <p><b>Cost.</b> There is no digest-to-tags index to consult, so proving a manifest unaliased is a descent of the
-     * {@code oci/} tag space - bounded and paged, short-circuiting on the first alias, but not free. That is a price an
-     * eviction can pay and a per-version <em>probe</em> cannot, so the two cheap decisions come first: a digest
-     * reference and a dead tag pointer both answer before any listing, and a manifest with no sidecar at all costs one
-     * {@code exists}. {@code InventoryReconciler.removeOrphanPublished} asks only when it can act on the answer,
-     * never for every published row.
+     * <p><b>Cost.</b> Proving a manifest unaliased reads the digest-to-tags index and the pointer of each tag it
+     * names - the manifest's own tags, whatever else the repository holds. The two cheap decisions still come first: a
+     * digest reference and a dead tag pointer both answer before the index, and a manifest with no sidecar at all
+     * costs one {@code exists}.
      */
     @Override
     public List<String> blobKeys(String coordinate, String version, ArtifactStore store) throws IOException {
@@ -243,75 +239,42 @@ public final class OciBlobLayout implements RepositoryFormat, BlobLayout {
         return List.of(sidecar);
     }
 
-    /** The bounds the sibling-tag scan descends {@code oci/} under. The step budget is what really bounds it (one
-     *  {@link ArtifactStore#exists} probe per opened node); the entry cap is a per-call continuation the loop below
-     *  follows to the end, never a shortened answer - a truncated scan that reported "unshared" would delete a sidecar
-     *  a tag past the cap still holds. Depth stays at the default {@link ArtifactStore#MAX_SEGMENTS} ceiling, which
-     *  every key the store's own write path would accept fits inside. */
-    private static final PagedTreeWalk ALIASES = PagedTreeWalk.bounded().steps(5_000_000).page(BoundedChildren.DRAIN_PAGE);
-
     /**
      * Whether a live tag pointer other than {@code witness} resolves to the manifest {@code hex} - the cross-alias
      * guard that keeps {@code oci/types/<hex>} standing while any sibling tag still serves that manifest.
      * {@code witness} is a key the caller has just read and knows is there: the tag pointer being evicted, or the
      * sidecar itself when a manifest is removed by digest.
      *
-     * <p>The scan is the shared bounded tree walk over {@code oci/} (iterative and paged, so an
-     * attacker-shaped multi-segment image name cannot overflow a stack and a wide level is never listed whole),
-     * following its own cursor to exhaustion and short-circuiting on the first alias found - the cancellation the
-     * primitive documents. Only tag pointers are read, judged by {@link #tagPointer}, so the format's sidecar and
-     * upload spaces cost a name test rather than a store read.
+     * <p>The answer is read from the digest-to-tags index ({@link OciTagIndex}): the tags ever linked at {@code hex},
+     * each confirmed by a read of its pointer - so the guard costs the manifest's own tags, never a walk of the
+     * repository's. The index is a superset of the live tags by its write order, which is what lets a removal decide
+     * from it.
      *
-     * <p><b>Fail-closed, and self-checking.</b> A store failure, a hostile key that trips a traversal bound, or any
-     * other unreadable state answers {@code true}: the guard could not <em>prove</em> the sidecar unshared, and the
-     * mandated direction is to mark more and delete less. It is deliberately not a throw - the rest of the eviction
-     * (destroying the tag pointer, which is what stops this version serving) must still happen, and leaving one small
-     * sidecar behind is inert storage that the next eviction of a sibling re-evaluates, where deleting it wrongly
-     * un-marks a live image's layers for the next collection pass and strips a sibling's served media type. The WARN is
-     * what keeps that degrade from being silent.
-     *
-     * <p>An exception is not the only way an enumeration can fail, and here the other way is the dangerous one:
-     * {@link ArtifactStore#list} throws nothing in the SPI, so a real backend outage <em>degrades to an empty
-     * listing</em> - and an empty listing is indistinguishable, to a "did anyone else claim this hash" question, from
-     * a repository with no other tags at all. Answering "unshared" there would delete a sidecar every alias still
-     * needs, on a store hiccup. So the scan validates itself against a key it already knows is there: it must have
-     * been handed {@code witness}, which this removal read a moment ago. A descent that did not deliver it
-     * enumerated something other than the live tag space and is refused. The check is conservative in the safe
-     * direction only - a tag pointer that also carries child keys is not a leaf, so it is not delivered, and this
-     * simply keeps the sidecar.
+     * <p><b>Fail-closed, and self-checking.</b> A store failure answers {@code true}: the guard could not <em>prove</em>
+     * the sidecar unshared, and the mandated direction is to mark more and delete less. It is deliberately not a throw
+     * - the rest of the eviction (destroying the tag pointer, which is what stops this version serving) must still
+     * happen, and leaving one small sidecar behind is inert storage the next eviction of a sibling re-evaluates. And
+     * when {@code witness} is a tag pointer the index must hold its entry: a tag linked before the index existed is
+     * not in it, and neither might its siblings be, so its absence keeps the sidecar rather than reading "no other
+     * tag" from an index that never heard of them.
      */
     private static boolean sharedByAnotherTag(String witness, String hex, ArtifactStore store) {
-        boolean[] sawOwn = {false};
         try {
-            String cursor = null;
-            while (true) {
-                Traversal.Result result = ALIASES.walk(store, "oci", cursor, leaf -> {
-                    if (leaf.equals(witness)) {
-                        sawOwn[0] = true;       // the liveness check: this descent really did reach the tag space
-                        return;
-                    }
-                    if (tagPointer(leaf) == null) {
-                        return;                 // a sidecar, staged upload chunks, or a key deeper than a tag pointer
-                    }
-                    Optional<ArtifactStore.Versioned> alias = store.readVersioned(leaf);
-                    if (alias.isPresent()
-                            && hex.equals(hex(new String(alias.get().content(), StandardCharsets.UTF_8).trim()))) {
-                        throw SHARED;           // the documented cancellation: stop the descent on the first hit
-                    }
-                });
-                if (result.exhausted()) {
-                    break;
-                }
-                cursor = result.cursor().orElseThrow();
+            OciTagIndex.Tag own = OciTagIndex.tag(witness);
+            List<OciTagIndex.Tag> entered = OciTagIndex.entered(store, hex);
+            if (own != null && !entered.contains(own)) {
+                return withheld(witness, hex, "the digest-to-tags index has no entry for " + witness
+                        + ", so it predates the tag and cannot speak for its siblings");
             }
-        } catch (SharedAlias _) {
-            return true;
+            for (OciTagIndex.Tag tag : entered) {
+                if (!tag.equals(own) && OciTagIndex.names(store, tag, hex)) {
+                    return true;
+                }
+            }
+            return false;
         } catch (IOException | RuntimeException unreadable) {
-            return withheld(witness, hex, "the tag-space descent failed: " + unreadable);
+            return withheld(witness, hex, "the digest-to-tags index could not be read: " + unreadable);
         }
-        return sawOwn[0] ? false : withheld(witness, hex, "the tag-space descent never delivered " + witness
-                + " itself, so it did not enumerate the live tag space (a listing that degraded to empty reads exactly "
-                + "like a repository with no other tags)");
     }
 
     /** Keep the sidecar and say why - the one place the guard's fail-closed degrade is recorded, so "retained rather
@@ -322,20 +285,6 @@ public final class OciBlobLayout implements RepositoryFormat, BlobLayout {
                 + "serves is affected.", hex, own, why);
         return true;
     }
-
-    /** The cancellation signal {@link #sharedByAnotherTag}'s descent stops on - an {@link IOException} because that is
-     *  the cancellation hook {@link PagedTreeWalk} documents, and caught immediately at the call site. Stackless and
-     *  shared: it is control flow, not a failure, and it is never surfaced. */
-    private static final class SharedAlias extends IOException {
-        private static final long serialVersionUID = 1L;
-
-        @Override
-        public synchronized Throwable fillInStackTrace() {
-            return this;                        // control flow, not a failure - there is no stack worth capturing
-        }
-    }
-
-    private static final SharedAlias SHARED = new SharedAlias();
 
     /**
      * The request path this image version currently occupies - deliberately ONE review handle per version (the tagged or

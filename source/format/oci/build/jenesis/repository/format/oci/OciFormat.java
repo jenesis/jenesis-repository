@@ -23,10 +23,10 @@ import tools.jackson.core.JsonGenerator;
 import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.json.JsonMapper;
 import build.jenesis.repository.format.OciTags;
+import build.jenesis.repository.format.OciTagIndex;
 import build.jenesis.repository.format.Checksums;
 import build.jenesis.repository.audit.AuditActions;
 import build.jenesis.repository.cleanup.VersionRemoval;
-import build.jenesis.repository.walk.BoundedChildren;
 
 /**
  * The OCI / Docker registry format (the {@code /v2/} Distribution API), so {@code docker push} and
@@ -810,8 +810,9 @@ public final class OciFormat implements RepositoryFormat, ProxyFormat, Repositor
      * which retention honours and a client's delete must too; the operator unpins first. With no inventory
      * installed nothing can be removed through the one path, and the answer is {@code 405 UNSUPPORTED}.
      *
-     * <p>Removing a manifest by digest reads the pointers of the image's own tags to find those naming it - the
-     * specification's "every tag", paid by the delete, never by a read.
+     * <p>Removing a manifest by digest finds the image's tags naming it in the digest-to-tags index
+     * ({@link OciTagIndex}) - the specification's "every tag" - confirmed by a read of each pointer, so the delete
+     * reads the tags that name the manifest and nothing that grows with the repository.
      */
     private void delete(String name, String reference, ArtifactStore store, FormatExchange exchange)
             throws IOException {
@@ -833,14 +834,11 @@ public final class OciFormat implements RepositoryFormat, ProxyFormat, Repositor
             if (!store.exists("oci/types/" + hex)) {
                 hex = null;
             } else {
-                String named = hex;
-                BoundedChildren.draining().scan(store, "oci/" + name + "/tags", tag -> {
-                    if (OciTags.isTag(tag) && store.readVersioned("oci/" + name + "/tags/" + tag)
-                            .map(pointer -> hex(new String(pointer.content(), StandardCharsets.UTF_8).trim()))
-                            .filter(named::equals).isPresent()) {
-                        tags.add(tag);
+                for (OciTagIndex.Tag tag : OciTagIndex.current(store, hex)) {
+                    if (tag.name().equals(name)) {
+                        tags.add(tag.tag());
                     }
-                });
+                }
             }
         } else {
             hex = store.readVersioned("oci/" + name + "/tags/" + reference)
@@ -866,6 +864,9 @@ public final class OciFormat implements RepositoryFormat, ProxyFormat, Repositor
         }
         for (String version : versions) {
             removal.remove(store, ecosystem(), name, version);
+        }
+        for (String tag : tags) {
+            OciTagIndex.retire(store, "oci/" + name + "/tags/" + tag, hex);
         }
         if (digest) {
             new OciReferrers(store).forget(name, hex);
@@ -1817,9 +1818,22 @@ public final class OciFormat implements RepositoryFormat, ProxyFormat, Repositor
     /** Point a tag at a digest with the bounded compare-and-set retry every load-bearing pointer write uses (the
      *  {@code Publication.link} idiom): a concurrent re-tag of the same tag resolves last-writer-wins rather than one
      *  push silently dropping the other's update while still answering {@code 201}, and a write that cannot land after
-     *  repeated conflicts surfaces as an {@link IOException} instead of a false success. */
+     *  repeated conflicts surfaces as an {@link IOException} instead of a false success.
+     *
+     *  <p>The digest-to-tags index is entered before the pointer and the digest the tag named before is retired after
+     *  it, so the index never misses a live tag ({@link OciTagIndex}). */
     static void linkTag(ArtifactStore store, String key, String digest) throws IOException {
-        Retries.update(store, key, _ -> digest.getBytes(StandardCharsets.UTF_8));
+        String hex = hex(digest);
+        OciTagIndex.enter(store, key, hex);
+        String[] before = {null};
+        Retries.update(store, key, current -> {
+            before[0] = current.map(pointer -> hex(new String(pointer.content(), StandardCharsets.UTF_8).trim()))
+                    .orElse(null);
+            return digest.getBytes(StandardCharsets.UTF_8);
+        });
+        if (before[0] != null && !before[0].equals(hex)) {
+            OciTagIndex.retire(store, key, before[0]);
+        }
     }
 
     // --- RepositoryImporter capability: delegated to OciImporter. importTarget returns empty - OCI owns

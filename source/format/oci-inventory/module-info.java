@@ -23,7 +23,6 @@
 module build.jenesis.repository.format.oci.inventory {
     requires build.jenesis.repository.format;
     requires build.jenesis.repository.store;
-    requires build.jenesis.repository.walk;
     requires build.jenesis.repository.blobs;
     requires build.jenesis.repository.inventory;
     requires build.jenesis.repository.settings;

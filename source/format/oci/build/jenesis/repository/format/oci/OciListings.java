@@ -265,7 +265,8 @@ final class OciListings {
         List<String> children = new ArrayList<>(store.list(prefix));
         children.sort(Comparator.comparing((String child) -> !child.equals("tags")).thenComparing(child -> child));
         for (String child : children) {
-            if (child.equals("uploads") || child.equals("upload-sessions") || child.equals("types")) {
+            if (child.startsWith(".") || child.equals("uploads") || child.equals("upload-sessions")
+                    || child.equals("types")) {
                 continue;
             }
             String childName = name.isEmpty() ? child : name + "/" + child;
@@ -330,8 +331,8 @@ final class OciListings {
     private static void images(ArtifactStore store, String prefix, String name, List<String> images)
             throws IOException {
         for (String child : store.list(prefix)) {
-            if (child.equals("uploads") || child.equals("upload-sessions") || child.equals("types")
-                    || child.equals("manifests")) {
+            if (child.startsWith(".") || child.equals("uploads") || child.equals("upload-sessions")
+                    || child.equals("types") || child.equals("manifests")) {
                 continue;
             }
             if (child.equals("tags")) {
