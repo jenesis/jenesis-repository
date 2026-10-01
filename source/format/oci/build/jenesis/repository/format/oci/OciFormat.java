@@ -30,49 +30,35 @@ import build.jenesis.repository.audit.AuditActions;
 import build.jenesis.repository.cleanup.VersionRemoval;
 
 /**
- * The OCI / Docker registry format (the {@code /v2/} Distribution API), so {@code docker push} and
- * {@code docker pull} work against the same store. It is an unusually clean fit: an OCI blob is addressed by its
- * {@code sha256:<hex>} digest, which is exactly the content-addressed {@code blobs/<hex>} the repository already
- * uses, so layers, configs and manifests dedupe against - and share storage with - everything else. A push
- * uploads blobs (monolithic, or a session of chunks) then a manifest, both stored by digest; a tag is a small
- * pointer ({@code oci/<name>/tags/<tag>} to a digest); a manifest's media type is kept in a sidecar so a pull
- * returns it verbatim. Stateless: the dispatcher passes the tenant-and-repository-scoped store on each call.
+ * The OCI / Docker registry format (the {@code /v2/} Distribution API). An OCI blob is addressed by its
+ * {@code sha256:<hex>} digest, which is exactly the store's content-addressed {@code blobs/<hex>}, so layers, configs
+ * and manifests share storage with everything else. A push uploads blobs (monolithic, or a session of chunks) then a
+ * manifest, both stored by digest; a tag is a pointer {@code oci/<name>/tags/<tag>} to a digest; a manifest's media
+ * type is kept in a sidecar so a pull returns it verbatim. Stateless: each call is handed the repository's store.
  *
- * <p>That clean fit has one cost, and it is why this format implements {@link BlobReferences}: the only OCI store key
- * whose <em>body</em> names a blob is the tag pointer, and it names the manifest. An image's config and layer digests
- * live inside the manifest JSON, behind no key at all, and a manifest pulled by digest has no tag pointer at all - so
- * a reference scan that reads pointer bodies alone sees a fraction of what an image serves. {@link #references} lends
- * the rest, which is the whole of what stands between a garbage collection pass and a live image whose manifest pulls
- * {@code 200} while its layers {@code 404}.
+ * <p>It implements {@link BlobReferences} because the only key whose body names a blob is the tag pointer, naming the
+ * manifest: config and layer digests live inside the manifest JSON, and a manifest pulled by digest has no pointer.
+ * {@link #references} lends the rest, without which a collection would leave a manifest serving over missing layers.
  *
- * <h2>Inbound signatures: cosign's tag convention</h2>
+ * <h2>Inbound signatures</h2>
  *
- * {@code cosign sign} pushes a signature as an OCI artifact of its own, tagged {@code sha256-<manifest hex>.sig}
- * beside the image: a manifest whose layers are simple-signing payloads, each naming the image by manifest digest,
- * annotated with the signature over the payload ({@code dev.cosignproject.cosign/signature}), the Fulcio certificate
- * and chain ({@code dev.sigstore.cosign/certificate}, {@code /chain}) and the transparency-log receipt
- * ({@code dev.sigstore.cosign/bundle}). This format implements {@link ArtifactSignatures} over that shape: a
- * manifest's evidence is each such layer, with the layer's annotations as the signature material, the payload blob
- * as the signed document and the manifest digest the payload names as the binding, which is what makes a signature
- * over a payload naming another image a finding rather than a match. The signature manifest is a sidecar of the
- * image it names ({@link #covers}), so one pushed after its image re-derives the image's verdict as a late
- * {@code .asc} does.
+ * {@code cosign sign} pushes a signature as an artifact of its own, tagged {@code sha256-<manifest hex>.sig}: a
+ * manifest whose layers are simple-signing payloads naming the image by digest, annotated with the signature, the
+ * Fulcio certificate and chain and the transparency-log receipt. As {@link ArtifactSignatures}, a manifest's evidence
+ * is each such layer - its annotations the material, the payload the signed document, the digest it names the
+ * binding, so a payload naming another image is a finding. The same material attached as a referrer, or a Sigstore
+ * bundle, decides the verdict the same way, and one pushed after its image re-derives it through {@link #covers}.
  *
  * <h2>Referrers</h2>
  *
- * A manifest pushed with a {@code subject} is a referrer of the manifest it names - a signature, an SBOM, an
- * attestation - and {@code GET /v2/<name>/referrers/<digest>} lists them, from an index {@link OciReferrers} keeps on
- * the write path. The push is answered with {@code OCI-Subject}, which tells a client this registry keeps that index
- * so it does not fall back to maintaining one itself under a tag. The signature evidence reads that index as well as
- * the tag convention: a cosign signature attached as a referrer, or a Sigstore bundle, decides the image's verdict the
- * same way, and one attached after its image re-derives it through {@link #covers(String, ArtifactSignatures.Signed)},
- * since a referrer's path does not name what it covers.
+ * A manifest pushed with a {@code subject} is a referrer of that manifest, listed by
+ * {@code GET /v2/<name>/referrers/<digest>} from the index {@link OciReferrers} keeps on the write path. The push is
+ * answered with {@code OCI-Subject}, so a client does not maintain a tag-schema index itself.
  *
  * <h2>Removal and mount</h2>
  *
- * {@code DELETE} of a manifest or a tag removes versions through the product's one removal ({@link VersionRemoval}),
- * and a blob upload that names {@code mount} and {@code from} links a blob the caller may read in another repository
- * of the tenant instead of taking it again.
+ * {@code DELETE} of a manifest or a tag removes versions through the one removal ({@link VersionRemoval}), and an
+ * upload naming {@code mount} and {@code from} links a blob the caller may read in another repository of the tenant.
  */
 public final class OciFormat implements RepositoryFormat, ProxyFormat, RepositoryImporter, BlobReferences,
         ArtifactSignatures, RepositoryExporter {
@@ -84,8 +70,7 @@ public final class OciFormat implements RepositoryFormat, ProxyFormat, Repositor
 
     private static final JsonMapper JSON = JsonMapper.builder().build();
 
-    /** The migration-import capability, delegated to the layout-only {@link OciImporter} - the format IS
-     *  the discovered importer now (an {@code instanceof} capability), and the importer class stays as its delegate. */
+    /** The import capability's delegate. */
     private final OciImporter importer = new OciImporter();
 
     static final String OCI_MANIFEST = "application/vnd.oci.image.manifest.v1+json";
@@ -95,23 +80,19 @@ public final class OciFormat implements RepositoryFormat, ProxyFormat, Repositor
             "application/vnd.docker.distribution.manifest.v2+json",
             "application/vnd.docker.distribution.manifest.list.v2+json");
 
-    /** The chunks of an in-flight chunked upload, staged by session id before they are finalized into a blob. */
-    /** The manifest PUT body is buffered whole (it is metadata, never a layer blob) to hand the same bytes to the
-     *  screen, so it must be bounded: a hostile authenticated pusher must not be able to OOM the shared JVM with a
-     *  multi-GB "manifest". 4 MiB is far above any real image manifest / index (a few KiB) yet caps the buffer.
-     *  Package-private so the migration-import path ({@link OciImporter}) bounds an imported manifest identically. */
+    /** The bound on a buffered manifest - pushed, proxied or imported - far above any real manifest or index, so a
+     *  hostile body cannot exhaust the heap. */
     static final int MAX_MANIFEST = 4 * 1024 * 1024;
 
+    /** The chunks of an in-flight chunked upload, staged by session id before they are finalized into a blob. */
     private static final String UPLOADS = "oci/.uploads/";
 
-    /** One start-time marker per open upload session, in its own namespace - kept out of the session's numbered
-     *  chunks (so it never disturbs chunk indexing) and out of the quota-metered {@link #UPLOADS} staging (so the
-     *  tiny marker is never itself counted). The reaper ages a never-finalized session out by this marker. */
+    /** One marker per open upload session, outside the session's numbered chunks and the quota-metered
+     *  {@link #UPLOADS} staging; the reaper ages a never-finalized session out by it. */
     private static final String SESSIONS = "oci/.upload-sessions/";
 
-    /** How long an un-finalized chunked-upload session is kept before {@link #reap} drops it. A {@code docker push}
-     *  that opens a session and streams chunks but never finalizes it (a crashed or hostile client) is stored bytes
-     *  that count against the quota, so it is swept once this stale rather than growing the store without bound. */
+    /** How long an un-finalized upload session - stored bytes counting against the quota - is kept before
+     *  {@link #reap} drops it. */
     private static final Duration UPLOAD_SESSION_TTL = Duration.ofHours(24);
 
     private final Clock clock;
@@ -121,9 +102,7 @@ public final class OciFormat implements RepositoryFormat, ProxyFormat, Repositor
         this(Clock.systemUTC(), UPLOAD_SESSION_TTL);
     }
 
-    /** The {@link Clock} and TTL seam lets a test open a session, advance time past the TTL and assert the reaper
-     *  drops it without sleeping - the injectable-clock-over-a-wall-clock-default idiom the negative cache and the
-     *  mark-sweep collector expose as a public constructor for the same reason. */
+    /** With the clock and session TTL given, so a test can age a session out without sleeping. */
     public OciFormat(Clock clock, Duration uploadTtl) {
         this.clock = clock;
         this.uploadTtl = uploadTtl;
@@ -146,11 +125,9 @@ public final class OciFormat implements RepositoryFormat, ProxyFormat, Repositor
     }
 
     /**
-     * The OCI protocol pushes one image across many requests - a session of blob uploads (a {@code POST} then chunked
-     * {@code PATCH}es and a finalising {@code PUT}), then a manifest {@code PUT} that references them by digest - so no
-     * single request carries the whole artifact for an ingress edge to screen as one body. This format therefore owns
-     * its own screening choreography (a manifest-time choke point) and opts out of the edge screen, which would
-     * otherwise store and gate each transport-level fragment as if it were a standalone publish.
+     * Opts out of the edge screen: a push spans many requests - blob uploads, then a manifest naming them by digest -
+     * so no request carries a whole artifact, and the edge would gate each fragment as a publish. The manifest is
+     * screened instead ({@link OciManifests}).
      */
     @Override
     public boolean screened() {
@@ -248,18 +225,13 @@ public final class OciFormat implements RepositoryFormat, ProxyFormat, Repositor
     private void blob(String digest, ArtifactStore store, FormatExchange exchange) throws IOException {
         String hex = hex(digest);
         if (!Checksums.isSha256Hex(hex)) {
-            // A blob is addressed by its sha256 digest; a reference that is not 64 lowercase hex chars cannot name a
-            // blob, and refusing it here stops a '..'-laced digest aiming the blobs/<hex> key at another key space.
+            // Anything but 64 lowercase hex chars names no blob, and could aim blobs/<hex> at another key space.
             exchange.respond(404);
             return;
         }
         String key = "blobs/" + hex;
-        // The withheld/<hash> marker is the blobs-namespace twin of the publish/ namespace's quarantine screen (a
-        // store-layout convention, like gc/condemned/<hash>): OCI serves by digest straight from blobs/, which no
-        // publish/ pointer hold ever reached, so a compliance hold on these bytes retracts serving here through the
-        // marker instead. Absent marker, zero-cost beyond one existence probe. A caller that may read what the
-        // repository holds for review - a content scanner reading the image a hold waits on its report for - is
-        // served the withheld bytes all the same, and is asked only once a marker stands.
+            // OCI serves straight from blobs/, so a hold retracts these bytes through the withheld/<hex> marker. A
+        // caller that may read held content - a scanner the hold waits on - is still served.
         if (!store.exists(key) || (Withheld.is(store, hex) && !exchange.readsHeld())) {
             exchange.respond(404);
             return;
@@ -284,10 +256,8 @@ public final class OciFormat implements RepositoryFormat, ProxyFormat, Repositor
         }
         String method = exchange.method();
         if (method.equals("POST")) {
-            // Fresh-upload sweep (the negative cache's "a fresh miss first sweeps expired entries" idiom): drop every
-            // session abandoned past the TTL before opening a new one, so an un-finalized session's staged chunks are
-            // reclaimed - and released from the quota counter - without needing a scheduler. Paced: the sweep lists
-            // every open session, so it runs at most once per REAP_INTERVAL per node rather than on every push.
+            // Abandoned sessions are reclaimed as a new one opens, with no scheduler; the sweep lists every session, so
+            // it runs at most once per REAP_INTERVAL per node.
             reapPaced(store);
             String mount = exchange.queryParameter("mount");
             String from = exchange.queryParameter("from");
@@ -300,7 +270,6 @@ public final class OciFormat implements RepositoryFormat, ProxyFormat, Repositor
                 return;
             }
             String id = UUID.randomUUID().toString();
-            // Record when the session opened so the reaper can age it out if it is streamed into but never finalized.
             writeSession(store, id, clock.millis(), 0L, 0L);
             exchange.setResponseHeader("Location", exchange.external("/v2/" + name + "/blobs/uploads/" + id));
             exchange.setResponseHeader("Docker-Upload-UUID", id);
@@ -340,14 +309,10 @@ public final class OciFormat implements RepositoryFormat, ProxyFormat, Repositor
      * the blob's location when the caller may read {@code from} and the blob is there, and {@code false} otherwise,
      * so the caller opens an ordinary upload session and the client uploads.
      *
-     * <p>{@code from} is the other image's name as the client addresses it, and whether the caller may read it is
-     * decided by the edge exactly as a {@code GET} of that blob would be ({@link FormatExchange#readable}). Every
-     * refusal - a name the caller may not read, a repository that does not exist or holds another format, a blob that
-     * is absent or withheld there - is the same fallback, so a mount is never a way to learn whether something the
-     * caller may not read exists.
-     *
-     * <p>A blob is stored per repository, so linking it is a copy streamed from one repository's store into this
-     * one's, written by digest and held to it; a blob this repository already holds is linked by nothing at all.
+     * <p>Whether the caller may read {@code from} is decided as a {@code GET} of that blob would be
+     * ({@link FormatExchange#readable}). Every refusal is the same fallback, so a mount never discloses whether
+     * something the caller may not read exists. A blob is stored per repository, so linking is a copy streamed across
+     * and held to its digest.
      */
     private boolean mounted(String name, String mount, String from, ArtifactStore store, FormatExchange exchange)
             throws IOException {
@@ -378,12 +343,9 @@ public final class OciFormat implements RepositoryFormat, ProxyFormat, Repositor
         return true;
     }
 
-    /** Stream one received chunk straight to its own object under the upload session, indexed by its arrival order, so
-     *  a chunked docker push never accumulates the growing layer in memory. The session marker carries the running
-     *  chunk count and received-byte total, advanced by one write here, so neither the next chunk index nor the
-     *  received-bytes total needs a full re-list / re-sum of the staged chunks per {@code PATCH} - an N-chunk push
-     *  stays O(N), not O(N^2), store round-trips (a per-PATCH re-sum would cost ~N^2/2 {@code HEAD}s on an object
-     *  store). Returns the running byte total for the {@code Range} header. */
+    /** Streams one chunk to its own object under the session, indexed by arrival, and advances the running count and
+     *  byte total in the session marker, so an N-chunk push costs O(N) store round-trips rather than a re-sum per
+     *  {@code PATCH}. Returns the byte total for the {@code Range} header. */
     private long append(ArtifactStore store, String id, InputStream chunk) throws IOException {
         long[] session = session(store, id);
         long timestamp = session[0] == 0L ? clock.millis() : session[0];   // a stray chunk with no POST starts the clock
@@ -395,9 +357,7 @@ public final class OciFormat implements RepositoryFormat, ProxyFormat, Repositor
         return bytes;
     }
 
-    /** The session marker as {@code [openMillis, chunkCount, byteTotal]}, all-zero when no marker is present. The
-     *  first line is the open timestamp {@link #reap} ages the session out on; the chunk count and byte total follow,
-     *  advanced per chunk by {@link #append} so the next index and {@code Range} total are read, never re-scanned. */
+    /** The session marker as {@code [openMillis, chunkCount, byteTotal]}, all-zero when absent. */
     private static long[] session(ArtifactStore store, String id) throws IOException {
         Optional<ArtifactStore.Versioned> marker = store.readVersioned(SESSIONS + id);
         if (marker.isEmpty()) {
@@ -418,17 +378,16 @@ public final class OciFormat implements RepositoryFormat, ProxyFormat, Repositor
         }
     }
 
-    /** Write the session marker: the open timestamp on the first line (what {@link #reap} reads), then the running
-     *  chunk count and received-byte total {@link #append} advances per chunk. */
+    /** Writes the session marker: the open timestamp on the first line, which {@link #reap} reads, then the chunk
+     *  count and byte total. */
     private static void writeSession(ArtifactStore store, String id, long openMillis, long count, long bytes)
             throws IOException {
         store.write(SESSIONS + id, new ByteArrayInputStream(
                 (openMillis + "\n" + count + "\n" + bytes).getBytes(StandardCharsets.UTF_8)));
     }
 
-    /** The session's chunks concatenated in arrival order as one stream, each opened only once the previous is
-     *  drained, so finalizing a chunked upload streams the whole layer through {@link ArtifactStore#writeBlob}
-     *  without ever holding it in memory. */
+    /** The session's chunks as one stream in arrival order, each opened once the previous is drained, so a layer is
+     *  never held in memory. */
     private static InputStream chunks(ArtifactStore store, String id) {
         List<String> indices = new ArrayList<>(store.list("oci/.uploads/" + id));
         indices.sort(Comparator.comparingInt(Integer::parseInt));
@@ -450,9 +409,8 @@ public final class OciFormat implements RepositoryFormat, ProxyFormat, Repositor
         });
     }
 
-    /** Drop every chunk object of a finalized (or abandoned) upload session, then its start marker. The marker is
-     *  deleted last, so a crash mid-cleanup leaves it behind for the reaper to retry against rather than orphaning
-     *  the chunks - the same converge-through-the-store, fail-toward-a-retry ordering the delete path elsewhere uses. */
+    /** Drops a session's chunks, then its marker last, so a crash mid-cleanup leaves the marker for the reaper to
+     *  retry rather than orphaning the chunks. */
     private static void cleanup(ArtifactStore store, String id) throws IOException {
         for (String index : store.list("oci/.uploads/" + id)) {
             store.delete("oci/.uploads/" + id + "/" + index);
@@ -460,10 +418,6 @@ public final class OciFormat implements RepositoryFormat, ProxyFormat, Repositor
         store.delete(SESSIONS + id);
     }
 
-    /** Drop every upload session whose start marker is older than the TTL - a chunked push that opened a session
-     *  (and possibly streamed chunks into the quota-metered {@link #UPLOADS} staging) but never finalized it. The
-     *  reclaimed chunk bytes converge back out of the quota counter through {@link #cleanup}'s metered deletes.
-     *  Returns the number of sessions reaped. */
     /** How often the fresh-upload sweep runs at most, per node; a push inside the interval opens its session without
      *  listing the others. */
     static final Duration REAP_INTERVAL = Duration.ofMinutes(1);
@@ -481,6 +435,8 @@ public final class OciFormat implements RepositoryFormat, ProxyFormat, Repositor
         }
     }
 
+    /** Drops every upload session opened longer ago than the TTL and never finalized; the chunk bytes leave the quota
+     *  through {@link #cleanup}'s metered deletes. Returns the number reaped. */
     public int reap(ArtifactStore store) throws IOException {
         Instant cutoff = clock.instant().minus(uploadTtl);
         int reaped = 0;
@@ -491,7 +447,6 @@ public final class OciFormat implements RepositoryFormat, ProxyFormat, Repositor
             }
             Instant startedAt;
             try {
-                // The open timestamp is the marker's first line; the chunk count and byte total follow it.
                 String first = new String(marker.get().content(), StandardCharsets.UTF_8).trim().split("\n", 2)[0];
                 startedAt = Instant.ofEpochMilli(Long.parseLong(first.trim()));
             } catch (NumberFormatException malformed) {
@@ -509,45 +464,26 @@ public final class OciFormat implements RepositoryFormat, ProxyFormat, Repositor
 
     @Override
     public List<String> blobRoots() {
-        // Every key this format pins a blob under lives beneath oci/: the tag pointers (oci/<name>/tags/<tag>), the
-        // media-type sidecars (oci/.types/<hex>) and the transient upload staging. A reference scan lists the leaves
-        // beneath this and asks references() what each one keeps alive.
+        // Every key this format pins a blob under: tag pointers, media-type sidecars and the upload staging.
         return List.of("oci");
     }
 
     /**
-     * The blobs an OCI key keeps alive beyond the one its own pointer body names - the answer that stops a garbage
-     * collection pass deleting a live image's layers.
+     * The blobs an OCI key keeps alive beyond the one its own body names.
      *
-     * <p>OCI is the standing example of a format a pointer-body reference scan cannot see: the ONLY store key whose
-     * body names a blob is the tag pointer, and it names the <em>manifest</em>. An image's config and layer digests
-     * live inside the manifest JSON, behind no key at all, and a manifest pulled by digest carries no tag pointer
-     * either - yet it is live content this format serves (a {@code GET /v2/<name>/manifests/sha256:<hex>} reads
-     * {@code blobs/<hex>} directly, and only a client's own {@code DELETE} of that digest retires it). So both faces are
-     * resolved here:
      * <ul>
      *   <li>{@code oci/<name>/tags/<tag>} - the tag pointer, whose body resolves the manifest;</li>
-     *   <li>{@code oci/.types/<hex>} - the media-type sidecar, the durable record that {@code <hex>} is a manifest this
-     *       registry ingested and serves. It is written for EVERY accepted manifest ({@code OciManifests.ingest}),
-     *       tagged or not, so it is the digest-only image's one lifeline.</li>
+     *   <li>{@code oci/.types/<hex>} - the media-type sidecar, written for every accepted manifest tagged or not, and
+     *       so the only lifeline of an image pulled by digest.</li>
      * </ul>
-     * Both resolve to a manifest hex, and from there the image's own set: the manifest itself, an image index's
-     * sub-manifests (expanded with a work-list and an emitted set, never self-recursion - a hostile nested index must
-     * not overflow the sweep's stack), and each sub-manifest's config, layers and legacy {@code fsLayers} blobSums.
-     * The upload staging ({@code oci/.uploads/}, {@code oci/.upload-sessions/}) names no served blob and answers empty:
-     * a never-finalized push is exactly what garbage collection is for, and {@link #reap} already retires it.
+     * Both resolve to a manifest, and from there the image's set: the manifest, an index's sub-manifests (expanded with
+     * a work-list, so a hostile nested index cannot overflow the stack), and each one's config, layers and legacy
+     * {@code fsLayers}. The upload staging answers empty: {@link #reap} retires it.
      *
-     * <p><b>It refuses rather than under-reports, and the refusal has a name.</b> A root manifest blob that is present
-     * but unparseable or past {@link #MAX_MANIFEST} raises {@link BlobReferences.Unresolvable} - its layers cannot be
-     * enumerated, and answering "just the manifest" would hand a reference scan a short list, which is a live layer
-     * condemned on one pass and DELETED on the next (the fail-open this seam's contract clause 3 makes illegal).
-     * Failing the pass deletes nothing, and the message names the key so an operator can discard the manifest. Those
-     * two sites are the ONLY ones that raise it: anything else that fails here is the store failing, and stays a plain
-     * {@link IOException}, so a consumer that must degrade on a corrupt stored manifest can do so without also
-     * degrading on a store outage (clause 3). Validation at push keeps this state out of anything the
-     * product stores; it is what a store corrupted outside it answers. A <em>sub</em>-manifest of an index degrades silently
-     * instead: a hostile index entry may legitimately point at a layer blob, which has no children to lose, so only the
-     * root - the one blob that is contractually a manifest - is an invariant break.
+     * <p>A root manifest that is present but unparseable or past {@link #MAX_MANIFEST} raises
+     * {@link BlobReferences.Unresolvable} naming the key, since a short list would get its layers deleted; only those
+     * two sites raise it, and a store failure stays a plain {@link IOException}. A sub-manifest of an index degrades
+     * silently: an index entry may legitimately name a layer, which has nothing to lose.
      */
     @Override
     public List<String> references(String key, ArtifactStore store) throws IOException {
@@ -598,9 +534,8 @@ public final class OciFormat implements RepositoryFormat, ProxyFormat, Repositor
         return List.copyOf(hashes);
     }
 
-    /** The manifest an {@code oci/} key resolves to, or empty when the key names no manifest - the upload staging, a
-     *  sidecar whose name is not a digest, a tag pointer that is gone or whose body is not a digest. Empty is the
-     *  honest "this key keeps no further blob alive"; it is never how an unreadable manifest is reported. */
+    /** The manifest an {@code oci/} key resolves to, or empty when it names none - never how an unreadable manifest
+     *  is reported. */
     private static Optional<String> manifestOf(String key, ArtifactStore store) throws IOException {
         if (!key.startsWith("oci/")) {
             return Optional.empty();
@@ -613,8 +548,7 @@ public final class OciFormat implements RepositoryFormat, ProxyFormat, Repositor
         if (rest.startsWith(".uploads/") || rest.startsWith(".upload-sessions/")) {
             return Optional.empty();                            // staged chunks of a push that never became an image
         }
-        // A tag pointer is oci/<name>/tags/<tag> and an image name is itself multi-segment, so the tag level is the
-        // LAST /tags/ - the same resolution a pull performs. Anything else under oci/ names no manifest.
+        // An image name is multi-segment, so the tag level is the last /tags/, as a pull resolves it.
         int tags = rest.lastIndexOf("/tags/");
         if (tags < 0) {
             return Optional.empty();
@@ -625,13 +559,9 @@ public final class OciFormat implements RepositoryFormat, ProxyFormat, Repositor
         return hex != null && Checksums.isSha256Hex(hex) ? Optional.of(hex) : Optional.empty();
     }
 
-    /** Read and parse a manifest blob for the reference scan, bounded by {@link #MAX_MANIFEST} exactly as ingest
-     *  bounds it. {@code rootKey} is the visited key when {@code hex} is the ROOT this scan resolved (and so is
-     *  contractually a manifest) and {@code null} for a sub-manifest of an index. Absent is {@code null} either way -
-     *  residue of an already-collected blob, nothing to keep alive - but a root that is PRESENT and unreadable raises
-     *  {@link BlobReferences.Unresolvable}: its layers are unknowable, and a short reference list gets them deleted.
-     *  A failure of the store itself propagates as the plain {@link IOException} it already is, because "these bytes
-     *  will never parse" and "the store is down" are different facts to a consumer that degrades on one of them. */
+    /** A manifest blob for the reference scan, bounded by {@link #MAX_MANIFEST}; {@code rootKey} is the visited key
+     *  for the root and {@code null} for a sub-manifest. Absent is {@code null}; a present root that cannot be read
+     *  raises {@link BlobReferences.Unresolvable}. */
     private static JsonNode referencedManifest(String hex, ArtifactStore store, String rootKey) throws IOException {
         if (!store.exists("blobs/" + hex)) {
             return null;
@@ -654,8 +584,7 @@ public final class OciFormat implements RepositoryFormat, ProxyFormat, Repositor
         } catch (RuntimeException malformed) {
             node = null;
         }
-        // isObject(), not merely "parses": a top-level array or scalar has no config/layers/manifests to enumerate,
-        // which is the same un-enumerable state an outright parse failure leaves - the ingest guard refuses both.
+        // A top-level array or scalar has nothing to enumerate, like a parse failure.
         if (node != null && node.isObject()) {
             return node;
         }
@@ -667,8 +596,7 @@ public final class OciFormat implements RepositoryFormat, ProxyFormat, Repositor
                 + "risk collecting them");
     }
 
-    /** The bare hex of a digest a manifest references, or {@code null} when it is not a real sha256 digest - so a
-     *  malformed entry never becomes a hash a reference scan (or anything else) then keys on. */
+    /** The bare hex of a referenced digest, or {@code null} when it is not a sha256 digest. */
     private static String referenced(String digest) {
         if (digest == null) {
             return null;
@@ -679,8 +607,7 @@ public final class OciFormat implements RepositoryFormat, ProxyFormat, Repositor
 
     private void store(String digest, InputStream content, ArtifactStore store, String name, FormatExchange exchange)
             throws IOException {
-        // writeBlob digests the stream as it stores it under blobs/<hex> (deduping against an identical blob), so the
-        // pushed layer goes from the network to storage without being buffered whole to be hashed first.
+        // Digested as it is stored, never buffered whole.
         String hex = store.writeBlob(content);
         if (digest != null && !hex.equals(hex(digest))) {
             exchange.respond(400);
@@ -703,19 +630,11 @@ public final class OciFormat implements RepositoryFormat, ProxyFormat, Repositor
         }
         if (exchange.method().equals("PUT")) {
             if (!reference.startsWith("sha256:") && !OciTags.isTag(reference)) {
-                // A manifest is pushed either by digest (sha256:...) or by tag; a reference that is neither a digest
-                // nor a well-formed tag would land as an oci/<name>/tags/<ref> store key, so a '/'- or '..'-laced
-                // reference could aim the write at a neighbouring key space - refuse it before storing anything, the
-                // tag-side counterpart of the Checksums.isSha256Hex guard on the blob path.
+                // Neither a digest nor a tag: it would become a tags/<ref> key aimed at a neighbouring space.
                 exchange.respond(400);
                 return;
             }
-            // Route the manifest through the OCI choke point: OciManifests.ingest screens it against its
-            // neutral oci coordinate and maps the verdict onto the native withheld/<hex> marker. Buffer it whole (it is
-            // metadata, never a layer blob) to hand the same bytes to the screen - but BOUNDED: OCI opts out of the
-            // ingress edge screen, so a manifest PUT reaches here with the raw request stream; an uncapped readAllBytes
-            // would let an authenticated pusher OOM the shared JVM (a cross-tenant DoS). Read one byte past the cap and
-            // refuse a body that overflows it, the manifest-side counterpart of the NuGet .nuspec readNBytes cap.
+            // Buffered for the screen, bounded: one byte past the cap is read to detect an overflow.
             byte[] body = exchange.requestStream().readNBytes(MAX_MANIFEST + 1);
             if (body.length > MAX_MANIFEST) {
                 exchange.setResponseHeader("Content-Type", "application/json");
@@ -728,26 +647,19 @@ public final class OciFormat implements RepositoryFormat, ProxyFormat, Repositor
                 ingested = OciManifests.ingest(
                         name, reference, body, exchange.requestHeader("Content-Type"), store);
             } catch (OciManifests.InvalidManifest invalid) {
-                // A manifest that is not parseable JSON (or over the cap - the 413 above pre-catches the PUT edge, this
-                // is the choke-point belt) is refused with the Distribution error envelope, storing/laying out nothing.
                 exchange.setResponseHeader("Content-Type", "application/json");
                 exchange.respond(400, ("{\"errors\":[{\"code\":\"MANIFEST_INVALID\",\"message\":"
                         + "\"the manifest is not a valid JSON manifest\"}]}").getBytes(StandardCharsets.UTF_8));
                 return;
             }
             String hex = ingested.hex();
-            // A push BY DIGEST must actually hash to that digest - the manifest-side counterpart of the blob store()
-            // content-address check. Without this a client could PUT /manifests/sha256:<X> with a body that hashes to
-            // Y, and the registry would accept it and answer Docker-Content-Digest: sha256:Y, silently disagreeing
-            // with the reference the client (and any content-addressed puller) used. Refuse the mismatch as invalid.
+            // A push by digest must hash to that digest.
             if (reference.startsWith("sha256:") && !reference.substring("sha256:".length()).equalsIgnoreCase(hex)) {
                 exchange.setResponseHeader("Content-Type", "application/json");
                 exchange.respond(400, ("{\"errors\":[{\"code\":\"MANIFEST_INVALID\",\"message\":"
                         + "\"the manifest body does not hash to the referenced digest\"}]}").getBytes(StandardCharsets.UTF_8));
                 return;
             }
-            // The subject a referrer names is confirmed, so a client knows this registry keeps the referrers index
-            // and does not fall back to maintaining the tag-schema index itself.
             ingested.subject().ifPresent(subject -> exchange.setResponseHeader("OCI-Subject", "sha256:" + subject));
             switch (ingested.disposition()) {
                 case ACCEPT -> {
@@ -756,12 +668,11 @@ public final class OciFormat implements RepositoryFormat, ProxyFormat, Repositor
                     exchange.respond(201);
                 }
                 case QUARANTINE -> {
-                    // Held for review: accepted onto the registry as a 202, but withheld from serving until released.
+                    // Held for review: accepted, but withheld from serving until released.
                     exchange.setResponseHeader("Docker-Content-Digest", "sha256:" + hex);
                     exchange.respond(202);
                 }
                 case REJECT -> {
-                    // Denied outright with the Distribution error envelope, so `docker push` surfaces the refusal.
                     exchange.setResponseHeader("Content-Type", "application/json");
                     exchange.respond(403, ("{\"errors\":[{\"code\":\"DENIED\",\"message\":"
                             + "\"manifest withheld by the compliance screen\"}]}").getBytes(StandardCharsets.UTF_8));
@@ -789,15 +700,9 @@ public final class OciFormat implements RepositoryFormat, ProxyFormat, Repositor
             return;
         }
         String key = "blobs/" + hex;
-        // A manifest serves while this registry records it as one - its media-type sidecar, written when a push,
-        // a fill or an import accepted it and retired when a client deletes it - and a withheld one 404s exactly as a
-        // withheld blob does (the withheld/<hash> convention above), so a held image cannot be pulled by digest or
-        // tag while its layers 404. A blob that was never accepted as a manifest is not served as one.
-        //
-        // A held manifest has no sidecar - nothing it would serve through is laid out until the hold is released - and
-        // is served by digest alone to a caller that may read what the repository holds for review: the content
-        // scanner a hold waits on. The withhold marker is what says the blob was screened as a manifest, and the
-        // type is the one the manifest declares of itself.
+        // A manifest serves while its media-type sidecar exists, and a withheld one 404s by digest and by tag, as a
+        // withheld blob does. A held manifest has no sidecar and is served by digest only to a caller that may read
+        // held content, under the type it declares of itself.
         Optional<ArtifactStore.Versioned> sidecar = store.readVersioned("oci/.types/" + hex);
         boolean withheld = Withheld.is(store, hex);
         boolean held = withheld && reference.startsWith("sha256:") && exchange.readsHeld();
@@ -824,19 +729,13 @@ public final class OciFormat implements RepositoryFormat, ProxyFormat, Repositor
 
     /**
      * {@code DELETE /v2/<name>/manifests/<reference>}: a tag removes that tag alone, a digest the manifest and every tag
-     * of the image naming it - each version through the product's one removal ({@link VersionRemoval}), which is the
-     * eviction retention removes a version by, so the same pointers go, the same observers hear of it and the blobs
-     * are left to the collector. Answered {@code 202} and recorded on the audit trail as the caller that asked.
+     * naming it, each version through the one removal ({@link VersionRemoval}) retention uses, leaving the blobs to the
+     * collector. Answered {@code 202} and audited.
      *
-     * <p>A reference that does not serve - absent, or withheld by a hold - is {@code 404 MANIFEST_UNKNOWN}, the
-     * answer a pull of it gets, so a delete discloses nothing a pull would not and a held version stays with its
-     * reviewer. A pinned version is refused with {@code 403 DENIED}: a pin is an operator's decision to keep it,
-     * which retention honours and a client's delete must too; the operator unpins first. With no inventory
-     * installed nothing can be removed through the one path, and the answer is {@code 405 UNSUPPORTED}.
-     *
-     * <p>Removing a manifest by digest finds the image's tags naming it in the digest-to-tags index
-     * ({@link OciTagIndex}) - the specification's "every tag" - confirmed by a read of each pointer, so the delete
-     * reads the tags that name the manifest and nothing that grows with the repository.
+     * <p>A reference that does not serve - absent or held - is {@code 404 MANIFEST_UNKNOWN}, as a pull is answered, so
+     * a delete discloses nothing. A pinned version is {@code 403 DENIED} until an operator unpins it. With no inventory
+     * installed the answer is {@code 405 UNSUPPORTED}. The tags naming a digest come from {@link OciTagIndex},
+     * confirmed per pointer, so the delete reads nothing that grows with the repository.
      */
     private void delete(String name, String reference, ArtifactStore store, FormatExchange exchange)
             throws IOException {
@@ -905,10 +804,8 @@ public final class OciFormat implements RepositoryFormat, ProxyFormat, Repositor
     }
 
     /**
-     * {@code GET /v2/<name>/tags/list} honouring the Distribution API's optional {@code n} (max results) and
-     * {@code last} (resume-after) paging, cut from the image's stored tag list ({@link OciListings}) - the document a
-     * tag push maintains and a hold retracts from, so a tag whose manifest is held is never disclosed (its existence
-     * included) and no read enumerates or screens the tag pointers.
+     * {@code GET /v2/<name>/tags/list} with the optional {@code n} and {@code last} paging, cut from the image's stored
+     * tag list ({@link OciListings}), from which a hold retracts a tag, so a held tag is never disclosed.
      */
     private void tags(String name, ArtifactStore store, FormatExchange exchange) throws IOException {
         if (!isImageName(name)) {
@@ -925,9 +822,7 @@ public final class OciFormat implements RepositoryFormat, ProxyFormat, Repositor
             exchange.respond(400);
             return;
         }
-        // The tag list is a stored listing every tag push maintains; the client's n/last window is cut from it here.
-        // Streamed out of the stored listing and stopped at the window's edge. Reading it whole and splitting it
-        // into a map of every tag made a request for a hundred names cost a repository's worth of them.
+        // Streamed and stopped at the window's edge, so a window costs its names.
         Optional<StoredListing.Served> served = StoredListing.open(store, new OciListings(store).tagsSpec(name));
         if (exchange.queryParameter("n") == null) {
             stream(exchange, served, "tags", name);
@@ -976,12 +871,8 @@ public final class OciFormat implements RepositoryFormat, ProxyFormat, Repositor
     /**
      * The whole of a stored name listing, written to the socket as the names arrive.
      *
-     * <p>This is the answer to an <b>unqualified</b> {@code tags/list} or {@code _catalog}. The Distribution
-     * specification says those return every name, so the response is legitimately the size of the repository and
-     * nothing here can bound it - but it is also the one case where nothing has to be decided before the body
-     * starts, because a complete answer has no next page to name in a {@code Link}. The windowed branch above may
-     * therefore gather its names, since it gathers at most the {@code n} the client chose; this one may not, and
-     * gathering was what it did - once as a list of every name and again as the JSON string of that list.
+     * <p>The answer to an unqualified {@code tags/list} or {@code _catalog}, which the specification says returns every
+     * name. It has no next page to name in a {@code Link}, so nothing need be gathered before the body starts.
      *
      * <p>{@code name} is the image the tags belong to, written as the document's {@code name} member; the catalog
      * names no subject and passes {@code null}.
@@ -989,9 +880,7 @@ public final class OciFormat implements RepositoryFormat, ProxyFormat, Repositor
     private static void stream(FormatExchange exchange, Optional<StoredListing.Served> served, String member,
                                String name) throws IOException {
         if (served.isEmpty()) {
-            // Nothing stored, so there is no header to validate against and no names to stream. The answer is the
-            // empty document, small enough to hand over whole - which also leaves the dispatcher deriving its
-            // validator from the bytes, exactly as it did before any of this streamed.
+            // Nothing stored: the empty document, handed over whole.
             Map<String, Object> body = new LinkedHashMap<>();
             if (name != null) {
                 body.put("name", addressed(exchange, name));
@@ -1001,9 +890,7 @@ public final class OciFormat implements RepositoryFormat, ProxyFormat, Repositor
             exchange.respond(200, JSON.writeValueAsString(body).getBytes(StandardCharsets.UTF_8));
             return;
         }
-        // Through Listings.serve, whose second form exists for exactly this: the answer is rendered from the
-        // stored document rather than copied out of it, so the length is not known ahead of the write, but the
-        // validator is - it is the stored document's sha256, which changes exactly when this answer does.
+        // Rendered from the stored document, so the length is unknown, but its sha256 is the validator.
         try (StoredListing.Served document = served.get()) {
             Listings.serve(exchange, document, "application/json", -1L, out -> {
                 try (JsonGenerator json = JSON.createGenerator(out)) {
@@ -1023,10 +910,8 @@ public final class OciFormat implements RepositoryFormat, ProxyFormat, Repositor
         }
     }
 
-    /** Parse the Distribution {@code n} page-size query parameter shared by {@code tags/list} and {@code _catalog}:
-     *  absent means unbounded ({@link Integer#MAX_VALUE}); a non-numeric or non-positive {@code n} is refused
-     *  {@code 400} (a zero or negative page size would otherwise read {@code getLast()} off an empty page or index a
-     *  negative range - each an unhandled 500). Returns {@code null} once it has already responded {@code 400}. */
+    /** The {@code n} page size of {@code tags/list} and {@code _catalog}: absent is {@link Integer#MAX_VALUE}, and a
+     *  non-numeric or non-positive one is answered {@code 400}, after which this returns {@code null}. */
     private static Integer pageSize(FormatExchange exchange) throws IOException {
         String limit = exchange.queryParameter("n");
         int page;
@@ -1044,10 +929,8 @@ public final class OciFormat implements RepositoryFormat, ProxyFormat, Repositor
     }
 
     /**
-     * The Distribution catalog ({@code GET /v2/_catalog}): every image name that carries at least one servable
-     * (non-withheld) tag, in lexicographic order, honouring the API's optional {@code n} (max results) / {@code last}
-     * (resume-after) paging - cut from the stored catalog ({@link OciListings}), which every tag list write re-derives,
-     * so a request never walks the image-name tree.
+     * {@code GET /v2/_catalog}: every image name with a servable tag, in lexicographic order, with {@code n} and
+     * {@code last} paging, cut from the stored catalog ({@link OciListings}) rather than a walk of the name tree.
      */
     private void catalog(ArtifactStore store, FormatExchange exchange) throws IOException {
         Integer limit = pageSize(exchange);
@@ -1055,9 +938,6 @@ public final class OciFormat implements RepositoryFormat, ProxyFormat, Repositor
             return;                                             // a non-numeric or non-positive n is a 400, already sent
         }
         String last = exchange.queryParameter("last");
-        // The catalog is a stored listing every tag push maintains (an image is listed while it has a listed tag);
-        // the client's n/last window is cut from it here, never walked out of the name tree.
-        // Streamed, and stopped at the window's edge - see tags/list for why it is never read whole.
         Optional<StoredListing.Served> served = StoredListing.open(store, new OciListings(store).catalogSpec());
         if (exchange.queryParameter("n") == null) {
             stream(exchange, served, "repositories", null);
@@ -1122,21 +1002,14 @@ public final class OciFormat implements RepositoryFormat, ProxyFormat, Repositor
                                 FormatExchange exchange, ArtifactStore store, URI upstream, ProxyFormat.Fetcher fetcher)
             throws IOException {
         if (!isImageName(name)) {
-            return false;                                       // a traversal-laced image name is no proxy target: the
-                                                                // same in-format guard the direct manifest/tags/upload
-        }                                                       // legs carry, so the proxy leg never leans on the firewall alone
+            return false;                                       // the guard every other leg carries
+        }
         URI url = upstreamUrl(upstream, name, (manifest ? "/manifests/" : "/blobs/") + reference);
         if (manifest) {
             return proxyManifest(name, reference, accept, exchange, store, url, fetcher);
         }
-        // Proxy-leg digest integrity for a blob, which is content-addressed by the reference itself. writeBlob streams
-        // the download under a SHA-256 DigestInputStream and stores it at blobs/<its-own-hash> (never buffering the
-        // layer whole); the fetched bytes are then held to the requested digest. On a sha256 reference (the OCI
-        // norm, and the only algorithm this content-addressed store keys on) a mismatch is REFUSED: the bytes land only
-        // under their own true hash, so blobs/<requested> is never created - nothing is linked or served, the mismatched
-        // object is left unreferenced for GC, and a re-pull re-hits upstream. A reference in another registered
-        // algorithm the store cannot address (sha512:...) is left to the serve path, which 404s it since no
-        // blobs/<sha256> key can answer it - today's behaviour, no fabricated cross-algorithm check.
+        // A sha256 reference holds the fetched bytes to it: on a mismatch they stay under their own hash, unlinked,
+        // and nothing is served. A digest in another algorithm cannot be a store key, so the serve path 404s it.
         Optional<ProxyFormat.Download> fetched = download(url, accept, fetcher);
         if (fetched.isEmpty()) {
             return false;
@@ -1173,9 +1046,8 @@ public final class OciFormat implements RepositoryFormat, ProxyFormat, Repositor
                 + (namespace.isEmpty() ? "" : namespace + "/") + name + rest);
     }
 
-    /** A manifest is small and its media type comes from the response headers, so it is fetched buffered (not
-     *  streamed): stored by digest, its type recorded in the sidecar, and, when referenced by a tag, the tag pointer
-     *  updated. */
+    /** A manifest, fetched buffered - it is small and its media type comes from the response headers - and ingested
+     *  as a push is. */
     private boolean proxyManifest(String name, String reference, String accept, FormatExchange exchange,
                                   ArtifactStore store, URI url, ProxyFormat.Fetcher fetcher) throws IOException {
         Optional<ProxyFormat.Fetched> fetched = fetch(url, accept, fetcher);
@@ -1184,35 +1056,25 @@ public final class OciFormat implements RepositoryFormat, ProxyFormat, Repositor
         }
         byte[] body = fetched.get().body();
         String hex = Checksums.sha256(body);
-        // Proxy-leg digest integrity: hold the received manifest to every digest that is knowable here, refusing
-        // (letting the local 404 stand) on any mismatch rather than caching corrupted-in-transit bytes under the digest
-        // or tag a client will later trust - the manifest counterpart of the blob check above.
-        //   - By-digest pull: the reference names the content digest, so the bytes must hash to it.
+        // The received manifest is held to every digest knowable here, letting the local 404 stand on a mismatch:
+        // the reference itself when pulled by digest,
         if (reference.startsWith("sha256:") && !hex.equals(hex(reference))) {
             return false;
         }
-        //   - By-tag pull: the upstream Docker-Content-Digest header carries the digest the registry addresses this
-        //     manifest by (the mutable tag is only a pointer to it), so the received bytes are held to it when present.
+        // and the upstream's Docker-Content-Digest when pulled by tag. Without that header nothing is verifiable and
+        // the upstream is trusted; a later by-digest pull is verified against the digest ingest records.
         String contentDigest = fetched.get().header("Docker-Content-Digest");
         if (contentDigest != null && contentDigest.startsWith("sha256:") && !hex.equals(hex(contentDigest))) {
             return false;
         }
-        //   - A mutable tag whose upstream response carries no (sha256) Docker-Content-Digest exposes no verifiable
-        //     digest to check against, so this falls back to trusting the upstream response, as before - no fabricated
-        //     check. The addressed digest is still recomputed and recorded by ingest() below, and a later by-digest
-        //     re-pull of the same content is verified against it.
         if (!reference.startsWith("sha256:") && !OciTags.isTag(reference)) {
             return false; // a non-tag reference must not become a tags/ store key - let the local 404 stand
         }
-        // Screen a proxied manifest through the same OCI choke point a push takes: a withheld upstream
-        // manifest gets its withheld/<hex> marker set, so the handle() serve below 404s it by digest and by tag. There
-        // is no separate proxy client response - the local serve is the response.
+        // Screened as a push is; the local serve that follows is the response, so a withheld manifest 404s.
         try {
             OciManifests.ingest(name, reference, body, fetched.get().header("Content-Type"), store);
         } catch (OciManifests.InvalidManifest invalid) {
-            // Serve-through-without-caching: an oversized (> 4 MiB, reachable only on this proxy leg) or unparseable
-            // upstream manifest is never stored or laid out - nothing stored means nothing that can later need an
-            // un-enumerable hold - but the client still receives the upstream body; only the local cache is skipped.
+            // An oversized or unparseable upstream manifest is served through without being stored.
             String type = fetched.get().header("Content-Type");
             if (type != null) {
                 exchange.setResponseHeader("Content-Type", type);
@@ -1225,8 +1087,8 @@ public final class OciFormat implements RepositoryFormat, ProxyFormat, Repositor
         return true;
     }
 
-    /** Fetch buffered through the Distribution bearer flow (for the small manifests a proxy must inspect): on a 401
-     *  challenge, exchange the realm for a token and retry once. */
+    /** A buffered fetch through the bearer flow: on a {@code 401} challenge, the realm is exchanged for a token and the
+     *  fetch retried once. */
     private Optional<ProxyFormat.Fetched> fetch(URI url, String accept, ProxyFormat.Fetcher fetcher) throws IOException {
         Map<String, String> headers = new LinkedHashMap<>();
         if (accept != null) {
@@ -1248,9 +1110,8 @@ public final class OciFormat implements RepositoryFormat, ProxyFormat, Repositor
         return fetcher.fetch(url, headers);
     }
 
-    /** Stream a download through the Distribution bearer flow (for a large blob): try once, and on a 401 Bearer
-     *  challenge exchange the realm for a token and retry streaming with it. Empty if the fetch fails or the challenge
-     *  cannot be satisfied, so the caller lets the local 404 stand rather than serving a partial blob. */
+    /** A streamed download through the bearer flow; empty when the fetch fails or the challenge cannot be met, so the
+     *  local 404 stands. */
     private Optional<ProxyFormat.Download> download(URI url, String accept, ProxyFormat.Fetcher fetcher)
             throws IOException {
         Map<String, String> headers = new LinkedHashMap<>();
@@ -1277,25 +1138,6 @@ public final class OciFormat implements RepositoryFormat, ProxyFormat, Repositor
     }
 
     /**
-     * Walk an upstream registry through its own Distribution index: page the {@code /v2/_catalog} repository list,
-     * page each image's {@code /v2/<name>/tags/list}, and expand each tagged manifest - an image index's
-     * per-platform manifests first, then a manifest's config and layer blobs, then the manifest itself - so an
-     * import stores every blob before the manifest and tag pointer that reference it. Blob and by-digest manifest
-     * coordinates are deduplicated across the walk (tags share layers) through a <em>bounded</em>
-     * {@link BoundedDigests} memory; the manifest fetch itself rides the same bearer-challenge flow the proxy path
-     * uses. A registry that disables the catalog (Docker Hub does) answers {@code 404} there, which surfaces as the
-     * initial index failure - enumeration honestly needs the catalog.
-     *
-     * <p><b>The stream is lazy; the dedup used not to be.</b> The {@code Stream} is a chain of paged
-     * {@code _catalog} and {@code tags/list} iterators, so no repository or tag list is ever materialised - but the
-     * dedup set beside it retained one entry per distinct blob and by-digest manifest for the <em>whole</em>
-     * enumeration. That is the right dedup semantics and the wrong lifetime: importing a large registry ended with a
-     * heap set proportional to the <em>source registry's</em> digest count, on the import worker, for a set whose only
-     * job is to save a re-fetch. {@link BoundedDigests} caps it, and the trade is free in the direction that matters:
-     * an evicted digest is re-emitted, which costs an idempotent content-addressed re-store, where running out of heap
-     * costs the import.
-     */
-    /**
      * The registry root an enumeration's requests go under: {@code <source>/v2/} for a registry named by its host,
      * and the source itself when it already names one - {@code https://host/v2/<repository>/}, a Jenesis repository's
      * own registry, whose catalog, tag lists and manifests all sit under it and whose images are named within it.
@@ -1305,6 +1147,13 @@ public final class OciFormat implements RepositoryFormat, ProxyFormat, Repositor
         return root.contains("/v2/") ? root : root + "v2/";
     }
 
+    /**
+     * Walks an upstream registry through its own index: the paged {@code _catalog}, each image's paged
+     * {@code tags/list}, and each tagged manifest expanded so every blob and child manifest is emitted before the
+     * manifest that references it. The stream is lazy, and digests are deduplicated through a bounded
+     * {@link BoundedDigests}, so the import's heap does not grow with the source registry. A registry that disables
+     * the catalog (Docker Hub does) fails the walk up front.
+     */
     @Override
     public Stream<Coordinate> enumerate(ProxyFormat.Fetcher fetcher, URI upstream) throws IOException {
         String root = upstream.toString();
@@ -1341,12 +1190,8 @@ public final class OciFormat implements RepositoryFormat, ProxyFormat, Repositor
      * Add the coordinates one manifest transitively references, depth-first: an index's per-platform manifests (each
      * expanded then added by digest), a manifest's config and layers as blobs - each digest once per walk.
      *
-     * <p>Walked with an explicit work-list, never recursion. A hostile or compromised upstream can serve a long chain
-     * of nested image indices (index -&gt; index -&gt; ...); a recursive walk would drive one stack frame per level and
-     * overflow the import worker's stack on that client-controlled depth - the same StackOverflow hazard the
-     * {@code /v2/_catalog} walk was rewritten to avoid. The stack holds {@link Step}s that reproduce the recursion's
-     * post-order exactly: every blob and every nested manifest is emitted before the manifest that references it, so an
-     * import still stores a referent before its referrer.
+     * <p>Walked with an explicit work-list, since a hostile upstream controls how deeply indices nest. The
+     * {@link Step}s keep post-order: everything a manifest references is emitted before it.
      */
     private void expand(URI base, String name, byte[] manifest, List<Coordinate> coordinates, BoundedDigests emitted,
                         ProxyFormat.Fetcher fetcher) throws IOException {
@@ -1401,27 +1246,18 @@ public final class OciFormat implements RepositoryFormat, ProxyFormat, Repositor
      * set of the blob and by-digest-manifest digests already emitted, so the walk still skips the layers tags share
      * without retaining one entry per digest of the <em>source registry</em> for the whole import.
      *
-     * <p><b>Eviction is safe, and that is the point.</b> A digest evicted from the memory is simply emitted a second
-     * time: the coordinate is fetched again and re-stored, which is an idempotent write of content-addressed bytes -
-     * the same bytes under the same hash. Over-emitting therefore costs a re-fetch and nothing else, where an
-     * unbounded memory costs the import worker's heap. The bound is on <em>recall</em>, never on correctness: the
-     * import is still complete, because every referent is emitted before its referrer whether or not it was deduped.
-     *
-     * <p>Least-recently-used rather than least-recently-added, because sharing is what the memory is for: a base
-     * layer referenced by a thousand tags is touched constantly and stays resident, while a one-off layer ages out.
+     * <p>Eviction costs only a re-fetch: an evicted digest is emitted again and re-stored, an idempotent
+     * content-addressed write. Least-recently-used, so a base layer many tags share stays resident.
      */
     private static final class BoundedDigests {
 
-        /** How many digests one enumeration remembers. A digest is a ~71-character string, so the memory is a few
-         *  tens of megabytes at this capacity - large enough that a realistic registry's shared layers never age out
-         *  between the tags that share them, small enough that the import worker's heap does not scale with the
-         *  upstream. */
+        /** How many digests one enumeration remembers - a few tens of megabytes. */
         private static final int CAPACITY = 50_000;
 
         private final Cache<String, Boolean> seen = Caffeine.newBuilder().maximumSize(CAPACITY).build();
 
-        /** Remember {@code digest} and report whether it is new to this enumeration - the {@code Set#add} contract,
-         *  with the one difference that an evicted digest reads as new again (see the class note). */
+        /** Remembers {@code digest} and reports whether it is new, as {@code Set#add} does - an evicted one reads as
+         *  new again. */
         private boolean add(String digest) {
             return seen.asMap().putIfAbsent(digest, Boolean.TRUE) == null;
         }
@@ -1488,11 +1324,8 @@ public final class OciFormat implements RepositoryFormat, ProxyFormat, Repositor
     }
 
     private Page page(URI origin, URI url, String field, ProxyFormat.Fetcher fetcher) throws IOException {
-        // The next-page URL is resolved from the upstream's own Link header (below), so its host is upstream-controlled
-        // and reaches fetch() as an INITIAL request - HttpFetcher's redirect-only SSRF screen never inspects it. Refuse
-        // a CROSS-ORIGIN page aimed at a private/loopback/metadata host through the same PrivateHosts guard the redirect
-        // chain and ImportScreen use, so a malicious registry cannot steer catalog/tags pagination at 169.254.169.254
-        // or an internal control plane. The first page is same-origin with the operator-configured root, so it passes.
+        // The next page comes from the upstream's Link header and reaches the fetcher as an initial request, which its
+        // redirect screen never inspects, so a cross-origin page aimed at a private host is refused here.
         if (!Origins.same(origin, url) && PrivateHosts.resolvesToPrivate(url.getHost())) {
             throw new IOException("Refusing a cross-origin catalog/tags page to a private/loopback host: " + url);
         }
@@ -1551,12 +1384,8 @@ public final class OciFormat implements RepositoryFormat, ProxyFormat, Repositor
         } catch (IllegalArgumentException malformed) {
             return null;   // a realm that is not a valid URI cannot be exchanged for a token
         }
-        // The bearer-token realm is chosen by the upstream's WWW-Authenticate challenge. It is trusted when it names
-        // the SAME host the operator configured as the upstream - an internal mirror's own token endpoint, so a
-        // private address there is expected. It is an SSRF when it names a DIFFERENT host that resolves to a private,
-        // loopback, link-local or cloud-metadata address: the upstream is then steering the proxy into the proxy's OWN
-        // internal network. Refuse only that cross-host-to-private hop (no token, so the caller lets the local 404
-        // stand); the fetcher screens redirect hops on the same guard.
+        // The upstream names the realm. The configured host's own realm may be private (an internal mirror); another
+        // host resolving privately would steer the proxy into its own network, and gets no token.
         String realmHost = realmUri.getHost();
         if (realmHost == null
                 || (!realmHost.equalsIgnoreCase(upstreamHost) && PrivateHosts.resolvesToPrivate(realmHost))) {
@@ -1575,16 +1404,13 @@ public final class OciFormat implements RepositoryFormat, ProxyFormat, Repositor
 
     @Override
     public String ecosystem() {
-        // The one string the manifest screen stamps its descriptors with and the inventory layout declares, so a
-        // signature this format produces evidence for lands on the same coordinate space as every other OCI record.
+        // The ecosystem the manifest screen's descriptors and the inventory layout use.
         return "oci";
     }
 
     @Override
     public List<ArtifactSignatures.Expectation> expects(String path) {
-        // An image manifest may carry a cosign signature; the signature manifest itself, a blob, a tag list or an
-        // upload never does. Optional: most images are unsigned, and a deployment that wants them signed pins the
-        // identities it admits and raises the dial.
+        // Optional: most images are unsigned, and a deployment that wants them signed raises the dial.
         return manifest(path).filter(reference -> !isSignatureTag(reference[1])).isPresent()
                 ? List.of(ArtifactSignatures.Expectation.optional(ArtifactSignatures.Scheme.SIGSTORE_BUNDLE))
                 : List.of();
@@ -1601,9 +1427,7 @@ public final class OciFormat implements RepositoryFormat, ProxyFormat, Repositor
     /**
      * The signature material an image carries, found both ways a client attaches it: under cosign's tag convention
      * ({@code sha256-<hex>.sig}), and among the image's referrers - a cosign signature pushed with a {@code subject},
-     * or a Sigstore bundle - read out of the subject's stored index, the same document a referrers request is
-     * answered from. Either way the manifest is found by the image's own digest, so it is the verdict of the
-     * manifest the client pulls that the material decides.
+     * or a Sigstore bundle - read from the subject's stored index. Both are found by the image's own digest.
      */
     @Override
     public List<ArtifactSignatures.Evidence> evidence(String path, ArtifactSignatures.Material material)
@@ -1614,9 +1438,7 @@ public final class OciFormat implements RepositoryFormat, ProxyFormat, Repositor
             return List.of();
         }
         String name = reference.get()[0];
-        // The signature artifact is found by the manifest's own digest, whatever tag the manifest was pushed under, so
-        // the body is hashed rather than the tag pointer read: this is the one derivation that cannot disagree with
-        // what cosign computed on the client.
+        // The body is hashed rather than the tag pointer read: the one derivation that cannot disagree with cosign.
         String hex = digest(body.get());
         List<ArtifactSignatures.Evidence> evidence = new ArrayList<>();
         String signaturePath = "/v2/" + name + "/manifests/" + SIGNATURE_TAG_PREFIX + hex + SIGNATURE_TAG_SUFFIX;
@@ -1708,8 +1530,7 @@ public final class OciFormat implements RepositoryFormat, ProxyFormat, Repositor
                     .filter(bounded -> !bounded.truncated())
                     .map(bounded -> bounded.content());
             if (payload.isEmpty()) {
-                // Clause 6 of the seam: a signature manifest naming a payload the registry does not hold is material
-                // that is present and cannot be read, never an unsigned image.
+                // Material present and unreadable, never an unsigned image.
                 throw new IOException("the signature manifest at " + signaturePath + " names a payload sha256:"
                         + layerHex + " the registry does not hold");
             }
@@ -1809,19 +1630,10 @@ public final class OciFormat implements RepositoryFormat, ProxyFormat, Repositor
      * Whether an image name may become the {@code oci/<name>/...} key it addresses: the store's own path rule
      * plus the one thing that rule deliberately allows and the Distribution grammar does not - an empty segment.
      *
-     * <p>The character half is {@link ArtifactStore#traversalFree}, not a local copy of it. A copy that fell behind -
-     * refusing {@code .}, {@code ..} and a backslash but not a control character - would let
-     * {@code /v2/kit/<NUL>lib/manifests/1.0} pass this screen, become a store key and throw
-     * {@code InvalidPathException} out of the filesystem backend - an unmapped {@code 500} at a request whose honest
-     * answer is {@code 404}, and a different answer again on each object-store backend. Delegating is what keeps this
-     * screen and the store's write screen from ever disagreeing about which names are addressable.
-     *
-     * <p>The segment checks stay local because they are genuinely this format's own: {@code traversalFree} permits
-     * an empty segment on purpose - a trailing slash and a doubled separator are legitimate request shapes - while a
-     * Distribution name segment may not be empty, and may not begin with a dot. That last rule is the grammar's, and
-     * it is also what this format's own spaces under {@code oci/} rely on: the sidecars, the upload staging, the
-     * digest-to-tags index and an image's referrer indexes all sit behind a leading dot, so no image can be named
-     * over one of them.
+     * <p>The character rule is {@link ArtifactStore#traversalFree}'s, so this screen and the store's never disagree
+     * about which names are addressable. A name segment may not be empty, which that rule allows, nor begin with a
+     * dot - the grammar's rule, which also keeps every image off this format's own dot-prefixed spaces under
+     * {@code oci/}.
      */
     static boolean isImageName(String name) {
         if (name.isEmpty() || !ArtifactStore.traversalFree(name)) {
@@ -1835,10 +1647,8 @@ public final class OciFormat implements RepositoryFormat, ProxyFormat, Repositor
         return true;
     }
 
-    /** Point a tag at a digest with the bounded compare-and-set retry every load-bearing pointer write uses (the
-     *  {@code Publication.link} idiom): a concurrent re-tag of the same tag resolves last-writer-wins rather than one
-     *  push silently dropping the other's update while still answering {@code 201}, and a write that cannot land after
-     *  repeated conflicts surfaces as an {@link IOException} instead of a false success.
+    /** Points a tag at a digest with the bounded compare-and-set retry: concurrent re-tags resolve last-writer-wins,
+     *  and a write that cannot land raises an {@link IOException} rather than answering a false success.
      *
      *  <p>The digest-to-tags index is entered before the pointer and the digest the tag named before is retired after
      *  it, so the index never misses a live tag ({@link OciTagIndex}). */
@@ -1856,8 +1666,7 @@ public final class OciFormat implements RepositoryFormat, ProxyFormat, Repositor
         }
     }
 
-    // --- RepositoryImporter capability: delegated to OciImporter. importTarget returns empty - OCI owns
-    //     its own manifest screening choke point, so the import walk lays each OCI asset out unscreened. ---
+    // --- RepositoryImporter capability, delegated to OciImporter ---
 
     @Override
     public boolean imports(String sourceFormat) {

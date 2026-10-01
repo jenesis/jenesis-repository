@@ -22,24 +22,17 @@ import tools.jackson.databind.node.ObjectNode;
  * descriptors, each with its {@code artifactType} and annotations, so a client finds a signature, an SBOM or an
  * attestation attached to an image without knowing its digest.
  *
- * <p><b>Maintained on the write path, never found by a walk.</b> A referrer's relationship is recorded when its
- * manifest is accepted: an empty marker at {@code oci/<name>/.manifests/<subject>/referrers/<referrer>}, which is the
- * durable fact, and the referrer's descriptor put into the subject's stored index, a {@link StoredListing} under
- * {@code listing/oci/<name>/.manifests/<subject>/referrers}. A read streams that one document; the marker space is
- * enumerated only by the listing's generator - the first materialisation and the rebuild pass - and never per
- * request. The marker names no blob, so it keeps nothing alive: a referrer's manifest is kept, as every manifest
- * is, by its media-type sidecar.
+ * <p><b>Maintained on the write path.</b> Accepting a referrer writes an empty marker at
+ * {@code oci/<name>/.manifests/<subject>/referrers/<referrer>}, the durable fact, and puts its descriptor into the
+ * subject's {@link StoredListing}. A read streams that document; only the listing's generator enumerates the markers.
+ * A marker names no blob and keeps nothing alive: a manifest is kept by its media-type sidecar.
  *
- * <p><b>Listed exactly while it serves.</b> A referrer is in the index while this registry records it as a manifest
- * (its {@code oci/.types/<hex>} sidecar) and no hold withholds it - so a referrer the gate holds is recorded (its
- * marker is written) but not listed, joins the index when a reviewer releases it, and leaves it when a retroactive
- * hold lands or a client deletes it. Each such transition reaches {@link OciListingObserver}, which re-decides the
- * one entry.
+ * <p><b>Listed exactly while it serves</b>: while its {@code oci/.types/<hex>} sidecar exists and no hold withholds
+ * it. A held referrer is recorded but not listed; {@link OciListingObserver} re-decides the entry on each transition.
  *
- * <p><b>An older repository back-fills on first read.</b> Before this registry served referrers, a client attaching
- * one fell back to the specification's tag schema: an image index tagged {@code sha256-<subject hex>} whose entries
- * are the referrers. The generator reads that index as well as the markers, so an attachment pushed before the
- * upgrade is still discoverable through the API a client now finds answering.
+ * <p>The generator also reads the specification's tag-schema fallback - an index tagged {@code sha256-<subject hex>}
+ * that a client maintains where a registry does not answer referrers - so such attachments are found through the
+ * API.
  */
 final class OciReferrers {
 
@@ -111,7 +104,6 @@ final class OciReferrers {
 
                 private void open() throws IOException {
                     if (!opened) {
-                        // The index's fixed members, then the array the entries are written into as they arrive.
                         out.write(("{\"schemaVersion\":2,\"mediaType\":" + JSON.writeValueAsString(INDEX)
                                 + ",\"manifests\":[").getBytes(StandardCharsets.UTF_8));
                         opened = true;
@@ -418,8 +410,7 @@ final class OciReferrers {
         ArrayNode page = JSON.createArrayNode();
         boolean more = false;
         String through = null;
-        // The stored index alone, unless something is recorded to build it from: a request naming a subject nothing
-        // refers to pays two probes and stores nothing.
+        // A subject nothing refers to costs two probes and stores nothing.
         Optional<StoredListing.Served> served = StoredListing.served(store, listing(name, subject));
         if (served.isEmpty() && (!store.isEmpty(markers(name, subject))
                 || store.exists("oci/" + name + "/tags/sha256-" + subject))) {
@@ -464,9 +455,8 @@ final class OciReferrers {
     }
 
     /**
-     * The descriptors a subject's index lists, read out of the stored document's bytes as a caller's bounded reader
-     * handed them over - the signature screen's, which reaches a format's own records by key and knows nothing of
-     * listings.
+     * The descriptors a subject's index lists, read from the stored document's bytes, for a caller that reads the
+     * format's records by key and knows nothing of listings.
      */
     static List<JsonNode> descriptors(byte[] stored) throws IOException {
         StoredListing.Document document = StoredListing.parse(stored);

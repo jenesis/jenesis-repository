@@ -25,8 +25,7 @@ public final class OciListingObserver implements ListingObserver {
 
     @Override
     public void onMarked(ArtifactDescriptor subject, ArtifactStore store) {
-        // This format does not carry the lifecycle module: a mark changes nothing a Distribution client reads from a
-        // tag list or an image index.
+        // A lifecycle mark changes nothing a Distribution client reads.
     }
 
     @Override
