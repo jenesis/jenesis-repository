@@ -3,30 +3,24 @@ package build.jenesis.repository.net;
 import module java.base;
 
 /**
- * The one private-range classifier the SSRF screens share, so the import trigger (an operator-supplied URL) and the
- * {@code ProxyFormat.Fetcher} redirect chain (a 30x {@code Location} an upstream chooses) apply the same rule rather
- * than each carrying its own copy. A host is refused when it resolves to any address an unauthenticated caller must
- * not be able to aim the deployment at: a cloud metadata service ({@code 169.254.169.254}), the loopback control
- * plane ({@code 127.0.0.1}, {@code ::1}), or any address the special-purpose registries do not call globally
- * reachable ({@link #isPrivate}). A host that does not resolve at all is <em>not</em> refused: it cannot be
- * reached, so it is no SSRF vector, and the caller's own connection attempt then fails naturally rather than this
- * screen masking an honest "no such host".
+ * The one private-range classifier the SSRF screens share, so the import trigger (an operator's URL) and the
+ * {@code ProxyFormat.Fetcher} redirect chain (an upstream's {@code Location}) apply one rule. A host is refused when it
+ * resolves to any address a caller must not aim the deployment at: a cloud metadata service ({@code 169.254.169.254}),
+ * the loopback control plane ({@code 127.0.0.1}, {@code ::1}), or any address the special-purpose registries do not
+ * call globally reachable ({@link #isPrivate}). A host that does not resolve is not refused: unreachable, it is no SSRF
+ * vector, and the caller's own connect fails honestly.
  *
- * <p><b>What a screen admitted, the connect holds.</b> A screen resolves a name and a client resolves it again when it
- * connects, and a name that rebinds between the two - public for the screen, private a moment later - reaches the
- * address the screen refused. So every screen resolves through {@link #addresses}, which remembers a host whose every
- * address was public, and the product's HTTP client asks {@link #connectable} when it connects: a host admitted in the
- * last {@value #HELD_MINUTES} minutes is held to its public addresses, and one that now answers only private ones is
- * not connected to at all. A host no screen admitted - an operator's own upstream, which may well be internal - is
- * left as it resolves. The memory is JVM-wide because DNS is: an admission made anywhere is a claim about the name
- * everywhere, and it is bounded to the most recent {@value #REMEMBERED} hosts.
+ * <p><b>What a screen admitted, the connect holds.</b> A name that rebinds between the screen's resolution and the
+ * client's - public, then private - would reach the refused address. So every screen resolves through
+ * {@link #addresses}, which remembers a host whose every address was public, and the product's HTTP client asks
+ * {@link #connectable}: a host admitted in the last {@value #HELD_MINUTES} minutes is held to its public addresses, and
+ * not connected to at all if it now answers only private ones. A host no screen admitted - an operator's own, possibly
+ * internal, upstream - connects as it resolves. The memory is JVM-wide, as DNS is, bounded to the {@value #REMEMBERED}
+ * most recent hosts.
  *
- * <p><b>The table is here; the policy is not.</b> This module carries nothing but {@code java.base}, deliberately,
- * so that anything above it may require it - which is the point: a caller that could not reach a classifier living
- * in the format SPI would keep a second copy of the same ranges instead. What each caller does
- * about a host that will not resolve, or a URI with no host at all, is theirs and genuinely differs - the format
- * legs admit, the downstream webhook and forwarding guards refuse. Only the range question lives here, because
- * that is the half where two answers is a defect rather than a decision.
+ * <p><b>The table is here; the policy is not.</b> This module is {@code java.base} only, so every caller can require it
+ * rather than keep a copy of the ranges. What a caller does about a host that will not resolve, or a URI with no host,
+ * is its own and differs - the format legs admit, the outbound delivery guards refuse.
  */
 public final class PrivateHosts {
 
@@ -48,8 +42,8 @@ public final class PrivateHosts {
     }
 
     /**
-     * Resolve {@code host} for a screen, remembering it as admitted when every address it resolves to is public - the
-     * one resolution every private-address screen goes through, so the connect can hold what the screen saw.
+     * Resolve {@code host} for a screen, remembering it as admitted when every address is public - the one resolution
+     * every private-address screen uses, so the connect can hold what the screen saw.
      *
      * @throws UnknownHostException when the host does not resolve
      */
@@ -61,11 +55,9 @@ public final class PrivateHosts {
         return addresses;
     }
 
-    /**
-     * The addresses a connection to {@code host} may use, of the ones it resolved to now: all of them for a host no
-     * screen admitted recently, and only the public ones for a host one did - which is empty when the name has
-     * rebound to private addresses since, and the caller then refuses the connection.
-     */
+    /** The addresses a connection to {@code host} may use, of those it resolves to now: all of them for a host no
+     *  screen admitted recently, only the public ones for a host one did - empty when the name has rebound to private
+     *  addresses, and the caller then refuses. */
     public static List<InetAddress> connectable(String host, List<InetAddress> resolved) {
         Instant admitted = ADMITTED.get(key(host));
         if (admitted == null || admitted.plus(Duration.ofMinutes(HELD_MINUTES)).isBefore(Instant.now())) {
@@ -80,13 +72,10 @@ public final class PrivateHosts {
         return bare.toLowerCase(Locale.ROOT);
     }
 
-    /**
-     * Whether {@code host} resolves to any address an SSRF screen must refuse. {@code true} when at least one of the
-     * host's resolved addresses is {@link #isPrivate private}; {@code false} for a {@code null}/blank host or one
-     * that does not resolve (unreachable, so not a vector - a caller lets the natural failure surface). A host this
-     * answers {@code false} for is {@linkplain #addresses admitted}, so a client connecting through
-     * {@link #connectable} cannot be rebound onto a private address afterwards.
-     */
+    /** Whether {@code host} resolves to any {@link #isPrivate private} address; {@code false} for a {@code null} or
+     *  blank host or one that does not resolve (unreachable, so not a vector). A host this answers {@code false} for is
+     *  {@linkplain #addresses admitted}, so a client connecting through {@link #connectable} cannot be rebound onto a
+     *  private address afterwards. */
     public static boolean resolvesToPrivate(String host) {
         if (host == null || host.isBlank()) {
             return false;
@@ -106,20 +95,17 @@ public final class PrivateHosts {
     }
 
     /**
-     * Whether {@code address} is one a screen must refuse: an address that is not an internet host's. The rule is
-     * the one IANA's special-purpose address registries state, entry by entry, for both families - an address in a
-     * block the registry does not mark globally reachable is refused, and one in a block it does is not - and the
-     * table below is those registries as they stood on 2026-09-26, the most specific block deciding. Three kinds of
-     * block say nothing about reach themselves and are judged by the IPv4 address they carry: an IPv4-mapped
-     * address, the two NAT64 prefixes ({@code 64:ff9b::/96}, and the local-use {@code 64:ff9b:1::/48}, which puts
-     * the IPv4 address either side of the octet RFC 6052 reserves), and 6to4 ({@code 2002::/16}) - since through a
-     * translator or a relay, it is that IPv4 address a connection reaches. Teredo is refused: its IPv4 address is
-     * obfuscated and names a client behind a NAT, which is never an upstream.
+     * Whether {@code address} is one a screen must refuse - not an internet host's. The rule is IANA's special-purpose
+     * address registries, entry by entry, for both families: a block the registry does not mark globally reachable is
+     * refused, the most specific block deciding; the table is those registries as of 2026-09-26. Blocks that say
+     * nothing about reach themselves are judged by the IPv4 address they carry, since a translator or relay connects to
+     * it: IPv4-mapped addresses, the NAT64 prefixes ({@code 64:ff9b::/96}, and the local-use {@code 64:ff9b:1::/48},
+     * which puts the IPv4 address either side of the octet RFC 6052 reserves) and 6to4 ({@code 2002::/16}). Teredo is
+     * refused: its obfuscated IPv4 address names a client behind a NAT, never an upstream.
      *
-     * <p>Outside every block, an IPv4 address is public, and an IPv6 address is public only within global unicast,
-     * {@code 2000::/3}: the rest of that space is multicast, the deprecated site-local block, IPv4-compatible
-     * addresses or the IETF's reserve, none of them an internet host. IPv4 multicast ({@code 224.0.0.0/4}) is in the
-     * multicast registry rather than the special-purpose one, and is refused here with it.
+     * <p>Outside every block an IPv4 address is public, and an IPv6 address is public only within global unicast,
+     * {@code 2000::/3}; the rest is multicast, deprecated site-local, IPv4-compatible or reserved. IPv4 multicast
+     * ({@code 224.0.0.0/4}), from the multicast registry, is refused too.
      */
     public static boolean isPrivate(InetAddress address) {
         return refused(address.getAddress());

@@ -5,20 +5,17 @@ import java.util.Locale;
 import java.util.Objects;
 
 /**
- * The web origin of a URL, as RFC 6454 defines it: its scheme, its host and its port. A credential, a redirect or
- * an upstream's own link is trusted within one origin and no further, so every place that asks "is this the same
- * server" asks here and gets the one answer.
+ * The web origin of a URL as RFC 6454 defines it: scheme, host and port. A credential, a redirect or an upstream's own
+ * link is trusted within one origin and no further, so every "same server?" question is answered here.
  */
 public final class Origins {
 
     private Origins() {
     }
 
-    /**
-     * Whether {@code first} and {@code other} share an origin: the same scheme and host, compared without case, and
-     * the same port, a port left out read as the scheme's default ({@code 80} for {@code http}, {@code 443} for
-     * {@code https}). A URL without a host has no origin and shares one with nothing.
-     */
+    /** Whether {@code first} and {@code other} share an origin: the same scheme and host, compared without case, and
+     *  the same port, an omitted port read as the scheme's default ({@code 80}, {@code 443}). A URL without a host
+     *  shares an origin with nothing. */
     public static boolean same(URI first, URI other) {
         if (first == null || other == null || first.getHost() == null || other.getHost() == null
                 || first.getScheme() == null || other.getScheme() == null) {
