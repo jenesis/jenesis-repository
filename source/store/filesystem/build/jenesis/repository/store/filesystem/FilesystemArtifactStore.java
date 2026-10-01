@@ -649,10 +649,12 @@ public final class FilesystemArtifactStore implements ArtifactStore {
     }
 
     /**
-     * A compare-and-set on {@code path}: the new content is spooled beside it and forced to the disk first, with no
-     * lock held; the key's stripe is then locked for the comparison and the rename alone; and the directory is forced
-     * once the lock is released. The flushes - the slow part of a durable write - so cost no rival its turn, and a
-     * write that loses the comparison drops what it spooled.
+     * A compare-and-set on {@code path}: the new content is spooled beside it and forced to the disk first, and the
+     * stored document is hashed into its token, both with no lock held; the key's stripe is then locked for the
+     * comparison and the rename alone; and the directory is forced once the lock is released. The flushes and the
+     * hash - the slow parts, the hash proportional to the stored document however small the write - so cost no rival
+     * on the stripe its turn, a write whose token is already stale loses without taking the lock, and a write that
+     * loses the comparison drops what it spooled.
      */
     private boolean compareAndSet(Path path, Object expected, Spool spool) throws IOException {
         // The same .upload*.tmp shape a keyed write spools through, so list()'s in-flight filter hides this temp file
@@ -663,10 +665,14 @@ public final class FilesystemArtifactStore implements ArtifactStore {
         try {
             spool.fill(temp);
             force(temp);
+            Hashed before = expected == null ? Hashed.NONE : Hashed.of(path, Files.getLastModifiedTime(temp));
+            if (before.consistent() && !Objects.equals(before.token(), expected)) {
+                return false;
+            }
             int stripe = stripe(path);
             synchronized (LOCKS[stripe]) {
                 try (FileChannel channel = stripeLock(stripe); FileLock _ = acquire(channel)) {
-                    moved = compareAndMove(path, expected, temp);
+                    moved = compareAndMove(path, expected, temp, before);
                 }
             }
         } finally {
@@ -678,6 +684,68 @@ public final class FilesystemArtifactStore implements ArtifactStore {
             forceDirectory(path.getParent());
         }
         return moved;
+    }
+
+    /**
+     * What identifies a stored file without reading it: the file system's key for it (device and inode where there
+     * is one), its full-precision modification time and its length. {@code null} for a key with no file.
+     */
+    private record Stamp(Object file, FileTime modified, long size) {
+
+        static Stamp of(Path path) throws IOException {
+            try {
+                BasicFileAttributes attributes = Files.readAttributes(path, BasicFileAttributes.class);
+                return attributes.isRegularFile()
+                        ? new Stamp(attributes.fileKey(), attributes.lastModifiedTime(), attributes.size())
+                        : null;
+            } catch (NoSuchFileException | FileNotFoundException e) {
+                return null;
+            }
+        }
+    }
+
+    /**
+     * The stored document's token, hashed before the stripe lock is taken, with the stamps read on either side of
+     * the hash.
+     *
+     * <p>Under the lock it {@linkplain #stands stands} for the current file only when that file is provably the
+     * incarnation that was hashed: the stamps either side of the hash agree with each other and with the one read
+     * under the lock, the file system names the file, and the file was last modified at least {@link #SETTLED}
+     * before the spool file was written. The last condition is what makes the stamp sufficient. A file is replaced
+     * by a rename, which frees the old file's inode for reuse, so a delete and a re-create can produce a new file
+     * with the old inode, length and - inside one tick of the file system's clock - modification time. Any file
+     * that replaced the hashed one did so after the spool file was written, so its modification time is at least the
+     * spool file's, both read off the same file system's clock; a hashed file older than that by more than a tick
+     * cannot share its stamp. A file modified within the margin is hashed again under the lock.
+     */
+    private record Hashed(Stamp stamp, Object token, boolean consistent, FileTime spooled) {
+
+        /** How far the hashed file's modification time must precede the spool file's: far beyond the coarsest
+         *  file-system timestamp tick and a small step of the clock. */
+        static final Duration SETTLED = Duration.ofSeconds(1);
+
+        /** Nothing hashed: a create, which compares against absence and has no stored document to hash. */
+        static final Hashed NONE = new Hashed(null, null, false, null);
+
+        static Hashed of(Path path, FileTime spooled) throws IOException {
+            Stamp first = Stamp.of(path);
+            if (first == null) {
+                return new Hashed(null, null, false, spooled);
+            }
+            Object token;
+            try {
+                token = FilesystemArtifactStore.token(first.modified().toMillis(), path);
+            } catch (NoSuchFileException | FileNotFoundException e) {
+                return new Hashed(null, null, false, spooled);
+            }
+            boolean consistent = first.file() != null && first.equals(Stamp.of(path));
+            return new Hashed(first, token, consistent, spooled);
+        }
+
+        boolean stands(Stamp current) {
+            return consistent && stamp.equals(current)
+                    && stamp.modified().toInstant().plus(SETTLED).isBefore(spooled.toInstant());
+        }
     }
 
     /** The stripe a key's compare-and-set serializes on, chosen from the key relative to the top-level root and never
@@ -696,16 +764,21 @@ public final class FilesystemArtifactStore implements ArtifactStore {
 
     /**
      * The compare-and-set proper, under both locks: compare the stored incarnation's token with {@code expected} and,
-     * when it matches, move the spooled content into place atomically. The token must advance on every successful
-     * update, including a re-write of byte-identical content (which the digest half of the token cannot distinguish):
-     * two writes inside one clock tick would otherwise leave it unchanged, and a third writer holding the pre-update
-     * token would still pass the compare - a stale write disguised as a fresh one.
+     * when it matches, move the spooled content into place atomically. The token is the one hashed before the lock
+     * when the file is provably the incarnation that was hashed ({@link Hashed#stands}), and is hashed again here
+     * otherwise. The token must advance on every successful update, including a re-write of byte-identical content
+     * (which the digest half of the token cannot distinguish): two writes inside one clock tick would otherwise leave
+     * it unchanged, and a third writer holding the pre-update token would still pass the compare - a stale write
+     * disguised as a fresh one.
      */
-    private static boolean compareAndMove(Path path, Object expected, Path temp) throws IOException {
-        boolean present = Files.isRegularFile(path);
-        long modified = present ? Files.getLastModifiedTime(path).toMillis() : -1L;
-        Object current = present ? token(modified, path) : null;
-        if (!Objects.equals(current, expected)) {
+    private static boolean compareAndMove(Path path, Object expected, Path temp, Hashed before) throws IOException {
+        Stamp now = Stamp.of(path);
+        boolean present = now != null;
+        long modified = present ? now.modified().toMillis() : -1L;
+        if (present != (expected != null)) {
+            return false;
+        }
+        if (present && !Objects.equals(before.stands(now) ? before.token() : token(modified, path), expected)) {
             return false;
         }
         Files.move(temp, path, StandardCopyOption.REPLACE_EXISTING, StandardCopyOption.ATOMIC_MOVE);
