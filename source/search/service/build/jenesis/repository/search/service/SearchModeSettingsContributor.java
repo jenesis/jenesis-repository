@@ -6,10 +6,9 @@ import build.jenesis.repository.settings.Setting;
 import build.jenesis.repository.settings.SettingsContributor;
 
 /**
- * Declares the setting that chooses how a repository answers a search. It is a repository setting with a tenant and
- * a deployment default, and essential, so the new-repository wizard asks it and the first boot's wizard asks the
- * default every repository inherits: the index is a cost a repository takes on, and the moment it is created is the
- * moment to decide whether it should.
+ * Declares the setting choosing how a repository answers a search: a repository setting with tenant and deployment
+ * defaults, and essential, so the new-repository wizard asks it and the first boot's wizard asks the inherited default
+ * - the index is a cost a repository takes on, decided when it is created.
  */
 public final class SearchModeSettingsContributor implements SettingsContributor {
 

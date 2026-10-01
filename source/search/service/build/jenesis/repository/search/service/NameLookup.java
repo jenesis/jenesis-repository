@@ -7,19 +7,17 @@ import build.jenesis.repository.search.SearchQuery;
 import build.jenesis.repository.store.ServableNames;
 
 /**
- * A lookup of published coordinates by the start of their name, answered from what the repository already keeps
- * sorted: the version documents, keyed ecosystem by ecosystem and coordinate by coordinate. Nothing is built for it and
- * nothing is stored; it reads one listing page of the coordinates that start with the prefix, then each one's versions
- * a page at a time, one document read per version and the withheld screen per hit.
+ * A lookup of published coordinates by the start of their name, answered from the version documents the repository
+ * already keeps sorted by ecosystem and coordinate: one listing page of the coordinates starting with the prefix, then
+ * each one's versions a page at a time, one document read per version and the withheld screen per hit. Nothing is built
+ * or stored.
  *
- * <p>Bounded twice, and the bound is visible. A page carries at most the caller's {@code limit} hits, and at most
- * {@link #EXAMINED} coordinates and versions are looked at to fill it - so a prefix whose every match is held, or a
- * coordinate of a hundred thousand versions, answers within the same number of reads as any other, cut short with a
- * cursor that resumes exactly where the page stopped rather than as a short list that reads as the whole answer.
+ * <p>Bounded twice, visibly: at most the caller's {@code limit} hits, and at most {@link #EXAMINED} coordinates and
+ * versions looked at, so a prefix whose matches are all held, or a coordinate of a hundred thousand versions, costs the
+ * same reads as any other and answers cut short with a cursor resuming exactly where it stopped.
  *
- * <p>The order is the repository's: by ecosystem, then by the coordinate as the store keys it, then by version name.
- * The match is the start of the coordinate as the format keys it - a Maven coordinate starts with its group - as
- * typed or in lower case, since a format that folds a name's case keys the folded form.
+ * <p>The order is the repository's: ecosystem, coordinate as stored, version name. The match is the start of the
+ * coordinate as the format keys it (a Maven coordinate starts with its group), as typed or in lower case.
  */
 final class NameLookup {
 
@@ -32,8 +30,8 @@ final class NameLookup {
     private NameLookup() {
     }
 
-    /** Where a page stopped, which the next page starts strictly after: the version it looked at last, or - with no
-     *  version - a coordinate whose versions it had all looked at. */
+    /** Where a page stopped, which the next starts strictly after: the last version looked at, or - with no version - a
+     *  coordinate whose versions were all looked at. */
     record Position(String ecosystem, String coordinate, String version) {
     }
 
@@ -90,10 +88,10 @@ final class NameLookup {
         return walk.page();
     }
 
-    /** The prefixes a lookup reads, in the order the store keys their runs: the query as typed and, where it differs,
-     *  in lower case - a format that folds a name's case keys the folded form, so a package pushed as {@code Demo}
-     *  and kept as {@code demo} is found by the name its publisher gave it. The two differ only in the case of their
-     *  letters, so neither is a prefix of the other and their runs never overlap. */
+    /** The prefixes a lookup reads, in store order: the query as typed and, where different, in lower case, since a
+     *  format that folds case keys the folded form - a package pushed as {@code Demo} and kept as {@code demo} is found
+     *  by the name its publisher gave. They differ only in case, so neither prefixes the other and their runs never
+     *  overlap. */
     private static List<String> runs(String prefix) {
         String folded = prefix.toLowerCase(Locale.ROOT);
         return folded.equals(prefix) ? List.of(prefix) : List.copyOf(new TreeSet<>(List.of(prefix, folded)));
@@ -130,7 +128,7 @@ final class NameLookup {
         }
 
         /** Walk one coordinate's versions after {@code after}; {@code false} once the page is full or the budget
-         *  spent, which ends the lookup. */
+         *  spent. */
         private boolean versions(String ecosystem, String coordinate, String after) throws IOException {
             String from = after;
             while (true) {
@@ -162,8 +160,8 @@ final class NameLookup {
             }
         }
 
-        /** The page as found: the first {@code limit} hits, resuming after the last of them when one more was
-         *  found, after the last version looked at when the budget ran out, and nowhere when the lookup finished. */
+        /** The page as found: the first {@code limit} hits, resuming after the last of them when one more was found,
+         *  after the last version looked at when the budget ran out, and nowhere when the lookup finished. */
         private Page page() {
             if (hits.size() > limit) {
                 return new Page(hits.subList(0, limit), positions.get(limit - 1));

@@ -11,32 +11,26 @@ import build.jenesis.repository.store.ServableNames;
 import build.jenesis.repository.walk.Trees;
 
 /**
- * A lookup of path-addressed artifacts - a raw upload, which no coordinate names - by the start of the path they are
- * served at, answered from the served-path pointers the store already keeps sorted. It is the name lookup's other
- * half: a coordinate is found by the start of its name, and a file nothing names is found by the start of its path.
+ * A lookup of path-addressed artifacts - raw uploads no coordinate names - by the start of their served path, from the
+ * served-path pointers the store keeps sorted: the name lookup's other half.
  *
- * <p>The query is a path relative to the repository ({@code installers/setup}, with or without a leading slash), as
- * its URL reads it. A format keeps what it serves under its mount ({@code /raw/installers/setup.bin}), which a
- * repository holding that format alone leaves out of its URL, so the query is looked up as typed and under the mount
- * of every format that names no coordinate. Each is one ordered descent of the pointers from the first key that could
- * start with it to the first that could not, so a lookup in a folder of a million files reads the pages that hold the
- * matches and not the rest. Only
- * a path no format describes to a coordinate is a hit - a Maven jar is found by its coordinate, never a second time by
- * its file name - and each is screened as it would be served, so a held file is no more findable here than it is
- * downloadable. The gate's review subtree is never entered.
+ * <p>The query is a path relative to the repository ({@code installers/setup}, with or without a leading slash). A
+ * format keeps what it serves under its mount ({@code /raw/installers/setup.bin}), which a single-format repository's
+ * URL leaves out, so the query is looked up as typed and under the mount of every format naming no coordinate - each
+ * one ordered descent from the first key that could start with it to the first that could not, reading only the pages
+ * holding matches. Only a path no format describes to a coordinate is a hit, so a Maven jar is found by its coordinate
+ * alone, and each is screened as served; the gate's review subtree is never entered.
  *
- * <p>Bounded as the name lookup is: at most the caller's {@code limit} hits, and at most {@link NameLookup#EXAMINED}
- * pointers looked at across the descents to find them, after which the page answers cut short with the path to resume
- * after.
+ * <p>Bounded as the name lookup is: at most {@code limit} hits and {@link NameLookup#EXAMINED} pointers looked at, then
+ * cut short with the path to resume after.
  */
 final class PathLookup {
 
     private PathLookup() {
     }
 
-    /** One page: the disclosed hits, and the served path to resume strictly after - the empty string to start from
-     *  the first, which a page of no rows answers when there is a hit for the next, and {@code null} when nothing
-     *  remains past it. */
+    /** One page: the disclosed hits and the served path to resume strictly after - empty to start from the first, as a
+     *  page of no rows answers when there is a hit for the next, {@code null} when nothing remains. */
     record Page(List<SearchQuery.Hit> hits, String next) {
     }
 
@@ -53,8 +47,8 @@ final class PathLookup {
         int examined = 0;
         String seen = after == null ? "" : after;
         for (String start : starts(path)) {
-            // A range wholly before the cursor was answered by an earlier page; the ranges are disjoint prefix blocks,
-            // so a cursor past a range's start that does not lie in it lies past all of it.
+            // A range wholly before the cursor was answered earlier; the ranges are disjoint prefix blocks, so a cursor
+            // past a range's start and outside it lies past all of it.
             if (resume != null && !resume.startsWith(start) && Trees.order(resume, start) > 0) {
                 continue;
             }
@@ -76,8 +70,8 @@ final class PathLookup {
         return new Page(hits, null);
     }
 
-    /** The keys the query could start, in the order the store keys them: as typed, and under the mount of every
-     *  installed format that names no coordinate - leaving out one that another already covers. */
+    /** The keys the query could start, in store order: as typed, and under the mount of every installed format naming
+     *  no coordinate, leaving out one another covers. */
     private static List<String> starts(String path) {
         List<String> starts = new ArrayList<>();
         starts.add(ServableNames.PUBLISHED + "/" + path);
@@ -98,9 +92,8 @@ final class PathLookup {
         return disjoint;
     }
 
-    /** Whether {@code path} could start a served path: no empty segment before its last, and no {@code .} or
-     *  {@code ..} - anything else names no stored file, so it matches none rather than reaching the traversal screen
-     *  as a key. */
+    /** Whether {@code path} could start a served path: no empty segment before its last and no {@code .} or {@code ..};
+     *  anything else names no stored file and matches nothing. */
     private static boolean relative(String path) {
         String[] segments = path.split("/", -1);
         for (int index = 0; index < segments.length; index++) {

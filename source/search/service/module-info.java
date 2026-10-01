@@ -1,8 +1,7 @@
 /**
- * The one search a repository answers, which the API ({@code /api/search}), the console's search bar and, through
- * the API, the {@code jenrepo} CLI all call: a lookup by name while a repository's full-text index is off - the
- * default - and the index while it is on, each a bounded page with a cursor, each hit screened so a held version is
- * no more findable here than it is served. It also declares the setting that chooses between the two.
+ * The one search a repository answers, which the API ({@code /api/search}), the console's search bar and the CLI call:
+ * a lookup by name while a repository's full-text index is off (the default) and the index while it is on, each a
+ * bounded page with a cursor and each hit screened. It also declares the setting choosing between them.
  *
  * @jenesis.release 25
  * @jenesis.bom pin-repository.properties

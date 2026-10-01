@@ -13,20 +13,16 @@ import build.jenesis.repository.store.ServableNames;
  * {@code jenrepo} CLI through the first.
  *
  * <p>The repository's {@link SearchMode} decides how. In {@link SearchMode#NAME}, the default, a query is the start of
- * a coordinate's name, looked up in what the repository already keeps sorted - a bounded page of point reads and a
- * cursor, with no index built or stored - and then the start of the path a file no coordinate names is served at, a
- * raw upload, which follows the coordinates in the same pages. In {@link SearchMode#FULL_TEXT} the installed index answers it; a repository
- * whose index is not built yet, or a composition that carries no index, answers by name meanwhile and says so, rather
- * than rendering a false-empty page.
+ * a coordinate's name, looked up in what the repository keeps sorted, then the start of a raw upload's served path, in
+ * the same pages. In {@link SearchMode#FULL_TEXT} the installed index answers; a repository whose index is not built
+ * yet, or a composition without an index, answers by name and says so rather than rendering a false-empty page.
  *
- * <p>Two things hold in both modes. Every hit is screened before it is shown, so a version the gate holds is no more
- * findable here than it is served. And every answer is one bounded page with the cursor to the next, so a surface
- * either pages on or says plainly that it stopped. The index is refreshed by a background pass, so it lags a publish by
- * up to one pass; the first page of a full-text answer therefore leads with the name lookup's first hits for the same
- * query, which is how someone finds what they have just published.
+ * <p>In both modes every hit is screened, so a held version is no more findable than it is served, and every answer is
+ * one bounded page with a cursor. The index lags a publish by up to one background pass, so a full-text answer's first
+ * page leads with the name lookup's first hits, which is how someone finds what they just published.
  *
- * <p>One instance serves every tenant and repository: the index provider is resolved once, here, so its per-repository
- * searchers survive across requests.
+ * <p>One instance serves every tenant and repository, holding the index provider so its searchers survive across
+ * requests.
  */
 public final class RepositorySearch {
 
@@ -43,7 +39,7 @@ public final class RepositorySearch {
         this(SearchQueryProvider.installed());
     }
 
-    /** The search over an explicit index - empty for none - so a caller can drive both modes without a
+    /** The search over an explicit index - empty for none - so a caller drives both modes without a
      *  {@code ServiceLoader} registration. */
     public RepositorySearch(Optional<SearchQueryProvider> index) {
         this.index = index;
@@ -99,7 +95,7 @@ public final class RepositorySearch {
         return new Answer(mode, false, paths.hits(), paths.next() == null ? null : Cursor.path(paths.next()));
     }
 
-    /** A hit the index holds may since have been withheld, or have gone; screened as a listing screens it. */
+    /** A hit the index holds may since have been withheld or gone; screened as a listing screens it. */
     private static boolean disclosable(StoreRepositoryInventory inventory, SearchQuery.Hit hit) throws IOException {
         return hit.pathAddressed()
                 ? inventory.disclosablePath(hit.path(), ServableNames.Policy.HIDE_WITHHELD)
@@ -107,12 +103,9 @@ public final class RepositorySearch {
                         ServableNames.Policy.HIDE_WITHHELD);
     }
 
-    /**
-     * One page of an answer: the mode the repository is set to, whether its full-text index answered - {@code false}
-     * in {@link SearchMode#NAME}, and in {@link SearchMode#FULL_TEXT} while the index is not built or not installed,
-     * when the name lookup answered instead - the hits, and the cursor to the next page, {@code null} when nothing
-     * remains.
-     */
+    /** One page of an answer: the repository's mode, whether its index answered ({@code false} in
+     *  {@link SearchMode#NAME}, and in {@link SearchMode#FULL_TEXT} while the index is unbuilt or not installed), the
+     *  hits, and the cursor to the next page, {@code null} when nothing remains. */
     public record Answer(SearchMode mode, boolean indexed, List<SearchQuery.Hit> hits, String nextCursor) {
 
         public Answer {
@@ -125,11 +118,8 @@ public final class RepositorySearch {
         }
     }
 
-    /**
-     * An answer's cursor, which says what answered it: a name lookup resumes by name even if the index has been built
-     * since, its path half by path, and an index page resumes in the index. Opaque to a caller, URL-safe, and refused
-     * when it is not one of these.
-     */
+    /** An answer's cursor, saying what answered: a name lookup resumes by name even once the index is built, its path
+     *  half by path, an index page in the index. Opaque, URL-safe, and refused when it is not one of these. */
     private record Cursor(NameLookup.Position name, String path, String text) {
 
         private static final String NAME = "n.";
