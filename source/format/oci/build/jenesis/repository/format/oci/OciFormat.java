@@ -3,6 +3,7 @@ package build.jenesis.repository.format.oci;
 import module java.base;
 import com.github.benmanes.caffeine.cache.Cache;
 import com.github.benmanes.caffeine.cache.Caffeine;
+import build.jenesis.repository.net.Origins;
 import build.jenesis.repository.format.ArtifactSignatures;
 import build.jenesis.repository.format.BlobReferences;
 import build.jenesis.repository.format.FormatExchange;
@@ -1486,20 +1487,13 @@ public final class OciFormat implements RepositoryFormat, ProxyFormat, Repositor
     private record Page(List<String> values, URI next) {
     }
 
-    /** Same scheme and authority (host:port) as the operator-configured enumeration root - the cross-origin test the
-     *  PrivateHosts page guard uses, identical to {@code ImportScreen.sameOrigin}. */
-    private static boolean sameOrigin(URI origin, URI url) {
-        return Objects.equals(origin.getScheme(), url.getScheme())
-                && Objects.equals(origin.getRawAuthority(), url.getRawAuthority());
-    }
-
     private Page page(URI origin, URI url, String field, ProxyFormat.Fetcher fetcher) throws IOException {
         // The next-page URL is resolved from the upstream's own Link header (below), so its host is upstream-controlled
         // and reaches fetch() as an INITIAL request - HttpFetcher's redirect-only SSRF screen never inspects it. Refuse
         // a CROSS-ORIGIN page aimed at a private/loopback/metadata host through the same PrivateHosts guard the redirect
         // chain and ImportScreen use, so a malicious registry cannot steer catalog/tags pagination at 169.254.169.254
         // or an internal control plane. The first page is same-origin with the operator-configured root, so it passes.
-        if (!sameOrigin(origin, url) && PrivateHosts.resolvesToPrivate(url.getHost())) {
+        if (!Origins.same(origin, url) && PrivateHosts.resolvesToPrivate(url.getHost())) {
             throw new IOException("Refusing a cross-origin catalog/tags page to a private/loopback host: " + url);
         }
         Optional<ProxyFormat.Fetched> fetched = fetch(url, "application/json", fetcher);

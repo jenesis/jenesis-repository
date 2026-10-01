@@ -2,6 +2,7 @@ package build.jenesis.repository.importer;
 
 import module java.base;
 
+import build.jenesis.repository.net.Origins;
 import build.jenesis.repository.net.PrivateHosts;
 import build.jenesis.repository.format.ProxyFormat;
 
@@ -104,7 +105,7 @@ public final class ImportScreen implements ProxyFormat.Fetcher {
             return "it downgrades an https migration to cleartext (scheme '" + scheme + "'), so the bytes it "
                     + "delivers can be substituted on the path";
         }
-        if (sameOrigin(authorised, url)) {
+        if (Origins.same(authorised, url)) {
             return null;            // exactly where the operator pointed the importer, at the level they authorised
         }
         String host = url.getHost();
@@ -157,14 +158,6 @@ public final class ImportScreen implements ProxyFormat.Fetcher {
         return PrivateHosts.resolvesToPrivate(host)
                 ? "the host resolves to a private, loopback, link-local or cloud-metadata address"
                 : null;
-    }
-
-    /** Whether {@code url} shares the authorised URL's scheme <em>and</em> authority. The scheme is part of the origin
-     *  on purpose: a same-host {@code http://} URL under an {@code https} migration is a different origin, and it is
-     *  precisely the one this screen exists to refuse. */
-    private static boolean sameOrigin(URI authorised, URI url) {
-        return Objects.equals(authorised.getScheme(), url.getScheme())
-                && Objects.equals(authorised.getRawAuthority(), url.getRawAuthority());
     }
 
     @Override

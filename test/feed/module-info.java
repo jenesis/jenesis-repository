@@ -14,6 +14,7 @@
  */
 open module build.jenesis.repository.feed.test {
     requires build.jenesis.repository.feed;
+    requires build.jenesis.repository.net;
     requires build.jenesis.repository.store;
     requires build.jenesis.repository.store.filesystem;
     requires org.junit.jupiter;

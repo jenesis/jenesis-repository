@@ -2,6 +2,7 @@ package build.jenesis.repository.blobs;
 
 import module java.base;
 
+import build.jenesis.repository.net.Origins;
 import build.jenesis.repository.net.PrivateHosts;
 import build.jenesis.repository.settings.PrivateHostGuard;
 
@@ -107,7 +108,7 @@ public final class OutboundTargets {
         if (unfetchable != null) {
             return unfetchable;
         }
-        if (sameOrigin(advertised, upstream)) {
+        if (Origins.same(advertised, upstream)) {
             return null;
         }
         return PrivateHostGuard.refusalReason(advertised, allowInternal,
@@ -119,16 +120,5 @@ public final class OutboundTargets {
      *  as rpm's primary index and NuGet's registration leaf do - takes the reason instead. */
     public static boolean mayFollow(URI advertised, URI upstream, boolean allowInternal) {
         return advertisedRefusal(advertised, upstream, allowInternal) == null;
-    }
-
-    /** Whether two URLs share a scheme <em>and</em> an authority. The scheme is part of the origin on purpose: a
-     *  same-host {@code http://} target under an {@code https} upstream is a different origin, and it is precisely the
-     *  downgrade the transport half exists to refuse. The authority is compared whole rather than by host, so a
-     *  different port on the upstream's own box is cross-origin and is screened. Identical to
-     *  {@code ImportScreen.sameOrigin} and {@code OciFormat.sameOrigin}. */
-    private static boolean sameOrigin(URI target, URI upstream) {
-        return upstream != null
-                && Objects.equals(target.getScheme(), upstream.getScheme())
-                && Objects.equals(target.getRawAuthority(), upstream.getRawAuthority());
     }
 }

@@ -2,6 +2,7 @@ package build.jenesis.repository.importer.index;
 
 import module java.base;
 
+import build.jenesis.repository.net.Origins;
 import build.jenesis.repository.format.ProxyFormat;
 import build.jenesis.repository.format.RepositoryFormat;
 import build.jenesis.repository.importer.ImportRequest;
@@ -105,17 +106,12 @@ public final class IndexSourceProvider implements ImportSourceProvider {
             }
 
             private Map<String, String> merged(URI url, Map<String, String> requestHeaders) {
-                if (requestHeaders.containsKey("Authorization") || !sameOrigin(url)) {
+                if (requestHeaders.containsKey("Authorization") || !Origins.same(root, url)) {
                     return requestHeaders;
                 }
                 Map<String, String> merged = new HashMap<>(requestHeaders);
                 merged.put("Authorization", authorization);
                 return merged;
-            }
-
-            private boolean sameOrigin(URI url) {
-                return Objects.equals(root.getScheme(), url.getScheme())
-                        && Objects.equals(root.getRawAuthority(), url.getRawAuthority());
             }
         };
     }

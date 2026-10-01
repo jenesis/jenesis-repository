@@ -6,6 +6,7 @@ import build.jenesis.repository.feed.FeedClient;
 import build.jenesis.repository.feed.FeedException;
 import build.jenesis.repository.feed.FeedPolicy;
 import build.jenesis.repository.feed.FeedRequest;
+import build.jenesis.repository.net.Origins;
 import build.jenesis.repository.feed.FeedResponse;
 import org.junit.jupiter.api.Test;
 import static org.assertj.core.api.Assertions.assertThat;
@@ -84,12 +85,12 @@ class FeedPaginationTest {
 
     @Test
     void a_cursor_on_another_port_or_scheme_is_a_different_origin() {
-        assertThat(FeedRequest.sameOrigin(Feeds.ORIGIN, URI.create("https://feed.example/v1/query?page=2"))).isTrue();
-        assertThat(FeedRequest.sameOrigin(Feeds.ORIGIN, URI.create("https://feed.example:443/x"))).isTrue();
-        assertThat(FeedRequest.sameOrigin(Feeds.ORIGIN, URI.create("https://FEED.example/x"))).isTrue();
-        assertThat(FeedRequest.sameOrigin(Feeds.ORIGIN, URI.create("http://feed.example/x"))).isFalse();
-        assertThat(FeedRequest.sameOrigin(Feeds.ORIGIN, URI.create("https://feed.example:8443/x"))).isFalse();
-        assertThat(FeedRequest.sameOrigin(Feeds.ORIGIN, URI.create("https://evil.example/x"))).isFalse();
+        assertThat(Origins.same(Feeds.ORIGIN, URI.create("https://feed.example/v1/query?page=2"))).isTrue();
+        assertThat(Origins.same(Feeds.ORIGIN, URI.create("https://feed.example:443/x"))).isTrue();
+        assertThat(Origins.same(Feeds.ORIGIN, URI.create("https://FEED.example/x"))).isTrue();
+        assertThat(Origins.same(Feeds.ORIGIN, URI.create("http://feed.example/x"))).isFalse();
+        assertThat(Origins.same(Feeds.ORIGIN, URI.create("https://feed.example:8443/x"))).isFalse();
+        assertThat(Origins.same(Feeds.ORIGIN, URI.create("https://evil.example/x"))).isFalse();
     }
 
     @Test

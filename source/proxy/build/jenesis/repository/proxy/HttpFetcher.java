@@ -2,6 +2,7 @@ package build.jenesis.repository.proxy;
 
 import module java.base;
 import module java.net.http;
+import build.jenesis.repository.net.Origins;
 import build.jenesis.repository.net.http.ScreenedHttpClient;
 import build.jenesis.repository.store.Features;
 import build.jenesis.repository.net.PrivateHosts;
@@ -223,7 +224,7 @@ public final class HttpFetcher implements ProxyFormat.Fetcher {
                 throw new IOException("refusing to follow a redirect to a private, loopback, link-local or "
                         + "cloud-metadata host (SSRF): " + current.getHost());
             }
-            if (!sameOrigin(origin, current)) {
+            if (!Origins.same(origin, current)) {
                 headers.keySet().removeIf(name -> SENSITIVE.contains(name.toLowerCase(Locale.ROOT)));
             }
         }
@@ -231,20 +232,6 @@ public final class HttpFetcher implements ProxyFormat.Fetcher {
 
     private static boolean isRedirect(int status) {
         return status == 301 || status == 302 || status == 303 || status == 307 || status == 308;
-    }
-
-    /** Same scheme, host and effective port - the origin a credential is scoped to. */
-    private static boolean sameOrigin(URI left, URI right) {
-        return Objects.equals(left.getScheme(), right.getScheme())
-                && Objects.equals(left.getHost(), right.getHost())
-                && port(left) == port(right);
-    }
-
-    private static int port(URI uri) {
-        if (uri.getPort() != -1) {
-            return uri.getPort();
-        }
-        return "https".equalsIgnoreCase(uri.getScheme()) ? 443 : "http".equalsIgnoreCase(uri.getScheme()) ? 80 : -1;
     }
 
     /** The throughput floor an upstream fetch is held to, as the operator set it now: {@link

@@ -1,6 +1,7 @@
 package build.jenesis.repository.feed;
 
 import module java.base;
+import build.jenesis.repository.net.Origins;
 
 /**
  * One HTTP request a feed makes: where, how, with which headers, and (for the feeds that query by POST) with which
@@ -91,35 +92,14 @@ public record FeedRequest(URI uri, String method, Map<String, String> headers, S
         return Optional.ofNullable(headers.get(name));
     }
 
-    /** Whether the URI is on the same origin (scheme, host and effective port) as {@code other}. */
-    public boolean sameOrigin(URI other) {
-        return sameOrigin(uri, other);
-    }
-
     /**
-     * Whether two URIs share a scheme, a host and an effective port. A cursor page a vendor hands back must resolve
-     * to the same origin as the operator-configured first request: an absolute {@code next} pointing anywhere else
-     * both steers the fetch (an SSRF, when the target is internal) and exfiltrates the request's credential header
-     * (when the target is a public attacker host). A malformed or hostless URI is never the same origin.
+     * Whether {@code other} is on this request's origin. A cursor page a vendor hands back must resolve to the same
+     * origin as the operator-configured first request: an absolute {@code next} pointing anywhere else both steers the
+     * fetch (an SSRF, when the target is internal) and exfiltrates the request's credential header (when the target
+     * is a public attacker host).
      */
-    public static boolean sameOrigin(URI first, URI other) {
-        if (first == null || other == null || first.getHost() == null || other.getHost() == null) {
-            return false;
-        }
-        return Objects.equals(scheme(first), scheme(other))
-                && first.getHost().equalsIgnoreCase(other.getHost())
-                && port(first) == port(other);
-    }
-
-    private static String scheme(URI uri) {
-        return uri.getScheme() == null ? null : uri.getScheme().toLowerCase(Locale.ROOT);
-    }
-
-    private static int port(URI uri) {
-        if (uri.getPort() >= 0) {
-            return uri.getPort();
-        }
-        return "http".equalsIgnoreCase(uri.getScheme()) ? 80 : 443;
+    public boolean sameOrigin(URI other) {
+        return Origins.same(uri, other);
     }
 
     @Override

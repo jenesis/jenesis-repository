@@ -2,6 +2,7 @@ package build.jenesis.repository.net.http;
 
 import module java.base;
 import module java.net.http;
+import build.jenesis.repository.net.Origins;
 import build.jenesis.repository.net.PrivateHosts;
 import org.eclipse.jetty.client.AsyncRequestContent;
 import org.eclipse.jetty.client.BytesRequestContent;
@@ -340,7 +341,7 @@ public final class ScreenedHttpClient extends HttpClient {
                 && "https".equalsIgnoreCase(request.uri().getScheme())) {
             return Optional.empty();
         }
-        boolean sameOrigin = sameOrigin(origin, target);
+        boolean sameOrigin = Origins.same(origin, target);
         if (!sameOrigin && !privateRedirects.getAsBoolean() && PrivateHosts.resolvesToPrivate(target.getHost())
                 && !(withinPrivateNetwork && PrivateHosts.resolvesToPrivate(origin.getHost()))) {
             throw new RedirectRefused(request.uri(), target);
@@ -475,22 +476,6 @@ public final class ScreenedHttpClient extends HttpClient {
             }
         }
         return null;
-    }
-
-    private static boolean sameOrigin(URI left, URI right) {
-        return Objects.equals(lower(left.getScheme()), lower(right.getScheme()))
-                && Objects.equals(lower(left.getHost()), lower(right.getHost())) && port(left) == port(right);
-    }
-
-    private static String lower(String value) {
-        return value == null ? null : value.toLowerCase(Locale.ROOT);
-    }
-
-    private static int port(URI uri) {
-        if (uri.getPort() != -1) {
-            return uri.getPort();
-        }
-        return "https".equalsIgnoreCase(uri.getScheme()) ? 443 : 80;
     }
 
     // ---- the exchange and its body ----
