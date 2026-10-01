@@ -33,19 +33,16 @@ import org.springframework.web.bind.annotation.ResponseBody;
 import org.springframework.web.bind.annotation.RestController;
 
 /**
- * The deployment-config management surface - the runtime-editable settings catalogue, the runtime repository
- * definitions, the per-format proxy upstreams and the per-host upstream credentials - peeled out of the
- * {@code RepositoryController} monolith into its own thin {@code web} adapter and contributed through the
- * {@code ServerModuleProvider} seam. It reads the store-backed {@link Settings} and changes them only through the
- * one settings editor ({@link SettingsEditor}) the console calls too, and manages the discovered
- * {@link UpstreamCredentialSource}; a mutation is audited under the tenant the deployment's routing answers for the
- * request ({@link RepositoryRouting#tenant}).
- * These are deployment-wide knobs, so every route here is under {@code /api/} and is gated {@code manage:write} (the
- * mutations) or {@code manage:read} (the reads) at scope {@code *} by the security chain before the request is
- * reached - operator-tenant-only - so this controller makes no authorization decision, the same guard the monolith
- * carried, unchanged by the move. With no upstream-credential module installed the {@code /api/upstreams/auth}
- * endpoints answer {@code 501}, after the auth check so {@code 401}/{@code 403} still precede. A privileged mutation
- * writes an audit event.
+ * The deployment-config management surface - the runtime settings catalogue, the runtime repository definitions, the
+ * per-format proxy upstreams and the per-host upstream credentials - contributed through the
+ * {@code ServerModuleProvider} seam. It reads the store-backed {@link Settings}, changes them only through the
+ * {@link SettingsEditor} the console uses too, and manages the discovered {@link UpstreamCredentialSource}; a mutation
+ * is audited under the tenant the routing answers for the request ({@link RepositoryRouting#tenant}).
+ *
+ * <p>These are deployment-wide knobs: the security chain gates every {@code /api/} route {@code manage:write} or
+ * {@code manage:read} at scope {@code *} - operator tenant only - before it is reached, so this controller makes no
+ * authorization decision. Without an upstream-credential module {@code /api/upstreams/auth} answers {@code 501}, after
+ * the auth check.
  */
 @RestController
 public class ConfigController {
@@ -56,15 +53,14 @@ public class ConfigController {
 
 
     private final Repositories repositories;
-    /** The one place a setting is changed, which every write here goes through; its settings are what the reads
-     *  here render. */
+    /** The one place a setting is changed; its settings are what the reads render. */
     private final SettingsEditor editor;
     private final Settings settings;
     private final UpstreamCredentialSource upstreamCredentials;
     private final AuditTrail audit;
     private final RepositoryRouting routing;
-    /** Whether a presented key is the deployment operator's - an operator-only setting, a repository's routing, is set
-     *  only with one. */
+    /** Whether a presented key is the deployment operator's - an operator-only setting, such as a repository's routing,
+     *  needs one. */
     private final Predicate<String> operator;
 
     public ConfigController(Repositories repositories, SettingsEditor editor,
@@ -83,12 +79,11 @@ public class ConfigController {
         audit.record(tenant, key == null ? "anonymous" : Authorization.hash(key), action, target);
     }
 
-    /** The deployment-wide runtime settings: each editable key with its effective value, its file/env default,
-     *  whether a stored override is in force, and whether it is pinned from a source above the store (with the phrase
-     *  naming what pins it) - a pinned key ignores the store, so a client greys the knob and a write is refused. The
-     *  settings that cannot change at runtime (storage backend, listen port, whether auth is enforced) are not
-     *  listed. With {@code ?tenant=}, that tenant's settings - the ones a tenant may hold, each with the deployment's
-     *  value as its baseline. */
+    /** The deployment-wide runtime settings: each editable key with its effective value, its file or environment
+     *  default, whether a stored override is in force, and whether a source above the store pins it (with the phrase
+     *  naming it) - a pinned key ignores the store, so a client greys it and a write is refused. Settings that cannot
+     *  change at runtime (storage backend, listen port, auth enforcement) are not listed. With {@code ?tenant=}, that
+     *  tenant's settings with the deployment's value as baseline. */
     @GetMapping("/api/settings")
     @ResponseBody
     public List<SettingView> settings(@RequestHeader(value = Repositories.KEY, required = false) String key,
@@ -97,9 +92,7 @@ public class ConfigController {
                 : rows(Setting.Scope.GLOBAL, null);
     }
 
-    /** A level's settings as the settings editor reads them for every surface ({@link SettingsEditor#rows}): the
-     *  deployment's, or a tenant's - each row's effective value, what it inherits, whether the level set its own, and
-     *  what pins it. */
+    /** A level's settings as the settings editor reads them for every surface ({@link SettingsEditor#rows}). */
     private List<SettingView> rows(Setting.Scope level, String tenant) {
         List<SettingView> view = new ArrayList<>();
         try {
@@ -112,14 +105,11 @@ public class ConfigController {
         return view;
     }
 
-    /**
-     * The first boot's wizard - the one the console runs at {@code /ui/setup} and the CLI's {@code setup} verb prints:
-     * the starter credential's step, then one step per group of the deployment's and a tenant's essential settings
-     * ({@link Wizard#SETUP}), each with the settings rows it asks, so what the wizard asks is a capability on all three
-     * surfaces and not a screen. Writes go through {@code PUT /api/settings/<key>} like any other. Its one store read
-     * is the settings document {@code GET /api/settings} reads - one object per module under a constant prefix,
-     * narrow by construction.
-     */
+    /** The first boot's wizard, the one {@code /ui/setup} runs and the CLI's {@code setup} prints: the starter
+     *  credential's step, then one step per group of essential deployment and tenant settings ({@link Wizard#SETUP})
+     *  with its rows, so the wizard is a capability on all three surfaces. Writes go through
+     *  {@code PUT /api/settings/<key>}. Its one store read is the settings document - one object per module under a
+     *  constant prefix. */
     @GetMapping("/api/setup")
     @ResponseBody
     public SetupView setup(@RequestHeader(value = Repositories.KEY, required = false) String key) {
@@ -142,12 +132,9 @@ public class ConfigController {
         return new SetupView(steps);
     }
 
-    /** Build one setting's API view carrying its {@link Setting.Kind kind}. A SECRET value is <em>never</em> emitted -
-     *  null on read (write-only semantics), so neither the stored value nor, in a tenant view, the global baseline
-     *  leaks into the JSON; {@code overridden}/{@code pinned} still signal <em>whether</em> it is set, and a client
-     *  changes it by writing a new value through {@code set}, never by reading the current one. This is the one server
-     *  chokepoint the console's own masking never covered - the API path bypassed it. Every other kind carries its
-     *  effective value and baseline as before. */
+    /** One setting's API view with its {@link Setting.Kind kind}. A SECRET value is never emitted - null on read, so
+     *  neither the stored value nor a tenant view's baseline reaches the JSON - while {@code overridden}/{@code pinned}
+     *  say whether it is set; a client changes it by writing a new value. */
     private static SettingView view(Setting setting, String effective, String baseline, boolean overridden,
                                     Optional<PinnedSettings.Pin> pin) {
         boolean secret = setting.kind() == Setting.Kind.SECRET;
@@ -158,11 +145,11 @@ public class ConfigController {
                 setting.tier() == null ? "" : setting.tier().name());
     }
 
-    /** Set a runtime override for one editable setting, deployment-wide or - with a {@code tenant} - for that tenant,
-     *  through the one settings editor ({@link SettingsEditor}): {@code 400} naming the refusal when the catalogue
-     *  refuses the value or the deployment would not resolve with it, {@code 409} when an operator pinned the key
-     *  above the store. A live setting takes effect on this node at once; the rest apply on restart, and the answer
-     *  says which in {@value #APPLIES_ON} ({@code now} or {@code restart}) so a script is told as the console is. */
+    /** Set a runtime override for one setting, deployment-wide or for a {@code tenant}, through the
+     *  {@link SettingsEditor}: {@code 400} naming the refusal when the catalogue refuses the value or the deployment
+     *  would not resolve with it, {@code 409} when an operator pinned the key above the store. A live setting applies
+     *  on this node at once, the rest on restart, and {@value #APPLIES_ON} says which ({@code now} or
+     *  {@code restart}). */
     @PutMapping("/api/settings/{key}")
     public void setSetting(@PathVariable("key") String key,
                            @RequestHeader(value = Repositories.KEY, required = false) String authKey,
@@ -189,8 +176,8 @@ public class ConfigController {
         }
     }
 
-    /** Clear a runtime override, reverting the setting to its file/env default (or, with a {@code tenant}, to the
-     *  deployment-wide value the tenant was overriding), refused as its {@link #setSetting PUT twin} is. */
+    /** Clear a runtime override, reverting to the file or environment default (or, for a {@code tenant}, the
+     *  deployment's value), refused as its {@link #setSetting PUT twin} is. */
     @DeleteMapping("/api/settings/{key}")
     public void clearSetting(@PathVariable("key") String key,
                              @RequestHeader(value = Repositories.KEY, required = false) String authKey,
@@ -199,14 +186,11 @@ public class ConfigController {
         changeSetting(key, "", authKey, tenant, request, response);
     }
 
-    /** Dump the stored settings as one JSON bundle, for backup or transfer to another deployment (the {@code }
-     *  export/import pattern). With no {@code tenant} the bundle carries the deployment-wide (global) documents keyed by
-     *  module plus every tenant's slice keyed {@code tenant:<tenant>:<module>} (the superadmin view); with a
-     *  {@code tenant} it carries only that tenant's documents keyed by module (a tenant slice). Credential-free by
-     *  construction: every SECRET-kind key is excluded from the bundle (a stored secret - the keyless identity token -
-     *  never travels in a backup), and the write-only upstream credentials are kept out of {@code config/settings}
-     *  entirely, so this dump carries no credential. The exclusion is done in {@link Settings#exportBundle} /
-     *  {@link Settings#documents(String)} through {@code SettingsSecrets}, not assumed. */
+    /** Dump the stored settings as one JSON bundle for backup or transfer. Without a {@code tenant}: the deployment's
+     *  documents keyed by module plus every tenant's slice keyed {@code tenant:<tenant>:<module>}; with one, that
+     *  tenant's documents. Credential-free by construction: {@link Settings#exportBundle} and
+     *  {@link Settings#documents(String)} exclude every SECRET key through {@code SettingsSecrets}, and upstream
+     *  credentials are never in {@code config/settings}. */
     @GetMapping("/api/settings/export")
     public void exportSettings(@RequestParam(value = "tenant", required = false) String tenant,
                                HttpServletResponse response) throws IOException {
@@ -218,10 +202,9 @@ public class ConfigController {
         response.getOutputStream().write(SettingsDocuments.serializeBundle(bundle));
     }
 
-    /** Restore a settings bundle produced by {@link #exportSettings}, parsed with the framework's JSON reader: with
-     *  no {@code tenant} a full restore of the deployment's documents and every tenant slice, with a {@code tenant}
-     *  that tenant's slice alone ({@link SettingsEditor#importBundle}, {@link SettingsEditor#importTenant}). A bundle
-     *  that would not resolve, or carries a value its setting refuses, is {@code 400}; one that sets a pinned key is
+    /** Restore a bundle {@link #exportSettings} produced: without a {@code tenant} the deployment's documents and every
+     *  tenant slice, with one that slice ({@link SettingsEditor#importBundle}, {@link SettingsEditor#importTenant}). A
+     *  bundle that would not resolve or carries a refused value is {@code 400}; one setting a pinned key is
      *  {@code 409}, naming every such key. Nothing is written unless all of it is accepted. */
     @PostMapping("/api/settings/import")
     public void importSettings(@RequestHeader(value = Repositories.KEY, required = false) String authKey,
@@ -241,13 +224,10 @@ public class ConfigController {
         });
     }
 
-    /**
-     * A repository's settings - every repository setting the catalogue carries, with the repository's effective value,
-     * what it would inherit from its tenant and the deployment ({@code defaultValue}), and whether it set its own - as
-     * the settings editor reads them for every surface ({@link SettingsEditor#rows}). The tenant is the one the
-     * deployment's routing answers for the request. Its reads are the repository's settings documents by name and the
-     * cached tenant and deployment snapshots, nothing that grows with what the repository holds.
-     */
+    /** A repository's settings - every repository setting in the catalogue with its effective value, what it would
+     *  inherit ({@code defaultValue}) and whether it sets its own ({@link SettingsEditor#rows}), in the tenant the
+     *  routing answers. It reads the repository's settings documents and the cached tenant and deployment snapshots,
+     *  nothing that grows with its content. */
     @GetMapping("/api/repository/settings")
     @ResponseBody
     public List<SettingView> repositorySettings(@RequestParam("repo") String repo, HttpServletRequest http)
@@ -259,9 +239,8 @@ public class ConfigController {
         return view;
     }
 
-    /** Set one repository setting, validated through the catalogue: {@code 400} naming the refusal - an unknown key,
-     *  a value its kind or its module refuses, a pinned key, or an operator-only one without the operator's key - and
-     *  nothing stored. */
+    /** Set one repository setting through the catalogue: {@code 400} naming the refusal - an unknown key, a refused
+     *  value, a pinned key, an operator-only one without the operator's key - with nothing stored. */
     @PutMapping("/api/repository/settings/{key}")
     public void setRepositorySetting(@PathVariable("key") String name, @RequestParam("repo") String repo,
                                      @RequestHeader(value = Repositories.KEY, required = false) String key,
@@ -294,12 +273,10 @@ public class ConfigController {
         return routing.tenant(http);
     }
 
-    /** The repositories defined at runtime ({@code repositories.<name>} in the settings store): each name with its
-     *  routing specification (one or more {@code writable} / {@code fallback <source> [options]} clauses). They add to
-     *  or override the deployment's file-configured repositories ({@code jenrepo.repositories.<name>}) and
-     *  route on the next request. With {@code ?tenant=}, the ones that tenant set for itself, which route its
-     *  repositories over the deployment's. Either way it reads settings documents - one object per module under a
-     *  constant prefix - and nothing that grows with what the repositories hold. */
+    /** The repositories defined at runtime ({@code repositories.<name>}): each name with its routing (one or more
+     *  {@code writable} / {@code fallback <source> [options]} clauses), adding to or overriding the deployment's
+     *  {@code jenrepo.repositories.<name>} and routing on the next request. With {@code ?tenant=}, that tenant's own.
+     *  It reads settings documents only. */
     @GetMapping("/api/repositories")
     @ResponseBody
     public List<NamedValue> repositoryDefinitions(@RequestParam(value = "tenant", required = false) String tenant) {
@@ -313,9 +290,9 @@ public class ConfigController {
     private static final String TENANT_ROUTING = "A tenant has no repository definitions: each repository is routed by "
             + "its own routing setting, PUT /api/repository/settings/routing?repo=<name>.";
 
-    /** Define a repository name deployment-wide ({@link SettingsEditor#definition}): parsed as the boot sweep parses
-     *  it and its upstreams screened, so a definition that would not route, or would fetch from where this deployment
-     *  must not, is a {@code 400} naming why and the fix. */
+    /** Define a repository name deployment-wide ({@link SettingsEditor#definition}), parsed as the boot sweep parses it
+     *  and its upstreams screened, so a definition that would not route, or would fetch from where it must not, is a
+     *  {@code 400} naming why and the fix. */
     @PutMapping("/api/repositories/{name}")
     public void setRepositoryDefinition(@PathVariable("name") String name,
                                         @RequestHeader(value = Repositories.KEY, required = false) String key,
@@ -334,28 +311,25 @@ public class ConfigController {
     }
 
     /**
-     * Create a repository to hold one format - {@code PUT /repository/<tenant>/<name>} with
-     * {@code {"value":"<format>"}} - in the tenant the deployment's routing decides for the URL, through the one creation every surface makes
-     * ({@link RepositoryType#create}). A repository that holds content but no format is given this one, and one whose
-     * type the requested one holds everything of - {@code maven} asked to be {@code java} - is given the requested
-     * one. Answers {@code 201} when created, {@code 200} when it already held that type or was given it, {@code 409}
-     * when it holds a type the requested one does not cover or is being deleted, and {@code 400} for a type no
-     * repository can hold here.
+     * Create a repository holding one format - {@code PUT /repository/<tenant>/<name>} with
+     * {@code {"value":"<format>"}} - in the tenant the routing decides, through the creation every surface makes
+     * ({@link RepositoryType#create}). A repository with content but no format gets this one, and one whose type the
+     * requested one covers ({@code maven} asked to be {@code java}) gets the requested one. {@code 201} when created,
+     * {@code 200} when it already held or was given the type, {@code 409} when it holds a type the requested one does
+     * not cover or is being deleted, {@code 400} for a type no repository can hold.
      *
-     * <p>A {@code "description"} beside the format gives the repository that description - empty clears it - and a
-     * description alone, with no format, describes a repository that exists: {@code 200}, or {@code 404} when there is
-     * none.
+     * <p>A {@code "description"} beside the format sets it (empty clears it); a description alone describes an existing
+     * repository - {@code 200}, or {@code 404} when there is none.
      *
-     * <p>A {@code "settings"} map beside the format creates the repository with those as its own settings, in one
-     * step: every value is validated through the catalogue first, as {@code PUT /api/repository/settings/<key>} would
-     * validate it, and a refusal answers {@code 400} naming every refused value with nothing written; the settings are
-     * then stored before the document that makes the repository exist ({@link RepositoryType#create(ArtifactStore,
-     * String, String, RepositoryType.Configuration)}), so it answers its first request as configured. Such a creation
-     * only creates: a repository that exists already is answered {@code 409} and left as it was.
+     * <p>A {@code "settings"} map creates the repository with its own settings in one step: every value is validated
+     * first, a refusal is {@code 400} naming every refused value with nothing written, and the settings are stored
+     * before the document that makes the repository exist
+     * ({@link RepositoryType#create(ArtifactStore, String, String, RepositoryType.Configuration)}), so its first
+     * request is answered as configured. Such a creation only creates: an existing repository is {@code 409} and left
+     * as it was.
      *
-     * <p>The routing is asked first, before the body is read or judged: a request naming a tenant it may not address
-     * is refused as every surface refuses a caller without access, whatever it carries. The body is therefore not
-     * required by the binding - an empty one is judged here, after the refusal, as naming no format.
+     * <p>The routing is asked before the body is read, so a request naming a tenant it may not address is refused
+     * whatever it carries; an empty body is then judged as naming no format.
      */
     @PutMapping("/repository/{tenant}/{name}")
     public void createRepository(@PathVariable("name") String name,
@@ -452,16 +426,11 @@ public class ConfigController {
         return true;
     }
 
-    /**
-     * Delete a repository and everything it holds, its own settings included - {@code DELETE
-     * /repository/<tenant>/<name>} - through the one removal every surface makes ({@link RepositoryRemoval}); the
-     * deployment's definition of its name is every tenant's, so it stays. The repository stops
-     * answering before this returns; its objects are removed off the request path, so the answer is {@code 202}, and a
-     * repository already being deleted - one a node stopped part way - is resumed. {@code 404} when there is none.
-     *
-     * <p>Nothing on the request path reads the repository's objects: the purge pages its scan on a thread of its
-     * own.
-     */
+    /** Delete a repository and everything it holds, its own settings included -
+     *  {@code DELETE /repository/<tenant>/<name>} - through the removal every surface makes
+     *  ({@link RepositoryRemoval}). The deployment's definition of the name is every tenant's, so it stays. The
+     *  repository stops answering before this returns and its objects go off the request path, so the answer is
+     *  {@code 202}; a deletion a node stopped part way is resumed. {@code 404} when there is none. */
     @DeleteMapping("/repository/{tenant}/{name}")
     public void deleteRepository(@PathVariable("name") String name,
                                  @RequestHeader(value = Repositories.KEY, required = false) String key,
@@ -507,17 +476,16 @@ public class ConfigController {
         change(request, key, response, actor -> editor.definition(name, null, actor));
     }
 
-    /** The per-format proxy upstreams set at runtime ({@code format-upstream.<format>}): each language format with the
-     *  upstream URL its local misses pull through, over the deployment's file-configured default. With
-     *  {@code ?tenant=}, the ones that tenant set for itself, which its repositories pull through instead. It reads
-     *  settings documents - one object per module under a constant prefix - as the list above does. */
+    /** The per-format proxy upstreams set at runtime ({@code format-upstream.<format>}): each format with the upstream
+     *  its misses pull through, over the file-configured default. With {@code ?tenant=}, that tenant's own. Settings
+     *  documents only. */
     @GetMapping("/api/upstreams")
     @ResponseBody
     public List<NamedValue> upstreams(@RequestParam(value = "tenant", required = false) String tenant) {
         return stored(tenant, SettingsScopes.UPSTREAM_PREFIX);
     }
 
-    /** Name a format's upstream - the deployment's, or with {@code ?tenant=} that tenant's own
+    /** Name a format's upstream - the deployment's, or with {@code ?tenant=} that tenant's
      *  ({@link SettingsEditor#upstream}) - screened as every outbound target is. */
     @PutMapping("/api/upstreams/{format}")
     public void setUpstream(@PathVariable("format") String format,
@@ -549,8 +517,8 @@ public class ConfigController {
         return tenant == null || tenant.isBlank() || SettingsDocuments.validTenant(tenant);
     }
 
-    /** The stored settings whose key carries a prefix (a map entry), as name (prefix stripped) to value: the
-     *  deployment's, or with a tenant the ones that tenant set for itself. */
+    /** The stored settings whose key carries {@code prefix}, as name (prefix stripped) to value - the deployment's, or
+     *  a tenant's own. */
     private List<NamedValue> stored(String tenant, String prefix) {
         List<NamedValue> entries = new ArrayList<>();
         if (!tenantName(tenant)) {
@@ -566,8 +534,8 @@ public class ConfigController {
         return entries;
     }
 
-    /** The upstream hosts that carry a proxy credential, so a private registry can be proxied. Only the hosts are
-     *  returned, never the credential: the secret is write-only, kept out of {@code config/settings}. */
+    /** The upstream hosts carrying a proxy credential, so a private registry can be proxied. Only hosts are returned:
+     *  the secret is write-only and kept out of {@code config/settings}. */
     @GetMapping("/api/upstreams/auth")
     @ResponseBody
     public List<String> upstreamCredentialHosts(HttpServletResponse response) throws IOException {
@@ -578,8 +546,7 @@ public class ConfigController {
         return new ArrayList<>(upstreamCredentials.hosts());
     }
 
-    /** With no upstream-credential module installed the credential endpoints answer 501, after the auth check so
-     *  401/403 still precede. */
+    /** Without an upstream-credential module the credential endpoints answer 501, after the auth check. */
     private static void respondUpstreamAuthNotInstalled(HttpServletResponse response) throws IOException {
         response.setStatus(501);
         response.setContentType("text/plain;charset=UTF-8");
@@ -605,8 +572,8 @@ public class ConfigController {
         try {
             upstreamCredentials.set(host, credential.get());
         } catch (IllegalStateException refused) {
-            // An upstream credential write with no master key configured is refused, naming the remedy; the
-            // credential is encrypted at rest like a SECRET setting, so nothing was persisted.
+            // No master key is configured, and the credential is encrypted at rest like a SECRET setting: refused with
+            // the remedy, nothing persisted.
             refuseSecret(response, refused);
             return;
         }
@@ -629,8 +596,8 @@ public class ConfigController {
     }
 
 
-    /** Refuse a SECRET write the deployment cannot encrypt at rest (no master key configured): {@code 400} with the
-     *  remedy, which names {@code JENREPO_SECRETS_KEY}. Nothing was persisted. */
+    /** Refuse a SECRET write the deployment cannot encrypt at rest: {@code 400} with the remedy, which names
+     *  {@code JENREPO_SECRETS_KEY}. Nothing is persisted. */
     private static void refuseSecret(HttpServletResponse response, IllegalStateException refused) throws IOException {
         text(response, 400, refused.getMessage());
     }
@@ -641,10 +608,9 @@ public class ConfigController {
         void apply(SettingsEditor.Actor actor) throws IOException;
     }
 
-    /** Make a change through the settings editor, answering {@code 200}; a refused one answers {@code 409} when what
-     *  it sets is pinned above the store and {@code 400} otherwise - a value the catalogue refuses, a deployment that
-     *  would not resolve, a secret this deployment cannot seal - with the editor's own sentence. Nothing was written
-     *  then. */
+    /** Make a change through the settings editor, answering {@code 200}; a refusal is {@code 409} when what it sets is
+     *  pinned above the store and {@code 400} otherwise - a refused value, a deployment that would not resolve, a
+     *  secret that cannot be sealed - with the editor's sentence, and nothing written. */
     private void change(HttpServletRequest http, String key, HttpServletResponse response, Change change)
             throws IOException {
         try {
@@ -673,12 +639,10 @@ public class ConfigController {
         response.setStatus(400);
     }
 
-    /** One runtime setting for the API: its key, its {@link Setting.Kind kind} (so a client masks a SECRET and picks
-     *  the right control), its effective value and its file/env default, whether a stored override is in force,
-     *  whether a change applies live, whether it is pinned from above the store (with the phrase naming the pin), and
-     *  its {@link Setting.Tier tier} - whether a wizard asks it, a settings screen shows it, or folds it away.
-     *  A SECRET's {@code value} and {@code defaultValue} are always {@code null} - the value is write-only and never
-     *  read back - while {@code overridden}/{@code pinned} still say whether it is set. */
+    /** One runtime setting for the API: its key and {@link Setting.Kind kind} (so a client masks a SECRET and picks a
+     *  control), its effective value and file/env default, whether an override is in force, whether a change applies
+     *  live, whether and by what it is pinned, and its {@link Setting.Tier tier}. A SECRET's {@code value} and
+     *  {@code defaultValue} are always {@code null}; {@code overridden}/{@code pinned} still say whether it is set. */
     public record SettingView(String key, String kind, String value, String defaultValue, boolean overridden,
                               boolean appliesImmediately, boolean pinned, String pinnedBy,
                               String group, String label, String description, boolean advanced, String tier) {
@@ -688,9 +652,8 @@ public class ConfigController {
     public record SetupView(List<StepView> steps) {
     }
 
-    /** One step of the wizard: its id and title, what it says - the starter credential's step, which asks no
-     *  setting - and the settings rows it asks, a settings group's, the same rows {@code GET /api/settings} lists,
-     *  documentation included. */
+    /** One wizard step: its id, title and text (the starter credential's step asks no setting) and the settings rows it
+     *  asks, the rows {@code GET /api/settings} lists. */
     public record StepView(String id, String title, String why, List<SettingView> settings) {
     }
 

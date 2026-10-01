@@ -13,12 +13,10 @@ import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 
 /**
- * Wires the deployment-config management web adapter into the repository server: the {@link ConfigController} over the
- * framework-free {@link Repositories} resolver, the one {@link SettingsEditor} every settings change goes through,
- * the discovered {@link UpstreamCredentialSource} and the discovered {@link AuditTrail}. Imported through {@code ServerModuleProvider} discovery (see {@link ConfigWebModule}), never
- * named by the server - so with this module absent the server carries no settings, repository-definition,
- * format-upstream or upstream-credential endpoints and the console hides the panels. The bean mirrors the constructor
- * injection the monolith performed, so the resolved dependencies are the same ones the server already exposes.
+ * Wires the deployment-config web adapter into the server: {@link ConfigController} over {@link Repositories}, the one
+ * {@link SettingsEditor}, the discovered {@link UpstreamCredentialSource} and the discovered {@link AuditTrail}.
+ * Imported through {@code ServerModuleProvider} discovery ({@link ConfigWebModule}); without this module the server
+ * carries none of these endpoints and the console hides the panels.
  */
 @Configuration(proxyBeanMethods = false)
 public class ConfigWebConfig {
@@ -33,9 +31,8 @@ public class ConfigWebConfig {
                 routing, key -> operator(authorization, operatorTenant, key));
     }
 
-    /** Whether {@code key} is the deployment operator's: every caller is on a deployment that enforces no
-     *  authorization, and otherwise a key of the operator tenant holding the manage right over every repository -
-     *  the one a route reading or writing the whole deployment takes. */
+    /** Whether {@code key} is the deployment operator's: always, on a deployment enforcing no authorization; otherwise
+     *  a key of the operator tenant holding the manage right over every repository. */
     static boolean operator(Authorization authorization, String operatorTenant, String key) {
         if (!authorization.enforced()) {
             return true;
