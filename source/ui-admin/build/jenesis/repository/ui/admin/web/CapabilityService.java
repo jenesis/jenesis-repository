@@ -25,24 +25,13 @@ import org.springframework.core.env.Environment;
 import org.springframework.stereotype.Service;
 
 /**
- * What this deployment's module path carries, computed once at startup (ServiceLoader presence is static for a
- * JVM): the one gating signal the console's pages share, so a surface whose module is absent is hidden rather than
- * broken, and no page invents its own check.
+ * What this deployment's module path carries, computed once at startup: the one gating signal the console's pages
+ * share, so a surface whose module is absent is hidden rather than broken.
  *
- * <p><b>Installed is the gate for a capability a module reports about itself, and enabled is the gate for a console
- * module.</b> The distinction is not a nuance; getting it wrong puts a link to a 404 in the navigation bar. A
- * feature module that is installed but not configured still has its endpoints and its screens, so its surface can
- * render a "configure it" state and an operator can find what to switch on - which is why the contributed flags
- * below read installed. A console module that is switched off is not <em>imported</em>:
- * {@link build.jenesis.repository.ui.ConsoleModuleImports ConsoleModuleImports} asks
- * {@link ConsoleModuleProvider#enabled}, so its controllers do not exist, and its own contract says a
- * switched-off module degrades "exactly as if the module were absent from the image". There is no configure-it state
- * to render, because there is no screen to render it on.
- *
- * <p>The nav read installed while the imports read enabled, so every switched-off console module contributed a link
- * to a path nothing had mapped. The deploy screen ships switched off by default, so that was its every deployment:
- * an admin-only "Deploy" entry in the bar answering 404, and nothing in the console able to say why. Both now come
- * from one list, resolved once here.
+ * <p>A capability a feature module reports about itself gates on installed, since an installed but unconfigured
+ * module still has screens that can say what to switch on. A console module gates on enabled, the list
+ * {@link build.jenesis.repository.ui.ConsoleModuleImports ConsoleModuleImports} imports
+ * ({@link ConsoleModuleProvider#enabled}): a switched-off one has no controllers, so a link to it would answer 404.
  */
 @Service
 public class CapabilityService {
@@ -58,30 +47,22 @@ public class CapabilityService {
     private final List<RepositoryPage> moduleRepositoryPages;
 
     /**
-     * @param environment the console's configuration chain, handed to the capability contributors so a flag they
-     *                    resolve from a setting answers here exactly as it answers on {@code /api/capabilities},
-     *                    and to the console-module discovery so the nav names what this deployment imported.
+     * @param environment the console's configuration chain, so a contributed flag answers as on
+     *                    {@code /api/capabilities} and the nav names what this deployment imported
      */
     public CapabilityService(Environment environment) {
         UnaryOperator<String> config = Features.namespaced(environment::getProperty);
-        // The console modules this deployment will actually import, which is the list the nav and the three
-        // console-module flags below are both derived from - the same question asked once.
+        // The console modules this deployment imports, from which the nav and the console-module flags derive.
         List<ConsoleModuleProvider> consoleModules = ConsoleModuleProvider.enabled(config);
-        // The six flags an installed feature module reports about itself are READ here, not re-derived. Each has one
-        // definition - its owning module's CapabilityContributor - and one discovery pipeline, the SPI home's
-        // resolve. Deriving them a second time beside the contributors is what let this gate and the served
-        // /api/capabilities disagree: the console resolved `gc` through a null configuration while the contributor
-        // resolved it through a real one, and answered `dependents` from the maintenance task's presence while the
-        // contributor answered from the query provider's. The flags with no contributor stay below, derived here,
-        // because nothing else answers them.
+        // A flag a module contributes is read from its CapabilityContributor, as /api/capabilities reads it; only the
+        // flags no contributor answers are derived here.
         Map<String, Object> contributed = CapabilityContributor.resolve(Map.of(), config).capabilities();
         this.capabilities = new Capabilities(
             !AdvisorySource.installed().isEmpty(),
             flag(contributed, "audit"),
             StagingProvider.resolve(_ -> null).isPresent(),
             RetentionProvider.resolve(_ -> null).isPresent(),
-            // The GC SPI's no-op-by-absence contract made visible: with no collector resolved, a cleanup evicts
-            // but reclaims nothing, and the cleanup screen says garbage collection is off.
+            // Without a collector a cleanup evicts but reclaims nothing, and the cleanup screen says so.
             flag(contributed, "gc"),
             flag(contributed, "scan"),
             flag(contributed, "provenance"),
@@ -93,31 +74,23 @@ public class CapabilityService {
             MaintenanceTaskProvider.installed().contains("index"),
             MaintenanceTaskProvider.installed().contains("license-retro-enforce"),
             FindingsProvider.installed().isPresent(),
-            // The durable maintainer-health ledger, and a source that fills it: the page renders the ledger the sweep
-            // populates, and a ledger with no source installed stays empty for ever, so the page is listed only where
-            // something can score what the repository holds.
+            // The health page needs the ledger and a source that fills it.
             HealthLedgerProvider.installed().isPresent() && !HealthSource.installed().isEmpty(),
-            // The hardening proxy leg: present when the gateway's migration-rescreen maintenance task is
-            // installed, so the console shows the hardened badge/verdict panel for a hardened repository and hides the
-            // surface entirely on a deployment that carries no hardening leg. The per-repository gate stays the repo's
-            // own harden flag; this is the module-presence signal, discovered like every other.
+            // The hardened proxy leg is present with its migration-rescreen task; each repository's own flag still
+            // decides whether it hardens.
             MaintenanceTaskProvider.installed().contains("migration-rescreen"),
             enabled(consoleModules, "scim"),
             flag(contributed, "leak-webhook"),
-            // The AI review queue is a filter of the findings ledger that only a code audit fills, so it is listed
-            // where both are present.
+            // The AI review queue needs the findings ledger and a code audit to fill it.
             FindingsProvider.installed().isPresent() && flag(contributed, "ai-review"),
             ImportSourceProvider.declared().stream()
                     .map(provider -> new ImportSourceView(
                             provider.name(), provider.label(), provider.requiresFormat()))
                     .toList(),
-            // The build tools the cache serves, as the cache contributes them to /api/capabilities - read rather
-            // than discovered again, so the projects page and the API name one set.
+            // The build tools the cache serves, as contributed to /api/capabilities.
             cacheProtocols(contributed));
         this.named = named(capabilities);
-        // The pages the imported console modules contribute, discovered once at startup like every other capability
-        // signal (a module's providers are static for a JVM). The shell filters these by the caller's role and the
-        // pages' own requirements per request; the discovery itself is not repeated on the hot path.
+        // Discovered once; the shell filters them per request by role and requirement.
         List<Contributed> modulePages = Contributions.collect("console module", consoleModules, this::contributed,
                 CapabilityService::noPages);
         this.moduleNav = modulePages.stream().flatMap(module -> module.nav().stream()).toList();
@@ -131,11 +104,8 @@ public class CapabilityService {
     }
 
     /**
-     * One module's pages, refused whole when any names a capability this console does not answer.
-     *
-     * <p>A requirement nobody answers can never be met, so the page would be hidden on every deployment and nothing
-     * would say why - the module's author would see a page that simply never appears. Refusing it at startup with
-     * the module and the name in the log is the loud version of the same outcome.
+     * One module's pages, refused whole, with a log line naming the module and the capability, when any page requires
+     * a capability this console does not answer and so could never be shown.
      */
     private Contributed contributed(ConsoleModuleProvider provider) {
         List<NavEntry> nav = List.copyOf(provider.navEntries());
@@ -176,8 +146,7 @@ public class CapabilityService {
                 Map.entry("import", capabilities.importAvailable()));
     }
 
-    /** One contributed flag, absent-reads-false - the SPI's no-op-by-absence contract, which is how a module that
-     *  is not on this deployment's path leaves its console surface hidden rather than broken. */
+    /** One contributed flag; absent reads false, so an absent module's surface is hidden. */
     private static boolean flag(Map<String, Object> contributed, String name) {
         return contributed.get(name) instanceof Boolean value && value;
     }
@@ -203,17 +172,9 @@ public class CapabilityService {
     }
 
     /**
-     * The pages a console module that threw, or named a capability nobody answers, contributes: none.
-     *
-     * <p>Uncontained, this fan-out ran at construction, so one optional module's {@code navEntries()} throwing took
-     * the whole shell - every other module's links with it, and the Spring context with them, which is a deployment
-     * that does not start rather than a console missing one entry. Contributing nothing is the honest degrade here
-     * and not merely the safe one: a nav link is an offer to navigate somewhere, and a module that could not say
-     * where has no offer to make. A half-built entry would be a link to a page that may not answer.
-     *
-     * <p>The failure names the module's implementation class and the exception type only, on the same reasoning as
-     * the base console's panel card: an exception message is uncontrolled text that may quote a configured value,
-     * and the whole failure belongs in the log rather than on an operator's page.
+     * The pages a console module contributes when it threw or named an unanswered capability: none, so one module
+     * cannot stop the console starting. The log names its class and exception type only, since a message may quote a
+     * configured value.
      */
     private static Contributed noPages(ConsoleModuleProvider provider, Exception failure) {
         LOGGER.warn("console module {} could not contribute its pages, so it contributes none: {}",
@@ -225,9 +186,8 @@ public class CapabilityService {
         return capabilities;
     }
 
-    /** The pages the imported console modules contribute to the first level, for the shell to list beside the core
-     *  ones - imported rather than installed, because a switched-off module has no screen for its link to reach.
-     *  Computed once at startup; the shell decides per request which the current user may see. */
+    /** The first-level pages the imported console modules contribute; the shell decides per request which the user may
+     *  see. */
     public List<NavEntry> moduleNav() {
         return moduleNav;
     }

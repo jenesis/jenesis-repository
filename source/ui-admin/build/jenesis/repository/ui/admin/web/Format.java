@@ -11,7 +11,7 @@ public class Format {
 
     private static final String[] UNITS = {"B", "KiB", "MiB", "GiB", "TiB", "PiB"};
 
-    /** {@code Math.log(1024)}, the unit divisor, computed once rather than per rendered size (this runs per row). */
+    /** {@code Math.log(1024)}, the unit divisor. */
     private static final double LOG_1024 = Math.log(1024);
 
     public String bytes(long value) {

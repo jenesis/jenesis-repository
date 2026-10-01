@@ -12,7 +12,7 @@ import build.jenesis.repository.ui.ConsoleScreen;
 
 /**
  * The audit trail in the console: the current tenant's security-relevant changes, newest first, filterable by action
- * and exportable as CSV. Both routes sit under {@code /admin/} so only a tenant admin reaches them (see SecurityConfig).
+ * and exportable as CSV. Both routes sit under {@code /admin/}, for tenant admins.
  */
 @Controller
 @ConsoleScreen
@@ -31,8 +31,7 @@ public class AuditController {
                         @RequestParam(name = "after", defaultValue = "") String after,
                         @RequestParam(name = "limit", defaultValue = "200") int limit, Model model) throws IOException {
         int size = Math.clamp(limit, 1, 500);
-        // A bounded slice per render, resumed by cursor, never the whole (unrotated) trail; the CSV export still
-        // streams it all.
+        // A bounded slice per render, resumed by cursor.
         AuditTrail.Page page = audit.query(tenant(), null, null, action, after, size);
         model.addAttribute("events", page.events());
         model.addAttribute("action", action == null ? "" : action);
@@ -43,10 +42,8 @@ public class AuditController {
         return "audit";
     }
 
-    /** Streamed a row at a time straight to the response through the audit SPI's {@code stream} seam, so neither a
-     *  whole-trail StringBuilder (three full copies Spring would re-copy to a String then bytes) nor the SPI's
-     *  materialised event list ever lands in heap - the store-backed trail holds only one day's events at a time, so a
-     *  very large trail exports within a flat memory envelope. Matches the API's {@code /api/audit.csv}. */
+    /** The trail as CSV, streamed a row at a time through the audit SPI's {@code stream} seam, so a large trail exports
+     *  in flat memory. Matches {@code /api/audit.csv}. */
     @GetMapping(value = "/ui/admin/audit.csv", produces = "text/csv;charset=UTF-8")
     public void csv(@RequestParam(name = "action", required = false) String action,
                     HttpServletResponse response) throws IOException {

@@ -7,14 +7,9 @@ import org.springframework.stereotype.Component;
 import org.springframework.web.context.annotation.RequestScope;
 
 /**
- * A per-request memo over {@link Memberships}' cross-tenant reads. A single console page render asks for a user's
- * accessible tenants and their role in the selected tenant several times over (the shell's tenancy chrome, the nav
- * entries, every {@code TenantAuthorization} decision), and each {@link Memberships#accessibleTo} confirms every
- * tenant the user belongs to by reading their grants there - so an uncached render repeats those store round-trips
- * per call. This holds those results for the life of the request only: request-scoped, so it never serves a stale role
- * across requests (a revoked grant is seen on the next request), and it needs no eviction - the scope ends with the
- * response. A scoped proxy lets the singleton {@link Memberships} hold a reference that resolves to the current
- * request's instance.
+ * A per-request memo over {@link Memberships}' reads, which one render asks many times (the shell, the nav, every
+ * {@code TenantAuthorization} decision). Request-scoped, so a revoked grant counts on the next request and nothing
+ * needs evicting; the scoped proxy lets the singleton {@link Memberships} reach the current request's instance.
  */
 @Component
 @RequestScope(proxyMode = ScopedProxyMode.TARGET_CLASS)

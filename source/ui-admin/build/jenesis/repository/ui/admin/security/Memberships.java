@@ -8,16 +8,10 @@ import build.jenesis.repository.ui.store.TenantService;
 import org.springframework.stereotype.Component;
 
 /**
- * Reads tenant membership across the whole store: which tenants a console user belongs to, and the
- * role they hold in a given one. Each tenant keeps its members as grants to their principal subject, so this
- * resolves a user's access at login (allow if a member of any tenant, or a super-admin) and per request (the role
- * that the current tenant grants) with a point read per tenant asked about. Writing membership is the per-tenant
- * {@link UserDirectory}'s job; this is the cross-tenant read side.
- *
- * <p>{@link #accessibleTo} reads the tenants {@link Authorization#tenantsOf} names for the user - one point read,
- * kept by every write that grants or takes away a role, directly or through a group - and confirms each against the
- * role that tenant grants (see {@link #granted}), so the answer costs a read per tenant the user belongs to and
- * never a probe of every tenant.
+ * Reads tenant membership across the store, the cross-tenant read side of {@link UserDirectory}: which tenants a
+ * console user belongs to and the role each grants, one point read per tenant asked about. {@link #accessibleTo}
+ * reads the tenants {@link Authorization#tenantsOf} names for the user and confirms each ({@link #granted}), so it
+ * costs a read per tenant the user belongs to, never a probe of every tenant.
  */
 @Component
 public class Memberships {
@@ -36,8 +30,7 @@ public class Memberships {
         if (!Names.isTenant(tenant)) {
             return Optional.empty();
         }
-        // Memoised for the life of the request: the shell, nav and every authorization decision read the same
-        // role, and each read is a point read of that member's own grants.
+        // Memoised for the request, which reads the same role many times.
         return cache.role(tenant, id, () -> UserDirectory.roleIn(authorization, tenant, id));
     }
 
@@ -58,11 +51,9 @@ public class Memberships {
     }
 
     /**
-     * The tenants among {@code candidates} whose membership grants {@code id} a role. The index names candidates
-     * rather than answers: a tenant purged whole removes its grants through the store and leaves the principal's
-     * index naming it, and a grant at a single repository names a tenant where the console confers no role. Asking
-     * each tenant for the role drops both, at a point read per candidate, each memoised for the request by
-     * {@link MembershipCache}.
+     * The tenants among {@code candidates} that grant {@code id} a role. The index only names candidates: it can name a
+     * purged tenant, or one where a single-repository grant confers no console role. One memoised read per candidate
+     * ({@link MembershipCache}).
      */
     private List<String> granted(String id, List<String> candidates) {
         List<String> mine = new ArrayList<>();

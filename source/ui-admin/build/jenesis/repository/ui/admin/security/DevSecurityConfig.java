@@ -25,16 +25,14 @@ import build.jenesis.repository.scope.Scopes;
  * {@code admin}/{@code admin}, {@code editor}/{@code editor}, {@code viewer}/{@code viewer} (members of a seeded
  * {@code default} tenant at the matching role) - and the tenant that gives them somewhere to be members of.
  *
- * <p>The chain itself, the credential form and the loopback guard are {@link build.jenesis.repository.ui
- * .DevConsoleSecurity}, shared with every other console. Declaring them here would bring back Spring Security's
- * <em>generated</em> login page: a second sign-in page nobody designed, that no console styling reaches, and that
- * would make this console sign in a different way from the other one.
+ * <p>The chain, the credential form and the loopback guard are the shared
+ * {@link build.jenesis.repository.ui.DevConsoleSecurity}.
  */
 @Configuration
 @Profile("dev")
 public class DevSecurityConfig {
 
-    /** Scoped exactly as the production chain is, or dev would prove a topology nothing ships. */
+    /** Scoped and authorized exactly as the production chain. */
     @Bean
     public DevConsolePolicy devConsolePolicy(TenantAuthorization tenants, ConsoleAccess access) {
         return new DevConsolePolicy() {
@@ -44,8 +42,7 @@ public class DevSecurityConfig {
                 return AdminUrlSpace.PATTERNS;
             }
 
-            /** The same matrix the production chain applies, from the one place it is declared - not a copy kept in
-             *  step by a comment. A dev chain that has quietly relaxed a rule proves a topology nothing ships. */
+            /** The production chain's matrix. */
             @Override
             public void rules(AuthorizeHttpRequestsConfigurer<HttpSecurity>
                                       .AuthorizationManagerRequestMatcherRegistry auth) {
@@ -63,9 +60,8 @@ public class DevSecurityConfig {
                 User.withUsername("viewer").password("{noop}viewer").roles("USER").build());
     }
 
-    /** Seed the tenant this deployment serves - {@code jenrepo.default-tenant}, else {@link Scopes#DEFAULT_TENANT} -
-     *  with the dev admin/editor/viewer accounts as its members (keyed by username). The configured one rather than
-     *  the constant, because the console signs these accounts in to the tenant it serves. */
+    /** Seeds the tenant this deployment serves ({@code jenrepo.default-tenant}, else {@link Scopes#DEFAULT_TENANT})
+     *  with the dev accounts as members, keyed by username. */
     @Bean
     public ApplicationRunner devTenantSeed(Authorization authorization, TenantService tenants,
             @Value("${jenrepo.default-tenant:" + Scopes.DEFAULT_TENANT + "}") String tenant) {

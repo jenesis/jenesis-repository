@@ -38,18 +38,15 @@ public class ProjectWizardController {
         this.tenant = tenant;
     }
 
-    /** The wizard's first step. It reads the settings documents its rows inherit from, one object per module under a
-     *  constant prefix, and nothing that grows with the store. */
+    /** The wizard's first step; it reads the settings documents its rows inherit from. */
     @GetMapping(ROUTE)
     public String start(Model model) throws IOException {
         model.addAttribute("wizard", WizardFlow.start(definition(), Map.of()));
         return "wizard";
     }
 
-    /** A step posted: moved on, back or completed ({@link WizardFlow#apply}); on completion the project is created,
-     *  and a name taken since it was checked stands the run back on the step that asked for it. Like the first step
-     *  it reads the settings documents, one object per module under a constant prefix, and a one-entry probe of the
-     *  project's space. */
+    /** A step posted ({@link WizardFlow#apply}); on completion the project is created, and a name taken since it was
+     *  checked returns the run to the step that asked for it. */
     @PostMapping(ROUTE)
     public String step(@RequestParam Map<String, String> form, Model model, RedirectAttributes redirect)
             throws IOException {

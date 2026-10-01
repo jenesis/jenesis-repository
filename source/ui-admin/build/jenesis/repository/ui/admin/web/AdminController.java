@@ -21,12 +21,8 @@ import org.springframework.web.servlet.mvc.support.RedirectAttributes;
 import build.jenesis.repository.ui.ConsoleScreen;
 
 /**
- * The per-tenant admin screen: manage the current tenant's console members (add/remove viewers,
- * editors and admins, including promoting other admins). The whole screen requires admin in the
- * selected tenant (see the security config): the GET page and the mutating routes alike.
- * Tenant lifecycle is a super-admin concern and lives on the tenants screen, the reclaim across every tenant's build
- * cache on the projects screen. Binding names are explicit because the Jenesis javac step does not emit
- * {@code -parameters}.
+ * The per-tenant admin screen: the current tenant's members and groups. Every route requires admin in the selected
+ * tenant. Binding names are explicit because the build compiles without {@code -parameters}.
  */
 @Controller
 @ConsoleScreen
@@ -36,14 +32,13 @@ public class AdminController {
     private final UserDirectory directory;
 
     private final KnownPrincipals known;
-    /** The deployment root, scoped to the session's tenant at each use through {@link #tenantDocuments()}.
-     *  Explicitly, rather than by injecting a request-scoped view: see that method for what that cost. */
+    /** The deployment root, scoped to the session's tenant at each use through {@link #tenantDocuments()}. */
     private final Documents storage;
     private final AuditTrail audit;
     private final CurrentTenant current;
     private final ConsoleActor actor;
 
-    /** Only for the fleet-wide half of the cache clear below - the console does not authorize through this. */
+    /** Reads and writes groups and grants; the console does not authorize through this. */
     private final Authorization authorization;
 
     public AdminController(UserDirectory directory, KnownPrincipals known,
@@ -58,24 +53,20 @@ public class AdminController {
         this.authorization = authorization;
     }
 
-    /** Record a privileged tenant-admin mutation (a SCIM-token or membership change) on the shared audit trail under
-     *  the current tenant, attributed to the acting member - the console peer of the /api and domain-layer audit
-     *  seams; best-effort, so a failed write never fails the mutation. */
+    /** Records a privileged tenant-admin mutation under the current tenant, attributed to the acting member;
+     *  best-effort. */
     private void audit(String action, String target) {
         audit.record(current.name(), actor.name(), action, target);
     }
 
-    /** How many members one console page renders. The membership is a key space, one small object per member,
-     *  so the screen pages it rather than reading a tenant's whole directory to draw a table. */
+    /** How many members one page renders; the membership is paged. */
     private static final int MEMBERS_PAGE = 200;
 
-    /** How many seen principals the id field offers. A suggestion list, not a directory: it is an aid to typing an
-     *  id, so it is bounded well below the membership page rather than growing with everyone who ever signed in. */
+    /** How many seen principals the id field suggests. */
     private static final int KNOWN_PAGE = 100;
 
-    /** How many groups one console page renders, and how many of each group's members it previews. Both are caps
-     *  rather than tuning: the screen costs a page of groups plus one member page each, which is a constant number
-     *  of store reads whatever a directory grows to - the same shape the credential listing takes. */
+    /** How many groups one page renders and how many members of each it previews, so the screen costs a constant
+     *  number of reads. */
     private static final int GROUPS_PAGE = 50;
 
     private static final int MEMBER_PREVIEW = 8;
@@ -86,11 +77,8 @@ public class AdminController {
         UserDirectory.Page page = directory.page(cursor, MEMBERS_PAGE);
         model.addAttribute("users", page.users());
         model.addAttribute("nextCursor", page.nextCursor().orElse(null));
-        // This tenant's groups, read through the same Authorization the API's group routes use.
         model.addAttribute("groups", groups());
-        // Everyone this deployment has seen sign in, offered on the id fields. An administrator otherwise has to be
-        // told an opaque provider subject out of band, which is the reason sign-in does not refuse a person the
-        // deployment has never seen: the sign-in is what produces the id to grant to.
+        // Everyone this deployment has seen sign in, offered on the id fields.
         model.addAttribute("knownPrincipals", known.page(null, KNOWN_PAGE));
         model.addAttribute("scimConfigured", new ScimTokens(tenantDocuments()).configured());
         return "admin";
@@ -101,11 +89,8 @@ public class AdminController {
     }
 
     /**
-     * This tenant's groups, with a preview of each one's membership.
-     *
-     * <p>Read through the same {@link Authorization} the API's group routes use rather than through a service of
-     * this console's own, which is the point rather than a convenience: two surfaces are one capability when they
-     * reach one implementation, so a screen written this way closes a parity gap instead of adding one.
+     * This tenant's groups with a preview of each membership, read through the {@link Authorization} the API's group
+     * routes use.
      */
     private List<GroupRow> groups() throws IOException {
         List<GroupRow> rows = new ArrayList<>();
@@ -123,9 +108,8 @@ public class AdminController {
     private static final int GROUP_MEMBERS_PAGE = 200;
 
     /**
-     * One group's page: what it grants and who is in it, each with its own action, and the group's deletion last.
-     * Its row on the members screen only opens it, so that screen stays one action per row however large a group
-     * grows. The members are a page of the group's membership key space, resumed by {@code cursor}.
+     * One group's page: what it grants and who is in it, each with its own action, and its deletion; members are paged
+     * by {@code cursor}.
      */
     @GetMapping("/group")
     public String group(@RequestParam("name") String name,
@@ -143,20 +127,14 @@ public class AdminController {
         return "admin-group";
     }
 
-    /** Back to the group's own page after a change to it, the name carried as a query parameter so no name a user
-     *  typed is ever part of a path. */
+    /** Back to the group's page, the name as a query parameter so no typed name becomes part of a path. */
     private static String toGroup(String name, RedirectAttributes redirect) {
         redirect.addAttribute("name", name);
         return "redirect:/ui/admin/group";
     }
 
-    /** Grant a group rights at a scope. Every member holds them from the next request - the write re-derives them
-     *  before it returns, which is what makes a group a grant rather than a label.
-     *
-     *  <p>The action names are the ones the API's group routes record, spelled the same way. They are literals
-     *  rather than {@code AuditActions} constants because that class is downstream of the base module and the API's
-     *  group routes are IN it - so a shared constant would point the wrong way across the tier boundary, and the
-     *  members handlers above already record their peer's names this way for the same reason. */
+    /** Grants a group rights at a scope; every member holds them from the next request, since the write re-derives
+     *  them. The audit action names are spelled as the API's group routes record them. */
     @PostMapping("/groups/grant")
     public String grantGroup(@RequestParam("name") String name,
                              @RequestParam("scope") String scope,
@@ -212,17 +190,8 @@ public class AdminController {
     }
 
     /**
-     * This session's tenant view of the console's documents.
-     *
-     * <p>Scoped here rather than injected as a request-scoped bean, and the reason is worth keeping. That bean was
-     * a scoped proxy over {@link Documents}, which has no interface - so the proxy had to be a CGLIB subclass, and
-     * on the module path that needs the owning package opened to Spring for reflection. Opening a free-core
-     * package product-wide to give one constructor parameter a proxy is a bad trade; asking instead for an
-     * interface proxy is worse, because it does not fail - it silently supplies something that is NOT the tenant's
-     * view, so this controller wrote a tenant's SCIM token at the deployment root while SCIM read the tenant's,
-     * and a freshly minted, correct bearer came back 401.
-     *
-     * <p>One call, naming the tenant it means, has none of that: the boundary is visible at the point it matters.
+     * This session's tenant view of the console's documents, scoped explicitly per call: {@link Documents} has no
+     * interface, so a request-scoped proxy would need its package opened to Spring.
      */
     private Documents tenantDocuments() {
         String tenant = current.name();
@@ -256,17 +225,14 @@ public class AdminController {
                           Authentication authentication,
                           RedirectAttributes redirect) throws IOException {
         UserDirectory.Role parsed = UserDirectory.Role.parse(role);
-        // Prevent an admin from demoting themselves out of the last admin role: the members screen requires admin, so a
-        // tenant left with no admin can no longer manage its own membership. Blocked only when the actor is lowering
-        // their OWN role below admin and no other member still holds admin - a super-admin can still recover it, but the
-        // tenant would otherwise be locked out. (removeUser already blocks removing your own access outright.)
+        // An admin may not demote themselves when no other member holds admin, which would leave the tenant unable to
+        // manage its own membership.
         if (authentication != null && id.equals(authentication.getName())
                 && !parsed.atLeast(UserDirectory.Role.ADMIN) && lastAdmin(id)) {
             throw new IllegalArgumentException("You are the last admin of this tenant. Promote another member to admin "
                     + "before lowering your own role.");
         }
-        // A create vs an update, so the trail reads like the SCIM provisioning peer (member.provision / member.update),
-        // decided against the existing entry before the upsert.
+        // Create or update, recorded as SCIM provisioning records them.
         boolean existing = directory.find(id).isPresent();
         directory.put(id, parsed, login);
         audit(existing ? "member.update" : "member.provision", id + " " + parsed.label());
@@ -280,8 +246,7 @@ public class AdminController {
         if (directory.find(id).map(user -> !user.role().atLeast(UserDirectory.Role.ADMIN)).orElse(true)) {
             return false;
         }
-        // An existence probe, so it pages and stops at the first other admin rather than materialising the tenant's
-        // whole membership to ask a yes/no question.
+        // Pages and stops at the first other admin.
         String cursor = null;
         do {
             UserDirectory.Page page = directory.page(cursor, MEMBERS_PAGE);

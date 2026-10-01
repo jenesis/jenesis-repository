@@ -37,52 +37,30 @@ import build.jenesis.repository.scope.Scopes;
 import build.jenesis.repository.server.RepositoryRoutingProvider;
 
 /**
- * Wires the Spring-free {@code build.jenesis.repository.ui.store} application-service layer into the console's context. The
- * domain module carries no Spring annotations, so each service is declared here as a bean and given the
- * collaborators the console configures ({@code Documents}, {@code CacheStorage}, {@code ArtifactStore},
- * {@code Authorization},
- * {@code AuditTrail}, {@code ObservationRegistry}) plus the two web-bound seams ({@code CurrentTenant} and
- * {@code ConsoleActor}, implemented in the security layer). This keeps the domain reusable by another surface
- * while the console binds it directly, in-process, rather than over the HTTP API.
- *
- * <p>The grantable-rights surfaces are contributed as beans too, so {@code CredentialService} still validates a
- * role against the discovered union and a new surface is one more bean, rather than a component-scanned bean in the
- * layer.
+ * Wires the Spring-free {@code build.jenesis.repository.ui.store} service layer into the console's context: each
+ * service is a bean given the collaborators the console configures and the two web-bound seams ({@code CurrentTenant},
+ * {@code ConsoleActor}), so the console calls the domain in process. The grantable-rights surfaces are beans too, which
+ * {@code CredentialService} validates a role against.
  */
 @Configuration
 public class DomainConfig {
 
-    // The audit trail is NOT declared here, not even as an @ConditionalOnMissingBean(AuditTrail.class) fallback.
-    // That condition cannot do what it says between two plain @Configuration classes: it is evaluated as the class
-    // is processed, and which of two user configurations is processed first is not defined. Losing that race, both
-    // this class and RepositoryStoreConfig would register a bean called auditTrail and the context would refuse to
-    // start at all - invisible to any lane that does not start a server.
-    //
-    // There is no composition that needs it. The standalone node scans RepositoryStoreConfig, which declares the
-    // trail unconditionally over the store it opens; a composed node excludes that class and takes the repository's
-    // own, which is authoritative there. And a deployment carrying no audit implementation is already answered a
-    // layer down, by AuditTrailProvider resolving to a trail that records nothing.
-    //
-    // The same shape elsewhere is ordered rather than raced: the cache node's two (`authorization`,
-    // `keyUsageTracker`) are safe because a configuration class processes its @ComponentScan before its @Import, so
-    // the bundle's scan of the composition registers both competitors before CacheConfig is ever read. What has no
-    // order at all is two classes picked up by the SAME scan.
+    // The audit trail comes from RepositoryStoreConfig, or from the repository in a composed node, never from here:
+    // @ConditionalOnMissingBean between two plain @Configuration classes of one scan is evaluated in an undefined
+    // order, and two auditTrail beans would stop the context.
 
     @Bean
     public CacheService cacheService(@Qualifier("cacheTenantStorage") CacheStorage cacheTenantStorage,
                                      AuditTrail audit, CurrentTenant currentTenant, ConsoleActor actor,
                                      SettingsAdmin settingsAdmin) {
-        // The cache screens manage cached build output, which lives in the cache's own segment of the store - not
-        // beside the console's documents at the deployment root, which is what the primary tenantStorage sees. A
-        // project's policy is its project settings, read and written through the settings catalogue.
+        // Cached build output lives in the cache's own segment of the store, not at the deployment root.
         return new CacheService(cacheTenantStorage, audit, currentTenant, actor, settingsAdmin);
     }
 
     @Bean
     public TenantService tenantService(@Qualifier("rootStorage") Documents rootStorage, AuditTrail audit,
                                        ConsoleActor actor) {
-        // The audited constructor: TenantService.create records tenant.create in the new tenant's own scope. The
-        // shared read-only callers (Memberships, login authorization) only list/check and so never audit.
+        // Audited: create records tenant.create in the new tenant's scope.
         return new TenantService(rootStorage, audit, actor);
     }
 
@@ -90,8 +68,7 @@ public class DomainConfig {
     public TenantPurge tenantPurge(TenantService tenantService, ArtifactStore repositoryStore,
                                    Authorization authorization, AuditTrail audit, ConsoleActor actor,
                                    ConfigurableEnvironment environment) {
-        // The purge deletes the tenant's own audit space, so its audit event is written to the operator scope, not the
-        // purged tenant's.
+        // The purge deletes the tenant's audit space, so its event goes to the operator scope.
         return new TenantPurge(tenantService, repositoryStore, authorization, audit, actor,
                 operatorTenant(environment));
     }
@@ -99,29 +76,21 @@ public class DomainConfig {
     @Bean
     public VolumeReclaim volumeReclaim(@Qualifier("cacheRootStorage") CacheStorage cacheRootStorage,
                                        AuditTrail audit, ConsoleActor actor, ConfigurableEnvironment environment) {
-        // Reclaims cached build output across every tenant, so it spans the CACHE's root rather than the
-        // deployment's - it must never be able to walk the repositories looking for things to delete.
+        // Spans the cache's root, so it can never walk the repositories for things to delete.
         return new VolumeReclaim(cacheRootStorage, audit, actor, operatorTenant(environment));
     }
 
     @Bean
     public CacheClear cacheClear(Authorization authorization, AuditTrail audit, ConsoleActor actor,
                                  ConfigurableEnvironment environment) {
-        // What a clear drops belongs to no tenant - every tenant's cached reads on this node, every node's grants -
-        // so it is recorded in the operator scope, as the API's clear is.
+        // What a clear drops belongs to no tenant, so it is recorded in the operator scope.
         return new CacheClear(authorization, audit, actor, operatorTenant(environment));
     }
 
     /**
-     * A fixed deployment's one tenant, created at boot when the store does not hold it yet.
-     *
-     * <p>A fixed deployment serves exactly one tenant, named by {@code jenrepo.default-tenant}, and the console lists
-     * tenants from the store - where a tenant appears only once something is written under it. On a fresh store the
-     * console therefore listed none, and an operator signing in for the first time was sent to the tenants screen
-     * to create the one tenant the deployment already serves, before any other screen would open. Creating it here
-     * makes a fresh deployment's console usable on first sign-in. A deployment of several tenants names its own,
-     * and a read-only one writes nothing, so both are left alone. Its repositories are created by an operator, each
-     * with the format it holds.
+     * A fixed deployment's one tenant ({@code jenrepo.default-tenant}), created at boot when the store lacks it, since
+     * the console lists tenants from the store and a fresh store would otherwise show none. A multi-tenant or read-only
+     * deployment is left alone.
      */
     @Bean
     public FixedTenant fixedTenant(TenantService tenants, Tenancy tenancy,
@@ -147,8 +116,7 @@ public class DomainConfig {
     public record FixedTenant(String name) {
     }
 
-    /** How the deployment routes tenants, read once for the console: the fixed-tenant creation above, the landing
-     *  that decides whether a tenant is chosen for the reader, and the header that shows which one is. */
+    /** How the deployment routes tenants, read once for the console. */
     @Bean
     public Tenancy tenancy(ConfigurableEnvironment environment) {
         return new Tenancy(environment.getProperty("jenrepo." + RepositoryRoutingProvider.SETTING,
@@ -163,10 +131,8 @@ public class DomainConfig {
         }
     }
 
-    /** The deployment-wide operator tenant (operator-tenant, else default-tenant, else
-     *  {@link Scopes#DEFAULT_TENANT}): the scope where cross-tenant privileged mutations that belong to no single
-     *  tenant are audited. Shared by the tenant purge, the volume reclaim and the cache clear so they apply one
-     *  rule. */
+    /** The operator tenant ({@code operator-tenant}, else {@code default-tenant}, else {@link Scopes#DEFAULT_TENANT}),
+     *  where privileged mutations belonging to no single tenant are audited. */
     private static String operatorTenant(ConfigurableEnvironment environment) {
         String operatorTenant = environment.getProperty("jenrepo.operator-tenant", "");
         return operatorTenant.isBlank()
@@ -178,13 +144,8 @@ public class DomainConfig {
     public SettingsAdmin settingsAdmin(ArtifactStore repositoryStore, ConfigurableEnvironment environment,
                                        SettingsEditor settingsEditor, TenantService tenantService, AuditTrail audit,
                                        CurrentTenant currentTenant, ConsoleActor actor) {
-        // The console changes settings through the one settings editor every surface uses, in process: the
-        // repository's own where the console is composed into it, the console's own store wiring's otherwise. The
-        // tenant directory feeds the modules screen's orphaned-data diagnostic (a per-tenant scan, read-only).
-        // The upstream-credential source reads its deploy-time bootstrap keys - notably secrets-key
-        // (JENREPO_SECRETS_KEY), the master key that envelope-encrypts a stored credential at rest - from the
-        // console's own environment, exactly as the /api ConfigController path does, so a credential set through the
-        // console is encrypted under the same key (and refused the same way when none is configured).
+        // The settings editor every surface uses, in process. Deploy-time keys such as JENREPO_SECRETS_KEY come from
+        // the console's environment, so a credential stored through the console is sealed under the API's key.
         return new SettingsAdmin(repositoryStore, settingsEditor, tenantService::all, audit, currentTenant, actor,
                 Features.namespaced(environment::getProperty));
     }
@@ -195,9 +156,8 @@ public class DomainConfig {
         return new RepositoryAdmin(repositoryStore, currentTenant, observations);
     }
 
-    /** The format family's mark lookup, shared by every console surface that draws a format's mark. Format discovery
-     *  is static for the life of the JVM and a mark is a constant in its format's module, so the lookup is resolved
-     *  once here and memoized inside rather than rebuilt per render. */
+    /** The format family's mark lookup, shared by every console surface and memoized, since discovery is fixed for the
+     *  JVM's life. */
     @Bean
     public FormatMarks formatMarks() {
         return FormatMarks.installed();
@@ -254,12 +214,8 @@ public class DomainConfig {
     }
 
     /**
-     * Where this console reads posture from: the deployment's stored settings layered over its environment, for the
-     * tenant being asked about.
-     *
-     * <p>The base console's screen and header badge both read this seam, so contributing it here is the whole of what
-     * makes them show this deployment's effective configuration rather than the process environment alone - and
-     * there is one implementation of the reading rather than a second screen that happens to agree.
+     * Where the posture screen and badge read from: the stored settings layered over the environment, for the tenant
+     * asked about.
      */
     @Bean
     public PostureSource postureSource(SettingsAdmin settings, ConfigurableEnvironment environment) {
@@ -270,11 +226,8 @@ public class DomainConfig {
     }
 
     /**
-     * This console's catalogue: the module graph decorated with each implementation's stored, effective state - is
-     * its module installed, is its gate open, which key opens it, what settings it contributes.
-     *
-     * <p>It is the same screen the base console serves, contributed rather than re-implemented, with the decoration
-     * that says whether anything is switched on.
+     * This console's catalogue: the module graph decorated with each implementation's effective state - installed,
+     * gate open, which key opens it, which settings it contributes.
      */
     @Bean
     public SpiCatalogSource spiCatalogSource(SettingsAdmin settings) {

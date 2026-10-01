@@ -13,27 +13,16 @@ import org.springframework.stereotype.Component;
 /**
  * The first boot's wizard: whether a session is sent to it, and what it asks.
  *
- * <p><b>The redirect keys on the starter credential, not on the store.</b> A super-admin whose session is on the
- * starter credential ({@link StarterCredential}) lands on {@code /setup} instead of the tenants screen - once per
- * session, since the screen is skippable and the skip is remembered for the session - for as long as the
- * {@value #SETTING} dial is on. It deliberately does not key on "no runtime configuration stored yet": that state
- * is what the boot log's hardening advice reads, and a dial that also meant it would be a second source of truth for
- * "setup is finished", which is whether the starter credential is still in use.
+ * <p>A super-admin session on the starter credential ({@link StarterCredential}) lands on {@code /setup} instead of
+ * the tenants screen, once per session since a skip is remembered, while the {@value #SETTING} dial is on. It keys on
+ * the starter credential rather than on an empty store, so "setup is finished" has one source of truth.
  *
- * <p><b>The dial is an ordinary setting.</b> {@value #SETTING} is declared in the console's settings contributor
- * with a description, rendered by the settings screen and the generated reference like any other dial, and read
- * here - where the redirect is decided - so switching it off means the redirect never happens rather than the
- * screen rendering an empty shell. On by default ({@link #onByDefault()}, one definition), because the argument
- * for the guide is precisely the operator who does not know to look for it; a deployment provisioned from
- * configuration, rebuilt by CI or started for the hundredth time is the party that can afford to say so, once.
- * There is no {@code jenrepo.x=${JENREPO_X:default}} line for it anywhere: relaxed binding maps the variable onto
- * the key whether or not a file mentions it, and the default lives here.
+ * <p>{@value #SETTING} is an ordinary catalogued setting, on by default ({@link #onByDefault()}), since the guide is
+ * for the operator who does not know to look for it.
  *
- * <p><b>It is the first boot's wizard, derived from the catalogue and never restating it.</b> Its steps are the
- * starter credential's, which is about no setting, then one per group of the deployment's and a tenant's essential
- * settings ({@link Wizard#SETUP}), each row the setting's own description, default and value, then the review; on
- * completion every value changed from what the deployment held is saved in one batch ({@link SettingsAdmin#saveAll}),
- * and nothing is written before that.
+ * <p>Its steps are the starter credential's, then one per group of the deployment's and a tenant's essential settings
+ * ({@link Wizard#SETUP}), then the review; completion saves every changed value in one batch
+ * ({@link SettingsAdmin#saveAll}), and nothing is written before.
  */
 @Component
 public class SetupWizard {
@@ -41,12 +30,10 @@ public class SetupWizard {
     /** The dial that switches the first-run redirect off. */
     public static final String SETTING = "setup-wizard";
 
-    /** The one definition of the dial's default: on. A compile-time text constant, so the settings contributor
-     *  declares exactly this and the generated reference shows exactly this. */
+    /** The dial's default, a constant the settings contributor and the generated reference read. */
     public static final String ON_BY_DEFAULT = "true";
 
-    /** The session attribute a skip sets, so a skipped guide does not come back on the next landing of the same
-     *  session; a new session on the starter credential is sent there again, which is the point. */
+    /** The session attribute a skip sets; a new session on the starter credential is sent there again. */
     public static final String SKIPPED = "jenesis.setup.skipped";
 
     private final SettingsAdmin settings;
@@ -82,8 +69,7 @@ public class SetupWizard {
     }
 
     /** What the console knows of the starter credential: whether this session is on it, and whether the console's
-     *  admin key and the API's bootstrap key are set - read from the deployment's environment, since they are
-     *  secrets it is provisioned with rather than values in the store. */
+     *  admin key and the API's bootstrap key are set in the environment. */
     public record Starter(boolean session, boolean adminKeySet, boolean bootstrapKeySet) {
     }
 

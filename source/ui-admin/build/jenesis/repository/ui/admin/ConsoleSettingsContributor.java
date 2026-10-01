@@ -7,17 +7,9 @@ import build.jenesis.repository.settings.SettingsContributor;
 import build.jenesis.repository.ui.admin.web.SetupWizard;
 
 /**
- * Puts the console's own gate in the deployment settings catalogue, so it appears in the generated reference and on
- * the modules screen like every other dial.
- *
- * <p>It had no entry at all, and the reason is worth keeping: the console was its own process, so "do not run it"
- * was the dial and there was nothing to write down. On one node that stopped being true, and a capability with no
- * documented way to switch it off is one an operator discovers by reading the module graph.
- *
- * <p>Declared <b>not live</b>, which is the honest statement rather than a limitation. The gate decides whether the
- * console's controllers and its security chain are registered at all, so it is read as the context starts; a
- * settings screen that offered to apply it immediately would be offering something it cannot do - and the screen
- * offering it would be the one disappearing.
+ * Puts the console's own gate in the settings catalogue, so it appears in the generated reference and on the modules
+ * screen. Declared not live: it decides whether the console's controllers and chain are registered, so it is read as
+ * the context starts.
  */
 public final class ConsoleSettingsContributor implements SettingsContributor {
 

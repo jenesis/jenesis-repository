@@ -11,11 +11,8 @@ import org.springframework.stereotype.Component;
 import build.jenesis.repository.ui.identity.UserDirectory;
 
 /**
- * Authorization for tenant-scoped routes: a request is allowed when the user is an env super-admin
- * (admin of every tenant) or holds at least the required role in the tenant the session has selected.
- * Roles live in that tenant's member objects, so the decision is made per request against the
- * current tenant rather than from a fixed authority. Used by both security chains to gate mutating
- * routes (editor) and the per-tenant admin area (admin).
+ * Authorization for tenant-scoped routes: allowed for a super-admin, or a user holding at least the required role in
+ * the session's tenant, decided per request from that tenant's grants. Both security chains use it.
  */
 @Component
 public class TenantAuthorization {

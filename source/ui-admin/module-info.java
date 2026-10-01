@@ -1,22 +1,10 @@
 /**
- * The Spring Boot admin console as an open module (Spring needs reflective access).
- * It requires the Spring modules its code compiles against, plus the four
- * Spring Boot starters to root the full runtime closure (embedded Jetty,
- * Thymeleaf, Jackson) through the module pins. It binds the Spring-free
- * domain layer ({@code ui.store}) and the product's SPI modules directly.
+ * The Spring Boot admin console, an open module for Spring's reflection, binding the Spring-free domain layer
+ * ({@code ui.store}) and the product's SPI modules directly.
  *
- * <p><b>Why {@code tomcat-embed-el} is excluded from the Jetty starter.</b> Spring Boot's
- * {@code spring-boot-starter-jetty} declares {@code org.apache.tomcat.embed:tomcat-embed-el} at compile scope -
- * it wants an Expression Language implementation and reaches for Tomcat's, even though the container is Jetty.
- * That jar is the automatic module {@code org.apache.tomcat.embed.el} and it exports {@code jakarta.el}, which
- * the real {@code jakarta.el} module also exports. On a classpath the duplicate is invisible; on a module path
- * the boot layer refuses to resolve, with {@code ResolutionException: Modules jakarta.el and
- * org.apache.tomcat.embed.el export package jakarta.el}.
- *
- * <p>The failure shows only once the exclusion is gone from all five modules that carry it and the console's tests
- * boot. <b>Removing it from one module proves nothing:</b> an exclusion is inherited by consumers, so a single
- * module's copy is masked by its siblings' and the build stays green - which is exactly the misreading that lets
- * a redundant-looking line survive unexamined. All five have to go before the failure appears.
+ * <p>{@code tomcat-embed-el} is excluded from the Jetty starter: as the automatic module
+ * {@code org.apache.tomcat.embed.el} it exports {@code jakarta.el} beside the real module, and the boot layer refuses to
+ * resolve. Exclusions are inherited from sibling modules, so removing one copy proves nothing until every copy goes.
  *
  * @jenesis.bom pin-repository.properties
  * @jenesis.signature signature-repository.properties

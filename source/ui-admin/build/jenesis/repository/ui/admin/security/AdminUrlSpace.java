@@ -5,14 +5,8 @@ import module java.base;
 import build.jenesis.repository.ui.ConsoleUrlSpace;
 
 /**
- * The admin console's URL space: the base console's, plus the screens this one adds.
- *
- * <p>It composes rather than restates. The base console already declares the space it shares - {@code /ui}, where
- * every screen of either console lives, and the sign-in endpoints - and restating those here would be two lists to
- * keep in step. What is genuinely this console's own is the SAML endpoints, below.
- *
- * <p>See {@link ConsoleUrlSpace} for why the console carries the {@code securityMatcher} and the repository does
- * not, and {@code ConsoleUrlSpaceCensusTest} for the check that keeps this list true.
+ * The admin console's URL space: the base console's ({@link ConsoleUrlSpace}, which says why the console carries the
+ * {@code securityMatcher}) plus the SAML endpoints.
  */
 public final class AdminUrlSpace {
 

@@ -18,24 +18,17 @@ import org.springframework.web.servlet.mvc.support.RedirectAttributes;
 import build.jenesis.repository.ui.ConsoleScreen;
 
 /**
- * The deployment-settings screen: the super-admin reviews every runtime-editable setting grouped by area, with its
- * effective value, its default and whether an override is in force, and sets or clears one. It edits the same
- * {@code config/settings} object the {@code /api/settings} endpoint and the CLI drive, so the three administration
- * surfaces stay equal. Super-admin only (a deployment-wide concern, like the tenant lifecycle) - enforced in the
- * security config. Binding names are explicit because the Jenesis javac step does not emit {@code -parameters}.
- *
- * <p>The deployment-wide screens are joined by a per-tenant one ({@code /settings/tenant}): the same store of truth,
- * but the tenant-overridable slice (the gate policy, deny list and forward targets a tenant may retune) of the tenant
- * the session has selected - the console equivalent of {@code /api/settings?tenant=}. It reads the session {@link
- * CurrentTenant} the way {@code RepositoryAdmin} and {@code AuditController} do, so a super-admin retunes one tenant's
- * slice by selecting it, layered over the deployment default and leaving other tenants untouched.
+ * The deployment-settings screens, super-admin only: every runtime-editable setting by group, with its effective
+ * value, default and override, set or cleared through the same documents {@code /api/settings} and the CLI edit. The
+ * per-tenant screen ({@code /settings/tenant}) edits the tenant-overridable slice of the session's
+ * {@link CurrentTenant}, as {@code /api/settings?tenant=} does. Binding names are explicit because the build compiles
+ * without {@code -parameters}.
  */
 @Controller
 @ConsoleScreen
 public class SettingsController {
 
-    /** The uploaded bundle is parsed with the framework's JSON reader, not the internal flat-document codec: an import
-     *  is operator-supplied, so a real parser reads it. */
+    /** Reads an uploaded bundle. */
     private static final JsonMapper JSON = JsonMapper.builder().build();
 
     private final SettingsAdmin settings;
@@ -54,17 +47,13 @@ public class SettingsController {
         return "settings";
     }
 
-    /** Where the deployment fetches what it does not hold: the format upstreams, the credentials sent to private
-     *  ones and the repository routing that names them, with the selected tenant's own layer over them. A page of its
-     *  own rather than panels under the settings catalogue, because naming an upstream is a step every proxying
-     *  deployment takes. It reads the settings documents - one object per module under a constant prefix - and
-     *  nothing that grows with what the repositories hold. */
+    /** Where the deployment fetches what it does not hold: the format upstreams, the credentials sent to private ones
+     *  and the routing naming them, with the selected tenant's layer over them. Reads the settings documents only. */
     @GetMapping("/ui/settings/upstreams")
     public String upstreams(Model model) throws IOException {
         model.addAttribute("repositories", settings.repositories());
         model.addAttribute("upstreams", settings.upstreams());
-        // The selected tenant's own layer over these, when a tenant is selected: its upstreams. A repository that routes
-        // itself does so through its own routing setting, which its overview edits.
+        // The selected tenant's upstreams; a repository's own routing is edited on its overview.
         String tenant = current.name();
         model.addAttribute("routedTenant", tenant);
         model.addAttribute("tenantUpstreams", tenant == null ? Map.of() : settings.upstreams(tenant));
@@ -79,24 +68,19 @@ public class SettingsController {
         return "backup";
     }
 
-    /** The modules console: the installed and enabled state of every discovered module, its contributed settings beneath
-     *  it, and an enable/disable toggle where a module declares an enablement gate. The toggle posts to
-     *  {@code /settings/save}, the same write path the settings screen uses, so a live gate applies on the nodes' next
-     *  re-read and a restart-bound one on their next boot (the row says which). Super-admin, under {@code /settings/**}. */
+    /** The modules console: every discovered module's installed and enabled state, its settings, and a toggle where it
+     *  declares an enablement gate, saved through {@code /settings/save}; the row says whether it applies live or on
+     *  restart. */
     @GetMapping("/ui/settings/modules")
     public String modules(Model model) throws IOException {
-        // Bind to the memoised orphaned-data snapshot (the render reads stored derived state, never a
-        // fresh deployment-wide store walk per render) and show its as-of instant, read right after so it reflects
-        // the same snapshot the rows carry.
+        // The memoised orphaned-data snapshot and its as-of instant, never a fresh store walk.
         model.addAttribute("modules", settings.modules());
         model.addAttribute("orphanScannedAt", settings.orphanScannedAt());
         return "modules";
     }
 
-    /** Purge one absent module's orphaned data - the button beside the modules screen's orphaned-data badge, driving
-     *  the same manifest primitive as {@code jenrepo purge} / {@code POST /api/admin/purge} and audited the same way.
-     *  The screen already shows the dry-run counts, so this is the confirmed second step; a module no manifest entry
-     *  names answers with a flash message rather than a error page. Super-admin, under {@code /settings/**}. */
+    /** Purges one absent module's orphaned data, the confirmed step after the dry-run counts the screen shows, through
+     *  the primitive {@code POST /api/admin/purge} uses, audited the same way. An unknown module is a flash message. */
     @PostMapping("/ui/settings/modules/purge")
     public String purgeOrphanedData(@RequestParam("module") String module, RedirectAttributes redirect)
             throws IOException {
@@ -109,14 +93,10 @@ public class SettingsController {
     }
 
 
-    /** The console screens a save may come back to: this one. Any other {@code return} lands here too - a redirect
-     *  target is never taken from the request unvetted. */
+    /** The screens a save may return to; any other {@code return} lands on the first. */
     private static final Set<String> RETURNS = Set.of("/ui/settings");
 
-    /**
-     * It reads the tenant's and the deployment's settings documents, which the values it resolves inherit from: one
-     * object per module under a constant prefix, narrow by construction.
-     */
+    /** Sets or clears one deployment setting through the catalogue. */
     @PostMapping("/ui/settings/save")
     public String save(@RequestParam("key") String key,
                        @RequestParam(name = "value", defaultValue = "") String value,
@@ -128,11 +108,8 @@ public class SettingsController {
         return "redirect:" + (RETURNS.contains(back) ? back : "/ui/settings");
     }
 
-    /** The selected tenant's runtime-settings screen: only the tenant-overridable keys (the gate policy, deny list and
-     *  forward targets a tenant may retune), each along the chain <em>pin &gt; tenant document &gt; global document &gt;
-     *  default</em>, with the global effective value shown as the tenant's baseline and whether this tenant has
-     *  overridden it. The console equivalent of {@code /api/settings?tenant=}, scoped to the session tenant the way the
-     *  repository and audit screens are. Super-admin, under {@code /settings/**}. */
+    /** The selected tenant's settings: only the tenant-overridable keys, each resolved pin over tenant over deployment
+     *  over default, with the deployment value shown as the baseline. */
     @GetMapping("/ui/settings/tenant")
     public String tenantSettings(Model model) throws IOException {
         model.addAttribute("groups", settings.groups(tenant()));
@@ -151,13 +128,10 @@ public class SettingsController {
         return "redirect:/ui/settings/tenant";
     }
 
-    /** Restore the selected tenant's overridable slice from an uploaded bundle: parsed with the framework's JSON reader,
-     *  validated (an unparseable value is refused before anything is written), then written as a full restore of that
-     *  tenant's slice, leaving the deployment settings and every other tenant untouched. */
+    /** Restores the selected tenant's slice from an uploaded bundle, validated before anything is written. */
     @PostMapping("/ui/settings/tenant/import")
     public String importTenant(HttpServletRequest request, RedirectAttributes redirect) {
-        // Resolve the tenant outside the catch so a missing selection bounces to the picker rather than reading as a
-        // bad bundle; only the import itself turns a storage/validation failure into a flash message.
+        // Outside the catch, so a missing selection bounces to the picker rather than reading as a bad bundle.
         String tenant = tenant();
         try {
             settings.importTenant(tenant, parse(bundle(request)));
@@ -168,8 +142,7 @@ public class SettingsController {
         return "redirect:/ui/settings/tenant";
     }
 
-    /** The tenant the session has selected, the way {@code RepositoryAdmin}/{@code AuditController} resolve it; a
-     *  missing selection throws so {@code GlobalControllerAdvice} bounces a super-admin to pick one first. */
+    /** The session's tenant; a missing selection throws, so {@code GlobalControllerAdvice} bounces to the picker. */
     private String tenant() {
         String tenant = current.name();
         if (tenant == null) {
@@ -178,9 +151,8 @@ public class SettingsController {
         return tenant;
     }
 
-    /** Download the deployment's stored settings as one JSON bundle, for backup or transfer - the same layout the
-     *  {@code /api/settings/export} endpoint and the CLI emit. Credential-free by construction: every SECRET-kind key
-     *  is excluded, so a stored secret (the keyless identity token) never travels in the downloaded backup. */
+    /** Downloads the stored settings as one JSON bundle, as {@code /api/settings/export} does, with every secret key
+     *  excluded. */
     @GetMapping("/ui/settings/export")
     public void export(HttpServletResponse response) throws IOException {
         response.setContentType("application/json");
@@ -188,9 +160,7 @@ public class SettingsController {
         response.getOutputStream().write(settings.exportBundle());
     }
 
-    /** Restore an uploaded settings bundle: parsed with the framework's JSON reader, validated (an unparseable value is
-     *  refused before anything is written), then written document-by-document as a full restore. A malformed upload
-     *  reports the reason rather than half-applying. */
+    /** Restores an uploaded settings bundle in full, validated before anything is written. */
     @PostMapping("/ui/settings/import")
     public String importBundle(HttpServletRequest request, RedirectAttributes redirect) {
         try {
@@ -203,26 +173,15 @@ public class SettingsController {
     }
 
     /**
-     * The most of an uploaded settings bundle that is read. A bundle is <em>metadata</em> - a handful of documents of
-     * {@code key -> value} strings, kilobytes even for a deployment with many tenants - not an artifact, so unlike an
-     * upload to a format it gets a real cap. Reaching it is a visible, explicit refusal: {@link MultipartBody.Part}
-     * yields no value at all past its bound rather than a prefix, so a bundle that ran over can never be imported
-     * <em>partially</em> - which for a full-restore import would silently wipe every setting the truncation cut off.
+     * The most of an uploaded settings bundle that is read; a bundle is kilobytes of strings. Past it
+     * {@link MultipartBody.Part} yields no value rather than a prefix, so a full restore is never applied partially.
      */
     private static final int BUNDLE_LIMIT = 4 * 1024 * 1024;
 
     /**
-     * The uploaded bundle, read off the request body with the product's shared multipart reader rather than a bound
-     * {@code MultipartFile}. Spring's {@code MultipartResolver} is switched off in <em>every</em> app because
-     * it, and {@code FormContentFilter}, would drain an artifact upload body before the format handler read it - twine's
-     * PyPI upload and {@code dotnet nuget push} are both {@code multipart/form-data} - so the console cannot depend on
-     * it and would be simply broken wherever it is off (the combined single-node image). The console walks the
-     * same bounded, streaming reader the NuGet and PyPI publish paths walk, which keeps that switch global and leaves
-     * the browser form a plain file upload.
-     *
-     * <p>Because there is no resolver, Spring Security's CSRF token cannot be read out of the multipart body either
-     * (nothing parses it before the filter chain runs), which is why both import forms carry the token in their action
-     * URL - see {@code settings.html} / {@code tenant-settings.html}.
+     * The uploaded bundle, read with the product's bounded multipart reader: Spring's {@code MultipartResolver} is off in
+     * every app, since it would drain a format's multipart upload (PyPI, NuGet) before its handler. For the same reason
+     * the CSRF token cannot be read from the body, so both import forms carry it in their action URL.
      */
     private static byte[] bundle(HttpServletRequest request) throws IOException {
         String missing = "Choose a settings bundle file to import.";
@@ -240,9 +199,8 @@ public class SettingsController {
         return content;
     }
 
-    /** Parse an operator-supplied bundle (module name to that module's flat {@code string -> string} document) with a
-     *  real JSON reader over the bounded upload, coercing scalar values to strings so a number or boolean is accepted
-     *  as its text. */
+    /** Parses a bundle (module to its flat {@code string -> string} document), accepting a number or boolean as its
+     *  text. */
     private static Map<String, Map<String, String>> parse(byte[] json) {
         if (!(JSON.readValue(json, Object.class) instanceof Map<?, ?> modules)) {
             throw new IllegalArgumentException("the bundle must be a JSON object of module documents");
@@ -276,8 +234,7 @@ public class SettingsController {
         return "redirect:/ui/settings/upstreams";
     }
 
-    /** A format's upstream - the deployment's, or with {@code forTenant} the selected tenant's own. The form names no
-     *  tenant: the session's is the one a super-admin chose to work in. */
+    /** Sets a format's upstream: the deployment's, or with {@code forTenant} the session tenant's. */
     @PostMapping("/ui/settings/upstreams")
     public String setUpstream(@RequestParam("format") String format,
                               @RequestParam("url") String url,

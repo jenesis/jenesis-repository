@@ -6,13 +6,9 @@ import build.jenesis.repository.ui.Navigation;
 import build.jenesis.repository.ui.RepositoryPage;
 
 /**
- * The two navigation levels of one request, from the pages a reader may open and the path they asked for.
- *
- * <p>Where a reader is follows from the path alone: the page whose path is the longest prefix of the request path,
- * on a segment boundary, is the page they are on, and its group is the group they are in. A path below
- * {@code /repositories/<name>} puts them inside that repository, and the sidebar then lists the repository's pages
- * rather than the group's. Nothing here reads the store or asks a module anything; the caller has already decided
- * which pages this reader may see.
+ * The two navigation levels of one request, from the pages a reader may open and the path. The current page is the
+ * longest segment-boundary prefix of the path; below {@code /repositories/<name>} the sidebar lists that repository's
+ * pages. Nothing here reads the store; the caller decided what the reader may see.
  */
 public final class ConsoleNavigation {
 
@@ -26,9 +22,8 @@ public final class ConsoleNavigation {
     }
 
     /**
-     * The navigation for {@code path}, given the top-level {@code entries} and the repository {@code pages} the reader
-     * may open, each in the order it is to be listed. A group's sidebar lists its entries alone: the repositories are
-     * the Repositories screen's table, which filters them, so the sidebar does not repeat them.
+     * The navigation for {@code path}, given the entries and repository pages the reader may open, in listing order. A
+     * group's sidebar lists its entries alone, never the repositories.
      */
     public static Navigation resolve(List<NavEntry> entries, List<RepositoryPage> pages, String path) {
         NavEntry current = current(entries, path);

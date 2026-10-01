@@ -37,16 +37,17 @@ import build.jenesis.repository.ui.ConsoleScreen;
 /**
  * The repository-admin panels of the console: list the tenant's repositories, and per repository browse releases,
  * promote or drop staging, edit retention, manage pins, preview or run cleanup, and migrate another manager's
- * repository in (the installed import-source modules decide which). Reads are GET (any member of the tenant); mutations are POST and therefore require editor or admin
- * (see SecurityConfig), the same role model the cache panels use. Binding names are explicit because the Jenesis
- * javac step does not emit {@code -parameters}.
+ * repository in. Reads are GET, open to any member of the tenant; mutations are POST and need editor or admin
+ * ({@code ConsoleAuthorization}). Binding names are explicit because the build compiles without {@code -parameters}.
+ *
+ * <p>A handler that resolves settings reads the repository's, the tenant's and the deployment's settings documents:
+ * one object per module under a constant prefix each.
  */
 @Controller
 @ConsoleScreen
 public class RepositoryAdminController {
 
-    /** How many recent holdings the overview renders - a bound so it never buffers or emits a row per version of a
-     *  repository that holds a great many; the full, paged list is the browse page and each coordinate's own. */
+    /** How many recent holdings the overview renders; the full, paged list is the browse page's. */
     private static final int DETAIL_HOLDINGS = 200;
 
 
@@ -86,16 +87,13 @@ public class RepositoryAdminController {
         // The deployment's definitions once, not once per row; each repository's own routing is one point read.
         Map<String, String> definitions = settings.repositories();
         for (String name : repositories.repositories()) {
-            // The parsed shape drives the per-repository badges: writable vs read-only, and per-fallback
-            // store/no-store + screen strength, from the one Definition the router routes on. Its valid-but-risky
-            // warnings (mixed strength, unscreened, plaintext) feed the non-blocking console banner.
+            // The parsed routing drives the row's badges, and its valid-but-risky warnings feed the console banner.
             SettingsAdmin.Routing routing = settings.routing(tenant.name(), name, definitions);
             String definition = routing.specification();
             SettingsAdmin.RepositoryShape shape = routing.shape();
             Optional<RepositoryDocument> document = repositories.document(name);
             String format = document.map(RepositoryDocument::format).orElse(null);
-            // Only a repository with no document can be being deleted - deleting takes the document first - so only
-            // such a row pays the probe for the marker, and the list costs what it did.
+            // Deleting takes the document first, so only a row without one pays the marker probe.
             boolean removing = document.isEmpty() && repositories.removing(name);
             // A combined type has no mark of its own, so it draws the marks of what it holds, as an untyped one does.
             List<Mark> held = format == null ? repositoryMarks(name)
@@ -111,17 +109,14 @@ public class RepositoryAdminController {
         }
         model.addAttribute("repositories", rows);
         model.addAttribute("formats", offered());
-        // The one document that stands for nobody, rendered for a row whose namespaces no format marks at all (see
-        // repositoryMarks) - held once for the page rather than copied into every row, because it attributes nothing
-        // and so carries no per-row identity.
+        // Drawn for a row no format marks (see repositoryMarks), once per page.
         model.addAttribute("neutralMark", Marks.neutral());
         model.addAttribute("definitionWarnings", warnings);
         return "repositories";
     }
 
-    /** What the tenant's repositories may use together - its storage quota and its request rate ceiling - with the
-     *  deployment's rate ceiling the tenant falls back to when it sets none. That value is read from the settings
-     *  documents, one object per module under a constant prefix, which is the one listing this page reaches. */
+    /** What the tenant's repositories may use together - its storage quota and request rate ceiling - with the
+     *  deployment's ceiling it falls back to. */
     @GetMapping("/ui/limits")
     public String limits(Model model) throws IOException {
         model.addAttribute("quota", limits.quota());
@@ -130,18 +125,10 @@ public class RepositoryAdminController {
     }
 
     /**
-     * The marks a repository shows in the list: one per top-level storage namespace an installed format owns,
-     * deduped by the format the mark attributes to, and none at all when no format claims any of them - the view then
-     * draws the single neutral mark, so every row renders a uniform figure.
-     *
-     * <p><b>Why emptiness is plumbing here and not an orphan.</b> {@link RepositoryAdmin#namespaces} is a raw
-     * top-level listing of the repository's key space, so what it returns is overwhelmingly the storage primitives'
-     * own bookkeeping - {@code publish/} pointers, content-addressed {@code blobs/}, a module's declared index space -
-     * and only incidentally a format's request-path root. A namespace no installed format claims is therefore
-     * ordinarily a bucket that never had a format, not a bucket whose format was removed, and dashing every one of
-     * them as "not installed" would mark plumbing as loss on every row of every deployment. The orphan state is
-     * raised where the recorded name really is a contributor's - the ecosystem an artifact was published under
-     * ({@link #browse}) and the plug-in a finding was reported by - and never guessed from a bucket name.
+     * The marks a repository shows in the list: one per top-level namespace an installed format owns, deduplicated by
+     * format, or none, for which the view draws the neutral mark. An unclaimed namespace is not drawn as an orphan:
+     * {@link RepositoryAdmin#namespaces} lists the store's own bookkeeping ({@code publish/}, {@code blobs/}, index
+     * spaces) far more often than a removed format's root.
      */
     private List<Mark> repositoryMarks(String repository) {
         List<Mark> resolved = new ArrayList<>();
@@ -154,16 +141,9 @@ public class RepositoryAdminController {
     }
 
     /**
-     * The mark a browse-search hit draws: the mark of the installed format that declares the hit's ecosystem, and
-     * <b>the orphan mark when none does</b>. That emptiness is unambiguous here in a way it is not for a storage
-     * namespace: an ecosystem is not a bucket name the store happens to hold, it is the label the <em>owning
-     * format</em> stamped on the coordinate when it was published, so a coordinate recorded under an ecosystem no
-     * installed format declares is content whose format module has left this deployment. The row keeps the identity
-     * it was recorded with - the same figure the format would have generated, dashed - rather than quietly reading
-     * as an ordinary hit that simply cannot be placed in the tree.
-     *
-     * <p>{@code null} - drawn as the neutral mark - is reserved for a hit that carries no ecosystem at all: there is
-     * then no name to attribute anything to, which is neither a contributor nor an orphan.
+     * The mark a browse-search hit draws: the installed format declaring the hit's ecosystem, or the orphan mark when
+     * none does, since an ecosystem is the label its format stamped at publish. {@code null}, drawn as the neutral mark,
+     * for a hit carrying no ecosystem.
      */
     private Mark ecosystemMark(String ecosystem) {
         if (ecosystem.isBlank()) {
@@ -172,11 +152,9 @@ public class RepositoryAdminController {
         return marks.forEcosystem(ecosystem).orElseGet(() -> Marks.orphaned(ecosystem));
     }
 
-    /** Give a repository that holds content but no format the type it holds - the list's Give format form - through
-     *  the one creation every surface makes, which also moves one to a type that holds everything its old one did. A
-     *  new repository is created by its wizard ({@link RepositoryWizardController}). The creation reads the settings
-     *  documents a creation's settings are validated by, one object per module under a constant prefix, narrow by
-     *  construction. */
+    /** Gives a repository that holds content but no format its type (the list's Give format form), through the one
+     *  creation every surface makes, which also moves one to a type holding everything its old one did. A new
+     *  repository is created by its wizard ({@link RepositoryWizardController}). */
     @PostMapping("/ui/repositories/create")
     public String create(@RequestParam("name") String name, @RequestParam("format") String format,
                          @RequestParam(name = "description", defaultValue = "") String description,
@@ -224,13 +202,8 @@ public class RepositoryAdminController {
     }
 
     /**
-     * A repository's settings: every repository setting the catalogue carries, grouped, each with the repository's own
-     * value, what it would inherit from its tenant and the deployment, and a save that stores it through the catalogue
-     * - the inputs the repository wizard asks, edited in place. Its reads are the repository's settings documents and
-     * its tenant's and the deployment's, one object per module each, and nothing that grows with what it holds.
-     *
-     * <p>It reads the tenant's and the deployment's settings documents, which the values it resolves inherit from: one
-     * object per module under a constant prefix, narrow by construction.
+     * A repository's settings: every repository setting the catalogue carries, grouped, with its own value and what it
+     * would inherit, saved through the catalogue.
      */
     @GetMapping("/ui/repositories/{repo}/settings")
     public String settings(@PathVariable("repo") String repo, Authentication authentication, Model model)
@@ -244,9 +217,6 @@ public class RepositoryAdminController {
      * Set or clear one repository setting through the catalogue, from the settings page, the retention page or the
      * overview's routing, and return there. An operator-only setting - the routing - is refused unless the session is a
      * super-admin's, whatever the form offered.
-     *
-     * <p>It reads the tenant's and the deployment's settings documents, which the values it resolves inherit from: one
-     * object per module under a constant prefix, narrow by construction.
      */
     @PostMapping("/ui/repositories/{repo}/settings/save")
     public String saveSetting(@PathVariable("repo") String repo, @RequestParam("key") String key,
@@ -270,13 +240,9 @@ public class RepositoryAdminController {
     }
 
     /**
-     * Delete a repository and everything it holds, its own settings included - the deployment's definition of its name
-     * is every tenant's, so it stays. Only through the deletion
-     * dialog: the request must carry the phrase the dialog has the reader type, {@code delete <name>}, so a form
-     * posted without it - or for another name - deletes nothing. The objects go off the request path; the list shows
-     * the repository as being deleted until they are gone.
-     *
-     * <p>Nothing on the request path reads the repository's objects.
+     * Deletes a repository and everything it holds, its settings included; the deployment's definition of its name is
+     * every tenant's and stays. The request must carry the dialog's phrase {@code delete <name>} for this name. The
+     * objects go off the request path, and the list shows the repository as being deleted until they are gone.
      */
     @PostMapping("/ui/repositories/{repo}/delete")
     public String delete(@PathVariable("repo") String name,
@@ -286,7 +252,6 @@ public class RepositoryAdminController {
             redirect.addFlashAttribute("error", "Nothing was deleted: type \"delete " + name + "\" to confirm.");
             return "redirect:/ui/repositories/" + name;
         }
-        // The repository's own settings go with its objects; the deployment's definition of its name stays.
         switch (lifecycle.delete(name)) {
             case ABSENT -> redirect.addFlashAttribute("error", "There is no repository '" + name + "'.");
             case STARTED -> redirect.addFlashAttribute("message", "Deleting repository '" + name
@@ -303,9 +268,6 @@ public class RepositoryAdminController {
 
     /**
      * Set or clear one of the tenant's limits - a setting of the Limits group, through the catalogue.
-     *
-     * <p>It reads the tenant's and the deployment's settings documents, which the values it resolves inherit from: one
-     * object per module under a constant prefix, narrow by construction.
      */
     @PostMapping("/ui/limits/save")
     public String saveLimit(@RequestParam("key") String key,
@@ -318,14 +280,8 @@ public class RepositoryAdminController {
     }
 
     /**
-     * A repository's overview: how it is routed, whether it hardens its proxy, what stands between it and its
-     * collector, its published index and the versions it most recently took in - published into it, or cached from an
-     * upstream. Everything else about a repository is a page of
-     * its own beside this one, listed in the sidebar, so a healthy repository and one needing attention do not look
-     * the same.
-     *
-     * <p>Every read here is a bounded window or a stored result, so the first screen of a repository renders in the
-     * same time over a million releases as over ten. Nothing walks the published set.
+     * A repository's overview: its routing, whether it hardens its proxy, what stands between it and its collector, its
+     * published index and the versions it most recently took in. Every read is a bounded window or a stored result.
      */
     @GetMapping("/ui/repositories/{repo}")
     public String detail(@PathVariable("repo") String repo, Model model) throws IOException {
@@ -335,10 +291,8 @@ public class RepositoryAdminController {
         RepositoryAdmin.Held holdings = repositories.recentHoldings(repo, DETAIL_HOLDINGS);
         model.addAttribute("holdings", holdings.shown());
         model.addAttribute("holdingsMore", holdings.more());
-        // The hardened proxy leg: whether this repository screens every upstream body in full. Its typed structural
-        // refusals are rows of the Refused page rather than a list of their own.
-        // The routing in force for this tenant - its own definition, else the deployment's - and which of the two it
-        // is, so the overview can say whether editing it changes this tenant alone.
+        // The routing in force for this tenant, its own or the deployment's, and which, so the overview can say whether
+        // editing it changes this tenant alone.
         SettingsAdmin.Routing routing = settings.routing(tenant.name(), repo);
         model.addAttribute("routing", routing);
         model.addAttribute("hardened", SettingsAdmin.hardenedDefinition(routing.specification()));
@@ -354,9 +308,8 @@ public class RepositoryAdminController {
             }
         }
         model.addAttribute("formatUpstream", upstream);
-        // The ecosystems this repository records that no installed format can place - what stands between the
-        // repository and its collector - named with the explicit way out, and what the last retirement of each did,
-        // since a retirement runs off the request and the button would otherwise look as though it did nothing.
+        // The ecosystems no installed format can place, which hold up the collector, with the last retirement of each,
+        // since a retirement runs off the request.
         SortedSet<String> unplaceable = lifecycle.unplaceableEcosystems(repo);
         model.addAttribute("unplaceable", unplaceable);
         Map<String, StoredReport.Report> retirements = new LinkedHashMap<>();
@@ -389,12 +342,7 @@ public class RepositoryAdminController {
         return "repository-pins";
     }
 
-    /**
-     * The retention policy, and the cleanup it drives: both stored results, the last preview and the last sweep.
-     *
-     * <p>It reads the tenant's and the deployment's settings documents, which the values it resolves inherit from: one
-     * object per module under a constant prefix, narrow by construction.
-     */
+    /** The retention policy, and the stored results of the last cleanup preview and sweep. */
     @GetMapping("/ui/repositories/{repo}/retention")
     public String retention(@PathVariable("repo") String repo, Model model) throws IOException {
         RetentionPolicy policy = lifecycle.retention(repo);
@@ -413,10 +361,8 @@ public class RepositoryAdminController {
     }
 
     /**
-     * A level of the repository's browse tree, or one page of its search. The search bar says which of the two modes
-     * the repository answers in - its {@code full-text-search} setting, resolved over the repository's, the tenant's
-     * and the deployment's settings documents, one object per module under a constant prefix - before anything is
-     * searched.
+     * A level of the repository's browse tree, or one page of its search; the search bar says whether the repository
+     * answers by name or full text ({@code full-text-search}).
      */
     @GetMapping("/ui/repositories/{repo}/browse")
     public String browse(@PathVariable("repo") String repo,
@@ -433,8 +379,6 @@ public class RepositoryAdminController {
         model.addAttribute("query", query);
         model.addAttribute("searching", searching);
         UnaryOperator<String> config = settings.repositoryConfig(tenant.name(), repo);
-        // The search bar says how this repository answers before anything is typed into it: a lookup by name, or the
-        // full-text index where the repository has it on.
         model.addAttribute("fullText", SearchMode.of(config) == SearchMode.FULL_TEXT);
         if (searching) {
             RepositoryBrowse.SearchPage page = browse.search(repo, config, query, cursor);
@@ -445,8 +389,6 @@ public class RepositoryAdminController {
             }
             model.addAttribute("results", results);
             model.addAttribute("indexed", page.indexed());
-            // The bound is visible: a clamped hit list says so, and links the next page, rather than reading as the
-            // whole match set.
             model.addAttribute("truncated", page.truncated());
             model.addAttribute("nextCursor", page.nextCursor());
             model.addAttribute("neutralMark", Marks.neutral());
@@ -463,8 +405,7 @@ public class RepositoryAdminController {
             model.addAttribute("dir", descending ? "desc" : "asc");
             model.addAttribute("base", safe);
             model.addAttribute("depth", 0);
-            // An empty root that holds versions is a format with no folder tree, whose holdings - releases and
-            // copies cached from an upstream alike - are listed instead.
+            // An empty root holding versions is a format with no folder tree, whose holdings are listed instead.
             RepositoryAdmin.Held holdings = level.entries().isEmpty() && safe.isEmpty()
                     ? repositories.recentHoldings(repo, DETAIL_HOLDINGS) : null;
             model.addAttribute("holdings", holdings == null ? List.of() : holdings.shown());
@@ -473,11 +414,9 @@ public class RepositoryAdminController {
         return "browse";
     }
 
-    /** The lazy-children fragment: just the child rows under a prefix, fetched on demand when a folder is expanded
-     *  in place (htmx), so the tree loads one level at a time and never scans the whole layout. Carries the current
-     *  sort so an expanded folder's children keep the order the level above them chose, and the page's own prefix
-     *  ({@code base}) so an injected row indents one step per level below the page - children read as nested under
-     *  their folder, not as flat siblings. */
+    /** The child rows under a prefix, fetched when a folder is expanded in place, so the tree loads a level at a time.
+     *  Carries the current sort and the page's own prefix ({@code base}), so children keep the order and indent one
+     *  step per level below the page. */
     @GetMapping("/ui/repositories/{repo}/browse/children")
     public String browseChildren(@PathVariable("repo") String repo,
                                  @RequestParam(name = "prefix", defaultValue = "") String prefix,
@@ -501,12 +440,8 @@ public class RepositoryAdminController {
 
 
     /**
-     * The level's entries as the shared browse tree draws them.
-     *
-     * <p>The tree body is {@code base :: browseRows}, one fragment for both consoles, and the only thing a
-     * repository-scoped browse draws differently is where a row links - so the rows carry their links. A folder
-     * links back into this browse and offers its children to htmx; a leaf links to the artifact detail this console
-     * has and the base one does not.
+     * The level's entries as the shared {@code base :: browseRows} fragment draws them: a folder links back into this
+     * browse and offers its children, a leaf links to the artifact detail.
      */
     private static List<BrowseRow> rows(String repo, List<RepositoryBrowse.BrowseEntry> entries, String base,
                                         String sort, String dir, int depth) {
@@ -535,18 +470,15 @@ public class RepositoryAdminController {
         return (int) prefix.chars().filter(c -> c == '/').count();
     }
 
-    /** The detail of one published artifact: its content-addressed checksum, size, the coordinate/version the owning
-     *  format describes for the path, the other versions of that coordinate, any compliance-gate verdict, and a link
-     *  to its provenance attestation - all from small objects, never the artifact body. Reached from a browse leaf. */
+    /** A coordinate's own page, whichever way its format stores: the one place a blobs-namespace package (npm, PyPI,
+     *  NuGet), which has no folder in the tree, opens from a search hit or a release row. Versions are paged by
+     *  cursor. */
     @GetMapping("/ui/repositories/{repo}/coordinate")
     public String coordinate(@PathVariable("repo") String repo,
                              @RequestParam("ecosystem") String ecosystem,
                              @RequestParam("coordinate") String coordinate,
                              @RequestParam(name = "after", defaultValue = "") String after,
                              Model model) throws IOException {
-        // A coordinate's own screen, whichever way its format stores: the one place a blobs-namespace format's
-        // package (npm, PyPI, NuGet and their kind) can be opened from a search hit or a release row, since it has
-        // no folder in the browse tree, and a second way in for a tree format. The versions are paged by cursor.
         RepositoryBrowse.CoordinateDetail detail = browse.coordinate(repo, ecosystem, coordinate,
                 after.isBlank() ? null : after, RepositoryBrowse.VERSIONS_PAGE);
         model.addAttribute("repo", repo);
@@ -576,9 +508,8 @@ public class RepositoryAdminController {
     }
 
     /**
-     * What the page may say about downloads: nothing at all while tracking is off (a count of zero would read as a
-     * fact), and beside the count how far behind it can be, which is the tracker's flush interval - the hits held
-     * in memory since the last flush are not in the number yet.
+     * What the page may say about downloads: nothing while tracking is off, since zero would read as a fact, and
+     * otherwise the count with how far behind it can be, the tracker's flush interval.
      */
     private void downloads(Model model) {
         DownloadTracker tracker = downloads.getIfAvailable(() -> DownloadTracker.NONE);
@@ -606,6 +537,8 @@ public class RepositoryAdminController {
         return count + " " + unit + (count == 1 ? "" : "s");
     }
 
+    /** The detail of one published artifact - checksum, size, coordinate and version, other versions, any gate verdict,
+     *  provenance and origin - from small objects, never the body. Reached from a browse leaf. */
     @GetMapping("/ui/repositories/{repo}/artifact")
     public String artifact(@PathVariable("repo") String repo,
                            @RequestParam(name = "path", defaultValue = "") String path,
@@ -615,24 +548,18 @@ public class RepositoryAdminController {
         model.addAttribute("detail", detail);
         // The API names an artifact by the path a client uses within the repository, so its links do too.
         model.addAttribute("servedPath", repositories.servedPath(repo, detail.path()));
-        // The origin acquisition rows (read from the OriginSection): where this deployment's bytes came
-        // from - uploaded vs via which fallback, stored/passed-through, screening, serves. A neutral display the gate
-        // does not consume; empty when the coordinate carries no recorded origin.
+        // Where these bytes came from (uploaded, or through which fallback), empty when nothing was recorded.
         model.addAttribute("origin", browse.origin(repo, detail.path()));
         downloads(model);
-        // The browse folder the "back to folder" link returns to, computed here (not in the view): parent() guards a
-        // path with no slash so an artifact requested without a path does not throw in the template.
+        // The folder the back link returns to; parent() guards a path with no slash.
         model.addAttribute("parent", parent(detail.path()));
         return "artifact";
     }
 
     /**
-     * The origin API: the {@code origin} acquisition rows of a published artifact path as JSON - the
-     * machine-readable twin of the artifact-detail origin panel, for an operator tool or audit export. Reads only the
-     * one small {@code origin} section ({@link RepositoryBrowse#origin}), never the artifact body. A
-     * read-role GET gated exactly as the surrounding {@code /repositories/**} console reads are (any member of the
-     * tenant, by SecurityConfig - operator/admin-appropriate for this neutral, gate-neutral display); a caller who
-     * cannot read the repository never reaches it. Empty when the path carries no recorded origin.
+     * The origin rows of a published artifact path as JSON, the machine-readable twin of the detail page's origin panel,
+     * from the one small section {@link RepositoryBrowse#origin} reads. Gated as every repository read is; empty when
+     * nothing was recorded.
      */
     @GetMapping("/ui/repositories/{repo}/artifact/origin")
     @ResponseBody
@@ -697,17 +624,14 @@ public class RepositoryAdminController {
         return "redirect:/ui/repositories/" + repo + "/import";
     }
 
-    /** Forget one unplaceable ecosystem's records - the hub's explicit retirement of an absent format's data. The
-     *  primitive refuses while an installed format still places the ecosystem, so the button can never retire live
-     *  records; the flash line carries the refusal instead. */
+    /** Retires one unplaceable ecosystem's records, an absent format's data. Refused while an installed format places
+     *  the ecosystem; the flash line carries the refusal. */
     @PostMapping("/ui/repositories/{repo}/forget-ecosystem")
     public String forgetEcosystem(@PathVariable("repo") String repo,
                                   @RequestParam("ecosystem") String ecosystem,
                                   RedirectAttributes redirect) throws IOException {
         try {
-            // Started, not awaited - the retirement deletes a page at a time until the ecosystem's key spaces are
-            // empty. The refusal below is still synchronous, because it is the operator's mistake and belongs in
-            // front of them rather than in a background job's outcome.
+            // Started, not awaited; the refusal is synchronous, being the operator's mistake.
             redirect.addFlashAttribute("message", lifecycle.forgetEcosystem(repo, ecosystem)
                     ? "Retiring ecosystem " + ecosystem + "; this screen shows what it removed when it finishes."
                     : "A retirement of " + ecosystem + " is already running.");
@@ -769,10 +693,7 @@ public class RepositoryAdminController {
         return "redirect:/ui/repositories/" + repo + "/staging";
     }
 
-    /**
-     * It reads the tenant's and the deployment's settings documents, which the values it resolves inherit from: one
-     * object per module under a constant prefix, narrow by construction.
-     */
+    /** Starts a cleanup sweep; the page shows its stored result. */
     @PostMapping("/ui/repositories/{repo}/cleanup")
     public String cleanup(@PathVariable("repo") String repo, RedirectAttributes redirect) throws IOException {
         // The sweep walks every release, so the request starts it and returns; the hub shows the stored result.
@@ -782,10 +703,7 @@ public class RepositoryAdminController {
         return "redirect:/ui/repositories/" + repo + "/retention";
     }
 
-    /**
-     * It reads the tenant's and the deployment's settings documents, which the values it resolves inherit from: one
-     * object per module under a constant prefix, narrow by construction.
-     */
+    /** Starts a cleanup preview; the page shows its stored result. */
     @PostMapping("/ui/repositories/{repo}/cleanup/preview")
     public String previewCleanup(@PathVariable("repo") String repo, RedirectAttributes redirect) throws IOException {
         redirect.addFlashAttribute("message", lifecycle.previewCleanup(repo)
@@ -800,27 +718,20 @@ public class RepositoryAdminController {
 
 
 
-    /** A repository as the list renders it: its name, the format it holds ({@code null} for one created before
-     *  repositories held a format, which answers nothing until it is given one), the marks of what it holds - the
-     *  format's own, else one per format namespace, empty when the console can mark none (the view then draws the
-     *  neutral mark) - and whether it is a
-     *  hardened proxy, which the list badges so an operator sees at a glance which repositories enforce
-     *  full-body upstream screening. */
+    /** A repository as the list renders it: its name, its format ({@code null} for one holding none, which answers
+     *  nothing until given one), the marks of what it holds (empty draws the neutral mark), and whether it is a
+     *  hardened proxy screening every upstream body in full. */
     public record RepositoryRow(String name, String format, List<Mark> marks, boolean hardened,
                                 SettingsAdmin.RepositoryShape shape, String description, String created,
                                 boolean removing) {
     }
 
-    /** One valid-but-risky definition warning for the console banner: the repository it applies to and
-     *  the loud ⚑ the parse logged (mixed screening strength, an unscreened or plaintext upstream) - surfaced as a
-     *  non-blocking notice on the repository admin view, distinct from a refused-and-not-stored parse error. */
+    /** A valid but risky routing the parse warned about (mixed screening strength, an unscreened or plaintext
+     *  upstream), shown as a non-blocking banner, unlike a refused parse. */
     public record RepositoryWarning(String repository, String message) {
     }
 
-    /** A browse search hit as the results list renders it: the {@link RepositoryBrowse.SearchResult} it wraps plus
-     *  the mark of the format that owns its ecosystem, so a hit shows its format's mark beside the coordinate -
-     *  {@code null} only for a hit that carries no ecosystem at all (an artifact with no coordinate), which the view
-     *  draws as the neutral mark. */
+    /** A browse search hit with the mark of the format owning its ecosystem ({@code null} for none, drawn neutral). */
     public record SearchRow(String display, String coordinate, String version, String ecosystem, String location,
                             Mark mark) {
     }
@@ -829,15 +740,12 @@ public class RepositoryAdminController {
     public record RetentionView(int keepLast, String maxAge, String prereleaseExpiry, String notDownloadedFor) {
     }
 
-    /** One breadcrumb in the browse trail: its label, the accumulated prefix it navigates to, and whether it is the
-     *  current (last) crumb - rendered as plain text rather than a link. */
+    /** One breadcrumb of the browse trail; the current (last) one renders as plain text. */
     public record Crumb(String label, String prefix, boolean current) {
     }
 
-    /** The path-segment crumbs of the browse trail: one crumb per accumulated path segment, the last marked current
-     *  so the view renders it inert. The fixed head of the trail (the repositories list, this repository's detail hub,
-     *  and the browse root) is supplied by the view, so at the browse root this list is empty and the "Browse" crumb
-     *  the view renders is the current one. */
+    /** One crumb per accumulated path segment, the last current; the view supplies the trail's fixed head, so this is
+     *  empty at the browse root. */
     private static List<Crumb> crumbs(String prefix) {
         List<Crumb> crumbs = new ArrayList<>();
         if (!prefix.isEmpty()) {

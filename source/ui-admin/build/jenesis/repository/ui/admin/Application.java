@@ -11,20 +11,10 @@ import org.springframework.boot.context.properties.ConfigurationPropertiesScan;
 
 
 /**
- * The admin console's composition.
- *
- * <p><b>It is not a launcher.</b> The console stopped being an image of its own when the three nodes
- * became one; the bundle imports {@code AdminConsoleNode}, and what is left here is the
- * {@code @SpringBootApplication} composition a {@code @SpringBootTest} and the browser fixture boot, plus the config
- * name they must apply.
- *
- * <p>The app loads {@code ui.properties} rather than {@code application.properties}, by naming it through
- * {@link #CONFIG_NAME_PROPERTY} - the same guard {@code RepositoryApplication} ({@code repository}),
- * {@code CacheServer} ({@code cache}) and the bundle already carry, and for the
- * same reason: this module requires {@code build.jenesis.repository.server} and {@code build.jenesis.repository.ui},
- * and each of those jars ships its own root {@code application.properties}. Spring loads exactly one
- * {@code classpath:/application.properties}, so a file of that name here would compete with them - and which one won
- * depended on module-path order.
+ * The admin console's composition: not a launcher (the bundle imports {@code AdminConsoleNode}), but the
+ * {@code @SpringBootApplication} a {@code @SpringBootTest} and the browser fixture boot. It loads {@code ui.properties}
+ * through {@link #CONFIG_NAME_PROPERTY}, since its dependencies each ship an {@code application.properties} and Spring
+ * loads only one, chosen by module-path order.
  */
 @Import({ConsoleModulesConfig.class, ConsoleScreensConfig.class, ConsoleIdentityConfig.class})
 @SpringBootApplication
@@ -32,12 +22,8 @@ import org.springframework.boot.context.properties.ConfigurationPropertiesScan;
 public class Application {
 
     /**
-     * The {@code spring.config.name} assignment this app boots under - {@value} - and therefore the base name of its
-     * configuration file ({@code ui.properties}, plus {@code ui-<profile>.properties} per profile). A boot that does
-     * <em>every</em> boot must apply it - a {@code @SpringBootTest}, the browser suite's console fixture, the
-     * bundle - or it silently configures the console from whichever dependency's {@code application.properties}
-     * happens to come first on the module path. Held as the whole assignment rather than the bare name so there is
-     * one literal to read, apply and check.
+     * The {@code spring.config.name} assignment every boot of this console applies, {@value}: the base name of its
+     * configuration file ({@code ui.properties}, {@code ui-<profile>.properties}).
      */
     public static final String CONFIG_NAME_PROPERTY = "spring.config.name=ui";
 
@@ -45,14 +31,9 @@ public class Application {
     }
 
     /**
-     * Boot this console on the given port ({@code 0} picks an ephemeral one) and return a handle carrying the bound
-     * port and closing the context, so a test or an embedder drives the real console over HTTP without the Spring
-     * types leaking into its own module.
-     *
-     * <p>The port rides as a run <em>argument</em> rather than a default property, which is not a stylistic
-     * choice: a {@code .properties()} default is Spring's lowest-precedence source and a configuration file on the
-     * closure pins {@code server.port}, so a {@code 0} set that way is silently ignored and the boot takes the
-     * fixed port instead. {@link #CONFIG_NAME_PROPERTY} rides with it for the reason that constant gives.
+     * Boots this console on the given port ({@code 0} for an ephemeral one) and returns a handle with the bound port,
+     * so a test drives it over HTTP without Spring types. The port is a run argument because a {@code .properties()}
+     * default ranks below a configuration file that pins {@code server.port}.
      */
     public static Running start(int port) {
         ConfigurableApplicationContext context = new SpringApplicationBuilder(Application.class)

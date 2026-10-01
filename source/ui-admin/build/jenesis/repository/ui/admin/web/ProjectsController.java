@@ -19,11 +19,10 @@ import org.springframework.web.servlet.mvc.support.RedirectAttributes;
 import build.jenesis.repository.ui.ConsoleScreen;
 
 /**
- * Lists the projects on the volume, creates new ones, and edits a project's settings - its size cap, sweep order and
- * unused-entry lifetime - through the settings catalogue. A super-admin also sees the volume the projects of every tenant share and
- * runs the reclaim across them: it acts on build-cache entries, so it lives with the projects rather than on the
- * tenant chooser. Binding names are given explicitly because the Jenesis javac step does not emit
- * {@code -parameters}.
+ * Lists the build-cache projects, creates them, and edits a project's settings through the catalogue. A super-admin
+ * also sees the volume every tenant's projects share and runs the reclaim across them. A handler resolving settings
+ * reads the project's, the tenant's and the deployment's settings documents, one object per module each. Binding names
+ * are explicit because the build compiles without {@code -parameters}.
  */
 @Controller
 @ConsoleScreen
@@ -44,10 +43,7 @@ public class ProjectsController {
         this.volumeReclaim = volumeReclaim;
     }
 
-    /**
-     * It reads the tenant's and the deployment's settings documents, which the values it resolves inherit from: one
-     * object per module under a constant prefix, narrow by construction.
-     */
+    /** The tenant's projects, and for a super-admin the shared volume. */
     @GetMapping("/ui/projects")
     public String list(Authentication authentication, Model model) throws IOException {
         model.addAttribute("projects", service.listProjects());
@@ -55,8 +51,7 @@ public class ProjectsController {
                 .anyMatch(authority -> authority.getAuthority().equals("ROLE_SUPERADMIN"));
         model.addAttribute("superadmin", superadmin);
         if (superadmin) {
-            // The volume is the STORE's, and it is asked directly: usable is unbounded and total is zero when the
-            // backend has none to report.
+            // The store's volume: usable unbounded and total zero when the backend reports none.
             Optional<ArtifactStore.Capacity> capacity = rootStorage.store().capacity();
             model.addAttribute("usableSpace", capacity.map(ArtifactStore.Capacity::usable).orElse(Long.MAX_VALUE));
             model.addAttribute("totalSpace", capacity.map(ArtifactStore.Capacity::total).orElse(0L));
@@ -74,8 +69,7 @@ public class ProjectsController {
                           RedirectAttributes redirect) {
         long bytes = minFreeBytes != null ? minFreeBytes : properties.getMinFreeBytes();
         int percent = minFreePercent != null ? minFreePercent : properties.getMinFreePercent();
-        // The reclaim spans every tenant's cache, so the mutation and its operator-scope audit live in the domain
-        // (VolumeReclaim); the controller only resolves the effective thresholds and renders the outcome.
+        // The reclaim and its operator-scope audit live in VolumeReclaim.
         Eviction.Result result = volumeReclaim.reclaim(bytes, percent);
         String suffix = result.entriesDeleted() == 0 ? " (target already met or no thresholds set)" : "";
         redirect.addFlashAttribute("message", "Volume reclaim: deleted " + result.entriesDeleted()
@@ -83,10 +77,7 @@ public class ProjectsController {
         return "redirect:/ui/projects";
     }
 
-    /**
-     * It reads the tenant's and the deployment's settings documents, which the values it resolves inherit from: one
-     * object per module under a constant prefix, narrow by construction.
-     */
+    /** One project's page and settings. */
     @GetMapping("/ui/projects/{name}")
     public String detail(@PathVariable("name") String name, Model model) throws IOException {
         model.addAttribute("project", service.project(name));
@@ -94,12 +85,7 @@ public class ProjectsController {
         return "project";
     }
 
-    /**
-     * Set or clear one of the project's settings through the catalogue.
-     *
-     * <p>It reads the tenant's and the deployment's settings documents, which the values it resolves inherit from: one
-     * object per module under a constant prefix, narrow by construction.
-     */
+    /** Sets or clears one of the project's settings through the catalogue. */
     @PostMapping("/ui/projects/{name}/settings/save")
     public String saveSetting(@PathVariable("name") String name, @RequestParam("key") String key,
                               @RequestParam(name = "value", defaultValue = "") String value,

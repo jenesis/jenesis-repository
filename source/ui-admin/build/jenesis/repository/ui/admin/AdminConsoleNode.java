@@ -17,61 +17,34 @@ import org.springframework.context.annotation.FilterType;
 import org.springframework.context.annotation.Import;
 
 /**
- * The console, as one thing an application either carries or does not.
- *
- * <p>This is the one console node, and the {@link #GATE} an operator reads as "the console" is declared here. The
- * shell is a library: the layout, the url space, the extension seams and the shared screens, with no wiring of its
- * own - a composition scanning a second node would register two {@code SecurityConfig} classes under one bean name
- * and fail the context outright.
- *
- * <p>The gate is read as the context starts, never from the settings store: it decides whether the console's
- * controllers and its deny-by-default security chain <em>exist</em>, and a stored setting is read by beans that
- * already do. With the console off, the repository's own chain is the whole of what the node answers - which is the
- * point, since leaving a console chain registered without its screens would claim every path the console owns and
- * answer them with a redirect to a sign-in page nothing serves.
+ * The console, as one thing an application either carries or does not; the shell module is a library with no wiring
+ * of its own. {@link #GATE} is read as the context starts, never from the store, since it decides whether the
+ * console's controllers and security chain exist: with it off, the repository's chain answers alone rather than a
+ * console chain redirecting to a sign-in page nothing serves.
  */
 @Configuration(proxyBeanMethods = false)
-// "jenrepo." + GATE, not GATE: the constant is the SETTINGS key (unprefixed, as the catalogue
-// carries it) and Spring wants the property name. They were one string until the settings
-// reference needed a literal it could read, and a compile-time constant is inlined - so this
-// call site went on compiling while asking for a property called "console" that nothing sets.
+// GATE is the unprefixed settings key; Spring wants the property name.
 @ConditionalOnProperty(name = "jenrepo." + AdminConsoleNode.GATE, havingValue = "true", matchIfMissing = true)
 @ConfigurationPropertiesScan(basePackages = "build.jenesis.repository.ui.admin.config")
 @ComponentScan(basePackages = "build.jenesis.repository.ui.admin",
         excludeFilters = @ComponentScan.Filter(type = FilterType.REGEX,
-                // The console's own store wiring, which exists so it can run as its own node. In a composed
-                // application the repository's StoreConfig is authoritative: both declare an `authorization` and an
-                // `auditTrail` bean, and more to the point the console's opens the store named by jenrepo.ui.* while
-                // the repository opens jenrepo.store - one node must read one store, and it is the one the
-                // repository writes.
+                // The console's standalone store wiring; composed, the repository's StoreConfig is authoritative, so
+                // the node reads the one store the repository writes.
                 pattern = {"build\\.jenesis\\.repository\\.ui\\.admin\\.config\\.RepositoryStoreConfig",
                         "build\\.jenesis\\.repository\\.ui\\.admin\\.Application"}))
 @Import({ConsoleScreensConfig.class, ConsoleModulesConfig.class, ConsoleIdentityConfig.class})
 public class AdminConsoleNode {
 
     /**
-     * Whether this deployment serves the console at all. Read before the context starts, so it applies on the next
-     * restart rather than live; the settings catalogue carries it unprefixed, which is why the call sites above
-     * compose {@code "jenrepo." + GATE} rather than holding one string for both jobs.
-     *
-     * <p>It lived on the shell's own node until that node went. Nothing imported that node, so the gate it carried
-     * was the gate of a console nobody booted, while the console that ships read the same constant across a module
-     * boundary.
+     * Whether this deployment serves the console at all: the unprefixed settings key, read before the context starts, so
+     * it applies on restart.
      */
     public static final String GATE = "console";
 
     /**
-     * Who administers this deployment, seeded from this console's own {@code jenrepo.ui.admins}.
-     *
-     * <p>Declared on the node rather than in {@code RepositoryStoreConfig}, which is the console's <em>standalone</em>
-     * store wiring and is excluded from the scan wherever the console is composed with the repository - so a bean
-     * declared there exists in one of the two compositions this console ships in. It is declared here rather than
-     * inherited from the base console's default because the two bind {@code jenrepo.ui.*} with different
-     * configuration types - disjoint keys, deliberately not merged - so each supplies the value from its own; the
-     * reader, the seeding and the grants they produce are shared.
-     *
-     * <p>Over the {@link Authorization} bean, which both compositions declare, rather than over the store: a second
-     * instance would carry a second cache of the same grants.
+     * Who administers this deployment, seeded from this console's {@code jenrepo.ui.admins}. Declared on the node so it
+     * exists in both compositions ({@code RepositoryStoreConfig} is standalone-only), over the {@link Authorization}
+     * bean so the grants have one cache.
      */
     @Bean
     public ConsoleAdministrators consoleAdministrators(Authorization authorization, UiProperties properties) {
@@ -79,10 +52,8 @@ public class AdminConsoleNode {
     }
 
     /**
-     * The people this deployment has seen sign in, so the members screen can offer them rather than asking an
-     * administrator to type a provider subject nobody can learn. Declared here for the same reason as
-     * {@code consoleAdministrators}: {@code RepositoryStoreConfig} is the standalone-console wiring and is excluded
-     * wherever this console is composed with the repository.
+     * The people this deployment has seen sign in, offered on the members screen; declared on the node as
+     * {@code consoleAdministrators} is.
      */
     @Bean
     public KnownPrincipals knownPrincipals(Authorization authorization) {

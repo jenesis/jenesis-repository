@@ -14,10 +14,9 @@ import org.springframework.web.servlet.mvc.support.RedirectAttributes;
 import build.jenesis.repository.ui.ConsoleScreen;
 
 /**
- * The landing routes. After sign-in a reader is routed by how many tenants they can reach. On a fixed deployment there
- * is one, and it is chosen for everyone. On a deployment of several, a member of exactly one tenant is taken into it,
- * while a deployment administrator - who can reach every tenant - starts with none chosen and picks one from the
- * tenants list, which the header's tenant chooser also leads to; so does anyone who belongs to several.
+ * The landing routes. After sign-in a reader is routed by the tenants they can reach: a fixed deployment's one tenant,
+ * or a member's only tenant, is chosen for them; a deployment administrator or a member of several picks one from the
+ * tenants list.
  */
 @Controller
 @ConsoleScreen
@@ -36,19 +35,15 @@ public class HomeController {
         this.tenancy = tenancy;
     }
 
-    /** The root forwards to the console so a bare host lands on it, keeping {@code /} free of a functional route:
-     *  every screen the console serves is under {@code /ui}, beside the artifacts at {@code /repository}, the registry
-     *  at {@code /v2}, the build cache at {@code /build} and the API at {@code /api}. */
+    /** The root forwards to the console, whose screens are all under {@code /ui}. */
     @GetMapping("/")
     public String root() {
         return "redirect:/ui/";
     }
 
     /**
-     * The landing, which only ever redirects. A screen that finishes by landing where the console would - the setup
-     * guide applied or skipped - says what it did in a flash message, and a flash message lives for the one request
-     * after the redirect that set it: this one. So what arrived is handed on to the screen this sends the reader to,
-     * or the reader would land on a page that says nothing about what they had just done.
+     * The landing, which only redirects, handing on any flash message that arrived, since a flash lives for one request
+     * and a screen finishing here (the setup guide) said what it did in one.
      */
     @GetMapping({"/ui", "/ui/"})
     public String home(Authentication authentication, HttpSession session, Model model,
@@ -61,19 +56,14 @@ public class HomeController {
         if (!authenticated(authentication)) {
             return "redirect:/ui/login";
         }
-        // Where there is one tenant to be in, the reader is in it, and it is chosen before anything else, so no
-        // screen the reader opens next sends them back here for a choice with one answer. A deployment administrator
-        // of a multi-tenant deployment is the exception: every tenant is theirs to work in, and the one that happens
-        // to exist first is not a choice they made, so they start in none and choose.
+        // One reachable tenant is chosen at once; a multi-tenant deployment's administrator starts in none and
+        // chooses.
         boolean superadmin = hasSuperadmin(authentication);
         List<String> accessible = memberships.accessibleTo(authentication.getName(), superadmin);
         if (current.name() == null && accessible.size() == 1 && !(superadmin && tenancy.multi())) {
             current.select(accessible.get(0));
         }
-        // A super-admin on the starter credential is guided first, once per session and while the dial is on -
-        // decided here, on the landing, so nothing else in the console is ever gated by it (SetupWizard says why).
-        // The dial is read last, so only a starter session pays it, and it is the settings document - one object
-        // per module under a constant prefix, narrow by construction - never a read that grows with the store.
+        // A super-admin on the starter credential is guided first (SetupWizard); decided only here, on the landing.
         if (setup.redirects(authentication, session)) {
             return "redirect:/ui/setup";
         }

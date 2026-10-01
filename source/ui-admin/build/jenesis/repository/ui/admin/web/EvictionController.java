@@ -9,11 +9,8 @@ import org.springframework.web.servlet.mvc.support.RedirectAttributes;
 import build.jenesis.repository.ui.ConsoleScreen;
 
 /**
- * Triggers eviction directly on the shared volume (no call into jenesis-cache): enforce the size
- * cap now, expire stale (ttl) entries now, or clear a project entirely. All routes are POST and are
- * admin-grade - clearing a project wipes its cache for everyone - so {@code AdminSecurityConfig} gates the
- * eviction routes under a project's {@code evict} path on admin in the selected tenant, above the generic
- * editor mutation gate.
+ * Starts eviction on a project: enforce the size cap, expire stale entries, or clear it entirely. Admin-grade POSTs
+ * ({@code ConsoleAuthorization}), since clearing a project wipes its cache for everyone.
  */
 @Controller
 @ConsoleScreen
@@ -25,20 +22,14 @@ public class EvictionController {
         this.service = service;
     }
 
-    /**
-     * It reads the tenant's and the deployment's settings documents, which the values it resolves inherit from: one
-     * object per module under a constant prefix, narrow by construction.
-     */
+    /** Starts enforcing the project's size cap. */
     @PostMapping("/ui/projects/{name}/evict/size")
     public String enforceSizeCap(@PathVariable("name") String name, RedirectAttributes redirect) throws IOException {
         flash(redirect, "size-cap sweep", service.enforceSizeCap(name));
         return "redirect:/ui/projects/" + name;
     }
 
-    /**
-     * It reads the tenant's and the deployment's settings documents, which the values it resolves inherit from: one
-     * object per module under a constant prefix, narrow by construction.
-     */
+    /** Starts expiring the project's stale entries. */
     @PostMapping("/ui/projects/{name}/evict/ttl")
     public String expireTtl(@PathVariable("name") String name, RedirectAttributes redirect) throws IOException {
         flash(redirect, "stale-entry sweep", service.expireTtl(name));

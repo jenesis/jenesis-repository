@@ -17,16 +17,10 @@ import org.springframework.core.env.ConfigurableEnvironment;
 import org.springframework.core.env.Environment;
 
 /**
- * The artifact-repository store the console manages, alongside the cache's CacheStorage. The console reads and
- * writes the repository through this multi-tenant {@link ArtifactStore} root (a backend chosen by
- * {@code jenrepo.store}); {@code RepositoryAdmin} scopes it to the signed-in user's tenant and the
- * selected repository, so the same console fronts both products.
- *
- * <p>The same store also holds the access credentials under {@code auth/<tenant>/<hash>/}, managed through an
- * enforcing {@link Authorization}: {@code CredentialService} mints and grants over it, and the cache and the
- * artifact repository authorize requests against it, so one credential store serves every surface. The
- * {@link Authorization} is the unconditional definition, so when this configuration is combined with the cache
- * (whose own store and authorization are conditional), this one wins and is shared.
+ * The console's standalone store wiring: the multi-tenant {@link ArtifactStore} root chosen by {@code jenrepo.store},
+ * which {@code RepositoryAdmin} scopes per tenant and repository, and the enforcing {@link Authorization} over the same
+ * store's credentials, which every surface authorizes against. Its {@link Authorization} is unconditional, so beside
+ * the cache's conditional one it wins and is shared.
  */
 @Configuration
 public class RepositoryStoreConfig {
@@ -35,9 +29,7 @@ public class RepositoryStoreConfig {
     public ArtifactStore repositoryStore(Environment environment) {
         String backend = environment.getProperty("jenrepo.store", "filesystem");
         ArtifactStore store = ArtifactStoreProvider.resolve(backend, environment::getProperty);
-        // In read-only mode the console browses/downloads but refuses its own admin writes (credentials, settings,
-        // tenants) at the same store choke point the repository server uses, so a mutating action cannot slip past
-        // the mode by going through the console's store instead of the server's.
+        // Read-only mode refuses the console's own writes at the server's choke point.
         return environment.getProperty("jenrepo.read-only", Boolean.class, false)
                 ? new ReadOnlyArtifactStore(store)
                 : store;
@@ -49,10 +41,8 @@ public class RepositoryStoreConfig {
     }
 
     /**
-     * The one place a setting is changed, for a console that runs as its own node: over its own view of the settings
-     * of the store it opens, resolving a change against the shipped defaults and pinning what this console's launch
-     * configuration fixes. Composed into the repository, the console uses the repository's editor instead, which is
-     * why this wiring is excluded there.
+     * The settings editor of a standalone console, over the store it opens, pinning what its launch configuration
+     * fixes. Composed, the console uses the repository's editor.
      */
     @Bean
     public SettingsEditor settingsEditor(ArtifactStore repositoryStore, AuditTrail auditTrail,
@@ -64,9 +54,8 @@ public class RepositoryStoreConfig {
 
     @Bean
     public AuditTrail auditTrail(ArtifactStore repositoryStore, Environment environment) {
-        // The console records through the same discovered trail as the server; always enabled here (the console
-        // only sees signed-in actors) and never pruning (the server's retention owns that). In read-only mode the
-        // trail is off, since it is itself a store write and there is no mutation to record.
+        // The server's discovered trail, never pruning (the server's retention prunes), and off when read-only, since it
+        // writes.
         boolean readOnly = environment.getProperty("jenrepo.read-only", Boolean.class, false);
         return AuditTrailProvider.resolve(repositoryStore,
                 key -> "audit".equals(key) && readOnly ? "false" : "audit-retention".equals(key) ? "" : null);

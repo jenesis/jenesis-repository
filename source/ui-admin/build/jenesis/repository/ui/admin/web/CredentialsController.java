@@ -14,11 +14,10 @@ import build.jenesis.repository.ui.ConsoleScreen;
 
 /**
  * Manages access credentials through the console: list them, mint a new one (its key is shown once), grant or
- * revoke a role on a project ({@code *} for all projects) over the discovered rights surfaces, set or clear a
- * credential's key expiry, and delete a credential. Mutations are POST and require admin in the selected tenant (see
- * SecurityConfig). An expiry is given as an ISO-8601 duration relative to now (e.g. {@code P30D}) or an absolute
- * ISO-8601 instant; a blank expiry on a mint applies the default lifetime, so a new key expires unless the "never"
- * opt-out is ticked. Binding names are explicit because the Jenesis javac step does not emit {@code -parameters}.
+ * revoke a role on a project ({@code *} for all) over the discovered rights surfaces, set or clear a key's expiry, and
+ * delete a credential; mutations need admin in the selected tenant. An expiry is an ISO-8601 duration from now
+ * ({@code P30D}) or instant; a blank one on a mint applies the default lifetime unless "never" is ticked. Binding names
+ * are explicit because the build compiles without {@code -parameters}.
  */
 @Controller
 @ConsoleScreen

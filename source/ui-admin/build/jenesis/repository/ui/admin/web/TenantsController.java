@@ -16,10 +16,9 @@ import org.springframework.web.servlet.mvc.support.RedirectAttributes;
 import build.jenesis.repository.ui.ConsoleScreen;
 
 /**
- * The tenants screen. Every user can list the tenants they may reach and select one to work in; an env super-admin
- * additionally sees all tenants and creates and deletes them. The super-admin-only routes are enforced in the
- * security config; selection re-checks membership here. Binding names are explicit because the Jenesis javac step
- * does not emit {@code -parameters}.
+ * The tenants screen: every user lists the tenants they may reach and selects one; a super-admin sees all and creates
+ * and deletes them. Selection re-checks membership. Binding names are explicit because the build compiles without
+ * {@code -parameters}.
  */
 @Controller
 @ConsoleScreen
@@ -49,10 +48,9 @@ public class TenantsController {
     }
 
     /**
-     * Select the tenant the console works in. A member's membership is asked before anything else, so a tenant they
-     * are not a member of is answered the same whether it exists or not - as an absent one, unless the deployment's
-     * {@link AccessDenial} says to refuse it honestly - and costs the same one membership read either way. Only a
-     * super-admin, who may select any tenant, is told a tenant does not exist.
+     * Selects the tenant the console works in. Membership is asked first, so a tenant the user is not a member of is
+     * answered as {@link AccessDenial} says whether it exists or not, at the same cost; only a super-admin is told a
+     * tenant does not exist.
      */
     @PostMapping("/ui/tenants/select")
     public String select(@RequestParam("tenant") String tenant, Authentication authentication) {

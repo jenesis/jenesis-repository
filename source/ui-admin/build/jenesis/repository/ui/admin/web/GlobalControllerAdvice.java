@@ -34,12 +34,10 @@ import org.springframework.http.HttpStatus;
 import org.springframework.web.bind.annotation.ResponseStatus;
 
 /**
- * Cross-cutting web concerns of the console's screens - the {@link ConsoleScreen}s, and nothing else in the context,
- * so a failure on the API or the data plane is never answered with the console's error page. Expose the signed-in user, the selected tenant, and the role flags for
- * that tenant to every view (so the layout can greet them, show the tenant switcher only when it
- * is meaningful, let editors mutate and reserve admin-only controls). The role flags are resolved
- * against the current tenant, and a super-admin is admin everywhere. Validation/storage failures
- * become a friendly error page, and a missing tenant selection bounces back through the router.
+ * Cross-cutting web concerns of the {@link ConsoleScreen}s alone, so the API and the data plane never get the console's
+ * error page: the signed-in user, the selected tenant and that tenant's role flags (a super-admin is admin everywhere)
+ * for every view, a friendly error page for validation and storage failures, and a bounce back through the router for
+ * a missing tenant selection.
  */
 @ControllerAdvice(annotations = ConsoleScreen.class)
 public class GlobalControllerAdvice {
@@ -58,15 +56,6 @@ public class GlobalControllerAdvice {
     /** The sections whose pages are about one tenant. */
     private static final Set<Group> TENANT_GROUPS = EnumSet.of(Group.REPOSITORIES, Group.BUILD_CACHE, Group.ACCESS);
 
-    /**
-     * The resolved licence state, injected rather than read from {@code Licenses.state()} statically.
-     *
-     * <p>The static is marked in {@code Licenses} as a boot-time wiring seam, and reading it directly here made the
-     * licensed rendering untestable: a booted console can only reach LICENSED with a token signed by the vendor's
-     * private key, which no test may hold, and the alternative - letting configuration add a trust anchor - would
-     * make a stock deployment accept a licence anyone could mint. Injection sidesteps both: a test composition
-     * supplies a state, and nothing a customer can configure reaches it.
-     */
     public GlobalControllerAdvice(Memberships memberships, CurrentTenant current, CapabilityService capabilities,
                                   List<PrincipalNameResolver> principalNames, Environment environment,
                                   SettingsAdmin settings, RepositoryAdmin repositories,
@@ -81,63 +70,42 @@ public class GlobalControllerAdvice {
         this.tenancy = tenancy;
     }
 
-    /** Whether the deployment runs read-only ({@code jenrepo.read-only}), so every view can show a banner
-     *  and a mutating affordance can hide itself. Read straight off the environment - the console observes the mode,
-     *  the store choke point enforces it. */
-    /**
-     * The product this console is, and what it is for - the brand on the sign-in page.
-     *
-     * <p>It is a model attribute rather than a literal in the template because the sign-in page is shared: there were
-     * two, each hardcoding its own name, which is why one of them still called itself by a module name.
-     */
+    /** The product this console is: the brand on the shared sign-in page. */
     @ModelAttribute("product")
     public String product() {
         return "Jenesis Repository";
     }
 
-    /** One line under the sign-in heading, saying what a visitor is signing in to. */
     /** How every screen shows an instant - see {@link Instants}. */
     @ModelAttribute("instants")
     public Instants instants() {
         return Instants.DISPLAY;
     }
 
+    /** One line under the sign-in heading, saying what a visitor is signing in to. */
     @ModelAttribute("tagline")
     public String tagline() {
         return "The console of the repository server.";
     }
 
+    /** Whether the deployment runs read-only ({@code jenrepo.read-only}), so a view shows a banner and hides mutating
+     *  affordances. The console observes the mode; the store enforces it. */
     @ModelAttribute("readOnly")
     public boolean readOnly() {
         return environment.getProperty("jenrepo.read-only", Boolean.class, false);
     }
 
-    /** The strictly-opt-in anonymous-role grant ({@code jenrepo.anonymous-rights}, env
-     *  {@code JENREPO_ANONYMOUS_RIGHTS}), so every view shows an explicit "Anonymous access" banner when it
-     *  is set - visible, never hidden. This is the one advice publishing it and every other attribute below. Read
-     *  straight off the environment,
-     *  like {@link #readOnly()} - the console observes the posture, the {@code Authorization} choke point enforces it.
-     *  Blank (the default) ⇒ no anonymous access and no banner. */
+    /** The opt-in anonymous grant ({@code jenrepo.anonymous-rights}), so every view shows an "Anonymous access" banner
+     *  while it is set; blank by default. Observed here as {@link #readOnly()} is; {@code Authorization} enforces
+     *  it. */
     @ModelAttribute("anonymousRights")
     public String anonymousRights() {
         return environment.getProperty("jenrepo.anonymous-rights", "").trim();
     }
 
-    /** The header's security-posture badge - the advisory count a super-admin sees on every view,
-     *  linking to the Security-posture screen; a clean deployment renders no badge. It is derived from the very same
-     *  collected report {@code /posture} renders, for the same session-selected tenant, so the number the
-     *  badge names is by construction the number of rows its own destination lists. A second report over the
-     *  <em>raw environment</em> would count as zero an advisory raised by a stored dial that the screen lists; see
-     *  {@link PostureBadge} for why the tenant rows are counted too.
-     *
-     *  <p>Collected only for a super-admin, because nobody else's view renders the badge - the model attribute is
-     *  {@code null} for everyone else and the shell's condition already guards on it, so an ordinary user's page view
-     *  performs no settings read at all. The collection is memoised by {@link SettingsAdmin}, which is what
-     *  keeps a per-view read off the store; a settings change made through this console drops that memo at once.
-     *
-     *  <p>A collection that fails is reported as {@link PostureBadge#unknown()} rather than as zero and rather than
-     *  as a 500 on every console page: an unreadable posture is not a clean one, and the screen the badge links to
-     *  fails visibly with the actual reason. The badge names the risk count only, never a value. */
+    /** The header's security-posture badge for a super-admin ({@code null} for anyone else): the advisory count of the
+     *  same collected report the posture screen renders for the same tenant, memoised by {@link SettingsAdmin} and
+     *  dropped on a settings change. A failed collection is {@link PostureBadge#unknown()}, never zero or a 500. */
     @ModelAttribute("postureBadge")
     public PostureBadge postureBadge(Authentication authentication) {
         if (!hasSuperadmin(authentication)) {
@@ -201,27 +169,18 @@ public class GlobalControllerAdvice {
         return hasSuperadmin(authentication) || memberships.accessibleTo(authentication.getName(), false).size() >= 2;
     }
 
-    /** Whether the header shows the tenant beside the brand: wherever the deployment serves several tenants, since
-     *  there the tenant is a choice - made, or still to be made - and a fixed deployment's one tenant is not. */
+    /** Whether the header shows the tenant beside the brand: where the deployment serves several tenants. */
     @ModelAttribute("multiTenant")
     public boolean multiTenant() {
         return tenancy.multi();
     }
 
     /**
-     * The console's two navigation levels for this request: the groups the header lists and the pages the sidebar
-     * lists, resolved to just what this reader may open, with the page they are on marked - so the shell renders them
-     * and decides nothing.
-     *
-     * <p>The core screens are listed here, each in the group it belongs to; every imported console module then adds
-     * its own through {@link build.jenesis.repository.ui.ConsoleModuleProvider#navEntries()} and
-     * {@link build.jenesis.repository.ui.ConsoleModuleProvider#repositoryPages()} (discovered once by
-     * {@link CapabilityService}). A page is visible when the reader's role clears its floor and the capability it
-     * requires is present, so the shell names no module's screens and a link never leads to a page that is not there.
-     *
-     * <p>It is resolved once per request. The two lists it replaces - the links and the administration subset of
-     * them - were each a model attribute, and the second recomputed the first, so every page resolved its navigation
-     * twice.
+     * The console's two navigation levels for this request, resolved once to what this reader may open with the current
+     * page marked. The core screens are listed here; imported modules add theirs through
+     * {@link build.jenesis.repository.ui.ConsoleModuleProvider#navEntries()} and
+     * {@link build.jenesis.repository.ui.ConsoleModuleProvider#repositoryPages()}. A page is visible when the reader's
+     * role clears its floor and its required capability is present.
      */
     @ModelAttribute("navigation")
     public Navigation navigation(Authentication authentication, HttpServletRequest request) {
@@ -242,14 +201,12 @@ public class GlobalControllerAdvice {
         entries.add(new NavEntry("Metrics", "/ui/metrics", Access.SUPERADMIN, Group.OPERATIONS));
         entries.add(new NavEntry("Security posture", "/ui/posture", Access.SUPERADMIN, Group.OPERATIONS));
         entries.add(new NavEntry("Caches", "/ui/caches", Access.SUPERADMIN, Group.OPERATIONS));
-        // The group's header link opens its first entry, so the everyday catalogue leads and the first-run guide -
-        // reached by the landing redirect until it is done - comes last.
+        // The group's header link opens its first entry, so the first-run guide comes last.
         entries.add(new NavEntry("Settings", "/ui/settings", Access.SUPERADMIN, Group.SETTINGS));
         entries.add(new NavEntry("Upstreams", "/ui/settings/upstreams", Access.SUPERADMIN, Group.SETTINGS));
         entries.add(new NavEntry("Tenant settings", "/ui/settings/tenant", Access.SUPERADMIN, Group.SETTINGS));
         entries.add(new NavEntry("Modules", "/ui/settings/modules", Access.SUPERADMIN, Group.SETTINGS));
-        // Picking a tenant is meaningful only where there is more than one to pick, and the header's tenant name
-        // links here too, so a member of several tenants reaches it without the Settings group being theirs.
+        // Only where there is more than one tenant to pick; the header's tenant name links here too.
         if (showTenants(authentication)) {
             entries.add(new NavEntry("Tenants", "/ui/tenants", Group.SETTINGS));
         }
@@ -266,8 +223,7 @@ public class GlobalControllerAdvice {
         pages.add(new RepositoryPage("Settings", "/settings", Topic.LIFECYCLE));
         pages.addAll(capabilities.moduleRepositoryPages());
         String path = request.getRequestURI().substring(request.getContextPath().length());
-        // Until a tenant is chosen there is nothing tenant-scoped to open: the reader sees what belongs to the
-        // deployment, and the tenant's own sections appear once the header's chooser has been used.
+        // Until a tenant is chosen, only the deployment's own pages are offered.
         if (current.name() == null) {
             entries.removeIf(entry -> TENANT_GROUPS.contains(entry.group()) || entry.path().equals("/ui/settings/tenant"));
         }
@@ -328,10 +284,7 @@ public class GlobalControllerAdvice {
 
     @ExceptionHandler(IllegalStateException.class)
     public String noTenant(HttpServletRequest request, Model model) {
-        // A missing tenant selection normally bounces back through the router at /ui/. But when the request that
-        // failed IS the console router, redirecting there would loop - the router re-throws the
-        // same IllegalStateException and we redirect again. On the console path, render the error page instead of
-        // redirecting into that loop.
+        // A missing tenant bounces back through the router at /ui/, except from the router itself, which would loop.
         String path = request == null ? null : request.getRequestURI();
         if (path != null && (path.equals("/ui") || path.equals("/ui/"))) {
             model.addAttribute("error", "No tenant could be selected for your account. Contact an administrator to be "
