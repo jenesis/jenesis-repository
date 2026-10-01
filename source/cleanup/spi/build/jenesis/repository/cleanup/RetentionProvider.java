@@ -5,51 +5,38 @@ import build.jenesis.repository.store.Features;
 import build.jenesis.repository.store.Providers;
 
 /**
- * A named factory for a {@link RetentionSweeper}, discovered at runtime with {@link ServiceLoader} - so the
- * retention engine is a drop-in module that {@code provides} this interface, and the composition names no engine.
- * Each provider reads its own configuration through the {@code config} lookup (a property/setting accessor
- * returning {@code null} when unset), staying free of any framework dependency, and yields empty when its engine is
- * not enabled. With no provider installed, {@link #resolve} is empty and retention degrades: the cleanup and
- * retention endpoints answer {@code 501} and the console hides the retention surface.
+ * A named factory for a {@link RetentionSweeper}, discovered with {@link ServiceLoader}, so the composition names no
+ * engine. Each provider reads its configuration through the {@code config} lookup and yields empty when its engine is
+ * not enabled. With no provider installed {@link #resolve} is empty: the cleanup and retention endpoints answer
+ * {@code 501} and the console hides the retention surface.
  *
  * <h2>Contract</h2>
  * <ol>
- * <li><b>Thread-safety.</b> {@link #name()} and {@link #requiredConfig()} are pure declarations; {@link #create}
- *     runs on the resolving thread. The {@link RetentionSweeper} it returns is shared by the scheduled sweep and
- *     the preview endpoint, so <em>that</em> object must be thread-safe.</li>
- * <li><b>Idempotency / replay.</b> A sweep is plan-then-apply and converges: re-running it after a crash evicts
- *     what the policy still selects and never re-deletes what is already gone or deletes twice what a partial run
- *     already removed.</li>
- * <li><b>Absence sentinel.</b> An empty {@link Optional} is the sentinel, from {@link #create} and from
- *     {@link #resolve} alike: the cleanup and retention endpoints answer {@code 501} and the console hides the
- *     surface. {@code null} is never a legal return from {@link #name()}, {@link #create} or
- *     {@link #requiredConfig()}.</li>
- * <li><b>Selection failure.</b> An explicit {@code jenrepo.retention=<name>} that no installed
- *     engine answers to - its module is off the path, its name is misspelled - or whose provider declines because
- *     its {@link #requiredConfig() required configuration} is unset throws {@link IllegalStateException} at
- *     resolution, naming the selection and the installed engine names. It does <em>not</em> degrade to
- *     no-retention: that would leave the endpoints answering {@code 501} while artifacts the operator meant to age
- *     out are held forever with nothing said. An explicit selection outranks the
- *     {@code jenrepo.<name>=false} toggle; only an <em>unselected</em> deployment degrades to empty, and
- *     two <em>enabled</em> engines with no selection are ambiguous and throw rather than resolving by discovery
- *     order.</li>
- * <li><b>Tenant scoping.</b> The sweeper applies its plan through a repository's own inventory, so every
- *     eviction is scoped to the tenant and repository the caller names.</li>
- * <li><b>Error visibility.</b> An eviction that fails is surfaced rather than swallowed: retention
- *     deletes durable content, so a partially applied plan must be visible in the sweep's outcome rather than
- *     reported as a clean pass.</li>
- * <li><b>Lifecycle / ownership.</b> The composition resolves the sweeper once and owns it; {@link #resolve} builds
- *     at most one instance per call, caches nothing and closes nothing.</li>
- * <li><b>Ordering / determinism.</b> The resolved engine is a function of the configuration and the installed
- *     providers only, never of discovery order.</li>
- * <li><b>Bounded work / cancellation.</b> A plan is computed before anything is deleted and can be previewed, so a
- *     sweep never presents a truncated pass as a complete one; a lease keeps a second node from sweeping the same
- *     repository concurrently. The {@link RepositoryInventory} a sweeper drives must deliver
- *     {@link RepositoryInventory#releases(RepositoryInventory.ReleaseVisitor)} grouped and streamed from its own key
- *     tree, so the plan holds one coordinate's versions rather than the repository's whole release list; the
- *     inherited default is the list-backed fallback, and its bound is <em>visible</em> - it refuses with an
- *     {@link IllegalStateException} naming the class and the override rather than buffering a deployment-sized
- *     release set.</li>
+ *   <li><b>Thread-safety.</b> {@link #name()} and {@link #requiredConfig()} are pure declarations; {@link #create} runs
+ *       on the resolving thread. The returned sweeper is shared by the scheduled sweep and the preview endpoint, so it
+ *       is thread-safe.</li>
+ *   <li><b>Idempotency / replay.</b> A sweep is plan-then-apply and converges: a re-run after a crash evicts what the
+ *       policy still selects and never deletes twice.</li>
+ *   <li><b>Absence sentinel.</b> An empty {@link Optional}, from {@link #create} and {@link #resolve} alike.
+ *       {@code null} is never returned from {@link #name()}, {@link #create} or {@link #requiredConfig()}.</li>
+ *   <li><b>Selection failure.</b> An explicit {@code jenrepo.retention=<name>} that no installed engine answers, or
+ *       whose required configuration is unset, throws {@link IllegalStateException} at resolution naming the selection
+ *       and the installed names - never degrading to no retention, which would keep what the operator meant to age out
+ *       with nothing said. An explicit selection outranks the {@code jenrepo.<name>=false} toggle; only an unselected
+ *       deployment degrades to empty, and two enabled engines with no selection throw as ambiguous.</li>
+ *   <li><b>Tenant scoping.</b> The sweeper applies its plan through a repository's own inventory, so every eviction is
+ *       scoped to the tenant and repository the caller names.</li>
+ *   <li><b>Error visibility.</b> A failed eviction is surfaced in the sweep's outcome: retention deletes durable
+ *       content, so a partially applied plan is never reported as clean.</li>
+ *   <li><b>Lifecycle / ownership.</b> The composition resolves the sweeper once and owns it; {@link #resolve} builds at
+ *       most one instance per call and caches and closes nothing.</li>
+ *   <li><b>Ordering / determinism.</b> The resolved engine depends on the configuration and the installed providers,
+ *       never on discovery order.</li>
+ *   <li><b>Bounded work / cancellation.</b> A plan is computed before anything is deleted and can be previewed; a lease
+ *       keeps two nodes from sweeping one repository at once. The {@link RepositoryInventory} a sweeper drives delivers
+ *       {@link RepositoryInventory#releases(RepositoryInventory.ReleaseVisitor)} grouped and streamed, so the plan
+ *       holds one coordinate's versions; the inherited list-backed default refuses past its bound rather than buffering
+ *       a deployment-sized set.</li>
  * </ol>
  */
 public interface RetentionProvider {
@@ -60,20 +47,14 @@ public interface RetentionProvider {
     /** Build the sweeper if the configuration enables it, reading settings through {@code config}; empty when off. */
     Optional<RetentionSweeper> create(UnaryOperator<String> config);
 
-    /** The config keys this engine cannot run without; empty (the default) for one that needs nothing. A provider
-     *  whose required keys are unset {@link Features#active self-disables} at discovery with one log line. */
+    /** The config keys this engine cannot run without; empty by default. A provider whose required keys are unset
+     *  {@link Features#active self-disables} at discovery with one log line. */
     default Set<String> requiredConfig() {
         return Set.of();
     }
 
-    /** The configured engine, resolved through the shared {@link Providers#optionalUnique} policy: an explicit
-     *  {@code jenrepo.retention=<name>} selects one by name and a selection nothing can honour
-     *  <em>throws</em> rather than degrading to no-retention, a
-     *  {@code jenrepo.<name>=false} or an unset {@link #requiredConfig()} switches one off, more than one
-     *  enabled engine is ambiguous rather than a discovery-order winner, and only an <em>unselected</em> deployment
-     *  with nothing enabled degrades to empty. */
-    /** The names of every installed retention engine - the keys {@code jenrepo.<name>} switches off - for the
-     *  settings catalogue to list. */
+    /** The names of every installed retention engine - the keys {@code jenrepo.<name>} switches off - for the settings
+     *  catalogue. */
     static Set<String> installed() {
         return Providers.installedNames("retention",
                 ServiceLoader.load(RetentionProvider.class),
@@ -81,6 +62,10 @@ public interface RetentionProvider {
                 _ -> true);
     }
 
+    /** The configured engine, through the shared {@link Providers#optionalUnique} policy: an explicit
+     *  {@code jenrepo.retention=<name>} nothing can honour throws, {@code jenrepo.<name>=false} or an unset
+     *  {@link #requiredConfig()} switches one off, two enabled engines are ambiguous, and only an unselected
+     *  deployment with nothing enabled resolves empty. */
     static Optional<RetentionSweeper> resolve(UnaryOperator<String> config) {
         return Providers.optionalUnique("retention",
                 ServiceLoader.load(RetentionProvider.class),

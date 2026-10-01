@@ -5,18 +5,15 @@ import module java.base;
 import build.jenesis.repository.store.Durations;
 
 /**
- * A retention rule over the published versions of each coordinate. A version is retained only if it is among the
- * {@code keepLast} newest AND within {@code maxAge} (and within {@code prereleaseExpiry} when it is a prerelease) AND
- * downloaded within {@code notDownloadedFor}; anything else is evicted - except the single newest version of a
- * coordinate, which is always kept so a cleanup never empties a coordinate. A {@code keepLast} of 0 disables the
- * count cap and a {@code null} duration disables that rule, so the dials compose: keep-last, max-age, prerelease
- * expiry, and not-downloaded-for (which evicts cold versions, the criterion that keeps a proxy cache lean). A
- * {@link Release#pinned() pinned} version is never evicted, whatever the rules say. The plan is computed, not
- * applied, so it can be previewed first.
+ * A retention rule over each coordinate's published versions. A version is kept only if it is among the
+ * {@code keepLast} newest, within {@code maxAge} (and {@code prereleaseExpiry} for a prerelease), and downloaded within
+ * {@code notDownloadedFor}; anything else is evicted - except a coordinate's single newest version, always kept so a
+ * cleanup never empties a coordinate, and a {@link Release#pinned() pinned} version, never evicted. A {@code keepLast}
+ * of 0 or a {@code null} duration disables that rule. The plan is computed, not applied, so it can be previewed.
  */
 public final class RetentionPolicy {
 
-    /** The four rules as settings keys - each a repository setting, read by these names wherever a policy is built. */
+    /** The four rules as repository setting keys. */
     public static final String KEEP_LAST = "keep-last";
     public static final String MAX_AGE = "max-age";
     public static final String PRERELEASE_EXPIRY = "prerelease-expiry";
@@ -25,8 +22,7 @@ public final class RetentionPolicy {
     /** The four keys, in the order the rules are listed everywhere. */
     public static final List<String> KEYS = List.of(KEEP_LAST, MAX_AGE, PRERELEASE_EXPIRY, NOT_DOWNLOADED_FOR);
 
-    // Newest-first, reused across every coordinate of every plan rather than reallocated inside the grouping loop
-    // (a large repository sorts one version list per coordinate, so the comparator would otherwise be minted per group).
+    // Newest-first, one comparator for every coordinate of every plan.
     private static final Comparator<Release> BY_PUBLISHED_DESCENDING = Comparator.comparing(Release::published).reversed();
 
     private final int keepLast;
@@ -42,9 +38,8 @@ public final class RetentionPolicy {
         if (keepLast < 0) {
             throw new IllegalArgumentException("keepLast must not be negative: " + keepLast);
         }
-        // A zero or negative duration would invert the rule: every past publish is "older" than PT-1H or PT0S, so
-        // one mistyped dial would mass-delete everything but each coordinate's newest version on the next sweep.
-        // A deletion policy fails loudly at construction, never at sweep time.
+        // A zero or negative duration would make every past publish "older" and mass-delete all but each coordinate's
+        // newest on the next sweep, so a deletion policy fails at construction, never at sweep time.
         this.keepLast = keepLast;
         this.maxAge = positive("maxAge", maxAge);
         this.prereleaseExpiry = positive("prereleaseExpiry", prereleaseExpiry);
@@ -59,22 +54,18 @@ public final class RetentionPolicy {
         return duration;
     }
 
-    /** Build a policy from the retention settings ({@code keep-last}, {@code max-age}, {@code prerelease-expiry},
-     *  {@code not-downloaded-for}) read through {@code config} - a property/setting accessor returning {@code null}
-     *  when unset; an unset or blank key disables its rule. */
+    /** Build a policy from the retention settings read through {@code config}, which answers {@code null} when unset;
+     *  an unset or blank key disables its rule. */
     public static RetentionPolicy fromConfig(UnaryOperator<String> config) {
         return parse(config.apply(KEEP_LAST), config.apply(MAX_AGE), config.apply(PRERELEASE_EXPIRY),
                 config.apply(NOT_DOWNLOADED_FOR));
     }
 
-    /**
-     * The one parse of the four dials as an operator writes them - the deployment default, the scheduled sweep, the
-     * API, the console and a repository's own settings all come through here, so they cannot disagree about a value.
-     * An unset or blank dial, or a duration dial set to {@link Durations#NONE}, disables its rule - the word a
-     * repository takes to switch off a rule its tenant or deployment sets; a duration is the deployment's one grammar
-     * ({@code P30D}, {@code 30d}, {@code PT12H}); a zero or negative one is refused here, at the operator's desk, and
-     * never at sweep time (see the constructor). A malformed value is an {@link IllegalArgumentException} naming it.
-     */
+    /** The one parse of the four dials - the deployment default, the scheduled sweep, the API, the console and a
+     *  repository's settings all come through here. An unset or blank dial, or a duration set to {@link Durations#NONE}
+     *  (how a repository switches off a rule its tenant or deployment sets), disables its rule; a duration is the
+     *  deployment's grammar ({@code P30D}, {@code 30d}, {@code PT12H}); a zero or negative one is refused here rather
+     *  than at sweep time. A malformed value is an {@link IllegalArgumentException} naming it. */
     public static RetentionPolicy parse(String keepLast, String maxAge, String prereleaseExpiry,
                                         String notDownloadedFor) {
         return parse(keepLast == null || keepLast.isBlank() ? 0 : Integer.parseInt(keepLast.trim()),
@@ -123,10 +114,8 @@ public final class RetentionPolicy {
     }
 
     public CleanupPlan plan(Collection<Release> releases, Instant now) {
-        // Grouped by ecosystem AND coordinate: two ecosystems may publish the same coordinate string (an npm
-        // package and a crate both named "foo"), and each ecosystem's version list is judged independently -
-        // the same groups the store inventory's walk-ordered stream delivers, so the buffered and the streaming
-        // plan cannot drift.
+        // Grouped by ecosystem and coordinate: two ecosystems may share a coordinate string, and each version list is
+        // judged on its own - the same groups the store inventory's stream delivers.
         Map<List<String>, List<Release>> byCoordinate = new LinkedHashMap<>();
         for (Release release : releases) {
             byCoordinate.computeIfAbsent(Arrays.asList(release.ecosystem(), release.coordinate()),
@@ -139,13 +128,11 @@ public final class RetentionPolicy {
         return new CleanupPlan(List.copyOf(evictions));
     }
 
-    /** Judge the versions of ONE coordinate - the group unit every rule is defined over: newest-first, the single
-     *  newest always kept (a cleanup never empties a coordinate), a pinned version never evicted, everything else
-     *  condemned by the first rule that names it. Judging any <em>subset</em> of a coordinate's versions is
-     *  provably conservative: a release's rank in a subset never exceeds its rank in the full list (keep-last fires
-     *  less), the age rules are per-release, and the subset's newest is protected on top of the full list's - so a
-     *  streamed group split by a crash-resume under-evicts for one pass and converges on the next, never the
-     *  reverse. Sorts {@code versions} in place. */
+    /** Judge the versions of one coordinate: newest-first, the newest always kept, a pinned version never evicted,
+     *  everything else condemned by the first rule naming it. Judging a subset is conservative - a release's rank in a
+     *  subset never exceeds its full rank, the age rules are per release, and the subset's newest is protected too - so
+     *  a group split by a crash-resume under-evicts for one pass and converges on the next. Sorts {@code versions} in
+     *  place. */
     private void judge(List<Release> versions, Instant now, List<CleanupPlan.Eviction> evictions) {
         versions.sort(BY_PUBLISHED_DESCENDING);
         for (int index = 1; index < versions.size(); index++) {
@@ -160,25 +147,22 @@ public final class RetentionPolicy {
         }
     }
 
-    /** A streaming evaluation of this policy over a release enumeration delivered grouped by coordinate (the
-     *  {@link RepositoryInventory#releases(RepositoryInventory.ReleaseVisitor)} contract): buffers only the current
-     *  coordinate's versions - never the repository's whole release list - and hands each completed group's
-     *  evictions to {@code sink} as soon as the group's boundary passes, so an applying sweep evicts while the
-     *  enumeration flows. Call {@link Planner#finish()} after the last release to judge the final group. */
+    /** A streaming evaluation of this policy over releases delivered grouped by coordinate (the
+     *  {@link RepositoryInventory#releases(RepositoryInventory.ReleaseVisitor)} contract): it buffers only the current
+     *  coordinate's versions and hands each group's evictions to {@code sink} as the group ends, so a sweep evicts
+     *  while the enumeration flows. Call {@link Planner#finish()} after the last release. */
     public Planner planner(Instant now, EvictionSink sink) {
         return new Planner(now, sink);
     }
 
-    /** Receives each eviction a {@link Planner} condemns - a plan collects it, a sweep applies it, so the receiver
-     *  is allowed the store I/O an eviction does. */
+    /** Receives each eviction a {@link Planner} condemns - a plan collects it, a sweep applies it. */
     @FunctionalInterface
     public interface EvictionSink {
         void accept(CleanupPlan.Eviction eviction) throws IOException;
     }
 
-    /** The one-coordinate-at-a-time state of a streaming {@link #planner plan}: {@link #offer} detects the group
-     *  boundary (the ecosystem or coordinate changes) and judges the completed group through the same rules the
-     *  buffered {@link #plan} applies - one judgment path, two delivery shapes. */
+    /** The one-coordinate-at-a-time state of a streaming plan: {@link #offer} detects the group boundary and judges the
+     *  completed group through the same rules {@link #plan} applies. */
     public final class Planner {
 
         private final Instant now;
@@ -190,8 +174,7 @@ public final class RetentionPolicy {
             this.sink = sink;
         }
 
-        /** Add the next release of the grouped stream, judging the previous coordinate's group when this release
-         *  opens a new one. */
+        /** Add the next release, judging the previous coordinate's group when this one opens a new group. */
         public void offer(Release release) throws IOException {
             if (!group.isEmpty() && !sameCoordinate(group.getFirst(), release)) {
                 judgeGroup();

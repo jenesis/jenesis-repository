@@ -3,10 +3,9 @@ package build.jenesis.repository.cleanup;
 import module java.base;
 
 /**
- * Applies a {@link RetentionPolicy} over a {@link RepositoryInventory}: {@link #plan} computes what would be evicted
- * (a dry run), {@link #sweep} computes the same plan and applies it. The engine is supplied by a
- * {@link RetentionProvider} module discovered with {@link ServiceLoader} - with no provider installed, nothing in
- * the system evicts releases, and the retention endpoints and screens say so.
+ * Applies a {@link RetentionPolicy} over a {@link RepositoryInventory}: {@link #plan} computes what would be evicted,
+ * {@link #sweep} computes and applies it. Supplied by a discovered {@link RetentionProvider}; without one nothing
+ * evicts releases, and the retention endpoints and screens say so.
  */
 public interface RetentionSweeper {
 

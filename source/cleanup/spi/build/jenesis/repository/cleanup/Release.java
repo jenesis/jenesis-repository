@@ -3,27 +3,24 @@ package build.jenesis.repository.cleanup;
 import module java.base;
 
 /**
- * A published version of a coordinate, as the cleanup sees it: the ecosystem and its ecosystem-canonical coordinate
- * (a Maven {@code group:artifact}, an npm package, ...), the version, when it was last published, when it was last
- * downloaded (the publish time when nothing has tracked a download), whether it is a prerelease (a Maven
- * {@code -SNAPSHOT}, an npm prerelease tag - decided by the format, not here), and whether it is pinned (force-kept,
- * immune to every retention rule). Prerelease is carried as a flag rather than derived from the version, so no version
- * convention leaks into the cleanup.
+ * A published version of a coordinate as the cleanup sees it: the ecosystem and its canonical coordinate, the version,
+ * when it was published and last downloaded (the publish time when no download was tracked), whether it is a prerelease
+ * (decided by the format, so no version convention leaks in here), and whether it is pinned (immune to every retention
+ * rule).
  */
 public record Release(String ecosystem, String coordinate, String version, Instant published, Instant lastDownloaded,
                       boolean prerelease, boolean pinned, Long downloads, Instant downloadedAt) {
 
-    /** A release whose download facts are unknown - the shape every retention rule and every test needed before the
-     *  count existed. {@code downloads} and {@code downloadedAt} are the recorded facts as they are, {@code null} when
-     *  nothing was recorded; {@code lastDownloaded} stays the retention view, the publish time when nothing was. */
+    /** A release whose download facts are unknown: {@code downloads} and {@code downloadedAt} are {@code null}, while
+     *  {@code lastDownloaded} stays the retention view. */
     public Release(String ecosystem, String coordinate, String version, Instant published, Instant lastDownloaded,
                    boolean prerelease, boolean pinned) {
         this(ecosystem, coordinate, version, published, lastDownloaded, prerelease, pinned, null, null);
     }
 
 
-    /** A release nothing has downloaded since publication - last-downloaded defaults to the publish time, unpinned;
-     *  ecosystem unset (production reads it from the inventory, the retention rules do not need it). */
+    /** A release nothing has downloaded since publication: last-downloaded is the publish time, unpinned, ecosystem
+     *  unset. */
     public Release(String coordinate, String version, boolean prerelease, Instant published) {
         this(null, coordinate, version, published, published, prerelease, false);
     }

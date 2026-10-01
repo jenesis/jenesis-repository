@@ -7,22 +7,21 @@ import build.jenesis.repository.store.Lease;
 import build.jenesis.repository.store.LineDocument;
 
 /**
- * A report a screen reads instead of computing: the result of a pass over the whole repository - what retention
- * would evict, what a licence policy would newly hold - written once by the pass that computed it and read back as
- * one small object, with the time it was computed at and a bounded sample of its rows.
+ * A report a screen reads instead of computing: the result of a pass over the whole repository - what retention would
+ * evict, what a licence policy would newly hold - written by that pass and read back as one small object with its
+ * timestamps and a bounded sample of rows.
  *
- * <p>The rule it enforces is the one every console screen has to hold to: a request renders what is stored, and a
- * walk of the published set happens only in the background. A screen that wants a fresh answer {@linkplain #compute
- * starts} the pass and shows it running; it never waits for it. The report keeps at most {@link #SAMPLE} rows - the
- * count is exact, the rows are the head - so the object stays small however large the repository.
+ * <p>A request renders what is stored; a walk of the published set happens only in the background. A screen wanting a
+ * fresh answer {@linkplain #compute starts} the pass and shows it running, never waiting for it. At most
+ * {@link #SAMPLE} rows are kept - the count is exact, the rows are the head.
  */
 public final class StoredReport {
 
     /** How many rows a report keeps; the count says how many there were. */
     public static final int SAMPLE = 200;
 
-    /** How long a running computation is believed before a new one may be started over it: the ttl of the lease a
-     *  run holds, so a node that died mid-computation frees the report after an hour without anyone's help. */
+    /** How long a running computation is believed before another may start over it: the ttl of the lease a run holds,
+     *  so a node that died mid-run frees the report after an hour. */
     private static final Duration STALE_RUN = Duration.ofHours(1);
 
     private static final String ROOT = "reports";
@@ -35,10 +34,9 @@ public final class StoredReport {
 
     public enum Status { RUNNING, DONE, FAILED }
 
-    /** One stored report: its status, when the pass started and finished, how many rows it found, the first
-     *  {@link #SAMPLE} of them, the failure that stopped it, if one did, and - while a run is under way or after one
-     *  failed - the {@code previous} finished report, so a screen keeps showing the last result rather than nothing
-     *  until the next one lands. A finished report carries no previous one. */
+    /** One stored report: its status, start and finish, row count, the first {@link #SAMPLE} rows, the failure that
+     *  stopped it, and - while running or after a failure - the {@code previous} finished report, so a screen keeps
+     *  showing the last result. A finished report carries no previous one. */
     public record Report(Status status, Instant startedAt, Instant finishedAt, int count, List<String> rows,
                          String failure, Report previous) {
 
@@ -82,15 +80,12 @@ public final class StoredReport {
     }
 
     /**
-     * Start {@code pass} on a thread of its own, recording it as running first, unless a run is already under way
-     * on any node and younger than an hour. Answers whether a run was started. The pass writes its own report when
-     * it finishes, or the failure that stopped it.
+     * Start {@code pass} on its own thread, recording it as running first, unless a run younger than an hour is under
+     * way on any node. Answers whether a run was started; the pass writes its report, or its failure, when it ends.
      *
-     * <p>The run holds a {@link Lease} named for the report in the repository's own {@code .system/locks} space, so
-     * two nodes asked for the same report at the same moment start one run, not two: the stored {@code RUNNING}
-     * status alone cannot guard it, because two nodes reading "not running" in the same instant would both compute.
-     * The lease's ttl is the hour a {@code RUNNING} status is believed for, and a finished run releases it so the
-     * next request can start at once.
+     * <p>The run holds a {@link Lease} named for the report in the repository's {@code .system/locks} space, so two
+     * nodes asked at the same moment start one run: two nodes reading "not running" at once would both compute. The
+     * lease's ttl is the hour a {@code RUNNING} status is believed, and a finished run releases it.
      */
     public static boolean compute(ArtifactStore store, String name, Pass pass) throws IOException {
         Lease lease = new Lease(store, STALE_RUN);
@@ -122,24 +117,17 @@ public final class StoredReport {
         return true;
     }
 
-    /**
-     * Whether a run of {@code name} still holds the report's lease. The run's thread writes the finished report and
-     * then releases the lease, so a reader that sees {@code DONE} may still be racing that last write; a caller that
-     * must not outlive the run - a test whose store is about to be deleted, a round that starts the next run - waits
-     * for this to be {@code false}, not for the status alone.
-     */
+    /** Whether a run of {@code name} still holds the report's lease. The run writes its report and then releases the
+     *  lease, so a caller that must not outlive the run - a test about to delete its store, a round starting the next
+     *  run - waits for this to be {@code false}, not for the status alone. */
     public static boolean inFlight(ArtifactStore store, String name) throws IOException {
         return new Lease(store, STALE_RUN).holder("report-" + name, Instant.now()).isPresent();
     }
 
-    /**
-     * Wait until {@code name} has settled - a report is stored, it is no longer RUNNING, and no run of it is
-     * {@linkplain #inFlight in flight} - and answer it, or empty once {@code patience} has run out. A test that drives
-     * a computation and reads what it persisted waits here rather than on the status alone: the run's last store write
-     * is the release of its lease, after the report, and a late compare-and-set recreates the store's lock directory
-     * under a temp dir JUnit is deleting, which fails the delete on a root that is not empty. Two suites had written
-     * this loop, and only one of them had learnt that.
-     */
+    /** Wait until {@code name} has settled - stored, no longer RUNNING, and not {@linkplain #inFlight in flight} - and
+     *  answer it, or empty once {@code patience} runs out. The run's last write is the release of its lease, after the
+     *  report, and a late compare-and-set would recreate the store's lock directory under a temp directory a test is
+     *  deleting. */
     public static Optional<Report> awaitSettled(ArtifactStore store, String name, Duration patience) throws IOException {
         Instant deadline = Instant.now().plus(patience);
         while (Instant.now().isBefore(deadline)) {
@@ -157,13 +145,11 @@ public final class StoredReport {
         return Optional.empty();
     }
 
-    /** The report's own name on its first line, so a torn or foreign object reads as unreadable rather than as a
-     *  report; positional lines with no name and no version would be a stored shape a reader could not tell from
-     *  garbage. */
+    /** The report's name on its first line, so a torn or foreign object reads as unreadable rather than as a report. */
     private static final String MAGIC = "jenesis-report";
 
-    /** A report that carries a previous one is running or failed, so it has no rows of its own: the lines are the
-     *  previous report's, which its {@code previous.} fields describe. */
+    /** A report carrying a previous one is running or failed and has no rows of its own: the lines are the previous
+     *  report's, described by its {@code previous.} fields. */
     private static byte[] serialize(Report report) {
         LineDocument.Builder document = LineDocument.of(MAGIC, 1)
                 .field("status", report.status())
