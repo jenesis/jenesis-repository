@@ -22,12 +22,14 @@
                     <th scope="col">Coordinate</th>
                     <th scope="col">Verdict</th>
                     <th scope="col">Held by</th>
-                    <th scope="col">Reasons</th>
                     <th scope="col" th:if="${isEditor}"><span class="app-sr-only">Actions</span></th>
                 </tr>
                 </thead>
                 <tbody>
-                <tr th:each="q : ${quarantine}">
+                <!--/* Two rows an entry: its facts, then - across the table's whole width - the reasons it is held for,
+                     one to a line, so a long reason reads as text rather than wrapping in a narrow column. */-->
+                <th:block th:each="q : ${quarantine}">
+                <tr th:class="${q.reasons.isEmpty()} ? null : 'app-list__lead'">
                     <td>
                         <a th:if="${q.placed()}" th:href="@{/ui/repositories/{repo}/coordinate(repo=${repo},ecosystem=${q.ecosystem},coordinate=${q.bareCoordinate})}" th:text="${q.coordinate}">group:artifact:version</a>
                         <span th:unless="${q.placed()}" th:text="${q.coordinate}">group:artifact:version</span><br>
@@ -51,7 +53,6 @@
                                title="Held by the screen the artifact met when it was published or fetched">the gate, on
                             arrival</small>
                     </td>
-                    <td><small th:text="${#strings.listJoin(q.reasons, '; ')}">reason</small></td>
                     <td th:if="${isEditor}" class="app-list__actions">
                         <!--/* Release admits what the gate held and loses nothing, so it is the caution and asks,
                              naming the verdict and the reasons it overrides; discard drops the bytes for good, so it
@@ -70,6 +71,14 @@
                         </div>
                     </td>
                 </tr>
+                <tr th:unless="${q.reasons.isEmpty()}" class="app-list__detail">
+                    <td th:colspan="${isEditor} ? 4 : 3">
+                        <ul class="app-reasons" aria-label="Reasons">
+                            <li th:each="reason : ${q.reasons}"><small th:text="${reason}">reason</small></li>
+                        </ul>
+                    </td>
+                </tr>
+                </th:block>
                 </tbody>
             </table>
         </figure>

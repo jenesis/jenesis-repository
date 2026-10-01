@@ -17,8 +17,7 @@ public final class FolderListingSettingsContributor implements SettingsContribut
                         + "a thousand names at a time, for the clients that list a folder where maven-metadata.xml "
                         + "is missing (Coursier, sbt) and for people browsing. Off by default: a page costs a store "
                         + "listing per name it shows, which a repository whose clients read the metadata never "
-                        + "needs. Set for one repository, for a tenant's repositories or for every repository; the "
-                        + "narrowest value wins.",
+                        + "needs.",
                 Setting.Kind.BOOLEAN, FolderListing.DEFAULT, true, Setting.Scope.REPOSITORY).advanced());
     }
 }

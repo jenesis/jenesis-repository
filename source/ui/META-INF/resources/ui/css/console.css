@@ -421,14 +421,14 @@ body:not(:has(.app-sidebar)) > main {
     color: var(--pico-primary);
     font-weight: 600;
 }
-.app-sidebar__back {
-    margin-bottom: var(--app-space-2);
+.app-sidebar nav a.app-sidebar__back {
+    margin: 0 var(--app-space-3) var(--app-space-2);
+    padding: var(--app-space-3) 0 var(--app-space-2);
+    border-top: 1px solid var(--pico-muted-border-color);
+    border-radius: 0;
 }
-.app-sidebar__title {
-    margin: 0 0 var(--app-space-2);
-    padding: 0 var(--app-space-3);
-    font-weight: 600;
-    overflow-wrap: anywhere;
+.app-sidebar nav a.app-sidebar__back:hover {
+    background: none;
 }
 /* A topic heading is a label and never a link, so it looks like neither a link nor the page it heads: a hairline
    above it closes the topic before, and it is set small, bold and spaced in the text colour, where the links are the
@@ -444,6 +444,11 @@ body:not(:has(.app-sidebar)) > main {
     letter-spacing: 0.1em;
     cursor: default;
     user-select: none;
+}
+/* The first heading opens the sidebar, so it has no topic before it to close. */
+.app-sidebar nav > .app-sidebar__heading:first-child {
+    padding-top: 0;
+    border-top: 0;
 }
 /* The groups again, for a narrow screen where the header has no room for them. */
 .app-sidebar__groups {
@@ -584,21 +589,10 @@ figure {
 .app-page-header__heading {
     margin: 0;
 }
-/* A trail and its page read as one line: the crumbs small and muted, and the page - the heading - as its last step,
-   set large, so the title is said once and the reader sees at a glance which step is here. */
-.app-page-header__heading:has(> nav) {
-    display: flex;
-    flex-wrap: wrap;
-    align-items: baseline;
-    column-gap: var(--app-space-2);
-}
+/* The trail sits small and muted on a line of its own above the page's heading, which is the step it leads to and so
+   is not repeated in it. */
 .app-page-header__heading > nav .app-breadcrumb {
-    margin: 0;
-}
-.app-page-header__heading > nav .app-breadcrumb li:last-child::after {
-    content: "/";
-    margin-left: var(--app-space-1);
-    color: var(--pico-muted-border-color);
+    margin: 0 0 var(--app-space-1);
 }
 .app-page-header__title {
     margin: 0;
@@ -611,6 +605,43 @@ hgroup.app-page-header__heading > h1.app-page-header__title {
     --pico-font-weight: 700;
     font-size: var(--app-font-size-2xl);
     overflow-wrap: anywhere;
+}
+/* A value edited in place: the text, a small pencil at its end, and the form beneath it once the pencil is opened.
+   The pencil is a disclosure holding nothing, so it toggles without a script; the form beside it follows its state. */
+.app-inline-edit {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: baseline;
+    column-gap: var(--app-space-2);
+    margin-bottom: var(--pico-typography-spacing-vertical);
+}
+.app-inline-edit > p,
+.app-inline-edit > details {
+    margin: 0;
+}
+.app-inline-edit > details > summary {
+    display: inline-flex;
+    padding: 0;
+    color: var(--pico-muted-color);
+    line-height: 1;
+    list-style: none;
+}
+.app-inline-edit > details > summary::-webkit-details-marker {
+    display: none;
+}
+.app-inline-edit > details > summary::after {
+    display: none;
+}
+.app-inline-edit > details > summary:hover,
+.app-inline-edit > details[open] > summary {
+    color: var(--pico-primary);
+}
+.app-inline-edit > form {
+    flex-basis: 100%;
+    margin: var(--app-space-2) 0 0;
+}
+.app-inline-edit > details:not([open]) ~ form {
+    display: none;
 }
 .app-page-header__actions {
     display: flex;
@@ -1357,6 +1388,22 @@ main .app-switch {
 }
 .app-list tr.app-list__detail > td {
     padding-top: 0;
+}
+/* A version's detail row says where its files are in prose set apart from the facts above it - muted and a size
+   down, as a repository's description sits under its name - and the files themselves stay links. */
+.app-list__detail small {
+    color: var(--pico-muted-color);
+    font-size: var(--app-font-size-xs);
+}
+/* The reasons an entry is held for, one to a line under it. */
+.app-reasons {
+    margin: 0;
+    padding: 0;
+    list-style: none;
+}
+.app-reasons > li {
+    margin: 0;
+    list-style: none;
 }
 .app-list__detail small + small,
 .app-list__detail small + .app-files {

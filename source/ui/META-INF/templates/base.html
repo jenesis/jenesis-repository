@@ -133,11 +133,6 @@
             </ul>
         </nav>
         <nav th:if="${navigation.sidebar().present()}" aria-label="Pages">
-            <a th:if="${navigation.sidebar().back() != null}" class="app-sidebar__back"
-               th:href="${navigation.sidebar().back().href()}"
-               th:text="'&larr; ' + ${navigation.sidebar().back().label()}">&larr; Back</a>
-            <p th:unless="${navigation.sidebar().title().isEmpty()}" class="app-sidebar__title"
-               th:text="${navigation.sidebar().title()}">Title</p>
             <th:block th:each="section : ${navigation.sidebar().sections()}">
                 <p th:unless="${section.heading().isEmpty()}" class="app-sidebar__heading"
                    th:text="${section.heading()}">Heading</p>
@@ -147,6 +142,10 @@
                            th:attr="aria-current=${link.current()} ? 'page' : null">Page</a></li>
                 </ul>
             </th:block>
+            <!--/* The way out of what the sidebar lists, after it and set apart by the same hairline as a topic. */-->
+            <a th:if="${navigation.sidebar().back() != null}" class="app-sidebar__back"
+               th:href="${navigation.sidebar().back().href()}"
+               th:text="'&larr; ' + ${navigation.sidebar().back().label()}">&larr; Back</a>
         </nav>
     </aside>
 </th:block>
@@ -175,8 +174,8 @@
     </hgroup>
 </header>
 
-<!--/* The trail's last step is the page, and the page's title is that step: the heading ends the trail on its line
-     rather than repeating it under it. */-->
+<!--/* The trail's last step is the page, and the page's title is that step: the trail stops before it and the heading
+     stands under it on its own line. */-->
 <header th:fragment="pageHeaderCrumbs(title, crumbs)" class="app-page-header">
     <hgroup class="app-page-header__heading">
         <nav th:if="${crumbs != null and crumbs.size() > 1}" aria-label="Breadcrumb">

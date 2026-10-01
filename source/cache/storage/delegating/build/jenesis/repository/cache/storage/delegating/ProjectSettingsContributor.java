@@ -25,7 +25,7 @@ public final class ProjectSettingsContributor implements SettingsContributor {
                         Setting.Kind.LONG, "0", true, Setting.Scope.PROJECT).essential(),
                 new Setting(ProjectPolicy.TTL, "Build cache project", "Unused-entry lifetime",
                         "How long an entry nobody has read or written is kept before the reaper removes it (P30D, "
-                                + "30d); unset inherits the tenant's or the deployment's, none keeps entries for ever.",
+                                + "30d); none keeps entries for ever.",
                         Setting.Kind.DURATION_OR_NONE, "", true, Setting.Scope.PROJECT).essential(),
                 new Setting(ProjectPolicy.LRU, "Build cache project", "Evict least recently used first",
                         "Which entries a size-cap sweep evicts first: the least recently used (the default), or the "

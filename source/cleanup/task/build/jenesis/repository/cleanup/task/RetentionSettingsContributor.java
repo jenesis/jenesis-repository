@@ -46,22 +46,17 @@ public final class RetentionSettingsContributor implements SettingsContributor {
                                 + "degrading to no retention.",
                         Setting.Kind.STRING, "", true).standard(),
                 new Setting(RetentionPolicy.KEEP_LAST, "Retention", "Keep last",
-                        "Keep at most this many newest versions per coordinate; 0 disables the count cap. Set for "
-                                + "one repository, for a tenant's repositories or for every repository; the "
-                                + "narrowest value wins.",
+                        "Keep at most this many newest versions per coordinate; 0 disables the count cap.",
                         Setting.Kind.INTEGER, "0", true, Setting.Scope.REPOSITORY).essential(),
                 new Setting(RetentionPolicy.MAX_AGE, "Retention", "Maximum age",
-                        "Evict versions older than this duration (P30D, 30d); unset inherits the tenant's or the "
-                                + "deployment's rule, none switches the rule off for this repository.",
+                        "Evict versions older than this duration (P30D, 30d); none switches the rule off.",
                         Setting.Kind.DURATION_OR_NONE, "", true, Setting.Scope.REPOSITORY).essential(),
                 new Setting(RetentionPolicy.PRERELEASE_EXPIRY, "Retention", "Prerelease expiry",
-                        "Evict prereleases older than this duration; unset inherits the tenant's or the "
-                                + "deployment's rule, none switches the rule off for this repository.",
+                        "Evict prereleases older than this duration; none switches the rule off.",
                         Setting.Kind.DURATION_OR_NONE, "", true, Setting.Scope.REPOSITORY).essential(),
                 new Setting(RetentionPolicy.NOT_DOWNLOADED_FOR, "Retention", "Not downloaded for",
-                        "Evict versions not downloaded within this duration - it needs download tracking; unset "
-                                + "inherits the tenant's or the deployment's rule, none switches the rule off for "
-                                + "this repository.",
+                        "Evict versions not downloaded within this duration - it needs download tracking; none "
+                                + "switches the rule off.",
                         Setting.Kind.DURATION_OR_NONE, "", true, Setting.Scope.REPOSITORY).essential(),
                 new Setting("scheduled-cleanup", "Retention", "Scheduled cleanup",
                         "Run the scheduled reaps: finished import jobs past their time-to-live and a quota'd "

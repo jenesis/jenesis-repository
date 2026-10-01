@@ -21,8 +21,7 @@ public final class RateLimitSettingsContributor implements SettingsContributor {
                 new Setting(KEY, "Limits", "Rate limit",
                         "Request ceiling in permits per minute per tenant; 0 disables. Defaults to 6000 "
                                 + "(100 req/s per tenant) - a sane ceiling that caps a runaway or abusive client "
-                                + "without biting legitimate parallel CI; an operator raises, lowers, or sets 0 to "
-                                + "disable, deployment-wide or for one tenant.",
+                                + "without biting legitimate parallel CI.",
                         Setting.Kind.LONG, "6000", false, Setting.Scope.TENANT).gate().essential());
     }
 

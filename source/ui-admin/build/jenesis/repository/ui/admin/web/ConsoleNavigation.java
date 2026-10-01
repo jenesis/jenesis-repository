@@ -19,6 +19,9 @@ public final class ConsoleNavigation {
     /** The collection the repository pages live below. */
     static final String REPOSITORIES = "/ui/repositories";
 
+    /** The heading of a repository's first topic - its overview and contents - in the sidebar. */
+    static final String GENERAL = "General";
+
     private ConsoleNavigation() {
     }
 
@@ -47,11 +50,12 @@ public final class ConsoleNavigation {
                 .filter(entry -> entry.group() == group)
                 .map(entry -> new Navigation.Link(entry.label(), entry.path(), entry == current))
                 .toList();
-        return new Navigation(groups, new Navigation.Sidebar(group.label(), null,
-                List.of(new Navigation.Section("", links))));
+        return new Navigation(groups, new Navigation.Sidebar(null, List.of(new Navigation.Section(group.label(),
+                links))));
     }
 
-    /** The sidebar inside one repository: its pages under their topics, and the way back to the collection. */
+    /** The sidebar inside one repository: its pages under their topics, the first headed General since the page's own
+     *  header names the repository, and the way back to the collection. */
     private static Navigation.Sidebar repositorySidebar(List<RepositoryPage> pages, String repository, String path) {
         String base = REPOSITORIES + "/" + repository;
         String relative = path.substring(base.length());
@@ -72,12 +76,10 @@ public final class ConsoleNavigation {
                 }
             }
             if (!links.isEmpty()) {
-                // The repository's name heads the sidebar, so the first topic needs no heading of its own.
-                sections.add(new Navigation.Section(sections.isEmpty() ? "" : topic.label(), links));
+                sections.add(new Navigation.Section(sections.isEmpty() ? GENERAL : topic.label(), links));
             }
         }
-        return new Navigation.Sidebar(repository, new Navigation.Link("All repositories", REPOSITORIES, false),
-                sections);
+        return new Navigation.Sidebar(new Navigation.Link("All repositories", REPOSITORIES, false), sections);
     }
 
     /** The entry the reader is on: the longest entry path that is {@code path} or one of its ancestors. */

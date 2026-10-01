@@ -57,16 +57,16 @@ public record Navigation(List<Link> groups, Sidebar sidebar) {
     }
 
     /**
-     * The sidebar: a {@code title} naming what it lists (the group, or the repository a reader is inside), a
-     * {@code back} link out of that when there is one, and its sections.
+     * The sidebar: its sections, each under the heading that names it, and a {@code back} link out of what it lists
+     * when there is one. Every sidebar is headed the same way, so what a group's sidebar lists and what a repository's
+     * does read alike.
      */
-    public record Sidebar(String title, Link back, List<Section> sections) {
+    public record Sidebar(Link back, List<Section> sections) {
 
         /** An empty sidebar, which the shell does not render at all. */
-        public static final Sidebar NONE = new Sidebar("", null, List.of());
+        public static final Sidebar NONE = new Sidebar(null, List.of());
 
         public Sidebar {
-            Objects.requireNonNull(title, "title");
             sections = List.copyOf(sections);
         }
 

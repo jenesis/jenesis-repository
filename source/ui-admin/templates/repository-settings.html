@@ -7,9 +7,15 @@
     <div th:replace="~{fragments :: messages}"></div>
     <th:block th:replace="~{base :: repositoryHeader('Settings', null, null)}"></th:block>
     <p><small>What this repository is configured with - the settings the repository wizard asks when one is created,
-        edited here. Each is this repository's own value where it set one, else its tenant's, else the deployment's;
-        reverting one makes the repository inherit again.</small></p>
+        edited here.</small></p>
     <p th:unless="${isEditor}"><small>You have read-only access to this tenant.</small></p>
+
+    <label class="setting-filter" th:unless="${groups.isEmpty()}">
+        <input type="search" id="setting-filter" autocomplete="off"
+               placeholder="Filter by name or what a setting does&hellip;"
+               aria-label="Filter settings by name or description">
+    </label>
+    <p class="setting-nomatch" id="setting-nomatch" hidden>No setting matches that filter.</p>
     <th:block th:if="${groups.isEmpty()}">
         <div th:replace="~{base :: empty('No module installed here declares a repository setting.')}"></div>
     </th:block>
@@ -22,10 +28,11 @@
         <article class="setting-group">
             <h2 th:text="${g.name}">Group</h2>
             <dl>
-                <th:block th:each="s : ${g.settings}">
+                <div th:each="s : ${g.settings}" class="setting"
+                     th:attr="data-search=|${s.key} ${s.label} ${s.description} ${s.module}|">
                     <dt th:text="${s.label}">Label</dt>
                     <dd th:text="${s.effectiveDisplay()}">value</dd>
-                </th:block>
+                </div>
             </dl>
         </article>
     </th:block>

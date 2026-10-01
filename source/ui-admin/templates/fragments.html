@@ -41,7 +41,10 @@
                         flex-wrap: wrap; }
         .setting-edit > input, .setting-edit > select { margin: 0; }
         .setting-edit > form { margin: 0; }
-        .setting-revert button { margin: 0; padding: .15rem .7rem; font-size: .72rem; }
+        .setting-controls { display: flex; gap: .5rem; align-items: center; flex-wrap: wrap; margin: .3rem 0 0; }
+        .setting-controls > .setting-edit { margin: 0; }
+        .setting-controls > .setting-revert { margin: 0; }
+        .setting-revert button { margin: 0; }
         /* In-memory option search: a client-side filter over the config catalogue, matching a
            knob's key and its documentation text so it is found by what it does, not just its name. */
         .setting-filter { max-width: 42rem; }
@@ -52,10 +55,10 @@
            second definition of how that screen looks. Only the toggle, which is this console's own control, is
            local. */
         .module-toggle button { margin: 0; padding: .15rem .7rem; font-size: .72rem; }
-        /* On a touch device the compact revert/toggle buttons grow to an adequate touch target - keyed on the
+        /* On a touch device the compact toggle buttons grow to an adequate touch target - keyed on the
            pointer, not the viewport width, matching the shared base's tree-toggle rule. */
         @media (pointer: coarse) {
-            .setting-revert button, .module-toggle button { padding: .55rem .9rem; }
+            .module-toggle button { padding: .55rem .9rem; }
         }
     </style>
 </head>
@@ -110,17 +113,6 @@
                   th:text="|🔒 pinned by ${s.pinnedBy}|">🔒 pinned</span>
             <span class="app-badge app-badge--danger" th:if="${s.highImpact}"
                   title="A change here can start rejecting or admitting packages.">high-impact</span>
-            <!--/* A row's save and revert are its everyday acts, so they are neutral; on a high-impact setting they
-                 can start rejecting or admitting packages, so they are the caution and ask first. */-->
-            <form method="post" th:action="@{${action}}" class="setting-revert"
-                  th:if="${s.overridden and !s.pinned}">
-                <input type="hidden" name="key" th:value="${s.key}">
-                <input type="hidden" name="return" th:value="${back}" th:if="${back != null}">
-                <input type="hidden" name="value" value="">
-                <th:block th:if="${s.highImpact}"><button th:replace="~{base :: cautionButton('Revert',
-                        |Revert this high-impact policy knob to ${revertTo}?|)}">Revert</button></th:block>
-                <th:block th:unless="${s.highImpact}"><button th:replace="~{base :: secondaryButton('Revert')}">Revert</button></th:block>
-            </form>
         </div>
     </div>
     <p class="setting-doc" th:text="${s.description}">What this setting does.</p>
@@ -129,6 +121,11 @@
         <span><th:block th:text="${baseline}">default</th:block>: <span
                 th:text="${s.defaultDisplay()}">default</span></span>
     </p>
+    <!--/* The row's controls on one line: the value and its Save, then Revert beside it while the value is set
+         here. Save is what the row is for, so it is the filled button; Revert drops the value set here, so it is
+         the caution. On a high-impact setting either can start rejecting or admitting packages, so both are the
+         caution and ask first. */-->
+    <div class="setting-controls">
     <th:block th:if="${s.toggle()}">
         <div th:replace="~{fragments :: settingSwitch(${s}, ${action}, ${back},
                 |Apply this high-impact policy change${scope}?|)}"></div>
@@ -145,7 +142,7 @@
                th:placeholder="${s.editPlaceholder()}">
         <th:block th:if="${s.highImpact}"><button th:replace="~{base :: cautionButton('Save',
                 |Apply this high-impact policy change${scope}?|)}">Save</button></th:block>
-        <th:block th:unless="${s.highImpact}"><button th:replace="~{base :: secondaryButton('Save')}">Save</button></th:block>
+        <th:block th:unless="${s.highImpact}"><button th:replace="~{base :: primaryButton('Save')}">Save</button></th:block>
     </form>
     <div class="setting-edit setting-pinned" th:if="${s.pinned and !s.toggle()}">
         <select th:if="${s.dropdown()}" disabled th:attr="aria-label=${s.label}">
@@ -156,6 +153,15 @@
                th:value="${s.secret()} ? '' : ${s.value}" th:attr="aria-label=${s.label}">
         <p class="setting-pinned-note" th:text="|Pinned by ${s.pinnedBy} — not editable here.|">
             Pinned — not editable here.</p>
+    </div>
+    <form method="post" th:action="@{${action}}" class="setting-revert" th:if="${s.overridden and !s.pinned}">
+        <input type="hidden" name="key" th:value="${s.key}">
+        <input type="hidden" name="return" th:value="${back}" th:if="${back != null}">
+        <input type="hidden" name="value" value="">
+        <th:block th:if="${s.highImpact}"><button th:replace="~{base :: cautionButton('Revert',
+                |Revert this high-impact policy knob to ${revertTo}?|)}">Revert</button></th:block>
+        <button th:unless="${s.highImpact}" type="submit" class="secondary outline app-caution">Revert</button>
+    </form>
     </div>
 </div>
 

@@ -41,10 +41,9 @@ class ConsoleNavigationTest {
     void a_path_below_a_repository_lists_its_pages_under_their_topics() {
         Navigation navigation = resolve("/ui/repositories/releases/pins");
 
-        assertThat(navigation.sidebar().title()).isEqualTo("releases");
         assertThat(navigation.sidebar().back().href()).isEqualTo("/ui/repositories");
         assertThat(navigation.sidebar().sections()).extracting(Navigation.Section::heading)
-                .as("the repository's name heads the first topic").containsExactly("", "Review", "Lifecycle");
+                .as("the first topic is the repository in general").containsExactly("General", "Review", "Lifecycle");
         assertThat(links(navigation)).filteredOn(Navigation.Link::current)
                 .extracting(Navigation.Link::href).containsExactly("/ui/repositories/releases/pins");
     }
@@ -56,6 +55,8 @@ class ConsoleNavigationTest {
         assertThat(links(navigation)).extracting(Navigation.Link::label)
                 .as("the repositories are the screen's table, which filters them")
                 .containsExactly("All repositories", "Limits");
+        assertThat(navigation.sidebar().sections()).extracting(Navigation.Section::heading)
+                .as("a group's sidebar is headed as a repository's topics are").containsExactly("Repositories");
     }
 
     @Test

@@ -12,7 +12,7 @@ class NavigationTest {
     void a_page_is_offered_when_a_rendered_link_leads_to_it() {
         Navigation navigation = new Navigation(
                 List.of(new Navigation.Link("Operations", "/ui/metrics", true)),
-                new Navigation.Sidebar("Operations", new Navigation.Link("Back", "/ui/", false), List.of(
+                new Navigation.Sidebar(new Navigation.Link("Back", "/ui/", false), List.of(
                         new Navigation.Section("", List.of(
                                 new Navigation.Link("Metrics", "/ui/metrics", true),
                                 new Navigation.Link("Walks", "/ui/walks", false))))));
@@ -26,7 +26,7 @@ class NavigationTest {
     void a_page_no_link_leads_to_is_not_offered() {
         Navigation navigation = new Navigation(
                 List.of(new Navigation.Link("Operations", "/ui/metrics", true)),
-                new Navigation.Sidebar("Operations", null, List.of(new Navigation.Section("", List.of(
+                new Navigation.Sidebar(null, List.of(new Navigation.Section("", List.of(
                         new Navigation.Link("Metrics", "/ui/metrics", true))))));
 
         assertThat(navigation.offers("/ui/walks")).as("a module this composition does not carry").isFalse();
