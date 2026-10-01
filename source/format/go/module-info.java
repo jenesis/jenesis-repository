@@ -14,8 +14,7 @@ module build.jenesis.repository.format.go {
     requires build.jenesis.repository.walk;
     requires build.jenesis.repository.blobs;
     requires org.slf4j;
-    exports build.jenesis.repository.format.go to build.jenesis.repository.gateway.go.test,
-            build.jenesis.repository.gateway.census.test;
+    exports build.jenesis.repository.format.go;
     provides build.jenesis.repository.format.RepositoryFormat
             with build.jenesis.repository.format.go.GoFormat;
     provides build.jenesis.repository.store.PublicationObserver

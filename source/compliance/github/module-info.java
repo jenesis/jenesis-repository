@@ -16,8 +16,7 @@ module build.jenesis.repository.compliance.github {
     requires build.jenesis.repository.feed;
     requires build.jenesis.repository.settings;
     requires tools.jackson.databind;
-    exports build.jenesis.repository.compliance.github to build.jenesis.repository.compliance.github.test,
-            build.jenesis.repository.compliance.test;
+    exports build.jenesis.repository.compliance.github;
     provides build.jenesis.repository.compliance.SignalSourceProvider
             with build.jenesis.repository.compliance.github.GitHubAdvisorySourceProvider;
     provides build.jenesis.repository.settings.SettingsContributor

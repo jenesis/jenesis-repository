@@ -16,9 +16,7 @@ module build.jenesis.repository.upstream.store {
     requires build.jenesis.repository.upstream;
     requires build.jenesis.repository.maintenance;
     requires build.jenesis.repository.settings;
-    exports build.jenesis.repository.upstream.store to build.jenesis.repository.server.kernel.test,
-            build.jenesis.repository.upstream.store.test,
-            build.jenesis.repository.server.kernel.contract.test, build.jenesis.repository.web.test;
+    exports build.jenesis.repository.upstream.store;
     provides build.jenesis.repository.upstream.UpstreamCredentialSourceProvider
             with build.jenesis.repository.upstream.store.StoreUpstreamCredentialsProvider;
     provides build.jenesis.repository.maintenance.StorageNamespace

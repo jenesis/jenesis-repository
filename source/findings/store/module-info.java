@@ -21,9 +21,7 @@ module build.jenesis.repository.findings.store {
     requires build.jenesis.repository.bounds;
     requires tools.jackson.databind;
     requires org.slf4j;
-    exports build.jenesis.repository.findings.store to
-            build.jenesis.repository.findings.test, build.jenesis.repository.reclamation.test,
-            build.jenesis.repository.server.kernel.test, build.jenesis.repository.ui.admin.installed.test;
+    exports build.jenesis.repository.findings.store;
     provides build.jenesis.repository.findings.FindingsProvider
             with build.jenesis.repository.findings.store.StoreFindingsProvider;
     provides build.jenesis.repository.gate.HoldReleaseObserver

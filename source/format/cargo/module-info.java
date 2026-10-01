@@ -18,10 +18,8 @@ module build.jenesis.repository.format.cargo {
     requires build.jenesis.repository.blobs;
     requires org.slf4j;
     requires tools.jackson.databind;
-    // Exported to test modules only.
-    exports build.jenesis.repository.format.cargo to
-            build.jenesis.repository.gateway.test,
-            build.jenesis.repository.format.cargo.test;
+    // Exported for the suites that drive the format directly.
+    exports build.jenesis.repository.format.cargo;
     provides build.jenesis.repository.format.RepositoryFormat
             with build.jenesis.repository.format.cargo.CargoFormat;
     provides build.jenesis.repository.store.PublicationObserver

@@ -19,11 +19,7 @@ module build.jenesis.repository.format.pypi {
     // PEP 740 attestations are JSON, each turned into the Sigstore bundle the verifier reads.
     requires tools.jackson.databind;
     requires build.jenesis.repository.settings;
-    exports build.jenesis.repository.format.pypi to
-            build.jenesis.repository.gateway.test,
-            build.jenesis.repository.gateway.census.test,
-            build.jenesis.repository.reclamation.test,
-            build.jenesis.repository.gateway.contract.test;
+    exports build.jenesis.repository.format.pypi;
     provides build.jenesis.repository.format.RepositoryFormat
             with build.jenesis.repository.format.pypi.PyPiFormat;
     provides build.jenesis.repository.store.PublicationObserver

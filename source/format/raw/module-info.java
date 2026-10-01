@@ -15,8 +15,7 @@ module build.jenesis.repository.format.raw {
     // The action name a client's DELETE is recorded under on the audit trail.
     requires build.jenesis.repository.audit;
     requires java.xml;
-    exports build.jenesis.repository.format.raw to
-            build.jenesis.repository.format.raw.test, build.jenesis.repository.gateway.test;
+    exports build.jenesis.repository.format.raw;
     provides build.jenesis.repository.format.RepositoryFormat
             with build.jenesis.repository.format.raw.RawFormat;
     provides build.jenesis.repository.store.PublicationObserver

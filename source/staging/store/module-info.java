@@ -19,8 +19,7 @@ module build.jenesis.repository.staging.store {
     requires build.jenesis.repository.maintenance;
     requires build.jenesis.repository.settings;
     requires org.slf4j;
-    exports build.jenesis.repository.staging.store to
-            build.jenesis.repository.staging.store.test, build.jenesis.repository.reclamation.test;
+    exports build.jenesis.repository.staging.store;
     provides build.jenesis.repository.staging.StagingProvider
             with build.jenesis.repository.staging.store.StoreStagingProvider;
     provides build.jenesis.repository.maintenance.MaintenanceTaskProvider

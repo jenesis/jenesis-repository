@@ -230,17 +230,6 @@ public interface WalkConsumer {
     }
 
     /**
-     * Whether this consumer reads {@link ArtifactDescriptor#size()} off the pointers it is handed.
-     *
-     * <p>{@code true} by default. The length rides the pointer itself, so every consumer gets it for nothing and the
-     * walk stats a blob only for a pointer that carries no length - once, writing the length back. {@link RebuildPass}
-     * does not consult this declaration: it completes a lengthless pointer whichever consumers listen.
-     */
-    default boolean needsBlobSize() {
-        return true;
-    }
-
-    /**
      * Whether this consumer distinguishes a withheld pointer from a served one.
      *
      * <p>{@code true} by default, because every consumer that rebuilds a served view must: a withheld artifact

@@ -9,8 +9,7 @@
  * @jenesis.signature signature-repository.properties
  */
 open module build.jenesis.repository.compliance.web {
-    exports build.jenesis.repository.compliance.web to build.jenesis.repository.server.kernel.test,
-            build.jenesis.repository.ui.admin.installed.test, build.jenesis.repository.recovery.test;
+    exports build.jenesis.repository.compliance.web;
     requires build.jenesis.repository.server.kernel;
     requires build.jenesis.repository.server;
     requires build.jenesis.repository.compliance;

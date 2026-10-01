@@ -20,9 +20,7 @@ module build.jenesis.repository.format.gems {
     // A push with attestations is a multipart form; the attestations array is read one bundle per element.
     requires build.jenesis.repository.multipart;
     requires tools.jackson.databind;
-    exports build.jenesis.repository.format.gems to
-            build.jenesis.repository.gateway.test, build.jenesis.repository.gateway.census.test,
-            build.jenesis.repository.gateway.contract.test;
+    exports build.jenesis.repository.format.gems;
     provides build.jenesis.repository.format.RepositoryFormat
             with build.jenesis.repository.format.gems.RubyGemsFormat;
     provides build.jenesis.repository.store.PublicationObserver

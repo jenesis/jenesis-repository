@@ -19,9 +19,7 @@ module build.jenesis.repository.format.ivy {
     requires build.jenesis.repository.blobs;
     requires org.slf4j;
     requires build.jenesis.repository.store;
-    exports build.jenesis.repository.format.ivy to
-            build.jenesis.repository.format.contract.ecosystem.test,
-            build.jenesis.repository.gateway.census.test;
+    exports build.jenesis.repository.format.ivy;
     provides build.jenesis.repository.format.RepositoryFormat
             with build.jenesis.repository.format.ivy.IvyFormat;
     provides build.jenesis.repository.store.PublicationObserver

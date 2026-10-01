@@ -16,8 +16,7 @@ module build.jenesis.repository.format.npm {
     requires org.slf4j;
     requires org.apache.commons.compress;
     requires tools.jackson.databind;
-    exports build.jenesis.repository.format.npm to build.jenesis.repository.gateway.test,
-            build.jenesis.repository.gateway.contract.test;
+    exports build.jenesis.repository.format.npm;
     provides build.jenesis.repository.format.RepositoryFormat
             with build.jenesis.repository.format.npm.NpmFormat;
     provides build.jenesis.repository.store.PublicationObserver

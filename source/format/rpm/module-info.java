@@ -20,8 +20,7 @@ module build.jenesis.repository.format.rpm {
     requires build.jenesis.repository.format.signing;
     requires java.xml;
     requires org.slf4j;
-    exports build.jenesis.repository.format.rpm to
-            build.jenesis.repository.gateway.rpm.test, build.jenesis.repository.gateway.census.test;
+    exports build.jenesis.repository.format.rpm;
     provides build.jenesis.repository.format.RepositoryFormat
             with build.jenesis.repository.format.rpm.RpmFormat;
     provides build.jenesis.repository.store.PublicationObserver

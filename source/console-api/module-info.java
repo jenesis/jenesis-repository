@@ -11,8 +11,7 @@
  */
 open module build.jenesis.repository.console.api {
     requires build.jenesis.repository.store;
-    exports build.jenesis.repository.console.api to build.jenesis.repository.server.kernel.test,
-            build.jenesis.repository.ui.admin.test;
+    exports build.jenesis.repository.console.api;
     requires build.jenesis.repository.server.kernel;
     requires build.jenesis.repository.server;
     requires build.jenesis.repository.audit;

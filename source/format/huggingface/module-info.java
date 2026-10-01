@@ -17,8 +17,7 @@ module build.jenesis.repository.format.huggingface {
     requires build.jenesis.repository.blobs;
     requires org.slf4j;
     requires tools.jackson.databind;
-    exports build.jenesis.repository.format.huggingface to build.jenesis.repository.gateway.test,
-            build.jenesis.repository.gateway.contract.test;
+    exports build.jenesis.repository.format.huggingface;
     provides build.jenesis.repository.format.RepositoryFormat
             with build.jenesis.repository.format.huggingface.HuggingFaceFormat;
     provides build.jenesis.repository.store.PublicationObserver

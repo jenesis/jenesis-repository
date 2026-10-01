@@ -27,11 +27,8 @@ module build.jenesis.repository.format.helm {
     requires org.apache.commons.compress;
     requires org.slf4j;
     requires org.yaml.snakeyaml;
-    // Exported to test modules only.
-    exports build.jenesis.repository.format.helm to
-            build.jenesis.repository.gateway.test,
-            build.jenesis.repository.gateway.census.test,
-            build.jenesis.repository.format.helm.test;
+    // Exported for the suites that drive the format directly.
+    exports build.jenesis.repository.format.helm;
     provides build.jenesis.repository.format.RepositoryFormat
             with build.jenesis.repository.format.helm.HelmFormat;
     provides build.jenesis.repository.store.PublicationObserver

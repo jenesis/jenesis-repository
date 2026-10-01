@@ -25,13 +25,8 @@ module build.jenesis.repository.format.swift {
     requires build.jenesis.repository.multipart;
     requires org.slf4j;
     requires tools.jackson.databind;
-    // Exported to test modules only.
-    exports build.jenesis.repository.format.swift to
-            build.jenesis.repository.format.contract.ecosystem.test,
-            build.jenesis.repository.gateway.census.test,
-            build.jenesis.repository.format.swift.test,
-            build.jenesis.repository.compliance.swift.test,
-            build.jenesis.repository.gateway.test;
+    // Exported for the suites that drive the format directly.
+    exports build.jenesis.repository.format.swift;
     provides build.jenesis.repository.format.RepositoryFormat
             with build.jenesis.repository.format.swift.SwiftFormat;
     provides build.jenesis.repository.store.PublicationObserver

@@ -22,10 +22,7 @@ module build.jenesis.repository.health.store {
     requires build.jenesis.repository.walk;
     requires tools.jackson.databind;
     requires org.slf4j;
-    exports build.jenesis.repository.health.store to
-            build.jenesis.repository.health.test, build.jenesis.repository.compliance.test,
-            build.jenesis.repository.reclamation.test,
-            build.jenesis.repository.server.kernel.test;
+    exports build.jenesis.repository.health.store;
     provides build.jenesis.repository.health.HealthLedgerProvider
             with build.jenesis.repository.health.store.StoreHealthLedgerProvider;
     provides build.jenesis.repository.maintenance.StorageNamespace

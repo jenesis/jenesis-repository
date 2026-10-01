@@ -16,8 +16,7 @@
 open module build.jenesis.repository.auth.keylogin {
     requires build.jenesis.repository.ui;
     requires build.jenesis.repository.scope;
-    exports build.jenesis.repository.auth.keylogin to build.jenesis.repository.auth.keylogin.test,
-            build.jenesis.repository.auth.keylogin.e2e;
+    exports build.jenesis.repository.auth.keylogin;
     requires build.jenesis.repository.ui.identity;
     requires build.jenesis.repository.ui.store;
     requires build.jenesis.repository.store;

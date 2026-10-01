@@ -42,8 +42,7 @@
 module build.jenesis.repository.store.gcs {
     // The storage client speaks over the product's own HTTP client, not a URL connection.
     requires build.jenesis.repository.net.http;
-    exports build.jenesis.repository.store.gcs to build.jenesis.repository.store.gcs.test,
-            build.jenesis.repository.store.backends.e2e;
+    exports build.jenesis.repository.store.gcs;
     requires build.jenesis.repository.store;
     requires com.google.api.services.storage;
     requires google.api.client;

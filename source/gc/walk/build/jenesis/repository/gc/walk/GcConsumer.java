@@ -54,13 +54,6 @@ public final class GcConsumer implements WalkConsumer {
         return NAME;
     }
 
-    /** The collector does its work at completion, over its own pass; a pointer handed to it here decides nothing,
-     *  and how large the blob is decides less. Asking costs a HEAD on a key the walk is not enumerating. */
-    @Override
-    public boolean needsBlobSize() {
-        return false;
-    }
-
     /**
      * It listens on nothing at all: the mark reads the pointers itself, over its own pass, so a member handed to it
      * here would be read a second time for nothing.

@@ -19,10 +19,7 @@ module build.jenesis.repository.format.oci.inventory {
     requires build.jenesis.repository.inventory;
     requires build.jenesis.repository.settings;
     requires org.slf4j;
-    exports build.jenesis.repository.format.oci.inventory to build.jenesis.repository.server.kernel.test,
-            // Test modules only.
-            build.jenesis.repository.server.principles.test,
-            build.jenesis.repository.server.kernel.contract.test;
+    exports build.jenesis.repository.format.oci.inventory;
     provides build.jenesis.repository.format.RepositoryFormat
             with build.jenesis.repository.format.oci.inventory.OciBlobLayout;
 }

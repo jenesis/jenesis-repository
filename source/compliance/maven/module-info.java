@@ -23,8 +23,7 @@ module build.jenesis.repository.compliance.maven {
     requires org.slf4j;
     // Gradle Module Metadata is JSON.
     requires tools.jackson.databind;
-    exports build.jenesis.repository.compliance.maven to build.jenesis.repository.gateway.test,
-            build.jenesis.repository.compliance.maven.test;
+    exports build.jenesis.repository.compliance.maven;
     provides build.jenesis.repository.compliance.QualityInspector
             with build.jenesis.repository.compliance.maven.MavenQualityInspector;
     provides build.jenesis.repository.settings.SettingsContributor

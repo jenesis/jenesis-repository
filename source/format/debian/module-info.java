@@ -27,9 +27,7 @@ module build.jenesis.repository.format.debian {
     // The keyring's store key and cache namespace, which a verifier must spell as the format does; agreeing on a key is
     // not access to the implementation, so the export is unqualified.
     exports build.jenesis.repository.format.debian.keys;
-    exports build.jenesis.repository.format.debian to
-            build.jenesis.repository.gateway.test, build.jenesis.repository.gateway.census.test,
-            build.jenesis.repository.gateway.contract.test;
+    exports build.jenesis.repository.format.debian;
     provides build.jenesis.repository.format.RepositoryFormat
             with build.jenesis.repository.format.debian.DebianFormat;
     provides build.jenesis.repository.store.PublicationObserver

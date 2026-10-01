@@ -36,10 +36,7 @@ module build.jenesis.repository.cleanup.task {
                     build.jenesis.repository.cleanup.task.RollUpConsumer;
     requires org.slf4j;
     requires tools.jackson.databind;
-    exports build.jenesis.repository.cleanup.task to
-            build.jenesis.repository.cleanup.test, build.jenesis.repository.gateway.test,
-            build.jenesis.repository.server.kernel.test, build.jenesis.repository.reclamation.test,
-            build.jenesis.repository.gateway.contract.test;
+    exports build.jenesis.repository.cleanup.task;
     provides build.jenesis.repository.cleanup.RetentionProvider
             with build.jenesis.repository.cleanup.task.RepositoryCleanerProvider;
     provides build.jenesis.repository.maintenance.MaintenanceTaskProvider

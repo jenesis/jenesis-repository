@@ -13,8 +13,7 @@ module build.jenesis.repository.usage {
     requires build.jenesis.repository.settings;
     requires build.jenesis.repository.server.spi;
     requires build.jenesis.repository.observation;
-    exports build.jenesis.repository.usage to build.jenesis.repository.test,
-            build.jenesis.repository.server.e2e, build.jenesis.repository.usage.test;
+    exports build.jenesis.repository.usage;
     provides build.jenesis.repository.server.spi.KeyUsageTrackerProvider
             with build.jenesis.repository.usage.BatchingKeyUsageTrackerProvider;
     provides build.jenesis.repository.settings.SettingsContributor

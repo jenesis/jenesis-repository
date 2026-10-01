@@ -30,11 +30,7 @@ module build.jenesis.repository.compliance.scan {
     // The console's template engine reads the report's records reflectively; only this package is opened.
     opens build.jenesis.repository.compliance.scan;
 
-    exports build.jenesis.repository.compliance.scan to build.jenesis.repository.compliance.web,
-            build.jenesis.repository.ui.store,
-            build.jenesis.repository.ui.admin.installed.test,
-            build.jenesis.repository.server.kernel.test, build.jenesis.repository.recovery.test,
-            build.jenesis.repository.maintenance.contract.test;
+    exports build.jenesis.repository.compliance.scan;
     provides build.jenesis.repository.maintenance.MaintenanceTaskProvider
             with build.jenesis.repository.compliance.scan.VulnerabilityScanTaskProvider,
                  build.jenesis.repository.compliance.scan.KevEnforceTaskProvider,

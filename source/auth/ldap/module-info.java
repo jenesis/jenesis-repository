@@ -37,8 +37,7 @@ open module build.jenesis.repository.auth.ldap {
     requires spring.ldap.core;
     requires java.naming;
     requires thymeleaf.spring6;
-    exports build.jenesis.repository.auth.ldap to build.jenesis.repository.auth.ldap.test,
-            build.jenesis.repository.auth.ldap.e2e;
+    exports build.jenesis.repository.auth.ldap;
     provides build.jenesis.repository.ui.ConsoleModuleProvider
             with build.jenesis.repository.auth.ldap.LdapLoginMechanism;
 }

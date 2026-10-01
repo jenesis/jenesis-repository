@@ -13,8 +13,7 @@ module build.jenesis.repository.ratelimit {
     requires build.jenesis.repository.settings;
     requires build.jenesis.repository.server.spi;
     requires build.jenesis.repository.observation;
-    exports build.jenesis.repository.ratelimit to build.jenesis.repository.test,
-            build.jenesis.repository.server.e2e, build.jenesis.repository.ratelimit.test;
+    exports build.jenesis.repository.ratelimit;
     provides build.jenesis.repository.server.spi.RateLimiterProvider
             with build.jenesis.repository.ratelimit.TokenBucketRateLimiterProvider;
     provides build.jenesis.repository.settings.SettingsContributor

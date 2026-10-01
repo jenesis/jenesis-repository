@@ -19,8 +19,7 @@
  * @jenesis.signature signature-repository.properties
  */
 module build.jenesis.repository.store.s3 {
-    exports build.jenesis.repository.store.s3 to build.jenesis.repository.store.s3.test,
-            build.jenesis.repository.store.backends.e2e;
+    exports build.jenesis.repository.store.s3;
     requires build.jenesis.repository.store;
     requires build.jenesis.repository.store.s3compatible;
     requires software.amazon.awssdk.services.s3;

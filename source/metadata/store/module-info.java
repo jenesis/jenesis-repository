@@ -24,9 +24,7 @@ module build.jenesis.repository.metadata.store {
     requires build.jenesis.repository.observation;
     requires build.jenesis.repository.store;
     requires org.slf4j;
-    exports build.jenesis.repository.metadata.store to
-            build.jenesis.repository.metadata.store.test, build.jenesis.repository.reclamation.test,
-            build.jenesis.repository.server.kernel.test;
+    exports build.jenesis.repository.metadata.store;
     provides build.jenesis.repository.metadata.MetadataProvider
             with build.jenesis.repository.metadata.store.StoreMetadataProvider;
     provides build.jenesis.repository.maintenance.StorageNamespace

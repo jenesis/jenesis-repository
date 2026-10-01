@@ -37,10 +37,7 @@ module build.jenesis.repository.format.homebrew {
     requires build.jenesis.repository.blobs;
     // The attestations document beside a bottle is read one bundle per element.
     requires tools.jackson.databind;
-    exports build.jenesis.repository.format.homebrew to
-            build.jenesis.repository.format.contract.ecosystem.test,
-            build.jenesis.repository.gateway.census.test,
-            build.jenesis.repository.gateway.test;
+    exports build.jenesis.repository.format.homebrew;
     provides build.jenesis.repository.format.RepositoryFormat
             with build.jenesis.repository.format.homebrew.HomebrewFormat;
 }

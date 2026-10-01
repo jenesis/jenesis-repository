@@ -14,8 +14,7 @@
  * @jenesis.signature signature-repository.properties
  */
 open module build.jenesis.repository.search.web {
-    exports build.jenesis.repository.search.web to build.jenesis.repository.web.test,
-            build.jenesis.repository.server.kernel.test;
+    exports build.jenesis.repository.search.web;
     requires build.jenesis.repository.server.kernel;
     requires build.jenesis.repository.server;
     requires build.jenesis.repository.search;

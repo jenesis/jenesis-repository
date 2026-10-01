@@ -19,12 +19,8 @@ module build.jenesis.repository.format.apk {
     requires build.jenesis.repository.settings;
     requires org.apache.commons.compress;
     requires org.slf4j;
-    // Exported to test modules only.
-    exports build.jenesis.repository.format.apk to
-            build.jenesis.repository.format.contract.ecosystem.test,
-            build.jenesis.repository.gateway.census.test,
-            build.jenesis.repository.format.apk.test,
-            build.jenesis.repository.gateway.test;
+    // Exported for the suites that drive the format directly.
+    exports build.jenesis.repository.format.apk;
     provides build.jenesis.repository.format.RepositoryFormat
             with build.jenesis.repository.format.apk.ApkFormat;
     provides build.jenesis.repository.store.PublicationObserver

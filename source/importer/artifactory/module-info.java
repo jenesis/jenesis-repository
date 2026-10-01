@@ -14,8 +14,7 @@ module build.jenesis.repository.importer.artifactory {
     requires build.jenesis.repository.importer;
     requires build.jenesis.repository.format;
     requires tools.jackson.databind;
-    exports build.jenesis.repository.importer.artifactory to build.jenesis.repository.test,
-            build.jenesis.repository.server.e2e, build.jenesis.repository.importer.artifactory.test;
+    exports build.jenesis.repository.importer.artifactory;
     provides build.jenesis.repository.importer.ImportSourceProvider
             with build.jenesis.repository.importer.artifactory.ArtifactorySourceProvider;
 }

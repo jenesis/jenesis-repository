@@ -18,9 +18,7 @@ module build.jenesis.repository.downloads {
     requires build.jenesis.repository.server.spi;
     requires build.jenesis.repository.settings;
     requires org.slf4j;
-    exports build.jenesis.repository.downloads to build.jenesis.repository.server.kernel.test,
-            build.jenesis.repository.downloads.test,
-            build.jenesis.repository.server.kernel.contract.test;
+    exports build.jenesis.repository.downloads;
     provides build.jenesis.repository.inventory.DownloadTrackerProvider
             with build.jenesis.repository.downloads.BatchingDownloadTrackerProvider;
     provides build.jenesis.repository.settings.SettingsContributor

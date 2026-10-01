@@ -19,8 +19,7 @@ module build.jenesis.repository.format.conda {
     requires org.apache.commons.compress;
     requires com.github.luben.zstd_jni;
     requires tools.jackson.databind;
-    exports build.jenesis.repository.format.conda to
-            build.jenesis.repository.gateway.conda.test, build.jenesis.repository.gateway.census.test;
+    exports build.jenesis.repository.format.conda;
     provides build.jenesis.repository.format.RepositoryFormat
             with build.jenesis.repository.format.conda.CondaFormat;
     provides build.jenesis.repository.store.PublicationObserver

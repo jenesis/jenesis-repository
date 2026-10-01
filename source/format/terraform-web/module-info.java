@@ -23,7 +23,7 @@ open module build.jenesis.repository.format.terraform.web {
     requires spring.beans;
     requires spring.context;
     requires spring.web;
-    exports build.jenesis.repository.format.terraform.web to build.jenesis.repository.server.kernel.test;
+    exports build.jenesis.repository.format.terraform.web;
     provides build.jenesis.repository.settings.SettingsContributor
             with build.jenesis.repository.format.terraform.web.TerraformSettingsContributor;
     provides build.jenesis.repository.server.kernel.ServerModuleProvider

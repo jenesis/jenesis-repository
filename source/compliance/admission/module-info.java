@@ -26,8 +26,7 @@ module build.jenesis.repository.compliance.admission {
     requires build.jenesis.repository.compliance;
     requires build.jenesis.repository.settings;
     requires tools.jackson.databind;
-    exports build.jenesis.repository.compliance.admission to
-            build.jenesis.repository.compliance.test, build.jenesis.repository.gateway.test;
+    exports build.jenesis.repository.compliance.admission;
     provides build.jenesis.repository.compliance.QualityInspector
             with build.jenesis.repository.compliance.admission.AttestationInspector;
     provides build.jenesis.repository.compliance.GatePolicyProvider

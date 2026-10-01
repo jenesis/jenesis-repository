@@ -17,8 +17,7 @@
  * @jenesis.signature signature-repository.properties
  */
 module build.jenesis.repository.store.azure {
-    exports build.jenesis.repository.store.azure to build.jenesis.repository.store.azure.test,
-            build.jenesis.repository.store.backends.e2e;
+    exports build.jenesis.repository.store.azure;
     requires build.jenesis.repository.store;
     requires com.azure.storage.blob;
     requires com.azure.core;

@@ -16,8 +16,7 @@
  * @jenesis.signature signature-repository.properties
  */
 open module build.jenesis.repository.webhook.web {
-    exports build.jenesis.repository.webhook.web to build.jenesis.repository.server.kernel.test,
-            build.jenesis.repository.webhook.web.test;
+    exports build.jenesis.repository.webhook.web;
     requires build.jenesis.repository.webhook;
     requires build.jenesis.repository.events;
     requires build.jenesis.repository.server.kernel;

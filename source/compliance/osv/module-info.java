@@ -15,9 +15,7 @@ module build.jenesis.repository.compliance.osv {
     requires build.jenesis.repository.feed;
     requires build.jenesis.repository.settings;
     requires tools.jackson.databind;
-    exports build.jenesis.repository.compliance.osv to build.jenesis.repository.compliance.osv.test,
-            build.jenesis.repository.compliance.test,
-            build.jenesis.repository.ecosystem.testkit;
+    exports build.jenesis.repository.compliance.osv;
     provides build.jenesis.repository.compliance.SignalSourceProvider
             with build.jenesis.repository.compliance.osv.OsvAdvisorySourceProvider;
     provides build.jenesis.repository.settings.SettingsContributor

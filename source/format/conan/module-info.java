@@ -19,10 +19,8 @@ module build.jenesis.repository.format.conan {
     requires build.jenesis.repository.blobs;
     requires tools.jackson.databind;
     requires org.slf4j;
-    // Exported to test modules only.
-    exports build.jenesis.repository.format.conan to
-            build.jenesis.repository.gateway.test,
-            build.jenesis.repository.format.conan.test;
+    // Exported for the suites that drive the format directly.
+    exports build.jenesis.repository.format.conan;
     provides build.jenesis.repository.format.RepositoryFormat
             with build.jenesis.repository.format.conan.ConanFormat;
     provides build.jenesis.repository.store.PublicationObserver

@@ -17,8 +17,7 @@ module build.jenesis.repository.compliance.openssf {
     requires build.jenesis.repository.feed;
     requires build.jenesis.repository.settings;
     requires tools.jackson.databind;
-    exports build.jenesis.repository.compliance.openssf to build.jenesis.repository.compliance.openssf.test,
-            build.jenesis.repository.compliance.test;
+    exports build.jenesis.repository.compliance.openssf;
     provides build.jenesis.repository.compliance.SignalSourceProvider
             with build.jenesis.repository.compliance.openssf.OpenSsfMaliciousSourceProvider;
     provides build.jenesis.repository.settings.SettingsContributor

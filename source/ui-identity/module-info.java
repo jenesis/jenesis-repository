@@ -21,19 +21,5 @@ open module build.jenesis.repository.ui.identity {
     requires spring.boot;
     requires spring.context;
     requires spring.security.core;
-    exports build.jenesis.repository.ui.identity to build.jenesis.repository.ui.identity.test,
-            build.jenesis.repository.ui.admin,
-            build.jenesis.repository.auth.keylogin,
-            build.jenesis.repository.auth.saml,
-            build.jenesis.repository.auth.oidc,
-            build.jenesis.repository.auth.ldap.test,
-            build.jenesis.repository.auth.ldap.e2e,
-            build.jenesis.repository.scim,
-            build.jenesis.repository.ui.admin.test,
-            build.jenesis.repository.ui.admin.installed.test,
-            build.jenesis.repository.auth.keylogin.test,
-            build.jenesis.repository.auth.oidc.test,
-            build.jenesis.repository.auth.saml.test,
-            build.jenesis.repository.bundle.full.test,
-            build.jenesis.repository.server.kernel.test;
+    exports build.jenesis.repository.ui.identity;
 }
