@@ -6,6 +6,7 @@ import build.jenesis.repository.observation.Metric;
 import build.jenesis.repository.observation.ObservabilitySource;
 import build.jenesis.repository.store.ArtifactStore;
 import build.jenesis.repository.store.OwnerOnly;
+import build.jenesis.repository.store.StoreBindings;
 
 /**
  * The budgeted pre-verdict staging store for the hardening proxy: the scratch {@link ArtifactStore} an untrusted
@@ -158,7 +159,16 @@ public final class SpoolStore implements ObservabilitySource {
      * {@code nocache} leg (and the hardening screen builds on it) fetches an untrusted body through.
      */
     public ArtifactStore acquire() {
-        return new SpoolLease().root();
+        return acquire(StoreBindings.NONE);
+    }
+
+    /**
+     * {@link #acquire()}, the spool carrying {@code bindings} - those of the repository store it stands in for, so a
+     * publication the pass-through runs over the scratch finds the deployment's binding exactly as one over the
+     * repository's own store does. Every scope of the spool carries them too.
+     */
+    public ArtifactStore acquire(StoreBindings bindings) {
+        return new SpoolLease().root(bindings);
     }
 
     /** Bytes currently spooled to temp files across every in-flight spool - the live {@code jenrepo.gateway.spool.bytes}
@@ -234,8 +244,8 @@ public final class SpoolStore implements ObservabilitySource {
         // 404-misses never spends a slot) and released once on close.
         private final AtomicBoolean slotHeld = new AtomicBoolean();
 
-        private Spool root() {
-            return new Spool(this, "");
+        private Spool root(StoreBindings bindings) {
+            return new Spool(this, "", bindings);
         }
 
         /** Acquire this request's concurrency slot on its first blob spool; a no-op on later spools of the same
@@ -328,15 +338,22 @@ public final class SpoolStore implements ObservabilitySource {
 
         private final SpoolLease lease;
         private final String prefix;
+        private final StoreBindings bindings;
 
-        private Spool(SpoolLease lease, String prefix) {
+        private Spool(SpoolLease lease, String prefix, StoreBindings bindings) {
             this.lease = lease;
             this.prefix = prefix;
+            this.bindings = bindings;
         }
 
         @Override
         public ArtifactStore scope(String tenant) {
-            return new Spool(lease, prefix + tenant + "/");
+            return new Spool(lease, prefix + tenant + "/", bindings);
+        }
+
+        @Override
+        public StoreBindings bindings() {
+            return bindings;
         }
 
         @Override

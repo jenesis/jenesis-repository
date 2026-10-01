@@ -307,7 +307,7 @@ final class PublishRecorder {
         // Whom the artifact names travels with every want, so a discovery source that looks a key up by its owner
         // knows whom to ask and what the key it finds is bound to.
         Set<String> maintainers = maintainers(inspected);
-        SignerTrust trust = SignerTrustProvider.trust(ComplianceSettings.lookup(), store);
+        SignerTrust trust = SignerTrustProvider.trust(ComplianceSettings.lookup(store), store);
         for (ComplianceGate.Subject subject : inspected) {
             for (ComplianceGate.Signature signature : subject.signatures()) {
                 if (signature.signer() == null) {

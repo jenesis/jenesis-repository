@@ -125,7 +125,7 @@ public final class SignatureCompletionObserver implements PublicationObserver {
         // every signature untrusted - and it would hide behind the inline path, because a held artifact is recorded
         // by THIS observer rather than by the screen. The composed trust with nothing installed is NONE,
         // so this needs no presence check of its own.
-        SignerTrust trust = SignerTrustProvider.trust(ComplianceSettings.lookup(), store);
+        SignerTrust trust = SignerTrustProvider.trust(ComplianceSettings.lookup(store), store);
         QualityInspector inspector = ((TrustAware) new SignatureInspector()).withTrust(trust);
         // The screen's own sibling lookup over the stored view, not a second one written here: it carries the bounded
         // read, the blobs-namespace formats' own serving keys, and - through heldContentOf - the stored pointer rather

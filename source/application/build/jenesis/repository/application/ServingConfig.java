@@ -37,6 +37,7 @@ import build.jenesis.repository.inventory.DownloadTracker;
 import build.jenesis.repository.settings.PrivateHostGuard;
 import build.jenesis.repository.settings.Setting;
 import build.jenesis.repository.settings.SettingsScopes;
+import build.jenesis.repository.server.spi.CapabilityContributor;
 import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.security.authorization.AuthorizationManager;
@@ -90,6 +91,19 @@ public class ServingConfig {
                 : new AuthFetcher(resolved, upstreamCredentials);
     }
 
+    /**
+     * This deployment's rich contribution to the one {@code /api/capabilities} - its formats, import sources, report
+     * columns and feature flags - as a bean the free controller merges beside the discovered contributors, reading
+     * the {@link DeploymentInfoController} of this context when a request asks.
+     */
+    @Bean
+    public DeploymentCapabilities deploymentCapabilities(ObjectProvider<DeploymentInfoController> info) {
+        return new DeploymentCapabilities(() -> {
+            DeploymentInfoController controller = info.getIfAvailable();
+            return controller == null ? null : controller.capabilityMap();
+        });
+    }
+
     /** The pre-verdict spool store, sized from {@code jenrepo.spool.*} ({@code max-bytes}, {@code max-spools}): the
      *  nocache pass-through leg spools each untrusted upstream body through it and refuses with {@code 503} when a
      *  budget is exhausted, rather than growing unbounded. A bean so its budget gauges are reported from this context. */
@@ -101,7 +115,7 @@ public class ServingConfig {
     @Bean
     public RepositoryRouter repositoryRouter(LiveDefinitions definitions, LiveConfig liveConfig, Repositories repositories,
                                              ProxyFormat.Fetcher upstreamFetcher, Environment environment,
-                                             SpoolStore spool,
+                                             SpoolStore spool, ArtifactStore root,
                                              ObjectProvider<UpstreamCredentialSource> credentials,
                                              ObjectProvider<DownloadTracker> downloads) {
         // liveConfig::proxyGate binds the tenant-aware proxyGate(String) overload, so a routed proxy fetch is screened
@@ -128,7 +142,9 @@ public class ServingConfig {
                 PublishInterceptor.withheldByAny(path, store, interceptors) || Publication.reviewPending(store, path);
         RepositoryRouter router = new RepositoryRouter(definitions::definition, repositories::store, upstreamFetcher)
                 .gating(liveConfig::gate, liveConfig::holdDays)
-                .passingThrough(spool::acquire)
+                // The scratch stands in for a repository's store, so it carries that store's bindings: a pass-through
+                // publication over it is screened by this deployment's binding, as one over the repository is.
+                .passingThrough(() -> spool.acquire(root.bindings()))
                 .hardening(hardeningBounds)
                 .withholding(withheld);
         return redirecting(router, config, liveConfig, repositories, withheld,
@@ -307,6 +323,8 @@ public class ServingConfig {
                                                                                   ObjectProvider<AuthorizationManager<
                                                                                           RequestAuthorizationContext>>
                                                                                           authorization,
+                                                                                  ObjectProvider<CapabilityContributor>
+                                                                                          contributed,
                                                                                   Environment environment) {
         // The controller is the one serving AND writing surface now: reads and writes both dispatch
         // through the routing seam and the free ScreenedDispatch edge. Registered under the bean name
@@ -336,7 +354,10 @@ public class ServingConfig {
                                 ? liveConfig.effective(tenant, repository, key, environmental.apply(key))
                                 : environmental.apply(key), null,
                 routedServing, deployEdgeHooks, auditTrail,
-                new build.jenesis.repository.server.AuthorizedReads(authorization::getIfAvailable));
+                new build.jenesis.repository.server.AuthorizedReads(authorization::getIfAvailable),
+                // This deployment's own contributions to /api/capabilities - its rich view among them - beside the
+                // discovered ones.
+                contributed.orderedStream().toList());
     }
 
     @Bean

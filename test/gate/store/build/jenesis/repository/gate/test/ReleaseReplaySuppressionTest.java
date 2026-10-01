@@ -60,7 +60,8 @@ class ReleaseReplaySuppressionTest {
         // rejection never leaves behind.
         ComplianceGate gate = new ComplianceGate(new VulnerabilityPolicy(Severity.HIGH), MALICIOUS)
                 .malicious(new MaliciousPackagePolicy().action(Verdict.QUARANTINE));
-        try (ComplianceScreen.Wiring wiring = ComplianceScreen.live(() -> gate)) {
+        try (ComplianceScreen.Binding binding = ComplianceScreen.binding().gate(() -> gate).open()) {
+            store = binding.bind(store);
             // A control publish proves the wired gate is live: an ordinary malicious upload quarantines, so a later
             // ACCEPT on the same coordinate can only be the screen's suppression, not an inert gate.
             Publication.Published control = new Publication(store).screen(

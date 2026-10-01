@@ -517,7 +517,10 @@ public record RepositoryDefinition(boolean writable, List<Fallback> fallbacks) {
      *  configuration time). It gates the parse of a {@code redirect} serve token: absent, the token is a fail-loud
      *  parse refusal naming the missing module rather than a silent proxy (see {@code applyOption}). It
      *  defaults {@code false} so a deployment without the module refuses a {@code redirect} definition at every write
-     *  site. Volatile because it is read on the request-parse path and written once at boot from the config thread. */
+     *  site. Volatile because it is read on the request-parse path and written once at boot from the config thread.
+     *  Process-wide because it is a fact about the module path - whether the module is installed - which is the same
+     *  in every context a process boots; the module records it from its configuration because that is where its
+     *  presence is learned, never because a deployment chose it. */
     private static volatile boolean redirectHandlerInstalled = false;
 
     /** Register (or clear) the presence of a redirect serve handler, so the {@code redirect} serve token parses (the
@@ -538,7 +541,8 @@ public record RepositoryDefinition(boolean writable, List<Fallback> fallbacks) {
      *  {@code redirect-dns} module rather than a silent reinterpretation as a repository named {@code dns} (see
      *  {@code parseSource}). It defaults {@code false} so a deployment without the module refuses a
      *  {@code dns} definition at every write site. Volatile because it is read on the request-parse path and written
-     *  once at boot from the config thread - the exact discipline of {@link #redirectHandlerInstalled}. */
+     *  once at boot from the config thread - the exact discipline of {@link #redirectHandlerInstalled}, and
+     *  process-wide for the same reason. */
     private static volatile boolean dnsDirectoryInstalled = false;
 
     /** Register (or clear) the presence of the {@code redirect-dns} module, so the {@code dns} source keyword parses

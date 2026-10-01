@@ -39,11 +39,6 @@ open module build.jenesis.repository.application {
     requires build.jenesis.repository.importer;
     requires build.jenesis.repository.ui;
     requires jakarta.servlet;
-    // the rich-capabilities contribution to the ONE /api/capabilities, discovered by the
-    // free RepositoryController's ServiceLoader.load(server.CapabilityContributor) - the free-core contributor SPI (a
-    // common-SPI hook, not a bean override or a WebMvcRegistrations mapping suppression).
-    provides build.jenesis.repository.server.spi.CapabilityContributor
-            with build.jenesis.repository.application.DeploymentCapabilities;
     // Claim the free-core import edge on module presence, so the free ImportEdgeController (conditionally
     // registered by FreeImportEdgeCondition when no provider is installed) is never created and this composition's
     // tenant-scoped ImportController is the sole import edge - through the free ImportEdgeProvider SPI rather than a

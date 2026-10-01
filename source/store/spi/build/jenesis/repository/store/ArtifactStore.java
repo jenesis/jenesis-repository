@@ -172,6 +172,22 @@ public interface ArtifactStore {
     Object identity();
 
     /**
+     * What the deployment that built this store bound to it - see {@link StoreBindings}: how a plug-in discovered
+     * once per process finds the values of the deployment whose store it was handed, rather than of whichever
+     * deployment wired a process-wide holder last.
+     *
+     * <p>A backend answers {@link StoreBindings#NONE}, which is this default; a store is bound by
+     * {@link StoreBindings#over}. <b>A decorator answers its delegate's</b>, as it does for {@link #identity()}, and
+     * every scope of a bound store answers the bindings of the store it was scoped from. The default is safe to
+     * inherit only because the one consumer that must find a binding refuses to proceed without it while a
+     * deployment is bound in the process - so a decorator that forgets to forward this fails a publish loudly
+     * instead of disarming the screen, and the store SPI's own tests hold every decorator in it to the forwarding.
+     */
+    default StoreBindings bindings() {
+        return StoreBindings.NONE;
+    }
+
+    /**
      * Validate {@code segment} as a single traversal-free scope name and return it - defence in depth for
      * {@link #scope(String)}. Every routing edge already rejects a non-{@code [A-Za-z0-9_-]} tenant / repository name
      * before it scopes the store, so this is a backstop: it stops a store backend from silently escaping its subspace

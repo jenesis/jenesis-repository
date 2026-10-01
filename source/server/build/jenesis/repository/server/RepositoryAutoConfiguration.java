@@ -4,6 +4,7 @@ import module org.slf4j;
 import build.jenesis.repository.audit.AuditTrail;
 
 import build.jenesis.repository.store.Clocks;
+import build.jenesis.repository.server.spi.CapabilityContributor;
 import build.jenesis.repository.server.spi.TokenExchange;
 import build.jenesis.repository.server.spi.TokenExchangeProvider;
 import build.jenesis.repository.server.spi.KeyUsageTracker;
@@ -18,6 +19,7 @@ import build.jenesis.repository.format.ProxyFormat;
 import build.jenesis.repository.format.RepositoryFormat;
 import build.jenesis.repository.importer.ImportSourceProvider;
 import build.jenesis.repository.store.ArtifactStore;
+import build.jenesis.repository.store.StoreBindings;
 import build.jenesis.repository.store.StoredCounter;
 import build.jenesis.repository.store.StoredListing;
 import build.jenesis.repository.store.ArtifactStoreProvider;
@@ -65,11 +67,11 @@ public class RepositoryAutoConfiguration {
 
     public RepositoryAutoConfiguration(Environment environment) {
         // The clock every stored stamp is made with, before any bean stamps anything: the system clock, offset by
-        // jenrepo.clock.skew when a fleet test wants this node's clock to run ahead of its peers'.
+        // jenrepo.clock.skew when a fleet test wants this node's clock to run ahead of its peers'. Installed whether or
+        // not a skew is set, so a deployment that sets none never inherits one an earlier context in the process set.
         String skew = environment.getProperty("jenrepo.clock.skew");
-        if (skew != null && !skew.isBlank()) {
-            Clocks.install(Clock.offset(Clock.systemUTC(), Duration.parse(skew.strip())));
-        }
+        Clocks.install(skew == null || skew.isBlank() ? Clock.systemUTC()
+                : Clock.offset(Clock.systemUTC(), Duration.parse(skew.strip())));
         // Hand the Spring Environment to the config-driven SPI enable/disable convention before any bean below
         // discovers providers, so every jenrepo.* toggle - including its JENREPO_* environment
         // spelling through relaxed binding - gates ServiceLoader discovery deployment-wide.
@@ -98,12 +100,17 @@ public class RepositoryAutoConfiguration {
     @Bean
     @ConditionalOnMissingBean
     public ArtifactStore artifactStore(RepositoryProperties properties, Environment environment,
-                                       ObjectProvider<ArtifactStoreDecorator> decorators) {
+                                       ObjectProvider<ArtifactStoreDecorator> decorators,
+                                       ObjectProvider<StoreBindings> bindings) {
         ArtifactStore resolved = ArtifactStoreProvider.resolve(properties.getStore(), environment::getProperty);
+        // What the composition hands the plug-ins it cannot inject - a screen's gate, say - rides the store itself,
+        // bound closest to the backend so every layer above forwards it and every scope of the store carries it.
+        // That is how a discovered plug-in finds THIS deployment's values on the store it is handed, rather than
+        // whichever deployment in the process wired a shared holder last.
+        ArtifactStore store = StoreBindings.all(bindings.orderedStream()).over(resolved);
         // Every contributed layer, innermost first, between the backend and the wrappers below. A composition
         // that adds metering or a node memo contributes one rather than redeclaring this bean, so the quota and
         // read-only wrappers cannot be left out of a copy of this method.
-        ArtifactStore store = resolved;
         for (ArtifactStoreDecorator decorator : decorators.orderedStream().toList()) {
             store = decorator.decorate(store);
         }
@@ -542,6 +549,7 @@ public class RepositoryAutoConfiguration {
                                                      @Qualifier("repositoryAuthorizationManager")
                                                      ObjectProvider<AuthorizationManager<RequestAuthorizationContext>>
                                                              authorization,
+                                                     ObjectProvider<CapabilityContributor> contributed,
                                                      Environment environment) {
         // A format reads a runtime toggle off the exchange (the Maven metadata computation opt-in); resolve the bare
         // setting key against the environment under the shared jenrepo.* prefix, into which a stored
@@ -550,7 +558,10 @@ public class RepositoryAutoConfiguration {
         // serving seam (NONE here, a router in a multi-repository distribution) drives a read of a proxy/group repo.
         return new RepositoryController(routing, dispatcher, importSources, fetcher, batch,
                 (_, _, key) -> environment.getProperty(Features.key(key)), store, routed, EdgeHooks.NONE,
-                audit.getIfAvailable(() -> AuditTrail.NONE), new AuthorizedReads(authorization::getIfAvailable));
+                audit.getIfAvailable(() -> AuditTrail.NONE), new AuthorizedReads(authorization::getIfAvailable),
+                // A deployment's own capability contributions are beans, so they read this deployment's state rather
+                // than whatever a process-wide holder was last handed.
+                contributed.orderedStream().toList());
     }
 
     /**

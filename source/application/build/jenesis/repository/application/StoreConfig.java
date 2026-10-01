@@ -70,10 +70,8 @@ public class StoreConfig {
     @Order(10)
     public ArtifactStoreDecorator meteringStoreDecorator(RepositoryProperties properties,
                                                          ObjectProvider<MeterRegistry> meterRegistry) {
-        return store -> {
-            MeteringArtifactStore.families(properties.isStoreFamilies());
-            return new MeteringArtifactStore(store, meterRegistry.getIfAvailable(), properties.getStore());
-        };
+        return store -> new MeteringArtifactStore(store, meterRegistry.getIfAvailable(), properties.getStore(),
+                properties.isStoreFamilies());
     }
 
     @Bean

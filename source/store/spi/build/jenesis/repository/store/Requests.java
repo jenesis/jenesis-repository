@@ -16,6 +16,13 @@ import build.jenesis.repository.scope.Scopes;
  * store - a {@link Publication} - reaches the root through the one {@linkplain #installRoot installed} at boot by
  * the node's driver, and requests nothing when none is installed (a unit test, an embedder without a driver): a
  * request is never a reason for the caller's own work to fail.
+ *
+ * <p><b>Why the root is held by the process rather than carried by the store.</b> Its readers include a pass's
+ * completion hook, which is handed no store at all, and the root is the node's - a process is one node, whose driver
+ * installs it at start and {@linkplain #retireRoot retires} it at close, so a context closed in a process leaves
+ * nothing behind for the next. Where two contexts share a process at once, what crosses between them is advice and
+ * never a decision: a request lands on the other deployment's root and a walk it would not otherwise have run is run
+ * there - which is a cost, and is why a driver retires only the root it installed.
  */
 public final class Requests {
 
@@ -101,6 +108,12 @@ public final class Requests {
      *  driver installs it at boot - once per process, since a process is one node. */
     public static void installRoot(ArtifactStore root) {
         ROOT.set(root);
+    }
+
+    /** Retire {@code root} as the installed root, if it still is: a driver closing retires what it installed and
+     *  nothing a later driver installed after it. */
+    public static void retireRoot(ArtifactStore root) {
+        ROOT.compareAndSet(root, null);
     }
 
     /** The installed root, if a driver installed one. */

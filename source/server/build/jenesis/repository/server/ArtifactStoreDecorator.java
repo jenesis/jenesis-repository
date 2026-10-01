@@ -29,9 +29,9 @@ public interface ArtifactStoreDecorator {
      * Wrap {@code store} and return the wrapper, or return {@code store} to decline.
      *
      * <p>Called once, on the boot thread, before anything has been served. An implementation may read
-     * configuration and install itself where a static accessor needs it, but must not touch the store: a
-     * decorator that reads at composition time turns a boot into a store call, and on a cold deployment into a
-     * failure nobody attributes to it.
+     * configuration, but must not touch the store: a decorator that reads at composition time turns a boot into a
+     * store call, and on a cold deployment into a failure nobody attributes to it. And it forwards
+     * {@link ArtifactStore#bindings()} to the store it wraps, as it does {@link ArtifactStore#identity()}.
      */
     ArtifactStore decorate(ArtifactStore store);
 }

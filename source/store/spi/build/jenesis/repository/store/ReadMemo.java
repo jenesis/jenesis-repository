@@ -84,6 +84,11 @@ public final class ReadMemo implements ArtifactStore {
     }
 
     @Override
+    public StoreBindings bindings() {
+        return delegate.bindings();
+    }
+
+    @Override
     public synchronized Optional<Versioned> readVersioned(String key) throws IOException {
         Optional<Versioned> known = remembered.get(key);
         if (known != null) {

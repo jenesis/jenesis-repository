@@ -9,7 +9,6 @@ import build.jenesis.repository.compliance.BoundedBodyReader;
 import build.jenesis.repository.store.ArchiveInflation;
 import build.jenesis.repository.store.ArchiveWalk;
 import build.jenesis.repository.compliance.ComplianceGate;
-import build.jenesis.repository.compliance.ComplianceSettings;
 import build.jenesis.repository.compliance.Maintainer;
 import build.jenesis.repository.compliance.ManifestSubjectBuilder;
 import build.jenesis.repository.compliance.QualityInspector;
@@ -533,7 +532,7 @@ public final class MavenQualityInspector implements QualityInspector {
                 return subjects;
             }
         }
-        return ClosureResolution.dependencies(path, pom, ECOSYSTEM, ComplianceSettings.lookup());
+        return ClosureResolution.dependencies(path, pom, ECOSYSTEM, lookup.settings());
     }
 
     /** Every dependency the SBOM already resolved, as gate subjects: the component's Maven coordinate and version,

@@ -2,6 +2,7 @@ package build.jenesis.repository.application;
 
 import module java.base;
 import build.jenesis.repository.server.kernel.MaintenanceScheduler;
+import build.jenesis.repository.store.ArtifactStore;
 import org.springframework.boot.autoconfigure.SpringBootApplication;
 import org.springframework.boot.builder.SpringApplicationBuilder;
 import org.springframework.context.ConfigurableApplicationContext;
@@ -151,6 +152,15 @@ public class RepositoryApplication {
          */
         public void runMaintenance(Instant now) {
             context.getBeanProvider(MaintenanceScheduler.class).ifAvailable(scheduler -> scheduler.runNow(now));
+        }
+
+        /**
+         * The deployment's root store - the one every repository's store is scoped from, carrying what the deployment
+         * bound to it - so a test can read and publish exactly as this node does, rather than through a store built
+         * beside it that carries none of it.
+         */
+        public ArtifactStore store() {
+            return context.getBean(ArtifactStore.class);
         }
 
         @Override

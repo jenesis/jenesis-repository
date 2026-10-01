@@ -488,6 +488,11 @@ public interface QualityInspector {
             return bounded;
         }
 
+        @Override
+        public UnaryOperator<String> settings() {
+            return delegate.settings();
+        }
+
         /** Whether any bounded sibling read stopped at its limit during this inspection. */
         boolean truncated() {
             return truncated;
@@ -660,6 +665,39 @@ public interface QualityInspector {
          *  use, so a caller spells the empty case the same way whichever seam it is on. */
         static Lookup none() {
             return NONE;
+        }
+
+        /** {@link #NONE}, for an inspection whose deployment resolves its dials through {@code settings}. */
+        static Lookup none(UnaryOperator<String> settings) {
+            Objects.requireNonNull(settings, "settings");
+            return new Lookup() {
+
+                @Override
+                public Optional<byte[]> fetch(String path) {
+                    return Optional.empty();
+                }
+
+                @Override
+                public Optional<Bounded> fetchBounded(String path, int limit) {
+                    return Optional.empty();
+                }
+
+                @Override
+                public UnaryOperator<String> settings() {
+                    return settings;
+                }
+            };
+        }
+
+        /**
+         * The deployment's settings this inspection resolves its dials through - what the store under inspection
+         * carries ({@link ComplianceSettings#lookup}), so an inspector reads the value an operator set at runtime and
+         * the same one the screen judging the artifact reads. The default is the boot environment, which is what a
+         * lookup with no store behind it has; a lookup over a store answers that store's, and a lookup decorating
+         * another answers its delegate's.
+         */
+        default UnaryOperator<String> settings() {
+            return ComplianceSettings.lookup(null);
         }
 
         /**

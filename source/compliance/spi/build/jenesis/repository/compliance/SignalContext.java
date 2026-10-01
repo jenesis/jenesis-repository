@@ -100,11 +100,19 @@ public interface SignalContext {
     /**
      * Bind the deployment's <strong>root</strong> store and clock as the space every signal's snapshots live in - the
      * one wiring point, made by the composition that owns the root store, closing which retires the binding (only if
-     * it is still the current one, so a second application context in the same JVM cannot unwire a live one). This is
-     * the same registry-free "the deployment wires it once" seam {@code ComplianceScreen} uses for its health source
-     * and meters, and it is sound here for the reason clause 6 gives: there is exactly one signal snapshot space per
-     * deployment, so there is exactly one thing to bind. A per-tenant capability could never be wired this way, which
-     * is precisely the distinction this SPI is making.
+     * it is still the current one, so a second application context in the same JVM cannot unwire a live one). It is
+     * sound for the reason clause 6 gives: there is exactly one signal snapshot space per deployment, so there is
+     * exactly one thing to bind. A per-tenant capability could never be wired this way, which is precisely the
+     * distinction this SPI is making.
+     *
+     * <p><b>Why it is held by the process rather than carried by a store.</b> A signal source is created from a
+     * configuration lookup alone ({@link SignalSourceProvider#named}), at sites that hold no deployment and no store -
+     * a maintenance task's provider, a dimension resolved from settings - and providers memoize what they create per
+     * endpoint, so the snapshot space has to be reachable without either; carrying it per deployment would thread the
+     * deployment through every signal resolution, which is a change to this SPI's resolution and not to its wiring.
+     * The process holds one, which is right for a process that is one node. A second context in the same process
+     * mirrors into the space of whichever deployment bound last - a public catalogue written to the other store, which
+     * is a cost and never a verdict, since every deployment mirrors the same catalogue.
      */
     static Deployment deployment(ArtifactStore root, Clock clock) {
         return Deployment.bind(root, clock);

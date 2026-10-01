@@ -385,6 +385,7 @@ public final class MaintenanceScheduler implements AutoCloseable {
         }
         workers.shutdownNow();
         leases.close();
+        Requests.retireRoot(root);
         try {
             RunningMarker.clean(root, nodeId);
         } catch (IOException | RuntimeException unremovable) {

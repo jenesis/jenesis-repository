@@ -50,6 +50,13 @@ public final class Features {
 
     private static final Set<String> ANNOUNCED = ConcurrentHashMap.newKeySet();
 
+    /**
+     * The installed lookup. Process-wide because module discovery reads it, and discovery runs where no deployment is
+     * in hand: an SPI home's {@code installed()} or {@code enabled()} is asked from a static initialiser and from
+     * plug-ins constructed with no deployment, so there is nothing a per-deployment value could ride on. It is the
+     * process's configuration - the one shell a process runs installs it at boot - and a suite booting several in
+     * one process {@linkplain #reset() resets} it between them.
+     */
     private static volatile UnaryOperator<String> config = Features::defaults;
 
     private Features() {

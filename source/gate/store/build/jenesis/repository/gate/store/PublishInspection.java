@@ -106,7 +106,7 @@ public final class PublishInspection {
             // The artifact is larger than the most any inspector is handed in one array, and what to do about
             // that is the operator's call rather than this screen's. Only STREAM reaches a verdict about what
             // the artifact CONTAINS; the other two refuse on its size and say so, because nothing read it.
-            QualityInspector.Oversized policy = QualityInspector.oversized(ComplianceSettings.lookup());
+            QualityInspector.Oversized policy = QualityInspector.oversized(ComplianceSettings.lookup(content.store()));
             if (policy != QualityInspector.Oversized.STREAM) {
                 throw new OversizedArtifactException(policy, artifact.size(), inspectionLimit());
             }
@@ -206,11 +206,11 @@ public final class PublishInspection {
     /** Trust is rebound per request, not per process: it is tenant state, and the screen is what knows which tenant
      *  this publish belongs to. An inspector that verifies nothing never implements the seam and is handed through
      *  untouched. Both inspection legs bind the same way, so they bind in one place. Trust is configuration, read
-     *  through {@link ComplianceSettings#lookup()} - the lookup the gate's dimensions are built from - since trust read
+     *  through {@link ComplianceSettings#lookup(ArtifactStore)} - the lookup the gate's dimensions are built from - since trust read
      *  anywhere else would answer about a different deployment than the one the gate was built for. */
     private QualityInspector bound(QualityInspector claimed, Content content) {
         return claimed instanceof TrustAware aware && trustInstalled
-                ? aware.withTrust(SignerTrustProvider.trust(ComplianceSettings.lookup(), content.store()))
+                ? aware.withTrust(SignerTrustProvider.trust(ComplianceSettings.lookup(content.store()), content.store()))
                 : claimed;
     }
 
@@ -294,6 +294,12 @@ public final class PublishInspection {
      */
     public static QualityInspector.Lookup siblings(Content content) {
         return new QualityInspector.Lookup() {
+
+            /** The settings the publication's store carries - the same lookup the screen judging it reads. */
+            @Override
+            public UnaryOperator<String> settings() {
+                return ComplianceSettings.lookup(content.store());
+            }
 
             @Override
             public Optional<byte[]> fetch(String path) throws IOException {

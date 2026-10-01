@@ -2,6 +2,7 @@ package build.jenesis.repository.store.metering;
 
 import module java.base;
 import build.jenesis.repository.store.ArtifactStore;
+import build.jenesis.repository.store.StoreBindings;
 import io.micrometer.core.instrument.MeterRegistry;
 import io.micrometer.core.instrument.Timer;
 
@@ -27,27 +28,44 @@ public final class MeteringArtifactStore implements ArtifactStore {
     // each request and never pay off. Bounded: op has a fixed handful of values and outcome is ok/error.
     private final ConcurrentMap<String, Timer> timers;
 
+    /** Whether this store counts by key family as well as by operation - the deployment's
+     *  {@code jenrepo.store-families}, for a run measuring where its store cost goes. */
+    private final boolean families;
+
     /** Over {@code delegate}; {@code registry} may be null, in which case the operations are counted but not timed. */
     public MeteringArtifactStore(ArtifactStore delegate, MeterRegistry registry, String backend) {
-        this(delegate, registry, backend == null || backend.isBlank() ? "filesystem" : backend, new ConcurrentHashMap<>());
+        this(delegate, registry, backend, false);
+    }
+
+    /** As {@link #MeteringArtifactStore(ArtifactStore, MeterRegistry, String)}, counting by key family too when
+     *  {@code families} is set. */
+    public MeteringArtifactStore(ArtifactStore delegate, MeterRegistry registry, String backend, boolean families) {
+        this(delegate, registry, backend == null || backend.isBlank() ? "filesystem" : backend, new ConcurrentHashMap<>(),
+                families);
     }
 
     private MeteringArtifactStore(ArtifactStore delegate, MeterRegistry registry, String backend,
-                                  ConcurrentMap<String, Timer> timers) {
+                                  ConcurrentMap<String, Timer> timers, boolean families) {
         this.delegate = delegate;
         this.registry = registry;
         this.backend = backend;
         this.timers = timers;
+        this.families = families;
     }
 
     @Override
     public ArtifactStore scope(String tenant) {
-        return new MeteringArtifactStore(delegate.scope(tenant), registry, backend, timers);
+        return new MeteringArtifactStore(delegate.scope(tenant), registry, backend, timers, families);
     }
 
     @Override
     public Object identity() {
         return delegate.identity();
+    }
+
+    @Override
+    public StoreBindings bindings() {
+        return delegate.bindings();
     }
 
     @Override
@@ -269,20 +287,15 @@ public final class MeteringArtifactStore implements ArtifactStore {
      *  report carries as {@code jenrepo.store.ops.<op>}, so a suite that drives the product as booted can hold a
      *  download, a publish or a walked object to a standard of reads and writes, and a soak can show the operations
      *  per request staying flat as the store fills. The Micrometer timer above is per backend and outcome for a
-     *  dashboard; this is the plain count a harness reads over HTTP. */
+     *  dashboard; this is the plain count a harness reads over HTTP. Process-wide because the figure is the node's
+     *  and a process is one node: it carries no deployment's configuration, only what was counted, and the suites
+     *  that compare two nodes' figures run each node as a process of its own. */
     private static final Map<String, LongAdder> COUNTS = new ConcurrentHashMap<>();
 
-    /** The same operations by key family, kept only when {@link #families(boolean)} switched it on - one map
-     *  lookup and a string concatenation per store call is not something the read path should pay to answer a
-     *  question nobody asked. */
+    /** The same operations by key family, kept only by a store built to count them - one map lookup and a string
+     *  concatenation per store call is not something the read path should pay to answer a question nobody asked.
+     *  Process-wide for the reason {@link #COUNTS} is. */
     private static final Map<String, LongAdder> FAMILIES = new ConcurrentHashMap<>();
-
-    private static volatile boolean families;
-
-    /** Count by key family as well as by operation, for a run that is measuring where its store cost goes. */
-    public static void families(boolean enabled) {
-        families = enabled;
-    }
 
     /** The operations this node issued so far, by operation and key family; empty unless switched on. */
     public static Map<String, Long> byFamily() {

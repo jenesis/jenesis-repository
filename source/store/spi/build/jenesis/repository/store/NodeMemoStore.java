@@ -87,6 +87,11 @@ public final class NodeMemoStore implements ArtifactStore {
     }
 
     @Override
+    public StoreBindings bindings() {
+        return delegate.bindings();
+    }
+
+    @Override
     public Optional<Versioned> readVersioned(String key) throws IOException {
         return delegate.readVersioned(key);
     }

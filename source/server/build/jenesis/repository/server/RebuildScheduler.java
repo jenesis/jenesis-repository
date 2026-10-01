@@ -257,6 +257,7 @@ public final class RebuildScheduler implements AutoCloseable, ObservabilitySourc
     @Override
     public void close() {
         scheduler.shutdownNow();
+        Requests.retireRoot(root);
         try {
             RunningMarker.clean(root, nodeId);
         } catch (IOException | RuntimeException unremovable) {

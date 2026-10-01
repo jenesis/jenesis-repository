@@ -70,7 +70,7 @@ public final class AttestationLookupObserver implements PublicationObserver {
         if (artifact.path() == null || artifact.hash() == null || artifact.path().endsWith(SIDECAR)) {
             return;
         }
-        Optional<URI> base = store(ComplianceSettings.lookup(), artifact.ecosystem());
+        Optional<URI> base = store(ComplianceSettings.lookup(store), artifact.ecosystem());
         if (base.isEmpty()) {
             return;
         }

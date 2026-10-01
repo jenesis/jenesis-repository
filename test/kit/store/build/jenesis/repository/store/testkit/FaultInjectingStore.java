@@ -2,6 +2,7 @@ package build.jenesis.repository.store.testkit;
 
 import module java.base;
 import build.jenesis.repository.store.ArtifactStore;
+import build.jenesis.repository.store.StoreBindings;
 
 /**
  * An {@link ArtifactStore} decorator that injects a store fault at a chosen point, so a crash-recovery test can drive
@@ -369,6 +370,13 @@ public final class FaultInjectingStore implements ArtifactStore {
         return peer != null ? peer : delegate.identity();
     }
 
+    /** A decorator answers its delegate's bindings, so a deployment's binding reaches a screen through the fault
+     *  injection as it reaches it through any production decorator. */
+    @Override
+    public StoreBindings bindings() {
+        return delegate.bindings();
+    }
+
     @Override
     public void pageListed(String prefix, String startAfter, int limit, Consumer<Listed> consumer) {
         // The paging primitive is forwarded, as a decorator must: left to the SPI's fallback it would page by listing
@@ -543,6 +551,11 @@ public final class FaultInjectingStore implements ArtifactStore {
         @Override
         public Object identity() {
             return peer != null ? List.of(peer, scoped.identity()) : scoped.identity();
+        }
+
+        @Override
+        public StoreBindings bindings() {
+            return scoped.bindings();
         }
 
         @Override

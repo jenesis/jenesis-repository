@@ -98,11 +98,8 @@ class LicenseReportTest {
         ArtifactStore store = store();
         publish(store, "maven", "org.example:custom", "1.0", "Acme Internal Terms");
         publish(store, "maven", "org.example:mit", "1.0", "MIT License");
-        LicenseReport.Inventory inventory;
-        try (AutoCloseable wiring = ComplianceSettings.wire(() -> Map.of(LicenseTable.KEY,
-                "Acme-Internal-1.0 | proprietary | Acme Internal Terms")::get)) {
-            inventory = written(store);
-        }
+        LicenseReport.Inventory inventory = written(ComplianceSettings.bind(store, () -> Map.of(LicenseTable.KEY,
+                "Acme-Internal-1.0 | proprietary | Acme Internal Terms")::get));
 
         assertThat(inventory.categories()).extracting(LicenseReport.Count::value, LicenseReport.Count::versions)
                 .as("the name the operator listed is identified, under the category they gave it")
@@ -116,10 +113,9 @@ class LicenseReportTest {
         ArtifactStore store = store();
         publish(store, "maven", "org.example:lib", "1.0", "MIT License");
 
-        try (AutoCloseable wiring = ComplianceSettings.wire(() -> Map.of(LicenseTable.KEY, "Acme-1.0")::get)) {
-            assertThat(LicenseReport.start(store)).isTrue();
-            assertThat(StoredReport.awaitSettled(store, LicenseReport.NAME, PATIENCE)).isPresent();
-        }
+        assertThat(LicenseReport.start(ComplianceSettings.bind(store, () -> Map.of(LicenseTable.KEY, "Acme-1.0")::get)))
+                .isTrue();
+        assertThat(StoredReport.awaitSettled(store, LicenseReport.NAME, PATIENCE)).isPresent();
 
         LicenseReport.Inventory failed = LicenseReport.read(store);
         assertThat(failed.state()).isEqualTo(LicenseReport.State.FAILED);

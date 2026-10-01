@@ -22,10 +22,11 @@ import build.jenesis.repository.store.testkit.PublicationHookFixture;
  * own tests and the format contract's hold round trip hold.
  *
  * <p><b>Why the declared verdicts are {@code ACCEPT} only.</b> {@code assess} returns {@code ACCEPT} unconditionally
- * until a {@code ComplianceGate} is wired, and that wiring is a process-wide {@code AtomicReference} the deployment
- * sets ({@code ComplianceScreen.live(...)}), not durable state a fixture can seed - the kit's {@code arrange} seam is
- * explicitly about state "the screen could really have been holding". Declaring a verdict this fixture cannot reach
- * from the store would make the fail-closed leg assert a gate the fixture wired rather than one a deployment has.
+ * over a store that carries no {@code ComplianceScreen.Binding}, and a binding is what a deployment hands the store it
+ * builds ({@code ComplianceScreen.binding()...open()}), not durable state a fixture can seed - the kit's
+ * {@code arrange} seam is explicitly about state "the screen could really have been holding". Declaring a verdict this
+ * fixture cannot reach from the stored keys would make the fail-closed leg assert a gate the fixture bound rather than
+ * one a deployment has.
  * The quarantine and reject verdicts are covered where the gate is wired: {@code test/gateway}'s
  * {@code ComplianceScreenTest} and {@code test/gate}'s {@code ReleaseReplaySuppressionTest}.
  */
@@ -67,8 +68,8 @@ final class ComplianceScreenFixture implements PublicationHookFixture.Intercepto
     public void arrange(ArtifactStore store, ArtifactDescriptor artifact, PublishInterceptor.Disposition verdict) {
         if (verdict != PublishInterceptor.Disposition.ACCEPT) {
             throw new IllegalArgumentException(hook() + " cannot be arranged to " + verdict
-                    + " from durable state: a non-neutral verdict comes from a wired ComplianceGate, which is process "
-                    + "wiring rather than store state");
+                    + " from durable state: a non-neutral verdict comes from the gate a deployment binds to its store, "
+                    + "which is not a stored key");
         }
     }
 

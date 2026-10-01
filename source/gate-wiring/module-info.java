@@ -4,9 +4,10 @@
  * configuration through {@code ServiceLoader} discovery and names no screen of its own.
  *
  * <p>It arms the screen from beans a deployment already has - the live configuration, the attributed advisory
- * feeds, the maintainer-health source, the meter registry - and unwires each when the context closes, so the
- * next context in the same JVM starts clean. With this module absent nothing arms the screen and a publish is
- * not screened, which is the ordinary shape of a deployment that installs no gate.
+ * feeds, the maintainer-health source, the meter registry - as one binding the deployment's store carries, which the
+ * server binds into the store it builds, and retires the binding when the context closes, so the next
+ * context in the same JVM starts clean. With this module absent nothing arms the screen and a publish is not
+ * screened, which is the ordinary shape of a deployment that installs no gate.
  *
  * @jenesis.release 25
  * @jenesis.bom pin-repository.properties
@@ -18,6 +19,7 @@ open module build.jenesis.repository.gate.wiring {
     requires build.jenesis.repository.server.kernel;
     requires build.jenesis.repository.store;
     requires micrometer.core;
+    requires spring.beans;
     requires spring.context;
     provides build.jenesis.repository.server.kernel.ServerModuleProvider
             with build.jenesis.repository.gate.wiring.GateWiringModule;

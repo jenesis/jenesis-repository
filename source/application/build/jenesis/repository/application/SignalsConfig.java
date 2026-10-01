@@ -22,6 +22,8 @@ import build.jenesis.repository.compliance.ProvenanceSignerProvider;
 import build.jenesis.repository.compliance.Vex;
 import build.jenesis.repository.compliance.VexProvider;
 import build.jenesis.repository.store.ArtifactStore;
+import build.jenesis.repository.store.StoreBindings;
+import org.springframework.beans.factory.ObjectProvider;
 import build.jenesis.repository.gateway.LiveDefinitions;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
@@ -161,13 +163,14 @@ public class SignalsConfig {
     }
 
     /**
-     * Wire the effective per-tenant settings into the screens, so an inspector that verifies signatures reads the
-     * keys an operator configured at runtime rather than the ones this process booted with. It is the same lookup
-     * {@link LiveConfig} builds the gate's dimensions from, resolved per publish against the publishing tenant.
+     * Bind the effective per-tenant settings to the deployment's store, so an inspector that verifies signatures reads
+     * the keys an operator configured at runtime rather than the ones this process booted with. It is the same lookup
+     * {@link LiveConfig} builds the gate's dimensions from, resolved per publish against the publishing tenant - and
+     * resolved through a provider, because the live configuration is itself built over the store this binds.
      */
-    @Bean(destroyMethod = "close")
-    public AutoCloseable complianceSettingsWiring(LiveConfig liveConfig) {
-        return ComplianceSettings.wire(() -> liveConfig.settings(PublishTenant.current()));
+    @Bean
+    public StoreBindings complianceSettingsStoreBindings(ObjectProvider<LiveConfig> liveConfig) {
+        return ComplianceSettings.bindings(() -> liveConfig.getObject().settings(PublishTenant.current()));
     }
 
 }

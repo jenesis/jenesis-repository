@@ -6,8 +6,10 @@
  * a deploy controller once wired by hand, and a quarantined path is withheld from every serving surface
  * through the screen's read side. The gate itself stays behind the compliance SPI: this module inspects an upload
  * through the discovered {@link build.jenesis.repository.compliance.QualityInspector}s and routes the verdict; the
- * {@code compliance/*} modules are untouched behind it. The screen is inert until a deployment wires the live gate
- * ({@code ComplianceScreen.live}), so a plain module-path presence never gates a test JVM by accident. Beside the
+ * {@code compliance/*} modules are untouched behind it. The screen judges a publish by the binding its store carries
+ * ({@code ComplianceScreen.Binding}), which a deployment hands the store it publishes through, so a plain module-path
+ * presence never gates a test JVM by accident and two deployments in one process never judge each other's uploads.
+ * Beside the
  * screen: the release and discard primitive every review surface delegates to ({@code HoldLifecycle}), the review
  * queue, the two hold-release observers of the KEV and licence kinds, the retention pass that keeps the quarantine
  * log from growing without bound, the withheld-marker reconcile and listing-rebuild walk consumers, and the

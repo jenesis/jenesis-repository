@@ -186,7 +186,7 @@ public final class MigrationRescreenTask implements MaintenanceTask {
         // releases via its own handle, never touching the spool), but the screen requires one; a small budgeted
         // scratch satisfies the constructor and is reclaimed after the pass.
         SpoolStore spoolStore = new SpoolStore(SpoolStore.Budget.standard());
-        ArtifactStore spool = spoolStore.acquire();
+        ArtifactStore spool = spoolStore.acquire(store.bindings());
         // Hoisted out of the per-artifact loop: constructing an inventory runs a ServiceLoader scan, and the flavour
         // question below is asked once per cached artifact.
         StoreRepositoryInventory inventory = new StoreRepositoryInventory(store);

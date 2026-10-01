@@ -50,10 +50,11 @@ public class RepositoryController {
 
     private static final Logger LOGGER = LoggerFactory.getLogger(RepositoryController.class);
 
-    /** The capability contributors, discovered once: this endpoint is read on every CLI {@code 404}, and
-     *  which contributors are installed cannot differ between two requests of one JVM. What each one *answers*
-     *  is still resolved per request, through the caller's own effective-value chain. */
-    private final List<CapabilityContributor> contributors = CapabilityContributor.installed();
+    /** The capability contributors: those discovered on the module path, once - this endpoint is read on every CLI
+     *  {@code 404}, and which are installed cannot differ between two requests of one JVM - and those the deployment
+     *  contributes as its own, which read its own beans. What each one <em>answers</em> is still resolved per request,
+     *  through the caller's own effective-value chain. */
+    private final List<CapabilityContributor> contributors;
 
     private static final JsonMapper JSON = JsonMapper.builder().build();
 
@@ -175,6 +176,31 @@ public class RepositoryController {
                                 EdgeHooks hooks,
                                 AuditTrail audit,
                                 Reads reads) {
+        this(routing, dispatcher, importSources, fetcher, batch, settings, root, routed, hooks, audit, reads, List.of());
+    }
+
+    /**
+     * As the constructor above, with the capability contributions the deployment makes itself beside the ones the
+     * module path provides - a contribution that reads the deployment's own beans, which a discovered contributor,
+     * constructed with no deployment, cannot.
+     *
+     * @param contributed the deployment's own contributions, merged after the discovered ones
+     */
+    public RepositoryController(RepositoryRouting routing,
+                                FormatDispatcher dispatcher,
+                                List<ImportSourceProvider> importSources,
+                                ProxyFormat.Fetcher fetcher,
+                                BatchIngestion batch,
+                                RepositorySettings settings,
+                                ArtifactStore root,
+                                RoutedServing routed,
+                                EdgeHooks hooks,
+                                AuditTrail audit,
+                                Reads reads,
+                                List<CapabilityContributor> contributed) {
+        List<CapabilityContributor> all = new ArrayList<>(CapabilityContributor.installed());
+        all.addAll(contributed);
+        this.contributors = List.copyOf(all);
         this.routing = routing;
         this.dispatcher = dispatcher;
         this.screened = new ScreenedDispatch(dispatcher, hooks);

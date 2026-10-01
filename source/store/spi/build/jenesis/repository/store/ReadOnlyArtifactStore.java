@@ -57,6 +57,11 @@ public final class ReadOnlyArtifactStore implements ArtifactStore, Observability
     }
 
     @Override
+    public StoreBindings bindings() {
+        return delegate.bindings();
+    }
+
+    @Override
     public boolean exists(String key) {
         return delegate.exists(key);
     }

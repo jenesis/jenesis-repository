@@ -3,7 +3,6 @@ package build.jenesis.repository.compliance.maven.test;
 import module java.base;
 import module org.junit.jupiter.api;
 import build.jenesis.repository.compliance.ComplianceGate;
-import build.jenesis.repository.compliance.ComplianceSettings;
 import build.jenesis.repository.compliance.QualityInspector;
 import build.jenesis.repository.compliance.maven.ClosureObservability;
 import build.jenesis.repository.compliance.maven.MavenQualityInspector;
@@ -54,8 +53,8 @@ class MavenClosureTest {
         String uri = System.getProperty("jenesis.maven.uri");
         System.setProperty("jenesis.maven.uri", repository.toUri().toString());
         long before = counter("jenrepo.compliance.closure.unresolved");
-        try (AutoCloseable _ = ComplianceSettings.wire(() -> Map.<String, String>of()::get)) {
-            assertThat(inspect()).extracting(ComplianceGate.Subject::coordinate)
+        try {
+            assertThat(inspect(Map.<String, String>of()::get)).extracting(ComplianceGate.Subject::coordinate)
                     .as("the artifact alone").containsExactly("com.app:lib");
         } finally {
             restore("jenesis.maven.uri", uri);
@@ -67,10 +66,7 @@ class MavenClosureTest {
     void the_named_repository_resolves_the_closure_with_licences_and_places_on_the_graph() throws Exception {
         long incomplete = counter("jenrepo.compliance.closure.incomplete");
         long unresolved = counter("jenrepo.compliance.closure.unresolved");
-        List<ComplianceGate.Subject> subjects;
-        try (AutoCloseable _ = named(Map.of())) {
-            subjects = inspect();
-        }
+        List<ComplianceGate.Subject> subjects = inspect(named(Map.of()));
 
         assertThat(subjects).extracting(ComplianceGate.Subject::coordinate)
                 .containsExactlyInAnyOrder("com.app:lib", "com.example:dep", "com.example:leaf");
@@ -86,29 +82,25 @@ class MavenClosureTest {
     @Test
     void a_closure_reading_more_documents_than_allowed_is_not_resolved_and_is_counted() throws Exception {
         long before = counter("jenrepo.compliance.closure.incomplete");
-        try (AutoCloseable _ = named(Map.of("maven-closure-documents", "1"))) {
-            assertThat(inspect()).extracting(ComplianceGate.Subject::coordinate)
-                    .as("no part of a closure is passed off as the whole of it").containsExactly("com.app:lib");
-        }
+        assertThat(inspect(named(Map.of("maven-closure-documents", "1")))).extracting(ComplianceGate.Subject::coordinate)
+                .as("no part of a closure is passed off as the whole of it").containsExactly("com.app:lib");
         assertThat(counter("jenrepo.compliance.closure.incomplete")).isEqualTo(before + 1);
     }
 
     @Test
     void a_closure_past_its_time_is_not_resolved_and_is_counted() throws Exception {
         long before = counter("jenrepo.compliance.closure.incomplete");
-        try (AutoCloseable _ = named(Map.of("maven-closure-timeout", "PT0S"))) {
-            assertThat(inspect()).extracting(ComplianceGate.Subject::coordinate).containsExactly("com.app:lib");
-        }
+        assertThat(inspect(named(Map.of("maven-closure-timeout", "PT0S"))))
+                .extracting(ComplianceGate.Subject::coordinate).containsExactly("com.app:lib");
         assertThat(counter("jenrepo.compliance.closure.incomplete")).isEqualTo(before + 1);
     }
 
     @Test
     void an_unreachable_repository_leaves_the_artifact_screened_and_is_counted() throws Exception {
         long before = counter("jenrepo.compliance.closure.incomplete");
-        try (AutoCloseable _ = ComplianceSettings.wire(() -> Map.of("maven-closure-repository",
-                "http://127.0.0.1:1/", "maven-closure-timeout", "PT5S")::get)) {
-            assertThat(inspect()).extracting(ComplianceGate.Subject::coordinate).containsExactly("com.app:lib");
-        }
+        assertThat(inspect(Map.of("maven-closure-repository", "http://127.0.0.1:1/",
+                "maven-closure-timeout", "PT5S")::get))
+                .extracting(ComplianceGate.Subject::coordinate).containsExactly("com.app:lib");
         assertThat(counter("jenrepo.compliance.closure.incomplete")).isEqualTo(before + 1);
     }
 
@@ -118,22 +110,21 @@ class MavenClosureTest {
         // completes - without knowing what that dependency pulls in, which is what the count says.
         Files.delete(repository.resolve("com/example/dep/1.0/dep-1.0.pom"));
         long before = counter("jenrepo.compliance.closure.incomplete");
-        try (AutoCloseable _ = named(Map.of())) {
-            assertThat(inspect()).extracting(ComplianceGate.Subject::coordinate)
-                    .containsExactly("com.app:lib", "com.example:dep");
-        }
+        assertThat(inspect(named(Map.of()))).extracting(ComplianceGate.Subject::coordinate)
+                .containsExactly("com.app:lib", "com.example:dep");
         assertThat(counter("jenrepo.compliance.closure.incomplete")).isEqualTo(before + 1);
     }
 
-    private List<ComplianceGate.Subject> inspect() throws IOException {
-        return new MavenQualityInspector().inspect(PATH, APPLICATION, QualityInspector.Lookup.none());
+    /** The application's POM inspected for a deployment resolving its dials through {@code settings}. */
+    private List<ComplianceGate.Subject> inspect(UnaryOperator<String> settings) throws IOException {
+        return new MavenQualityInspector().inspect(PATH, APPLICATION, QualityInspector.Lookup.none(settings));
     }
 
     /** The settings naming the test's repository, with {@code more} beside it. */
-    private AutoCloseable named(Map<String, String> more) {
+    private UnaryOperator<String> named(Map<String, String> more) {
         Map<String, String> settings = new HashMap<>(more);
         settings.put("maven-closure-repository", repository.toUri().toString());
-        return ComplianceSettings.wire(() -> settings::get);
+        return settings::get;
     }
 
     private void pom(String artifact, String licence, String dependencies) throws IOException {

@@ -7,6 +7,7 @@ import build.jenesis.repository.server.ArtifactStoreDecorator;
 import build.jenesis.repository.server.RepositoryAutoConfiguration;
 import build.jenesis.repository.server.RepositoryProperties;
 import build.jenesis.repository.store.ArtifactStore;
+import build.jenesis.repository.store.StoreBindings;
 import org.junit.jupiter.api.io.TempDir;
 import org.springframework.beans.factory.support.DefaultListableBeanFactory;
 import org.springframework.beans.factory.support.RootBeanDefinition;
@@ -65,7 +66,8 @@ class ArtifactStoreDecoratorOrderTest {
                 Map.of("jenrepo.filesystem.root", root.toString())));
 
         ArtifactStore store = new RepositoryAutoConfiguration(environment)
-                .artifactStore(properties, environment, beans.getBeanProvider(ArtifactStoreDecorator.class));
+                .artifactStore(properties, environment, beans.getBeanProvider(ArtifactStoreDecorator.class),
+                        beans.getBeanProvider(StoreBindings.class));
 
         assertThat(applied)
                 .as("the lowest order sits closest to the backend, so it is applied first")
@@ -73,6 +75,36 @@ class ArtifactStoreDecoratorOrderTest {
         assertThat(store.getClass().getSimpleName())
                 .as("read-only stays outermost: a layer cannot be contributed above the wrappers the declaration owns")
                 .isEqualTo("ReadOnlyArtifactStore");
+    }
+
+    /**
+     * What a composition contributes for its plug-ins rides the store the declaration builds: bound under every layer,
+     * it reaches the outermost wrapper and every scope of it, which is the store every publication runs over.
+     */
+    @Test
+    void contributed_bindings_reach_the_outermost_store_and_every_scope_of_it() {
+        DefaultListableBeanFactory beans = new DefaultListableBeanFactory();
+        beans.registerBeanDefinition("layer", definition(new Recording(10, "layer", new ArrayList<>())));
+        RootBeanDefinition bound = new RootBeanDefinition(StoreBindings.class);
+        bound.setInstanceSupplier(() -> StoreBindings.of(String.class, "the deployment's"));
+        beans.registerBeanDefinition("bindings", bound);
+
+        RepositoryProperties properties = new RepositoryProperties();
+        properties.setStore("filesystem");
+        properties.setReadOnly(true);
+        properties.setQuota("1G");
+        StandardEnvironment environment = new StandardEnvironment();
+        environment.getPropertySources().addFirst(new MapPropertySource("test",
+                Map.of("jenrepo.filesystem.root", root.toString())));
+
+        ArtifactStore store = new RepositoryAutoConfiguration(environment)
+                .artifactStore(properties, environment, beans.getBeanProvider(ArtifactStoreDecorator.class),
+                        beans.getBeanProvider(StoreBindings.class));
+
+        assertThat(store.bindings().get(String.class)).as("through the quota and read-only wrappers")
+                .contains("the deployment's");
+        assertThat(store.scope("tenant").scope("repository").bindings().get(String.class))
+                .as("and on a repository's view of it").contains("the deployment's");
     }
 
     private static RootBeanDefinition definition(ArtifactStoreDecorator instance) {

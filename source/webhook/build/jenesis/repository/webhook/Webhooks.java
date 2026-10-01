@@ -5,8 +5,7 @@ import module java.base;
 /**
  * The webhook feature's boot-time enablement latch, kept in this framework-free module so the discovered {@link
  * WebhookSink} (firing on the request path, for every event the seam fans out) and the {@link WebhookDeliveryTask}
- * (firing on the maintenance scheduler) read the same on/off state a scheduler pass sets - the pattern forwarding and
- * the compliance gate use. Everything is inert by default: with the feature disabled the sink writes no outbox note,
+ * (firing on the maintenance scheduler) read the same on/off state a scheduler pass sets. Everything is inert by default: with the feature disabled the sink writes no outbox note,
  * so a deployment that never turns webhooks on writes no webhook state at all. The latch is deliberately read here
  * rather than by a producer: whether a notification is wanted is this delivery module's own question, and a producer
  * that consulted it would silently decide for every other installed sink too.
@@ -21,7 +20,9 @@ public final class Webhooks {
 
     /**
      * Immutability exception - boot-time enablement latch: set once per scheduler boot via configure(boolean) and read
-     * lock-free by the webhook sink and task. Feature wiring, not shared mutable data.
+     * lock-free by the webhook sink and task. Feature wiring, not shared mutable data. Process-wide because it is the
+     * answer of the process's own configuration ({@code Features}), which every discovery in the process reads; it
+     * carries none of a deployment's collaborators, so there is nothing of one deployment's for another to be handed.
      */
     private static volatile boolean enabled;
 

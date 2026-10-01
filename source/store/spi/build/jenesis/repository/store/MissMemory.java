@@ -72,7 +72,10 @@ public final class MissMemory {
         this.misses = Caffeine.newBuilder().expireAfterWrite(lifetime).maximumSize(MAX_ENTRIES).build();
     }
 
-    /** The one memory of this process, built from {@link #TTL_SETTING} on first use. */
+    /** The one memory of this process, built from {@link #TTL_SETTING} on first use. Process-wide, as the node's
+     *  other caches are, because it is the node's memory and is cleared and reported as the node's: every entry is
+     *  keyed by the identity of the store it was read from, so two deployments over different stores never answer
+     *  from each other's entries, and what they share is the ttl the first one read. */
     public static MissMemory node() {
         synchronized (NODE_LOCK) {
             if (node == null) {

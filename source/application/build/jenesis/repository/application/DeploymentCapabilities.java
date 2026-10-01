@@ -13,16 +13,13 @@ import build.jenesis.repository.server.spi.CapabilityContributor;
  * single endpoint. The free controller serves {@code /api/capabilities} once, extended (never shadowed) by this
  * contribution, so no mapping override is needed for {@link DeploymentInfoController}'s view to reach that path.
  *
- * <p>A {@link CapabilityContributor} is discovered with a plain {@code ServiceLoader.load} inside the controller,
- * so it is instantiated with a no-arg constructor and has <b>no</b> Spring context. The rich view, by contrast, reads
- * live Spring beans and the effective configuration ({@code Repositories}, {@code Settings}, the provenance signer,
- * the upstream fetcher). So
- * {@link DeploymentInfoController} - the Spring bean that already builds that view - {@linkplain #install installs} a
- * supplier of it here at construction, the same {@code install}/{@code installed} static-holder seam
- * {@code SpoolStore} and {@code MaintenanceObservability} use to bridge a Spring bean to a {@code ServiceLoader}-
- * discovered collaborator. With nothing installed (a shell that wires no {@code DeploymentInfoController}) this
- * contributes an empty map, so the base map is served byte-for-byte unchanged - the SPI's no-op-by-absence
- * contract.
+ * <p>The rich view reads live beans and the effective configuration ({@code Repositories}, {@code Settings}, the
+ * provenance signer, the upstream fetcher), so this contributor is not discovered on the module path, where it would
+ * be constructed with no deployment: it is a bean of the deployment, handed the supplier of its
+ * {@link DeploymentInfoController}'s view, and the free controller merges the contributor beans of its own context
+ * beside the discovered ones. Two deployments in one process each serve their own view. With no
+ * {@code DeploymentInfoController} in the context this contributes an empty map, so the base map is served
+ * byte-for-byte unchanged - the SPI's no-op-by-absence contract.
  *
  * <p><b>The merge reports a collision, so this side does not refuse one</b>. The free
  * {@link CapabilityContributor#merge} lets a base key win, which protects the product's own flags, and <em>names</em>
@@ -60,15 +57,15 @@ public final class DeploymentCapabilities implements CapabilityContributor {
      */
     public static final Set<String> FREE_BASE_KEYS = Set.of("readOnly", "auth", "anonymousRights");
 
-    /** The live rich-capabilities supplier, installed by {@link DeploymentInfoController} at construction. Volatile so
-     *  the ServiceLoader-discovered instance in the request thread reads the reference the boot thread published. */
-    private static volatile Supplier<Map<String, Object>> supplier;
+    /** The deployment's live rich-capabilities view, asked per request; it answers {@code null} where the
+     *  deployment carries no {@link DeploymentInfoController}. */
+    private final Supplier<Map<String, Object>> supplier;
 
-    /** Publish the supplier of the rich-capabilities map (the {@link DeploymentInfoController}'s live view),
-     *  so a request-time contributor renders exactly the deployment's current formats / import-sources / module-flags.
-     *  Called once at bean construction; re-installing replaces the reference. */
-    public static void install(Supplier<Map<String, Object>> richCapabilities) {
-        supplier = richCapabilities;
+    /** A contribution of the view {@code richCapabilities} supplies - the deployment's
+     *  {@link DeploymentInfoController}'s, so a request renders exactly its current formats / import-sources /
+     *  module-flags. */
+    public DeploymentCapabilities(Supplier<Map<String, Object>> richCapabilities) {
+        this.supplier = Objects.requireNonNull(richCapabilities, "richCapabilities");
     }
 
     /** {@inheritDoc}
@@ -79,8 +76,7 @@ public final class DeploymentCapabilities implements CapabilityContributor {
      *  would answer the same question through the weaker chain. */
     @Override
     public Map<String, Object> capabilities(UnaryOperator<String> configuration) {
-        Supplier<Map<String, Object>> installed = supplier;
-        return installed == null ? Map.of() : extending(installed.get());
+        return extending(supplier.get());
     }
 
     /**

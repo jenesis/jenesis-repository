@@ -495,7 +495,7 @@ public final class ProxyScreen {
      *  when it verifies nothing or no trust module is installed. */
     private QualityInspector trusting(QualityInspector inspector) {
         return inspector instanceof TrustAware aware && TRUST_INSTALLED
-                ? aware.withTrust(SignerTrustProvider.trust(ComplianceSettings.lookup(), store))
+                ? aware.withTrust(SignerTrustProvider.trust(ComplianceSettings.lookup(store), store))
                 : inspector;
     }
 
@@ -607,6 +607,12 @@ public final class ProxyScreen {
      *  {@code AttestationInspector}'s bounded call is written to avoid. Both legs are implemented against the store;
      *  neither is derived from the other. */
     private final class SiblingLookup implements QualityInspector.Lookup {
+
+        /** The settings the screened repository's store carries. */
+        @Override
+        public UnaryOperator<String> settings() {
+            return ComplianceSettings.lookup(store);
+        }
 
         @Override
         public Optional<byte[]> fetch(String path) throws IOException {

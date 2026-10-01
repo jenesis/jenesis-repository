@@ -195,7 +195,7 @@ public final class LicenseReport {
             // The table is read here, on the count's own thread and off the request that asked for it, from the
             // deployment's compliance settings - the licences an operator added are deployment-wide. A value that
             // does not parse fails the count, naming the row.
-            derivation = new LicenseDerivation(repository, LicenseTable.of(ComplianceSettings.lookup()));
+            derivation = new LicenseDerivation(repository, LicenseTable.of(ComplianceSettings.lookup(repository)));
             new StoreRepositoryInventory(repository).releases(this);
             List<String> rows = new ArrayList<>();
             rows.add(VERSIONS + "\t\t" + versions);

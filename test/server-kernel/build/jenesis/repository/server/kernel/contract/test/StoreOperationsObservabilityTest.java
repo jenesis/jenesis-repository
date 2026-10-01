@@ -66,30 +66,25 @@ class StoreOperationsObservabilityTest {
     void a_family_derived_from_any_store_key_still_makes_a_legal_signal_name() throws IOException {
         ArtifactStore backend = ArtifactStoreProvider.resolve("filesystem",
                 key -> "jenrepo.filesystem.root".equals(key) ? root.toString() : null);
-        ArtifactStore store = new MeteringArtifactStore(backend, null, "filesystem");
-        MeteringArtifactStore.families(true);
-        try {
-            for (String key : List.of(".system/audit/2026-09-09/entry", ".system/config/settings",
-                    "default/releases/publish/maven/com/acme/lib/1.0/lib-1.0.jar",
-                    "default/releases/blobs/0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
-                    "gc/17/refs/ab/batch-1", "default/releases/2026/09/09")) {
-                store.write(key, new ByteArrayInputStream("bytes".getBytes(StandardCharsets.UTF_8)));
-            }
-
-            List<Metric> metrics = new StoreOperationsObservability().metrics();
-
-            assertThat(metrics).extracting(Metric::name)
-                    .as("every name the family breakdown derives is a legal signal name")
-                    .allMatch(Signals::valid);
-            assertThat(metrics).extracting(Metric::name)
-                    .as("and the operation counters are still there - a refused family name does not take them with it")
-                    .contains("jenrepo.store.ops.reads", "jenrepo.store.ops.writes");
-            assertThat(metrics).extracting(Metric::name)
-                    .as("the date is named as a number rather than dropped or mangled into an illegal segment")
-                    .anyMatch(name -> name.startsWith("jenrepo.store.family.write.system.audit."));
-        } finally {
-            MeteringArtifactStore.families(false);
+        ArtifactStore store = new MeteringArtifactStore(backend, null, "filesystem", true);
+        for (String key : List.of(".system/audit/2026-09-09/entry", ".system/config/settings",
+                "default/releases/publish/maven/com/acme/lib/1.0/lib-1.0.jar",
+                "default/releases/blobs/0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+                "gc/17/refs/ab/batch-1", "default/releases/2026/09/09")) {
+            store.write(key, new ByteArrayInputStream("bytes".getBytes(StandardCharsets.UTF_8)));
         }
+
+        List<Metric> metrics = new StoreOperationsObservability().metrics();
+
+        assertThat(metrics).extracting(Metric::name)
+                .as("every name the family breakdown derives is a legal signal name")
+                .allMatch(Signals::valid);
+        assertThat(metrics).extracting(Metric::name)
+                .as("and the operation counters are still there - a refused family name does not take them with it")
+                .contains("jenrepo.store.ops.reads", "jenrepo.store.ops.writes");
+        assertThat(metrics).extracting(Metric::name)
+                .as("the date is named as a number rather than dropped or mangled into an illegal segment")
+                .anyMatch(name -> name.startsWith("jenrepo.store.family.write.system.audit."));
     }
 
     private static long sum(List<Metric> metrics, String name) {

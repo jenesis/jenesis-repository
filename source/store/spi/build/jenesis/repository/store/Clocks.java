@@ -10,6 +10,10 @@ import module java.base;
  * or the system clock offset by {@code jenrepo.clock.skew}, a dial that exists so a fleet's tolerance to a peer whose
  * clock runs ahead is a thing a test can provoke rather than a thing a javadoc asserts. Reading {@link #now()} where a
  * stamp is made, instead of {@link Instant#now()}, is what puts a mechanism under that test.
+ *
+ * <p>It is process-wide on purpose: a clock is the node's, and a process is one node - a fleet's nodes, whose clocks
+ * are what a skew provokes, run as processes of their own. Every boot installs it, the system clock where no skew is
+ * set, so a context booted after another in the same process never stamps with the earlier one's skew.
  */
 public final class Clocks {
 

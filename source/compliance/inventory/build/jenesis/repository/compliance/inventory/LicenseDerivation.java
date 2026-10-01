@@ -4,6 +4,7 @@ import module java.base;
 import module org.slf4j;
 import build.jenesis.repository.cleanup.Release;
 import build.jenesis.repository.compliance.ComplianceGate;
+import build.jenesis.repository.compliance.ComplianceSettings;
 import build.jenesis.repository.compliance.License;
 import build.jenesis.repository.compliance.LicenseTable;
 import build.jenesis.repository.compliance.QualityInspector;
@@ -170,6 +171,12 @@ public final class LicenseDerivation {
      * questions and have different code; a bound reached on this one is a reported outcome, not a missing companion.
      */
     private final class Siblings implements QualityInspector.Lookup {
+
+        /** The settings the repository's store carries. */
+        @Override
+        public UnaryOperator<String> settings() {
+            return ComplianceSettings.lookup(store);
+        }
 
         @Override
         public Optional<byte[]> fetch(String path) throws IOException {

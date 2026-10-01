@@ -19,6 +19,7 @@ import build.jenesis.repository.inventory.StoreRepositoryInventory;
 import build.jenesis.repository.store.ArtifactDescriptor;
 import build.jenesis.repository.store.ArtifactStore;
 import build.jenesis.repository.store.PublishInterceptor;
+import build.jenesis.repository.store.StoreBindings;
 import build.jenesis.repository.gate.InspectionMerge;
 import build.jenesis.repository.gate.QuarantineLog;
 
@@ -34,12 +35,23 @@ import build.jenesis.repository.gate.QuarantineLog;
  * quarantine hold itself: a path with a pending {@code /quarantine} pointer does not serve - even a previously linked
  * artifact stays retracted until the hold is released or discarded - at the cost of one pointer read per serve.
  *
- * <p>The screen is discovered by {@code ServiceLoader} and so constructed without context; the deployment wires the
- * live gate at boot through {@link #live}, and until then the screen is inert (every upload is accepted, the withhold
- * read side stays active since it is store truth, not policy). An embedder or test injects the gate directly through
- * the explicit constructor instead of the JVM-wide wiring.
+ * <p>The screen is discovered by {@code ServiceLoader} and held once per process, so it is constructed without a
+ * deployment. A deployment hands it one {@link Binding} - its gate, its per-tenant gates, its advisory feeds and
+ * health source, its meters and the hold-mapping dial - by {@linkplain Binding#bind binding its store}, and every
+ * call the screen receives carries a store derived from that one: {@link #assess} through {@code content.store()},
+ * {@link #committed} and {@link #onPublished} as their argument, and {@link #rescreen} as its first. So a publish is
+ * judged by the deployment whose store it runs over, and two deployments in one process never judge each other's
+ * uploads.
  *
- * <p>This class is the verdict and its wiring: it owns every JVM-wide reference the deployment sets, the per-publish
+ * <p><b>A call that finds no binding is inert only while no deployment is bound in the process.</b> Inert means every
+ * upload is accepted, which is right for a process that bound no gate at all and wrong for one that did: there an
+ * unbound store is a path that lost the deployment's binding - a store built beside the deployment's root, a
+ * decorator that does not forward it - and accepting through it would disable the gate without a word. So while any
+ * {@link Binding} is open, an unbound {@link #assess}, {@link #committed} or {@link #rescreen} throws, which refuses
+ * the publish. The withhold read side is unaffected either way, since it is store truth, not policy. An embedder or
+ * a test that wants one screen with one gate, whatever store it is handed, uses an explicit constructor instead.
+ *
+ * <p>This class is the verdict and its binding: it owns the binding a deployment hands it, the per-publish
  * state carried from {@link #assess} to {@link #committed}, and the decision of what runs when. The work it
  * orchestrates is in three package peers it hands that state to explicitly - {@link PublishInspection} reads the
  * artifact into subjects, {@link PublishRecorder} writes down what a routed outcome established, and
@@ -49,62 +61,22 @@ public final class ComplianceScreen implements PublishInterceptor {
 
     private static final Logger LOGGER = LoggerFactory.getLogger(ComplianceScreen.class);
 
-    /** The JVM-wide live gate the ServiceLoader-constructed screen reads, set by the deployment at boot. */
-    private static final AtomicReference<Supplier<ComplianceGate>> LIVE = new AtomicReference<>();
+    /**
+     * The bindings open in this process. It carries no deployment's values - a publish reads those off its own store
+     * - only whether any deployment is bound, which is what turns a call that lost its binding into a refusal rather
+     * than an unscreened admission. Process-wide by necessity: the question is about the process, and a store that
+     * carries no binding has nothing else to ask.
+     */
+    private static final Set<Binding> OPEN = ConcurrentHashMap.newKeySet();
 
-    /** The deployment's gate for a named tenant, set by the deployment at boot beside {@link #LIVE}: the live gate
-     *  resolves the tenant off the publishing request, and a re-assessment made off any request ({@link #rescreen})
-     *  names the tenant it is re-assessing for instead. */
-    private static final AtomicReference<Function<String, ComplianceGate>> TENANT_GATES = new AtomicReference<>();
-
-    /** A JVM-wide sink the deployment wires so every committed verdict is counted ({@code jenrepo.gate.verdicts}),
-     *  across EVERY publish path (the deploy, staging, batch) - not just the deploy controller's own
-     *  observation. Registry-free: the sink is a plain callback and the Micrometer counter lives in the distribution,
-     *  so the gate module stays free of any metrics dependency. */
-    private static final AtomicReference<VerdictListener> VERDICTS = new AtomicReference<>();
-
-    /** The deployment's named advisory feeds - the SAME instances the live gate assesses through - re-queried per feed
-     *  at commit so a just-accepted coordinate's advisory findings are persisted immediately (closing the window
-     *  between its publish and the next scheduled sweep) rather than rendering clean until the sweep catches up. Since
-     *  the gate's assess just populated each feed's cache, the commit-time re-query is a warm {@code FeedCache} read,
-     *  not a fresh upstream pass. Restart-bound like the feeds themselves, so a plain supplier of the boot-built map;
-     *  unset (the ServiceLoader-constructed screen until the deployment wires it) leaves the screen writing no advisory
-     *  rows, exactly as before. */
-    private static final AtomicReference<Supplier<SequencedMap<String, AdvisorySource>>> FEEDS = new AtomicReference<>();
-
-    /** A registry-free sink the deployment wires so a commit-time feed re-query the warm cache could not answer (a
-     *  feed whose refresh failed with nothing cached, failing closed) is counted rather than silently dropped
-     *  - the publish is never failed for it. Registry-free like {@link #VERDICTS}: the Micrometer counter lives in the
-     *  distribution, so the gate module stays free of any metrics dependency. */
-    private static final AtomicReference<FeedMissListener> FEED_MISSES = new AtomicReference<>();
-
-    /** A registry-free sink the deployment wires so an artifact an inspector could not parse is counted
-     *  ({@code jenrepo.gate.unparseable} tagged by format) rather than only logged - the make-errors-visible
-     *  diagnostic. Registry-free like {@link #VERDICTS}: the Micrometer counter lives in the distribution. */
-    private static final AtomicReference<UnparseableListener> UNPARSEABLE_METER = new AtomicReference<>();
-
-    /** Whether a blobs-namespace format that resolves no reverse hold mapping for the publish it just laid out
-     *  {@code throws} (failing the publish) or only alarms. The deployment wires this from
-     *  {@code jenrepo.strict-hold-mapping} (default false): production stays alarm-not-abort so one broken
-     *  format cannot DoS publishes (the {@code hold.unenforceable} gauge reasoning), while every test that publishes
-     *  through a format flips
-     *  it on so a broken mapping fails on the FIRST publish in CI rather than surfacing in a later audit. Unset (the
-     *  ServiceLoader-constructed screen until the deployment wires it) reads as {@code false}. */
-    private static final AtomicReference<BooleanSupplier> STRICT_HOLD_MAPPING = new AtomicReference<>();
-
-    /** A registry-free sink the deployment wires so a publish whose blobs-namespace reverse mapping does not resolve
-     *  the artifact just served is counted ({@code jenrepo.publish.holdmapping.broken} tagged by ecosystem) - a
-     *  wiring-regression alarm, the publish-time sibling of the sweep's {@code jenrepo.vulnerabilities.hold.unenforceable}
-     *  gauge. Registry-free like {@link #VERDICTS}: the Micrometer meter lives in the distribution, so the gate module
-     *  stays free of any metrics dependency. */
-    private static final AtomicReference<HoldMappingBrokenListener> HOLD_MAPPING_BROKEN = new AtomicReference<>();
-
-    /** How an upload is read into subjects, built from the inspectors and the signer trust this JVM discovered. */
+    /** How an upload is read into subjects, built from the inspectors and the signer trust this JVM discovered -
+     *  what the module path holds, which is one answer for every deployment in the process. */
     private static final PublishInspection INSPECTION =
             new PublishInspection(QualityInspector.all(), !SignerTrustProvider.installed().isEmpty());
 
     /** The findings ledger, when a persistence module is installed - the structured sibling of the quarantine
-     *  log's flat reason line; empty leaves the screen's behaviour exactly as before. */
+     *  log's flat reason line; empty when none is. Process-wide like {@link #INSPECTION}: it is the module path's
+     *  answer, and the ledger it opens is always over the store a call carries. */
     private static final Optional<FindingsProvider> FINDINGS = FindingsProvider.installed();
 
     /** The durable maintainer-health ledger, when a persistence module is installed. Present, it is overlaid onto the
@@ -112,14 +84,6 @@ public final class ComplianceScreen implements PublishInterceptor {
      *  written at commit for a just-accepted coordinate; absent, the gate keeps its live health source and the screen
      *  persists no health. */
     private static final Optional<HealthLedgerProvider> HEALTH = HealthLedgerProvider.installed();
-
-    /** The deployment's live maintainer-health source - the SAME instance the sweep probes through - consulted per
-     *  accepted coordinate at commit so a just-published coordinate carries its health in the ledger immediately
-     *  (closing the window between its publish and the next scheduled health sweep, so admission of a LATER version of
-     *  the same coordinate reads a populated ledger). Restart-bound like the source itself, so a plain supplier; unset
-     *  (the ServiceLoader-constructed screen until the deployment wires it) leaves the screen writing no health record,
-     *  and the sweep populates the coordinate on its next pass. */
-    private static final AtomicReference<Supplier<HealthSource>> HEALTH_SOURCE = new AtomicReference<>();
 
     /**
      * The {@code source} every gate finding this screen writes is attributed to. Named here, once, because a console
@@ -149,10 +113,13 @@ public final class ComplianceScreen implements PublishInterceptor {
      *  the {@code Publication} (Maven's does, npm's raw {@code blobs} writes do not) must not be re-screened into
      *  a fresh quarantine of the very bytes just released - the release IS the override of that verdict. While set the
      *  screen accepts unconditionally; the withhold read side ({@link #withheld}) is untouched, since it is store truth
-     *  not policy. Thread-scoped and cleared in a {@code finally} by the replay, so it can never leak past it. */
+     *  not policy. Thread-scoped and cleared in a {@code finally} by the replay, so it can never leak past it - and
+     *  carrying no deployment's values, it cannot hand one deployment's state to another. */
     private static final ThreadLocal<Boolean> RELEASING = ThreadLocal.withInitial(() -> Boolean.FALSE);
 
-    private final Supplier<ComplianceGate> gate;
+    /** The binding an explicit constructor gave this screen, which it uses whatever store it is handed; null for the
+     *  discovered screen, which finds its binding on the store. */
+    private final Binding explicit;
 
     /** What this screen assessed, stashed between {@link #assess} and {@link #committed} - both run on the
      *  publishing thread within one {@code Publication} call, so the audit can name the subjects and reasons. */
@@ -184,33 +151,26 @@ public final class ComplianceScreen implements PublishInterceptor {
      */
     public static final String FEED_FAILED_CLOSED = "an advisory feed failed closed";
 
-    /** The {@code ServiceLoader} constructor: the gate is whatever the deployment wired through {@link #live},
-     *  or nothing (an inert screen) until it does. */
+    /** The {@code ServiceLoader} constructor: the screen judges each call by the {@link Binding} its store carries. */
     public ComplianceScreen() {
-        this.gate = () -> {
-            Supplier<ComplianceGate> live = LIVE.get();
-            return live == null ? null : live.get();
-        };
+        this.explicit = null;
     }
 
-    /** An explicitly configured screen - the seam a test or an embedder uses instead of the JVM-wide wiring. */
+    /** An explicitly configured screen - one gate, whatever store it is handed, and no meters, feeds or health
+     *  source: the seam a test or an embedder uses instead of a deployment's binding. */
     public ComplianceScreen(Supplier<ComplianceGate> gate) {
-        this.gate = gate;
+        this(binding().gate(gate).build());
     }
 
-    /** Wire the deployment's live gate into every discovered screen in this JVM; closing the returned wiring
-     *  unwires it again (only if it is still the current one), so a booted-then-closed server never leaves a stale
-     *  gate behind for the next context in the same JVM. */
-    public static Wiring live(Supplier<ComplianceGate> gate) {
-        LIVE.set(gate);
-        return new Wiring(gate);
+    /** An explicitly configured screen judging every call by {@code binding}, whatever store it is handed. */
+    public ComplianceScreen(Binding binding) {
+        this.explicit = Objects.requireNonNull(binding, "binding");
     }
 
-    /** Wire the deployment's gate per tenant, for the re-assessments {@link #rescreen} makes off the request path;
-     *  closing the returned handle retires the wiring (only if it is still the current one). */
-    public static AutoCloseable tenantGates(Function<String, ComplianceGate> gates) {
-        TENANT_GATES.set(gates);
-        return () -> TENANT_GATES.compareAndSet(gates, null);
+    /** A new binding, to be {@linkplain Binding.Builder#open opened} by a deployment or
+     *  {@linkplain Binding.Builder#build built} for an explicit screen. */
+    public static Binding.Builder binding() {
+        return new Binding.Builder();
     }
 
     /** What {@link #rescreen} came to. */
@@ -225,7 +185,7 @@ public final class ComplianceScreen implements PublishInterceptor {
         /** The gate still holds it; the review queue's latest row for the path says why. */
         HELD,
 
-        /** No gate is wired on this node, so nothing could be decided and the hold stands. */
+        /** No gate is bound for the tenant, so nothing could be decided and the hold stands. */
         UNSCREENED
     }
 
@@ -238,90 +198,43 @@ public final class ComplianceScreen implements PublishInterceptor {
      * an override: an artifact still held for any other reason fails the same assessment and stays held, its log row
      * headed by {@code because}.
      *
-     * @param store the repository's own scoped store
+     * @param store the repository's own scoped store, which carries the deployment's {@link Binding}
+     * @throws IllegalStateException when {@code store} carries no binding while a deployment is bound in this process
      */
     public static Rescreened rescreen(ArtifactStore store, String tenant, String path, String because)
             throws IOException {
-        Function<String, ComplianceGate> gates = TENANT_GATES.get();
-        ComplianceGate current = gates == null ? null : gates.apply(tenant);
+        Binding binding = bound(store);
+        ComplianceGate current = binding == null ? null : binding.tenantGates.apply(tenant);
         if (current == null) {
             return Rescreened.UNSCREENED;
         }
         return PublishHolds.rescreen(INSPECTION,
                 (inspected, held) -> overlaid(current, store, inspected, held).assess(inspected),
-                recorder(), store, path, because);
+                binding.recorder(), store, path, because);
     }
 
-    /** A registry-free callback the deployment wires so a committed verdict is counted: {@code (format, verdict)}
+    /** A registry-free callback a deployment binds so a committed verdict is counted: {@code (format, verdict)}
      *  where verdict is the {@link Disposition} name. */
     @FunctionalInterface
     public interface VerdictListener {
         void recorded(String format, String verdict);
     }
 
-    /** Wire the deployment's verdict sink into every discovered screen in this JVM; closing the returned handle
-     *  retires it (only if it is still the current one). */
-    public static AutoCloseable verdicts(VerdictListener listener) {
-        VERDICTS.set(listener);
-        return () -> VERDICTS.compareAndSet(listener, null);
-    }
-
-    /** Wire the deployment's named advisory feeds - the same instances the live gate assesses through - into every
-     *  discovered screen in this JVM, so a committed publish re-queries them (a warm {@code FeedCache} read) and
-     *  persists the just-published coordinate's advisory findings at once. Closing the returned handle retires the
-     *  wiring (only if it is still the current one), so a booted-then-closed server leaves no stale feeds behind. */
-    public static AutoCloseable advisoryFeeds(Supplier<SequencedMap<String, AdvisorySource>> feeds) {
-        FEEDS.set(feeds);
-        return () -> FEEDS.compareAndSet(feeds, null);
-    }
-
-    /** Wire the deployment's live maintainer-health source - the same instance the health sweep probes through - into
-     *  every discovered screen in this JVM, so a committed publish persists the just-accepted coordinate's health into
-     *  the durable ledger at once. Closing the returned handle retires the wiring (only if it is still the current one),
-     *  so a booted-then-closed server leaves no stale source behind. */
-    public static AutoCloseable healthSource(Supplier<HealthSource> source) {
-        HEALTH_SOURCE.set(source);
-        return () -> HEALTH_SOURCE.compareAndSet(source, null);
-    }
-
-    /** A registry-free callback the deployment wires so a commit-time feed re-query that failed closed (the warm cache
+    /** A registry-free callback a deployment binds so a commit-time feed re-query that failed closed (the warm cache
      *  had nothing and the refresh could not reach the feed) is counted: {@code (feed)} names the feed that missed. */
     @FunctionalInterface
     public interface FeedMissListener {
         void missed(String feed);
     }
 
-    /** Wire the deployment's feed-miss sink into every discovered screen in this JVM; closing the returned handle
-     *  retires it (only if it is still the current one). */
-    public static AutoCloseable advisoryFeedMisses(FeedMissListener listener) {
-        FEED_MISSES.set(listener);
-        return () -> FEED_MISSES.compareAndSet(listener, null);
-    }
-
-    /** A registry-free callback the deployment wires so an artifact an inspector could not parse is counted:
+    /** A registry-free callback a deployment binds so an artifact an inspector could not parse is counted:
      *  {@code (format)} names the ecosystem/format of the unparseable upload. */
     @FunctionalInterface
     public interface UnparseableListener {
         void detected(String format);
     }
 
-    /** Wire the deployment's unparseable-artifact meter into every discovered screen in this JVM; closing the returned
-     *  handle retires it (only if it is still the current one). */
-    public static AutoCloseable unparseableArtifacts(UnparseableListener listener) {
-        UNPARSEABLE_METER.set(listener);
-        return () -> UNPARSEABLE_METER.compareAndSet(listener, null);
-    }
-
-    /** Wire whether the publish-time hold-mapping round-trip check ({@link #onPublished}) throws on a break: the
-     *  deployment supplies {@code jenrepo.strict-hold-mapping} through {@code LiveConfig}, so the value is
-     *  read from the effective settings the same way the gate dials are (default false in production, on in the test
-     *  config). Closing the returned handle retires the wiring (only if it is still the current one). */
-    public static AutoCloseable strictHoldMapping(BooleanSupplier strict) {
-        STRICT_HOLD_MAPPING.set(strict);
-        return () -> STRICT_HOLD_MAPPING.compareAndSet(strict, null);
-    }
-
-    /** A registry-free callback the deployment wires so a broken publish-time hold mapping is counted: {@code (eco)}
+    /** A registry-free callback a deployment binds so a broken publish-time hold mapping is counted: {@code (eco)}
      *  names the ecosystem whose blobs-namespace format resolved no served path or content hash for the artifact it
      *  just laid out. */
     @FunctionalInterface
@@ -329,26 +242,203 @@ public final class ComplianceScreen implements PublishInterceptor {
         void broken(String ecosystem);
     }
 
-    /** Wire the deployment's broken-hold-mapping meter into every discovered screen in this JVM; closing the returned
-     *  handle retires it (only if it is still the current one). */
-    public static AutoCloseable holdMappingBroken(HoldMappingBrokenListener listener) {
-        HOLD_MAPPING_BROKEN.set(listener);
-        return () -> HOLD_MAPPING_BROKEN.compareAndSet(listener, null);
-    }
+    /**
+     * Everything a deployment hands the screen, as one value its store carries ({@link #bind}). The listeners are
+     * registry-free on purpose: the Micrometer counters live in the distribution that binds them, so this module
+     * stays free of any metrics dependency.
+     *
+     * <p>Opened by a deployment ({@link Builder#open}) and closed with it: while open, a call through a store carrying
+     * no binding is refused rather than admitted unscreened. Built without opening ({@link Builder#build}) for an
+     * explicit screen, which is not a deployment and so arms nothing.
+     */
+    public static final class Binding implements AutoCloseable, build.jenesis.repository.store.PublishPathWiring {
 
-    /** The handle {@link #live} returns; closing it retires that wiring. */
-    public static final class Wiring implements AutoCloseable, build.jenesis.repository.store.PublishPathWiring {
-
+        /** The gate for the publishing thread - resolved off the publishing request's tenant - or null for none. */
         private final Supplier<ComplianceGate> gate;
 
-        private Wiring(Supplier<ComplianceGate> gate) {
-            this.gate = gate;
+        /** The gate for a named tenant, for a re-assessment made off any request ({@link #rescreen}). */
+        private final Function<String, ComplianceGate> tenantGates;
+
+        /** Counts every committed verdict, across every publish path (the deploy, staging, batch). */
+        private final VerdictListener verdicts;
+
+        /** The named advisory feeds - the same instances the gate assesses through - re-queried per feed at commit,
+         *  so a just-accepted coordinate's advisory findings are persisted at once rather than rendering clean until
+         *  the next sweep. The gate's assess just warmed each feed's cache, so the re-query is a cache read. */
+        private final Supplier<SequencedMap<String, AdvisorySource>> feeds;
+
+        /** Counts a commit-time feed re-query the warm cache could not answer, rather than dropping it silently; the
+         *  publish is never failed for it. */
+        private final FeedMissListener feedMisses;
+
+        /** Counts an artifact an inspector could not parse ({@code jenrepo.gate.unparseable}, by format). */
+        private final UnparseableListener unparseable;
+
+        /** Whether a blobs-namespace format that resolves no reverse hold mapping for the publish it just laid out
+         *  throws (failing the publish) or only alarms - {@code jenrepo.strict-hold-mapping}, off in production so one
+         *  broken format cannot stop publishes, on in every test that publishes through a format. */
+        private final BooleanSupplier strictHoldMapping;
+
+        /** Counts a publish whose blobs-namespace reverse mapping does not resolve the artifact just served. */
+        private final HoldMappingBrokenListener holdMappingBroken;
+
+        /** The live maintainer-health source - the same instance the health sweep probes through - consulted per
+         *  accepted coordinate at commit, so a just-published coordinate carries its health in the ledger at once. */
+        private final Supplier<HealthSource> healthSource;
+
+        private Binding(Builder builder) {
+            this.gate = builder.gate;
+            this.tenantGates = builder.tenantGates;
+            this.verdicts = builder.verdicts;
+            this.feeds = builder.feeds;
+            this.feedMisses = builder.feedMisses;
+            this.unparseable = builder.unparseable;
+            this.strictHoldMapping = builder.strictHoldMapping;
+            this.holdMappingBroken = builder.holdMappingBroken;
+            this.healthSource = builder.healthSource;
         }
 
+        /** {@code store} carrying this binding, as do all its scopes: what a deployment publishes through. */
+        public ArtifactStore bind(ArtifactStore store) {
+            return bindings().over(store);
+        }
+
+        /** This binding as the store bindings that carry it. */
+        public StoreBindings bindings() {
+            return StoreBindings.of(Binding.class, this);
+        }
+
+        /** What a commit records through: the discovered ledgers, and this binding's feeds, feed-miss sink and
+         *  live health source. */
+        private PublishRecorder recorder() {
+            return new PublishRecorder(FINDINGS, HEALTH, feeds, feedMisses, healthSource);
+        }
+
+        /** Retire this binding: a call through a store carrying no binding is inert again once none is open. */
         @Override
         public void close() {
-            LIVE.compareAndSet(gate, null);
+            OPEN.remove(this);
         }
+
+        /** Assembles a {@link Binding}; everything unset is absent - no gate, no meters, no feeds, the lenient hold
+         *  mapping. */
+        public static final class Builder {
+
+            private Supplier<ComplianceGate> gate = () -> null;
+            private Function<String, ComplianceGate> tenantGates = _ -> null;
+            private VerdictListener verdicts;
+            private Supplier<SequencedMap<String, AdvisorySource>> feeds;
+            private FeedMissListener feedMisses;
+            private UnparseableListener unparseable;
+            private BooleanSupplier strictHoldMapping = () -> false;
+            private HoldMappingBrokenListener holdMappingBroken;
+            private Supplier<HealthSource> healthSource;
+
+            private Builder() {
+            }
+
+            /** The gate a publish assesses through, resolved on the publishing thread; a null answer screens nothing. */
+            public Builder gate(Supplier<ComplianceGate> gate) {
+                this.gate = Objects.requireNonNull(gate, "gate");
+                return this;
+            }
+
+            /** The gate per tenant, for the re-assessments {@link #rescreen} makes off the request path. */
+            public Builder tenantGates(Function<String, ComplianceGate> tenantGates) {
+                this.tenantGates = Objects.requireNonNull(tenantGates, "tenantGates");
+                return this;
+            }
+
+            /** The sink every committed verdict is counted through. */
+            public Builder verdicts(VerdictListener verdicts) {
+                this.verdicts = verdicts;
+                return this;
+            }
+
+            /** The named advisory feeds a committed publish re-queries to persist its advisory findings at once. */
+            public Builder advisoryFeeds(Supplier<SequencedMap<String, AdvisorySource>> feeds) {
+                this.feeds = feeds;
+                return this;
+            }
+
+            /** The sink a commit-time feed re-query that failed closed is counted through. */
+            public Builder advisoryFeedMisses(FeedMissListener feedMisses) {
+                this.feedMisses = feedMisses;
+                return this;
+            }
+
+            /** The sink an artifact an inspector could not parse is counted through. */
+            public Builder unparseableArtifacts(UnparseableListener unparseable) {
+                this.unparseable = unparseable;
+                return this;
+            }
+
+            /** Whether a broken publish-time hold mapping fails the publish ({@code true}) or only alarms. */
+            public Builder strictHoldMapping(BooleanSupplier strictHoldMapping) {
+                this.strictHoldMapping = Objects.requireNonNull(strictHoldMapping, "strictHoldMapping");
+                return this;
+            }
+
+            /** The sink a broken publish-time hold mapping is counted through. */
+            public Builder holdMappingBroken(HoldMappingBrokenListener holdMappingBroken) {
+                this.holdMappingBroken = holdMappingBroken;
+                return this;
+            }
+
+            /** The live maintainer-health source a committed publish persists the coordinate's health from. */
+            public Builder healthSource(Supplier<HealthSource> healthSource) {
+                this.healthSource = healthSource;
+                return this;
+            }
+
+            /** The binding, for an explicit screen: not a deployment, so it arms nothing in the process. */
+            public Binding build() {
+                return new Binding(this);
+            }
+
+            /** The binding a deployment hands its store, open until closed: while it is, a call through a store
+             *  carrying no binding is refused rather than admitted unscreened. */
+            public Binding open() {
+                Binding binding = new Binding(this);
+                OPEN.add(binding);
+                return binding;
+            }
+        }
+    }
+
+    /** What an unbound commit records through: the discovered ledgers alone, with no feeds, sink or health source. */
+    private static final Binding NO_BINDING = binding().build();
+
+    /**
+     * The binding {@code store} carries; null when it carries none and no deployment is bound in this process, the
+     * inert screen of a process that bound no gate.
+     *
+     * @throws IllegalStateException when {@code store} carries none while a deployment is bound: the call reached the
+     *         screen through a path that lost the deployment's binding, and answering it would admit unscreened
+     */
+    private static Binding bound(ArtifactStore store) {
+        Optional<Binding> carried = store.bindings().get(Binding.class);
+        if (carried.isPresent()) {
+            return carried.get();
+        }
+        if (!OPEN.isEmpty()) {
+            throw new IllegalStateException("The compliance screen was handed a store that carries no deployment "
+                    + "binding (" + store.identity() + ") while a deployment is bound in this process; refusing "
+                    + "rather than admitting unscreened. Every store a deployment publishes through must be derived "
+                    + "from the store it bound, and every decorator must forward its delegate's bindings.");
+        }
+        return null;
+    }
+
+    /** The binding this call runs under: the explicit one, else the one its store carries, as {@link #bound}. */
+    private Binding binding(ArtifactStore store) {
+        return explicit != null ? explicit : bound(store);
+    }
+
+    /** As {@link #binding}, for an observer leg, which is contained and so must not be the place a lost binding is
+     *  reported: an unbound store answers no binding there, and the publish's own {@link #assess} refused it. */
+    private Binding observing(ArtifactStore store) {
+        return explicit != null ? explicit : store.bindings().get(Binding.class).orElse(null);
     }
 
     /** Run {@code dispatch} with the screen suppressed on this thread, so a format whose {@code handle} re-publishes
@@ -381,7 +471,8 @@ public final class ComplianceScreen implements PublishInterceptor {
             // accept the re-publish rather than re-screening the released bytes into a fresh quarantine.
             return Disposition.ACCEPT;
         }
-        ComplianceGate current = gate.get();
+        Binding binding = binding(content.store());
+        ComplianceGate current = binding == null ? null : binding.gate.get();
         if (current == null) {
             return Disposition.ACCEPT;
         }
@@ -398,14 +489,14 @@ public final class ComplianceScreen implements PublishInterceptor {
             // That is distinct from "parsed fine, declares nothing": it must never read as a silent clean. The gate's
             // input silently failed to derive, so the license/vulnerability dimensions never saw the real coordinate -
             // fail closed and HOLD it (could not fully screen ⇒ do not serve), recording a scoped, legible reason.
-            return screenMalformed(artifact, malformed);
+            return screenMalformed(artifact, malformed, binding.unparseable);
         } catch (RuntimeException failure) {
             // An inspector threw a NON-Malformed runtime error parsing this upload - an unhandled edge over hostile
             // content (an NPE, an index/arithmetic fault) that was not wrapped as a MalformedArtifactException. The gate
             // never saw a derived coordinate, exactly as for the malformed case, so it fails closed and HOLDS it (could
             // not fully screen ⇒ do not serve) rather than letting the raw error escape to the publisher as a 500 or
             // admitting the unscreened bytes - the same discipline screenMalformed and screenFeedFailure apply.
-            return screenInspectorFailure(artifact, failure);
+            return screenInspectorFailure(artifact, failure, binding.unparseable);
         }
         if (inspected.isEmpty()) {
             // Nothing derived a package subject, so no parsed coordinate ever reached the gate - screen the path's
@@ -513,7 +604,8 @@ public final class ComplianceScreen implements PublishInterceptor {
         unparseable.remove();
         oversizedFinding.remove();
         feedFailure.remove();
-        PublishRecorder recorder = recorder();
+        Binding binding = binding(store);
+        PublishRecorder recorder = (binding == null ? NO_BINDING : binding).recorder();
         if (malformed != null) {
             // An inspector could not parse this upload: record the distinct inspection-failed finding on the
             // coordinate whatever the disposition (admitted-but-unscreened by default, or held), so the artifact
@@ -521,7 +613,7 @@ public final class ComplianceScreen implements PublishInterceptor {
             recorder.recordUnparseableFinding(store, artifact, inspected, malformed,
                     oversized ? "oversized" : "unparseable");
         }
-        VerdictListener listener = VERDICTS.get();
+        VerdictListener listener = binding == null ? null : binding.verdicts;
         if (listener != null) {
             // Best-effort: count the verdict on EVERY publish path before the disposition's own writes, so a
             // downstream write failure never loses the decision from the metric.
@@ -602,36 +694,33 @@ public final class ComplianceScreen implements PublishInterceptor {
     public void onPublished(ArtifactDescriptor artifact, ArtifactStore store) throws IOException {
         // Contained on its own, ahead of the round-trip check: the two are unrelated concerns and a late-declaration
         // re-assessment must never decide whether the hold-mapping validation runs, nor the other way about.
+        Binding binding = observing(store);
         try {
-            releaseCompleted(artifact, store);
+            releaseCompleted(artifact, store, binding);
         } catch (IOException | RuntimeException failure) {
             LOGGER.warn("Could not re-assess the artifacts " + artifact.path() + " completes; they stay held",
                     failure);
         }
-        PublishHolds.verifyHoldMapping(artifact, store, HOLD_MAPPING_BROKEN.get(), STRICT_HOLD_MAPPING.get());
+        PublishHolds.verifyHoldMapping(artifact, store, binding == null ? null : binding.holdMappingBroken,
+                binding == null ? null : binding.strictHoldMapping);
     }
 
     /** Release the neighbours this publish completed the declaration for ({@link PublishHolds#releaseCompleted}),
      *  re-assessed through the gate this publish assessed through, overlays included. Suppressed while a review
      *  release is replaying ({@link #RELEASING}), so a released artifact whose format re-publishes through the
      *  {@code Publication} cannot re-enter this and walk the same directory again. */
-    private void releaseCompleted(ArtifactDescriptor artifact, ArtifactStore store) throws IOException {
-        if (RELEASING.get()) {
+    private void releaseCompleted(ArtifactDescriptor artifact, ArtifactStore store, Binding binding)
+            throws IOException {
+        if (RELEASING.get() || binding == null) {
             return;
         }
-        ComplianceGate current = gate.get();
+        ComplianceGate current = binding.gate.get();
         if (current == null) {
             return;
         }
         PublishHolds.releaseCompleted(INSPECTION,
                 (inspected, held) -> overlaid(current, store, inspected, held).assess(inspected),
-                recorder(), store, artifact.path());
-    }
-
-    /** What this commit records through: the discovered ledgers this screen holds, and the advisory feeds, the
-     *  feed-miss sink and the live health source as the deployment has them wired now. */
-    private static PublishRecorder recorder() {
-        return new PublishRecorder(FINDINGS, HEALTH, FEEDS.get(), FEED_MISSES.get(), HEALTH_SOURCE.get());
+                binding.recorder(), store, artifact.path());
     }
 
     /**
@@ -697,7 +786,8 @@ public final class ComplianceScreen implements PublishInterceptor {
      *  exactly like an unparseable body, so this holds the artifact in quarantine and records the inspection-failed
      *  reason through the same marker {@link #screenMalformed} uses - never letting the raw error escape to the publisher
      *  and never admitting the unscreened bytes. */
-    private Disposition screenInspectorFailure(ArtifactDescriptor artifact, RuntimeException failure) {
+    private Disposition screenInspectorFailure(ArtifactDescriptor artifact, RuntimeException failure,
+                                               UnparseableListener meter) {
         String format = artifact.ecosystem() == null ? "none" : artifact.ecosystem();
         // An InspectionFault already names the inspector, the path and the reason - the attribution the fan-out
         // captured before it called the guest. Anything else reaching here came from outside that loop and
@@ -708,7 +798,6 @@ public final class ComplianceScreen implements PublishInterceptor {
         LOGGER.warn("A quality inspector threw inspecting " + artifact.path() + " (" + message + "); holding it in "
                 + "quarantine (fail-closed) and recording an inspection-failed finding - could not fully screen, so "
                 + "it is not served", failure);
-        UnparseableListener meter = UNPARSEABLE_METER.get();
         if (meter != null) {
             meter.detected(format);
         }
@@ -748,12 +837,12 @@ public final class ComplianceScreen implements PublishInterceptor {
      *  distinct {@link Finding.Kind#INSPECTION} finding on the coordinate - so an operator sees a scoped reason for the
      *  hold and can investigate or release it. A real artifact that trips a stricter parser is held by design (the owner
      *  accepted this publish-rejection risk); the quarantine review/release flow is the operator's override. */
-    private Disposition screenMalformed(ArtifactDescriptor artifact, MalformedArtifactException failure) {
+    private Disposition screenMalformed(ArtifactDescriptor artifact, MalformedArtifactException failure,
+                                        UnparseableListener meter) {
         String format = artifact.ecosystem() == null ? "none" : artifact.ecosystem();
         LOGGER.warn(
                 "Could not parse claimed artifact " + artifact.path() + "; holding it in quarantine (fail-closed) and "
                         + "recording an inspection-failed finding - could not fully screen, so it is not served", failure);
-        UnparseableListener meter = UNPARSEABLE_METER.get();
         if (meter != null) {
             meter.detected(format);
         }

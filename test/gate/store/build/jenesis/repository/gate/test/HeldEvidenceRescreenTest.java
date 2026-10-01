@@ -17,13 +17,15 @@ import build.jenesis.repository.store.ArtifactStore;
 import build.jenesis.repository.store.ArtifactStoreProvider;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 /**
  * A held artifact re-assessed once evidence it was waiting on lands off the publish path - a content scan's report on
  * an image - through the tenant's own publish gate, bound to the artifact as it was stored: it is released when the
  * gate now clears it, and stays held, saying why, when the evidence is itself a reason to hold. Driven through a real
  * {@code docker push}-shaped manifest PUT into the OCI format, screened by the discovered {@link ComplianceScreen}
- * over the OCI inspector, with a dimension that reads the repository's record of the scan.
+ * over the OCI inspector through the binding the store carries, with a dimension that reads the repository's record
+ * of the scan.
  */
 class HeldEvidenceRescreenTest {
 
@@ -86,8 +88,8 @@ class HeldEvidenceRescreenTest {
 
     @Test
     void the_scan_landing_clean_releases_the_held_image() throws IOException {
-        try (ComplianceScreen.Wiring _ = ComplianceScreen.live(() -> GATE);
-             AutoCloseable _ = ComplianceScreen.tenantGates(_ -> GATE)) {
+        try (ComplianceScreen.Binding binding = bindGate()) {
+            store = binding.bind(store);
             String hex = push();
             assertThat(new QuarantineLog(store).latest(PATH)).hasValueSatisfying(event ->
                     assertThat(event.reasons()).contains("content scan pending"));
@@ -105,8 +107,8 @@ class HeldEvidenceRescreenTest {
 
     @Test
     void the_scan_landing_with_a_critical_finding_keeps_it_held_and_says_why() throws IOException {
-        try (ComplianceScreen.Wiring _ = ComplianceScreen.live(() -> GATE);
-             AutoCloseable _ = ComplianceScreen.tenantGates(_ -> GATE)) {
+        try (ComplianceScreen.Binding binding = bindGate()) {
+            store = binding.bind(store);
             String hex = push();
             record(hex, "vulnerable");
 
@@ -125,8 +127,8 @@ class HeldEvidenceRescreenTest {
 
     @Test
     void the_scan_still_pending_keeps_it_held() throws IOException {
-        try (ComplianceScreen.Wiring _ = ComplianceScreen.live(() -> GATE);
-             AutoCloseable _ = ComplianceScreen.tenantGates(_ -> GATE)) {
+        try (ComplianceScreen.Binding binding = bindGate()) {
+            store = binding.bind(store);
             push();
 
             assertThat(ComplianceScreen.rescreen(store, "default", PATH, "a pass looked"))
@@ -138,15 +140,29 @@ class HeldEvidenceRescreenTest {
     }
 
     @Test
-    void nothing_held_and_no_gate_wired_decide_nothing() throws IOException {
-        try (AutoCloseable _ = ComplianceScreen.tenantGates(_ -> GATE)) {
-            assertThat(ComplianceScreen.rescreen(store, "default", PATH, "a pass looked"))
+    void nothing_held_and_no_gate_bound_decide_nothing() throws IOException {
+        try (ComplianceScreen.Binding binding = ComplianceScreen.binding().tenantGates(_ -> GATE).open()) {
+            assertThat(ComplianceScreen.rescreen(binding.bind(store), "default", PATH, "a pass looked"))
                     .isEqualTo(ComplianceScreen.Rescreened.NOT_HELD);
-        } catch (Exception failed) {
-            throw new AssertionError(failed);
         }
         assertThat(ComplianceScreen.rescreen(store, "default", PATH, "a pass looked"))
+                .as("with no deployment bound in the process, an unbound store is the inert screen")
                 .isEqualTo(ComplianceScreen.Rescreened.UNSCREENED);
+    }
+
+    @Test
+    void a_store_that_lost_the_binding_is_refused_while_a_deployment_is_bound() {
+        try (ComplianceScreen.Binding _ = bindGate()) {
+            assertThatThrownBy(() -> ComplianceScreen.rescreen(store, "default", PATH, "a pass looked"))
+                    .as("a re-assessment through a store the deployment did not bind must not answer UNSCREENED")
+                    .isInstanceOf(IllegalStateException.class)
+                    .hasMessageContaining("carries no deployment binding");
+        }
+    }
+
+    /** The deployment's binding for this suite: the one gate, for publishes and re-assessments alike. */
+    private static ComplianceScreen.Binding bindGate() {
+        return ComplianceScreen.binding().gate(() -> GATE).tenantGates(_ -> GATE).open();
     }
 
     private void record(String hex, String outcome) throws IOException {
