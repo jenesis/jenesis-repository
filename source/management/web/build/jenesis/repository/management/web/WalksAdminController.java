@@ -17,10 +17,9 @@ import build.jenesis.repository.store.ArtifactStore;
 import build.jenesis.repository.walk.task.WalkRuns;
 
 /**
- * The walks over the API: the overview the console screen renders - the scheduled entries with their consumers,
- * what each entry's last run cost, the installed consumers with their descriptions and dials, the standing
- * requests - and a request for a walk now. Both go through {@link WalkRuns}, the same implementation the screen
- * reaches; the walks document itself is edited as the {@code walks} setting through {@code /api/settings}.
+ * The walks over the API: the overview the console renders - the scheduled entries and consumers, each entry's last run
+ * cost, the installed consumers with descriptions and dials, the standing requests - and a request for a walk now, both
+ * through {@link WalkRuns}, as the screen; the walks document is edited as the {@code walks} setting.
  */
 @RestController
 public class WalksAdminController {

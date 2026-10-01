@@ -16,27 +16,18 @@ import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 /**
- * The operator's explicit reclamation of a removed module's data - a framework primitive over the per-module
- * storage manifest, always present regardless of which feature modules an image carries (an operator must be able
- * to purge a module's leftovers precisely when that module is gone). Two deployment-global admin verbs, both
- * operator-tenant-only: {@code GET /api/admin/orphans} reports manifest entries whose declaring module is no
- * longer installed but whose key-spaces still hold data (purely informational - module absence never triggers
- * deletion, since an incomplete image or a mid-rolling deploy looks identical to an intentional removal), and
- * {@code POST /api/admin/purge?namespace=<module>} reaps the named module's declared key-spaces.
+ * The operator's explicit reclamation of a removed module's data, a framework primitive over the per-module storage
+ * manifest, present whichever modules an image carries, since a module's leftovers are purged when it is gone. Two
+ * deployment-global, operator-tenant-only verbs: {@code GET /api/admin/orphans} reports manifest entries whose module
+ * is not installed but whose key-spaces hold data - informational, since absence never triggers deletion, an incomplete
+ * image looking like a removal - and {@code POST /api/admin/purge?namespace=<module>} reaps that module's key-spaces.
  *
- * <p>The purge is dry-run by default: without {@code dryRun=false} it only lists what would be deleted, with
- * per-prefix object counts and bytes, so nothing is ever removed unless the operator both names the target and
- * explicitly turns the dry run off. A real purge records an audit event. Re-homed beside the credential and
- * authorization management surface (its natural admin peer) and contributed through the {@code ServerModuleProvider}
- * seam; with this module absent the server carries no {@code /api/admin/orphans} or {@code /api/admin/purge} endpoint.
+ * <p>The purge is a dry run unless {@code dryRun=false}: it lists what would go, with per-prefix counts and bytes, so
+ * nothing is removed unless the operator names the target and turns the dry run off. A real purge is audited.
  *
- * <p><strong>Both responses name what this purge cannot reach</strong> ({@code unreachable}, with the one-sentence
- * {@code note} behind it): the reserved root key spaces no {@code StorageNamespace} may declare - today
- * {@code audit/}, {@code locks/} and {@code quota/} - and which the manifest therefore cannot describe. That is a
- * deliberate exclusion rather than a gap, and this is where an operator meets it: a blast radius that lists no
- * {@code audit/} rows must not read as "there is no audit data", and a report is the only place that distinction can
- * be drawn at the moment it matters. The list is derived from {@link StorageNamespaces#UNREACHABLE} rather than spelled
- * here, so the endpoint can never describe a different exclusion from the one the purge actually has.
+ * <p><strong>Both responses name what the purge cannot reach</strong> ({@code unreachable}, with its {@code note}): the
+ * reserved root spaces no {@code StorageNamespace} may declare, from {@link StorageNamespaces#UNREACHABLE}, so a blast
+ * radius listing none of them is not read as "there is no data there".
  */
 @RestController
 public class StoragePurgeController {
@@ -54,8 +45,8 @@ public class StoragePurgeController {
         this.routing = routing;
     }
 
-    /** The orphaned-data diagnostic: every manifest entry whose declaring module is not installed yet whose
-     *  key-spaces still hold data. A report, never an action. */
+    /** The orphaned-data diagnostic: every manifest entry whose module is not installed yet whose key-spaces hold data.
+     *  A report, never an action. */
     @GetMapping("/api/admin/orphans")
     public OrphansView orphans() throws IOException {
         List<OrphanView> orphans = new ArrayList<>();
@@ -65,8 +56,8 @@ public class StoragePurgeController {
         return new OrphansView(orphans, unreachable(), StorageNamespaces.UNREACHABLE_NOTE);
     }
 
-    /** Purge the named module's declared key-spaces - dry-run unless {@code dryRun=false} is passed explicitly.
-     *  {@code 404} when no manifest entry names the module (the target is named, never inferred). */
+    /** Purge the named module's key-spaces, a dry run unless {@code dryRun=false}; {@code 404} when no manifest entry
+     *  names it. */
     @PostMapping("/api/admin/purge")
     public ResponseEntity<PurgeView> purge(@RequestParam("namespace") String namespace,
                                            @RequestParam(value = "dryRun", defaultValue = "true") boolean dryRun,
@@ -97,15 +88,14 @@ public class StoragePurgeController {
                 unreachable(), StorageNamespaces.UNREACHABLE_NOTE));
     }
 
-    /** The reserved roots this purge can never reach, rendered as the {@code <root>/} prefixes an operator sees in a
-     *  key. Read from the purge primitive's own derivation, never restated here. */
+    /** The reserved roots the purge cannot reach, as the {@code <root>/} prefixes an operator sees, from the purge's
+     *  own derivation. */
     private static List<String> unreachable() {
         return StorageNamespaces.UNREACHABLE.stream().map(root -> root + "/").toList();
     }
 
-    /** The orphan report: what data remains from modules this image was not built with, and the reserved key spaces
-     *  no manifest entry can describe - so an empty report is read as "no orphaned plug-in data", never as "no data
-     *  outside the declared spaces". */
+    /** The orphan report, with the reserved spaces no manifest entry describes, so an empty report reads as "no
+     *  orphaned plug-in data", never "no data outside the declared spaces". */
     public record OrphansView(List<OrphanView> orphans, List<String> unreachable, String note) {
     }
 
@@ -113,19 +103,17 @@ public class StoragePurgeController {
     public record OrphanView(String namespace, long objects, long bytes) {
     }
 
-    /** What one purge (or its dry run) covered, with the per-prefix breakdown of the fully scoped key-spaces - and
-     *  the reserved key spaces it deliberately cannot reach, so the blast radius is read for what it is. */
+    /** What one purge or dry run covered, per fully scoped prefix, and the reserved spaces it cannot reach. */
     public record PurgeView(String namespace, boolean dryRun, List<SpaceView> spaces, long objects, long bytes,
                             List<KeptView> kept, List<String> unreachable, String note) {
     }
 
-    /** A declared prefix the purge leaves at its {@code scope}, because the installed {@code owners} declare it
-     *  too. */
+    /** A declared prefix the purge leaves at its {@code scope}, because the installed {@code owners} declare it too. */
     public record KeptView(String scope, String prefix, List<String> owners) {
     }
 
-    /** One fully scoped prefix ({@code <tenant>/<repository>/<prefix>} or {@code <tenant>/<prefix>}) and what it
-     *  holds (dry run) or held (purge). */
+    /** One fully scoped prefix ({@code <tenant>/<repository>/<prefix>} or {@code <tenant>/<prefix>}) and what it holds
+     *  or held. */
     public record SpaceView(String prefix, long objects, long bytes) {
     }
 }

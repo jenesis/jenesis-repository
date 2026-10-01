@@ -22,17 +22,12 @@ import org.springframework.context.annotation.Configuration;
 import org.springframework.core.env.Environment;
 
 /**
- * Wires the credential and authorization management web adapter into the repository server: the
- * {@link ManagementController} over the framework-free {@link Repositories} resolver, the shared {@link Authorization}
- * and the discovered {@link AuditTrail}, alongside its re-homed admin peers - the
- * {@link SpiCatalogController} plug-in read, the {@link StoragePurgeController} storage-manifest reclamation and
- * the {@link WalksAdminController} walks overview - each
- * registered as an explicit {@code @Bean} (Spring MVC maps the {@code @RestController} handler methods on the bean
- * instances, so no component scan crosses the module boundary). Imported through
- * {@code ServerModuleProvider} discovery (see {@link ManagementWebModule}), never named by the server - so with this
- * module absent the server carries no credential, policy, quota, rate-limit, trust, role, audit, token-exchange,
- * SPI-catalogue or storage-purge endpoint and the console hides the panels. The beans mirror the constructor injection
- * the monolith performed, so the resolved dependencies are the same ones the server already exposes.
+ * Wires the management web adapter into the repository server: the {@link ManagementController} over
+ * {@link Repositories}, the shared {@link Authorization} and the discovered {@link AuditTrail}, beside its admin peers
+ * - {@link SpiCatalogController}, {@link StoragePurgeController}, {@link WalksAdminController} - each an explicit
+ * {@code @Bean}, so no component scan crosses the module boundary. Imported through {@code ServerModuleProvider}
+ * discovery ({@link ManagementWebModule}), so without this module the server carries none of these endpoints and the
+ * console hides the panels.
  */
 @Configuration(proxyBeanMethods = false)
 public class ManagementWebConfig {
@@ -53,25 +48,21 @@ public class ManagementWebConfig {
     @Bean
     public PostureAdminController postureAdminController(Settings settings, Environment environment,
                                                          PinnedSettings pins) {
-        // The security-posture read: every discovered SafetyAdvisor's advisory against the effective config -
-        // an operator's PinnedSettings pin over the kernel's Settings over the deployment Environment, the chain the
-        // running server resolves its own dials through. A clean deployment returns an empty list.
+        // Every discovered SafetyAdvisor against the effective configuration, through the chain the running server
+        // resolves its dials through: an operator's pin over the stored settings over the environment.
         return new PostureAdminController(settings, environment, pins);
     }
 
     @Bean
     public ObservabilityAdminController observabilityAdminController(ConfigurableListableBeanFactory beans) {
-        // This context's report: the discovered sources and every source among the singletons it has built; a
-        // disabled or absent source contributes nothing - the same seam /actuator/observability uses.
+        // This context's report: the discovered sources and every source among its singletons.
         return new ObservabilityAdminController(() -> ObservabilityReport.of(Arrays.stream(beans.getSingletonNames()).map(beans::getSingleton).filter(Objects::nonNull).toList()));
     }
 
     @Bean
     public CachesAdminController cachesAdminController(AuditTrail audit, Authorization authorization,
                                                       RepositoryRouting routing) {
-        // Registered by hand, like every controller here: absent from this list, /api/admin/caches and its clear
-        // would answer 404 in every composition while the console's own button worked. The controller-registration
-        // inspection rule holds that.
+        // Registered by hand like every controller here; the controller-registration inspection rule holds that it is.
         return new CachesAdminController(audit, authorization, routing);
     }
 
@@ -81,14 +72,8 @@ public class ManagementWebConfig {
         return new StoragePurgeController(namespaces, tenants, audit, routing);
     }
 
-    /**
-     * The walks over the API.
-     *
-     * <p>This config registers its controllers by hand, so absent from the list {@code GET /api/admin/walks} and
-     * {@code POST /api/admin/walks/run} would answer 404 in every composition that carried the module. The CLI's
-     * {@code walks} and {@code walks run} call exactly those two paths, so two of that capability's three surfaces
-     * would be dead while the third - the console screen - worked.
-     */
+    /** The walks over the API, registered by hand like every controller here: absent, {@code GET /api/admin/walks} and
+     *  {@code POST /api/admin/walks/run}, which the CLI calls, would answer 404. */
     @Bean
     public WalksAdminController walksAdminController(ArtifactStore root, AuditTrail audit, Settings settings,
                                                      PinnedSettings pinned, Environment environment,

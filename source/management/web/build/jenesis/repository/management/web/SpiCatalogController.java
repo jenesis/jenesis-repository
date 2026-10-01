@@ -11,15 +11,10 @@ import org.springframework.web.bind.annotation.ResponseBody;
 import org.springframework.web.bind.annotation.RestController;
 
 /**
- * The SPI catalogue admin read: {@code GET /api/admin/spi} lists every discovered SPI this deployment carries and the
- * installed implementations that provide it, each with its enablement key, enabled state and contributed settings - the
- * per-SPI view over the same module-capability model {@code /api/capabilities} lists per module, so an operator (or a
- * headless agent) sees the whole plug-in surface grouped by contract at a glance. Under {@code /api/admin/}, so the
- * {@code RepositoryAuthorizationManager} scopes it deployment-global: a {@code manage:read} right <em>and</em> the
- * operator tenant, exactly like the storage-manifest admin verbs. Read-only - it observes the plug-in surface, never
- * mutates it; the enable/disable and setting edits live on the modules and settings surfaces. Re-homed beside the
- * credential and authorization management surface (its natural peer) and contributed through the
- * {@code ServerModuleProvider} seam; with this module absent the server carries no {@code /api/admin/spi} endpoint.
+ * The SPI catalogue: {@code GET /api/admin/spi} lists every product SPI this deployment carries and the implementations
+ * providing it, each with its enablement key, enabled state and settings - the per-SPI view of the module model
+ * {@code /api/capabilities} lists per module. Under {@code /api/admin/}: a {@code manage:read} right and the operator
+ * tenant. Read-only; enabling and settings live on their own surfaces. Without this module there is no such endpoint.
  */
 @RestController
 public class SpiCatalogController {
@@ -34,13 +29,10 @@ public class SpiCatalogController {
         this.pins = pins;
     }
 
-    /** Every product SPI grouped with its installed implementations, enumerated from the module graph and decorated
-     *  with each module's effective installed / enabled state and its contributed settings - the same effective-value
-     *  chain the modules screen shows, which is the chain {@link ModuleCapability#catalog} documents its lookup as and the
-     *  chain the running server resolves a gate through: an operator's pin over the stored value over the
-     *  {@code jenrepo.*} default. This read once resolved stored-over-environment and so reported a
-     *  gated implementation as enabled off a stored value the pin above it makes inert. {@code version} lets a future
-     *  shape change be detected. */
+    /** Every product SPI with its implementations, from the module graph, decorated with each module's effective
+     *  installed and enabled state and its settings through the chain the running server resolves a gate by: an
+     *  operator's pin over the stored value over the {@code jenrepo.*} default ({@link ModuleCapability#catalog}).
+     *  {@code version} lets a client detect a shape change. */
     @GetMapping("/api/admin/spi")
     @ResponseBody
     public CatalogView spi() throws IOException {
@@ -70,9 +62,8 @@ public class SpiCatalogController {
     public record SpiView(String name, String type, List<ImplementationView> implementations) {
     }
 
-    /** One installed implementation: its short and fully-qualified provider type, the JPMS module it comes from,
-     *  whether it is {@code installed} (on the module path) and {@code enabled} (its module's gate resolves on), the
-     *  {@code enableKey} of that gate ({@code null} when always on once installed), and the settings its module reads. */
+    /** One installed implementation: its short and full provider type, its module, whether it is {@code installed} and
+     *  {@code enabled}, its gate's {@code enableKey} ({@code null} when always on), and its module's settings. */
     public record ImplementationView(String name, String type, String module, boolean installed, boolean enabled,
                                      String enableKey, List<SettingView> settings) {
     }

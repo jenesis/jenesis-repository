@@ -28,16 +28,12 @@ import org.springframework.web.bind.annotation.RestController;
 
 /**
  * The credential and authorization management surface - the tenant's credentials, grants, lifetime policy, storage
- * quota, request-rate ceiling, named roles and the audit trail - peeled out of the
- * {@code RepositoryController} monolith into its own thin {@code web} adapter and contributed through the
- * {@code ServerModuleProvider} seam. A JSON CRUD over the framework-free {@link Authorization} (resolved per tenant
- * through {@link Repositories}) and the discovered {@link AuditTrail}; the tenant is the one the deployment's
- * routing answers for the request ({@link RepositoryRouting#tenant}). Every route here is under {@code /api/} and is
- * gated {@code manage:read} (the reads) or {@code manage:write} (the mutations) at scope {@code *} by the security chain
- * before the request is reached, so this controller makes no authorization decision - the same guard the monolith
- * carried, unchanged by the move. With no rate-limiting module installed the rate-limit endpoints answer {@code 501};
- * with no audit module installed the audit endpoints answer {@code 501}, after the auth check so {@code 401}/{@code 403}
- * still precede. A privileged mutation writes an audit event.
+ * quota, request-rate ceiling, named roles and audit trail - contributed through the {@code ServerModuleProvider} seam:
+ * a JSON CRUD over the framework-free {@link Authorization}, resolved per tenant through {@link Repositories}, and the
+ * discovered {@link AuditTrail}, the tenant the one the routing answers ({@link RepositoryRouting#tenant}). Every route
+ * is under {@code /api/} and gated {@code manage:read} or {@code manage:write} at scope {@code *} by the security chain
+ * before it is reached, so this controller decides no authorization. Without a rate-limiting or an audit module those
+ * endpoints answer {@code 501}, after the auth check. A privileged mutation writes an audit event.
  */
 @RestController
 public class ManagementController {
@@ -70,11 +66,8 @@ public class ManagementController {
         audit.record(tenant, key == null ? "anonymous" : Authorization.hash(key), action, target);
     }
 
-    // The credential routes are the CORE's: build.jenesis.repository.server.CredentialsController owns list,
-    // mint, grant, revoke, expiry, rotate and the source-IP allowlist, and every one of them is a thin call onto
-    // Authorization, which holds the logic. Writing an audit row is not logic, so it is supplied through
-    // CredentialContext and the routes exist once, not restated here. Two
-    // implementations of "issue a credential" would drift, and the drift would be in an authorization surface.
+    // The credential routes are the core's CredentialsController's, each a thin call onto Authorization; the audit row
+    // is supplied through CredentialContext, so issuing a credential is implemented once.
 
     @GetMapping("/api/policy")
     @ResponseBody
@@ -97,12 +90,8 @@ public class ManagementController {
         response.setStatus(200);
     }
 
-    /**
-     * The tenant's storage quota: the byte ceiling ({@code 0} when unlimited) and the bytes currently stored.
-     *
-     * <p>It reads the tenant's and the deployment's settings documents, which the values it resolves inherit from: one
-     * object per module under a constant prefix, narrow by construction.
-     */
+    /** The tenant's storage quota: the byte ceiling ({@code 0} when unlimited) and the bytes stored, read from the
+     *  tenant's and the deployment's settings documents. */
     @GetMapping("/api/quota")
     @ResponseBody
     public QuotaView quota(HttpServletRequest http) throws IOException {
@@ -110,13 +99,8 @@ public class ManagementController {
         return new QuotaView(repositories.quotaLimit(tenant), repositories.quotaUsed(tenant));
     }
 
-    /** Set ({@code > 0}) or clear ({@code 0}, so the deployment's applies) the tenant's own storage quota in bytes -
-     *  its {@code tenant-quota} setting, changed through the one settings editor, which records it on the trail as
-     *  every surface's change of the setting is recorded.
-     *
-     * <p>It reads the tenant's and the deployment's settings documents, which the values it resolves inherit from: one
-     * object per module under a constant prefix, narrow by construction.
-     */
+    /** Set ({@code > 0}) or clear ({@code 0}, so the deployment's applies) the tenant's storage quota in bytes, its
+     *  {@code tenant-quota} setting, through the settings editor, which records it on the trail. */
     @PutMapping("/api/quota")
     public void setQuota(@RequestHeader(value = Repositories.KEY, required = false) String key,
                          @RequestBody QuotaRequest request,
@@ -125,21 +109,14 @@ public class ManagementController {
         long maxBytes = request == null ? 0L : request.maxBytes();
         editor.tenant(tenant, Map.of(QuotaSettingsContributor.KEY, maxBytes == 0 ? "" : Long.toString(maxBytes)),
                 false, actor(tenant, key));
-        // The usage total is NOT recomputed here: that walks every blob of every repository the tenant owns while
-        // the caller waits - so the cost of setting a limit would grow with the tenant, which is the one thing a
-        // request must not do. The cleanup pass already recomputes it for any tenant that has
-        // a limit, so deferring costs a window rather than the number: enforcement runs on the previous total until
-        // the next pass, and a limit lowered mid-window can be briefly over-admitted against. That is the trade,
-        // taken deliberately, and it is the reason the pass runs unconditionally rather than only on change.
+        // The usage total is not recomputed here, which would walk every blob of the tenant while the caller waits; the
+        // cleanup pass recomputes it, so enforcement runs on the previous total until then and a lowered limit may
+        // briefly over-admit.
         response.setStatus(200);
     }
 
-    /**
-     * The tenant's request rate ceiling in permits per minute ({@code 0} when it falls back to the deployment default).
-     *
-     * <p>It reads the tenant's and the deployment's settings documents, which the values it resolves inherit from: one
-     * object per module under a constant prefix, narrow by construction.
-     */
+    /** The tenant's request rate ceiling in permits per minute ({@code 0} when the deployment default applies), read
+     *  from the tenant's and the deployment's settings documents. */
     @GetMapping("/api/rate-limit")
     @ResponseBody
     public RateLimitView rateLimit(HttpServletRequest http, HttpServletResponse response) throws IOException {
@@ -151,16 +128,11 @@ public class ManagementController {
                 .orElse(0L));
     }
 
-    /** The rate ceiling's setting key, spelled here because the limiter module that declares it is optional. */
+    /** The rate ceiling's key, spelled here since the limiter module declaring it is optional. */
     private static final String RATE_LIMIT = "rate-limit";
 
-    /** Set ({@code > 0}) or clear ({@code 0}, so the deployment's applies) the tenant's own request rate ceiling in
-     *  permits per minute - its {@code rate-limit} setting, changed through the one settings editor as the quota
-     *  is.
-     *
-     * <p>It reads the tenant's and the deployment's settings documents, which the values it resolves inherit from: one
-     * object per module under a constant prefix, narrow by construction.
-     */
+    /** Set ({@code > 0}) or clear ({@code 0}) the tenant's request rate ceiling in permits per minute, its
+     *  {@code rate-limit} setting, through the settings editor. */
     @PutMapping("/api/rate-limit")
     public void setRateLimit(@RequestHeader(value = Repositories.KEY, required = false) String key,
                              @RequestBody RateLimitRequest request, HttpServletRequest http,
@@ -205,11 +177,10 @@ public class ManagementController {
         response.setStatus(200);
     }
 
-    /** The tenant's audit trail, newest first, optionally bounded by ISO-8601 {@code from}/{@code to} instants and a
-     *  single {@code action}, and paged so a request serves a bounded slice rather than the whole (unrotated) trail:
-     *  by cursor ({@code after}, the {@code Jenesis-Next-Cursor} header of the previous answer, absent on the last page)
-     *  or by {@code offset}/{@code limit} (default 0/500, limit clamped to 1000, offset to the trail's reach). The
-     *  CSV export below streams the whole trail for off-system retention. */
+    /** The tenant's audit trail, newest first, optionally bounded by ISO-8601 {@code from}/{@code to} and one
+     *  {@code action}, and paged: by cursor ({@code after}, the previous answer's {@code Jenesis-Next-Cursor}, absent
+     *  on the last page) or by {@code offset}/{@code limit} (default 0/500, limit clamped to 1000). The CSV export
+     *  streams the whole trail. */
     @GetMapping("/api/audit")
     @ResponseBody
     public List<AuditView> auditTrail(@RequestParam(name = "from", required = false) String from,
@@ -238,11 +209,8 @@ public class ManagementController {
         return views;
     }
 
-    /** The same audit trail as a CSV download for off-system retention, streamed a row at a time straight to the
-     *  response through the audit SPI's {@code stream} seam - neither a whole-trail StringBuilder (three full copies
-     *  Spring would re-copy to a String then bytes) nor the SPI's materialised event list ever lands in heap, so a very
-     *  large trail exports within a flat memory envelope (the store-backed trail holds only one day's events at a
-     *  time). */
+    /** The audit trail as a CSV download, streamed a row at a time through the audit SPI's {@code stream}, so a large
+     *  trail exports in flat memory. */
     @GetMapping(value = "/api/audit.csv", produces = "text/csv;charset=UTF-8")
     public void auditCsv(@RequestParam(name = "from", required = false) String from,
                          @RequestParam(name = "to", required = false) String to,
@@ -281,8 +249,8 @@ public class ManagementController {
         return value == null || value.isBlank() ? null : Instant.parse(value.trim());
     }
 
-    /** Quote a CSV field when it carries a comma, quote or newline, and prefix a leading {@code = + - @} (or tab or
-     *  carriage return) with an apostrophe so a spreadsheet does not evaluate it as a formula. */
+    /** Quote a CSV field carrying a comma, quote or newline, and prefix a leading {@code = + - @}, tab or carriage
+     *  return with an apostrophe so a spreadsheet does not evaluate it. */
     private static String csv(String value) {
         if (value == null) {
             return "";

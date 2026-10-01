@@ -14,9 +14,9 @@ import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.web.bind.annotation.RestController;
 
 /**
- * The read caches over the store, at the API: what this node holds, and the one call that drops it all - node-local
- * for the listings, fleet-wide for the grants, as {@link NodeCaches} says. Recorded under the calling key in the
- * tenant the routing answers for the request, the trail that key reads back; the console's Caches screen and the CLI's {@code caches clear} reach the same implementation.
+ * The read caches over the store, at the API: what this node holds, and the call dropping it all - node-local for the
+ * listings, fleet-wide for the grants, as {@link NodeCaches} says. Recorded under the calling key in the tenant the
+ * routing answers; the console's Caches screen and the CLI's {@code caches clear} reach the same implementation.
  */
 @RestController
 public class CachesAdminController {

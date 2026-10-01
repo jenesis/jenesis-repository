@@ -3,10 +3,8 @@ package build.jenesis.repository.management.web;
 import build.jenesis.repository.server.kernel.ServerModuleProvider;
 
 /**
- * Announces the credential and authorization management web adapter to the repository server's
- * {@code ServerModuleProvider} discovery, so the server imports {@link ManagementWebConfig} - and with it the
- * credential, policy, quota, rate-limit, trust, role and audit endpoints - without naming the management surface
- * anywhere.
+ * Announces the management web adapter to the server's {@code ServerModuleProvider} discovery, so the server imports
+ * {@link ManagementWebConfig} without naming the management surface.
  */
 public final class ManagementWebModule implements ServerModuleProvider {
 

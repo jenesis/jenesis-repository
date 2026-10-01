@@ -7,12 +7,10 @@ import build.jenesis.repository.server.CredentialContext;
 import build.jenesis.repository.server.spi.Authorization;
 
 /**
- * This distribution's answers to the two questions the core's credential surface leaves open.
- *
- * <p>The routes themselves live once, in the core's {@code CredentialsController}, and act on the tenant the
- * routing answers for the request. What differs here is not logic: every mutation is written to the audit ledger,
- * against the tenant it acted on, and a caller naming no tenant falls back to the configured default rather than the
- * core's. Publishing this bean is what makes the core's default step aside.
+ * This distribution's answers to the two questions the core's credential surface leaves open. The routes live once, in
+ * the core's {@code CredentialsController}, acting on the tenant the routing answers; here every mutation is written to
+ * the audit ledger against that tenant, and a caller naming no tenant falls back to the configured default. Publishing
+ * this bean makes the core's default step aside.
  */
 public final class AuditedCredentialContext implements CredentialContext {
 
@@ -24,8 +22,7 @@ public final class AuditedCredentialContext implements CredentialContext {
         this.audit = Objects.requireNonNull(audit, "audit");
     }
 
-    /** The configured default tenant, which is what the token exchange falls back to when a caller names
-     *  none - the core answers its single tenant there, and a multi-tenant deployment answers what it was told. */
+    /** The configured default tenant, which the token exchange falls back to when a caller names none. */
     @Override
     public String defaultTenant() {
         return defaultTenant;
