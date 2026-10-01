@@ -61,10 +61,6 @@ open module build.jenesis.repository.application {
     requires spring.security.core;
     requires spring.security.web;
     requires spring.boot.starter.security;
-    // The bundle that ships this composition, and the suites and harnesses that boot it.
-    exports build.jenesis.repository.application to build.jenesis.repository.bundle.full,
-            build.jenesis.repository.server.kernel.test, build.jenesis.repository.degraded.test,
-            build.jenesis.repository.ecosystem.run,
-            build.jenesis.repository.server.docker.test,
-            build.jenesis.repository.load.lane.test;
+    // The composition, for the bundles that ship it and the suites and harnesses that boot it.
+    exports build.jenesis.repository.application;
 }

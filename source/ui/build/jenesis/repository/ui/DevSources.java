@@ -28,17 +28,25 @@ import org.thymeleaf.templatemode.TemplateMode;
 @ConditionalOnProperty("jenrepo.ui.sources")
 public class DevSources implements WebMvcConfigurer {
 
-    /** Where the shell's static files live below a checkout's root. */
-    private static final Path STATIC = Path.of("core", "source", "ui", "META-INF", "resources", "ui");
+    /** Where the shell's static files live below the free core's own root. */
+    private static final Path STATIC = Path.of("source", "ui", "META-INF", "resources", "ui");
 
     private final Path root;
 
+    /** The shell's static files: below the root, or below a {@code core} checkout of the free core within it. */
+    private final Path statics;
+
     public DevSources(@Value("${jenrepo.ui.sources}") String root) {
         this.root = Path.of(root).toAbsolutePath().normalize();
-        if (!Files.isDirectory(this.root.resolve(STATIC))) {
-            throw new IllegalStateException("jenrepo.ui.sources names " + this.root + ", which is not a checkout of"
-                    + " this repository: it has no " + STATIC);
+        Path statics = this.root.resolve(STATIC);
+        if (!Files.isDirectory(statics)) {
+            statics = this.root.resolve("core").resolve(STATIC);
         }
+        if (!Files.isDirectory(statics)) {
+            throw new IllegalStateException("jenrepo.ui.sources names " + this.root + ", which is not a checkout of"
+                    + " the console: it has no " + STATIC + ", at its root or below core/");
+        }
+        this.statics = statics;
     }
 
     /** Every module's templates, read from the tree ahead of the jars. */
@@ -51,25 +59,22 @@ public class DevSources implements WebMvcConfigurer {
     public void addResourceHandlers(ResourceHandlerRegistry registry) {
         for (String folder : List.of("css", "js", "fonts", "img")) {
             registry.addResourceHandler("/ui/" + folder + "/**")
-                    .addResourceLocations(root.resolve(STATIC).resolve(folder).toUri().toString())
+                    .addResourceLocations(statics.resolve(folder).toUri().toString())
                     .setCachePeriod(0);
         }
     }
 
-    /** The template folders of every module in the checkout at {@code root}. */
+    /** The template folders of every production module in the checkout at {@code root}: every {@code templates}
+     *  folder beneath a {@code source} tree, outside the build's output. */
     static List<Path> roots(Path root) throws IOException {
         List<Path> roots = new ArrayList<>();
-        for (Path tree : List.of(root.resolve(Path.of("core", "source")), root.resolve(Path.of("enterprise", "source")))) {
-            if (!Files.isDirectory(tree)) {
-                continue;
-            }
-            try (Stream<Path> folders = Files.walk(tree)) {
-                folders.filter(Files::isDirectory)
-                        .filter(folder -> folder.getFileName().toString().equals("templates"))
-                        .filter(folder -> !folder.toString().contains(File.separator + "target" + File.separator))
-                        .sorted()
-                        .forEach(roots::add);
-            }
+        try (Stream<Path> folders = Files.walk(root)) {
+            folders.filter(Files::isDirectory)
+                    .filter(folder -> folder.getFileName().toString().equals("templates"))
+                    .filter(folder -> root.relativize(folder).toString().contains("source" + File.separator))
+                    .filter(folder -> !root.relativize(folder).toString().contains("target" + File.separator))
+                    .sorted()
+                    .forEach(roots::add);
         }
         return List.copyOf(roots);
     }

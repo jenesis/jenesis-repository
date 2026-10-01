@@ -23,14 +23,8 @@ module build.jenesis.repository.compliance.signatures {
     // The sweep walks the inventory's releases, whose visitor speaks the cleanup module's release type.
     requires build.jenesis.repository.cleanup;
     requires java.net.http;
-    exports build.jenesis.repository.compliance.signatures to
-            build.jenesis.repository.compliance.test, build.jenesis.repository.compliance.contract.test,
-            build.jenesis.repository.gateway.test,
-            // The signer index, read by the API and the console and seeded by their tests
-            build.jenesis.repository.compliance.web, build.jenesis.repository.ui.store,
-            build.jenesis.repository.server.kernel.test, build.jenesis.repository.ui.admin.installed.test,
-            // and by the browser suites' seed.
-            build.jenesis.repository.console.seed.testkit;
+    // The signer index, read by the API and the console and seeded by their tests.
+    exports build.jenesis.repository.compliance.signatures;
     provides build.jenesis.repository.compliance.QualityInspector
             with build.jenesis.repository.compliance.signatures.SignatureInspector;
     provides build.jenesis.repository.gate.HoldReleaseObserver
