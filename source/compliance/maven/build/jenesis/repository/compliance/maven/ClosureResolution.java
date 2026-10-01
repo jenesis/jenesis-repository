@@ -1,0 +1,228 @@
+package build.jenesis.repository.compliance.maven;
+
+import module java.base;
+import module org.slf4j;
+import build.jenesis.Repository;
+import build.jenesis.RepositoryItem;
+import build.jenesis.maven.MavenDefaultRepository;
+import build.jenesis.maven.MavenDependencyKey;
+import build.jenesis.maven.MavenDependencyScope;
+import build.jenesis.maven.MavenPomResolver;
+import build.jenesis.maven.MavenRepository;
+import build.jenesis.maven.MavenResolver;
+import build.jenesis.repository.compliance.ComplianceGate;
+import build.jenesis.repository.compliance.ManifestSubjectBuilder;
+import build.jenesis.repository.store.Durations;
+
+/**
+ * A published POM's dependency closure resolved over the network: through the one Maven repository an operator named
+ * for it, within a bound, or not at all.
+ *
+ * <p><b>Nothing is fetched until {@value #REPOSITORY} names a repository.</b> A deployment reaches no third party
+ * because this module is installed, so with the setting empty - the default - a POM that publishes no CycloneDX
+ * document beside it is screened on what it is and what it declares, and its transitive dependencies are not. Named,
+ * the walk goes to that repository alone: no local Maven repository is read or written and no {@code jenesis.maven.*}
+ * property redirects it.
+ *
+ * <p><b>The walk is bounded.</b> It reads at most {@value #DOCUMENTS} POM and metadata documents
+ * ({@value #DOCUMENTS_DEFAULT} unless set) and takes no new one once {@value #TIMEOUT} has passed ({@value
+ * #TIMEOUT_DEFAULT} unless set), each connection and read timing out after the same duration, so one publish cannot
+ * fan out without end and holds its thread for about twice the timeout at most. A walk that reaches either bound, or
+ * fails, yields nothing: the resolver hands back no part of a closure it could not finish.
+ *
+ * <p><b>A closure this does not resolve is said.</b> A POM screened without its closure because nothing is named is
+ * counted on {@value #UNRESOLVED}. A walk that failed or reached a bound is logged naming the artifact and the reason,
+ * and counted on {@value #INCOMPLETE}; so is one that completed without the POM of some dependency, which the named
+ * repository does not hold - that dependency is screened as itself and its own dependencies are not known, which the
+ * resolver, as Maven does, does not treat as a failure. Either way the publish proceeds on what was screened: the
+ * network is a source of evidence here, never a reason to refuse.
+ */
+final class ClosureResolution {
+
+    private static final Logger LOGGER = LoggerFactory.getLogger(ClosureResolution.class);
+
+    /** The Maven repository a closure is resolved through; empty, the default, resolves none. */
+    static final String REPOSITORY = "maven-closure-repository";
+
+    /** The most POM and metadata documents one closure reads. */
+    static final String DOCUMENTS = "maven-closure-documents";
+
+    static final String DOCUMENTS_DEFAULT = "256";
+
+    /** How long one closure may take new documents for, and how long each connection and read may take. */
+    static final String TIMEOUT = "maven-closure-timeout";
+
+    static final String TIMEOUT_DEFAULT = "PT30S";
+
+    /** What a POM's own publish could not screen because no repository is named to resolve its closure through. */
+    static final String UNRESOLVED = "jenrepo.compliance.closure.unresolved";
+
+    /** What a POM's own publish could not screen because its closure's walk failed, reached a bound or found a
+     *  dependency's POM missing. */
+    static final String INCOMPLETE = "jenrepo.compliance.closure.incomplete";
+
+    /** The scope prefix the resolver keys a closure's dependencies by. */
+    static final String PREFIX = "dep";
+
+    /** The identifier the root POM is resolved under, so the closure names it among its roots. */
+    private static final String ROOT = "root";
+
+    private static final AtomicLong UNRESOLVED_COUNT = new AtomicLong();
+
+    private static final AtomicLong INCOMPLETE_COUNT = new AtomicLong();
+
+    private ClosureResolution() {
+    }
+
+    /** POM publishes screened without their closure because no repository was named, since this node started. */
+    static long unresolved() {
+        return UNRESOLVED_COUNT.get();
+    }
+
+    /** POM publishes screened without all of their closure because the walk failed, reached a bound or found a
+     *  dependency's POM missing. */
+    static long incomplete() {
+        return INCOMPLETE_COUNT.get();
+    }
+
+    /**
+     * The dependencies of the POM published at {@code path}, as gate subjects in the {@code ecosystem}'s namespace,
+     * each placed on the build graph - or none, said as the class documentation describes, when nothing is named or
+     * the walk does not complete.
+     *
+     * <p>The root is not one of its own dependencies. The resolver's closure carries the root POM's coordinate in
+     * {@code dependencies()} beside everything it reaches, so it is resolved under {@link #ROOT}, which the closure
+     * names among its roots, and skipped: the subject the POM itself yields already stands for it.
+     */
+    static List<ComplianceGate.Subject> dependencies(String path, byte[] pom, String ecosystem,
+                                                     UnaryOperator<String> config) {
+        String named = config.apply(REPOSITORY);
+        if (named == null || named.isBlank()) {
+            UNRESOLVED_COUNT.incrementAndGet();
+            return List.of();
+        }
+        try {
+            Duration timeout = Durations.parse(setting(config, TIMEOUT, TIMEOUT_DEFAULT));
+            int documents = Integer.parseInt(setting(config, DOCUMENTS, DOCUMENTS_DEFAULT));
+            Walk walk = new Walk(repository(URI.create(named.strip()), timeout), documents,
+                    Instant.now().plus(timeout));
+            MavenResolver.Closure closure;
+            try (ExecutorService executor = Executors.newVirtualThreadPerTaskExecutor()) {
+                closure = new MavenPomResolver().dependencies(executor, walk,
+                        List.of(new MavenResolver.RootPom(new ByteArrayInputStream(pom), null, ROOT, false, null)),
+                        Map.of(), MavenDependencyScope.COMPILE, PREFIX);
+            }
+            if (!walk.missing.isEmpty()) {
+                INCOMPLETE_COUNT.incrementAndGet();
+                LOGGER.warn("{} holds no POM for {}, so the dependency closure of {} is screened without what those "
+                        + "depend on", named.strip(), new TreeSet<>(walk.missing), path);
+            }
+            return subjects(closure, ecosystem);
+        } catch (Exception failed) {
+            INCOMPLETE_COUNT.incrementAndGet();
+            LOGGER.warn("Could not resolve the dependency closure of {} through {}: {}. The compliance gate screened "
+                    + "the artifact and what it declares, not its transitive dependencies", path, named.strip(),
+                    reason(failed));
+            return List.of();
+        }
+    }
+
+    private static String setting(UnaryOperator<String> config, String key, String fallback) {
+        String value = config.apply(key);
+        return value == null || value.isBlank() ? fallback : value.strip();
+    }
+
+    /** The named repository and nothing else: no local repository, checksums read from the same place, and every
+     *  connection and read timing out after {@code timeout}. */
+    private static MavenRepository repository(URI named, Duration timeout) {
+        URI uri = named.toString().endsWith("/") ? named : URI.create(named + "/");
+        SequencedMap<String, URI> validations = new LinkedHashMap<>();
+        validations.put("SHA512", uri);
+        validations.put("SHA256", uri);
+        validations.put("SHA1", uri);
+        int millis = (int) Math.min(Integer.MAX_VALUE, timeout.toMillis());
+        return new MavenDefaultRepository(uri, null, Collections.unmodifiableMap(validations), null, null)
+                .connection(new Repository.Connection().retries(0).connectTimeout(millis).readTimeout(millis));
+    }
+
+    /**
+     * The named repository as one closure reads it: refusing a fetch past the {@code documents}-th or after
+     * {@code deadline}, and noting each dependency whose POM it does not hold.
+     */
+    private static final class Walk implements MavenRepository {
+
+        private final MavenRepository repository;
+
+        private final int documents;
+
+        private final Instant deadline;
+
+        private final AtomicInteger remaining;
+
+        private final Set<String> missing = ConcurrentHashMap.newKeySet();
+
+        Walk(MavenRepository repository, int documents, Instant deadline) {
+            this.repository = repository;
+            this.documents = documents;
+            this.deadline = deadline;
+            this.remaining = new AtomicInteger(documents);
+        }
+
+        @Override
+        public Optional<RepositoryItem> fetch(Executor executor, String groupId, String artifactId, String version,
+                                              String type, String classifier, String checksum) throws IOException {
+            String document = groupId + ":" + artifactId + ":" + version;
+            admit(document);
+            Optional<RepositoryItem> fetched =
+                    repository.fetch(executor, groupId, artifactId, version, type, classifier, checksum);
+            if (fetched.isEmpty() && "pom".equals(type) && checksum == null) {
+                missing.add(document);
+            }
+            return fetched;
+        }
+
+        @Override
+        public Optional<RepositoryItem> fetchMetadata(Executor executor, String groupId, String artifactId,
+                                                      String checksum) throws IOException {
+            admit(groupId + ":" + artifactId);
+            return repository.fetchMetadata(executor, groupId, artifactId, checksum);
+        }
+
+        private void admit(String document) throws IOException {
+            if (remaining.getAndDecrement() <= 0) {
+                throw new IOException("the closure reads more than " + documents + " documents (" + DOCUMENTS
+                        + "), reaching " + document);
+            }
+            if (Instant.now().isAfter(deadline)) {
+                throw new IOException("the closure took longer than " + TIMEOUT + " allows, reaching " + document);
+            }
+        }
+    }
+
+    private static List<ComplianceGate.Subject> subjects(MavenResolver.Closure closure, String ecosystem) {
+        Map<MavenDependencyKey, ComplianceGate.Reachability> reachability = BuildGraphReachability.of(closure, PREFIX);
+        Set<MavenDependencyKey> roots = new HashSet<>(closure.roots().values());
+        List<ComplianceGate.Subject> subjects = new ArrayList<>();
+        closure.dependencies().forEach((key, value) -> {
+            if (roots.contains(key)) {
+                return;
+            }
+            ManifestSubjectBuilder declared = ManifestSubjectBuilder.of(ecosystem);
+            for (var license : closure.licenses().getOrDefault(key.coordinate(PREFIX, value.version()), List.of())) {
+                declared = declared.license(license.name(), license.url());
+            }
+            subjects.addAll(declared.subject(key.groupId() + ":" + key.artifactId(), value.version(),
+                    reachability.getOrDefault(key, ComplianceGate.Reachability.UNKNOWN)));
+        });
+        return subjects;
+    }
+
+    /** The innermost message of a failure, which is where the resolver says what it could not read. */
+    private static String reason(Throwable failure) {
+        Throwable cause = failure;
+        while (cause.getCause() != null && cause.getCause() != cause) {
+            cause = cause.getCause();
+        }
+        return cause.getMessage() == null ? cause.getClass().getSimpleName() : cause.getMessage();
+    }
+}

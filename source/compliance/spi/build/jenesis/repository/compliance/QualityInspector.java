@@ -65,8 +65,9 @@ import build.jenesis.repository.store.Limits;
  *
  * <li><b>Read purity.</b> Inspection performs no external I/O: no network fetch, no filesystem access, no store
  * write. The only reads are the bytes handed in and siblings fetched through {@link Lookup}. (The Maven inspector's
- * best-effort transitive resolution is the single declared exception, and it degrades to the artifact's own
- * coordinate when resolution fails.)</li>
+ * transitive resolution is the single declared exception: it reads only from a repository an operator named for it,
+ * within a bound on documents and time, and a closure it does not resolve leaves the artifact screened on its own
+ * coordinate and is counted as such.)</li>
  *
  * <li><b>Staleness.</b> Not applicable: an inspector holds no cached or externally-sourced state to be stale.</li>
  *

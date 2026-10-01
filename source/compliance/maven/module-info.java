@@ -6,7 +6,8 @@
  * declaration source that declares anything: the POM, then the CycloneDX SBOM a Jenesis build publishes beside the
  * artifact or embeds in the jar, then the OSGi {@code Bundle-License} header. For a POM it also yields a subject per
  * dependency in the closure - read hermetically out of the published SBOM when one is stored, and only otherwise
- * resolved over the network through the Jenesis Maven resolver. Discovered through {@code provides}; npm, PyPI,
+ * resolved through the Jenesis Maven resolver from the one repository an operator named for it, within a bound, which
+ * this module's settings declare; with none named nothing is fetched. Discovered through {@code provides}; npm, PyPI,
  * NuGet and Go each add their own inspector module the same way.
  *
  * <p>{@code build.jenesis.repository.dependency} is the shared SBOM primitive - the CycloneDX/SPDX parsers and the
@@ -26,6 +27,8 @@ module build.jenesis.repository.compliance.maven {
     requires build.jenesis.repository.dependency;
     requires build.jenesis;
     requires build.jenesis.repository.xml;
+    requires build.jenesis.repository.settings;
+    requires build.jenesis.repository.observation;
     requires org.slf4j;
     // Gradle Module Metadata is a JSON descriptor; a maintained parser rather than a hand-rolled one.
     requires tools.jackson.databind;
@@ -33,4 +36,8 @@ module build.jenesis.repository.compliance.maven {
             build.jenesis.repository.compliance.maven.test;
     provides build.jenesis.repository.compliance.QualityInspector
             with build.jenesis.repository.compliance.maven.MavenQualityInspector;
+    provides build.jenesis.repository.settings.SettingsContributor
+            with build.jenesis.repository.compliance.maven.ClosureSettingsContributor;
+    provides build.jenesis.repository.observation.ObservabilitySource
+            with build.jenesis.repository.compliance.maven.ClosureObservability;
 }

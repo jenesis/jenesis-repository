@@ -4,19 +4,12 @@ import module java.base;
 import module org.slf4j;
 import module java.xml;
 import module tools.jackson.databind;
-import build.jenesis.Environment;
-import build.jenesis.Make;
-import build.jenesis.maven.MavenDefaultRepository;
-import build.jenesis.maven.MavenRepository;
-import build.jenesis.maven.MavenDependencyKey;
-import build.jenesis.maven.MavenDependencyScope;
-import build.jenesis.maven.MavenPomResolver;
-import build.jenesis.maven.MavenResolver;
 import build.jenesis.repository.format.java.JavaLayout;
 import build.jenesis.repository.compliance.BoundedBodyReader;
 import build.jenesis.repository.store.ArchiveInflation;
 import build.jenesis.repository.store.ArchiveWalk;
 import build.jenesis.repository.compliance.ComplianceGate;
+import build.jenesis.repository.compliance.ComplianceSettings;
 import build.jenesis.repository.compliance.Maintainer;
 import build.jenesis.repository.compliance.ManifestSubjectBuilder;
 import build.jenesis.repository.compliance.QualityInspector;
@@ -75,11 +68,11 @@ import build.jenesis.repository.xml.Xml;
  * <h2>The closure: declared first, resolved second</h2>
  * For a POM the dependency closure is taken from the sibling CycloneDX attachment when one is published - the
  * document already lists every resolved component with its purl, its version and its own licences, so the closure is
- * read <b>hermetically</b>, out of the store, with no network at all. Only when no such document is stored does the
- * inspector fall back to resolving the closure over the network through the Jenesis Maven resolver
- * ({@link MavenDefaultRepository}), the SPI's single declared read-purity exception. That fallback is unchanged, and
- * remains best-effort: a network or unresolvable-dependency failure yields no transitive subjects rather than
- * blocking the publish.
+ * read <b>hermetically</b>, out of the store, with no network at all. Only when no such document is stored is the
+ * closure resolved over the network ({@link ClosureResolution}), the SPI's single declared read-purity exception: and
+ * only through the Maven repository an operator named for it, within a bound on the documents read and the time
+ * taken. With none named nothing is fetched. A closure that is not resolved - nothing named, a failed walk, a bound
+ * reached - yields no transitive subjects rather than blocking the publish, and is counted and, where it failed, logged.
  *
  * <h2>Gradle Module Metadata ({@code .module})</h2>
  * Gradle publishes a JSON descriptor beside the POM from version 6 onward, and every Gradle consumer of that
@@ -135,8 +128,6 @@ import build.jenesis.repository.xml.Xml;
 public final class MavenQualityInspector implements QualityInspector {
 
     private static final Logger LOGGER = LoggerFactory.getLogger(MavenQualityInspector.class);
-
-    private static final String PREFIX = "dep";
 
     /** The advisory-feed namespace Maven coordinates report - what the feeds and the gate key on for JVM artifacts. */
     private static final String ECOSYSTEM = "Maven";
@@ -530,9 +521,8 @@ public final class MavenQualityInspector implements QualityInspector {
 
     /**
      * The dependency closure, declared-first: the sibling CycloneDX attachment when one is stored - a hermetic read
-     * through the store, no network - and only otherwise the resolver's network walk. Landing the SBOM leg behind the
-     * document's presence is what keeps the network path the fallback rather than removing it: the overwhelming
-     * majority of Maven artifacts carry no attachment at all, and for them nothing about this inspector changes.
+     * through the store, no network - and only otherwise the bounded walk through the repository an operator named,
+     * if one is named.
      */
     private static List<ComplianceGate.Subject> closure(String path, byte[] pom, String[] coordinate,
                                                         QualityInspector.Lookup lookup) throws IOException {
@@ -543,7 +533,7 @@ public final class MavenQualityInspector implements QualityInspector {
                 return subjects;
             }
         }
-        return transitive(pom);
+        return ClosureResolution.dependencies(path, pom, ECOSYSTEM, ComplianceSettings.lookup());
     }
 
     /** Every dependency the SBOM already resolved, as gate subjects: the component's Maven coordinate and version,
@@ -561,59 +551,6 @@ public final class MavenQualityInspector implements QualityInspector {
                             reachability.getOrDefault(component.ref(), ComplianceGate.Reachability.UNKNOWN)));
         }
         return subjects;
-    }
-
-    /** The build tool's default repository with this JVM's {@code jenesis.maven.*} properties laid over it; the tool
-     *  reads settings from the environment it is handed, never from system properties. */
-    private static MavenRepository repository() {
-        Map<String, String> properties = new HashMap<>();
-        System.getProperties().forEach((name, value) -> properties.put(name.toString(), value.toString()));
-        return MavenDefaultRepository.ofEnvironment(new Environment(Make.keys(properties)));
-    }
-
-    /** The identifier the root POM is resolved under, so the closure names it among its roots. */
-    private static final String ROOT = "root";
-
-    /**
-     * The dependency closure resolved over the network - the SPI's single declared read-purity exception, reached
-     * only when the artifact publishes no CycloneDX attachment. Best-effort: a walk that fails answers nothing and
-     * the artifact screens on its own coordinate.
-     *
-     * <p>The root is not one of its own dependencies. The resolver's closure carries the root POM's coordinate in
-     * {@code dependencies()} beside everything it reaches, so a walk that succeeds would answer the artifact a
-     * second time - with the same licences and no place on the graph, since it is the graph's origin - beside the
-     * subject the POM itself yields. The declared closure never does, because a CycloneDX document's components
-     * exclude its metadata component. The root POM is resolved under {@link #ROOT} so the closure names it, and it
-     * is skipped here.
-     */
-    private static List<ComplianceGate.Subject> transitive(byte[] pom) {
-        try (ExecutorService executor = Executors.newVirtualThreadPerTaskExecutor()) {
-            MavenResolver.Closure closure = new MavenPomResolver().dependencies(
-                    executor, repository(),
-                    List.of(new MavenResolver.RootPom(new ByteArrayInputStream(pom), null, ROOT, false, null)),
-                    Map.of(), MavenDependencyScope.COMPILE, PREFIX);
-            Map<MavenDependencyKey, ComplianceGate.Reachability> reachability =
-                    BuildGraphReachability.of(closure, PREFIX);
-            Set<MavenDependencyKey> roots = new HashSet<>(closure.roots().values());
-            List<ComplianceGate.Subject> subjects = new ArrayList<>();
-            closure.dependencies().forEach((key, value) -> {
-                if (roots.contains(key)) {
-                    return;
-                }
-                ManifestSubjectBuilder declared = ManifestSubjectBuilder.of(ECOSYSTEM);
-                for (var license : closure.licenses()
-                        .getOrDefault(key.coordinate(PREFIX, value.version()), List.of())) {
-                    declared = declared.license(license.name(), license.url());
-                }
-                subjects.addAll(declared.subject(key.groupId() + ":" + key.artifactId(), value.version(),
-                        reachability.getOrDefault(key, ComplianceGate.Reachability.UNKNOWN)));
-            });
-            return subjects;
-        } catch (Exception e) {
-            LOGGER.warn("Could not resolve the transitive closure; the compliance gate is "
-                    + "assessing the artifact coordinate only, not its dependency tree", e);
-            return List.of();
-        }
     }
 
     /**
