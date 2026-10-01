@@ -6,21 +6,14 @@ import build.jenesis.repository.format.ProxyFormat;
 import build.jenesis.repository.blobs.OutboundTargets;
 
 /**
- * Walks a Composer-v2 repository rooted at an upstream - the same {@code packages.json} and {@code p2} files
- * {@link ComposerFormat} already reads to serve pull-through, pointed at "list everything": package names come from
- * the root's {@code list} endpoint (jenesis emits one, {@code list.json}; Packagist's is likewise) or, for an upstream
- * that inlines it instead, its {@code available-packages} array; each name's {@code p2/<vendor>/<package>.json} and
- * {@code ~dev} companion contribute one
- * entry per version that names its own zip dist (minification only drops fields equal to the previous version's,
- * and a dist differs per version, so a dist-less entry genuinely has none to download). Each entry
- * pairs the {@code <vendor>/<package>/<version>.zip} path {@link ComposerImporter} accepts with the version's
- * {@code dist.url} - which comes from untrusted metadata, so it passes the same
- * {@link build.jenesis.repository.blobs.OutboundTargets} screen the proxy leg applies to the very same field, a
- * private cross-origin target skipped rather than fetched. Only zip dists are emitted (the shape
- * the importer replays). Reached through {@code ComposerFormat}'s
- * {@code ProxyFormat.enumerate}. The root document is read eagerly - a repository advertising neither a package list
- * nor {@code available-packages} fails up front with the honest constraint - and the per-package metadata reads
- * lazily, failures surfacing as {@link UncheckedIOException} (a {@code 404} p2 file is a stale listing, skipped).
+ * Walks a Composer-v2 repository rooted at an upstream: package names come from the root's {@code list} endpoint or,
+ * for an upstream that inlines them, its {@code available-packages}; each name's {@code p2/<vendor>/<package>.json} and
+ * {@code ~dev} companion contribute an entry per version naming its own zip dist (minification drops only fields equal
+ * to the previous version's, and a dist differs per version, so a dist-less entry has none). Each entry pairs the
+ * {@code <vendor>/<package>/<version>.zip} path {@link ComposerImporter} accepts with the version's {@code dist.url},
+ * screened by {@link build.jenesis.repository.blobs.OutboundTargets} as the proxy leg screens it. Only zip dists are
+ * emitted. The root is read eagerly, so a repository listing no packages fails up front; the metadata reads lazily,
+ * failures surfacing as {@link UncheckedIOException}, and a {@code 404} p2 file, a stale listing, is skipped.
  */
 public final class ComposerEnumeration {
 
@@ -30,13 +23,9 @@ public final class ComposerEnumeration {
     }
 
     /**
-     * @param allowInternal the deployment's {@link build.jenesis.repository.blobs.ProxyLeg#ALLOW_INTERNAL} dial - the
-     *                      same one the proxy leg reads, so a walk and a pull-through of the same {@code dist.url}
-     *                      cannot answer differently, and the one screen they both call is
-     *                      {@link build.jenesis.repository.blobs.OutboundTargets}. Off means a cross-origin dist must
-     *                      be {@code https} and public; one on the submitted upstream's own ORIGIN (scheme and
-     *                      authority) is operator-trusted either way, because it reaches no host, port or scheme the
-     *                      walk is not already reaching.
+     * @param allowInternal the deployment's {@link build.jenesis.repository.blobs.ProxyLeg#ALLOW_INTERNAL} dial, the
+     *     one the proxy leg reads, screened by {@link build.jenesis.repository.blobs.OutboundTargets}: off, a
+     *     cross-origin dist must be {@code https} and public; a dist on the upstream's own origin is trusted either way
      */
     public static Stream<Map.Entry<String, URI>> enumerate(ProxyFormat.Fetcher fetcher, URI upstream,
                                                            boolean allowInternal) throws IOException {
@@ -56,8 +45,8 @@ public final class ComposerEnumeration {
                 });
     }
 
-    /** The names to walk: the root's inline {@code available-packages}, else the document behind its {@code list}
-     *  URL ({@code {"packageNames": [...]}}); neither is the honest constraint - the repository is not enumerable. */
+    /** The names to walk: the root's inline {@code available-packages}, else the document behind its {@code list} URL
+     *  ({@code {"packageNames": [...]}}); with neither the repository is not enumerable. */
     private static List<String> names(ProxyFormat.Fetcher fetcher, URI root, JsonNode packages) throws IOException {
         List<String> names = new ArrayList<>();
         for (JsonNode name : packages.path("available-packages")) {
@@ -83,9 +72,9 @@ public final class ComposerEnumeration {
         return names;
     }
 
-    /** One package's versions from its {@code p2} file: minified entries expanded by carrying {@code dist} forward,
-     *  a version emitted when it names a public zip dist. A {@code 404} is a stale listing (or an absent {@code ~dev}
-     *  companion) and contributes nothing. */
+    /** One package's versions from its {@code p2} file, minified entries expanded by carrying {@code dist} forward, a
+     *  version emitted when it names a public zip dist. A {@code 404}, a stale listing or an absent {@code ~dev},
+     *  contributes nothing. */
     private static List<Map.Entry<String, URI>> versions(ProxyFormat.Fetcher fetcher, URI root, String template,
                                                          String name, boolean allowInternal) throws IOException {
         Optional<ProxyFormat.Fetched> fetched = fetcher.fetch(
@@ -104,8 +93,7 @@ public final class ComposerEnumeration {
         JsonNode versions = MAPPER.readTree(new String(fetched.get().body(), StandardCharsets.UTF_8))
                 .path("packages").path(plain);
         for (JsonNode entry : versions) {
-            // Minified metadata drops only fields equal to the previous version's; a dist differs per version, so a
-            // version without its own dist genuinely has none to download.
+            // A version without its own dist has none to download.
             JsonNode dist = entry.path("dist");
             String version = entry.path("version").asString(null);
             String url = dist.path("url").asString(null);
@@ -119,10 +107,7 @@ public final class ComposerEnumeration {
             } catch (IllegalArgumentException invalid) {
                 continue;
             }
-            // The sharpest instance of the two policies was here: this walk exempted a dist on the submitted upstream's
-            // own authority while ComposerFormat.distUrl - eighty lines away, over the same dist.url field of the same
-            // document - refused exactly that. Same format, same field, two answers, neither aware of the other. Both
-            // now ask OutboundTargets, so there is one answer and it is the exempting one (see that class for why).
+            // The same screen ComposerFormat.distUrl applies to the same field.
             if (OutboundTargets.mayFollow(target, root, allowInternal)) {
                 entries.add(Map.entry(plain + "/" + version + ".zip", target));
             }

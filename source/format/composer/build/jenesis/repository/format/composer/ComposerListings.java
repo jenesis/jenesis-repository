@@ -12,15 +12,13 @@ import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.node.ObjectNode;
 
 /**
- * A Composer registry's served metadata as stored listings: the per-package Composer-v2 files
- * ({@code p2/<vendor>/<package>.json} for release versions, its {@code ~dev} companion for dev versions), whose
- * entries are the per-version stanzas the publish stored, completed with their download URL and lifecycle
- * {@code abandoned} flag; and the {@code list.json} of package names. The download URL names the host the registry
- * is reached at, so it is stored as the {@value #BASE} placeholder and completed on the way out.
+ * A Composer registry's metadata as stored listings: the per-package {@code p2} files (releases, and the {@code ~dev}
+ * companion), whose entries are the stored stanzas completed with their download URL and lifecycle {@code abandoned}
+ * flag, and the {@code list.json} of names. The URL names the registry's host, so it is stored as the {@value #BASE}
+ * placeholder and completed on the way out.
  *
- * <p>A version is listed exactly when its archive pointer is not withheld - the screen the on-read generation applied
- * per version; a lifecycle mark does not unlist a version but marks its stanza {@code abandoned}, which is why a mark
- * re-renders the one stanza rather than removing it.
+ * <p>A version is listed exactly when its archive pointer is not withheld; a lifecycle mark re-renders its stanza as
+ * {@code abandoned} rather than removing it.
  */
 final class ComposerListings {
 
@@ -67,15 +65,8 @@ final class ComposerListings {
                         .getBytes(StandardCharsets.UTF_8);
             }
 
-            /**
-             * The stored versions, pulled one at a time rather than split out of the whole document.
-             *
-             * <p>An element is an arbitrary JSON object rather than a name, so each is read as a tree and written
-             * back compactly rather than cut out of the source text as {@link #split} cuts it - the same trade
-             * {@code NuGetListings} makes, and for the same reason: cutting from source text cannot be bounded,
-             * because the text is the document. One package's versions is bounded by a publisher, so this is
-             * parity with the appender below rather than a memory fix.
-             */
+            /** The stored versions, pulled one at a time: each element is read as a tree and written back compactly
+             *  rather than cut from the source text, which cannot be bounded since the text is the document. */
             @Override
             public Reader read(InputStream in, long ignored) throws IOException {
                 JsonParser parser = ComposerFormat.MAPPER.createParser(in);
@@ -159,14 +150,7 @@ final class ComposerListings {
         };
     }
 
-    /**
-     * A codec's whole-document form, driven by its own streaming one.
-     *
-     * <p>Two parsers for one grammar is two things to keep in step, and they were: the array scanning here used
-     * to walk characters counting brackets while {@code read} used a parser. Now the document form is the
-     * streaming form run to exhaustion, so a disagreement between them is not possible rather than merely
-     * unlikely.
-     */
+    /** A codec's whole-document form, driven by its streaming one, so the two cannot disagree on the grammar. */
     private static SortedMap<String, byte[]> collected(StoredListing.Codec codec, byte[] document) {
         SortedMap<String, byte[]> entries = new TreeMap<>();
         try (StoredListing.Codec.Reader reader = codec.read(new ByteArrayInputStream(document), document.length)) {
@@ -206,15 +190,8 @@ final class ComposerListings {
             return array.append("]}").toString().getBytes(StandardCharsets.UTF_8);
         }
 
-        /**
-         * The same document, written as the names arrive.
-         *
-         * <p>The list is every package in the repository, so without this the inherited appender collected all of
-         * them into a map and called {@link #join}, which is the whole document again as a {@code StringBuilder}.
-         * A codec that implements only {@code split} and {@code join} silently converts a streaming generator
-         * above it back into a buffering one - which is how the OCI tag list still died after its generator, its
-         * response and its derivation had all been fixed.
-         */
+        /** The same document, written as the names arrive: the list is every package in the repository, so it is never
+         *  collected. */
         @Override
         public Appender append(OutputStream out) {
             return new Appender() {
@@ -246,8 +223,7 @@ final class ComposerListings {
             };
         }
 
-        /** The stored names, pulled one at a time out of the parser's bounded buffer rather than split out of the
-         *  whole document. The length is not consulted: the array's end is a token, not an offset. */
+        /** The stored names, pulled one at a time out of the parser's bounded buffer; the array's end is a token. */
         @Override
         public Reader read(InputStream in, long ignored) throws IOException {
             JsonParser parser = ComposerFormat.MAPPER.createParser(in);
@@ -320,19 +296,10 @@ final class ComposerListings {
         return entries;
     }
 
-    /**
-     * <b>This one collects deliberately, and the sorted map is doing real work.</b> Every other
-     * repository-wide generator streams into a {@code Sink}, which owes its entries in ascending key
-     * order and takes that order from the scan.
-     *
-     * <p>That does not hold here: the key is {@code vendor + "/" + pkg}, composed from two nested scans, and
-     * vendors-then-packages is not the order of the composed key - with vendors {@code a} and {@code a-b},
-     * nesting yields {@code a/...} first, while {@code -} (0x2D) sorts before {@code /} (0x2F).
-     *
-     * <p>So the map is what puts these entries in order. Removing it would write a misordered
-     * document - which the codecs and the cursor paging both assume is ascending, and which nothing
-     * would report.
-     */
+    /** <b>This one collects, and the sorted map is doing real work.</b> The key {@code vendor + "/" + pkg} is composed
+     *  from two nested scans, whose order is not the key's: with vendors {@code a} and {@code a-b}, nesting yields
+     *  {@code a/...} first, while {@code -} sorts before {@code /}. The map orders the document the codecs and cursor
+     *  paging assume ascending. */
     private SortedMap<String, byte[]> generateList(String repo) throws IOException {
         SortedMap<String, byte[]> entries = new TreeMap<>();
         for (String vendor : blobs.list("composer/" + repo + "/index")) {
@@ -345,8 +312,8 @@ final class ComposerListings {
         return entries;
     }
 
-    /** A version's p2 entry: its stored stanza with the download URL (the placeholder base) and the lifecycle
-     *  {@code abandoned} flag a client prints when it selects a marked version. */
+    /** A version's p2 entry: its stanza with the download URL (the placeholder base) and the {@code abandoned} flag a
+     *  client prints when it selects a marked version. */
     private static byte[] render(byte[] stanza, String vendor, String pkg, String version, Lifecycle.Flag flag)
             throws IOException {
         JsonNode entry = ComposerFormat.MAPPER.readTree(stanza);
@@ -366,12 +333,12 @@ final class ComposerListings {
         return ComposerFormat.MAPPER.writeValueAsBytes(entry);
     }
 
-    /** A version was published: list it (and its package) if it is servable. */
+    /** A version was published: list it and its package if servable. */
     void published(String repo, String vendor, String pkg, String version, byte[] stanza) throws IOException {
         refresh(repo, vendor, pkg, version, stanza);
     }
 
-    /** Re-decide one version's entry from the store's current state - after a hold, a release or a mark. */
+    /** Re-decide one version's entry from the store's current state. */
     void refresh(String repo, String vendor, String pkg, String version) throws IOException {
         ByteArrayOutputStream buffer = new ByteArrayOutputStream();
         if (!blobs.read(ComposerFormat.indexKey(repo, vendor, pkg, version), buffer)) {

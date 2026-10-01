@@ -10,10 +10,9 @@ import build.jenesis.repository.store.ListingObserver;
 import build.jenesis.repository.store.StoredListing;
 
 /**
- * Keeps the Composer {@linkplain ComposerListings stored metadata} in step with the transitions that happen off the
- * publish path - a hold on a published version and its release, a lifecycle mark and its reversal, a removal - by
- * re-rendering the one version's entry. A transition whose subject names neither a dist path nor a coordinate is
- * mapped to no entry, so every listing is regenerated in place.
+ * Keeps the Composer {@linkplain ComposerListings stored metadata} in step with transitions off the publish path - a
+ * hold and its release, a lifecycle mark and its reversal, a removal - by re-rendering the one version's entry. A
+ * subject naming neither a dist path nor a coordinate regenerates every listing in place.
  */
 public final class ComposerListingObserver implements ListingObserver {
 
