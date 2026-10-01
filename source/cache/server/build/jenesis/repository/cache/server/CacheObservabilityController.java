@@ -11,15 +11,12 @@ import org.springframework.web.bind.annotation.RestController;
 import build.jenesis.repository.observation.ObservabilityReport;
 
 /**
- * The cache node's observability report, at the path and in the shape the repository node answers it - the core
- * report's one rendering - so what a cache costs the store is read the way what a repository costs it is. Gated by
- * a cache credential exactly as a lookup is: the same resolution the cache routes make, with a placeholder entry, so
- * an unauthenticated caller is challenged and a forged key learns nothing.
+ * The cache node's observability report, at the repository node's path and in its shape, so the cache's store cost is
+ * read the same way. Gated by a cache credential as a lookup is, with a placeholder entry, so an unauthenticated caller
+ * is challenged and a forged key learns nothing.
  *
- * <p>The standalone cache node's only: a composing launcher - the bundle carries both nodes over one store -
- * answers the same path for the whole process through the repository's endpoint, and its scan of this package
- * leaves this class out ({@link CacheNode}), which is decided by the composition rather than by a condition that
- * would have to guess what another module's scan registered.
+ * <p>Only for the standalone cache node: a composing launcher answers the path for the whole process, and its scan
+ * leaves this class out ({@link CacheNode}).
  */
 @RestController
 public class CacheObservabilityController {
@@ -44,7 +41,7 @@ public class CacheObservabilityController {
             }
             return null;
         }
-        // This context's report: the discovered sources and every source among the singletons it has built.
+        // This context's report: the discovered sources and every source among its singletons.
         return ObservabilityReport.of(Arrays.stream(beans.getSingletonNames()).map(beans::getSingleton).filter(Objects::nonNull).toList()).view();
     }
 }

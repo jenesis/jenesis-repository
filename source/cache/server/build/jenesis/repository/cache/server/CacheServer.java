@@ -11,25 +11,18 @@ import org.springframework.security.web.SecurityFilterChain;
 
 
 /**
- * The Jenesis build-cache server's composition: a Spring Boot configuration whose wire protocol, multi-tenant
- * auth and eviction live in {@link Cache} (HTTP-framework-independent) and {@link CacheController}.
- * Persistence is a {@link build.jenesis.repository.cache.storage.CacheStorage} that delegates into a
- * segment of the repository's own store, so it is configured by {@code JENREPO_STORE} and that store's
- * keys rather than by a selection of its own; see {@link CacheConfig} for the environment configuration. Configuration is loaded from {@code cache.properties}
- * ({@code spring.config.name=cache}) rather than {@code application.properties}, so the credential
- * store's artifact-repository module - which ships its own {@code application.properties} - cannot
- * shadow it on the module path.
+ * The build-cache server's composition: wire protocol, tenancy and eviction live in {@link Cache} and
+ * {@link CacheController}; persistence is a {@link build.jenesis.repository.cache.storage.CacheStorage} delegating into
+ * a segment of the repository's store, configured by {@code JENREPO_STORE} ({@link CacheConfig}). Configuration loads
+ * from {@code cache.properties} ({@code spring.config.name=cache}), so the credential store module's own
+ * {@code application.properties} cannot shadow it.
  *
- * <p>The credential-store module pulls Spring Security onto the module path (the key-usage tracker lives there).
- * The cache does its own per-request key authorization in {@link Cache}, so the servlet-security auto-configuration
- * is excluded to keep the wire protocol and Actuator open exactly as before, rather than have a default login chain
- * lock them down. The combined deployment keeps its own security chain and is unaffected.
+ * <p>Spring Security's servlet auto-configuration is excluded, since the cache authorizes its own requests and a
+ * default login chain would lock the protocol and Actuator down; the combined deployment keeps its own chain.
  *
- * <p><b>Nothing ships this.</b> The cache stopped being an image of its own when the nodes became one - running
- * just the cache is a configuration of the image, which imports {@code CacheNode} - so the module declares no
- * {@code @jenesis.main} and no launcher is built from it. What is left is {@link #start(int)} for a test and
- * {@link #boot(String...)} for the harness, which reaches it through a launcher of its own rather than through a
- * {@code main} here.
+ * <p><b>Nothing ships this.</b> Running only the cache is a configuration of the image, which imports
+ * {@code CacheNode}, so there is no {@code @jenesis.main}: {@link #start(int)} serves a test and
+ * {@link #boot(String...)} the harness, through a launcher of its own.
  */
 @SpringBootApplication(excludeName = {
         "org.springframework.boot.security.autoconfigure.SecurityAutoConfiguration",
@@ -42,31 +35,15 @@ import org.springframework.security.web.SecurityFilterChain;
 public class CacheServer {
 
     /**
-     * The management surface of a cache running alone: the probe paths and nothing else.
+     * The management surface of a cache running alone: the probe paths and nothing else. Without this chain
+     * {@code /actuator/prometheus}, its counters labelled by tenant and project, would be matched by no chain and
+     * answer anyone. There is no deployment-wide authorization here to gate it with, and no need: a deployment wanting
+     * only the cache runs the ordinary node with every format off, where the scrape is gated. So a composition that is
+     * not a deployment closes its management surface.
      *
-     * <p>Without this chain, {@code /actuator/prometheus} would answer anyone - with
-     * {@code jenrepo_cache_requests_total} labelled by {@code tenant} and {@code project}, that hands every tenant and
-     * project name to whoever can reach the port - because the only other chain here claims {@code /build/**} and
-     * this launcher excludes the repository's security auto-configuration by name, so everything under
-     * {@code /actuator} would be matched by no chain at all. A request nothing matches is not a request nothing
-     * governs; it is a request governed by nothing.
-     *
-     * <p>The answer is not to authenticate it. There is no deployment-wide authorization on this node to authenticate
-     * against - the repository's authorization manager arrives with beans this launcher deliberately excludes -
-     * and there does not need to be, because <b>this is not a deployment</b>. There is no cache-only image: a
-     * deployment that wants only the build cache runs the ordinary node with every format switched off, and there
-     * the scrape is authorization-gated like every other {@code /actuator} path. So the honest posture for a
-     * composition that is not a deployment is a closed management surface.
-     *
-     * <p><b>It lives on the launcher rather than in {@code CacheSecurityConfig}, and that is load-bearing.</b>
-     * {@code CacheNode} excludes this class from the scan that pulls the cache into a composing launcher, so a
-     * bean declared here reaches the standalone composition and only that one. Declared in the shared security
-     * config instead, it would reach the merged node too - and an ordered chain over a narrower space wins over the
-     * repository's unmatched-scope chain, so it would deny the actuator surface of the node an operator actually
-     * runs, a {@code 403} on the merged node's scrape that {@code ServerToggleE2ETest} holds against.
-     *
-     * <p>What stays open is what a container platform probes, for the reason it is open everywhere else: a kubelet
-     * carries no credential, and a probe that needs one is a probe that fails the pod.
+     * <p>It is declared on the launcher, which {@code CacheNode} excludes from a composing scan, so it reaches only the
+     * standalone composition; in the shared security config it would deny the merged node's actuator surface. The probe
+     * paths stay open, since a kubelet carries no credential.
      */
     @Bean
     @Order(2)
@@ -82,34 +59,21 @@ public class CacheServer {
         return http.build();
     }
 
-    /**
-     * Runs the cache <em>alone</em>, for a process that must measure it without the rest of the product around it -
-     * which today means the cache soak, where a 48 MiB entry against a 512 MiB bound makes buffering fatal rather
-     * than merely visible. Booting the whole bundle into that bound would measure the bundle's footprint instead.
-     *
-     * <p><b>This is not a {@code main} and the distinction is the point.</b> The harness starts a node by naming a
-     * module and a main class; a class with a {@code main} reads as a product whatever its javadoc says, and the
-     * cache is a segment of the bundle, imported as {@code CacheNode}. The entry point is a test-owned launcher - the
-     * deliberate exception to
-     * {@code ServerRuntime.isHarness} - and it is what makes the boot-time decisions a harness-booted node owes,
-     * the licence report among them. Nothing here decides anything: this method boots and returns.
-     */
+    /** Runs the cache alone, for a process that must measure it without the rest of the product, where booting the
+     *  bundle would measure the bundle's footprint. Not a {@code main}: the harness starts a node by module and main
+     *  class, and a class with a {@code main} reads as a product. The entry point is a test-owned launcher, which makes
+     *  the boot-time decisions a harness-booted node owes; this method only boots. */
     public static void boot(String... arguments) {
         new SpringApplicationBuilder(CacheServer.class)
                 .properties("spring.config.name=cache")
                 .run(arguments);
     }
 
-    /**
-     * Boot the server on the given port ({@code 0} picks an ephemeral one) and return a handle that
-     * exposes the bound port and closes the context. Lets an embedder or test drive the real server,
-     * controller and servlet filters over HTTP without leaking the Spring types into its module.
-     */
+    /** Boot the server on {@code port} ({@code 0} picks an ephemeral one) and return a handle exposing the bound port
+     *  and closing the context, without leaking Spring types. */
     public static Running start(int port) {
-        // The port rides as a run argument rather than a default property: a .properties() default is Spring's
-        // lowest-precedence layer, so anything above it wins and two suites asking for an ephemeral port would race
-        // for one fixed port. No file pins server.port any more - 8080 is Spring's own default - so the argument is
-        // what makes 0 mean 0.
+        // The port rides as a run argument: a properties() default is the lowest-precedence layer, so with a higher one
+        // set two suites asking for an ephemeral port would race for a fixed one.
         ConfigurableApplicationContext context = new SpringApplicationBuilder(CacheServer.class)
                 .properties("spring.config.name=cache")
                 .run("--server.port=" + port);

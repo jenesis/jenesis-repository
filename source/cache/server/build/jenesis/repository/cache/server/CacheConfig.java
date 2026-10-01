@@ -18,11 +18,9 @@ import org.springframework.context.annotation.Configuration;
 import org.springframework.core.env.Environment;
 
 /**
- * Builds the {@link Cache} from {@link CacheProperties} (bound from {@code jenrepo.cache.*} / the
- * matching {@code JENREPO_CACHE_*} environment variables) and starting the reaper. A configured trial
- * bootstrap key is logged with a strong warning. There is no storage backend to select here: the cache
- * delegates into the repository's store, which reads its own configuration (root / bucket / connection
- * string) from the same {@link Environment}, so every app shares one config surface.
+ * Builds the {@link Cache} from {@link CacheProperties} ({@code jenrepo.cache.*}) and starts the reaper; a trial
+ * bootstrap key is logged with a warning. No storage backend is selected: the cache delegates into the repository's
+ * store, which reads its own configuration from the same {@link Environment}.
  *
  * <p>The same store also backs the credential store: the per-credential grants under {@code auth/<tenant>/<hash>/},
  * and an enforcing {@link Authorization} over it decides {@code cache:read}/{@code cache:write}. The authorization is
@@ -45,7 +43,7 @@ public class CacheConfig {
     @Bean(initMethod = "start", destroyMethod = "close")
     @ConditionalOnMissingBean
     public KeyUsageTracker keyUsageTracker(Authorization authorization, Environment environment) {
-        // Usage tracking is a discovered plugin (the usage module); NONE when absent.
+        // Usage tracking is a discovered plugin; NONE when absent.
         return KeyUsageTrackerProvider.resolve(authorization,
                 key -> environment.getProperty("jenrepo.cache." + key));
     }
@@ -73,13 +71,12 @@ public class CacheConfig {
         // A project's policy is trusted for the same window as the credential a request is authorised against.
         Duration policyInterval = StoreCache.configuredTtl();
         cache.policyInterval(policyInterval);
-        // A project's policy is its project settings, read from the store it and its tenant and the deployment keep
-        // them in - the same documents the console and the API write.
+        // A project's policy is its project settings, from the documents the console and API write.
         cache.policies((tenant, project) -> StoredSettings.projectChain(artifactStore, tenant, project));
         cache.start();
         LOGGER.info("jenesis-cache ready (storage {}, project cache {}, reaper {}, touch window {}, policy window {}, "
                         + "min free {}B/{}%, project {}, keys {})",
-                // The cache has no backend of its own: it reports the repository store it delegates to.
+                // The cache reports the repository store it delegates to.
                 environment.getProperty("jenrepo.store", "filesystem"), properties.getProjects(),
                 reaper == null ? "off" : reaper, touchInterval == null ? "every hit" : touchInterval,
                 policyInterval.isZero() ? "every request" : policyInterval,

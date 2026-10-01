@@ -7,12 +7,9 @@ import build.jenesis.repository.server.spi.CapabilityContributor;
 
 /**
  * The build tools this node's cache serves, as {@code cacheProtocols} on {@code /api/capabilities}: one entry per
- * installed protocol, in name order, with the {@code endpoint} a client of that tool is pointed at -
- * {@code /build/<tenant>} followed by the protocol's own root, with {@code <tenant>} and {@code <project>} left for
- * the reader to fill in. The console's build-cache pages and {@code jenrepo capabilities} read this one answer.
- *
- * <p>Empty where the cache is switched off ({@code jenrepo.build-cache=false}): its endpoint is then not registered,
- * so a protocol on the module path is served by nothing and listing it would point a build at a 404.
+ * installed protocol in name order, with the {@code endpoint} a client of that tool is pointed at,
+ * {@code /build/<tenant>} and the protocol's root, {@code <tenant>} and {@code <project>} left to fill in. Empty where
+ * the cache is switched off, since its endpoint is then not registered.
  */
 public final class CacheProtocolsCapabilityContributor implements CapabilityContributor {
 

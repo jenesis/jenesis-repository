@@ -9,30 +9,13 @@ import org.springframework.security.config.annotation.web.configurers.AbstractHt
 import org.springframework.security.web.SecurityFilterChain;
 
 /**
- * The cache's own security chain, in the cache's own module.
+ * The cache's own security chain, in the cache's module, so every node carrying the cache - the bundle included - has
+ * {@code /build/**} governed by it rather than by a chain that would redirect a cache client to a login page.
  *
- * <p>It lives here rather than in a module that composes the cache into an app, where the cache would carry its
- * security only when that particular composition assembled it. Any other node with the cache aboard - the bundle -
- * would then have {@code /build/**} governed by whatever chain happened to match, which for a
- * cache client is either a redirect to a login page or a demand for a repository key it does not have. A module
- * that authenticates its own requests should carry the chain that lets it, exactly as
- * {@code scimSecurityFilterChain} does for {@code /scim/**}.
- *
- * <p>The chain scopes {@code /build/**} to permit-all with CSRF disabled, because {@link CacheController} does its
- * own per-request key authentication and a cache client must never be bounced to {@code /login}. It is ordered
- * ahead of a console's chain and of the repository's unmatched fall-through, so the narrower space wins.
- *
- * <p>It governs {@code /build/**} and nothing else, deliberately. The management surface of a cache running ALONE
- * is closed by {@code CacheServer}, in the launcher rather than here, because a chain declared here would reach
- * the merged node too - and an ordered chain over a narrower space wins over the repository's unmatched-scope
- * one, so it would deny the actuator surface of the node an operator actually runs ({@code ServerToggleE2ETest}
- * holds that).
- */
-/*
- * @EnableWebSecurity because this module now owns its chain and must therefore bring what builds one. Moving the
- * chain here revealed that the STANDALONE cache had no web-security infrastructure at all: it borrowed the
- * repository's @EnableWebSecurity whenever a composition happened to put them together, and had none when run
- * alone. A module cannot own its security only in the compositions somebody else assembled.
+ * <p>It permits {@code /build/**} with CSRF disabled, because {@link CacheController} authenticates each request
+ * itself, and is ordered ahead of a console's chain and the repository's unmatched fall-through. It governs nothing
+ * else: a cache running alone has its management surface closed by {@code CacheServer}, since a chain here would also
+ * reach the merged node and deny its actuator surface.
  */
 @Configuration
 @EnableWebSecurity

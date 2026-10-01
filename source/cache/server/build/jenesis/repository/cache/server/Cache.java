@@ -15,27 +15,22 @@ import com.github.benmanes.caffeine.cache.Caffeine;
 import io.micrometer.core.instrument.MeterRegistry;
 
 /**
- * The build-cache logic, independent of any HTTP framework so it can be driven by {@link CacheController}
- * (Spring MVC) and tested directly. It is multi-tenant: the storage root holds one folder per tenant,
- * each a self-contained space of projects (configured by their project settings, {@link ProjectPolicy}). A request
- * carries its project in a header and its key as {@code jenk_<tenant>.<secret>}, so a key is bound to one
- * tenant and only ever checked against that tenant's space. Authorisation is delegated to a shared
- * {@link Authorization}: it reads the per-credential grants on each request (so a revoked grant takes
- * effect at once) against the {@code cache:read}/{@code cache:write} surface, and an anonymous
- * authorization (or a configured trial bootstrap key) lets every request through. Project policies are
- * held in an LRU cache and read again past the policy window. A write triggers immediate per-project size-cap eviction; the
- * periodic reaper additionally re-applies the size cap, the ttl and the global free-space target across
- * every tenant and project by re-scanning the store, so an over-cap project that is idle - its cap lowered
- * after the writes landed, or the cache enabled over a store that already held entries from before it
- * existed - still converges rather than waiting for a write that may never come.
+ * The build-cache logic, independent of any HTTP framework, driven by {@link CacheController} and tested directly. It
+ * is multi-tenant: the storage root holds a folder per tenant, each a space of projects configured by their project
+ * settings ({@link ProjectPolicy}). A request carries its project in a header and its key as
+ * {@code jenk_<tenant>.<secret>}, so a key is checked only against its own tenant's space. Authorisation is the shared
+ * {@link Authorization}, reading the credential's grants on each request (a revoked grant takes effect at once) against
+ * {@code cache:read}/{@code cache:write}; an anonymous authorization or a trial bootstrap key lets every request
+ * through. Project policies are held in an LRU cache and re-read past the policy window. A write triggers the project's
+ * size-cap eviction; the periodic reaper re-applies the size cap, the ttl and the global free-space target across every
+ * tenant and project, so an idle over-cap project converges too.
  */
 public class Cache {
 
     private static final System.Logger LOGGER = System.getLogger(Cache.class.getName());
 
-    /** How many of the coldest entries a single free-space reclaim pass selects and drops before re-scanning - the
-     *  bound on the reclaim's in-heap footprint, so a low-disk node reclaims in batches rather than sorting the whole
-     *  store's entry set at once. */
+    /** How many of the coldest entries one free-space reclaim pass selects before re-scanning: the bound on its heap
+     *  footprint, so a low-disk node reclaims in batches rather than sorting the whole store. */
     private static final int RECLAIM_BATCH = 1024;
 
     public enum Outcome {
@@ -56,16 +51,13 @@ public class Cache {
     public record Rejected(int status) implements Resolution {
     }
 
-    /** A project's policy as last read from its effective settings, and when this node read it
-     *  ({@link #policyInterval}). */
+    /** A project's policy as last read, and when this node read it ({@link #policyInterval}). */
     record Project(String name, long size, boolean lru, Instant verified) {
     }
 
-    /**
-     * Where a project's policy comes from: its effective settings - the project's own over its tenant's over the
-     * deployment's ({@code StoredSettings.projectChain}) - read when this node has not read them within the policy
-     * window. {@link #NONE} - nothing configured - is what a cache built without a store answers.
-     */
+    /** Where a project's policy comes from: its effective settings - the project's own over its tenant's over the
+     *  deployment's ({@code StoredSettings.projectChain}) - read when this node has not read them within the policy
+     *  window. {@link #NONE} is what a cache built without a store answers. */
     @FunctionalInterface
     public interface Policies {
 
@@ -76,8 +68,8 @@ public class Cache {
         UnaryOperator<String> of(String tenant, String project) throws IOException;
     }
 
-    /** What this node remembers of an entry's recency: the instant of the stamp it last wrote or read, or of the
-     *  store it made itself, which leaves no stamp - so a renewal knows whether there is a stamp to retire. */
+    /** What this node remembers of an entry's recency: the stamp it last wrote or read, or the store it made itself,
+     *  which leaves no stamp, so a renewal knows whether there is one to retire. */
     private record Known(Instant at, boolean stamped) {
     }
 
@@ -95,15 +87,14 @@ public class Cache {
     private final Map<String, CacheStorage> scopes = new ConcurrentHashMap<>();
     private final Map<String, AtomicBoolean> evicting = new ConcurrentHashMap<>();
     private final Map<String, AtomicBoolean> dirty = new ConcurrentHashMap<>();
-    // Single-flight guard for the off-request free-space reclaim (cannotFit): at most one background sweep runs at a
-    // time, so a burst of writers under low disk never spawns a reclaim per PUT.
+    // Single-flight guard for the off-request free-space reclaim, so a burst of writers under low disk spawns one
+    // sweep.
     private final AtomicBoolean reclaiming = new AtomicBoolean();
-    // A request counter is stable per (tenant, project, outcome) and one is incremented on every request, so each is
-    // resolved once and reused rather than rebuilding the builder + tag set and re-doing the registry lookup per call.
+    // A counter per (tenant, project, outcome), resolved once rather than looked up on every request.
     private final Map<String, Counter> counters = new ConcurrentHashMap<>();
     private final MeterRegistry registry;
     private final Duration reaper;
-    /** How many entries' recency this node remembers; past it a hot entry's stamp is merely re-read once. */
+    /** How many entries' recency this node remembers; past it a hot entry's stamp is re-read once. */
     private static final int TOUCH_MEMORY = 200_000;
     /** The shipped {@code jenrepo.cache.touch-interval}; {@link #touchInterval(Duration)} is what binds it. */
     static final Duration DEFAULT_TOUCH_INTERVAL = Duration.ofHours(6);
@@ -135,20 +126,13 @@ public class Cache {
         policyInterval(StoreCache.DEFAULT_TTL);
     }
 
-    /**
-     * How long a recency stamp stands before a hit renews it ({@code jenrepo.cache.touch-interval}); {@code null} or
-     * zero stamps every hit. Within the window a hit costs the store nothing for recency: this node remembers, per
-     * entry, the stamp it last wrote or read - or the store it made itself, whose recency is the entry's own time
-     * until a stamp exists - and only an entry it does not remember is asked for its recency - its stamps, then the
-     * entry's own time when it has none - and stamped only if that is past the window. A renewal writes the new stamp and
-     * retires the one it knows of, so an entry keeps one. The stamp is therefore up to one window older than the
-     * entry's last use, which is the error margin the ttl and the least-recently-used sweep accept in exchange for
-     * a warm build of thousands of hits writing nothing - the first warm build after a cold store included, since
-     * the node that stored an entry remembers having done so. The stamp is an object beside the entry on every
-     * backend alike, never a modification time, so a store copied from one backend to another keeps it - and on the
- * object stores a touch rewrites nothing, so a recency read from modification times is the time an entry was
- * written, which is not what a least-recently-used sweep is meant to order by.
-     */
+    /** How long a recency stamp stands before a hit renews it ({@code jenrepo.cache.touch-interval}); {@code null} or
+     *  zero stamps every hit. Within the window a hit costs the store nothing for recency: this node remembers per
+     *  entry the stamp it last wrote or read, or the store it made, and asks only for an entry it does not remember,
+     *  stamping it only past the window. A renewal writes the new stamp and retires the known one, so an entry keeps
+     *  one. A stamp is therefore up to a window older than the last use, the margin the ttl and the least-recently-used
+     *  sweep accept so a warm build of thousands of hits writes nothing. The stamp is an object beside the entry on
+     *  every backend, never a modification time, which object stores do not move on a read. */
     public Cache touchInterval(Duration interval) {
         if (interval == null || interval.isZero() || interval.isNegative()) {
             // Every hit stamps; the memory still holds the previous stamp so a renewal can retire it.
@@ -162,15 +146,11 @@ public class Cache {
         return this;
     }
 
-    /**
-     * How long a project's policy - the size cap and sweep order its settings set - is trusted before a request reads
-     * it again; {@code null} or zero reads it on every request. Reading it is the settings documents of the project, its
-     * tenant and the deployment - otherwise the only store calls a hit pays, recency being kept in the touch window -
-     * so the node remembers when it last read a project's policy and reads it again only past the window. The window
-     * is the deployment's {@code jenrepo.cache.ttl}, as it is for the credential the same request was authorised
-     * against: another node's edit of a project's cap shows here within it, and an operator who wants every request
-     * to see an edit at once sets it to zero.
-     */
+    /** How long a project's policy - the size cap and sweep order its settings set - is trusted before a request reads
+     *  it again; {@code null} or zero reads it every request. Reading it costs the settings documents of the project,
+     *  its tenant and the deployment, otherwise the only store calls a hit pays. The window is
+     *  {@code jenrepo.cache.ttl}, as for the credential the request was authorised against, so another node's edit
+     *  shows within it. */
     public Cache policyInterval(Duration interval) {
         policyInterval = interval == null || interval.isZero() || interval.isNegative() ? null : interval;
         return this;
@@ -188,13 +168,13 @@ public class Cache {
         return this;
     }
 
-    /** Override the off-request key-usage tracker (defaults to a disabled one), so an allowed read stamps last-used. */
+    /** Override the off-request key-usage tracker (a disabled one by default), so an allowed read stamps last-used. */
     public Cache usageTracker(KeyUsageTracker usageTracker) {
         this.usageTracker = usageTracker;
         return this;
     }
 
-    /** Start the ttl/free-space reaper thread (a no-op when no interval is configured). */
+    /** Start the ttl and free-space reaper thread; a no-op when no interval is configured. */
     public void start() {
         if (reaper != null && !reaping) {
             reaping = true;
@@ -219,20 +199,15 @@ public class Cache {
         return max;
     }
 
-    /** Authorise a request and resolve its entry in the tenant its key belongs to, recording the rejection metric for
-     *  a denial. */
+    /** Authorise a request and resolve its entry in its key's tenant, counting a denial. */
     public Resolution resolve(String project, String key, String step, String inputs, boolean write) {
         return resolve(null, project, key, step, inputs, write);
     }
 
-    /**
-     * Authorise a request addressed to {@code named}'s cache - {@code /build/<tenant>/...} - and resolve its entry.
-     * The URL names the tenant and the key decides whether it may be addressed: a key reaches its own tenant's cache
-     * and no other, and the bootstrap key the default tenant's. A key naming another tenant, or lacking the right on
-     * the project, is refused as the deployment's {@link AccessDenial} says, never a crossing, and the refusal is
-     * decided from the names alone, so it is the same for a project or tenant that exists and one that does not;
-     * {@code null} addresses the key's own.
-     */
+    /** Authorise a request addressed to {@code named}'s cache ({@code /build/<tenant>/...}) and resolve its entry. A
+     *  key reaches its own tenant's cache and no other, the bootstrap key the default tenant's; a key naming another
+     *  tenant or lacking the project's right is refused as the deployment's {@link AccessDenial} says, decided from the
+     *  names alone so it is the same whether the project or tenant exists. {@code null} addresses the key's own. */
     public Resolution resolve(String named, String project, String key, String step, String inputs, boolean write) {
         String name = project;
         if (name == null || name.isBlank()) {
@@ -275,16 +250,15 @@ public class Cache {
                 decision = Authorization.Decision.FORBIDDEN;
             }
             if (decision == Authorization.Decision.UNAUTHORIZED) {
-                // An unauthenticated request's tenant/project are attacker-chosen strings: tagging metrics with
-                // them would let anyone mint unbounded meter registrations (a forged key's checksum is a public
-                // CRC32). Only an authenticated outcome tags real names.
+                // An unauthenticated request's names are attacker-chosen, and a forged key's checksum is a public
+                // CRC32, so only an authenticated outcome tags names, or anyone could mint unbounded meter
+                // registrations.
                 count("", Outcome.UNAUTHORIZED);
                 return new Rejected(401);
             }
             if (decision != Authorization.Decision.ALLOWED) {
-                // FORBIDDEN covers both a provisioned credential lacking the grant (a real tenant, worth
-                // attributing) and a forged-but-well-formed key (attacker-chosen names that must not become
-                // meter tags) - only a provisioned credential's denial is tagged with its names.
+                // FORBIDDEN covers a provisioned credential without the grant, worth attributing, and a forged
+                // well-formed key, whose names must not become tags.
                 count(provisioned(tenant, key) ? metric : "", Outcome.FORBIDDEN);
                 return new Rejected(AccessDenial.configured().status());
             }
@@ -296,8 +270,7 @@ public class Cache {
             count(metric, Outcome.INVALID);
             return new Rejected(400);
         }
-        // The tenant's storage view is resolved only for an authorized request, so a forged key cannot grow the
-        // scope map with made-up tenant names.
+        // The tenant's view is resolved only when authorized, so a forged key cannot grow the scope map.
         CacheStorage scoped = scope(tenant);
         return new Allowed(metric, scoped, project(metric, tenant, name), new CacheStorage.Entry(name, step, inputs));
     }
@@ -316,8 +289,8 @@ public class Cache {
             return;     // stamped, read as stamped or stored within the window: the store hears nothing
         }
         if (known == null) {
-            // Unknown to this node: ask the storage once - its stamp, or the entry's own time when it has none, as
-            // another node's store or a restart leaves it - and remember the answer as if this node had made it.
+            // Unknown to this node: ask the store once - its stamp, else the entry's own time - and remember the
+            // answer.
             CacheStorage.Recency recency = allowed.storage().recency(allowed.entry()).orElse(null);
             known = recency == null ? null : new Known(recency.at(), recency.stamped());
             if (window != null && known != null && now.isBefore(known.at().plus(window))) {
@@ -325,7 +298,7 @@ public class Cache {
                 return;
             }
         }
-        // A stamp is retired by the renewal; an entry known by its own time - stored here or elsewhere - has none.
+        // A renewal retires a stamp; an entry known by its own time has none.
         Instant previous = known != null && known.stamped() ? known.at() : null;
         allowed.storage().stamp(allowed.entry(), now, previous);
         memory.put(remembered, new Known(now, true));
@@ -342,8 +315,8 @@ public class Cache {
     /** Store the entry and schedule size-cap eviction when the project caps its size. */
     public void store(Allowed allowed, InputStream in) throws IOException {
         allowed.storage().store(allowed.entry(), in);
-        // The entry's own time is its recency until a stamp exists: remembered, so a hit within the window of the
-        // store - the first warm build after a cold one - neither asks for a stamp nor writes one.
+        // The entry's own time is its recency until stamped, remembered so a hit within the window neither reads nor
+        // writes a stamp.
         touched.put(remembered(allowed), new Known(clock.instant().truncatedTo(ChronoUnit.SECONDS), false));
         if (allowed.project().size() > 0) {
             scheduleEviction(allowed.metric(), allowed.storage(), allowed.project());
@@ -354,12 +327,9 @@ public class Cache {
         return contentLength > max;
     }
 
-    /** Whether a store cannot be admitted now: true when the volume is below the free target. A sustained low-disk
-     *  state must not make every writer pay an O(total entries) enumerate-and-sort of the whole store on the request
-     *  thread, so the reclaim runs off-request as a single-flight background sweep (the same off-request shape the
-     *  size-cap eviction drain uses) rather than synchronously here; the periodic reaper reclaims on its own clock too.
-     *  Space therefore frees without any PUT scanning the store, and a writer under genuine exhaustion still gets a
-     *  507 rather than blocking on a full sweep. */
+    /** Whether a store cannot be admitted now: true when the volume is below the free target. The reclaim runs
+     *  off-request as a single-flight background sweep, as the size-cap eviction does, so no writer pays an
+     *  enumerate-and-sort of the store, and a writer under real exhaustion gets a 507 rather than blocking. */
     public boolean cannotFit() {
         if (!low()) {
             return false;
@@ -368,8 +338,7 @@ public class Cache {
         return low();
     }
 
-    /** Kick a single-flight background free-space reclaim: at most one runs at a time (a second caller while one is in
-     *  flight is a no-op), so a burst of writers under low disk schedules one sweep, not one per PUT. */
+    /** Kick a single-flight background free-space reclaim; a caller while one runs is a no-op. */
     private void triggerReclaim() {
         if (reclaiming.compareAndSet(false, true)) {
             Thread.ofVirtual().name("jenesis-cache-reclaim").start(() -> {
@@ -404,8 +373,7 @@ public class Cache {
                 .increment();
     }
 
-    /** Whether the key is a provisioned credential of its tenant - the gate for trusting its names as meter
-     *  tags: an unknown credential's tenant/project are unauthenticated input. */
+    /** Whether the key is a provisioned credential of its tenant: the gate for trusting its names as meter tags. */
     private boolean provisioned(String tenant, String key) {
         try {
             return authorization.credential(tenant, Authorization.hash(key)).isPresent();
@@ -418,16 +386,14 @@ public class Cache {
         return scopes.computeIfAbsent(tenant, storage::scope);
     }
 
-    /** The tenants this node caches for, drained through the storage's paged root listing. The remainder is followed
-     *  rather than reported: a tenant is provisioned, not client-created, and every caller here (the reaper, the
-     *  free-space reclaim) needs all of them - what pages beneath this is the per-project entry set, which is what a
-     *  build inflates. */
+    /** The tenants this node caches for, drained through the storage's paged root listing; every caller needs all of
+     *  them, and tenants are provisioned, not client-created. */
     private List<String> tenants() {
         List<String> result = new ArrayList<>();
         String cursor = null;
         while (true) {
-            // The cache's storage holds tenant folders and nothing else - the product's own spaces are under .system,
-            // beside it rather than in it - so every name of a tenant's shape is a tenant, whatever it is called.
+            // The storage holds tenant folders only - the product's own spaces are under .system beside it - so every
+            // name of a tenant's shape is a tenant.
             Traversal.Result page = storage.listDir("", cursor, CacheStorage.PAGE, name -> {
                 if (Names.isTenant(name)) {
                     result.add(name);
@@ -440,10 +406,8 @@ public class Cache {
         }
     }
 
-    /** Drive one project's paged entry enumeration to exhaustion, handing every entry to {@code action}. A sweep's
-     *  answer is a total or a deletion set, so the remainder is always followed; what the bound buys is that only one
-     *  page of entries is ever in heap, never the project. Deleting from inside the sweep is safe because a cursor is
-     *  a key, not an index: everything deleted is already behind it. */
+    /** Drive one project's paged entry enumeration to exhaustion, one page in heap at a time. Deleting during the sweep
+     *  is safe because a cursor is a key: everything deleted is behind it. */
     private static void sweep(CacheStorage store, String project, Consumer<CacheStorage.Stored> action) {
         String cursor = null;
         while (true) {
@@ -481,8 +445,8 @@ public class Cache {
         return loaded;
     }
 
-    /** A project's effective settings, or none when they cannot be read - a cache that cannot read its policy keeps
-     *  serving uncapped rather than failing the build that asked, and says so. */
+    /** A project's effective settings, or none when they cannot be read: the cache keeps serving uncapped rather than
+     *  failing the build, and says so. */
     private UnaryOperator<String> policy(String tenant, String project) {
         try {
             return policies.of(tenant, project);
@@ -515,15 +479,9 @@ public class Cache {
         }
     }
 
-    /**
-     * Enforce one project's size cap, in bounded passes rather than one enumerate-and-sort.
-     *
-     * <p>Holding the project's whole entry set in a list and sorting it would be an allocation proportional to
-     * whatever a build had cached - on a write-triggered path, so a client would control both when it ran and how
-     * large it was. The total is counted by streaming, and each round retains only the {@link #RECLAIM_BATCH} entries
-     * it
-     * is about to delete, selected through the same bounded heap the free-space reclaim uses.
-     */
+    /** Enforce one project's size cap in bounded passes: the total is counted by streaming, and each round retains only
+     *  the {@link #RECLAIM_BATCH} entries it will delete, through the bounded selection the free-space reclaim uses,
+     *  since a write-triggered sort of a project's whole entry set would let a client choose its size. */
     private void evict(CacheStorage store, Project project) {
         long limit = project.size();
         if (limit <= 0) {
@@ -572,22 +530,15 @@ public class Cache {
     }
 
     private void reclaim() {
-        // A sustained low-disk state must never make the reclaim build an in-heap list of the WHOLE store's entries and
-        // sort it - an O(total entries) enumerate-and-sort run exactly when the node is already disk-degraded, the OOM
-        // this bounds. Each pass streams the entries a project at a time (a lazily-flattened view, never a whole-store
-        // snapshot) through a bounded max-heap that retains only the RECLAIM_BATCH coldest, deletes them until the free
-        // target is met, then re-scans for the next batch - so the peak footprint is one batch, whatever the store's
-        // size. The single-flight guard around this keeps at most one such sweep running.
+        // Each pass streams entries a project at a time through a bounded selection of the RECLAIM_BATCH coldest,
+        // deletes them until the free target is met, then re-scans: the peak is one batch whatever the store's size.
         while (low()) {
             Selection selection = new Selection(RECLAIM_BATCH, true);
             Map<CacheStorage.Stored, CacheStorage> owners = new IdentityHashMap<>();
             for (String tenant : tenants()) {
                 CacheStorage scoped = scope(tenant);
                 projects(scoped, project -> sweep(scoped, project, entry -> {
-                    // An entry is deleted through the storage that ENUMERATED it, never through the root one. A
-                    // Stored's token is opaque and scope-relative: handing a tenant-scoped entry to the root storage
-                    // only ever worked because one backend's token happened to be an absolute path, and it silently
-                    // deleted nothing on any backend whose token was not.
+                    // Deleted through the storage that enumerated it: a Stored's token is opaque and scope-relative.
                     owners.put(entry, scoped);
                     selection.accept(entry);
                 }));
@@ -610,16 +561,9 @@ public class Cache {
         }
     }
 
-    /**
-     * The bounded selection every sweep here drives: the {@code k} entries that sort first under the eviction order -
-     * coldest for a least-recently-used policy, warmest for the most-recently-used one - accumulated in one streaming
-     * pass through a heap that never holds more than {@code k}, so a size cap or a free-space reclaim picks what to
-     * drop without ever materialising or sorting the whole entry set in heap.
-     *
-     * <p>It is a {@link Consumer} rather than a function over a collection precisely so it can be handed straight to
-     * the storage's paged enumeration: the entries arrive one at a time, page by page, and are never anywhere else at
-     * once. Selecting across tenants and projects is then just driving one selection through several enumerations.
-     */
+    /** The bounded selection every sweep drives: the {@code k} entries that sort first under the eviction order -
+     *  coldest for least-recently-used, warmest for most-recently-used - through a heap of at most {@code k}. A
+     *  {@link Consumer}, so it is handed straight to the paged enumeration and can span several. */
     private static final class Selection implements Consumer<CacheStorage.Stored> {
 
         /** The eviction order: the entries that sort FIRST are the ones to delete. */
@@ -674,8 +618,7 @@ public class Cache {
                     reapAll();
                     reclaim();
                 } catch (RuntimeException e) {
-                    // One backend hiccup (an S3 throttle, an Azure blip during a listing) must not kill the reaper
-                    // for the life of the process - a dead reaper means TTL and free-space eviction silently stop.
+                    // A backend hiccup must not kill the reaper, which would silently stop ttl and free-space eviction.
                     LOGGER.log(System.Logger.Level.WARNING, "cache reaper sweep failed; retrying next interval", e);
                 }
             }
@@ -696,11 +639,8 @@ public class Cache {
                 if (ttl != null) {
                     expire(store, name, ttl);
                 }
-                // Size-cap eviction is otherwise applied only on a write (scheduleEviction). Re-apply it here so a
-                // project that is over cap yet idle converges on the reaper's own clock rather than waiting for a
-                // write that may never come - the cap was lowered after the writes landed, or the cache was enabled
-                // over a store that already held entries from before it existed. Like the ttl and free-space sweeps,
-                // it reconstructs the policy over pre-existing data by re-scanning the store, not from live writes.
+                // The size cap is otherwise applied only on a write; re-applied here so an idle over-cap project - its
+                // cap lowered, or the cache enabled over existing entries - converges on the reaper's clock.
                 long limit = size(config, name);
                 if (limit > 0) {
                     evict(store, new Project(name, limit, ProjectPolicy.lru(config.apply(ProjectPolicy.LRU)),
@@ -723,9 +663,8 @@ public class Cache {
         try {
             return ProjectPolicy.ttl(config.apply(ProjectPolicy.TTL));
         } catch (IllegalArgumentException malformed) {
-            // As a malformed size: the reaper sweeps every project in one pass, so one project's bad value is said out
-            // loud and that project's expiry is skipped, rather than read as "no ttl" in silence. The catalogue
-            // refuses such a value on every write path; this guards one written into the store by hand.
+            // A malformed ttl is logged and that project's expiry skipped rather than read as "no ttl"; the catalogue
+            // refuses such a value on every write path, so this guards one written into the store by hand.
             LOGGER.log(System.Logger.Level.WARNING, malformed.getMessage() + " for cache project " + project
                     + "; stale entries are not expired until the value is fixed");
             return null;
@@ -736,8 +675,8 @@ public class Cache {
         try {
             return ProjectPolicy.size(config.apply(ProjectPolicy.SIZE));
         } catch (IllegalArgumentException malformed) {
-            // A typo must not read as "unlimited" in silence: the misconfigured project would just grow unbounded. It
-            // still parses as no-cap (fail-open keeps the cache serving), but says so.
+            // A malformed cap is logged rather than silently read as unlimited; it still parses as no cap, so the cache
+            // keeps serving.
             LOGGER.log(System.Logger.Level.WARNING, malformed.getMessage() + " for cache project " + project
                     + "; the size cap is disabled until the value is fixed");
             return 0;

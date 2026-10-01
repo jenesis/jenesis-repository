@@ -12,23 +12,18 @@ import org.springframework.web.bind.annotation.RequestMethod;
 import org.springframework.web.bind.annotation.RestController;
 
 /**
- * The HTTP surface of the cache: it finds the protocol that owns a request path, and serves the address that
- * protocol reads off it onto {@link Cache}.
+ * The HTTP surface of the cache: it finds the protocol owning a request path and serves the address it reads onto
+ * {@link Cache}. Each wire format is a discovered {@code CacheProtocol} in its own module, so a node serves what it
+ * carries. What they share stays here: the existence probe a HEAD pays, the read that streams a hit and turns a reaped
+ * entry into a miss, the length and capacity refusals before a PUT's body, the counters and the challenge.
  *
- * <p>It speaks no wire format itself. Each one - the product's own, Gradle's, Bazel's, the Maven build-cache
- * extension's - is a discovered {@code CacheProtocol} in a module of its own, so which formats a node serves is
- * which modules it carries and a composition serves a subset by carrying fewer. What stays here is everything they
- * share and would otherwise each reimplement: the existence probe a HEAD pays, the read that streams a hit and
- * turns a concurrently reaped entry into the miss it really is, the length and capacity refusals a PUT makes
- * before reading a body, the outcome counters and the challenge.
- *
- * <p>The body is an opaque blob streamed straight to and from storage, and a PUT answers 204/403 before reading
- * it, so an {@code Expect: 100-continue} client skips the upload.
+ * <p>The body is an opaque blob streamed to and from storage, and a PUT answers 204/403 before reading it, so an
+ * {@code Expect: 100-continue} client skips the upload.
  */
 @RestController
 public class CacheController {
 
-    /** The node's own admin surface presents its identity the way the native protocol does; one definition. */
+    /** The node's admin surface presents identity as the native protocol does. */
     static final String PROJECT = CacheProtocol.PROJECT_HEADER;
 
     static final String KEY = CacheProtocol.KEY_HEADER;
@@ -53,7 +48,7 @@ public class CacheController {
         }
         Cache.Allowed allowed = (Cache.Allowed) resolution;
         if ("HEAD".equalsIgnoreCase(request.getMethod())) {
-            // A HEAD reports presence without a body, so it still pays the one existence probe a body-less answer needs.
+            // A HEAD has no body, so it pays the existence probe.
             if (!cache.exists(allowed)) {
                 cache.count(allowed.metric(), Cache.Outcome.MISS);
                 response.setStatus(404);
@@ -64,20 +59,16 @@ public class CacheController {
             response.setStatus(200);
             return;
         }
-        // A GET does not pre-probe existence: the read below already streams the hit, and its recovery block turns a
-        // missing (or concurrently reaped) entry into the same 404 MISS an explicit exists() check would have - so the
-        // read-mostly hot path pays one object-store round trip on a hit, not a HEAD then a GET. Recency is stamped
-        // after the read, which proved the entry exists: stamped ahead of it, a miss - every step of a cold build -
-        // asked the store for the stamps of an entry that was not there and then whether it existed.
+        // A GET does not probe first: the read streams the hit, and its recovery turns a missing or reaped entry into
+        // the 404 MISS, so a hit costs one round trip. Recency is stamped after the read proved the entry exists, so a
+        // miss stamps nothing.
         response.setStatus(200);
         OutputStream out = response.getOutputStream();
         try {
             cache.read(allowed, out);
         } catch (IOException e) {
-            // The entry may be absent (a never-stored key) or deleted by the eviction/reaper thread before or during
-            // the read. While nothing has been written the response can still become the miss it really is; a failure
-            // mid-body can only abort. The stream is deliberately not closed on this path - closing it would commit
-            // the 200 first.
+            // The entry may be absent or reaped during the read. Before anything is written the response can still
+            // become a miss; mid-body it can only abort. The stream is not closed here, which would commit the 200.
             if (response.isCommitted()) {
                 throw e;
             }
@@ -92,23 +83,17 @@ public class CacheController {
     }
 
     /**
-     * Find the protocol that owns this path and serve the address it reads.
+     * Find the protocol that owns this path and serve the address it reads. Claims are disjoint by contract -
+     * {@code CacheProtocol.RESERVED} keeps Gradle's layout apart from the native one - so order does not matter. The
+     * tenant is the URL's ({@code /build/<tenant>/...}), and the key decides whether it may be addressed.
      *
-     * <p>One mapping rather than eight: the protocols are discovered, so which wire formats a node speaks is
-     * which modules it carries, and a composition serves a subset by carrying fewer of them. Order is irrelevant
-     * because claims are disjoint by contract - {@code CacheProtocol.RESERVED} is what makes that true of a
-     * tenant's shared cache, where Gradle's layout is otherwise shape-identical to the native one. The tenant is the
-     * URL's, {@code /build/<tenant>/...}, and the key presented decides whether it may be addressed.
-     *
-     * <p><b>The path is decoded segment by segment</b>, because that is what the {@code @PathVariable} handlers
-     * this replaces did and a raw request URI is not. Re-joining the decoded segments differs from per-variable
-     * decoding in exactly one case - a segment containing an encoded separator - which cannot arise here: the
-     * servlet container refuses an encoded slash in a path by default, and every address these protocols read is
-     * hex or an opaque key.
+     * <p>The path is decoded segment by segment. Re-joining decoded segments differs from decoding each only for an
+     * encoded separator, which the servlet container refuses by default, and every address the protocols read is hex or
+     * an opaque key.
      */
     @RequestMapping(value = "/build/{tenant}/**", method = {RequestMethod.GET, RequestMethod.HEAD, RequestMethod.PUT})
     public void dispatch(HttpServletRequest request, HttpServletResponse response) throws IOException {
-        // /build/<tenant>/<path>: the tenant whose cache is addressed, and the path within it the protocols read.
+        // /build/<tenant>/<path>: the addressed tenant, and the path the protocols read.
         String decoded = decoded(request).substring(ROOT.length());
         int slash = decoded.indexOf('/');
         String tenant = slash < 0 ? decoded : decoded.substring(0, slash);
@@ -121,14 +106,13 @@ public class CacheController {
             }
         }
         if (protocol == null) {
-            // No protocol claims it: this node does not speak that wire format, which is a 404 rather than a 400
-            // - the path is not malformed, it is simply not served here.
+            // No protocol claims it: this node does not speak that format, a 404.
             response.setStatus(404);
             return;
         }
         Optional<CacheProtocol.Address> address = protocol.address(new ServletRequest(request, path));
         if (address.isEmpty()) {
-            // Claimed but unreadable: the contract's clause 4, and the one case that is the client's mistake.
+            // Claimed but unreadable: clause 4, the client's mistake.
             response.setStatus(400);
             return;
         }
@@ -194,9 +178,7 @@ public class CacheController {
         }
         long contentLength = request.getContentLengthLong();
         if (contentLength < 0) {
-            // A chunked (unknown-length) body would bypass the size cap entirely (-1 compares under any max), so
-            // one PUT could stream unbounded bytes to the volume. The build-tool clients always send a fixed
-            // length, so requiring one refuses nothing legitimate.
+            // A chunked body would bypass the size cap, so a length is required; build-tool clients always send one.
             cache.count(allowed.metric(), Cache.Outcome.REJECTED);
             response.setStatus(411);
             return;
@@ -218,16 +200,9 @@ public class CacheController {
         response.setStatus(201);
     }
 
-    /**
-     * Refuse, and on a 401 say how to authenticate.
-     *
-     * <p>A bare 401 is only usable by a client that sends its credential unasked. The native clients do - the key
-     * rides a header they always set - but a client that waits to be challenged needs the challenge. Maven Resolver
-     * is one: it sends the GET without credentials, and with no {@code WWW-Authenticate} it never retries, so the
-     * read half of the Maven cache could not authenticate at all. It sends credentials unasked on an upload, so the
-     * missing challenge shows as a cache that stores perfectly and never hits, reported by the extension as "Remote
-     * cache is incomplete or missing".
-     */
+    /** Refuse, and on a 401 say how to authenticate: a client that waits to be challenged needs
+     *  {@code WWW-Authenticate}. Maven Resolver sends a GET without credentials and never retries unchallenged, so
+     *  without it the Maven cache would store but never hit. */
     private static void challenge(Cache.Rejected rejected, HttpServletResponse response) {
         response.setStatus(rejected.status());
         if (rejected.status() == 401) {

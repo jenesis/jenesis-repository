@@ -1,16 +1,13 @@
 /**
- * The build-cache server, a Spring Boot app on the same stack as the admin console. It requires the
- * Spring modules its code compiles against plus the web starter to root the runtime closure (embedded
- * Jetty, Jackson) through Maven, and the storage SPI. The cache has no backend of its own: it delegates
- * to the repository's store, which a deployment selects once with {@code JENREPO_STORE}. Open so Spring
- * can reflect over the beans/controller;
- * the {@code build.jenesis.repository.cache.server} package is exported so the server is embeddable and testable.
+ * The build-cache server, a Spring Boot app on the console's stack: the Spring modules its code compiles against, the
+ * web starter rooting the runtime closure, and the storage SPI. The cache delegates to the repository's store, selected
+ * once with {@code JENREPO_STORE}. Open for Spring's reflection; its package is exported so the server is embeddable
+ * and testable.
  *
  * @jenesis.bom pin-repository.properties
  * @jenesis.signature signature-repository.properties
  * @jenesis.release 25
  * @jenesis.exclude spring.boot.starter.jetty org.apache.tomcat.embed/tomcat-embed-el
- *
  */
 open module build.jenesis.repository.cache.server {
     requires build.jenesis.repository.cache.storage;

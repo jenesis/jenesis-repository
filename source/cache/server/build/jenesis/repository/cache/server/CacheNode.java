@@ -6,20 +6,13 @@ import org.springframework.context.annotation.Configuration;
 import org.springframework.context.annotation.FilterType;
 
 /**
- * The build cache, as one thing an application either carries or does not.
+ * The build cache, as one thing an application carries or not: on one node it is beans beside the repository's, so a
+ * deployment that serves artifacts and no cache needs a way to say so.
  *
- * <p>Same reason as the console's gate, and the same shape: on one node the cache is beans beside the
- * repository's, so "do not run it" cannot express a deployment without a build cache, and a deployment that serves
- * artifacts and wants no cache endpoint needs a way to say so.
- *
- * <p>Read as the context starts rather than from the settings store, because it decides whether the cache's
- * controller and its permit-all chain are registered at all. That chain is the reason it matters more than a
- * feature flag would: the cache does its own per-request key authorization, so its routes are permitted by the
- * order-1 chain, and registering that chain for a cache nobody serves would leave a permitted path space in front
- * of a controller that is not there.
- *
- * <p>Default on: an application carrying the cache module meant to serve it. {@code jenrepo.build-cache=false}
- * takes it out.
+ * <p>Read as the context starts, since it decides whether the cache's controller and its permit-all chain are
+ * registered: the cache authorizes its own requests, so its routes are permitted by the order-1 chain, and that chain
+ * without a controller would leave a permitted path space in front of nothing. Default on;
+ * {@code jenrepo.build-cache=false} takes it out.
  */
 @Configuration(proxyBeanMethods = false)
 @ConditionalOnProperty(name = "jenrepo." + CacheNode.GATE, havingValue = "true", matchIfMissing = true)
@@ -31,6 +24,6 @@ import org.springframework.context.annotation.FilterType;
                 pattern = "build\\.jenesis\\.repository\\.cache\\.server\\.(CacheServer|CacheObservabilityController|CacheStoreAutoConfiguration)"))
 public class CacheNode {
 
-    /** Whether this application serves the build cache at all. Read before the context starts; applies on restart. */
+    /** Whether this application serves the build cache. Read before the context starts; applies on restart. */
     public static final String GATE = "build-cache";
 }

@@ -6,12 +6,9 @@ import build.jenesis.repository.settings.Setting;
 import build.jenesis.repository.settings.SettingsContributor;
 
 /**
- * Puts the build cache's gate in the deployment settings catalogue, for the same reason the console's is there: the
- * cache is not an image of its own that an operator can simply not run, so on one node an operator needs a
- * documented way to say a deployment serves artifacts and no cache.
- *
- * <p>Not live: the gate decides whether the cache's controller and its permit-all chain are registered, which is a
- * decision the context makes as it starts.
+ * Puts the build cache's gate in the deployment settings catalogue: the cache is no image of its own an operator can
+ * leave unrun, so a node needs a documented way to serve artifacts without a cache. Not live: the gate decides at
+ * startup whether the cache's controller and chain are registered.
  */
 public final class CacheNodeSettingsContributor implements SettingsContributor {
 
