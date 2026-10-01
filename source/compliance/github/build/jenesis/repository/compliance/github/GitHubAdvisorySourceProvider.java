@@ -8,17 +8,13 @@ import build.jenesis.repository.compliance.SignalSource;
 import build.jenesis.repository.compliance.SignalSourceProvider;
 
 /**
- * Discovers the GitHub Advisory Database feed: enabled by the {@code github} setting, pointed at
- * {@code github-endpoint} (default {@code https://api.github.com}), and <b>requiring</b> a {@code github-token}.
- * Composed with any other enabled feed and de-duplicated.
+ * Discovers the GitHub Advisory Database feed: enabled by {@code github}, pointed at {@code github-endpoint} (default
+ * {@code https://api.github.com}), and <b>requiring</b> a {@code github-token}. Composed with any other enabled feed
+ * and de-duplicated.
  *
- * <p><b>The token is required, not a rate-limit nicety.</b> Without one the source would issue an unauthenticated
- * request - which {@code /advisories} answers {@code 403}, not with a smaller page. An advisory feed fails CLOSED,
- * so that 403 would hold every publish in quarantine: a deployment with this feed on could not accept a single
- * artifact until someone found the setting. The feed self-disables when the credential is unset, exactly as the
- * credentialed feeds beside it do and exactly as the
- * secure floor already promised ("their provider self-disables when the credential is unset"). Screening continues
- * on every other enabled feed rather than stopping on this one's absence.
+ * <p>The token is required: without one {@code /advisories} answers {@code 403}, and an advisory feed fails closed, so
+ * every publish would be held. The feed self-disables when the credential is unset, as the other credentialed feeds do,
+ * and screening continues on every other enabled feed.
  */
 public final class GitHubAdvisorySourceProvider implements SignalSourceProvider {
 
@@ -41,7 +37,7 @@ public final class GitHubAdvisorySourceProvider implements SignalSourceProvider 
         }
         String token = context.setting("github-token");
         if (token == null || token.isBlank()) {
-            // Enabled but uncredentialed: not installed at all, rather than installed and erroring on every publish.
+            // Enabled but uncredentialed: not installed, rather than installed and failing every publish.
             LOGGER.warn("The github advisory feed is enabled but no github-token is set, so it is not installed: "
                     + "GitHub answers /advisories 403 without a credential, and an advisory feed fails closed, which "
                     + "would quarantine every publish. Set github-token, or set github=false to say so deliberately.");

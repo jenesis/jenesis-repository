@@ -5,9 +5,8 @@ import build.jenesis.repository.settings.Setting;
 import build.jenesis.repository.settings.SettingsContributor;
 
 /**
- * Describes the GitHub Advisory Database feed's settings, so they surface on the settings screens exactly when this
- * module is installed. The API token stays environment-only ({@code JENREPO_GITHUB_TOKEN}): the settings
- * store is readable over {@code /api/settings}, so a credential does not belong in it.
+ * Describes the GitHub feed's settings, so they appear exactly when this module is installed. The token stays
+ * environment-only ({@code JENREPO_GITHUB_TOKEN}), since the settings store is readable over {@code /api/settings}.
  */
 public final class GitHubSettingsContributor implements SettingsContributor {
 
