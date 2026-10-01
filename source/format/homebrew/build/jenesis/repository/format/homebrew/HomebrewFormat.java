@@ -19,52 +19,39 @@ import build.jenesis.repository.store.ArtifactStore;
 import build.jenesis.repository.store.Publication;
 
 /**
- * Homebrew bottles: a bottle domain a {@code brew install} pours from.
+ * Homebrew bottles: a bottle domain a {@code brew install} pours from, reached with
+ * {@code HOMEBREW_BOTTLE_DOMAIN=<base>/homebrew/<repo>}. A bottle is a gzipped tar of a formula's installed files, one
+ * per platform tag.
  *
- * <p>A bottle is the built binary package - a gzipped tar of the installed files, one per platform tag - and
- * pointing a client here is one variable: {@code HOMEBREW_BOTTLE_DOMAIN=<base>/homebrew/<repo>}.
+ * <h2>A bottle domain serves flat files</h2>
  *
- * <h2>What a bottle domain actually serves, measured</h2>
- *
- * <p>Homebrew's own bottles live on {@code ghcr.io} as OCI artifacts, and a formula's stable bottle block records
- * {@code root_url https://ghcr.io/v2/homebrew/core} with per-tag URLs of the form
- * {@code .../hello/blobs/sha256:<digest>}. It is natural to read that as "a bottle domain is an OCI registry", and
- * it is wrong: <b>that layout is used only when the domain is GitHub Packages itself.</b> Driven against a real
- * client with the domain pointed elsewhere, {@code brew} asks for
+ * <p>Homebrew's own bottles are OCI artifacts on {@code ghcr.io}, but that layout is used only when the domain is
+ * GitHub Packages itself. With the domain pointed elsewhere, {@code brew} asks for
  *
  * <pre>{@code <domain>/hello-2.12.3.x86_64_linux.bottle.tar.gz}</pre>
  *
- * <p>a flat file named for the coordinate - and, when that answers {@code 404}, prints
- * <em>"Bottle missing, falling back to the default domain"</em> and fetches from {@code ghcr.io} instead. So this
- * format serves files, not an OCI layout, and needs none of the registry machinery the entry that scoped it
- * assumed. The measurement is recorded here because the assumption is the natural one and would cost a day.
+ * <p>a flat file named for the coordinate, and on a {@code 404} prints <em>"Bottle missing, falling back to the default
+ * domain"</em> and fetches from {@code ghcr.io}. So this format serves files, not an OCI layout.
  *
- * <h2>There is no enumeration surface, and that is the protocol</h2>
+ * <h2>No enumeration surface</h2>
  *
- * <p>A client never asks a bottle domain what it holds: the <em>formula</em> - which lives in a tap, a git
- * repository this product deliberately does not serve - names the file, its checksum and its platform. So there is
- * no index to maintain, no listing to keep in step with a hold, and no document a publish has to re-decide. That
- * makes this the simplest format here, and the simplicity is the ecosystem's rather than a reduction of it.
+ * <p>A client never asks a bottle domain what it holds: the formula, in a tap this product does not serve, names the
+ * file, its checksum and its platform. So there is no index and no listing to keep in step with a hold.
  *
- * <p><b>What a hold means, and the one thing it cannot do.</b> Withholding a bottle makes this domain answer
- * {@code 404}, and for a privately built formula that is the end of it. For a bottle <em>mirrored</em> from
- * homebrew-core it is not: the client falls back to the default domain and installs from upstream. A hold here is
- * therefore a statement about what this repository serves, not a guarantee about what a client ends up with -
- * which is a property of the ecosystem's fallback, and is worth knowing before relying on it.
+ * <p><b>What a hold cannot do.</b> A withheld bottle answers {@code 404}, which ends it for a privately built formula;
+ * for a bottle mirrored from homebrew-core the client falls back to the default domain and installs from upstream. A
+ * hold is a statement about what this repository serves, not what a client ends up with.
  */
 public final class HomebrewFormat implements RepositoryFormat, ArtifactLayout, BlobLayout, ArtifactSignatures, RepositoryExporter {
 
     /** The package-ecosystem name Homebrew coordinates report. */
     public static final String ECOSYSTEM = "Homebrew";
 
-    /**
-     * The attestations kept beside a bottle, at {@code <bottle>.attestations.json}: what GitHub's attestation store
-     * answers for the bottle's digest ({@code {"attestations":[{"bundle":{...}},...]}}), or a bare array of bundles,
-     * or one bundle. Homebrew-core attests every bottle its CI builds through GitHub Artifact Attestations, keyed by
-     * the bottle's SHA-256, and a client never asks a bottle domain for it - so the document arrives here either
-     * pushed beside the bottle by whoever mirrors it, or looked up after a publish by the signatures dimension's
-     * attestation lookup where an operator switched it on. Read as the bottle's evidence, one bundle at a time.
-     */
+    /** The attestations kept beside a bottle, at {@code <bottle>.attestations.json}: what GitHub's attestation store
+     *  answers for the bottle's digest ({@code {"attestations":[{"bundle":{...}},...]}}), a bare array of bundles, or
+     *  one bundle. Homebrew-core attests every bottle its CI builds, keyed by SHA-256, and no client asks a bottle
+     *  domain for it, so the document arrives pushed beside the bottle by a mirror, or looked up after a publish by the
+     *  signatures dimension where an operator switched that on. Read as the bottle's evidence, one bundle at a time. */
     public static final String ATTESTATIONS = ".attestations.json";
 
     private static final String PREFIX = "/homebrew/";
@@ -95,8 +82,7 @@ public final class HomebrewFormat implements RepositoryFormat, ArtifactLayout, B
             return;
         }
         String repo = segments[0], file = segments[1];
-        // A bottle, or the attestations document kept beside one - published and served the same way, the
-        // sidecar under the bottle's own name plus its suffix.
+        // A bottle, or the attestations document beside one, under the bottle's name plus its suffix.
         boolean sidecar = file.endsWith(ATTESTATIONS);
         Optional<Bottle> bottle = Bottle.of(sidecar ? file.substring(0, file.length() - ATTESTATIONS.length()) : file);
         if (bottle.isEmpty()) {
@@ -111,10 +97,9 @@ public final class HomebrewFormat implements RepositoryFormat, ArtifactLayout, B
         }
     }
 
-    // ---- signatures ----
+    // ---- signatures
 
-    /** A bottle may carry the attestations GitHub's store holds for it beside it; optional, since a privately built
-     *  bottle has none and the store is asked only where an operator switched the lookup on. */
+    /** A bottle may carry its attestations beside it; optional, since a privately built bottle has none. */
     @Override
     public List<ArtifactSignatures.Expectation> expects(String path) {
         return describe(path).map(described -> described.coordinate() != null).orElse(false)
@@ -131,8 +116,7 @@ public final class HomebrewFormat implements RepositoryFormat, ArtifactLayout, B
         return describe(bottle).filter(described -> described.coordinate() != null).map(_ -> bottle);
     }
 
-    /** The key a bottle or its attestations document serves from: this layout's pointer key is its request path
-     *  without the leading slash, for the sidecar exactly as for the bottle. */
+    /** The key a bottle or its attestations document serves from: the request path without its leading slash. */
     @Override
     public Optional<String> servingKey(String requestPath, ArtifactStore store) {
         if (!requestPath.startsWith(PREFIX)) {
@@ -190,13 +174,9 @@ public final class HomebrewFormat implements RepositoryFormat, ArtifactLayout, B
         return evidence;
     }
 
-    /**
-     * Publish a bottle.
-     *
-     * <p>The bytes stream into the content-addressed store and the file name is the coordinate, which is the whole
-     * of the metadata this ecosystem puts anywhere this repository can see: a bottle is a tar of installed files
-     * with no manifest, and what a client verifies it against - the checksum - lives in the formula, in a tap.
-     */
+    /** Publish a bottle: the bytes stream into the store, and the file name is the coordinate - all the metadata this
+     *  ecosystem puts where this repository can see, since a bottle has no manifest and its checksum lives in the
+     *  formula. */
     private void push(FormatExchange exchange, Blobs blobs, String repo, String file) throws IOException {
         String hash = blobs.store(exchange.requestStream());
         try {
@@ -230,7 +210,7 @@ public final class HomebrewFormat implements RepositoryFormat, ArtifactLayout, B
         return "homebrew/" + repo + "/" + file;
     }
 
-    // ---- layout ----
+    // ---- layout
 
     @Override
     public Optional<ArtifactDescriptor> describe(String path) {
@@ -249,8 +229,7 @@ public final class HomebrewFormat implements RepositoryFormat, ArtifactLayout, B
 
     @Override
     public List<String> paths(String coordinate, String version, ArtifactStore store) {
-        // A bottle's pointer lives in the blobs namespace rather than under publish/, so the coordinate seam this
-        // format really has is BlobLayout's - see blobKeys below.
+        // A bottle's pointer lives in the blobs namespace, so its coordinate seam is BlobLayout's (blobKeys below).
         return List.of();
     }
 
@@ -264,12 +243,12 @@ public final class HomebrewFormat implements RepositoryFormat, ArtifactLayout, B
         if (!BlobLayout.addressable(coordinate, version)) {
             return List.of();   // a traversal-shaped coordinate maps nowhere - these keys are what an eviction DELETES
         }
-        // One coordinate is many bottles: a version is built per platform tag, and a rebuild adds another. The
-        // file name carries all three, so the version's keys are every stored file that parses back to it.
+        // One coordinate is many bottles - one per platform tag, plus rebuilds - so its keys are every stored file that
+        // parses back to it.
         List<String> keys = new ArrayList<>();
         for (String repo : store.list("homebrew")) {
             for (String file : store.list("homebrew/" + repo)) {
-                // The attestations document kept beside a bottle goes with the bottle: it is the version's too.
+                // The attestations beside a bottle belong to the version too.
                 String subject = file.endsWith(ATTESTATIONS)
                         ? file.substring(0, file.length() - ATTESTATIONS.length())
                         : file;
@@ -288,20 +267,10 @@ public final class HomebrewFormat implements RepositoryFormat, ArtifactLayout, B
     /**
      * {@inheritDoc}
      *
-     * <p>This layout's pointer key <em>is</em> its served path without the leading slash - {@link #servedPaths}
-     * composes one from the other - so the request-path describer is already the parse, and writing a second one
-     * here would be two spellings of one grammar with nothing holding them together. The description is re-keyed to
-     * the pointer, because what a repair rebuilding the inventory row holds is the key, not the request path.
-     *
-     * <p><b>Only when the description actually names a version.</b> The two describers have different contracts:
-     * {@code describe} answers about any path this format serves and falls back to a coordinate-less descriptor for
-     * the indexes and checksums beside the artifacts, while this one must answer <em>empty</em> for those - a
-     * repair walking the blob root asks about every key it meets, and a present descriptor with no coordinate is
-     * an absence dressed as a claim. The filter is what keeps the delegation honest.
-     *
-     * <p>{@code BlobLayoutCoordinateSeamTest} drives this over keys this layout really wrote and over the folders
-     * above them, so both halves are checked rather than asserted: if the two shapes ever stop coinciding the round
-     * trip names the wrong coordinate, and if the filter goes the parent of a pointer is claimed as one.
+     * <p>This layout's pointer key is its served path without the leading slash, so the request-path describer is the
+     * parse, re-keyed to the pointer. It answers only when the description names a version: {@code describe} falls back
+     * to a coordinate-less descriptor for files beside an artifact, while a repair walking the blob root needs empty
+     * for those. {@code BlobLayoutCoordinateSeamTest} drives both halves over keys this layout wrote.
      */
     @Override
     public Optional<ArtifactDescriptor> describePointer(String key) {

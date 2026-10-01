@@ -3,15 +3,11 @@ package build.jenesis.repository.format.homebrew;
 import module java.base;
 
 /**
- * A bottle's file name, which is the whole of its coordinate.
- *
- * <p>{@code <name>-<version>.<tag>.bottle.tar.gz}, with an optional rebuild number before the extension
- * ({@code hello-2.12.3.x86_64_linux.bottle.1.tar.gz}). The <b>tag</b> is Homebrew's word for a platform -
- * {@code x86_64_linux}, {@code arm64_sequoia}, {@code all} - and is the last dot-separated component of the stem,
- * which is unambiguous because a tag carries no dot and a version always does not end in one.
- *
- * <p>The name and version split at the last hyphen followed by a digit, the same rule the Helm format uses for
- * the same reason: a formula name may contain hyphens ({@code python-tk}) and a version always begins with one.
+ * A bottle's file name, which is the whole of its coordinate: {@code <name>-<version>.<tag>.bottle.tar.gz}, with an
+ * optional rebuild number before the extension ({@code hello-2.12.3.x86_64_linux.bottle.1.tar.gz}). The tag is
+ * Homebrew's word for a platform ({@code x86_64_linux}, {@code arm64_sequoia}, {@code all}) and is the stem's last
+ * dot-separated component, since a tag carries no dot. Name and version split at the last hyphen followed by a digit,
+ * as in the Helm format: a formula name may contain hyphens ({@code python-tk}) and a version begins with a digit.
  */
 record Bottle(String name, String version, String tag, String rebuild) {
 
