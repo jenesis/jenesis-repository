@@ -11,13 +11,12 @@ import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.json.JsonMapper;
 
 /**
- * Starting an export and reading its state, for every surface that offers one: the API answers from it, and the
- * console's export screen calls it in process, so the two cannot disagree about which URL is refused, which job a
- * resume names or what a job has done.
+ * Starting an export and reading its state, for every surface: the API answers from it and the console's screen calls
+ * it in process, so they agree on which URL is refused, which job a resume names and what a job has done.
  *
- * <p>The URL is screened as a migration URL is, under the same dial: https only, and no address that resolves inside
- * the deployment's own network, unless {@code jenrepo.block-private-import-hosts=false} allows migrating to one. The
- * credential is kept for the job's life and never written; a resume therefore names it again.
+ * <p>The URL is screened as a migration URL is, under the same dial: https only, and nothing resolving inside the
+ * deployment's network unless {@code jenrepo.block-private-import-hosts=false}. The credential is held for the job's
+ * life and never written, so a resume names it again.
  */
 public final class Exports {
 

@@ -6,11 +6,11 @@ import build.jenesis.repository.net.http.ScreenedHttpClient;
 import build.jenesis.repository.format.ExportTarget;
 
 /**
- * An {@link ExportTarget} over HTTP: the URL a format's client is pointed at, and the credential it was given. Every
- * request resolves a relative path against that URL and is refused if it would leave it; no redirect is followed,
- * since a redirect is how a target that passed the address screen would send the bytes and the credential somewhere
- * that did not. The credential goes as {@code Basic} with a user name, else as {@code Bearer} - which is what this
- * product accepts - unless the exporter sets {@code Authorization} or the header its format's client uses itself.
+ * An {@link ExportTarget} over HTTP: the URL a format's client is pointed at, and its credential. Every request
+ * resolves a relative path against that URL and is refused if it would leave it; no redirect is followed, since a
+ * redirect could send the bytes and the credential somewhere the address screen never saw. The credential goes as
+ * {@code Basic} with a user name, else {@code Bearer}, unless the exporter sets {@code Authorization} or its client's
+ * own header itself.
  */
 public final class HttpExportTarget implements ExportTarget {
 
@@ -111,8 +111,8 @@ public final class HttpExportTarget implements ExportTarget {
 
     private static HttpRequest.BodyPublisher publisher(Body body) {
         if (body.length() == 0) {
-            // An empty file is a file - a recipe's empty source list, a marker a client writes - and the JDK refuses a
-            // streamed publisher of length zero outright, so it goes as the empty body it is.
+            // An empty file is a file, and the JDK refuses a streamed publisher of length zero, so it goes as an empty
+            // body.
             return HttpRequest.BodyPublishers.noBody();
         }
         Supplier<InputStream> open = () -> {

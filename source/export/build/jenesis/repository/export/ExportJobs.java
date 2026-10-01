@@ -14,20 +14,18 @@ import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.json.JsonMapper;
 
 /**
- * Runs an export as a background job, so the request that starts it answers at once and the caller polls.
+ * Runs an export as a background job, so the starting request answers at once and the caller polls.
  *
- * <p><b>What it walks.</b> Every format the repository holds that exports, and for each, its versions - the inventory's
- * versions of the format's ecosystem, a coordinate at a time, or for a format that records no coordinates, every path
- * it has published. A coordinate's versions go in the order they were published, so a target that marks the last
- * version it received as the latest ends where this repository does; after a coordinate's last version its format is
- * asked for what describes the coordinate as a whole.
+ * <p><b>What it walks.</b> Every exporting format the repository holds, and its versions - the inventory's versions of
+ * the format's ecosystem a coordinate at a time, or every published path for a format without coordinates. A
+ * coordinate's versions go in publish order, so a target that marks the last version received as latest ends where this
+ * repository does; then the format is asked for what describes the coordinate as a whole.
  *
  * <p><b>What it records.</b> The job's state - {@code running}, {@code completed} or {@code failed}, the counts, the
- * version it reached, and on a failure the version and the target's answer - is a small JSON document under
- * {@code exports/<id>} in the repository's own store: the store is the only state, so a status read needs no
- * in-memory registry and progress survives a restart. After each coordinate the cursor is written; a resumed job skips
- * everything up to it and redoes at most the coordinate it stopped in, which the target answers as already present.
- * The target's credential is never written.
+ * version reached, and on a failure the version and the target's answer - is a small JSON document at
+ * {@code exports/<id>} in the repository's store, so status needs no in-memory registry and survives a restart. A
+ * cursor is written after each coordinate; a resumed job skips to it and redoes at most the coordinate it stopped in,
+ * which the target answers as present. The target's credential is never written.
  */
 public final class ExportJobs {
 
@@ -70,7 +68,7 @@ public final class ExportJobs {
         Counts counts = prior == null ? new Counts() : new Counts(prior);
         String cursor = prior == null ? null : prior.cursor();
         // The claim: a new job's record is created, a resumed one's replaced only while it is the record the resume
-        // read - a reap that dismissed it since wins, and the resume says so rather than reviving a deleted job.
+        // read, so a reap that dismissed it wins rather than the resume reviving a deleted job.
         if (!store.writeVersioned("exports/" + jobId, body("running", url, counts, cursor, null, null),
                 prior == null ? null : prior.token())) {
             throw new JobState.Dismissed(jobId);

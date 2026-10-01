@@ -15,16 +15,12 @@ import tools.jackson.databind.json.JsonMapper;
 
 /**
  * Starts an export of a repository and reads its state: {@code POST /api/repository/export?repo=<name>} with
- * {@code {"url": ..., "username": ..., "password": ...}} or {@code {"url": ..., "token": ...}}, and optionally
- * {@code "resume": <job>} to continue a stopped job, answers {@code 202} with the job's id; {@code GET
- * /api/repository/export/<id>?repo=<name>} answers its state.
- *
- * <p>The URL is the one the repository's format's client is pointed at - {@code .../maven/} for Maven, the registry
- * for npm - of another deployment of this product or of any repository manager. What is refused and why is
- * {@link Exports}', which the console's export screen calls too.
- *
- * <p>Authorization is the security chain's: an export sends a repository's contents wherever it is told to, so it
- * takes the manage rights on that repository.
+ * {@code {"url": ..., "username": ..., "password": ...}} or {@code {"url": ..., "token": ...}}, optionally
+ * {@code "resume": <job>} to continue a stopped job, answers {@code 202} with the job id;
+ * {@code GET /api/repository/export/<id>?repo=<name>} answers its state. The URL is the one the format's client is
+ * pointed at ({@code .../maven/} for Maven, the registry for npm), of this product or any repository manager. What is
+ * refused is {@link Exports}', which the console's screen calls too. An export sends a repository's contents wherever
+ * it is told, so the security chain requires the manage rights on that repository.
  */
 @RestController
 public class ExportController {
