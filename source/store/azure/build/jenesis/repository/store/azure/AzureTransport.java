@@ -15,17 +15,15 @@ import reactor.core.publisher.Mono;
 import reactor.core.scheduler.Schedulers;
 
 /**
- * The blob client's HTTP over the product's own client, in place of the SDK's Netty client: the store's
- * requests leave the way every other outbound call does, and carry the product's {@code User-Agent} rather than the
- * SDK's, which names the Java version and the operating system. Shared-key signing covers neither the
- * {@code User-Agent} nor anything this changes, so every signature stands as the SDK computed it.
+ * The blob client's HTTP over the product's own client instead of the SDK's Netty client, so the store's requests leave
+ * as every other outbound call does, with the product's {@code User-Agent} rather than one naming the runtime.
+ * Shared-key signing covers neither the {@code User-Agent} nor anything else this changes, so every signature stands.
  *
- * <p>The store uses the SDK's synchronous clients, so {@link #sendSync} is the path every request takes, and it
- * blocks the calling thread as those clients expect; {@link #send} runs the same exchange on the SDK's
- * bounded-elastic scheduler for any caller that asks asynchronously. A request body streams from the SDK's
- * {@link BinaryData} with its length - the body's own, or the {@code Content-Length} the SDK declared for a body
- * that knows none, since the service refuses a chunked one. It is public for the store's tests, whose own blob
- * clients speak through it too. A response body streams back undecoded.
+ * <p>The store uses the SDK's synchronous clients, so {@link #sendSync} is every request's path, blocking as those
+ * clients expect; {@link #send} runs the same exchange on the SDK's bounded-elastic scheduler. A request body streams
+ * from {@link BinaryData} with its length - its own, or the SDK's declared {@code Content-Length}, since the service
+ * refuses a chunked body. Public for the store's tests, whose blob clients use it too. A response streams back
+ * undecoded.
  */
 public final class AzureTransport implements HttpClient {
 
@@ -33,8 +31,8 @@ public final class AzureTransport implements HttpClient {
     private static final Set<String> NOT_SENT = Set.of("host", "content-length", "connection", "expect", "upgrade",
             "user-agent");
 
-    /** Bounded by the client's connect and idle timeouts rather than by a total: a large blob's upload takes as long
-     *  as it takes, and only silence ends it. */
+    /** Bounded by the client's connect and idle timeouts rather than a total, so a large upload takes as long as it
+     *  takes and only silence ends it. */
     private final java.net.http.HttpClient client = ScreenedHttpClient.newHttpClient();
 
     @Override
@@ -82,8 +80,8 @@ public final class AzureTransport implements HttpClient {
         return new Received(request, response);
     }
 
-    /** The request's body with its length: the one the body knows, else the {@code Content-Length} the SDK set - a
-     *  staged block streams from a publisher that knows none, and the service refuses a body sent without one. */
+    /** The request body with its length: the body's own, else the SDK's {@code Content-Length} - a staged block streams
+     *  from a publisher that knows none, and the service refuses a body without one. */
     private static java.net.http.HttpRequest.BodyPublisher body(BinaryData body, Long declared) {
         Long length = body == null ? Long.valueOf(0) : body.getLength() != null ? body.getLength() : declared;
         if (body == null || length != null && length == 0) {

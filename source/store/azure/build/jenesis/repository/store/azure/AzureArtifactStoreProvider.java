@@ -13,47 +13,38 @@ import com.azure.storage.blob.BlobServiceClientBuilder;
 import com.azure.storage.blob.models.BlobStorageException;
 
 /**
- * The {@code azure-blob} artifact-store backend over an Azure Blob Storage container. Selected with
- * {@code jenrepo.store=azure-blob}; configured by {@code jenrepo.azure-blob.connection-string}
- * (a storage-account connection string, or the Azurite development string) and an optional
- * {@code jenrepo.azure-blob.container} (default {@code jenesis-repository}). The blob I/O and the
- * conditional compare-and-set semantics live in {@link AzureArtifactStore}.
+ * The {@code azure-blob} artifact-store backend over an Azure Blob Storage container, selected with
+ * {@code jenrepo.store=azure-blob} and configured by {@code jenrepo.azure-blob.connection-string} (a storage-account or
+ * Azurite connection string) and an optional {@code jenrepo.azure-blob.container} (default {@code jenesis-repository}).
+ * The blob I/O and conditional writes are {@link AzureArtifactStore}'s.
  *
- * <p>The blob endpoint the connection string resolves to is required to be {@code https} unless
- * {@code jenrepo.azure-blob.allow-insecure-endpoint=true} explicitly permits a plaintext one - the same
- * screen the {@code s3} and {@code gcs} siblings apply to their own endpoint keys, reached here through the
- * connection string because that is where this SDK carries the scheme. Azure's account key rides inside the very value
- * that also selects the transport, so a {@code DefaultEndpointsProtocol=http} puts the shared-key signature and every
- * artifact byte on a plaintext wire that no error will ever surface - a plaintext exchange succeeds.
+ * <p>The blob endpoint the connection string resolves to must be {@code https} unless
+ * {@code jenrepo.azure-blob.allow-insecure-endpoint=true} - the screen the {@code s3} and {@code gcs} backends apply,
+ * reached through the connection string because that is where this SDK carries the scheme. The account key rides in the
+ * same value that selects the transport, so {@code DefaultEndpointsProtocol=http} would put the shared-key signature
+ * and every artifact on a plaintext wire with no error to surface it.
  */
 public final class AzureArtifactStoreProvider implements ArtifactStoreProvider {
 
-    /** The config key an {@code azure-blob} connection string - and with it the blob endpoint's scheme - is read
-     *  from, named here so the screen's refusal and the resolution that applies it cannot drift apart. */
+    /** The config key the connection string - and with it the endpoint's scheme - is read from, named once for the
+     *  screen and the resolution. */
     public static final String CONNECTION_STRING_KEY = Features.key("azure-blob.connection-string");
 
-    /**
-     * Whether a conditional write may stream its body ({@code true} by default).
-     *
-     * <p><b>Setting this to {@code false} restores a heap cost, and that is the whole of what it does.</b> A
-     * listing is one object written under compare-and-set, and some listings are proportional to the repository.
-     * Streaming the write is what keeps such a document out of memory; buffering puts it back, whole, on the path
-     * that writes it. Turn this off to work around a storage implementation, never for anything else, and expect
-     * the repository's memory ceiling to fall with it.
-     */
+    /** Whether a conditional write may stream its body ({@code true} by default). Some listings, written under
+     *  compare-and-set, are proportional to the repository; buffering puts such a document whole in memory on the write
+     *  path. Turn it off only to work around a storage implementation, expecting the memory ceiling to fall with it. */
     public static final String STREAMING_WRITES_KEY = Features.key("azure-blob.streaming-writes");
 
     /** The blob container, defaulted when unset. */
     public static final String CONTAINER_KEY = Features.key("azure-blob.container");
 
     /** The config key that opts the endpoint {@link #CONNECTION_STRING_KEY} resolves to out of the https-only
-     *  transport screen. */
+     *  screen. */
     public static final String ALLOW_INSECURE_KEY = Features.key("azure-blob.allow-insecure-endpoint");
 
-    /** The config key that switches the boot-time conditional-write probe off ({@code false}); on by default.
-     *  The probe refuses to start a node over an endpoint that ignores a write precondition, which is how two
-     *  nodes would lose each other's writes silently; switching it off is for an endpoint a deployment has
-     *  satisfied itself about by other means, and the node then warns on every start. */
+    /** The config key that switches off the boot-time conditional-write probe ({@code false}); on by default. The probe
+     *  refuses to start over an endpoint that ignores a write precondition, under which two nodes would silently lose
+     *  each other's writes; off, the node warns on every start. */
     public static final String PROBE_KEY = Features.key("azure-blob.conditional-write-probe");
 
 
@@ -88,12 +79,12 @@ public final class AzureArtifactStoreProvider implements ArtifactStoreProvider {
         try {
             container.createIfNotExists();
         } catch (BlobStorageException ignored) {
-            // The container may already exist or the credentials may not permit creation; the operations
-            // below surface a clear error if the container is truly unusable.
+            // The container may exist or creation may not be permitted; the operations below report a truly unusable
+            // one.
         }
         AzureArtifactStore store = new AzureArtifactStore(container,
                 !"false".equalsIgnoreCase(config.apply(STREAMING_WRITES_KEY)));
-        // The one boot-time question every compare-and-set rests on, asked of every object-store endpoint alike.
+        // The question every compare-and-set rests on, asked of every object-store endpoint at boot.
         try {
             ConditionalWrites.probe(store, "the blob endpoint for container " + containerName, config.apply(PROBE_KEY));
         } catch (IOException failure) {
@@ -104,22 +95,15 @@ public final class AzureArtifactStoreProvider implements ArtifactStoreProvider {
     }
 
     /**
-     * The blob endpoint the connection string resolves to, required to be {@code https} by default so the account key
-     * and artifact bytes are not sent over a plaintext transport a MITM can read or tamper with. A plaintext
-     * {@code http} endpoint - a local Azurite container, say - is an explicit opt-out: set
-     * {@code jenrepo.azure-blob.allow-insecure-endpoint=true}. This is the {@code s3}/{@code gcs} rule,
-     * spelled the same way, for the one backend whose transport is not a config key of its own.
+     * The blob endpoint, {@code https} unless {@code jenrepo.azure-blob.allow-insecure-endpoint=true} (a local Azurite,
+     * say), so the account key and artifact bytes never cross a plaintext transport.
      *
-     * <p>A {@code null} endpoint - a connection string declaring neither a {@code BlobEndpoint} nor a
-     * {@code DefaultEndpointsProtocol} - is a shape the SDK itself refuses, so it is left to the SDK's own diagnostic
-     * rather than answered with a second one. The screen judges the <em>scheme</em> only: whether the endpoint is
-     * reachable, whether its certificate validates and whether the container exists are the client's business and
-     * surface as its own errors.
+     * <p>A {@code null} endpoint - a connection string declaring neither {@code BlobEndpoint} nor
+     * {@code DefaultEndpointsProtocol} - is left to the SDK's own diagnostic. Only the scheme is judged; reachability,
+     * certificates and the container are the client's to report.
      *
-     * <p>The rule itself is {@link Endpoints#secure}, shared with the {@code s3} and {@code gcs} backends;
-     * what is this backend's own is the pair of config keys it names - and the fact that the endpoint is
-     * <em>extracted</em> from one of them rather than read from it - so this method is where the two are bound to the
-     * screen.
+     * <p>The rule is {@link Endpoints#secure}, shared with {@code s3} and {@code gcs}; this binds this backend's keys,
+     * the endpoint being extracted from one of them.
      *
      * @throws IllegalStateException at resolution, before any client is built or any key is signed with.
      */
@@ -129,13 +113,12 @@ public final class AzureArtifactStoreProvider implements ArtifactStoreProvider {
 
     /**
      * The blob endpoint a connection string resolves to, or {@code null} when it declares neither. An explicit
-     * {@code BlobEndpoint} wins wherever it appears, because it is what blob traffic actually uses; otherwise
-     * {@code DefaultEndpointsProtocol} carries the scheme, which is all the screen judges. The
-     * {@code UseDevelopmentStorage=true} shorthand expands to Azurite's fixed plaintext loopback endpoint.
+     * {@code BlobEndpoint} wins wherever it appears, since blob traffic uses it; otherwise
+     * {@code DefaultEndpointsProtocol} carries the scheme. {@code UseDevelopmentStorage=true} expands to Azurite's
+     * plaintext loopback endpoint.
      *
-     * <p>Public so its own test module can pin the extraction directly: unlike the {@code s3} and {@code gcs}
-     * siblings, whose endpoint is a config key of its own, this backend's transport is buried in a value that also
-     * carries the account key, and getting the extraction wrong would silently disarm the screen.
+     * <p>Public so its test module can pin the extraction: the transport is buried in a value that also carries the
+     * account key, and a wrong extraction would silently disarm the screen.
      */
     public static String blobEndpoint(String connectionString) {
         String protocol = null;

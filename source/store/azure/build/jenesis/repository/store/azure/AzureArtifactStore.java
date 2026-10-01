@@ -25,15 +25,12 @@ import com.azure.storage.blob.specialized.BlockBlobClient;
 import build.jenesis.repository.store.OwnerOnly;
 
 /**
- * An {@link ArtifactStore} backed by an Azure Blob Storage container on the official
- * {@code azure-storage-blob} SDK. A blob is the object at its name; a tenant or repository is a name
- * prefix (see {@link #scope}). The version token is the blob ETag, so {@link #writeVersioned} is a true
- * cross-node compare-and-set over Azure's long-standing optimistic concurrency: {@code expected == null}
- * uploads with {@code If-None-Match: *} (write only while the blob is still absent) and a non-null token
- * with {@code If-Match: <etag>} (write only while the blob is unchanged); a {@code 412 Precondition Failed}
- * (or the {@code 409 BlobAlreadyExists} an {@code If-None-Match: *} raises) becomes a {@code false} return,
- * so the caller re-reads and retries. Concurrent {@code maven-metadata.xml} edits and lock acquisitions
- * across many nodes therefore resolve through Azure itself, with no database or lock service.
+ * An {@link ArtifactStore} over an Azure Blob Storage container on the {@code azure-storage-blob} SDK. A blob is the
+ * object at its name; a tenant or repository is a name prefix ({@link #scope}). The version token is the blob ETag, so
+ * {@link #writeVersioned} is a cross-node compare-and-set: {@code expected == null} uploads with
+ * {@code If-None-Match: *} and a token with {@code If-Match: <etag>}; a {@code 412}, or the
+ * {@code 409 BlobAlreadyExists} {@code If-None-Match: *} raises, becomes {@code false}, so the caller re-reads and
+ * retries. Concurrent writers across nodes resolve through Azure itself.
  */
 public final class AzureArtifactStore implements ArtifactStore {
 
@@ -78,12 +75,9 @@ public final class AzureArtifactStore implements ArtifactStore {
             String sas = blob.generateSas(values);
             return Optional.of(URI.create(blob.getBlobUrl() + "?" + sas));
         } catch (RuntimeException noSharedKey) {
-            // generateSas requires an account-key (shared-key) credential; a client built from a token/AAD credential
-            // cannot sign a service SAS here, so degrade to streaming (Optional.empty) rather than fail the read. The
-            // SDK signals the missing key inconsistently across builds (IllegalStateException in some, a
-            // NullPointerException dereferencing the absent credential in azure-storage-blob 12.35.0), so catch any
-            // RuntimeException from the signing attempt rather than a single subtype. A user-delegation-key SAS for
-            // AAD-authenticated deployments is not implemented.
+            // generateSas needs a shared-key credential; a token or AAD client cannot sign a service SAS, so the read
+            // streams instead. The SDK signals the missing key with differing runtime exceptions across versions, so
+            // any RuntimeException from signing degrades. A user-delegation-key SAS is not implemented.
             return Optional.empty();
         }
     }
@@ -93,8 +87,8 @@ public final class AzureArtifactStore implements ArtifactStore {
         try {
             return Boolean.TRUE.equals(container.getBlobClient(keyPrefix + key).exists());
         } catch (BlobStorageException e) {
-            // Only a 404 means absent; a throttle or auth failure must fail the request loudly, or a published
-            // artifact silently turns into a miss (served as 404) for as long as the backend misbehaves.
+            // Only a 404 is absence; a throttle or auth failure fails loudly rather than turning an artifact into a
+            // miss.
             if (e.getStatusCode() == 404) {
                 return false;
             }
@@ -168,10 +162,9 @@ public final class AzureArtifactStore implements ArtifactStore {
     public void write(String key, InputStream in) throws IOException {
         ArtifactStore.key(key);
         BlockBlobClient blob = container.getBlobClient(keyPrefix + key).getBlockBlobClient();
-        // Close only after a complete transfer: BlobOutputStream commits its staged block list in close(), even
-        // when the source failed mid-stream, which would land a truncated blob at the key - breaking the SPI's
-        // atomic-write contract. An abandoned (unclosed) stream commits nothing; the service expires the staged
-        // blocks, so an aborted upload stores nothing at all.
+        // Close only after a complete transfer: BlobOutputStream commits its block list on close even after a failed
+        // source, which would land a truncated blob. An unclosed stream commits nothing, and the service expires the
+        // staged blocks.
         BlobOutputStream out = blob.getBlobOutputStream(true);
         try {
             in.transferTo(out);
@@ -183,9 +176,8 @@ public final class AzureArtifactStore implements ArtifactStore {
 
     @Override
     public String writeBlob(InputStream in) throws IOException {
-        // A content-addressed key is the hash of the bytes being written, so the key is unknown until the stream is
-        // read; buffer the (possibly large) body to a temp file while digesting it, then upload from the file under
-        // blobs/<hash> - never holding the whole artifact in memory.
+        // A content-addressed key is the hash of the bytes, so the body is spooled to a file while digested and
+        // uploaded from it under blobs/<hash>, never held whole.
         Path temporary = spool();
         try {
             MessageDigest digest = MessageDigest.getInstance("SHA-256");
@@ -195,9 +187,8 @@ public final class AzureArtifactStore implements ArtifactStore {
             String key = "blobs/" + HexFormat.of().formatHex(digest.digest());
             if (!exists(key)) {
                 BlockBlobClient blob = container.getBlobClient(keyPrefix + key).getBlockBlobClient();
-                // Close only after a complete transfer (see write): a close after a failed transfer would commit
-                // a truncated blob at blobs/<hash> - permanent corruption, since the dedupe check above would
-                // then skip every future re-upload of the true content.
+                // Close only after a complete transfer (see write): a truncated blob at blobs/<hash> would be
+                // permanent, since the dedupe check would skip every later upload of the true content.
                 try (InputStream stored = Files.newInputStream(temporary)) {
                     BlobOutputStream out = blob.getBlobOutputStream(true);
                     stored.transferTo(out);
@@ -214,8 +205,8 @@ public final class AzureArtifactStore implements ArtifactStore {
         }
     }
 
-    /** The owner-only upload spool ({@link OwnerOnly}): a content-addressed write buffers the (possibly large) plaintext artifact here while hashing, and a shared {@code /tmp} spool would
-     *  leave the plaintext artifact bytes world-readable for the life of the upload. */
+    /** The owner-only upload spool ({@link OwnerOnly}), so a buffered artifact is never world-readable in a shared
+     *  {@code /tmp}. */
     private static Path spool() throws IOException {
         return OwnerOnly.createTempFile("azure-artifact-", null);
     }
@@ -229,8 +220,8 @@ public final class AzureArtifactStore implements ArtifactStore {
         }
     }
 
-    /** The storage prefix of a listing container - the scope's key prefix and the normalised container name with its
-     *  trailing delimiter - so a caller's {@code a/b/} and {@code a/b} ask the service for one prefix. */
+    /** The storage prefix of a listing container - the scope's prefix plus the normalised container and its delimiter -
+     *  so {@code a/b/} and {@code a/b} ask for one prefix. */
     private String base(String prefix) {
         String container = ArtifactStore.container(prefix);
         return keyPrefix + (container.isEmpty() ? "" : container + "/");
@@ -258,24 +249,18 @@ public final class AzureArtifactStore implements ArtifactStore {
             return;
         }
         String base = base(prefix);
-        // Azure's List Blobs honours a server-side start-at key (ListBlobsOptions.startFrom, its own query parameter,
-        // distinct from the opaque continuation marker), so seek straight to the boundary instead of re-listing from
-        // the base and skipping every prior key in the client. The resume now costs one bounded page from startAfter,
-        // not an O(position) scan, so paging a whole namespace in strides stops being O(N^2). Mirrors the s3 backend,
-        // including the name-order repair: the SDK hands each page's blobs and prefixes as two separate lists, so
-        // merge them back into key order first. That order puts a container's prefix entry at `name + "/"`, AFTER a
-        // sibling whose name extends this one past a character below '/' (`app.txt` the blob precedes `app/` the
-        // prefix, yet the child `app` pages first) - so every name parks and the smallest parked one releases only
-        // once no smaller-named child can still arrive (held()). A released name at or below startAfter is dropped
-        // rather than emitted: start-from seeks to the boundary INCLUSIVELY (see scan()), so its own blob and a
-        // same-named container's prefix both re-arrive, and a prefix-child of the boundary was already paged by the
-        // call that emitted the boundary itself.
+        // List Blobs takes a server-side start-at key (ListBlobsOptions.startFrom, distinct from the continuation
+        // marker), so a resume seeks to the boundary in one bounded page rather than re-listing from the base. As in
+        // the s3 backend, the SDK returns a page's blobs and prefixes as two lists, merged back into key order, where a
+        // container's prefix sits at `name + "/"` after a sibling extending the name past a character below '/' (blob
+        // `app.txt` precedes prefix `app/`, yet child `app` pages first): so names park and the smallest releases once
+        // no smaller one can arrive (held()). A released name at or below startAfter is dropped: startFrom is
+        // inclusive, and a prefix-child of the boundary was already paged by the previous call.
         ListBlobsOptions options = new ListBlobsOptions().setPrefix(base).setMaxResultsPerPage(Math.min(ArtifactStore.oneMoreThan(limit), 5000));
         if (!startAfter.isEmpty()) {
             options.setStartFrom(base + startAfter);
         }
-        // Keyed by child NAME, valued by what List Blobs said about it; a prefix entry is a
-        // container and carries no metadata of its own.
+        // Keyed by child name; a prefix entry is a container and carries no metadata.
         TreeMap<String, Listed> pending = new TreeMap<>();
         int emitted = 0;
         String last = null;
@@ -309,8 +294,8 @@ public final class AzureArtifactStore implements ArtifactStore {
                 }
                 String name = relative.endsWith("/") ? relative.substring(0, relative.length() - 1) : relative;
                 if (!name.equals(last)) {
-                    // A blob and a same-named container page as one child; the blob's metadata is kept, because
-                    // that is what a GET of this key resolves to.
+                    // A blob and a same-named container page as one child, keeping the blob's metadata - what a GET
+                    // resolves to.
                     pending.merge(name, listed(prefix, name, blobs.get(relative)),
                             (kept, arriving) -> kept.size().isPresent() ? kept : arriving);
                 }
@@ -326,8 +311,8 @@ public final class AzureArtifactStore implements ArtifactStore {
         }
     }
 
-    /** A child as List Blobs saw it; {@code item} is null for a prefix entry - a container - which has no size or
-     *  age of its own. Both halves of a blob's metadata are in the listing response already. */
+    /** A child as List Blobs saw it; {@code item} is null for a prefix entry - a container, with no size or age. A
+     *  blob's metadata rides in the listing response. */
     private static Listed listed(String prefix, String name, BlobItem item) {
         String container = ArtifactStore.container(prefix);
         String key = container.isEmpty() ? name : container + "/" + name;
@@ -340,9 +325,8 @@ public final class AzureArtifactStore implements ArtifactStore {
                 properties.getLastModified() == null ? Instant.EPOCH : properties.getLastModified().toInstant());
     }
 
-    /** Whether {@code name} may not be paged out yet at stream position {@code relative}: a proper prefix of it
-     *  whose next character sorts below {@code '/'} could still arrive as a hierarchy prefix (its container key
-     *  {@code prefix + "/"} sorts at or past the position), and that shorter child name must page first. */
+    /** Whether {@code name} must wait at stream position {@code relative}: a proper prefix of it whose next character
+     *  sorts below {@code '/'} could still arrive as a hierarchy prefix, and that shorter name must page first. */
     private static boolean held(String name, String relative) {
         for (int index = 1; index < name.length(); index++) {
             if (name.charAt(index) < '/' && relative.compareTo(name.substring(0, index) + "/") <= 0) {
@@ -358,9 +342,8 @@ public final class AzureArtifactStore implements ArtifactStore {
             throw new IllegalArgumentException("A scan limit must be positive: " + limit);
         }
         String base = base(prefix);
-        // listBlobs, not listBlobsByHierarchy: a recursive scan wants every blob under the prefix, so there are no
-        // grouped prefixes to merge and none of page()'s name-order repair to do - the flat listing already arrives
-        // in the key order this method owes.
+        // listBlobs, not listBlobsByHierarchy: a recursive scan has no grouped prefixes, so the flat listing arrives in
+        // the key order owed, with none of page()'s repair.
         ListBlobsOptions options = new ListBlobsOptions()
                 .setPrefix(base)
                 .setMaxResultsPerPage(Math.min(ArtifactStore.oneMoreThan(limit), 5000))
@@ -378,9 +361,8 @@ public final class AzureArtifactStore implements ArtifactStore {
                     continue;
                 }
                 String key = item.getName().substring(keyPrefix.length());
-                // startFrom seeks to a key INCLUSIVELY, where this method's cursor is exclusive, so the boundary
-                // itself comes back on the resuming page. Dropping it here is what keeps two pages from delivering
-                // one key twice - the same correction page() makes against the same option.
+                // startFrom is inclusive where this cursor is exclusive, so the boundary key returns and is dropped
+                // here.
                 if (startAfter != null && !startAfter.isEmpty() && key.compareTo(startAfter) <= 0) {
                     continue;
                 }
@@ -388,7 +370,7 @@ public final class AzureArtifactStore implements ArtifactStore {
                     return Scan.truncated(last, delivered, steps);
                 }
                 BlobItemProperties properties = item.getProperties();
-                // Both halves ride along in the listing; nothing here issues a per-blob request.
+                // Both halves ride in the listing; no per-blob request.
                 consumer.accept(properties == null
                         ? Listed.of(key)
                         : Listed.of(key,
@@ -404,7 +386,7 @@ public final class AzureArtifactStore implements ArtifactStore {
 
     @Override
     public Optional<Object> version(String key) throws IOException {
-        // Blob properties, where the inherited default would download the blob to read its ETag.
+        // Blob properties rather than the inherited download.
         try {
             return Optional.of(container.getBlobClient(keyPrefix + key).getProperties().getETag());
         } catch (BlobStorageException e) {
@@ -412,7 +394,7 @@ public final class AzureArtifactStore implements ArtifactStore {
                     || BlobErrorCode.CONTAINER_NOT_FOUND.equals(e.getErrorCode())) {
                 return Optional.empty();
             }
-            // Only a not-found is absence; a throttle or auth failure must surface, not read as "unchanged".
+            // Only a not-found is absence; a throttle or auth failure surfaces rather than reading as "unchanged".
             throw new IOException("Could not read the version of " + key, e);
         }
     }
@@ -436,18 +418,15 @@ public final class AzureArtifactStore implements ArtifactStore {
         return put(key, BinaryData.fromBytes(content), expected);
     }
 
-    /**
-     * The streaming compare-and-set: the same {@code If-Match} / {@code If-None-Match} condition over a stream of
-     * known length. Azure needs the length to start the upload, which is why the caller supplies one.
-     */
+    /** The streaming compare-and-set: the same {@code If-Match} / {@code If-None-Match} condition over a stream of
+     *  known length, which Azure needs to start the upload. */
     @Override
     public boolean writeVersioned(String key, InputStream content, long length, Object expected) throws IOException {
         if (!streamingWrites) {
             return put(key, BinaryData.fromBytes(content.readAllBytes()), expected);
         }
-        // Spooled to an owner-only file first, as write(..) is: a body from a plain stream is not replayable, and the
-        // client retries a refused upload by reading it again - which answers a publish 500 under two nodes'
-        // contention. A file-backed body replays.
+        // Spooled to an owner-only file first, as write(..) is: the client retries a refused upload by re-reading the
+        // body, which a plain stream cannot replay.
         Path temporary = spool();
         try {
             try (OutputStream out = Files.newOutputStream(temporary,
@@ -475,10 +454,9 @@ public final class AzureArtifactStore implements ArtifactStore {
             container.getBlobClient(keyPrefix + key).getBlockBlobClient().uploadWithResponse(options, null, Context.NONE);
             return true;
         } catch (BlobStorageException e) {
-            // A container-level 404 (ContainerNotFound) is a misconfiguration or outage, not a CAS conflict: mapping
-            // it to a false return would turn a missing/renamed container into silent retry-exhaustion at the caller.
-            // Surface it as a real IOException. Only a blob-level 404 (the blob an If-Match refers to has been
-            // deleted) is the benign conflict a re-read-and-retry resolves, alongside the 412/409 rejections.
+            // A ContainerNotFound is a misconfiguration or outage, not a CAS conflict: as false it would become silent
+            // retry exhaustion. Only a blob-level 404 (the If-Match target deleted), a 412 or a 409 is a conflict a
+            // retry resolves.
             if (BlobErrorCode.CONTAINER_NOT_FOUND.equals(e.getErrorCode())) {
                 throw new IOException("Could not write " + key + ": container does not exist", e);
             }
