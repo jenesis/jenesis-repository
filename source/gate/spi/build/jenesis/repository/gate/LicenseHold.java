@@ -4,13 +4,9 @@ import module java.base;
 import build.jenesis.repository.store.ArtifactStore;
 
 /**
- * The retroactive license enforcement sweep's hold kind ({@code compliance/licenses}'s
- * {@code license-retro-enforce} pass): a {@link HoldKind} called {@code license} whose subjects are space-free
- * reason tokens - the SPDX ids a denied license matched, plus the literal {@code unknown} for an unknown-license
- * hold. A retroactive hold survives a crash idempotently, an operator's release sticks, and only a <em>new</em>
- * reason token (a newly-denied license, or the {@code unknown} bucket newly turned on) holds a released version
- * again; a policy loosening never auto-releases. The record is also the signal that a hold is a license auto-hold
- * rather than a publish-time gate or KEV hold, so a sweep gauge counts only its own holds.
+ * The {@code license-retro-enforce} sweep's hold kind: a {@link HoldKind} called {@code license} whose subjects are the
+ * SPDX ids a denied licence matched, plus {@code unknown} for an unknown-licence hold. Only a new reason token holds a
+ * released version again, and a policy loosening never auto-releases.
  */
 public final class LicenseHold {
 
@@ -37,8 +33,7 @@ public final class LicenseHold {
         return KIND.overridden(store, ecosystem, coordinate, version);
     }
 
-    /** {@link HoldKind#holds}: whether the sweep holds a license record for the coordinate version {@code path} maps
-     *  to. */
+    /** {@link HoldKind#holds}. */
     public static boolean holds(ArtifactStore store, String path) throws IOException {
         return KIND.holds(store, path);
     }

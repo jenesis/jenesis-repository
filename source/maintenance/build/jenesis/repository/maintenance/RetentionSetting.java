@@ -6,24 +6,16 @@ import build.jenesis.repository.store.Durations;
 import build.jenesis.repository.store.Features;
 
 /**
- * One retention dial: the config key a pass reads its age bound from, the product default a deployment gets when
- * the key is unset, and the one parse that turns the stored string into a bound - or into no bound at all.
+ * One retention dial: the config key a pass reads its age bound from, the default when the key is unset, and the
+ * parse that turns the stored string into a bound or into no bound.
  *
- * <p>The retention family's twin of {@link IntervalSetting}, and the one rule that keeps the two families distinct
- * is the meaning of zero. A cadence of zero would be a pass that is installed, listed and never runs, so the cadence
- * dial refuses it; a retention of zero is a policy an operator may legitimately hold - keep everything - so here
- * blank, zero and negative all mean exactly that. Every reaper reads its dial through here rather than restating the
- * rule, so one value cannot mean opposite things on two dials of one family - zero as a default year on one and as
- * "keep forever" on another.
+ * <p>The retention twin of {@link IntervalSetting}, differing in what zero means: keeping everything is a legitimate
+ * policy, so blank, zero and negative all mean no bound. Every reaper reads its dial through here, so zero means the
+ * same on every dial of the family.
  *
- * <p><strong>{@code resolve} never throws</strong>, for the cadence dial's reason: an unchecked throw out of a
- * pass's dial parse does not disable one reaper, it fails the whole pass - or, for a dial read while a provider is
- * resolved, the server's startup. A malformed value falls back to the product default and is announced once at
- * {@code WARNING}, naming the key, the value and the bound actually in effect.
- *
- * <p><strong>The default lives here.</strong> A pass holds its dial as one constant, and its module's settings
- * catalogue entry renders the key and the default from {@link #key()} and {@link #fallback()}, so the two cannot
- * drift.
+ * <p>{@code resolve} never throws, as for {@link IntervalSetting}: a malformed value falls back to the default and is
+ * announced once at {@code WARNING}. A pass holds its dial as one constant and its catalogue entry renders
+ * {@link #key()} and {@link #fallbackText()}, so the default has one definition.
  */
 public final class RetentionSetting {
 
@@ -42,15 +34,13 @@ public final class RetentionSetting {
         }
         Duration fallback;
         try {
-            // Not operator input - a literal this pass shipped - so a value that does not parse throws here.
+            // A literal the pass ships, not operator input, so a malformed one throws.
             fallback = Durations.parse(fallbackText.trim());
         } catch (RuntimeException malformed) {
             throw new IllegalArgumentException("The default bound for " + key + " is not a duration: "
                     + fallbackText, malformed);
         }
         if (fallback == null || !fallback.isPositive()) {
-            // Not operator input: a pass shipping a zero or negative default is a programming error, and it must fail
-            // where it is written rather than ship a reaper whose product default is "reap nothing".
             throw new IllegalArgumentException("The default bound for " + key + " must be positive, was " + fallback);
         }
         this.key = key;
@@ -58,26 +48,23 @@ public final class RetentionSetting {
         this.fallback = fallback;
     }
 
-    /** An age bound read from a duration dial ({@code staging-ttl=P30D}, {@code =30d}). The default is given as
-     *  <strong>text</strong> for the reason {@code IntervalSetting.of} gives: the settings reference is extracted
-     *  from the compiled contributor, so a default built at run time renders as {@code (computed)} and documents
-     *  nothing. */
+    /** An age bound read from a duration dial ({@code staging-ttl=P30D}); the default is text, as for
+     *  {@link IntervalSetting#of(String, String)}. */
     public static RetentionSetting of(String key, String fallback) {
         return new RetentionSetting(key, fallback);
     }
 
-    /** The config key this bound is read from - also what the module's settings catalogue entry renders. */
+    /** The config key this bound is read from. */
     public String key() {
         return key;
     }
 
-    /** The product default a deployment runs with when the dial is unset or malformed. Always positive. A module's
-     *  settings catalogue entry renders {@link #fallbackText()} rather than this. */
+    /** The default a deployment runs with when the dial is unset or malformed; always positive. */
     public Duration fallback() {
         return fallback;
     }
 
-    /** The product default exactly as the pass wrote it - the string a settings catalogue entry renders. */
+    /** The default as the pass wrote it, which the settings catalogue entry renders. */
     public String fallbackText() {
         return fallbackText;
     }

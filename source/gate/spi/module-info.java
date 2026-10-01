@@ -1,21 +1,11 @@
 /**
  * The compliance gate's contract half: the vocabulary every module that reacts to a hold reads, and nothing that
- * screens, replays or reviews. The two SPIs - {@link build.jenesis.repository.gate.HoldReleaseObserver}, run when a
- * reviewer releases or discards a held path, and {@link build.jenesis.repository.gate.RetroLicensePlanner}, the
- * dry-run seam for retroactive licence enforcement - with their discovery statics; the durable hold records
- * ({@code HoldRecords}, {@code HoldKind}, the KEV and licence kinds), the {@code QuarantineLog} the screen writes and
- * every review surface reads, the dispatch context a held upload is replayed from, the one way a sweep places a
- * retroactive hold, the guarded clear of a withhold marker, and the two questions a release asks of the holds it
- * is not lifting ({@code HeldElsewhere}).
- *
- * <p>It is a module apart from the screen so that a module needing only the vocabulary - the findings ledger,
- * forwarding, reachability, the licence and scan sweeps, the router - does not get the review queue, the compliance
- * screen, the inspection merge, a retention pass and two walk consumers with it. Those are
- * {@code build.jenesis.repository.gate} - the implementation keeps that module <em>name</em>, because a settings
- * contributor's module names the document its dials are stored in and a namespace declaration's module names its
- * manifest entry, and both live on that side - and this contract half is {@code build.jenesis.repository.gate.spi}
- * over the package {@code build.jenesis.repository.gate}. The implementation requires this module; nothing here
- * requires it back.
+ * screens, replays or reviews - the {@link build.jenesis.repository.gate.HoldReleaseObserver} and
+ * {@link build.jenesis.repository.gate.RetroLicensePlanner} SPIs, the durable hold records, the quarantine log, the
+ * dispatch context a held upload is replayed from, the placing of a retroactive hold, the guarded clear of a withhold
+ * marker and the questions a release asks of the holds it is not lifting. The implementation is the module
+ * {@code build.jenesis.repository.gate}, which requires this one, so a module needing only the vocabulary does not get
+ * the review queue and the screen with it.
  *
  * @jenesis.release 25
  * @jenesis.bom pin-repository.properties

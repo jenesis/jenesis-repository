@@ -11,15 +11,9 @@ import build.jenesis.repository.store.Publication;
 import build.jenesis.repository.store.ServableNames;
 
 /**
- * The two questions a release or a discard asks of the holds it is <em>not</em> lifting: whether another path of
- * the same version is still held ({@link #othersStillHeld}), and whether another coordinate's live review pointer
- * still needs a content hash a clear would lift the marker for ({@link #withheldByAnotherAlias}). Both read the
- * hold records, the review pointers and the index the holds write; neither replays, links or clears anything.
- *
- * <p>They lived on {@code HoldLifecycle}, the release primitive itself, which put the hold kinds and the clear
- * seam - the vocabulary every module that reacts to a hold reads - on the same class as the replay through the
- * screen and the formats. Every such module then required the review machinery for a query. They are the contract
- * half's now, and the lifecycle in the store half asks them exactly as the hold kinds and the clear seam do.
+ * The two questions a release or a discard asks of the holds it is not lifting: whether another path of the same
+ * version is still held ({@link #othersStillHeld}), and whether another coordinate's live review pointer still needs a
+ * content hash a clear would lift the marker for ({@link #withheldByAnotherAlias}). Both only read.
  */
 public final class HeldElsewhere {
 
@@ -27,32 +21,20 @@ public final class HeldElsewhere {
     }
 
     /**
-     * Whether any path of {@code artifact}'s version <em>other than</em> {@code path} still carries a live
-     * {@code /quarantine} pointer - the guard a per-version record reaper consults before a discard of one path
-     * deletes version-scoped state (a hold record, a findings document): discarding one path of a multi-path hold
-     * must not strip the state the remaining held paths are reviewed against. Checks both the discarded path's own
-     * directory in the quarantine tree (a publish-time-held sibling never linked into the release layout) and the
-     * version's released paths (a cross-published view held under another directory).
+     * Whether any path of {@code artifact}'s version other than {@code path} still carries a live {@code /quarantine}
+     * pointer: the guard before a discard of one path deletes version-scoped state (hold records, findings, markers,
+     * served blobs) the remaining held paths are reviewed against. Checks the discarded path's own directory in the
+     * quarantine tree and the version's released paths.
      *
-     * <p><b>Fail-closed where the version's paths cannot be enumerated at all.</b> The second leg asks the
-     * owning format which paths this version serves, and with that format's module off the graph - or with a
-     * roots-only layout that resolves no path for the coordinate - it answers nothing. Read as "no other path is
-     * held", that silence makes a discard of ONE path reap the whole version's state: the kev/license/reachability
-     * records through their {@code onDiscarded}, the metadata document and its findings through
-     * {@code DiscardedHoldFindingsObserver}, the orphaned records through {@code releaseOrphaned}, the version-wide
-     * withhold markers through the release leg, and the served blobs themselves through {@code discardBlobs} - all of
-     * it removed while the remaining paths are still under review, because a module is absent. So the enumeration is
-     * three-valued ({@link StoreRepositoryInventory#knownPaths}) and an unaskable one answers "still held": the
-     * per-version state stays, and the last discard that CAN be judged reaps it.
+     * <p>Fail-closed: when no installed format can enumerate the version's paths
+     * ({@link StoreRepositoryInventory#knownPaths} is unknown), the answer is "still held", and the last discard that
+     * can be judged reaps the state.
      */
     public static boolean othersStillHeld(ArtifactStore store, ArtifactDescriptor artifact, String path)
             throws IOException {
         int slash = path.lastIndexOf('/');
         String directory = slash < 0 ? "/" : path.substring(0, slash + 1);
-        // "Is any child here other than this one" is answered exactly by the first two names, so it is asked that
-        // way rather than by listing the folder: at most one child can be `path` itself, so a second child - or a
-        // first that is not `path` - settles it. The folder is a version's quarantine pointers, which is small in
-        // every healthy case and is precisely the shape that is not in the pathological one this guards against.
+        // At most one child is `path` itself, so the first two names settle whether another exists.
         List<String> children = new ArrayList<>();
         store.page(Publication.quarantineKey(directory), "", 2, children::add);
         for (String child : children) {
@@ -65,9 +47,6 @@ public final class HeldElsewhere {
         if (siblings instanceof Known.Unknown<List<String>> _) {
             return true;    // nothing installed can enumerate this version's paths - keep every per-version record
         }
-        // The Unknown arm above is the whole point of the three-valued read, so determined() cannot raise here; it is
-        // the fail-closed narrowing rather than a collapse, and a fourth state would break this line rather than slip
-        // through it.
         for (String sibling : siblings.determined().answer().orElse(List.of())) {
             if (!sibling.equals(path) && store.readVersioned(Publication.quarantineKey(sibling)).isPresent()) {
                 return true;
@@ -76,33 +55,19 @@ public final class HeldElsewhere {
         return false;
     }
 
-    /** Whether hash {@code H} is still withheld on account of ANOTHER coordinate: any live {@code /quarantine<path>}
-     *  review pointer OUTSIDE {@code excludedPaths} whose hold covers {@code H}. The withhold marker is
-     *  content-addressed (one marker withholds the bytes wherever served) and the blobs-namespace serve gate keys
-     *  withheld on the MARKER, not the per-path {@code /quarantine} pointer - so clearing {@code H} while a
-     *  byte-identical sibling coordinate is still held would un-withhold that sibling. This is {@link #othersStillHeld}
-     *  generalised from same-version paths to cross-coordinate content aliases: {@code excludedPaths} is the releasing
-     *  coordinate/version's own served paths (the set {@code othersStillHeld} reasons over), so a pointer that maps back
-     *  to a DIFFERENT coordinate that still needs {@code H} keeps the marker standing.
+    /** Whether {@code hash} is still withheld on account of another coordinate: a live {@code /quarantine<path>}
+     *  pointer outside {@code excludedPaths} (the releasing version's own served paths) whose hold covers it. The
+     *  marker is content-addressed and the blobs-namespace serve gate keys on it, so clearing it while a byte-identical
+     *  sibling is held would un-withhold that sibling.
      *
-     *  <p><b>Answered from the index the holds write</b> ({@link HeldBy}): the served paths recorded under {@code H},
-     *  each checked live by one point read of its review pointer. A hold's link records the hash its pointer names,
-     *  and a retroactive sweep records every served path of the version under every content hash it serves - the
-     *  full-hash form, since a multi-file coordinate's pointer advertises only its first hash - so the answer is
-     *  exact even for a sibling whose format has since been uninstalled. Nothing descends every review pointer in
-     *  the repository per release or per reconcile page; the descent is taken once per repository, as the
-     *  {@linkplain #backfill backfill} that indexes holds the index does not yet carry.
+     *  <p>Answered from the {@link HeldBy} index the holds write, each recorded path checked live by one point read; a
+     *  retroactive sweep records every served path under every hash the version serves, so the answer is exact even for
+     *  a sibling whose format is uninstalled.
      *
-     *  <p><b>Three-valued, and that is what makes the clear seam safe.</b> A {@code boolean} here fused
-     *  <em>"nothing else holds these bytes"</em> with <em>"I could not establish that"</em>, and {@code Withheld.clear}
-     *  consumed the fused value as the first. The three states are: {@link Known.Present} with the holding served
-     *  path (a live alias needs the hash - the marker stays), {@link Known.Absent} (no live alias claims it - the
-     *  ONLY answer that lifts a marker, and the only one {@link Known.Determined}-typed {@code Withheld.clear}
-     *  accepts), and {@link Known.Unknown} for a hash more pointers hold than one page reads
-     *  ({@link Known.Cause#TRUNCATED}), or - while the backfill is still owed - a pointer nothing installed can
-     *  place ({@link Known.Cause#UNINSTALLED}) or one that could not be read at all ({@link Known.Cause#FAILED}). A
-     *  genuine store {@link IOException} propagates, so the caller does NOT clear - fail-closed, since leaving a
-     *  marker is always safe and clearing wrongly is the disclosure. */
+     *  <p>{@link Known.Present} names the holding path; {@link Known.Absent} is the only answer that lifts a marker;
+     *  {@link Known.Unknown} covers more holders than one page reads ({@link Known.Cause#TRUNCATED}) and, while the
+     *  {@linkplain #backfill backfill} is owed, a pointer nothing installed can place ({@link Known.Cause#UNINSTALLED})
+     *  or read ({@link Known.Cause#FAILED}). A store {@link IOException} propagates, so the caller does not clear. */
     public static Known<String> withheldByAnotherAlias(ArtifactStore store, String hash, Set<String> excludedPaths)
             throws IOException {
         return withheldByAnotherAlias(store, Set.of(hash), excludedPaths).get(hash);
@@ -112,18 +77,12 @@ public final class HeldElsewhere {
     private static final int HOLDERS_PAGE = 1000;
 
     /**
-     * The same question for a whole set of hashes, answered per hash from the {@link HeldBy} index the holds write:
-     * one page of point reads per hash - the served paths whose review pointers hold it, each checked live, less
-     * the releasing coordinate's own paths - a live one left over is {@link Known.Present} with that path, none is
-     * {@link Known.Absent}. An indexed holder whose pointer is not live is no holder, and is left in the index for
-     * the reason {@link HeldBy} gives.
+     * The same question for a set of hashes, one page of point reads per hash in the {@link HeldBy} index. An indexed
+     * holder whose pointer is not live is no holder, and stays in the index.
      *
-     * <p>A repository from before the index has review pointers nothing indexed, and the first question asked of
-     * it {@linkplain #backfill backfills} them by a descent of the review pointers; until that
-     * descent has enumerated every pointer and stamped the repository, the answer comes from the descent itself, so
-     * no release lifts a marker on an index that is not yet complete. The reconcile backstop asks this for every
-     * marker of a page, twice - the judgement and the re-verification after the clear - which is why the page form
-     * exists.
+     * <p>Until the repository is stamped complete, the first question {@linkplain #backfill backfills} the index, and
+     * while that cannot complete the answer comes from the descent itself, so no release lifts a marker on an
+     * incomplete index.
      */
     public static Map<String, Known<String>> withheldByAnotherAlias(ArtifactStore store, Set<String> hashes,
                                                                     Set<String> excludedPaths) throws IOException {
@@ -146,8 +105,7 @@ public final class HeldElsewhere {
                 if (excludedPaths.contains(path) || !(answer instanceof Known.Absent<String>)) {
                     continue;
                 }
-                // An entry whose pointer is not live is no holder and is left standing: it is a hold one write short
-                // of its pointer as often as a stale one, and the two cannot be told apart here (HeldBy says why).
+                // Left standing: a hold one write short of its pointer looks the same as a stale entry.
                 if (store.readVersioned(Publication.quarantineKey(path)).isPresent()) {
                     answer = Known.known(path);
                 }
@@ -158,14 +116,10 @@ public final class HeldElsewhere {
     }
 
     /**
-     * The descent over the review-pointer subtree that indexes a repository from before the index: every pointer
-     * is read once, the hash its body names and every hash its coordinate resolves among its blob hashes are
-     * recorded for its served path, and the repository is stamped complete - unless a pointer nobody can judge was
-     * met, since an index missing that pointer's hashes would let a release lift a marker it still needs. While
-     * descending it also answers the caller's question for {@code hashes} the way the descent always did, and that
-     * answer is returned when the stamp could not be written; when it could, the caller reads the index instead.
-     * Bounded by the number of currently held paths through the shared {@link HeldPointers} descent, never the
-     * whole repository, and taken once per repository.
+     * Indexes a repository's review pointers: each pointer is read once, the hash it names and every blob hash of its
+     * coordinate are recorded for its served path, and the repository is stamped complete unless a pointer nobody can
+     * judge was met. The caller's answer for {@code hashes} is returned only when the stamp was withheld; otherwise the
+     * caller reads the index. Bounded by the held paths ({@link HeldPointers}), and taken once per repository.
      */
     private static Optional<Map<String, Known<String>>> backfill(ArtifactStore store, Set<String> hashes,
                                                                  Set<String> excludedPaths) throws IOException {
@@ -232,24 +186,16 @@ public final class HeldElsewhere {
     }
 
 
-    /** The hashes the still-held sibling coordinate behind the review pointer at {@code servedPath} still needs - its
-     *  full {@link StoreRepositoryInventory#blobHashes} set, not merely the first hash its pointer body advertises,
-     *  which the backfill records and the reconcile judges a page of markers against. Three-valued, not
-     *  two: a path a format DID place and that names no versioned artifact resolves no hash set, and contributes
-     *  nothing - that is an answer, {@link Known.Absent}. A path <em>no installed format can place at all</em> is not:
-     *  the review pointer is standing there, something is held behind it, and with the owning format's module off
-     *  the graph nothing here can say which hashes that coordinate needs. Answering "none" would let a clear lift
-     *  {@code withheld/<hash>} out from under a byte-identical sibling whose pointer still stands, so it is
-     *  {@link Known.Unknown}, which no clear seam accepts. */
+    /** The full {@link StoreRepositoryInventory#blobHashes} set the coordinate behind the review pointer at
+     *  {@code servedPath} needs, not only the first hash its pointer names. {@link Known.Absent} for a path a format
+     *  handles that names no versioned artifact; {@link Known.Unknown}, which no clear seam accepts, for a path no
+     *  installed format claims. */
     public static Known<Set<String>> siblingHashes(StoreRepositoryInventory inventory, String servedPath)
             throws IOException {
         Optional<ArtifactDescriptor> described = inventory.describe(servedPath);
         if (described.isEmpty()) {
-            // A path an installed format handles but no layout describes belongs to a format without coordinates -
-            // a raw asset, an OCI upload, a blobs-namespace publish envelope - and such a pointer keeps no sibling
-            // hashes: its own hash was compared before this was asked. Answering Unknown here would leave every
-            // marker a release should lift standing behind one such pointer; only a path no installed format claims
-            // at all is a pointer nobody can judge.
+            // A handled path no layout describes (a raw asset, an OCI upload) keeps no sibling hashes; its own hash
+            // was already compared. Only a path no installed format claims cannot be judged.
             for (RepositoryFormat format : RepositoryFormat.installed()) {
                 if (format.handles(servedPath)) {
                     return Known.absent();

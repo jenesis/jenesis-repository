@@ -9,30 +9,20 @@ import build.jenesis.repository.store.ArtifactStore;
 import build.jenesis.repository.store.Retries;
 
 /**
- * One retroactive hold kind's two per-release records: what a sweep is holding a coordinate version <em>for</em>
- * (its subjects - the CVEs, the licence reason tokens, the advisory ids), and what a human has released it for, so
- * the sweep never re-holds a release for a subject an operator has already cleared. Both are keyed by the same
- * ecosystem/coordinate/version the inventory keys its sidecars by, through the two layouts {@link HoldRecords}
- * ({@code holds/<kind>/...}) and {@link OverrideRecords} ({@code overrides/<kind>/...}) own, and both store the
- * subject set as a space-separated list.
+ * One retroactive hold kind's two per-version records: the subjects a sweep holds a coordinate version for (CVEs,
+ * licence reason tokens, advisory ids), and the subjects a human released it for, so the sweep never re-holds for a
+ * cleared subject. Keyed through {@link HoldRecords} ({@code holds/<kind>/...}) and {@link OverrideRecords}
+ * ({@code overrides/<kind>/...}), each a space-separated subject set.
  *
- * <p>The protocol every kind shares. {@link #hold} writes the record <em>before</em> the sweep links its hold
- * pointers, so a crash never leaves a pointer whose subject set is unknown, and it is a union into any existing
- * record, never a replacement: a feed that transiently drops a recorded subject while another appears must not
- * erase the subject that justified the hold, or the re-analysis pass loses its re-confirmation subject and
- * auto-releases a still-affected version. A record only shrinks on an explicit release, discard or clear.
- * {@link #onReleased} promotes the record into the override (unioned with any prior override) and drops the
- * consumed record; {@link #onDiscarded} drops the record and writes no override, because no human cleared anything
- * and a re-publish is simply re-screened; and both are per <em>version</em>, so discarding one path of a
- * multi-path hold leaves the state the remaining held paths are reviewed against and the last discard reaps it.
+ * <p>{@link #hold} writes before the sweep links its hold pointers, so no pointer has an unknown subject set, and
+ * unions into the existing record: a feed that drops a subject transiently must not erase the subject the re-analysis
+ * pass re-confirms against. A record shrinks only on a release, discard or clear. {@link #onReleased} promotes the
+ * record into the override and drops it; {@link #onDiscarded} drops it and writes no override, since no human cleared
+ * anything. Both are per version, so the last discard of a multi-path hold reaps the state.
  *
- * <p>The KEV, licence and reachability sweeps share this class rather than carrying a copy each - one codec for the
- * document, one compare-and-set loop, one multi-path guard. A kind is a name; what differs between kinds is how its
- * subjects are found and explained, and that stays with the kind.
- *
- * <p>Every write is a compare-and-set under {@link Retries}, and a lost override throws rather than returning: it
- * would durably re-expose a released artifact to a re-hold. Nothing here reads an artifact blob - only the tiny
- * markers and, on release or discard, the path's format-neutral descriptor.
+ * <p>A kind is a name; how its subjects are found and explained stays with the kind. Every write is compare-and-set
+ * under {@link Retries}, and a lost override throws, since it would re-expose a released artifact to a re-hold.
+ * Nothing here reads an artifact blob.
  */
 public final class HoldKind {
 
@@ -54,8 +44,7 @@ public final class HoldKind {
         return kind;
     }
 
-    /** Record that a sweep is (retroactively) holding a coordinate version for {@code subjects}, unioned into any
-     *  existing record. Written before the hold pointers are linked. */
+    /** Records that a sweep holds a coordinate version for {@code subjects}, unioned into any existing record. */
     public void hold(ArtifactStore store, String ecosystem, String coordinate, String version,
                      Collection<String> subjects) throws IOException {
         String key = holdKey(ecosystem, coordinate, version);
@@ -64,23 +53,20 @@ public final class HoldKind {
         writeSet(store, key, merged);
     }
 
-    /** The subjects the sweep recorded for a currently-held coordinate version, or empty when this kind holds no
-     *  record there (an un-held release, or one held only by another kind or the publish-time gate). */
+    /** The subjects recorded for a held coordinate version, or empty when this kind holds no record there. */
     public Optional<Set<String>> held(ArtifactStore store, String ecosystem, String coordinate, String version)
             throws IOException {
         return readSet(store, holdKey(ecosystem, coordinate, version));
     }
 
-    /** The subjects a human has released for a coordinate version - the set the sweep must not re-hold on. Empty
-     *  when the release has never been operator-released. */
+    /** The subjects a human released a coordinate version for, which the sweep must not re-hold on. */
     public Set<String> overridden(ArtifactStore store, String ecosystem, String coordinate, String version)
             throws IOException {
         return readSet(store, overrideKey(ecosystem, coordinate, version)).orElseGet(Set::of);
     }
 
-    /** Whether this kind holds a record for the coordinate version {@code path} maps to - {@code false} for a path
-     *  no installed format maps to a coordinate. The per-path read a {@link HoldReleaseObserver#holds} fan-out
-     *  serves. */
+    /** Whether this kind holds a record for the coordinate version {@code path} maps to; {@code false} for a path no
+     *  installed format maps. Serves {@link HoldReleaseObserver#holds}. */
     public boolean holds(ArtifactStore store, String path) throws IOException {
         ArtifactDescriptor artifact = describe(store, path);
         return artifact != null
@@ -94,13 +80,10 @@ public final class HoldKind {
     }
 
     /**
-     * The review-release hook: promote this kind's hold record for the released path's coordinate into the override
-     * (unioned with any prior override) and drop the consumed record, so the sweep never re-holds the release for a
-     * subject a human has already cleared. When no record exists, {@code recovered} is asked for the subjects the
-     * release should still override - a kind whose publish-time gate holds write no record recovers them from
-     * elsewhere - and a release that recovers nothing is a no-op, so another kind's release is left untouched.
-     * Called by every review release surface <em>before</em> it links the release pointer or clears the
-     * {@code /quarantine} pointer, through {@link HoldReleaseObserver#released}.
+     * The review-release hook: promotes this kind's record for the released path's coordinate into the override and
+     * drops the record. Without a record, {@code recovered} supplies the subjects to override (for a publish-time hold
+     * that wrote none), and recovering nothing is a no-op. Runs through {@link HoldReleaseObserver#released}, before
+     * the release surface mutates anything.
      */
     public void onReleased(ArtifactStore store, String path, Function<String, Set<String>> recovered)
             throws IOException {
@@ -124,11 +107,8 @@ public final class HoldKind {
     }
 
     /**
-     * The review-discard hook: drop this kind's hold record for the discarded path's coordinate, so a thrown-away
-     * version's row never dangles (nothing evicts a discarded version's rows: it has no published record for the
-     * reconcile sweep to judge). No override is written - no human cleared anything, and a re-publish of the same
-     * version is simply re-screened. The record is per version, so while another path of the same version is still
-     * held it stays; the last discard reaps it.
+     * The review-discard hook: drops this kind's record for the discarded path's coordinate, since no sweep reaches a
+     * discarded version. No override is written. The record stays while another path of the version is held.
      */
     public void onDiscarded(ArtifactStore store, String path) throws IOException {
         ArtifactDescriptor artifact = describe(store, path);
@@ -139,11 +119,8 @@ public final class HoldKind {
     }
 
     /**
-     * Drop a coordinate version's hold record without writing an override - what a re-analysis pass does after it
-     * auto-releases a hold whose intelligence has cleared. An operator's release is a deliberate acceptance the sweep
-     * must never re-hold, but an intel-driven release is only as good as the current intel: if the subject is
-     * re-listed the release must hold again, so the record is simply removed and a later re-listing writes a fresh
-     * one. A no-op when no record is present, so a crash mid-pass re-runs cleanly.
+     * Drops a coordinate version's record without writing an override, as a re-analysis pass does when the
+     * intelligence behind a hold has cleared: a re-listed subject must hold again. A no-op when absent.
      */
     public void cleared(ArtifactStore store, String ecosystem, String coordinate, String version)
             throws IOException {

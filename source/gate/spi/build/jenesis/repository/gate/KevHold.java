@@ -4,15 +4,9 @@ import module java.base;
 import build.jenesis.repository.store.ArtifactStore;
 
 /**
- * The known-exploited hold kind: a {@link HoldKind} called {@code kev} whose subjects are the CVEs the CISA catalogue
- * names, written by the retroactive {@code kev-enforce} sweep ({@code compliance/scan}) and by the publish-time gate
- * alike - the gate's known-exploited finding carries the kind and the CVE, and the screen writes the record when it
- * quarantines. A hold therefore survives a crash idempotently, an operator's release sticks whichever side held, and
- * only a <em>new, different</em> KEV CVE holds a released version again; a KEV delisting never auto-releases. The
- * record is also the signal that a hold is a known-exploited one, so a sweep gauge counts only its own holds.
- *
- * <p>A publish-time hold's CVEs come from the finding, which names its kind - never from the quarantine log's reason
- * text by regular expression.
+ * The known-exploited hold kind: a {@link HoldKind} called {@code kev} whose subjects are the catalogued CVEs, written
+ * by the {@code kev-enforce} sweep and by the publish-time gate, whose finding carries the kind and the CVE. An
+ * operator's release sticks whichever side held, and only a new, different KEV CVE holds a released version again.
  */
 public final class KevHold {
 
@@ -21,8 +15,7 @@ public final class KevHold {
     private KevHold() {
     }
 
-    /** {@link HoldKind#hold}: a sweep or the gate is holding a coordinate version for the given known-exploited
-     *  CVEs. */
+    /** {@link HoldKind#hold} for the given known-exploited CVEs. */
     public static void hold(ArtifactStore store, String ecosystem, String coordinate, String version,
                             Collection<String> cves) throws IOException {
         KIND.hold(store, ecosystem, coordinate, version, cves);
@@ -55,8 +48,7 @@ public final class KevHold {
         KIND.onDiscarded(store, path);
     }
 
-    /** {@link HoldKind#cleared}: the continuous re-analysis pass auto-released the hold because every recorded CVE is
-     *  off the known-exploited catalogues or its advisory was retracted. */
+    /** {@link HoldKind#cleared}, when every recorded CVE left the catalogues or its advisory was retracted. */
     public static void cleared(ArtifactStore store, String ecosystem, String coordinate, String version)
             throws IOException {
         KIND.cleared(store, ecosystem, coordinate, version);

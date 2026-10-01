@@ -9,28 +9,16 @@ import build.jenesis.repository.walk.PagedTreeWalk;
 import build.jenesis.repository.walk.Traversal;
 
 /**
- * The one descent over the live {@code publish/quarantine} review-pointer subtree, shared by the review queue
- * ({@code QuarantineLog.heldPaths}) and the cross-alias withhold guard ({@code HoldLifecycle.withheldByAnotherAlias}).
- * Neither carries a self-recursive descent that lists each level whole with {@link ArtifactStore#list} - the
- * unbounded-work class the bounded traversal primitives exist to remove - and both have to answer the same awkward
- * question about this particular tree, so the answer is written once here rather than twice.
+ * The descent over the live {@code publish/quarantine} review-pointer subtree, shared by the review queue and the
+ * cross-alias withhold guard ({@link HeldElsewhere}).
  *
- * <p><strong>Why this is not simply {@link PagedTreeWalk} applied to the root.</strong> The shared bounded tree walk
- * defines a <em>leaf</em> as a key {@link ArtifactStore#exists} answers for, and it does not descend into one. A hold
- * pointer is a blob at {@code publish/quarantine<path>}, and on a flat/object store a held path can be a proper prefix
- * of another held path - both are independent keys - so a node here can be a pointer <em>and</em> a container at once.
- * Handing the root straight to the tree walk would deliver such a node and then silently drop every deeper hold
- * beneath it, the mirror image of delivering only leaves. This class therefore
- * drives the shared primitives rather than replacing them: the tree walk enumerates each subtree, and the rare node
- * that is both a pointer and a container is re-queued as a fresh subtree root, so <em>every</em> stored pointer is
- * delivered exactly once and no level is ever listed whole.
+ * <p>{@link PagedTreeWalk} does not descend into a key {@link ArtifactStore#exists} answers for, but a held path can be
+ * a proper prefix of another held path, so a node here can be a pointer and a container at once. Such a node is
+ * re-queued as a fresh subtree root, so every pointer is delivered exactly once and no level is listed whole.
  *
- * <p><strong>Bounds.</strong> Every bound is the shared primitives' own. The per-call entry cap is a continuation this
- * class follows to exhaustion - a review queue that stopped early would report a hold-free repository that still holds
- * artifacts, and an alias guard that stopped early would clear a withhold marker a still-held sibling needs, so a
- * short answer here is a wrong answer, not a page of a right one. What actually bounds the descent is the step budget
- * (one {@link ArtifactStore#exists} probe per opened node) and the depth ceiling, both of which raise a named
- * {@link build.jenesis.repository.walk.TraversalException} rather than answering short.
+ * <p>The entry cap is followed to exhaustion, since a short answer would hide holds from the queue or let the guard
+ * clear a marker a held sibling needs; the step budget and the depth ceiling raise a named
+ * {@link build.jenesis.repository.walk.TraversalException} instead.
  */
 final class HeldPointers {
 
@@ -45,28 +33,21 @@ final class HeldPointers {
     @FunctionalInterface
     interface Pointers {
 
-        /** Handle one pointer key; answer {@code false} to end the descent immediately (the alias guard's early exit
-         *  on the first live alias found). */
+        /** Handles one pointer key; {@code false} ends the descent. */
         boolean accept(String key) throws IOException;
     }
 
-    /** The subtree bounds. The step budget is what really bounds this descent - the entry cap is followed to
-     *  exhaustion by {@link #descend} - and depth stays at the primitive's {@link ArtifactStore#MAX_SEGMENTS} default,
-     *  so a pointer deeper than any the store accepts fails <em>by name</em> rather than being skipped. */
+    /** The subtree bounds: the step budget, and the default depth of {@link ArtifactStore#MAX_SEGMENTS}. */
     private static final PagedTreeWalk SUBTREE = PagedTreeWalk.bounded().steps(1_000_000);
-    /** The same walk at the drain width, for the two descents that follow their continuation to exhaustion: a
-     *  filesystem rescans a container per page, so for a drain the page width is the number of rescans of a
-     *  wide level. The review screen's one window keeps {@link #SUBTREE}, whose one readdir is the same at any
-     *  width and whose page is what the screen renders. */
+    /** The same walk at the drain width, for the descents that run to exhaustion, since a filesystem rescans a
+     *  container per page. The review screen's page keeps {@link #SUBTREE}. */
     private static final PagedTreeWalk DRAIN = SUBTREE.page(BoundedChildren.DRAIN_PAGE);
 
-    /** A one-name existence probe: does this pointer key also parent deeper keys? Not a traversal - it asks for a
-     *  single child and stops - so it drives the flat primitive at its narrowest rather than opening a descent. */
+    /** A one-name probe: does this pointer key also parent deeper keys? */
     private static final BoundedChildren PROBE = BoundedChildren.bounded().entries(1).page(1).steps(1);
 
-    /** The children of a node that is a pointer <em>and</em> a container, each queued as a fresh subtree root. Only
-     *  that pathological shape is ever buffered, so the queue is not a level listing in disguise; the entry cap stays
-     *  the primitive's default, which truncates - and a truncation here would drop holds, so it is refused loudly. */
+    /** The children of a node that is a pointer and a container, each queued as a subtree root. A truncation would
+     *  drop holds, so it is refused. */
     private static final BoundedChildren SPLIT = BoundedChildren.bounded();
 
     /**
@@ -117,11 +98,9 @@ final class HeldPointers {
     }
 
     /**
-     * Deliver one page of review pointers: at most {@code limit} keys in path order, starting strictly after
-     * {@code after} ({@code null} from the top), plus the deeper holds of any pointer-and-container node met within
-     * the page, so a page never splits such a node's subtree and the next page's cursor is always a key the root walk
-     * can resume from. A review screen reads the queue through this rather than through {@link #descend}: a
-     * repository with tens of thousands of holds is a queue to page through, not a list to render.
+     * One page of review pointers: at most {@code limit} keys in path order strictly after {@code after}
+     * ({@code null} from the top), plus the deeper holds of any pointer-and-container node in the page, so the next
+     * cursor is always a key the root walk resumes from.
      */
     static Page page(ArtifactStore store, String after, int limit) throws IOException {
         List<String> keys = new ArrayList<>();
@@ -193,9 +172,8 @@ final class HeldPointers {
         return any[0];
     }
 
-    /** The consumer's early exit, an {@link IOException} because that is the cancellation hook {@link PagedTreeWalk}
-     *  documents, caught immediately in {@link #descend} and never surfaced. Stackless and shared: it is control flow,
-     *  not a failure. */
+    /** The consumer's early exit: an {@link IOException}, the cancellation hook {@link PagedTreeWalk} documents, caught
+     *  in {@link #descend}. Stackless and shared, being control flow. */
     private static final class Stop extends IOException {
 
         private static final long serialVersionUID = 1L;

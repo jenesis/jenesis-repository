@@ -3,26 +3,13 @@ package build.jenesis.repository.maintenance;
 import module java.base;
 
 /**
- * The failures one {@link MaintenanceTask} unit contained while it swept the rest of its subjects, and the single
- * exception it raises for them before the unit returns.
+ * The failures one {@link MaintenanceTask} unit contained while it swept the rest of its subjects, raised as one
+ * exception once the unit returns: every subject that could be swept was, and the pass still counts as failed.
  *
- * <p><b>Why containment and a throw rather than one or the other.</b> {@code MaintenanceTask} contract clause 4 says a
- * unit that could not do its work must throw - a swallowed failure reaches neither
- * {@code jenrepo.maintenance.failures} nor the task's reported status, so a store that refused every write
- * reads exactly like a clean pass. But a unit that aborts on its <em>first</em> refused subject leaves the other
- * million coordinates unswept for one poisoned jar, which is the bounded-work half of clause 6. Both are satisfied by
- * containing each subject, naming what failed, and raising once at the end: every subject that could be swept was
- * swept, and the pass is still counted as failed. {@code SignalRefreshTask} is the pattern this generalises -
- * "containing it here is not swallowing it".
+ * <p>The first {@value #NAMED} subjects are named and the rest counted, because the usual cause is a store outage that
+ * fails every subject, and keeping them all would turn it into a heap outage.
  *
- * <p><b>Bounded on purpose.</b> The failure this exists to report is usually a store outage, which fails
- * <em>every</em> subject in the walk; a collector that kept them all, or a message that named them all, would turn a
- * store outage into a heap outage on a repository with millions of versions. So the first few subjects are named and
- * the rest are counted - enough for an operator to see what kind of thing failed, bounded regardless of how much of
- * the walk went with it.
- *
- * <p>Method-local by construction: one instance belongs to one unit, is handed down that unit's own call tree and is
- * never shared across the units the scheduler fans out concurrently (clause 1), so it needs no synchronisation.
+ * <p>One instance belongs to one unit and is never shared across concurrent units, so it needs no synchronisation.
  */
 public final class UnitFailures {
 
@@ -35,18 +22,16 @@ public final class UnitFailures {
     private long count;
 
     /**
-     * @param work        what this unit was doing, named so the raised failure says which pass over which
-     *                    repository gave way rather than only that something did
-     * @param consequence what the deployment should read into the failure - which derived state is missing, what
-     *                    was deliberately not stamped, and when it converges
+     * @param work        what this unit was doing, so the raised failure names the pass and repository
+     * @param consequence what the failure means for the deployment: which derived state is missing, what was not
+     *                    stamped, and when it converges
      */
     public UnitFailures(String work, String consequence) {
         this.work = Objects.requireNonNull(work, "work");
         this.consequence = Objects.requireNonNull(consequence, "consequence");
     }
 
-    /** Contain one subject's failure. The caller logs it with its stack trace at the site, where the context is;
-     *  this keeps only what the raised failure needs to name it. */
+    /** Contains one subject's failure; the caller logs its stack trace at the site. */
     public void record(String subject, Throwable failure) {
         count++;
         if (named.size() < NAMED) {
@@ -54,15 +39,13 @@ public final class UnitFailures {
         }
     }
 
-    /** Whether any subject failed - the question a freshness stamp, a marker flip or any other "this view is current"
-     *  claim must ask before it is written, since a unit that did not do its work may not report itself fresh. */
+    /** Whether any subject failed, which a freshness stamp or marker flip asks before it is written. */
     public boolean any() {
         return count > 0;
     }
 
-    /** Raise the contained failures as the unit's own, so the scheduler logs, counts and reports them (clause 4).
-     *  A no-op when nothing failed. Called by the scheduler once the unit returns - a pass records and does not
-     *  raise, because the step a pass can forget is the one that made a failed sweep read as a clean one. */
+    /** Raises the contained failures as the unit's own; a no-op when nothing failed. The scheduler calls it once the
+     *  unit returns, so a pass only records. */
     public void rethrow() throws IOException {
         if (count == 0) {
             return;
