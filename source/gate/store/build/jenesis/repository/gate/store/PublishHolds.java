@@ -38,10 +38,11 @@ final class PublishHolds {
     }
 
     /** Assess inspected subjects through the gate the publish assessed through, its per-repository overlays
-     *  included, so a re-assessment cannot differ from the publish for a reason of the caller's own. */
+     *  included, so a re-assessment cannot differ from the publish for a reason of the caller's own. {@code held} is
+     *  the artifact as it is stored under its hold: the path it is held at and the hash of the held blob. */
     @FunctionalInterface
     interface Assessor {
-        ComplianceGate.Assessment assess(List<ComplianceGate.Subject> inspected, String path);
+        ComplianceGate.Assessment assess(List<ComplianceGate.Subject> inspected, ArtifactDescriptor held);
     }
 
     /** Log the verdict of an upload the gate held and the chain still accepted: the publication primitive joined the
@@ -154,8 +155,8 @@ final class PublishHolds {
                 continue;
             }
             try {
-                if (clearedByCompletion(inspection, assessor, recorder, publication, inventory, store, path,
-                        published)) {
+                if (cleared(inspection, assessor, recorder, publication, inventory, store, path,
+                        "Re-assessed after " + published + " landed; still held:")) {
                     // The release is the ordinary one, so every hook, override and withhold marker is lifted exactly
                     // as a reviewer's release lifts them.
                     HoldLifecycle.release(store, path);
@@ -169,18 +170,41 @@ final class PublishHolds {
         }
     }
 
+    /**
+     * Re-assess the artifact held at {@code path} because evidence it was waiting on has landed - the report of a
+     * content scan made off the publish path - and release it through {@link HoldLifecycle#release} if the gate now
+     * answers {@code ALLOW}. The same judgement {@link #releaseCompleted} makes of a held neighbour, over the same
+     * held blob, through the same gate; {@code because} heads the log row a still-held artifact is given, so the
+     * review queue says what the re-assessment found and why it ran.
+     */
+    static ComplianceScreen.Rescreened rescreen(PublishInspection inspection, Assessor assessor,
+                                                PublishRecorder recorder, ArtifactStore store, String path,
+                                                String because) throws IOException {
+        Publication publication = new Publication(store);
+        if (publication.blob("/quarantine" + path).isEmpty()) {
+            return ComplianceScreen.Rescreened.NOT_HELD;
+        }
+        StoreRepositoryInventory inventory = new StoreRepositoryInventory(store);
+        if (!cleared(inspection, assessor, recorder, publication, inventory, store, path, because + "; still held:")) {
+            return ComplianceScreen.Rescreened.HELD;
+        }
+        HoldLifecycle.release(store, path);
+        LOGGER.info("Released {}: {}, and the gate now clears it", path, because);
+        return ComplianceScreen.Rescreened.RELEASED;
+    }
+
     /** Whether the gate now answers ALLOW for the artifact held at {@code path}, read back from its held blob with the
      *  siblings that have since landed in view. Anything short of a clean ALLOW - no held blob, no describable
-     *  coordinate, nothing to gate, an unparseable body, a feed that failed closed - keeps the hold. */
-    private static boolean clearedByCompletion(PublishInspection inspection, Assessor assessor,
-                                               PublishRecorder recorder, Publication publication,
-                                               StoreRepositoryInventory inventory, ArtifactStore store, String path,
-                                               String published) throws IOException {
+     *  coordinate, nothing to gate, an unparseable body, a feed that failed closed - keeps the hold, and a hold kept
+     *  for a reason the gate gave is logged under {@code heading}. */
+    private static boolean cleared(PublishInspection inspection, Assessor assessor, PublishRecorder recorder,
+                                   Publication publication, StoreRepositoryInventory inventory, ArtifactStore store,
+                                   String path, String heading) throws IOException {
         Optional<String> held = publication.blob("/quarantine" + path);
         if (held.isEmpty()) {
             return false;
         }
-        Optional<ArtifactDescriptor> described = inventory.describe(path);
+        Optional<ArtifactDescriptor> described = heldAs(inventory, store, path);
         if (described.isEmpty()) {
             return false;
         }
@@ -194,7 +218,8 @@ final class PublishHolds {
         if (inspected.isEmpty()) {
             return false;
         }
-        ComplianceGate.Assessment assessment = assessor.assess(inspected, path);
+        ComplianceGate.Assessment assessment =
+                assessor.assess(inspected, described.get().withPath(path).withBlob(held.get(), -1L));
         // The version is being judged on the strength of what just landed - for Maven's order, the signature - so
         // this is where its signer is first seen: learned if it releases, wanted if nobody could place it.
         recorder.recordMaintainers(store, inspected, path);
@@ -206,13 +231,27 @@ final class PublishHolds {
         // artifact, and "no publisher signature" is no longer what a reviewer should read. The log's latest row for
         // the path is what the review queue shows, so it says what the re-assessment found.
         List<String> reasons = new ArrayList<>();
-        reasons.add("Re-assessed after " + published + " landed; still held:");
+        reasons.add(heading);
         for (ComplianceGate.Finding finding : assessment.findings()) {
             reasons.add(finding.detail());
         }
         new QuarantineLog(store).record(Clocks.now(), path, coordinate(described.get(), inspected),
                 Verdict.QUARANTINE, reasons);
         return false;
+    }
+
+    /** What the artifact held at {@code path} is: the installed layout's description, or - for a format that lays
+     *  out nothing for a held artifact, as OCI lays out no tag for a held manifest - the subject the screen recorded
+     *  when it held it. Empty when neither places a coordinate. */
+    private static Optional<ArtifactDescriptor> heldAs(StoreRepositoryInventory inventory, ArtifactStore store,
+                                                       String path) throws IOException {
+        Optional<ArtifactDescriptor> described = inventory.describe(path);
+        if (described.isPresent()) {
+            return described;
+        }
+        return HeldSubjects.read(store, path).filter(HeldSubjects.Subject::versioned)
+                .map(subject -> new ArtifactDescriptor(subject.ecosystem(), subject.coordinate(), subject.version(),
+                        path, null, false, null, -1L));
     }
 
     /**

@@ -48,6 +48,14 @@ public class GateWiringConfig {
     }
 
     @Bean(destroyMethod = "close")
+    public AutoCloseable complianceScreenTenantGatesWiring(LiveConfig liveConfig) {
+        // A held artifact re-assessed off any request - a content scan's report landing in a maintenance pass - has
+        // no publishing thread to resolve a tenant from, so the re-assessment names its tenant and is answered by
+        // that tenant's own publish gate, the one its uploads are screened by.
+        return ComplianceScreen.tenantGates(liveConfig::publishGate);
+    }
+
+    @Bean(destroyMethod = "close")
     public AutoCloseable complianceScreenFeedsWiring(NamedAdvisoryFeeds namedAdvisoryFeeds) {
         // The publish screen re-queries these named feeds at commit to persist a just-accepted coordinate's advisory
         // findings at once, closing the window between a publish and the next scheduled sweep. The feeds are

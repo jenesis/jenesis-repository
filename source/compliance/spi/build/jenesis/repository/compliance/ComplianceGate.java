@@ -4,6 +4,8 @@ import module java.base;
 
 import build.jenesis.repository.store.ArchiveInflation;
 import build.jenesis.repository.store.ArchiveWalk;
+import build.jenesis.repository.store.ArtifactDescriptor;
+import build.jenesis.repository.store.ArtifactStore;
 
 /**
  * The ingestion gate. A subject is checked against the core dimensions over a single
@@ -84,6 +86,20 @@ public final class ComplianceGate {
         List<GatePolicy> rebound = new ArrayList<>(policies.size());
         for (GatePolicy policy : policies) {
             rebound.add(policy instanceof HealthAware aware ? aware.withHealth(health) : policy);
+        }
+        return new ComplianceGate(vulnerabilityPolicy, maliciousPolicy, denyListPolicy, List.copyOf(rebound),
+                advisories, vex, waivers);
+    }
+
+    /** This gate bound to one stored artifact: every discovered dimension is rebound through
+     *  {@link GatePolicy#bound} to the repository's scoped store and the artifact as it was stored there, so a
+     *  dimension that answers from what the repository recorded about these bytes reads it for this assessment. The
+     *  screen binds before it assesses a publish and before it re-assesses a held artifact; a dimension that reads only
+     *  the subject is returned unchanged, so binding a gate with no such dimension is a no-op. */
+    public ComplianceGate bound(ArtifactStore repository, ArtifactDescriptor artifact) {
+        List<GatePolicy> rebound = new ArrayList<>(policies.size());
+        for (GatePolicy policy : policies) {
+            rebound.add(policy.bound(repository, artifact));
         }
         return new ComplianceGate(vulnerabilityPolicy, maliciousPolicy, denyListPolicy, List.copyOf(rebound),
                 advisories, vex, waivers);
@@ -675,9 +691,19 @@ public final class ComplianceGate {
         // entry. Asked again, every advisory would be reported twice, once without the package's place on the build
         // graph; the discovered policies below are the ones that read the evidence.
         boolean packaged = !subject.contentScan();
-        List<AdvisorySource.Advisory> found = !packaged || subject.version() == null || subject.version().isBlank()
-                ? List.of()
-                : advisories.advisories(subject.ecosystem(), subject.coordinate(), subject.version());
+        List<AdvisorySource.Advisory> found = new ArrayList<>();
+        if (packaged && subject.version() != null && !subject.version().isBlank()) {
+            found.addAll(advisories.advisories(subject.ecosystem(), subject.coordinate(), subject.version()));
+            // What a discovered dimension holds about the subject beyond the feeds - a content scan's report on the
+            // stored bytes - joins the feeds' answer here, before VEX and waivers, so it is decided by exactly the
+            // threshold, action and statements a feed's advisory is. Only for a claimed subject: the unclaimed
+            // assessment skips the discovered dimensions altogether.
+            if (discoveredPolicies) {
+                for (GatePolicy policy : policies) {
+                    found.addAll(policy.advisories(subject));
+                }
+            }
+        }
         // A VEX statement that marks an advisory not-applicable to this subject downgrades it to a recorded allow and
         // keeps it out of every dimension (vulnerability, malicious, known-exploited), so one attested claim clears the
         // flaw uniformly rather than each dimension re-flagging it. The remaining advisories screen as usual.

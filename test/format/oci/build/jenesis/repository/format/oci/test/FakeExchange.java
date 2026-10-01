@@ -23,6 +23,7 @@ final class FakeExchange implements FormatExchange {
     private final ByteArrayOutputStream responseBody = new ByteArrayOutputStream();
     private int status = -1;
     private Function<String, Optional<ArtifactStore>> readable = _ -> Optional.empty();
+    private boolean readsHeld;
     private final List<String> audited = new ArrayList<>();
 
     FakeExchange(String method, String path) {
@@ -87,6 +88,17 @@ final class FakeExchange implements FormatExchange {
     @Override
     public Optional<ArtifactStore> readable(String path) {
         return readable.apply(path);
+    }
+
+    /** Answer {@link #readsHeld} as an edge would for a caller whose credential may read held content. */
+    FakeExchange readingHeld() {
+        this.readsHeld = true;
+        return this;
+    }
+
+    @Override
+    public boolean readsHeld() {
+        return readsHeld;
     }
 
     @Override

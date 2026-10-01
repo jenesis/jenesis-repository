@@ -25,6 +25,10 @@ open module build.jenesis.repository.gate.test {
     requires build.jenesis.repository.format;
     requires build.jenesis.repository.format.maven;
     requires build.jenesis.repository.format.jenesis;
+    // A held image re-assessed once its content scan's report lands: a real manifest PUT into the OCI format,
+    // screened over the OCI inspector by the discovered screen.
+    requires build.jenesis.repository.format.oci;
+    requires build.jenesis.repository.compliance.oci;
     requires org.junit.jupiter;
     requires org.assertj.core;
     uses build.jenesis.repository.compliance.QualityInspector;

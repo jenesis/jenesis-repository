@@ -40,6 +40,10 @@ public final class Authorization {
 
     public static final String REPOSITORY_WRITE = "repository:write";
 
+    /** Reading what a repository holds for review: the bytes a hold withholds from every other reader, which a
+     *  content scanner reads to produce the report the hold waits on. Never implied by {@link #REPOSITORY_READ}. */
+    public static final String QUARANTINE_READ = "quarantine:read";
+
     public static final String MANAGE_READ = "manage:read";
 
     public static final String MANAGE_WRITE = "manage:write";

@@ -52,6 +52,11 @@ public final class ComplianceScreen implements PublishInterceptor {
     /** The JVM-wide live gate the ServiceLoader-constructed screen reads, set by the deployment at boot. */
     private static final AtomicReference<Supplier<ComplianceGate>> LIVE = new AtomicReference<>();
 
+    /** The deployment's gate for a named tenant, set by the deployment at boot beside {@link #LIVE}: the live gate
+     *  resolves the tenant off the publishing request, and a re-assessment made off any request ({@link #rescreen})
+     *  names the tenant it is re-assessing for instead. */
+    private static final AtomicReference<Function<String, ComplianceGate>> TENANT_GATES = new AtomicReference<>();
+
     /** A JVM-wide sink the deployment wires so every committed verdict is counted ({@code jenrepo.gate.verdicts}),
      *  across EVERY publish path (the deploy, staging, batch) - not just the deploy controller's own
      *  observation. Registry-free: the sink is a plain callback and the Micrometer counter lives in the distribution,
@@ -199,6 +204,52 @@ public final class ComplianceScreen implements PublishInterceptor {
     public static Wiring live(Supplier<ComplianceGate> gate) {
         LIVE.set(gate);
         return new Wiring(gate);
+    }
+
+    /** Wire the deployment's gate per tenant, for the re-assessments {@link #rescreen} makes off the request path;
+     *  closing the returned handle retires the wiring (only if it is still the current one). */
+    public static AutoCloseable tenantGates(Function<String, ComplianceGate> gates) {
+        TENANT_GATES.set(gates);
+        return () -> TENANT_GATES.compareAndSet(gates, null);
+    }
+
+    /** What {@link #rescreen} came to. */
+    public enum Rescreened {
+
+        /** Nothing is held at the path: never held, or released or discarded already. */
+        NOT_HELD,
+
+        /** The gate cleared the held artifact and it was released, exactly as a reviewer's release releases it. */
+        RELEASED,
+
+        /** The gate still holds it; the review queue's latest row for the path says why. */
+        HELD,
+
+        /** No gate is wired on this node, so nothing could be decided and the hold stands. */
+        UNSCREENED
+    }
+
+    /**
+     * Re-assess the artifact {@code tenant}'s repository holds at {@code path}, because evidence it was waiting on
+     * has landed off the publish path - a content scan's report, recorded where a dimension
+     * {@linkplain ComplianceGate#bound bound} to the stored artifact reads it - and release it if the gate now clears
+     * it. The gate is the one a publish to that tenant assesses through, its per-repository overlays and the stored
+     * artifact's binding included, so the answer is the one a publish of the same bytes would get today. This is not
+     * an override: an artifact still held for any other reason fails the same assessment and stays held, its log row
+     * headed by {@code because}.
+     *
+     * @param store the repository's own scoped store
+     */
+    public static Rescreened rescreen(ArtifactStore store, String tenant, String path, String because)
+            throws IOException {
+        Function<String, ComplianceGate> gates = TENANT_GATES.get();
+        ComplianceGate current = gates == null ? null : gates.apply(tenant);
+        if (current == null) {
+            return Rescreened.UNSCREENED;
+        }
+        return PublishHolds.rescreen(INSPECTION,
+                (inspected, held) -> overlaid(current, store, inspected, held).assess(inspected),
+                recorder(), store, path, because);
     }
 
     /** A registry-free callback the deployment wires so a committed verdict is counted: {@code (format, verdict)}
@@ -376,9 +427,9 @@ public final class ComplianceScreen implements PublishInterceptor {
             // The file is still screened from its path against the deny-list, and what was found beside it is
             // assessed with it: a bundle beside a deny-listed name neither switches the deny-list off nor goes
             // unexamined.
-            return screenFromPath(artifact, overlaid(current, content.store(), inspected, artifact.path()), inspected);
+            return screenFromPath(artifact, overlaid(current, content.store(), inspected, artifact), inspected);
         }
-        current = overlaid(current, content.store(), inspected, artifact.path());
+        current = overlaid(current, content.store(), inspected, artifact);
         ComplianceGate.Assessment assessment;
         try {
             assessment = current.assess(inspected);
@@ -419,10 +470,15 @@ public final class ComplianceScreen implements PublishInterceptor {
      * deps.dev probe on the admission path. The ledger IS a {@code HealthSource}, so this is the same overlay shape;
      * a coordinate with no stored record resolves to empty (no finding), the same safe default a live probe that
      * cannot resolve a coordinate produces. Absent the ledger module the gate keeps its live health source.
+     *
+     * <p><b>The stored artifact.</b> Every dimension is {@linkplain ComplianceGate#bound bound} to this repository and
+     * to the artifact as it was stored, so a dimension that answers from what the repository recorded about these
+     * bytes - a content scan's report - reads it for this assessment.
      */
     private static ComplianceGate overlaid(ComplianceGate gate, ArtifactStore store,
-                                           List<ComplianceGate.Subject> inspected, String path) {
-        ComplianceGate overlaid = gate;
+                                           List<ComplianceGate.Subject> inspected, ArtifactDescriptor artifact) {
+        String path = artifact.path();
+        ComplianceGate overlaid = gate.bound(store, artifact);
         if (FINDINGS.isPresent()) {
             try {
                 overlaid = overlaid.waivers(
@@ -568,7 +624,7 @@ public final class ComplianceScreen implements PublishInterceptor {
             return;
         }
         PublishHolds.releaseCompleted(INSPECTION,
-                (inspected, path) -> overlaid(current, store, inspected, path).assess(inspected),
+                (inspected, held) -> overlaid(current, store, inspected, held).assess(inspected),
                 recorder(), store, artifact.path());
     }
 

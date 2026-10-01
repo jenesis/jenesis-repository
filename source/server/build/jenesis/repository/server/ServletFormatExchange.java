@@ -77,6 +77,16 @@ public final class ServletFormatExchange implements FormatExchange {
         audit.accept(action, target);
     }
 
+    /** What the deployment's authorization recorded on the request: whether the presented credential carries
+     *  {@link build.jenesis.repository.server.spi.Authorization#QUARANTINE_READ} on the repository the request
+     *  addresses, asked only when a format asks. Nothing recorded - an anonymous deployment, a request no
+     *  authorization decided - reads no held content. */
+    @Override
+    public boolean readsHeld() {
+        return request.getAttribute(RepositoryAuthorizationManager.READS_HELD) instanceof BooleanSupplier held
+                && held.getAsBoolean();
+    }
+
     @Override
     public Optional<ArtifactStore> readable(String path) {
         return readable.apply(path);

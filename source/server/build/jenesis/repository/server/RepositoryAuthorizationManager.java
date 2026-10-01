@@ -22,7 +22,9 @@ import org.springframework.web.util.UriUtils;
  *   <li><b>An artifact</b> - {@code /repository/<tenant>/<repository>/...}, the registry's {@code /v2/...}, a staged
  *       upload - takes {@code repository:read} for a GET or HEAD and {@code repository:write} otherwise, on the
  *       repository the URL names and the path within it, so a path-scoped grant ({@code <repo>:<prefix>})
- *       authorizes exactly its subtree.</li>
+ *       authorizes exactly its subtree. An accepted read also carries whether the key holds
+ *       {@code quarantine:read} there ({@link #READS_HELD}), the right a content scanner needs to read what a hold
+ *       withholds from everyone else.</li>
  *   <li><b>An operation on one repository</b> - {@code /api/repository/...?repo=<repository>}, its cleanup,
  *       retention, pins, an import into it, a staged release's promotion - takes that repository's rights, exactly as
  *       its artifacts do; an export of it, which sends its contents elsewhere, the manage rights on it.</li>
@@ -54,6 +56,14 @@ import org.springframework.web.util.UriUtils;
  * a bean by {@link RepositorySecurityAutoConfiguration}.
  */
 public class RepositoryAuthorizationManager implements AuthorizationManager<RequestAuthorizationContext> {
+
+    /**
+     * The request attribute an artifact read carries a {@link BooleanSupplier} under: whether the presented key also
+     * carries {@link Authorization#QUARANTINE_READ} on the repository and path the read addresses. Recorded as a
+     * question rather than an answer so the credential is asked only when a format serving held bytes asks it -
+     * nearly every read never does.
+     */
+    public static final String READS_HELD = "jenrepo.reads-held";
 
     private final Authorization authorization;
     private final KeyUsageTracker usage;
@@ -129,6 +139,17 @@ public class RepositoryAuthorizationManager implements AuthorizationManager<Requ
             decision = Authorization.Decision.FORBIDDEN;
         }
         request.setAttribute("jenrepo.decision", decision);
+        if (decision == Authorization.Decision.ALLOWED && read && !target.manage() && !target.probe()
+                && !"*".equals(target.scope())) {
+            request.setAttribute(READS_HELD, (BooleanSupplier) () -> {
+                try {
+                    return authorization.authorize(key, target.scope(), target.subPath(),
+                            Authorization.QUARANTINE_READ) == Authorization.Decision.ALLOWED;
+                } catch (IOException _) {
+                    return false;    // an unreadable store proves no authority, as above
+                }
+            });
+        }
         String tenant = Authorization.tenantOf(key);
         if (decision == Authorization.Decision.ALLOWED && usage.enabled() && tenant != null) {
             usage.record(tenant, Authorization.hash(key), client);

@@ -232,6 +232,18 @@ public final class OciFormat implements RepositoryFormat, ProxyFormat, Repositor
         exchange.respond(status, JSON.writeValueAsBytes(Map.of("errors", List.of(error))));
     }
 
+    /** The media type a stored manifest declares in its own {@code mediaType} field, or empty when it declares none or
+     *  does not parse - the type a held manifest is served under, since only an admitted one has a sidecar. The
+     *  manifest was size-checked when it was ingested, so it is read whole. */
+    private static String declaredType(ArtifactStore store, String key) throws IOException {
+        try (InputStream in = store.open(key)) {
+            JsonNode type = JSON.readTree(in.readNBytes(MAX_MANIFEST)).path("mediaType");
+            return type.isString() ? type.stringValue().trim() : "";
+        } catch (RuntimeException unreadable) {
+            return "";
+        }
+    }
+
     private void blob(String digest, ArtifactStore store, FormatExchange exchange) throws IOException {
         String hex = hex(digest);
         if (!Checksums.isSha256Hex(hex)) {
@@ -244,8 +256,10 @@ public final class OciFormat implements RepositoryFormat, ProxyFormat, Repositor
         // The withheld/<hash> marker is the blobs-namespace twin of the publish/ namespace's quarantine screen (a
         // store-layout convention, like gc/condemned/<hash>): OCI serves by digest straight from blobs/, which no
         // publish/ pointer hold ever reached, so a compliance hold on these bytes retracts serving here through the
-        // marker instead. Absent marker, zero-cost beyond one existence probe.
-        if (!store.exists(key) || Withheld.is(store, hex)) {
+        // marker instead. Absent marker, zero-cost beyond one existence probe. A caller that may read what the
+        // repository holds for review - a content scanner reading the image a hold waits on its report for - is
+        // served the withheld bytes all the same, and is asked only once a marker stands.
+        if (!store.exists(key) || (Withheld.is(store, hex) && !exchange.readsHeld())) {
             exchange.respond(404);
             return;
         }
@@ -778,12 +792,21 @@ public final class OciFormat implements RepositoryFormat, ProxyFormat, Repositor
         // a fill or an import accepted it and retired when a client deletes it - and a withheld one 404s exactly as a
         // withheld blob does (the withheld/<hash> convention above), so a held image cannot be pulled by digest or
         // tag while its layers 404. A blob that was never accepted as a manifest is not served as one.
+        //
+        // A held manifest has no sidecar - nothing it would serve through is laid out until the hold is released - and
+        // is served by digest alone to a caller that may read what the repository holds for review: the content
+        // scanner a hold waits on. The withhold marker is what says the blob was screened as a manifest, and the
+        // type is the one the manifest declares of itself.
         Optional<ArtifactStore.Versioned> sidecar = store.readVersioned("oci/.types/" + hex);
-        if (sidecar.isEmpty() || !store.exists(key) || Withheld.is(store, hex)) {
+        boolean withheld = Withheld.is(store, hex);
+        boolean held = withheld && reference.startsWith("sha256:") && exchange.readsHeld();
+        if (!store.exists(key) || (withheld && !held) || (sidecar.isEmpty() && !held)) {
             exchange.respond(404);
             return;
         }
-        String recorded = new String(sidecar.get().content(), StandardCharsets.UTF_8).trim();
+        String recorded = sidecar.isPresent()
+                ? new String(sidecar.get().content(), StandardCharsets.UTF_8).trim()
+                : declaredType(store, key);
         String type = recorded.isEmpty() ? OCI_MANIFEST : recorded;
         long size = store.size(key);
         exchange.setResponseHeader("Content-Type", type);

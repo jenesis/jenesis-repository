@@ -155,4 +155,16 @@ public interface FormatExchange {
     default Optional<build.jenesis.repository.store.ArtifactStore> readable(String path) {
         return Optional.empty();
     }
+
+    /**
+     * Whether the caller may read content this repository holds for review - the bytes a hold withholds from every
+     * other reader, which a content scanner must read to produce the report the hold waits on. A format that serves
+     * by content hash past a withhold marker serves the held bytes to such a caller and to no one else.
+     *
+     * <p>{@code false} on an exchange no edge wraps and for every caller whose credential does not carry the right, so
+     * a format that asks discloses nothing it would not otherwise serve.
+     */
+    default boolean readsHeld() {
+        return false;
+    }
 }
