@@ -5,12 +5,11 @@ import build.jenesis.repository.store.ArtifactStore;
 import build.jenesis.repository.store.ServedAliases;
 
 /**
- * When a module's latest view moves: to a version at least as high as the one it names now, so it follows the highest
- * version published rather than the last - a backport of 1.4.1 published after 2.0.0 leaves it on 2.0.0. The version
- * it names now is read off the origin its alias records, the version folder that origin's file sits in, which is how
- * both a {@code /module/} publish and a Maven one lay a version out. Versions order as Java module versions do; one
- * that does not parse as such orders as text against the other. Two higher versions published at the same moment
- * both pass and the later link wins, which a further publish of either corrects.
+ * When a module's latest view moves: to a version at least as high as the one it names, so it follows the highest
+ * version published rather than the last - a backport of 1.4.1 after 2.0.0 leaves it on 2.0.0. The version it names is
+ * read off the origin its alias records (the version folder of that file), as both a {@code /module/} and a Maven
+ * publish lay a version out. Versions order as Java module versions; one that does not parse orders as text. Two higher
+ * versions published at once both pass and the later link wins, which a further publish corrects.
  */
 final class LatestView {
 

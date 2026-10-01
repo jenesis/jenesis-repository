@@ -8,15 +8,14 @@ import build.jenesis.repository.format.java.bridge.ModuleView;
 import build.jenesis.repository.store.ArtifactStore;
 
 /**
- * The Jenesis format's contribution to cross-publishing: when the Maven format publishes a modular jar, it hands the
- * module here to also give it a {@code /module/} view - the jar linked by module name and version (and by module name
- * alone, the latest) over the same content-addressed blob. Discovered by the Maven format through {@link ServiceLoader}
- * over the {@link ModuleView} contract the shared Java-layout module exports to just these two modules.
+ * The Jenesis format's side of cross-publishing: when the Maven format publishes a modular jar it hands the module here
+ * for a {@code /module/} view - the jar linked by name and version, and by name alone for the latest - over the same
+ * blob. Discovered by the Maven format through {@link ServiceLoader} over {@link ModuleView}, exported to just these
+ * two modules.
  *
- * <p>Both pointers are written by a publish; only the version-addressed one is written by a
- * {@link ModuleView#rebuild rebuild}, because only it is a function of stored state. Every write is the same
- * compare-and-set {@link Publication#link} a first-hand Jenesis publish makes, so a cross-view and a direct
- * {@code /module/} publish are the same object and a repeat of either is free.
+ * <p>A publish writes both pointers; a {@link ModuleView#rebuild rebuild} only the version-addressed one, the only
+ * function of stored state. Every write is the {@link Publication#link} compare-and-set a direct publish makes, so a
+ * cross-view and a direct publish are the same object and a repeat is free.
  */
 public final class ModuleViewPublisher implements ModuleView {
 
@@ -27,9 +26,8 @@ public final class ModuleViewPublisher implements ModuleView {
         if (!classifier.isEmpty()) {
             return;   // a classified jar is one of a version's files, never the module the latest view names
         }
-        // The "latest" pointers, and the reason publish and rebuild are two methods: a publish moves them to its
-        // version when that is the highest yet (LatestView), and a rebuild pass re-linking them would move them to
-        // whichever version the walk reached last, so the pass leaves them as the publishes left them.
+        // The latest pointers are why publish and rebuild differ: a publish moves them to its version when it is the
+        // highest yet (LatestView), while a rebuild re-linking them would move them to whatever the walk reached last.
         if (!LatestView.takes(store, JavaLayout.latestModule(moduleName), version)) {
             return;
         }
@@ -37,9 +35,8 @@ public final class ModuleViewPublisher implements ModuleView {
         for (String latest : List.of(JavaLayout.latestModule(moduleName),
                 JavaLayout.latestArtifact(moduleName, "jar"))) {
             publication.link(latest, hash);
-            // REASSIGNED, not recorded: this publish takes the view off the version that held it. An append would
-            // leave a release of 1.0 lifting a view that has been 2.0's since 2.0 landed - and 2.0 may be held on its
-            // own account.
+            // Reassigned, not appended: the view leaves the version that held it, or a release of 1.0 would later lift
+            // a view that is 2.0's - and 2.0 may be held on its own account.
             ServedAliases.reassign(store, origin, latest);
         }
     }

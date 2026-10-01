@@ -1,9 +1,8 @@
 /**
- * The Jenesis module layout as a plugin module ({@code /module/...}, {@code /artifact/...}): it provides
- * {@link build.jenesis.repository.format.RepositoryFormat} and serves over the store module's format-neutral
- * {@code Publication}. It {@code provides} the {@code ModuleView} the Maven format uses to give a published modular jar
- * its module view - the one-way cross-publish, Maven into the module layout; it does not mirror a module back to Maven.
- * Discovered through {@code provides}, so the layout plugs in like any other format.
+ * The Jenesis module layout ({@code /module/...}, {@code /artifact/...}): a
+ * {@link build.jenesis.repository.format.RepositoryFormat} over the store module's {@code Publication}, providing the
+ * {@code ModuleView} the Maven format uses to give a modular jar its module view - one way, Maven into the module
+ * layout.
  *
  * @jenesis.release 25
  * @jenesis.bom pin-repository.properties
