@@ -171,6 +171,18 @@ class ClientLifecycleCommandsTest {
         assertThat(deprecate.audited).isEmpty();
     }
 
+    @Test
+    void a_version_s_mark_is_named_by_the_coordinate_its_own_client_names() {
+        assertThat(FormatDrive.format("cargo").lifecycleCoordinate("serde",
+                "/cargo/main/api/v1/crates/serde/1.0.0/download")).as("a crate's registry and the crate")
+                .isEqualTo("main/serde");
+        assertThat(FormatDrive.format("nuget").lifecycleCoordinate("Newtonsoft.Json",
+                "/nuget/v3/flatcontainer/newtonsoft.json/13.0.1/newtonsoft.json.13.0.1.nupkg"))
+                .as("a package id in lower case").isEqualTo("newtonsoft.json");
+        assertThat(FormatDrive.format("npm").lifecycleCoordinate("left-pad", "/npm/left-pad/-/left-pad-1.3.0.tgz"))
+                .as("the inventory's coordinate, where the format keys its marks by it").isEqualTo("left-pad");
+    }
+
     /** The document {@code npm deprecate} PUTs: the package with one stored version carrying {@code message}, and no
      *  tarball attached. */
     private static byte[] packument(String message) {

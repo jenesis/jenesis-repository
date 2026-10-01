@@ -71,6 +71,10 @@
                     <!--/* Pinned where the versions are listed: an editor pins or lifts it on the row itself. */-->
                     <td><div class="app-actions">
                         <span th:if="${v.pinned}">yes</span>
+                        <!--/* A version is deprecated or yanked on the lifecycle page, where an installed module adds one. */-->
+                        <a th:if="${isEditor and repositoryPagePaths.contains('/lifecycle') and !v.cached}"
+                           th:href="@{/ui/repositories/{repo}/lifecycle(repo=${repo},coordinate=${detail.coordinate},version=${v.version},path=${v.paths.isEmpty() ? '' : v.paths[0]})}">Deprecate
+                            or yank</a>
                         <form th:if="${isEditor and !v.cached}" method="post"
                               th:action="${v.pinned} ? @{'/ui/repositories/' + ${repo} + '/pins/remove'} : @{'/ui/repositories/' + ${repo} + '/pins'}"
                               th:with="here=@{/ui/repositories/{repo}/coordinate(repo=${repo},ecosystem=${detail.ecosystem},coordinate=${detail.coordinate})}">

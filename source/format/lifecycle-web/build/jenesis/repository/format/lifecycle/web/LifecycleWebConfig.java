@@ -18,9 +18,14 @@ import org.springframework.context.annotation.Configuration;
 @Configuration(proxyBeanMethods = false)
 public class LifecycleWebConfig {
 
+    /** The marks every operator surface reads and changes them through - this API and the console's page. */
     @Bean
-    public LifecycleController lifecycleController(Repositories repositories, RepositoryRouting routing,
-                                                   AuditTrail audit) {
-        return new LifecycleController(repositories, routing, audit);
+    public LifecycleMarks lifecycleMarks(Repositories repositories, AuditTrail audit) {
+        return new LifecycleMarks(repositories.root(), audit);
+    }
+
+    @Bean
+    public LifecycleController lifecycleController(LifecycleMarks marks, RepositoryRouting routing) {
+        return new LifecycleController(marks, routing);
     }
 }

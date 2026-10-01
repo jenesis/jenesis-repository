@@ -341,6 +341,16 @@ public interface RepositoryFormat extends IconContributor {
         return false;
     }
 
+    /**
+     * The coordinate this format's lifecycle marks name a version by, for the version the inventory records as
+     * {@code coordinate} and serves at {@code path} - what its own client's yank or deprecate names, and what a mark
+     * set from another surface must name to be seen. The inventory's coordinate, unless the format keys its marks
+     * otherwise.
+     */
+    default String lifecycleCoordinate(String coordinate, String path) {
+        return coordinate;
+    }
+
     /** The config keys this format cannot run without; empty (the default) for every self-contained format. A
      *  format whose required keys are unset {@link Features#active self-disables} at discovery. */
     default Set<String> requiredConfig() {

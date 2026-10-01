@@ -178,6 +178,16 @@ public class GlobalControllerAdvice {
         return roleAtLeast(authentication, Role.ADMIN);
     }
 
+    /** The paths the installed console modules add to every repository, so a page links to one only where it is. */
+    @ModelAttribute("repositoryPagePaths")
+    public Set<String> repositoryPagePaths() {
+        Set<String> paths = new HashSet<>();
+        for (RepositoryPage page : capabilities.moduleRepositoryPages()) {
+            paths.add(page.path());
+        }
+        return paths;
+    }
+
     @ModelAttribute("isEditor")
     public boolean isEditor(Authentication authentication) {
         return roleAtLeast(authentication, Role.EDITOR);

@@ -15,7 +15,9 @@
  * @jenesis.signature signature-repository.properties
  */
 open module build.jenesis.repository.format.lifecycle.web {
-    exports build.jenesis.repository.format.lifecycle.web to build.jenesis.repository.server.kernel.test;
+    // The service the API answers from, to the console page that answers from it too.
+    exports build.jenesis.repository.format.lifecycle.web to build.jenesis.repository.server.kernel.test,
+            build.jenesis.repository.format.lifecycle.console;
     requires build.jenesis.repository.server.kernel;
     requires build.jenesis.repository.server;
     requires build.jenesis.repository.audit;

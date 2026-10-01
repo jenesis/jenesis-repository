@@ -112,6 +112,7 @@ open module build.jenesis.repository.bundle {
     requires build.jenesis.repository.format.winget;
     requires build.jenesis.repository.format.signing;
     requires build.jenesis.repository.format.lifecycle.web;
+    requires build.jenesis.repository.format.lifecycle.console;
     requires build.jenesis.repository.format.terraform.web;
     // Retention and the scheduled walk that runs it, staging and promotion, the stored metadata the passes keep,
     // the index and the download counter: the operation of a repository, not an organisation's extra.

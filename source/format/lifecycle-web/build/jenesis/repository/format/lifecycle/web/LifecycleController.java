@@ -1,17 +1,11 @@
 package build.jenesis.repository.format.lifecycle.web;
 
 import module java.base;
-import build.jenesis.repository.audit.AuditActions;
 import build.jenesis.repository.server.RepositoryRouting;
-import build.jenesis.repository.audit.AuditTrail;
 import build.jenesis.repository.server.kernel.Repositories;
-import build.jenesis.repository.format.RepositoryFormat;
-import build.jenesis.repository.format.RepositoryType;
 import build.jenesis.repository.format.lifecycle.Lifecycle;
-import build.jenesis.repository.inventory.StoreRepositoryInventory;
 import build.jenesis.repository.server.kernel.RepositoryRequests;
 import build.jenesis.repository.server.spi.Authorization;
-import build.jenesis.repository.store.ServableNames;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import org.springframework.web.bind.annotation.DeleteMapping;
@@ -42,14 +36,12 @@ import org.springframework.web.bind.annotation.RestController;
 @RestController
 public class LifecycleController {
 
-    private final Repositories repositories;
+    private final LifecycleMarks marks;
     private final RepositoryRouting routing;
-    private final AuditTrail audit;
 
-    public LifecycleController(Repositories repositories, RepositoryRouting routing, AuditTrail audit) {
-        this.repositories = repositories;
+    public LifecycleController(LifecycleMarks marks, RepositoryRouting routing) {
+        this.marks = marks;
         this.routing = routing;
-        this.audit = audit;
     }
 
     /**
@@ -58,7 +50,8 @@ public class LifecycleController {
      *
      * <p>The whole-repository form is paged by {@code after}/{@code limit}: a mark exists per deprecated or yanked
      * version, so the answer is sized by what the repository holds. It answers with the cursor that continues it, and
-     * a caller wanting everything follows that cursor - which is what the CLI does.
+     * a caller wanting everything follows that cursor - which is what the CLI does. One coordinate's marks are bounded
+     * by that coordinate's versions, so that form is answered whole and says so: no cursor, nothing cut short.
      */
     @GetMapping("/api/lifecycle")
     public LifecycleView list(@RequestParam("repository") String repository,
@@ -71,52 +64,17 @@ public class LifecycleController {
         if (tenant == null) {
             return null;
         }
-        // Served-view parity: a withheld version's lifecycle mark must not be disclosed on this
-        // served listing. Each mark is routed through the servable-name enumeration seam
-        // (inventory.disclosableDisplay under HIDE_WITHHELD: the membership policy, resolving the mark's ecosystem by
-        // the inventory's shared bounded probe, stats no blob), so a held coordinate:version's mark drops out while a
-        // deprecated-but-servable mark - or a ghost the inventory cannot place as a held member - stays listed.
-        StoreRepositoryInventory inventory = new StoreRepositoryInventory(repositories.store(tenant, repository));
-        List<FlagView> flags = new ArrayList<>();
         if (coordinate == null || coordinate.isBlank()) {
-            Lifecycle.Page page = Lifecycle.page(repositories.store(tenant, repository),
-                    (coord, version) -> inventory.disclosableDisplay(coord + ":" + version,
-                            ServableNames.Policy.HIDE_WITHHELD),
-                    after, pageLimit(limit));
-            for (Lifecycle.Entry entry : page.entries()) {
-                flags.add(new FlagView(entry.coordinate(), entry.version(),
-                        entry.flag().state().name().toLowerCase(Locale.ROOT), entry.flag().message()));
-            }
-            return new LifecycleView(flags, page.next() != null, page.next());
-        } else {
-            RepositoryRequests.rejectTraversal(coordinate);
-            for (var marked : Lifecycle.versions(repositories.store(tenant, repository), coordinate).entrySet()) {
-                String version = marked.getKey();
-                if (inventory.disclosableDisplay(coordinate + ":" + version, ServableNames.Policy.HIDE_WITHHELD)) {
-                    flags.add(new FlagView(coordinate, version,
-                            marked.getValue().state().name().toLowerCase(Locale.ROOT), marked.getValue().message()));
-                }
-            }
+            LifecycleMarks.Page page = marks.page(tenant, repository, after, limit);
+            return new LifecycleView(views(page.marks()), page.next() != null, page.next());
         }
-        // One coordinate's marks are bounded by that coordinate's versions, so this form is answered whole and says
-        // so: no cursor, and nothing was cut short.
-        return new LifecycleView(flags, false, null);
+        return new LifecycleView(views(marks.coordinate(tenant, repository, coordinate)), false, null);
     }
 
-    /** The page size, defaulted and clamped - an unclamped {@code limit} would hand the caller back the unbounded
-     *  read the paging exists to remove. */
-    private static int pageLimit(Integer limit) {
-        if (limit == null) {
-            return DEFAULT_LIMIT;
-        }
-        return Math.clamp(limit, 1, MAX_LIMIT);
+    private static List<FlagView> views(List<LifecycleMarks.Mark> marks) {
+        return marks.stream().map(mark -> new FlagView(mark.coordinate(), mark.version(),
+                mark.state().name().toLowerCase(Locale.ROOT), mark.message())).toList();
     }
-
-    /** What a caller that names no {@code limit} gets. */
-    private static final int DEFAULT_LIMIT = 200;
-
-    /** The most marks one call will answer with, however large a {@code limit} is asked for. */
-    private static final int MAX_LIMIT = 1_000;
 
     /** Mark a coordinate/version deprecated or yanked. {@code state} is {@code deprecated} or {@code yanked}; the
      *  optional {@code message} is the operator's note surfaced to clients (npm's deprecation text). */
@@ -132,27 +90,18 @@ public class LifecycleController {
         if (tenant == null) {
             return;
         }
-        RepositoryRequests.rejectTraversal(coordinate);
-        RepositoryRequests.rejectTraversal(version);
         Lifecycle.State parsed = Lifecycle.State.parse(state).orElse(null);
         if (parsed == null) {
             response.setStatus(400);
             return;
         }
-        // A mark is refused on a repository whose format shows it to no client: stored, it would read as done while
-        // every client went on offering the version exactly as before.
-        Optional<RepositoryType> type = repositories.type(tenant, repository);
-        if (type.isPresent() && type.get().formats().stream().noneMatch(RepositoryFormat::surfacesLifecycleMarks)) {
+        Optional<String> refused = marks.mark(tenant, repository, coordinate, version, parsed, message, actor(key));
+        if (refused.isPresent()) {
             response.setStatus(422);
             response.setContentType("text/plain;charset=UTF-8");
-            response.getWriter().write("A " + type.get().name() + " repository shows a lifecycle mark to no client: "
-                    + "its format has no metadata a client reads a deprecation or a yank from, so the mark is "
-                    + "refused rather than stored where nobody would see it.");
+            response.getWriter().write(refused.get());
             return;
         }
-        Lifecycle.mark(repositories.store(tenant, repository), coordinate, version,
-                new Lifecycle.Flag(parsed, message == null ? "" : message));
-        audit(tenant, key, Lifecycle.action(parsed), repository + "/" + coordinate + "@" + version);
         response.setStatus(200);
     }
 
@@ -167,11 +116,7 @@ public class LifecycleController {
         if (tenant == null) {
             return;
         }
-        RepositoryRequests.rejectTraversal(coordinate);
-        RepositoryRequests.rejectTraversal(version);
-        if (Lifecycle.clear(repositories.store(tenant, repository), coordinate, version)) {
-            audit(tenant, key, AuditActions.LIFECYCLE_CLEAR, repository + "/" + coordinate + "@" + version);
-        }
+        marks.clear(tenant, repository, coordinate, version, actor(key));
         response.setStatus(200);
     }
 
@@ -181,8 +126,9 @@ public class LifecycleController {
         response.setStatus(400);
     }
 
-    private void audit(String tenant, String key, String action, String target) {
-        audit.record(tenant, key == null ? "anonymous" : Authorization.hash(key), action, target);
+    /** Who a key's change is recorded as: its hash, never the key. */
+    private static String actor(String key) {
+        return key == null ? "anonymous" : Authorization.hash(key);
     }
 
     /** A page of a repository's marked versions (or, for a single coordinate, all of them). {@code next} carries the

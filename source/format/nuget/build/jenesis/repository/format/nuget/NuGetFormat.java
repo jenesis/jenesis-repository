@@ -69,6 +69,12 @@ public final class NuGetFormat implements RepositoryFormat, ProxyLeg, BlobLayout
         return true;
     }
 
+    /** A package's marks name its id in lower case, as every path of the feed does. */
+    @Override
+    public String lifecycleCoordinate(String coordinate, String path) {
+        return coordinate.toLowerCase(Locale.ROOT);
+    }
+
     @Override
     public String ecosystem() {
         return "NuGet";

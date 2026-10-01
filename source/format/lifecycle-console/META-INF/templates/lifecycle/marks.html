@@ -1,0 +1,83 @@
+<!doctype html>
+<html lang="en" xmlns:th="http://www.thymeleaf.org">
+<head th:replace="~{fragments :: head('Deprecations & yanks')}"></head>
+<body>
+<header th:replace="~{fragments :: nav}"></header>
+<main id="main">
+    <div th:replace="~{fragments :: messages}"></div>
+    <th:block th:replace="~{base :: repositoryHeader('Deprecations & yanks', null, null)}"></th:block>
+
+    <p><small>A <strong>deprecated</strong> version still installs, and its client warns whoever installs it; a
+        <strong>yanked</strong> one stays for whoever already pinned it, and no new resolution picks it. Each client
+        sees the mark in its own metadata - npm's deprecation message, Cargo's and RubyGems' yank, NuGet's unlisting -
+        and its own command sets the same mark this page does.</small></p>
+
+    <article th:if="${refusal != null}" class="app-subsection-error" role="status">
+        <p th:text="${refusal}">This repository shows a lifecycle mark to no client.</p>
+    </article>
+
+    <article>
+        <h2 th:text="${coordinate.isEmpty()} ? 'Marked versions' : 'Marked versions of ' + ${coordinate}">Marked
+            versions</h2>
+        <p th:unless="${coordinate.isEmpty()}"><a th:href="@{/ui/repositories/{repo}/lifecycle(repo=${repository})}">Every
+            marked version &rarr;</a></p>
+        <th:block th:if="${marks.isEmpty()}">
+            <div th:replace="~{base :: empty('No version of this repository is deprecated or yanked.')}"></div>
+        </th:block>
+        <figure th:unless="${marks.isEmpty()}">
+            <table class="app-list">
+                <thead>
+                <tr>
+                    <th scope="col">Coordinate</th>
+                    <th scope="col">Version</th>
+                    <th scope="col">Mark</th>
+                    <th scope="col">Message</th>
+                    <th scope="col" th:if="${isEditor}"><span class="app-sr-only">Actions</span></th>
+                </tr>
+                </thead>
+                <tbody>
+                <tr th:each="mark : ${marks}">
+                    <td><a th:href="@{/ui/repositories/{repo}/lifecycle(repo=${repository},coordinate=${mark.coordinate})}"
+                           th:text="${mark.coordinate}">left-pad</a></td>
+                    <td><code th:text="${mark.version}">1.3.0</code></td>
+                    <td><span class="app-badge"
+                              th:classappend="${mark.state.name() == 'YANKED'} ? 'app-badge--warn' : ''"
+                              th:text="${#strings.toLowerCase(mark.state.name())}">deprecated</span></td>
+                    <td><small th:text="${mark.message}">use something else</small></td>
+                    <td th:if="${isEditor}" class="app-list__actions">
+                        <form class="app-actions" method="post"
+                              th:action="@{/ui/repositories/{repo}/lifecycle/clear(repo=${repository})}">
+                            <input type="hidden" name="coordinate" th:value="${mark.coordinate}">
+                            <input type="hidden" name="version" th:value="${mark.version}">
+                            <input type="hidden" name="narrowed" th:value="${!coordinate.isEmpty()}">
+                            <button th:replace="~{base :: cautionButton('Clear', 'Clear this mark? Clients offer the version again as they did before it was marked.')}">Clear</button>
+                        </form>
+                    </td>
+                </tr>
+                </tbody>
+            </table>
+        </figure>
+        <p th:if="${next != null}"><a th:href="@{/ui/repositories/{repo}/lifecycle(repo=${repository},after=${next})}">Showing
+            the first page - more marked versions follow &rarr;</a></p>
+    </article>
+
+    <article th:if="${isEditor and refusal == null}">
+        <h2>Mark a version</h2>
+        <form method="post" th:action="@{/ui/repositories/{repo}/lifecycle(repo=${repository})}">
+            <div class="grid">
+                <label>Coordinate <input name="coordinate" th:value="${coordinate}" placeholder="left-pad" required></label>
+                <label>Version <input name="version" th:value="${version}" placeholder="1.3.0" required></label>
+                <label>Mark
+                    <select name="state" required>
+                        <option th:each="state : ${states}" th:value="${#strings.toLowerCase(state.name())}"
+                                th:text="${#strings.toLowerCase(state.name())}">deprecated</option>
+                    </select>
+                </label>
+            </div>
+            <label>Message <input name="message" placeholder="What to use instead - npm shows this to whoever installs it"></label>
+            <button th:replace="~{base :: primaryButton('Mark the version')}">Mark the version</button>
+        </form>
+    </article>
+</main>
+</body>
+</html>

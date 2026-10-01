@@ -22,6 +22,7 @@ open module build.jenesis.repository.ui.store {
     requires build.jenesis.repository.index.keys;
     requires org.slf4j;
     exports build.jenesis.repository.ui.store to build.jenesis.repository.ui.store.test,
+            build.jenesis.repository.format.lifecycle.console,
             build.jenesis.repository.ui.identity,
             build.jenesis.repository.auth.keylogin,
             build.jenesis.repository.server.kernel.test,

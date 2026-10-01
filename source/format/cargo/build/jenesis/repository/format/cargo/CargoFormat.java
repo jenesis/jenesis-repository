@@ -99,6 +99,16 @@ public final class CargoFormat implements RepositoryFormat, ArtifactLayout, Prox
         return true;
     }
 
+    /** A crate's marks are its registry's: {@code <registry>/<crate>}, the registry read off the path it serves at. */
+    @Override
+    public String lifecycleCoordinate(String coordinate, String path) {
+        if (path == null || !path.startsWith(PREFIX)) {
+            return coordinate;
+        }
+        int slash = path.indexOf('/', PREFIX.length());
+        return slash < 0 ? coordinate : path.substring(PREFIX.length(), slash) + "/" + coordinate;
+    }
+
     /** Cargo retries its sparse index with the token only when a {@code 401} names Cargo's own scheme. */
     @Override
     public List<String> challenges() {
