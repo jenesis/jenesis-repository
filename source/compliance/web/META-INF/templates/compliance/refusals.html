@@ -31,7 +31,7 @@
                     <span th:unless="${f.placed()}" th:text="${f.coordinate}">group:artifact:version</span><br>
                     <small><code th:text="${f.path}">/path/...</code></small>
                 </td>
-                <td><span class="app-badge app-badge--danger" th:text="${f.verdict}">REJECT</span></td>
+                <td><span class="app-badge app-badge--danger" th:text="${@format.verdict(f.verdict)}">Reject</span></td>
                 <td><small th:text="${#strings.listJoin(f.reasons, '; ')}">reason</small></td>
                 <td><small th:text="${instants.display(f.when)}">when</small></td>
             </tr>

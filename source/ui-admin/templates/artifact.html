@@ -76,7 +76,7 @@
             <tbody>
             <tr>
                 <th scope="row">Verdict</th>
-                <td><span class="app-badge app-badge--warn" th:text="${detail.quarantine.verdict}">QUARANTINE</span></td>
+                <td><span class="app-badge app-badge--warn" th:text="${@format.verdict(detail.quarantine.verdict)}">Hold for review</span></td>
             </tr>
             <tr>
                 <th scope="row">Reasons</th>

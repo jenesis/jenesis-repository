@@ -35,7 +35,7 @@
                         <span th:unless="${q.placed()}" th:text="${q.coordinate}">group:artifact:version</span>
                     </td>
                     <td><span th:each="verdict : ${q.verdicts}" class="app-badge app-badge--warn"
-                              th:text="${verdict}">QUARANTINE</span></td>
+                              th:text="${@format.verdict(verdict)}">Hold for review</span></td>
                     <!--/* The retroactive hold kinds standing on this coordinate, read from the durable
                            holds/ records rather than from the installed providers. A kind whose module has been
                            uninstalled still holds, and is drawn here exactly as an orphaned finding source is - the

@@ -1,6 +1,8 @@
 package build.jenesis.repository.ui.admin.web;
 
 import module java.base;
+
+import build.jenesis.repository.settings.Setting;
 import build.jenesis.repository.ui.store.DurationWords;
 import org.springframework.stereotype.Component;
 
@@ -26,6 +28,16 @@ public class Format {
         }
         double scaled = value / Math.pow(1024, unit);
         return String.format(Locale.ROOT, "%.1f %s", scaled, UNITS[unit]);
+    }
+
+    /** A gate verdict as a person reads it, by the name the settings give it: {@code QUARANTINE} as "Hold for
+     *  review"; a value no verdict names as it is. */
+    public String verdict(String value) {
+        if (value == null) {
+            return "";
+        }
+        return Setting.Choice.VERDICTS.stream().filter(choice -> choice.value().equals(value.trim()))
+                .map(Setting.Choice::name).findFirst().orElse(value);
     }
 
     /** A stored duration in words, as every setting's is shown: "30 days", "never"; an empty one as a dash. */
