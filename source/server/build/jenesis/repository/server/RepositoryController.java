@@ -407,7 +407,6 @@ public class RepositoryController {
                 _ -> new ScreenedDispatch(dispatcher.only(type.formats()), hooks));
     }
 
-    /** What a publish into a repository that holds no format is told. */
     /** The repositories this node has already said, in its log, cannot serve - each is named once, not per request. */
     private static final Set<String> UNSERVED = ConcurrentHashMap.newKeySet();
 
@@ -437,6 +436,7 @@ public class RepositoryController {
         return Optional.of(reason);
     }
 
+    /** What a publish into a repository that does not exist or holds no served format is told. */
     static String absent(String repository) {
         return "Repository '" + repository + "' does not exist or holds no format this deployment serves. Create it "
                 + "in the console under Repositories, choosing the format it holds.";

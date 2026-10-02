@@ -954,19 +954,6 @@ public final class StoreRepositoryInventory implements RepositoryInventory {
     }
 
     /**
-     * Forget one ecosystem's durable records - the operator's explicit retirement of data whose format is gone,
-     * and the way out of the refusal every reclaiming pass answers an unplaceable ecosystem with. Deletes the
-     * ecosystem's slices of the record spaces ({@code meta}, {@code pinned}), after which the ecosystem no longer
-     * appears in the published index: the collector judges the repository again, the format's now-unreferenced content
-     * blobs are ordinary garbage it reclaims, and the stray pointers and listings that remain are reaped by the format
-     * module's own manifest purge.
-     *
-     * <p>Refused while any installed format still places the ecosystem: forgetting a live ecosystem's records
-     * would orphan data a format is actively serving. The caller audits; this only deletes.
-     *
-     * @return how many record objects were deleted
-     */
-    /**
      * Refuse an ecosystem an installed format still places, without deleting anything.
      *
      * <p>Separate from the deletion because the two answer to different callers. The retirement itself is long
@@ -982,6 +969,19 @@ public final class StoreRepositoryInventory implements RepositoryInventory {
         }
     }
 
+    /**
+     * Forget one ecosystem's durable records - the operator's explicit retirement of data whose format is gone,
+     * and the way out of the refusal every reclaiming pass answers an unplaceable ecosystem with. Deletes the
+     * ecosystem's slices of the record spaces ({@code meta}, {@code pinned}), after which the ecosystem no longer
+     * appears in the published index: the collector judges the repository again, the format's now-unreferenced content
+     * blobs are ordinary garbage it reclaims, and the stray pointers and listings that remain are reaped by the format
+     * module's own manifest purge.
+     *
+     * <p>Refused while any installed format still places the ecosystem: forgetting a live ecosystem's records
+     * would orphan data a format is actively serving. The caller audits; this only deletes.
+     *
+     * @return how many record objects were deleted
+     */
     public long forgetEcosystem(String ecosystem) throws IOException {
         refuseIfPlaceable(ecosystem);
         long removed = 0;
@@ -1111,6 +1111,11 @@ public final class StoreRepositoryInventory implements RepositoryInventory {
         return true;
     }
 
+    /** The reconciler, for the walk consumer that judges one key at a time. */
+    InventoryReconciler reconciler() {
+        return reconciler;
+    }
+
     /**
      * Rebuild the publish facts from the {@code publish/} pointer tree in both directions, so a crash that left derived
      * state drifting converges on the next sweep. The forward leg recreates a missing section from the owning format's
@@ -1121,11 +1126,6 @@ public final class StoreRepositoryInventory implements RepositoryInventory {
      * counts are what <em>this</em> call restored and removed. The sweep itself lives in {@link InventoryReconciler},
      * which this method delegates to before healing the rollup identity from the converged set.
      */
-    /** The reconciler, for the walk consumer that judges one key at a time. */
-    InventoryReconciler reconciler() {
-        return reconciler;
-    }
-
     public Reconciliation reconcile(ArtifactWalk walk, Instant now) throws IOException {
         Reconciliation reconciliation = reconciler.reconcile(walk, now);
         // Self-heal: with the version documents converged, recompute the rollup identity from that truth, so any drift
