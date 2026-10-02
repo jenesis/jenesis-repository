@@ -1,11 +1,8 @@
 package build.jenesis.repository.index.keys;
 
 /**
- * The one spelling of the published index's storage keys - written by the index task, read by the console.
- *
- * <p>Both the writer and the reader are consumers of these names, and only the writer could see them. That is what
- * made the console's copy possible and what made a divergence silent: a console reading a key nothing writes any
- * more renders "no index published yet" rather than failing, so the wrong answer looks exactly like the empty one.
+ * The one spelling of the published index's storage keys - written by the index task, read by the console, which on
+ * a key nothing writes would render "no index published yet" rather than fail.
  */
 public final class PublishedIndexKeys {
 

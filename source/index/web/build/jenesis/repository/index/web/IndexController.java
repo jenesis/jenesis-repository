@@ -14,13 +14,12 @@ import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 /**
- * The published-index surface, contributed through the {@code ServerModuleProvider} seam: {@code GET /api/index}
- * returns the chain descriptor as JSON (revalidated, since the chain grows), and {@code GET /api/index/chunks/{id}}
- * streams one immutable, content-addressed chunk with an {@code ETag} equal to its SHA-256 id and
- * {@code Cache-Control: public, max-age=…, immutable}, honouring {@code If-None-Match} with a {@code 304} - so a
- * consumer's sync is fetch-descriptor, diff, fetch-only-unseen-chunks, and every chunk fetch is cached forever. The
- * tenant is the one the routing answers for the request, so two tenants never read each other's index; a
- * traversal-unsafe repository or chunk id is a {@code 400}. Rights are enforced by the security chain before the request reaches the controller.
+ * The published-index surface: {@code GET /api/index} returns the chain descriptor as JSON (revalidated, since the
+ * chain grows), and {@code GET /api/index/chunks/{id}} streams one immutable, content-addressed chunk with an
+ * {@code ETag} equal to its SHA-256 id and {@code Cache-Control: public, max-age=…, immutable}, honouring
+ * {@code If-None-Match} with a {@code 304}, so every chunk fetch is cached forever. The tenant is the routing's for the
+ * request, so two tenants never read each other's index; a traversal-unsafe repository or chunk id is a {@code 400}.
+ * The security chain enforces rights before the request reaches the controller.
  */
 @RestController
 public class IndexController {
@@ -66,8 +65,7 @@ public class IndexController {
             return;
         }
         PublishedIndex index = new PublishedIndex(repositories.store(tenant, repo));
-        // One metadata probe answers both existence and the content length: chunkSize is -1 for an absent chunk, so a
-        // full fetch pays size + read, not the redundant exists + size + read (the 304 re-sync path keeps its one probe).
+        // One probe answers existence and length (-1 when absent), so a full fetch pays size + read.
         long size = index.chunkSize(id);
         if (size < 0) {
             response.setStatus(404);
