@@ -518,7 +518,8 @@ public class Cache {
             return;
         }
         while (total[0] > limit) {
-            Selection selection = new Selection(RECLAIM_BATCH, project.lru());
+            Selection<CacheStorage.Stored> selection = new Selection<>(RECLAIM_BATCH, project.lru(),
+                    CacheStorage.Stored::recency);
             sweep(store, project.name(), selection);
             List<CacheStorage.Stored> batch = selection.selected();
             if (batch.isEmpty()) {
@@ -558,26 +559,22 @@ public class Cache {
         // Each pass streams entries a project at a time through a bounded selection of the RECLAIM_BATCH coldest,
         // deletes them until the free target is met, then re-scans: the peak is one batch whatever the store's size.
         while (low()) {
-            Selection selection = new Selection(RECLAIM_BATCH, true);
-            Map<CacheStorage.Stored, CacheStorage> owners = new IdentityHashMap<>();
+            Selection<Owned> selection = new Selection<>(RECLAIM_BATCH, true, owned -> owned.entry().recency());
             for (String tenant : tenants()) {
                 CacheStorage scoped = scope(tenant);
-                projects(scoped, project -> sweep(scoped, project, entry -> {
-                    // Deleted through the storage that enumerated it: a Stored's token is opaque and scope-relative.
-                    owners.put(entry, scoped);
-                    selection.accept(entry);
-                }));
+                projects(scoped, project -> sweep(scoped, project,
+                        entry -> selection.accept(new Owned(entry, scoped))));
             }
-            List<CacheStorage.Stored> batch = selection.selected();
+            List<Owned> batch = selection.selected();
             if (batch.isEmpty()) {
                 return;
             }
             boolean progressed = false;
-            for (CacheStorage.Stored entry : batch) {
+            for (Owned owned : batch) {
                 if (!low()) {
                     return;
                 }
-                owners.getOrDefault(entry, storage).delete(entry);
+                owned.owner().delete(owned.entry());
                 progressed = true;
             }
             if (!progressed || batch.size() < RECLAIM_BATCH) {
@@ -586,27 +583,30 @@ public class Cache {
         }
     }
 
+    /** An entry with the storage that enumerated it, which is the one that deletes it: a {@code Stored}'s token is
+     *  opaque and relative to its scope. Only the entries a {@link Selection} retains are held this way. */
+    private record Owned(CacheStorage.Stored entry, CacheStorage owner) {
+    }
+
     /** The bounded selection every sweep drives: the {@code k} entries that sort first under the eviction order -
      *  coldest for least-recently-used, warmest for most-recently-used - through a heap of at most {@code k}. A
      *  {@link Consumer}, so it is handed straight to the paged enumeration and can span several. */
-    private static final class Selection implements Consumer<CacheStorage.Stored> {
+    private static final class Selection<T> implements Consumer<T> {
 
         /** The eviction order: the entries that sort FIRST are the ones to delete. */
-        private final Comparator<CacheStorage.Stored> order;
+        private final Comparator<T> order;
         /** The retained candidates, worst-first, so the one to drop when a better arrives is always the head. */
-        private final PriorityQueue<CacheStorage.Stored> retained;
+        private final PriorityQueue<T> retained;
         private final int k;
 
-        private Selection(int k, boolean coldest) {
+        private Selection(int k, boolean coldest, Function<T, Instant> recency) {
             this.k = k;
-            this.order = coldest
-                    ? Comparator.comparing(CacheStorage.Stored::recency)
-                    : Comparator.comparing(CacheStorage.Stored::recency).reversed();
+            this.order = coldest ? Comparator.comparing(recency) : Comparator.comparing(recency).reversed();
             this.retained = new PriorityQueue<>(this.order.reversed());
         }
 
         @Override
-        public void accept(CacheStorage.Stored entry) {
+        public void accept(T entry) {
             if (retained.size() < k) {
                 retained.add(entry);
             } else if (order.compare(entry, retained.peek()) < 0) {
@@ -616,8 +616,8 @@ public class Cache {
         }
 
         /** What was selected, in deletion order. */
-        private List<CacheStorage.Stored> selected() {
-            List<CacheStorage.Stored> selected = new ArrayList<>(retained);
+        private List<T> selected() {
+            List<T> selected = new ArrayList<>(retained);
             selected.sort(order);
             return selected;
         }

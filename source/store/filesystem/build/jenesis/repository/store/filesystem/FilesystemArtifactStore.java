@@ -377,85 +377,145 @@ public final class FilesystemArtifactStore implements ArtifactStore {
      *  enough that a crashed one does not outlive the day. */
     private static final Duration TEMP_GRACE = Duration.ofHours(1);
 
+    /**
+     * A scan descends the tree in key order and stops one entry past the page, so a page costs the directories on its
+     * way rather than the tree under the prefix. A directory has no order and no seek, so each one entered is read
+     * whole and the fewest of its children the page can still use are kept - the smallest past the cursor, compared
+     * as a directory's key with its separator after it, which is how its keys sort among its siblings' - and a
+     * subtree that lies wholly behind the cursor is never entered. A project of thousands of folders is paged by
+     * reading the few on the page's way, where walking the whole prefix per page made a sweep's cost the square of
+     * what it swept.
+     */
     @Override
     public Scan scan(String prefix, String startAfter, int limit, Consumer<Listed> consumer) throws IOException {
         if (limit <= 0) {
             throw new IllegalArgumentException("A scan limit must be positive: " + limit);
         }
         Path base = resolve(prefix);
-        Path rootPath = root.normalize();
-        // The capped-TreeMap selection page() uses: a file tree is walked in whatever order directories hand it over,
-        // and the page owed is the smallest keys past startAfter. Holding limit + 1 tells "drained exactly" from
-        // "more".
-        TreeMap<String, Listed> smallest = new TreeMap<>();
-        String after = startAfter == null ? "" : startAfter;
         if (!Files.isDirectory(base)) {
             return Scan.exhausted(0, 1);
         }
-        Files.walkFileTree(base, new SimpleFileVisitor<>() {
-            @Override
-            public FileVisitResult preVisitDirectory(Path dir, BasicFileAttributes attributes) {
-                // The stripe locks under .cas are the store's own: a scan does not enter them.
-                return dir.equals(locks) ? FileVisitResult.SKIP_SUBTREE : FileVisitResult.CONTINUE;
-            }
-
-            @Override
-            public FileVisitResult visitFile(Path path, BasicFileAttributes attributes) {
-                String name = path.getFileName().toString();
-                // The in-flight .upload*.tmp filter, and past a grace window the one place such temps are reclaimed. A
-                // crash between a write's temp and its rename leaves a temp that every listing hides, so no sweep would
-                // ever count or remove it and the volume would fill. This is the only traversal that visits every file
-                // under a prefix, and the grace window keeps an in-flight write safe. A failed delete is ignored:
-                // another node may have won the race.
-                if (name.startsWith(".upload") && name.endsWith(".tmp")) {
-                    if (attributes.lastModifiedTime().toInstant().isBefore(Instant.now().minus(TEMP_GRACE))) {
-                        try {
-                            Files.deleteIfExists(path);
-                        } catch (IOException _) {
-                            // Raced, or not ours to delete; the next scan tries again.
-                        }
-                    }
-                    return FileVisitResult.CONTINUE;
-                }
-                String key = FileNames.decode(
-                        rootPath.relativize(path.normalize()).toString().replace(File.separatorChar, '/'));
-                if (key.compareTo(after) <= 0) {
-                    return FileVisitResult.CONTINUE;
-                }
-                if (smallest.size() < ArtifactStore.oneMoreThan(limit)) {
-                    smallest.put(key, listed(key, attributes));
-                } else if (key.compareTo(smallest.lastKey()) < 0) {
-                    smallest.put(key, listed(key, attributes));
-                    smallest.pollLastEntry();
-                }
-                return FileVisitResult.CONTINUE;
-            }
-
-            @Override
-            public FileVisitResult visitFileFailed(Path path, IOException failure) throws IOException {
-                // A file that vanished is not a file that could not be examined: a concurrent write renames its temp
-                // into place between the directory read and the stat, and a listing is entitled not to report a deleted
-                // file. Aborting here would skip the cache reaper's sweep whenever a write was in flight - under
-                // sustained load, every interval.
-                //
-                // Every other failure throws: a short scan is how a sweep learns a prefix is drained, so a file that is
-                // there and cannot be read must fail the call rather than shorten it into a claim of completeness.
-                if (failure instanceof NoSuchFileException) {
-                    return FileVisitResult.CONTINUE;
-                }
-                throw failure;
-            }
-        });
-        boolean more = smallest.size() > limit;
+        Path rootPath = root.normalize();
+        String baseKey = FileNames.decode(rootPath.relativize(base).toString().replace(File.separatorChar, '/'));
+        Descent descent = new Descent(startAfter == null ? "" : startAfter, ArtifactStore.oneMoreThan(limit));
+        descent.enter(base, baseKey);
+        List<Listed> found = descent.found;
+        boolean more = found.size() > limit;
         if (more) {
-            smallest.pollLastEntry();
+            found.removeLast();
         }
         String last = null;
-        for (Listed entry : smallest.values()) {
+        for (Listed entry : found) {
             consumer.accept(entry);
             last = entry.key();
         }
-        return more ? Scan.truncated(last, smallest.size(), 1) : Scan.exhausted(smallest.size(), 1);
+        return more ? Scan.truncated(last, found.size(), descent.steps)
+                : Scan.exhausted(found.size(), descent.steps);
+    }
+
+    /** One scan's descent: the entries it has found, in key order, until it holds {@code wanted}. */
+    private final class Descent {
+
+        private final String after;
+        private final int wanted;
+        private final List<Listed> found = new ArrayList<>();
+        private long steps;
+
+        private Descent(String after, int wanted) {
+            this.after = after;
+            this.wanted = wanted;
+        }
+
+        /** A directory's child as its keys sort: a directory's key carries its separator, a file's does not. */
+        private record Child(String order, String key, Path path, BasicFileAttributes attributes) {
+        }
+
+        /** Visit {@code dir}, whose key is {@code dirKey}, in key order; answers whether the page is full. */
+        private boolean enter(Path dir, String dirKey) throws IOException {
+            String floor = null;
+            while (true) {
+                int room = wanted - found.size();
+                TreeMap<String, Child> next = smallest(dir, dirKey, floor, room);
+                for (Child child : next.values()) {
+                    if (child.attributes().isDirectory()) {
+                        if (enter(child.path(), child.key())) {
+                            return true;
+                        }
+                    } else {
+                        found.add(listed(child.key(), child.attributes()));
+                        if (found.size() == wanted) {
+                            return true;
+                        }
+                    }
+                }
+                if (next.size() < room) {
+                    return false;                   // the directory had no more children past the floor
+                }
+                floor = next.lastKey();
+            }
+        }
+
+        /** The {@code room} smallest children of {@code dir} the page can still use: past the cursor, past
+         *  {@code floor}, and not a subtree wholly behind the cursor. */
+        private TreeMap<String, Child> smallest(Path dir, String dirKey, String floor, int room) throws IOException {
+            steps++;
+            TreeMap<String, Child> smallest = new TreeMap<>();
+            try (DirectoryStream<Path> children = Files.newDirectoryStream(dir)) {
+                for (Path path : children) {
+                    if (path.equals(locks)) {
+                        continue;                   // the stripe locks under .cas are the store's own
+                    }
+                    BasicFileAttributes attributes;
+                    try {
+                        attributes = Files.readAttributes(path, BasicFileAttributes.class, LinkOption.NOFOLLOW_LINKS);
+                    } catch (NoSuchFileException vanished) {
+                        // A concurrent write renamed its temp into place between the read and the stat; a listing is
+                        // entitled not to report a deleted file.
+                        continue;
+                    }
+                    String name = FileNames.decode(path.getFileName().toString());
+                    if (!attributes.isDirectory() && name.startsWith(".upload") && name.endsWith(".tmp")) {
+                        reclaimTemp(path, attributes);
+                        continue;
+                    }
+                    String key = dirKey.isEmpty() ? name : dirKey + "/" + name;
+                    String order = attributes.isDirectory() ? key + "/" : key;
+                    if (floor != null && order.compareTo(floor) <= 0) {
+                        continue;
+                    }
+                    if (attributes.isDirectory()
+                            ? order.compareTo(after) <= 0 && !after.startsWith(order)
+                            : key.compareTo(after) <= 0) {
+                        continue;                   // wholly behind the cursor
+                    }
+                    if (smallest.size() < room || order.compareTo(smallest.lastKey()) < 0) {
+                        smallest.put(order, new Child(order, key, path, attributes));
+                        if (smallest.size() > room) {
+                            smallest.pollLastEntry();
+                        }
+                    }
+                }
+            } catch (NoSuchFileException | NotDirectoryException vanished) {
+                return smallest;                    // a directory removed under the scan holds nothing to page
+            }
+            return smallest;
+        }
+    }
+
+    /**
+     * The in-flight {@code .upload*.tmp} filter, and past a grace window the one place such temps are reclaimed. A
+     * crash between a write's temp and its rename leaves a temp that every listing hides, so no sweep would ever count
+     * or remove it and the volume would fill. A scan reads every directory a full sweep crosses, and the grace window
+     * keeps an in-flight write safe. A failed delete is ignored: another node may have won the race.
+     */
+    private static void reclaimTemp(Path path, BasicFileAttributes attributes) {
+        if (attributes.lastModifiedTime().toInstant().isBefore(Instant.now().minus(TEMP_GRACE))) {
+            try {
+                Files.deleteIfExists(path);
+            } catch (IOException _) {
+                // Raced, or not ours to delete; the next scan tries again.
+            }
+        }
     }
 
     /** Both halves of the metadata come from the attributes the visitor was handed, so a scan stats nothing. */
