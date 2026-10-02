@@ -9,6 +9,7 @@ import org.springframework.core.annotation.Order;
 import org.springframework.core.env.Environment;
 import org.springframework.security.config.Customizer;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
+import org.springframework.security.core.userdetails.UserDetailsService;
 import org.springframework.security.web.SecurityFilterChain;
 
 /**
@@ -26,13 +27,16 @@ public class DevConsoleSecurity {
     public static final String PATH = "/ui/login/dev";
 
     /** The dev chain, scoped and authorized by the edition's policy, refusing as the production chain refuses, and
-     *  identical in every other respect. */
+     *  identical in every other respect. It names its own accounts: a sign-in mechanism that contributes an
+     *  {@code AuthenticationProvider} bean - key sign-in does - becomes the global manager's only provider, and a
+     *  form leaning on the global manager would then refuse every one of them. */
     @Bean
     @Order(2)
-    public SecurityFilterChain devSecurityFilterChain(HttpSecurity http, DevConsolePolicy policy, ConsoleAccess access)
-            throws Exception {
+    public SecurityFilterChain devSecurityFilterChain(HttpSecurity http, DevConsolePolicy policy, ConsoleAccess access,
+                                                      UserDetailsService accounts) throws Exception {
         return http
                 .securityMatcher(policy.space().toArray(String[]::new))
+                .userDetailsService(accounts)
                 .authorizeHttpRequests(policy::rules)
                 .exceptionHandling(exceptions -> exceptions.accessDeniedHandler(new NoAccessRedirect(access)))
                 .formLogin(form -> form

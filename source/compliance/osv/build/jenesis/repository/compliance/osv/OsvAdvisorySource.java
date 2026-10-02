@@ -122,11 +122,16 @@ public final class OsvAdvisorySource implements AdvisorySource {
      *  other declared name is OSV's own or one OSV does not publish. */
     private static final Map<String, String> OSV_NAMES = Map.of(Ecosystems.CONAN, "ConanCenter");
 
+    /** The name OSV knows the product's {@code ecosystem} by, which is the one an advisory query carries. */
+    public static String osvName(String ecosystem) {
+        return OSV_NAMES.getOrDefault(ecosystem, ecosystem);
+    }
+
     /** One page's request: the vendor's query URL and body, with the cursor token echoed back from the second page on. */
     private FeedRequest request(String ecosystem, String coordinate, String version, String pageToken) {
         Map<String, Object> body = new LinkedHashMap<>();
         body.put("version", version);
-        body.put("package", Map.of("ecosystem", OSV_NAMES.getOrDefault(ecosystem, ecosystem), "name", coordinate));
+        body.put("package", Map.of("ecosystem", osvName(ecosystem), "name", coordinate));
         if (pageToken != null) {
             body.put("page_token", pageToken);
         }
