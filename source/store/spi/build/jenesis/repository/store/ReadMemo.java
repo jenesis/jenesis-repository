@@ -101,10 +101,16 @@ public final class ReadMemo implements ArtifactStore {
         return read;
     }
 
-    /** Answered off the remembered object, so a token probe after a read costs nothing more. */
+    /** Answered off the remembered object when there is one, so a token probe after a read costs nothing more, and
+     *  by the store's own token probe otherwise: reading the object to learn its token would hold a whole listing to
+     *  compare one token. A token alone is not remembered, since a later read needs the body. */
     @Override
-    public Optional<Object> version(String key) throws IOException {
-        return readVersioned(key).map(Versioned::token);
+    public synchronized Optional<Object> version(String key) throws IOException {
+        Optional<Versioned> known = remembered.get(key);
+        if (known != null) {
+            return known.map(Versioned::token);
+        }
+        return delegate.version(key);
     }
 
     @Override

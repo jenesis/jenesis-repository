@@ -63,6 +63,31 @@ class ReadMemoTest {
     }
 
     @Test
+    void a_token_probe_of_a_key_not_read_asks_the_stores_token_and_never_its_body() throws IOException {
+        ArtifactStore raw = raw();
+        raw.writeVersioned("listing/large", bytes("a document a token probe must not read"), null);
+        List<String> asked = new ArrayList<>();
+        ArtifactStore recording = (ArtifactStore) java.lang.reflect.Proxy.newProxyInstance(
+                ArtifactStore.class.getClassLoader(), new Class<?>[] {ArtifactStore.class}, (proxy, method, arguments) -> {
+                    asked.add(method.getName());
+                    try {
+                        return method.invoke(raw, arguments);
+                    } catch (InvocationTargetException thrown) {
+                        throw thrown.getCause();
+                    }
+                });
+        ArtifactStore memo = ReadMemo.over(recording);
+
+        assertThat(memo.version("listing/large")).contains(raw.version("listing/large").orElseThrow());
+        assertThat(asked).as("the probe is the store's token probe").containsExactly("version");
+
+        memo.readVersioned("listing/large");
+        asked.clear();
+        assertThat(memo.version("listing/large")).isPresent();
+        assertThat(asked).as("and after a read, the remembered token").isEmpty();
+    }
+
+    @Test
     void a_compare_and_set_never_acts_on_a_remembered_token_so_a_peers_write_is_never_lost() throws IOException {
         ArtifactStore raw = raw();
         raw.writeVersioned("meta/x", bytes("v1"), null);

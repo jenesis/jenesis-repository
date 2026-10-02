@@ -396,6 +396,17 @@ public final class FaultInjectingStore implements ArtifactStore {
         return delegate.readVersioned(key);
     }
 
+    /** A token probe is the delegate's own, counted and faulted as the read it stands for, so a wrapped store's
+     *  metadata request is never turned back into a download. */
+    @Override
+    public Optional<Object> version(String key) throws IOException {
+        Mode mode = intercept(Op.READ_VERSIONED, key);
+        if (mode == Mode.THROW_BEFORE || mode == Mode.THROW_AFTER) {
+            throw fault(Op.READ_VERSIONED, key);
+        }
+        return delegate.version(key);
+    }
+
     @Override
     public boolean writeVersioned(String key, byte[] content, Object expected) throws IOException {
         Mode mode = intercept(Op.WRITE_VERSIONED, key);
@@ -571,6 +582,14 @@ public final class FaultInjectingStore implements ArtifactStore {
                 throw fault(Op.READ_VERSIONED, key);
             }
             return scoped.readVersioned(key);
+        }
+
+        @Override
+        public Optional<Object> version(String key) throws IOException {
+            if (intercept(Op.READ_VERSIONED, key) != null) {
+                throw fault(Op.READ_VERSIONED, key);
+            }
+            return scoped.version(key);
         }
 
         @Override
