@@ -7,20 +7,13 @@ import software.amazon.awssdk.services.s3.model.CommonPrefix;
 import software.amazon.awssdk.services.s3.model.GetObjectResponse;
 import software.amazon.awssdk.services.s3.model.ListObjectsV2Response;
 import software.amazon.awssdk.services.s3.model.S3Exception;
-import software.amazon.awssdk.services.s3.model.S3Object;import software.amazon.awssdk.services.s3.S3Client;
+import software.amazon.awssdk.services.s3.model.S3Object;
+import software.amazon.awssdk.services.s3.S3Client;
 
 /**
- * The half of an object-store backend that is the same whichever S3-compatible service is behind it.
- *
- * <p>Reading, listing, scanning and paging are ordinary S3 API calls and behave identically on AWS S3, on Google
- * Cloud Storage's S3-compatible XML API, and on MinIO. What differs between services is the version token and how
- * a conditional write is expressed - S3 uses {@code If-Match} / {@code If-None-Match} on the write, GCS honours
- * those only on reads and takes {@code x-goog-if-generation-match} instead - so that half stays with each backend.
- *
- * <p>The two backends carried both halves each. The listing side alone was fourteen methods and a hundred and
- * sixty-five lines, duplicated exactly, {@code pageListed} among them at fifty-six lines: continuation tokens,
- * delimiters, prefix arithmetic and the page-size bound. A paging fault found and fixed against one service would
- * have been left standing in the other, and nothing would have said so.
+ * The half of an object-store backend that is the same whichever S3-compatible service is behind it: reading, listing,
+ * scanning and paging are ordinary S3 API calls. What differs between services - the version token and how a
+ * conditional write is expressed - stays with the subclass.
  */
 public abstract class S3CompatibleArtifactStore implements ArtifactStore {
 
@@ -183,10 +176,8 @@ public abstract class S3CompatibleArtifactStore implements ArtifactStore {
             throw new IllegalArgumentException("A scan limit must be positive: " + limit);
         }
         String base = base(prefix);
-        // No delimiter, and therefore none of page()'s name-order repair: a recursive scan wants every object under
-        // the prefix, and without grouped prefixes the listing arrives in exactly the key order this method owes.
-        // maxKeys is limit + 1 so the page after the last delivered key is what proves whether more remains, rather
-        // than a second request asking.
+        // No delimiter, so the listing arrives in exactly the key order owed and needs no name-order repair. maxKeys
+        // is limit + 1 so the same page proves whether more remains, without a second request.
         long steps = 0;
         long delivered = 0;
         String last = null;
@@ -219,16 +210,13 @@ public abstract class S3CompatibleArtifactStore implements ArtifactStore {
         }
         String base = base(prefix);
         // The stream arrives in raw key order, where a container shows up as a grouped prefix at `name + "/"` -
-        // AFTER any sibling whose name extends this one past a character below '/' (the object `app.txt`
-        // precedes the grouped prefix `app/`, yet the child `app` must page before `app.txt`). Emitting in
-        // child-NAME order therefore parks every name and releases the smallest parked one only once no
-        // smaller-named child can still arrive - see held(). A released name at or below startAfter is dropped:
-        // the server-side start-after skips the boundary's own object but not a same-named container's grouped
-        // prefix, and a prefix-child of the boundary (`app` for `app.txt`) re-arrives here yet was already paged
-        // by the call that emitted the boundary itself.
-        // Keyed by child NAME, valued by what the listing said about it: a leaf carries its
-        // size and age straight off the response, a grouped prefix carries neither because a
-        // container has none of its own. Nothing here issues a request to fill them.
+        // after any sibling whose name extends this one past a character below '/' (the object `app.txt` precedes
+        // the grouped prefix `app/`, yet the child `app` must page before `app.txt`). So every name is parked and the
+        // smallest released only once no smaller-named child can still arrive - see held(). A released name at or
+        // below startAfter is dropped: the server-side start-after skips the boundary's own object but not a
+        // same-named container's grouped prefix, and a prefix-child of the boundary re-arrives yet was already paged.
+        // Each child carries what the listing said - a leaf its size and age, a container neither - with no request
+        // to fill them.
         TreeMap<String, Listed> pending = new TreeMap<>();
         int emitted = 0;
         String last = null;
