@@ -7,17 +7,16 @@ import build.jenesis.repository.inventory.DownloadTrackerProvider;
 import build.jenesis.repository.server.spi.BatchingWorker;
 
 /**
- * Opt-in download tracking ({@code jenrepo.track-downloads}), off the request path on its own worker thread -
- * started and stopped through Spring's bean lifecycle (not a daemon), so {@link #close} stops and joins it for a
- * clean shutdown, and {@link #alive}/{@link #dropped} let a health indicator watch it. A successful read offers a
- * {@link DownloadTracker.Hit} to a bounded in-memory queue (non-blocking, counted as dropped if saturated - a
- * download count is a retention and popularity signal, not an audit log); the thread drains the queue into one
- * accumulator per coordinate version and flushes each at most once per {@code download-flush-interval}: one
- * compare-and-set on the version's document adding the hits since the last flush and carrying the newest of them.
- * The count is therefore up to one interval behind and, on an unclean stop, loses at most one interval of hits;
- * a clean stop flushes every residual. An idle worker flushes a due delta on its own clock, so a lone download is
- * not held until the next one arrives. {@link #drain} and {@link #onIdle} are public so a test can drive them
- * synchronously, without the thread.
+ * Download tracking ({@code jenrepo.track-downloads}, on unless switched off), off the request path on its own worker
+ * thread, started and stopped through Spring's bean lifecycle so {@link #close} stops and joins it, and watched by
+ * a health indicator through {@link #alive} and {@link #dropped}. A successful read offers a
+ * {@link DownloadTracker.Hit} to a bounded queue without blocking, counted as dropped when saturated, since a download
+ * count is a retention and popularity signal rather than an audit log. The thread drains the queue into one accumulator
+ * per coordinate version and flushes each at most once per {@code download-flush-interval}: one compare-and-set on the
+ * version's document adding the hits since the last flush and carrying the newest. The count is up to one interval
+ * behind, an unclean stop loses at most one interval of hits, and a clean stop flushes every residual. An idle worker
+ * flushes a due delta on its own clock, so a lone download is not held until the next arrives. {@link #drain} and
+ * {@link #onIdle} are public so a test can drive them without the thread.
  */
 public final class BatchingDownloadTracker extends BatchingWorker<DownloadTracker.Hit> implements DownloadTracker {
 
@@ -30,12 +29,12 @@ public final class BatchingDownloadTracker extends BatchingWorker<DownloadTracke
 
     private static final int QUEUE_CAPACITY = 100_000;
 
-    /** How often an idle worker looks for a delta whose interval has passed: seconds of lag on a due flush, and a
-     *  scan of the accumulators that is not the worker's main occupation. */
+    /** How often an idle worker looks for a due delta: seconds of lag on a flush, for a scan of the accumulators that
+     *  stays a small part of the worker's time. */
     private static final Duration IDLE_SWEEP = Duration.ofSeconds(30);
 
     /** One coordinate version's hits since this process started: how many arrived, how many were flushed, when the
-     *  newest arrived and when the last flush was. Guarded by its own monitor, as the key-usage tracker's are. */
+     *  newest arrived and when the last flush was. Guarded by its own monitor. */
     private static final class Pending {
         private long count;
         private long flushed;
@@ -46,8 +45,7 @@ public final class BatchingDownloadTracker extends BatchingWorker<DownloadTracke
     private final DownloadTrackerProvider.Inventories inventories;
     private final Duration flushInterval;
     private final Map<Hit, Pending> pending = new ConcurrentHashMap<>();
-    // Flushes that failed with an IOException: folded into dropped() so a store that always fails to persist is
-    // visible on the health surface, rather than the tracker reporting alive && dropped==0 while writing nothing.
+    // Failed flushes, folded into dropped() so a store that never persists shows on the health surface.
     private final AtomicLong writeFailures = new AtomicLong();
     private volatile Instant nextIdleSweep = Instant.EPOCH;
 

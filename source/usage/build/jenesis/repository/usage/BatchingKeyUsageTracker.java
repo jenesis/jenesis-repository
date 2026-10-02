@@ -12,24 +12,21 @@ import build.jenesis.repository.server.spi.BatchingWorker;
 import build.jenesis.repository.server.spi.KeyUsageTracker;
 
 /**
- * Opt-in usage tracking for credentials, off the request path on its own worker thread - started and stopped
- * through Spring's bean lifecycle (not a daemon), so {@link #close} stops and joins it for a clean shutdown,
- * and {@link #alive}/{@link #dropped} let a health indicator watch it. An allowed request offers a
- * {@link Hit} (its tenant, the key's hash and the source address) to a bounded in-memory queue (non-blocking, dropped
- * if saturated - usage is an informational signal, not an audit log); the thread drains the queue into a per-credential
- * accumulator that counts every hit and remembers the last address, and flushes each credential through {@link
- * Authorization#recordUsed} at most once per day (the persisted count therefore lags but converges, and the store sees
- * at most one write per credential per day). The flush adds the delta since the last flush, so no hit within a process
- * lifetime is lost; a crash forfeits only the unflushed tail, which an informational counter can bear. {@link #drain}
- * is public so it can be driven synchronously, without the thread. A {@link #record} is a no-op when tracking is off.
+ * Credential usage tracking ({@code jenrepo.track-key-usage}, on unless switched off), off the request path on its own
+ * worker thread, started and stopped through Spring's bean lifecycle so {@link #close} stops and joins it, and
+ * watched by a health indicator through {@link #alive} and {@link #dropped}. An allowed request offers a {@link Hit}
+ * (tenant, key hash, source address) to a bounded queue without blocking, dropped when saturated, since usage is an
+ * informational signal rather than an audit log. The thread drains the queue into a per-credential accumulator that
+ * counts every hit and remembers the last address, and flushes each credential through
+ * {@link Authorization#recordUsed} at most once per UTC day, adding the delta since the last flush: the persisted count
+ * lags but converges, no hit within a process lifetime is lost, and a crash forfeits only the unflushed tail.
+ * {@link #drain} is public so a test can drive it without the thread; {@link #record} is a no-op when tracking is off.
  *
- * <p>An enabled tracker is its own {@link ObservabilitySource}: it reports its bounded queue depth ({@code
- * jenrepo.usage.queue}, used vs the fixed capacity - the saturation that turns into drops), the per-credential
- * accumulators it holds ({@code jenrepo.usage.tracked}), the hits it has dropped under back-pressure ({@code
- * jenrepo.usage.dropped}), a {@code jenrepo.usage.worker} health check (DOWN when the worker died with tracking on)
- * and a {@code jenrepo.usage.flush} task status stamped with the last drain. A <em>disabled</em> tracker (tracking
- * switched off) reports nothing at all, consistent with the "a disabled plugin is not listed" rule; the same
- * distinction the health surface already draws between "installed but off" and a dead worker.
+ * <p>An enabled tracker reports its queue depth against the capacity ({@code jenrepo.usage.queue}), the accumulators
+ * it holds ({@code jenrepo.usage.tracked}), the hits dropped ({@code jenrepo.usage.dropped}), a
+ * {@code jenrepo.usage.worker} health check (DOWN when the worker died with tracking on) and a
+ * {@code jenrepo.usage.flush} task status stamped with the last drain. A disabled tracker reports nothing, as a
+ * disabled plugin is not listed.
  */
 public final class BatchingKeyUsageTracker extends BatchingWorker<BatchingKeyUsageTracker.Hit>
         implements KeyUsageTracker, ObservabilitySource {
@@ -64,15 +61,12 @@ public final class BatchingKeyUsageTracker extends BatchingWorker<BatchingKeyUsa
     }
 
     /**
-     * The worker has terminated (or was never started), so every Pending is quiescent: nothing mutates a count
-     * concurrently and this final pass is deterministic. Drain whatever the stopped worker left queued so a clean
-     * shutdown forfeits no accepted hit, then flush
-     * every residual delta - including a credential already flushed once today, whose at-most-once-per-day gate
-     * would otherwise strand its same-day tail until the process ends.
+     * The worker has terminated (or was never started), so every accumulator is quiescent. Drains what the stopped
+     * worker left queued, so a clean shutdown forfeits no accepted hit, then flushes every residual delta, including
+     * one for a credential already flushed today.
      *
-     * <p>A worker that did not stop within the grace window is still draining; flushing now would race its
-     * {@code count++} on a Pending and could mark a hit flushed without persisting it - the very loss the "no hit
-     * lost within a process lifetime" contract forbids. Its next drain flushes the tail instead.
+     * <p>A worker that did not stop within the grace window is still draining, and flushing now could race its count
+     * and mark a hit flushed without persisting it; its next drain flushes the tail instead.
      */
     @Override
     protected void onClosed(boolean terminated) {
@@ -100,10 +94,8 @@ public final class BatchingKeyUsageTracker extends BatchingWorker<BatchingKeyUsa
                 flush(entry.getKey(), entry.getValue(), today);
             }
         }
-        // Drop a fully-flushed credential not seen today: its delta is already persisted, so a later hit rebuilds a
-        // fresh Pending (flushed=0) and flushes the new delta correctly. Without this the maps grow one entry per
-        // (tenant, credential-hash) ever seen - a credential-rotating or anonymous-authorized tenant leaks memory and
-        // slows each drain (it scans the whole map). The sibling download tracker bounds itself the same way.
+        // Drop a fully flushed credential not written today, so the maps are bounded by the credentials seen in one
+        // day; a later hit rebuilds a fresh accumulator and flushes its new delta.
         pending.entrySet().removeIf(entry -> {
             Pending value = entry.getValue();
             synchronized (value) {
@@ -179,10 +171,8 @@ public final class BatchingKeyUsageTracker extends BatchingWorker<BatchingKeyUsa
     }
 
     private void flush(String key, Pending entry, LocalDate day) {
-        // Snapshot the count, delta and last-seen fields together under the entry's monitor, so a concurrent
-        // accumulate() cannot tear the read. Crucially, capture `snapshot` here and advance `flushed` only to it
-        // below - never to a re-read count - so a count++ landing while recordUsed is in flight stays an unflushed
-        // delta for the next flush rather than being absorbed as "flushed" without ever being persisted.
+        // Read the fields together under the monitor, and advance `flushed` only to this snapshot, so a hit landing
+        // while recordUsed is in flight stays an unflushed delta rather than being marked flushed unpersisted.
         long snapshot;
         long delta;
         Instant when;
@@ -204,8 +194,7 @@ public final class BatchingKeyUsageTracker extends BatchingWorker<BatchingKeyUsa
                 }
                 writtenDay.put(key, day);
             }
-            // A false return means every compare-and-set lost to contention: leave `flushed` where it is so the delta
-            // is re-attempted on the next flush rather than being marked written and silently dropped.
+            // False: every compare-and-set lost, so the delta stays unflushed for the next flush.
         } catch (IOException e) {
             // best-effort
         }

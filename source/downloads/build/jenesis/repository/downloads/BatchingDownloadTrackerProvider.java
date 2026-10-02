@@ -7,9 +7,8 @@ import build.jenesis.repository.inventory.DownloadTracker;
 import build.jenesis.repository.inventory.DownloadTrackerProvider;
 
 /**
- * Discovers the batching download tracker: recording is off unless {@code track-downloads} switches it on, and a
- * disabled tracker still stands (its worker reports as off) so a health surface distinguishes "installed but off"
- * from a dead worker.
+ * The batching download tracker: recording is on unless {@code track-downloads} switches it off, and a disabled
+ * tracker still stands, its worker reporting as off, so a health surface tells "installed but off" from a dead worker.
  */
 public final class BatchingDownloadTrackerProvider implements DownloadTrackerProvider {
 

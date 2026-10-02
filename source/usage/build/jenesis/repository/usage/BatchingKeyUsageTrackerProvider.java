@@ -7,9 +7,8 @@ import build.jenesis.repository.server.spi.KeyUsageTracker;
 import build.jenesis.repository.server.spi.KeyUsageTrackerProvider;
 
 /**
- * Discovers the batching usage tracker: recording is off unless {@code track-key-usage} switches it on, and a
- * disabled tracker still stands (its worker reports as off) so a health surface distinguishes "installed but off"
- * from a dead worker.
+ * The batching usage tracker: recording is on unless {@code track-key-usage} switches it off, and a disabled tracker
+ * still stands, its worker reporting as off, so a health surface tells "installed but off" from a dead worker.
  */
 public final class BatchingKeyUsageTrackerProvider implements KeyUsageTrackerProvider {
 
