@@ -15,10 +15,8 @@ import org.springframework.context.annotation.Import;
 /**
  * Boots the repository, the console and the build cache as one application, off the bundle module path.
  *
- * <p>One image that has to be told which half to be is an indirection nobody wants - so there is one entry point,
- * one config file
- * ({@code bundle.properties}, named explicitly because two modules on this path carry a root
- * {@code application.properties}) and one port.
+ * <p>There is one entry point, one config file ({@code bundle.properties}, named explicitly because two modules on
+ * this path carry a root {@code application.properties}) and one port.
  *
  * <p><b>How the halves compose.</b> The repository needs no scanning: {@link RepositoryApplication} is a bare
  * {@code @SpringBootConfiguration @EnableAutoConfiguration} launcher carrying no beans of its own, so its
@@ -37,16 +35,13 @@ import org.springframework.context.annotation.Import;
 @EnableAutoConfiguration
 @ConfigurationPropertiesScan(basePackages = {"build.jenesis.repository.ui",
         "build.jenesis.repository.ui.identity"})
-// The console and the build cache each arrive as one importable thing that knows its own gate, rather than as a
-// scan this launcher spells out. A launcher cannot make its own @ComponentScan conditional, so a console and a cache
-// that can be switched off had to become configurations that can be.
-// It is the admin console: there is one console, and what an edition adds to it arrives through the seams it
-// declares rather than as a second console beside it. A capability this image does not carry reports itself
-// not installed, which is what every absent module already does. The cache's module on the path is not the cache
-// served: without the import its endpoint is never registered and every build tool's request is a 404.
+// The console and the build cache each arrive as one importable configuration that knows its own switch, since a
+// launcher cannot make its own @ComponentScan conditional. There is one console, and an edition adds to it through
+// the seams it declares. Without the import the cache's endpoint is never registered and every build tool's request
+// is a 404, whatever the module path carries.
 @Import({AdminConsoleNode.class, CacheNode.class})
-// The composition itself is scanned rather than imported: it is not optional, it is what this image is. Its
-// own launcher class is excluded so its auto-configuration is not re-triggered by the one this launcher is.
+// The composition is scanned rather than imported, since it is not optional; its own launcher class is excluded so
+// its auto-configuration is not triggered a second time.
 @ComponentScan(basePackages = "build.jenesis.repository.application",
         excludeFilters = @ComponentScan.Filter(type = FilterType.REGEX,
                 pattern = "build\\.jenesis\\.repository\\.application\\.RepositoryApplication"))
@@ -64,11 +59,9 @@ public class Server {
     /**
      * Boot the server on the given port ({@code 0} picks an ephemeral one) and return a handle exposing
      * the bound port and closing the context, so a test can drive the exact composition the image runs over HTTP.
-     * The port rides as a run argument rather than a default property, which is not merely a habit: a
-     * {@code .properties()} default sits in Spring's lowest-precedence layer, so anything above it - a config
-     * file, an environment variable - would win and two suites asking for an ephemeral port would race for one
-     * fixed port. No file pins {@code server.port} any more (8080 is Spring's own default and restating it put
-     * the value in a second place), so an argument is what makes {@code 0} mean 0.
+     * The port rides as a run argument because a {@code .properties()} default sits in Spring's lowest-precedence
+     * layer, where a config file or an environment variable would win and two suites asking for an ephemeral port
+     * would race for one fixed port.
      */
     public static Running start(int port) {
         ConfigurableApplicationContext context = new SpringApplicationBuilder(Server.class)
