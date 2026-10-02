@@ -164,7 +164,14 @@ public final class WizardFlow {
     /** A run on its first step, its settings starting from {@code initial} - what the deployment holds already, for
      *  the first boot; nothing, for a creation. */
     public static WizardFlow start(Definition definition, Map<String, String> initial) {
+        return start(definition, initial, Map.of());
+    }
+
+    /** A run starting from {@code initial} settings and {@code identity} answers the first step names already, by
+     *  field name. */
+    public static WizardFlow start(Definition definition, Map<String, String> initial, Map<String, String> identity) {
         Map<String, String> values = new LinkedHashMap<>();
+        identity.forEach((field, value) -> values.put(IDENTITY + field, value));
         initial.forEach((key, value) -> values.put(SETTING + key, value));
         return new WizardFlow(definition, values, 0);
     }

@@ -10,6 +10,7 @@ import build.jenesis.repository.server.spi.Authorization;
 import build.jenesis.repository.server.spi.Authorization.Kind;
 import build.jenesis.repository.server.spi.RateLimiter;
 import build.jenesis.repository.server.spi.RateLimiterProvider;
+import build.jenesis.repository.ui.AdministratorKeys;
 import build.jenesis.repository.ui.LoginOptions;
 import build.jenesis.repository.ui.ConsoleTemplates;
 import build.jenesis.repository.ui.LoginContributor;
@@ -129,6 +130,28 @@ public class KeyLoginConfig {
     @Bean
     public SpringResourceTemplateResolver keyLoginTemplateResolver(ApplicationContext context) {
         return ConsoleTemplates.resolver(context, KeyLoginMechanism.QUALIFIER);
+    }
+
+    /** The first-run guide's administrator: {@code keylogin/admin}, whose key applying the guide issues. */
+    @Bean
+    public AdministratorKeys administratorKeys(KeyLogins keyLogins) {
+        String prefix = KeyLoginMechanism.QUALIFIER + "/";
+        return new AdministratorKeys() {
+            @Override
+            public String suggested() {
+                return prefix + "admin";
+            }
+
+            @Override
+            public boolean signsIn(String id) {
+                return id.startsWith(prefix) && id.length() > prefix.length();
+            }
+
+            @Override
+            public String issue(String actor, String id) throws IOException {
+                return keyLogins.issueDeployment(actor, id);
+            }
+        };
     }
 
     /** The one implementation of listing, issuing and revoking login keys, which the API and the screen both call. */

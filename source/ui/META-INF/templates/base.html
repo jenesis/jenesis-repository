@@ -359,6 +359,13 @@
     <th:block th:if="${anonymousRights != null and !anonymousRights.isEmpty()}"><p th:replace="~{base :: alert('Anonymous access is enabled (' + ${anonymousRights} + ') - a request with no credential is served against that grant.', 'warn')}"></p></th:block>
     <th:block th:if="${message}"><p th:replace="~{base :: alert(${message}, null)}"></p></th:block>
     <th:block th:if="${error}"><p th:replace="~{base :: alert(${error}, 'danger')}"></p></th:block>
+    <!--/* A login key issued a moment ago - the first-run administrator's - shown this once, since only its hash is
+         kept. */-->
+    <article th:if="${issuedKey}" class="app-issued-key" role="status">
+        <p>Sign in as <strong th:text="${issuedFor}">keylogin/admin</strong> with this login key from now on. It is
+            shown only now: copy it somewhere safe.</p>
+        <pre><code th:text="${issuedKey}">jkl_...</code></pre>
+    </article>
 </div>
 
 <!--/* The artifact browse's rows: the tree body both consoles draw.

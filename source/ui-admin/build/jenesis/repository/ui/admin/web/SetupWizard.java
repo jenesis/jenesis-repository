@@ -4,6 +4,7 @@ import module java.base;
 
 import build.jenesis.repository.settings.Setting;
 import build.jenesis.repository.settings.Wizard;
+import build.jenesis.repository.ui.AdministratorKeys;
 import build.jenesis.repository.ui.ConsoleAdministrators;
 import build.jenesis.repository.ui.identity.StarterCredential;
 import build.jenesis.repository.ui.store.SettingsAdmin;
@@ -42,10 +43,23 @@ public class SetupWizard {
 
     private final SettingsAdmin settings;
     private final ConsoleAdministrators administrators;
+    private final Optional<AdministratorKeys> keys;
 
-    public SetupWizard(SettingsAdmin settings, ConsoleAdministrators administrators) {
+    public SetupWizard(SettingsAdmin settings, ConsoleAdministrators administrators, Optional<AdministratorKeys> keys) {
         this.settings = settings;
         this.administrators = administrators;
+        this.keys = keys;
+    }
+
+    /** What a completed run did: how many settings it changed, who it made administrator (empty for nobody), and the
+     *  login key it issued them (empty when their sign-in method is not one that issues keys) - its only showing. */
+    public record Applied(int changed, String administrator, String key) {
+    }
+
+    /** What the first step names when the operator names nobody: an administrator whose key applying issues, where a
+     *  sign-in method issues one. */
+    public Map<String, String> suggested() {
+        return keys.map(issuing -> Map.of(ADMINISTRATOR, issuing.suggested())).orElse(Map.of());
     }
 
     /** Whether the guide is on where nothing has said otherwise - the default the code applies. */
@@ -101,13 +115,20 @@ public class SetupWizard {
             if (information.equals(Wizard.STARTER_CREDENTIAL)) {
                 // The administrator is named here and granted with the rest of the run, so the step that says to
                 // stop using the starter key is also where its replacement is made; it offers no early completion.
-                paragraphs.add("Name the person who administers this deployment from now on: applying the setup "
-                        + "grants them administration, and they sign in as themselves - through single sign-on or a "
-                        + "login key - instead of with the starter key.");
+                paragraphs.add(keys.isPresent()
+                        ? "Applying the setup makes the administrator below the deployment's administrator and issues "
+                                + "it a login key, shown once on the screen you land on: sign in with it from then on "
+                                + "instead of with the starter key."
+                        : "Name the person who administers this deployment from now on: applying the setup grants "
+                                + "them administration, and they sign in as themselves instead of with the starter "
+                                + "key.");
                 steps.add(WizardFlow.Step.identity(information.title(), paragraphs, List.of(new WizardFlow.Field(
-                        ADMINISTRATOR, "Administrator", "Their sign-in id, as the console names them: the sign-in "
-                        + "method, a slash and their name there, e.g. github/alice. Leave it empty to grant one "
-                        + "later under Access.", List.of(), false))));
+                        ADMINISTRATOR, "Administrator", keys.isPresent()
+                                ? "Keep it to sign in with the key it is issued, or name someone another sign-in "
+                                        + "method signs in, such as github/alice. Empty grants nobody."
+                                : "Their sign-in id: the sign-in method, a slash and their name there, such as "
+                                        + "github/alice. Empty grants nobody; grant one later under Access.",
+                        List.of(), false))));
             } else {
                 steps.add(WizardFlow.Step.information(information.title(), paragraphs, List.of()));
             }
@@ -152,12 +173,18 @@ public class SetupWizard {
 
     /**
      * Save what a completed run changed from what the deployment held, in one batch - validated whole, so one refused
-     * value saves none. Returns how many values changed.
+     * value saves none - and grant the administrator it names, issuing their login key where their sign-in method
+     * issues one, on behalf of {@code actor}.
      */
-    public int complete(WizardFlow flow) throws IOException {
-        String administrator = flow.identity().getOrDefault(ADMINISTRATOR, "");
+    public Applied complete(WizardFlow flow, String actor) throws IOException {
+        String administrator = flow.identity().getOrDefault(ADMINISTRATOR, "").trim();
+        String issued = "";
         if (!administrator.isBlank()) {
             administrators.grant(administrator);
+            Optional<AdministratorKeys> issuing = keys.filter(mechanism -> mechanism.signsIn(administrator));
+            if (issuing.isPresent()) {
+                issued = issuing.get().issue(actor, administrator);
+            }
         }
         Map<String, String> held = held();
         Map<String, String> changed = new LinkedHashMap<>();
@@ -169,7 +196,7 @@ public class SetupWizard {
         if (!changed.isEmpty()) {
             settings.saveAll(changed);
         }
-        return changed.size();
+        return new Applied(changed.size(), administrator, issued);
     }
 
     private Map<String, SettingsAdmin.SettingView> views() throws IOException {

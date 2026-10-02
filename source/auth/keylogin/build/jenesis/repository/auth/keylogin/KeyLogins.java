@@ -66,6 +66,14 @@ public final class KeyLogins {
         return new Issued(issued.id(), issued.key(), qualified, scope, granted.label());
     }
 
+    /** Issue a deployment-wide login key for {@code principal} - one that belongs to no tenant, such as the
+     *  administrator's the first-run guide hands out - on behalf of {@code actor}, returning its plaintext once. */
+    public String issueDeployment(String actor, String principal) throws IOException {
+        KeyLoginKeys.Issued issued = keys.issue(principal, "", principal.substring(principal.indexOf('/') + 1));
+        audit.record(Scopes.DEFAULT_TENANT, actor, KeyLoginMechanism.QUALIFIER + ".issue", principal);
+        return issued.key();
+    }
+
     /** Revoke one issued key by its id, on behalf of {@code actor}; a no-op when it is already gone. */
     public void revoke(String actor, String id) throws IOException {
         Optional<KeyLoginKeys.Entry> entry = keys.find(id);

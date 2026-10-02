@@ -72,7 +72,7 @@ public class HomeController {
         // A super-admin on the starter credential is guided first (SetupWizard); decided only here, on the landing.
         boolean guided = setup.redirects(authentication, session);
         if (guided || current.name() == null) {
-            for (String said : List.of("message", "error")) {
+            for (String said : List.of("message", "error", "issuedKey", "issuedFor")) {
                 if (model.containsAttribute(said)) {
                     redirect.addFlashAttribute(said, model.getAttribute(said));
                 }

@@ -1081,6 +1081,15 @@ main .app-steps button.app-quiet:hover {
 .app-badge--info::before { -webkit-mask-image: var(--app-icon-info); mask-image: var(--app-icon-info); }
 
 /* ---- Alerts and running work ------------------------------------------------------------------------------ */
+/* A key issued a moment ago, shown once: set apart, and its value breaks rather than overflows. */
+.app-issued-key {
+    border-left: 3px solid var(--app-status-info-fg);
+}
+.app-issued-key pre {
+    margin-bottom: 0;
+    white-space: pre-wrap;
+    word-break: break-all;
+}
 .app-alert {
     margin-bottom: var(--app-space-4);
     padding: var(--app-space-3) var(--app-space-4);

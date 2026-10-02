@@ -50,7 +50,8 @@ public class SetupController {
     /** The wizard's first step, starting from what the deployment holds. */
     @GetMapping(SetupWizard.ROUTE)
     public String setup(Authentication authentication, Model model) throws IOException {
-        model.addAttribute("wizard", WizardFlow.start(wizard.definition(starter(authentication)), wizard.held()));
+        model.addAttribute("wizard", WizardFlow.start(wizard.definition(starter(authentication)), wizard.held(),
+                wizard.suggested()));
         model.addAttribute("github", github());
         return "wizard";
     }
@@ -125,13 +126,19 @@ public class SetupController {
                        Model model, RedirectAttributes redirect) throws IOException {
         WizardFlow flow = WizardFlow.resume(wizard.definition(starter(authentication)), form);
         if (flow.apply(form.get(WizardFlow.ACTION))) {
-            int changed = wizard.complete(flow);
+            SetupWizard.Applied applied = wizard.complete(flow, authentication.getName());
             SetupWizard.skip(session);
-            String administrator = flow.identity().getOrDefault(SetupWizard.ADMINISTRATOR, "");
+            int changed = applied.changed();
             redirect.addFlashAttribute("message", (changed == 0 ? "Setup applied; no setting needed changing."
                     : "Setup applied: " + changed + (changed == 1 ? " setting" : " settings") + " saved.")
-                    + (administrator.isBlank() ? "" : " " + administrator + " administers the deployment.")
+                    + (applied.administrator().isBlank() ? ""
+                            : " " + applied.administrator() + " administers the deployment.")
                     + " Next, give each build its own credential under Access, New credential.");
+            if (!applied.key().isBlank()) {
+                // Shown this once: only its hash is stored.
+                redirect.addFlashAttribute("issuedKey", applied.key());
+                redirect.addFlashAttribute("issuedFor", applied.administrator());
+            }
             return "redirect:/ui/";
         }
         model.addAttribute("wizard", flow);
