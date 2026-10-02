@@ -1,13 +1,9 @@
 /**
- * The publish-path compliance screen's boot-time wiring as a removable module: it provides
- * {@link build.jenesis.repository.server.kernel.ServerModuleProvider}, so the repository server imports the
- * configuration through {@code ServiceLoader} discovery and names no screen of its own.
- *
- * <p>It arms the screen from beans a deployment already has - the live configuration, the attributed advisory
- * feeds, the maintainer-health source, the meter registry - as one binding the deployment's store carries, which the
- * server binds into the store it builds, and retires the binding when the context closes, so the next
- * context in the same JVM starts clean. With this module absent nothing arms the screen and a publish is not
- * screened, which is the ordinary shape of a deployment that installs no gate.
+ * The publish-path compliance screen's boot-time wiring, contributed through
+ * {@link build.jenesis.repository.server.kernel.ServerModuleProvider}. It arms the screen from beans a deployment
+ * already has - the live configuration, the advisory feeds, the maintainer-health source, the meter registry - as one
+ * binding the server layers into the store it builds, and retires the binding when the context closes, so the next
+ * context in the same JVM starts clean. With this module absent nothing arms the screen and a publish is not screened.
  *
  * @jenesis.release 25
  * @jenesis.bom pin-repository.properties

@@ -2,10 +2,7 @@ package build.jenesis.repository.gate.wiring;
 
 import build.jenesis.repository.server.kernel.ServerModuleProvider;
 
-/**
- * Announces the compliance screen's publish-path wiring to the repository server's {@code ServerModuleProvider}
- * discovery, so the server imports {@link GateWiringConfig} without naming a screen anywhere.
- */
+/** Contributes {@link GateWiringConfig}, the compliance screen's publish-path wiring, to the server. */
 public final class GateWiringModule implements ServerModuleProvider {
 
     @Override
