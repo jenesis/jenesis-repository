@@ -27,8 +27,8 @@ import org.springframework.security.web.authentication.UsernamePasswordAuthentic
  * chain; the chain's own filter backs off in its favour.
  *
  * <p>The customizer opens the routes that authenticate by something other than a management key - the provenance
- * verification key, the leak webhook (signed) and the token exchange (an id-token) - and caps unauthenticated request
- * bodies with {@link RequestBodyLimitFilter}. Everything else falls to the chain's deny-by-default rule.
+ * verification key and the token exchange (an id-token) - and caps the exchange's unauthenticated body with
+ * {@link RequestBodyLimitFilter}. A module that opens a route of its own contributes its own customizer. Everything else falls to the chain's deny-by-default rule.
  */
 @Configuration
 public class RepositorySecurityConfig {
@@ -49,9 +49,8 @@ public class RepositorySecurityConfig {
                 .authorizeHttpRequests(authorize -> authorize
                         // No console route: this node serves no console, and a permit reads as a surface.
                         .requestMatchers(HttpMethod.GET, "/api/provenance/key").permitAll()
-                        .requestMatchers(HttpMethod.POST, "/api/leaked").permitAll()
                         .requestMatchers(HttpMethod.POST, "/api/token").permitAll())
-                .addFilterBefore(new RequestBodyLimitFilter(1L << 20), UsernamePasswordAuthenticationFilter.class);
+                .addFilterBefore(new RequestBodyLimitFilter(1L << 20, "/api/token"), UsernamePasswordAuthenticationFilter.class);
     }
 
     /**

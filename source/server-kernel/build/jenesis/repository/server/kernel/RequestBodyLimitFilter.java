@@ -12,13 +12,13 @@ import org.springframework.web.filter.OncePerRequestFilter;
 import org.springframework.web.util.UriUtils;
 
 /**
- * Caps the request body on the two unauthenticated write endpoints ({@code POST /api/leaked} and {@code POST
- * /api/token}) so an anonymous caller cannot exhaust memory with a huge POST - their bodies are a small revocation
- * report and an id-token. A declared {@code Content-Length} over the cap is rejected with {@code 413} before the body
+ * Caps the request body on the unauthenticated write endpoints it is given - an id-token exchange, a webhook a partner
+ * signs - so an anonymous caller cannot exhaust memory with a huge POST, since their bodies are small. Each module that
+ * opens such a route adds one for its own paths. A declared {@code Content-Length} over the cap is rejected with {@code 413} before the body
  * is read; a body that runs over the cap while streaming (a chunked request, or a lying Content-Length) is cut off by
  * the wrapped input stream, so nothing beyond the cap is ever buffered. The path is decoded first so an encoded route
- * ({@code /api/%6ceaked}) cannot slip past the match. Artifact upload paths are untouched: this guards only the two
- * small routes, matched exactly.
+ * ({@code /api/%74oken}) cannot slip past the match. Artifact upload paths are untouched: this guards only the routes
+ * it names, matched exactly.
  *
  * <p>The rejection short-circuits with {@code setStatus} rather than {@code sendError} (the same shape the free
  * {@code RateLimitFilter} uses to shed load): running before the authorization filter, a {@code sendError} would
@@ -29,9 +29,12 @@ import org.springframework.web.util.UriUtils;
 public class RequestBodyLimitFilter extends OncePerRequestFilter {
 
     private final long maxBytes;
+    private final Set<String> paths;
 
-    public RequestBodyLimitFilter(long maxBytes) {
+    /** A cap of {@code maxBytes} on a {@code POST} to any of {@code paths}, each matched exactly. */
+    public RequestBodyLimitFilter(long maxBytes, String... paths) {
         this.maxBytes = maxBytes;
+        this.paths = Set.of(paths);
     }
 
     @Override
@@ -40,7 +43,7 @@ public class RequestBodyLimitFilter extends OncePerRequestFilter {
             return true;
         }
         String path = UriUtils.decode(request.getRequestURI(), StandardCharsets.UTF_8);
-        return !path.equals("/api/leaked") && !path.equals("/api/token");
+        return !paths.contains(path);
     }
 
     @Override

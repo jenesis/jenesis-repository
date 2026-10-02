@@ -23,7 +23,7 @@ import static org.mockito.ArgumentMatchers.anyString;
  * (no {@code Content-Length}) or a lying, understated {@code Content-Length} slips past that early check - so the
  * byte-counting wrapper on the request input stream is the <em>only</em> remaining defense. It must throw the moment
  * the body runs past the cap, so nothing beyond the cap is ever buffered; without it an anonymous caller could stream
- * an unbounded body into memory through {@code POST /api/leaked} or {@code /api/token}. Driven over reflective servlet
+ * an unbounded body into memory through an open route such as {@code POST /api/token}. Driven over reflective servlet
  * stubs (mirroring the sibling filter tests), no server.
  */
 class RequestBodyLimitFilterTest {
@@ -41,6 +41,15 @@ class RequestBodyLimitFilterTest {
         assertCutOff(4L);
     }
 
+    @Test
+    void a_route_it_was_not_given_is_not_capped() throws Exception {
+        byte[] body = new byte[64];
+        AtomicReference<byte[]> read = new AtomicReference<>();
+        new RequestBodyLimitFilter(8, "/api/token").doFilter(request("POST", "/repository/acme/releases/x", -1L, body),
+                response(), (req, resp) -> read.set(((HttpServletRequest) req).getInputStream().readAllBytes()));
+        assertThat(read.get()).as("an upload path is read whole, untouched by the cap").hasSize(64);
+    }
+
     private static void assertCutOff(long declaredLength) throws Exception {
         long cap = 8;
         byte[] oversized = new byte[64];   // a real body far over the 8-byte cap
@@ -53,8 +62,8 @@ class RequestBodyLimitFilterTest {
             }
         };
 
-        new RequestBodyLimitFilter(cap).doFilter(
-                request("POST", "/api/leaked", declaredLength, oversized), response(), chain);
+        new RequestBodyLimitFilter(cap, "/api/token").doFilter(
+                request("POST", "/api/token", declaredLength, oversized), response(), chain);
 
         assertThat(thrown.get())
                 .as("the wrapped stream cuts the over-cap body off mid-read rather than buffering it whole")
