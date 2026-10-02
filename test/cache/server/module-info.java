@@ -26,9 +26,12 @@ open module build.jenesis.repository.cache.server.contract.test {
     requires build.jenesis.repository.scope;
     requires build.jenesis.repository.store;
     requires build.jenesis.repository.store.filesystem;
+    requires build.jenesis.repository.store.metering;
     requires build.jenesis.repository.server.spi;
     requires build.jenesis.repository.walk;
     requires micrometer.core;
+    requires jakarta.servlet;
+    requires org.mockito;
     requires org.junit.jupiter;
     requires org.assertj.core;
 }
