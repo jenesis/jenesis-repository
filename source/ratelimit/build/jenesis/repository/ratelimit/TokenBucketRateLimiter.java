@@ -12,17 +12,14 @@ import build.jenesis.repository.server.spi.RateLimiter;
  * gets a bucket that refills at the requested rate and holds up to one window's worth of burst; a request consumes
  * one token, and {@link #allow} is false when the bucket is empty. A rate of zero or less is unlimited. The rate is
  * passed per call rather than fixed at construction, so a configuration change takes effect on the next request
- * without rebuilding anything; the bucket simply refills and caps at the new rate.
+ * without rebuilding anything; the bucket refills and caps at the new rate.
  *
- * The limiter is per process - in a replicated deployment each node limits independently, so the effective ceiling
- * is the configured rate times the node count. That is the usual, cheap trade for not putting a coordination
- * service on the hot path; a single front door (or a small node count) keeps it close to the configured number.
+ * <p>The limiter is per process, so in a replicated deployment the effective ceiling is the configured rate times the
+ * node count - the trade for keeping a coordination service off the hot path.
  *
- * <p>It is its own {@link ObservabilitySource}: the live limiter the distribution holds reports {@code
- * jenrepo.ratelimit.buckets} - the number of keys it is currently tracking, one bucket each - as a gauge, so an
- * operator watches the very memory-exhaustion vector the shared {@code anonymous} bucket is there to bound, plus a
- * {@code jenrepo.ratelimit.limiter} health check that the limiter is installed and metering. There is no background
- * task (buckets refill lazily on the request path), so {@link #taskStatuses()} stays empty.
+ * <p>It reports {@code jenrepo.ratelimit.buckets}, the keys it tracks, as a gauge - the memory-exhaustion vector the
+ * shared {@code anonymous} bucket bounds - and a {@code jenrepo.ratelimit.limiter} health check. Buckets refill lazily
+ * on the request path, so there is no task status.
  */
 public final class TokenBucketRateLimiter implements RateLimiter, ObservabilitySource {
 
@@ -38,18 +35,9 @@ public final class TokenBucketRateLimiter implements RateLimiter, ObservabilityS
     }
 
     /**
-     * A limiter reading time from a supplied nanosecond clock instead of {@link System#nanoTime}.
-     *
-     * <p><b>A test seam, and deliberately the only wither here with no production caller.</b> A rate limiter's whole
-     * behaviour is a function of elapsed time, so a suite that cannot move the clock can only assert it by sleeping -
-     * which makes the suite slow, and flaky on a loaded machine, for a property that is exactly specified. Every
-     * other value on this type is either a constructor argument or reachable from configuration; this one is not
-     * offered to an operator because there is no deployment in which reading time from somewhere other than the
-     * system clock is a thing to want.
-     *
-     * <p>It is stated here because "public, honoured, and called by nothing in {@code source/**}" is otherwise the
-     * signature of a knob that was built and never wired up, and telling the two apart by eye is what an audit of
-     * this shape costs. A seam says so at its declaration.
+     * A limiter reading time from a supplied nanosecond clock instead of {@link System#nanoTime}: a test seam with no
+     * production caller, since a limiter's behaviour is a function of elapsed time and a suite that cannot move the
+     * clock can only assert it by sleeping.
      */
     public TokenBucketRateLimiter withClock(LongSupplier clock) {
         return new TokenBucketRateLimiter(clock);

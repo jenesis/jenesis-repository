@@ -1,9 +1,8 @@
 /**
- * Request rate limiting as a plugin module: it {@code provides} a
- * {@link build.jenesis.repository.server.spi.RateLimiterProvider} answering to {@code token-bucket}, metering each key
- * against an in-memory bucket that refills at the requested rate and holds one window's burst. Per process - in a
- * replicated deployment each node limits independently, the usual cheap trade for keeping a coordination service
- * off the hot path; a coordinated limiter would be another module. A deployment without this module never limits.
+ * Request rate limiting: a {@link build.jenesis.repository.server.spi.RateLimiterProvider} answering to
+ * {@code token-bucket}, metering each key against an in-memory bucket that refills at the requested rate and holds one
+ * window's burst. Per process, so each node of a replicated deployment limits independently, which keeps a
+ * coordination service off the hot path. A deployment without this module never limits.
  *
  * @jenesis.release 25
  * @jenesis.bom pin-repository.properties
