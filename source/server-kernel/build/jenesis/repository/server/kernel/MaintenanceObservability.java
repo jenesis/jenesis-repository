@@ -8,10 +8,10 @@ import build.jenesis.repository.observation.TaskStatus;
 
 /**
  * The maintenance scheduler's signals: one {@link TaskStatus} per <em>enabled</em> background pass the scheduler runs
- * (GC and reclamation, the sizes and dependents sweeps, the scheduled scan and cleanup, the forwarding watermark, the
- * continuous re-analysis sweep, ...), so an operator - or a headless agent following the console - sees each pass's
- * last run and outcome rather than trusting the worker thread to stay up unnoticed. Because the scheduler owns every
- * task's execution, this one source reports them all; the individual {@code MaintenanceTask} plugins are untouched.
+ * (GC and reclamation, the sizes sweep, the scheduled scan and cleanup, the webhook delivery, ...), so an operator - or
+ * a headless agent following the console - sees each pass's last run and outcome rather than trusting the worker thread
+ * to stay up unnoticed. Because the scheduler owns every task's execution, this one source reports them all; the
+ * individual {@code MaintenanceTask} plugins are untouched.
  *
  * <p>It is the scheduler's own face, built beside it by the context that built the scheduler and reported from that
  * context, so a report always describes the scheduler that is running there.

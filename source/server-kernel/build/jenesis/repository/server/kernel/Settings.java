@@ -37,7 +37,7 @@ import build.jenesis.repository.store.Retries;
  * scope ({@code <tenant>/.system/config/settings/<module>.json}, the aligned layout), so the effective value of a
  * tenant-overridable key follows the chain <em>Spring pin &gt; tenant document &gt; global document &gt; packaged
  * default</em> ({@link #getOrDefault(String, String, String)}), while a global-only key is refused in a tenant document
- * and always resolves deployment-wide. Gate policies, deny lists and forward targets can therefore differ per tenant
+ * and always resolves deployment-wide. Gate policies and deny lists can therefore differ per tenant
  * while deployment-wide knobs stay uniform. Each tenant's merged overrides are cached in the same way as the global
  * snapshot, lazily loaded and invalidated on a write or the scheduled re-read.
  *
@@ -143,7 +143,7 @@ public final class Settings {
     /** The effective value of a key for a tenant: the tenant's own override where the key is tenant-overridable and the
      *  tenant set one, otherwise the deployment-wide (global) override, otherwise {@code fallback} (the file/env
      *  default). A global-only key ignores any tenant document and resolves deployment-wide, so a tenant can retune its
-     *  gate policy, deny list or forward target without touching a deployment knob. The Spring-pin leg of the chain is
+     *  gate policy or deny list without touching a deployment knob. The Spring-pin leg of the chain is
      *  applied by {@link LiveConfig}, above this. */
     public String getOrDefault(String tenant, String key, String fallback) {
         if (tenant == null || tenant.isBlank() || !SettingsScopes.tenantOverridable(key)) {
@@ -271,7 +271,7 @@ public final class Settings {
     }
 
     /** Set or clear one override in a tenant's own scope, layered over the deployment-wide value. Refuses a global-only
-     *  key, which no tenant document may carry - a tenant retunes only a gate policy, deny list or forward target,
+     *  key, which no tenant document may carry - a tenant retunes only a tenant-scoped key such as a gate policy,
      *  never a deployment knob. The compare-and-set touches only that tenant's owning module document, and the tenant's
      *  cached snapshot is dropped so the writing node sees the change at once. */
     public void set(String tenant, String key, String value) throws IOException {
