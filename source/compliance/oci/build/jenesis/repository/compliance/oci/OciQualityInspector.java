@@ -9,44 +9,32 @@ import build.jenesis.repository.compliance.ManifestSubjectBuilder;
 import build.jenesis.repository.compliance.QualityInspector;
 
 /**
- * The OCI / Docker image quality inspector: the publishing and proxy quality gate for the {@code /v2/} Distribution
- * layout, as a plugin of its own. It claims {@code /v2/...} artifacts and screens the MANIFEST - the one document a
- * push ends with, and the one a pull starts from - so the shared {@link ComplianceGate} can assess an image's
- * {@code {name, reference}} coordinate for known vulnerabilities, malicious-package flags and the operator deny-list,
- * and its declared licence against the licence policy.
+ * The OCI image quality inspector: it claims {@code /v2/...} and screens the manifest - the document a push ends with
+ * and a pull starts from - so the {@link ComplianceGate} can assess an image's {@code {name, reference}} coordinate
+ * for known vulnerabilities, malicious-package flags and the deny-list, and its declared licence against the policy.
  *
  * <h2>The coordinate is the path, and only the manifest carries one</h2>
  *
  * A Distribution client puts the coordinate in the URL - {@code /v2/<name>/manifests/<reference>} - and nowhere in
- * the bytes, so it is read from the path exactly as the Go, Conan and Hugging Face inspectors read theirs. A BLOB is
- * deliberately not screened: {@code /v2/<name>/blobs/sha256:<digest>} names content, not a version, and the same
- * layer is shared by every image that includes it - screening it would attach one image's verdict to bytes belonging
- * to many. The manifest is where an image becomes a thing an operator can name, hold and release, which is why the
- * hold machinery ({@code format/oci-inventory}) keys on it too.
- *
- * <p>A reference that is a DIGEST rather than a tag is still a coordinate and still screened: a client that pulls by
- * digest is pulling a specific image, and an advisory that names it must bite. It is reported as the version, which
- * is what the path says.
+ * the bytes, so it is read from the path. A blob is not screened: {@code /v2/<name>/blobs/sha256:<digest>} names
+ * content shared by every image that includes it, so a verdict on it would attach one image's verdict to many. The
+ * manifest is where an image becomes something an operator can name, hold and release, which is why the hold
+ * machinery in {@code format/oci-inventory} keys on it too. A digest reference is screened like a tag and reported as
+ * the version, since an advisory naming that image must bite.
  *
  * <h2>The licence is the publisher's own annotation</h2>
  *
- * The OCI image spec defines {@code org.opencontainers.image.licenses} as an SPDX expression in the manifest's
- * {@code annotations}, and that is what this reads - a declaration the publisher made in the document being screened.
- * An image that declares none reports none, and the deployment's unknown-licence dial decides, which is the same
- * fail-closed shape every other inspector uses. Nothing inspects a layer for licence text: guessing a licence from
- * file contents is how a policy comes to be enforced against something nobody declared.
+ * The OCI image spec's {@code org.opencontainers.image.licenses} annotation, an SPDX expression. An image that declares
+ * none reports none and the deployment's unknown-licence dial decides; nothing guesses a licence from a layer's files.
  *
- * <p>The manifest is small by the spec's own design (a config descriptor and a layer list), and it is read under the
- * shared prefix tier like every other manifest-shaped document; a body that is not readable JSON is screened as the
- * coordinate alone rather than refused, because a Distribution registry accepts manifest media types this does not
- * parse - an image index, a Helm chart, an arbitrary artifact type - and refusing them would break a conformant push
- * that this gate has no opinion about.
+ * <p>The manifest is read under the shared prefix tier; a body that is not readable JSON is screened as the coordinate
+ * alone rather than refused, because a registry accepts manifest media types this does not parse - an image index, a
+ * Helm chart, an arbitrary artifact type.
  */
 public final class OciQualityInspector implements QualityInspector {
 
-    /** The package-ecosystem name OCI coordinates report. OSV has no dedicated container feed, so a vulnerability
-     *  lookup finds nothing unless an operator recorded one - while the deny-list and the malicious-package flag,
-     *  which key on the coordinate, bite exactly as they do for any other ecosystem. */
+    /** The ecosystem OCI coordinates report. OSV has no container feed, so a vulnerability lookup finds only what an
+     *  operator recorded, while the deny-list and the malicious-package flag bite as for any ecosystem. */
     private static final String ECOSYSTEM = "OCI";
 
     private static final String PREFIX = "/v2/";
@@ -65,17 +53,9 @@ public final class OciQualityInspector implements QualityInspector {
     private static final JsonMapper JSON = JsonMapper.builder().build();
 
     /**
-     * cosign's signature artifact, which is a signature rather than an image.
-     *
-     * <p>It is a well-formed manifest, so this inspector reads it without complaint - and that is the danger. It
-     * has no licence of its own, so a deployment that holds an unlicensed artifact quarantines every cosign
-     * signature pushed to it, and a withheld sidecar is never handed to an inspector: signature verification for
-     * this layout switches itself off on exactly the deployments strict enough to care: with
-     * {@code license-unknown} at QUARANTINE the signature artifact is held and the image it covers publishes
-     * unjudged. The shipped default is ALLOW, which is why the default deployment does not show it.
-     *
-     * <p>A signature is not an artifact, and an inspector that claims one is the thing that can hide it - the same
-     * rule the Helm layout follows.
+     * cosign's signature artifact, which is a signature rather than an image, so it is not claimed. It is a well-formed
+     * manifest with no licence of its own: claimed, it would be held under {@code license-unknown=QUARANTINE}, and a
+     * withheld sidecar is never handed to signature verification, so the image it covers would publish unjudged.
      */
     private static boolean isSignatureTag(String path) {
         int manifests = path.indexOf("/manifests/");
@@ -99,9 +79,8 @@ public final class OciQualityInspector implements QualityInspector {
     }
 
     /**
-     * The compliance subject for a manifest path, or an empty list for anything else the {@code /v2/} tree carries -
-     * a blob, an upload session, the {@code /v2/} version probe, a tag listing. Those name no single image version to
-     * screen, and the blob deliberately so (see the class comment).
+     * The compliance subject for a manifest path, or an empty list for anything else under {@code /v2/} - a blob, an
+     * upload session, the version probe, a tag listing - which names no single image version.
      */
     private static List<ComplianceGate.Subject> subjects(String path, byte[] content) {
         String rest = path.substring(PREFIX.length());
@@ -146,11 +125,8 @@ public final class OciQualityInspector implements QualityInspector {
     }
 
     /**
-     * The SPDX expression the manifest's {@code org.opencontainers.image.licenses} annotation declares, or empty.
-     *
-     * <p>Never throws for the licence's sake: a manifest this cannot parse is one whose media type this gate has no
-     * opinion about, and the coordinate still screens. An undeclared licence is what the deployment's dial decides
-     * about - fail-closed, without this inspector inventing a verdict.
+     * The SPDX expression the manifest's {@code org.opencontainers.image.licenses} annotation declares, or empty -
+     * also for a manifest this cannot parse, whose coordinate still screens.
      */
     private static List<String> licences(byte[] manifest) {
         if (manifest == null || manifest.length == 0) {
