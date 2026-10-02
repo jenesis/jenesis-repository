@@ -15,7 +15,7 @@
 <header th:replace="~{fragments :: nav}"></header>
 <main id="main">
     <div th:replace="~{fragments :: messages}"></div>
-    <th:block th:replace="~{base :: repositoryHeader(${detail.coordinate}, 'Browse', @{/ui/repositories/{repo}/browse(repo=${repo})})}"></th:block>
+    <th:block th:replace="~{base :: repositoryHeader(${detail.coordinate}, 'in', null, null)}"></th:block>
     <article>
         <p>
             <span th:if="${mark != null}"

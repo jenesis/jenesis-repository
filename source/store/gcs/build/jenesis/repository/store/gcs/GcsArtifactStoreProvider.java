@@ -89,6 +89,11 @@ public final class GcsArtifactStoreProvider implements ArtifactStoreProvider {
     }
 
     @Override
+    public String where() {
+        return "in Google Cloud Storage";
+    }
+
+    @Override
     public Set<String> config() {
         return Set.of(BUCKET_KEY, CREDENTIALS_KEY, PROJECT_KEY, STREAMING_WRITES_KEY, ENDPOINT_KEY, PROBE_KEY,
                 ALLOW_INSECURE_KEY);

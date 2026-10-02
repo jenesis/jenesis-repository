@@ -166,6 +166,7 @@
     <input type="search" id="setting-filter" autocomplete="off"
            placeholder="Filter by name or what a setting does&hellip;"
            aria-label="Filter settings by name or description">
+    <!--/* Greyed out by the script on a page that has no advanced setting to show. */-->
     <label class="setting-filter__advanced"><input type="checkbox" id="setting-show-advanced"> Show advanced
         settings</label>
     <p class="setting-nomatch" id="setting-nomatch" hidden>No setting matches that filter.</p>
@@ -263,7 +264,7 @@
               title="Read-only view - a proxy or group; a publish is refused 405">read-only</span>
         <th:block th:each="f : ${shape.fallbacks()}">
             <span th:if="${f.upstream()}" class="app-badge" th:title="${f.source}">
-                <span th:text="${f.store()} ? 'fallback cached' : 'fallback pass-through'">fallback cached</span>
+                <span th:text="${f.store()} ? 'source, cached' : 'source, passed through'">source, cached</span>
                 · <span th:text="${f.screening}">default</span></span>
             <span th:unless="${f.upstream()}" class="app-badge"
                   th:title="'inner repository ' + ${f.repository}" th:text="'&rarr; ' + ${f.repository}">&rarr; repo</span>

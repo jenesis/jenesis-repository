@@ -194,17 +194,14 @@
      repository. The repository's identity - its format and its URL - is its overview's to say, once. The console resolves
      `repositoryHeader` from the request path, so a page contributed by any module opens the same way. `parent` and
      `parentHref` name a page between the repository and this one (a signer's page sits under Signers), or are null. */-->
-<th:block th:fragment="repositoryHeader(title, parent, parentHref)">
+<th:block th:fragment="repositoryHeader(title, binding, parent, parentHref)">
     <header class="app-page-header">
         <hgroup class="app-page-header__heading">
-            <nav aria-label="Breadcrumb" th:if="${repositoryHeader != null}">
-                <ol class="app-breadcrumb">
-                    <li><a th:href="@{/ui/repositories/{r}(r=${repositoryHeader.name()})}"
-                           th:text="${repositoryHeader.name()}">releases</a></li>
-                    <li th:if="${parent != null}"><a th:href="${parentHref}" th:text="${parent}">Parent</a></li>
-                </ol>
-            </nav>
-            <h1 class="app-page-header__title" th:text="${title}">Page</h1>
+            <h1 class="app-page-header__title"><span th:text="${title}">Staging</span><span
+                    class="app-page-header__binding" th:if="${repositoryHeader != null}"> [[${binding}]] <th:block
+                    th:if="${parent != null}"><a th:href="${parentHref}" th:text="${parent}">org.acme:app</a> in
+                    </th:block><a th:href="@{/ui/repositories/{r}(r=${repositoryHeader.name()})}"
+                    th:text="${repositoryHeader.name()}">releases</a></span></h1>
         </hgroup>
     </header>
 </th:block>

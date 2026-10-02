@@ -30,7 +30,9 @@
             <p class="app-dashboard__note" th:unless="${p.note().isEmpty()}"><small th:text="${p.note()}">As of
                 12:03</small></p>
         </article>
-        <div th:if="${panels.isEmpty()}" th:replace="~{base :: empty('Nothing to show yet.')}"></div>
+        <th:block th:if="${panels.isEmpty() and !refreshing}">
+            <div th:replace="~{base :: empty('Nothing to show yet.')}"></div>
+        </th:block>
     </section>
 </main>
 </body>

@@ -136,14 +136,26 @@
             <a th:each="l : ${step.links()}" th:href="@{${l.href()}}" th:text="${l.label()}">Open</a>
         </p>
 
-        <!--/* The review: every choice the run makes, the defaults it leaves alone included. */-->
-        <dl class="app-review" th:if="${wizard.reviewing()}">
-            <th:block th:each="c : ${wizard.choices()}">
-                <dt th:text="${c.label()}">Setting</dt>
-                <dd><strong th:text="${c.value()}">value</strong>
-                    <small th:if="${c.note() != null}" th:text="|(${c.note()})|">(default)</small></dd>
-            </th:block>
-        </dl>
+        <!--/* The review: every choice the run makes, the defaults it leaves alone included, as the console's lists are
+             drawn - what, the value, and where it comes from. */-->
+        <figure th:if="${wizard.reviewing()}">
+            <table class="app-list app-review">
+                <thead>
+                <tr>
+                    <th scope="col">Setting</th>
+                    <th scope="col">Value</th>
+                    <th scope="col">Source</th>
+                </tr>
+                </thead>
+                <tbody>
+                <tr th:each="c : ${wizard.choices()}">
+                    <td th:text="${c.label()}">Setting</td>
+                    <td><strong th:text="${c.value()}">value</strong></td>
+                    <td><small th:text="${c.note() != null} ? ${c.note()} : 'chosen here'">default</small></td>
+                </tr>
+                </tbody>
+            </table>
+        </figure>
 
         <!--/* The step's actions, by their weight: Next or the completion is the one primary, and the quicker completion
              the secondary beside it, both on the right where the run moves forward; going back and leaving change

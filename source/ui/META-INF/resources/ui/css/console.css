@@ -886,8 +886,14 @@ main .app-filter-bar > button {
     margin: 0;
     border-top: 3px solid var(--pico-muted-border-color);
 }
+/* A panel asking for attention takes the warning colours the posture badge uses; an all-clear one a green edge. */
 .app-dashboard__panel--attention {
     border-top-color: var(--app-status-warn-fg);
+    background: var(--app-status-warn-bg);
+}
+.app-dashboard__panel--attention .app-dashboard__figure,
+.app-dashboard__panel--attention .app-dashboard__figure strong {
+    color: var(--app-status-warn-fg);
 }
 .app-dashboard__panel--clear {
     border-top-color: var(--app-status-pass-fg);
@@ -925,6 +931,15 @@ main .app-filter-bar > button {
 .app-dashboard__note {
     margin: var(--app-space-3) 0 0;
     color: var(--app-muted-text);
+}
+
+/* A repository page's heading: the page in the heading's weight, what it is of in a lighter one on the same line. */
+.app-page-header__binding {
+    font-weight: 400;
+    color: var(--app-muted-text);
+}
+.app-page-header__binding a {
+    color: inherit;
 }
 
 /* ---- Cards, fields, empty states -------------------------------------------------------------------------- */
@@ -1009,14 +1024,6 @@ main .app-steps button.app-quiet:hover {
     text-decoration: underline;
 }
 /* A wizard's review: each choice on a line of its own, its name beside the value that will apply. */
-.app-review {
-    display: grid;
-    grid-template-columns: max-content 1fr;
-    gap: var(--app-space-2) var(--app-space-4);
-}
-.app-review dd {
-    margin: 0;
-}
 
 .app-empty {
     padding: var(--app-space-6) var(--app-space-4);
@@ -1119,11 +1126,26 @@ main .app-steps button.app-quiet:hover {
 
 /* ---- Actions ---------------------------------------------------------------------------------------------- */
 /* Four weights, so a button's colour says what it does before its label is read (base.html renders each):
-   `app-primary` is Pico's filled button and the only filled one on a page; `app-secondary` is Pico's neutral outline;
+   `app-primary` is Pico's filled button and the only filled one on a page; `app-secondary` is outlined in the primary
+   colour on a light fill, so it reads as a button and still below the filled one;
    `app-caution` - consequential but recoverable - takes the status palette's warn tint, and `app-danger` -
    irreversible - its danger tint. Both tints are the status pairs, so they clear AA in either theme wherever a status
    badge does. Colour is never the only signal: the label says what the action does, and caution and danger ask
    before they act. */
+.app-secondary,
+button.app-secondary,
+[type="submit"].app-secondary {
+    background: var(--pico-card-sectioning-background-color);
+    border-color: var(--pico-primary);
+    color: var(--pico-primary);
+}
+.app-secondary:hover,
+button.app-secondary:hover,
+[type="submit"].app-secondary:hover {
+    background: var(--pico-primary-focus);
+    border-color: var(--pico-primary-hover);
+    color: var(--pico-primary-hover);
+}
 .app-caution,
 button.app-caution,
 [type="submit"].app-caution {

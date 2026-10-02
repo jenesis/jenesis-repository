@@ -87,6 +87,21 @@ public interface ArtifactStoreProvider extends IconContributor {
         return requiredConfig();
     }
 
+    /** Where this backend keeps what is stored, as a sentence about it names the place: "on the filesystem", "in
+     *  S3". */
+    default String where() {
+        return "in the " + name() + " store";
+    }
+
+    /** {@link #where()} of the installed backend {@code name} names - the default one where it names none - or the
+     *  generic phrase where none answers to it. */
+    static String where(String name) {
+        String wanted = name == null || name.isBlank() ? "filesystem" : name;
+        return ServiceLoader.load(ArtifactStoreProvider.class).stream().map(ServiceLoader.Provider::get)
+                .filter(provider -> provider.name().equals(wanted)).map(ArtifactStoreProvider::where).findFirst()
+                .orElse("in the " + wanted + " store");
+    }
+
     /** Every config key an installed backend reads, whichever one is selected - the store's share of what a
      *  deployment recognises. */
     static Set<String> declaredConfig() {

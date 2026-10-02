@@ -39,9 +39,10 @@ class FirstRunFeedsTest {
     }
 
     @Test
-    void it_asks_where_to_be_told_and_asks_about_feeds_before_thresholds() {
+    void it_asks_about_feeds_before_thresholds_and_leaves_webhooks_to_the_settings() {
         List<String> asked = asked();
-        assertThat(asked).contains("webhook", "webhook-endpoints");
+        assertThat(asked).as("where events are sent is decided when there is a receiver, not on a new deployment")
+                .doesNotContain("webhook", "webhook-endpoints");
         for (String feed : SignalSourceProvider.contributors().stream().map(SignalSourceProvider::name).toList()) {
             assertThat(asked.indexOf(feed)).as("a threshold means nothing until %s is on", feed)
                     .isLessThan(asked.indexOf("vulnerability-threshold"));

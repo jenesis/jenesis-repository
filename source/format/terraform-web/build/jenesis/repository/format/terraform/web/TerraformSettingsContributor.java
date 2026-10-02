@@ -21,13 +21,11 @@ public final class TerraformSettingsContributor implements SettingsContributor {
                 Setting.Kind.STRING, TerraformDiscoveryConfig.DEFAULT_PREFIX, false).advanced(),
                 new Setting("terraform.git-hosts", "Formats", "Terraform git hosts",
                         "The git hosts a proxied Terraform module's git source may be fetched from, so the module "
-                                + "downloads through this repository rather than being cloned by the client. Each "
-                                + "listed host serves a ref as an archive, which is cached and held to the digest of "
-                                + "its first fetch; a moved tag is then refused. Comma-separated hosts as a source "
-                                + "writes them, port included; a host other than github.com, gitlab.com or "
-                                + "bitbucket.org also names, after an equals sign, which of the three it runs (github, "
-                                + "gitlab or bitbucket). Each listed host is a third party this deployment then "
-                                + "reaches; to fetch from the three public hosts, name all three.",
+                                + "downloads through this repository rather than being cloned by the client. A listed "
+                                + "host serves a ref as an archive, cached and held to the digest of its first fetch, "
+                                + "so a moved tag is refused. A host other than github.com, gitlab.com or "
+                                + "bitbucket.org also names which of the three it runs. Each listed host is a third "
+                                + "party this deployment then reaches.",
                         Setting.Kind.STRING, "", false).advanced(),
                 new Setting("terraform.git-refuse-unlisted", "Formats", "Refuse Terraform git sources elsewhere",
                         "Whether a proxied Terraform module whose git source cannot be fetched through this "

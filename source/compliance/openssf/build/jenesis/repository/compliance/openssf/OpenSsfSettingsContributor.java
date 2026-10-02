@@ -14,13 +14,12 @@ public final class OpenSsfSettingsContributor implements SettingsContributor {
     public List<Setting> settings() {
         return List.of(
                 new Setting("openssf", "Compliance", "OpenSSF malicious packages",
-                        "The OpenSSF malicious-packages dataset as OSV.dev serves it: its curated MAL- records name "
-                                + "package versions known to be malicious, and each one found for a coordinate is a "
-                                + "malicious finding the malware action decides. A lookup is an outbound call to a "
-                                + "public API. It fails closed: while it is on and cannot be reached, a publish it "
-                                + "would have screened is held for review rather than admitted unscreened - so switch "
-                                + "it on only where this deployment can reach the endpoint below, and read a hold's "
-                                + "reason before taking it for a verdict on the content.",
+                        "The OpenSSF malicious-packages dataset as OSV.dev serves it: curated records naming package "
+                                + "versions known to be malicious, each one found for a coordinate a malicious finding "
+                                + "the malware action decides. A lookup is an outbound call to a public API. It fails "
+                                + "closed: while it is on and cannot be reached, a publish it would have screened is "
+                                + "held for review - so switch it on only where this deployment can reach the endpoint "
+                                + "below.",
                         Setting.Kind.BOOLEAN, "false", false).essential(),
                 new Setting("openssf-endpoint", "Compliance", "OpenSSF feed endpoint",
                         "The OSV API base URL serving the dataset, for a mirror or a proxy.",

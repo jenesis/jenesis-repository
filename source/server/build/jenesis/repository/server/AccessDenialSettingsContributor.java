@@ -12,14 +12,12 @@ public final class AccessDenialSettingsContributor implements SettingsContributo
     public List<Setting> settings() {
         return List.of(
                 new Setting(AccessDenial.KEY, "Access", "Answer to a caller without access",
-                        "What a request for a tenant, a repository or an artifact the caller may not reach is "
-                                + "answered, on every surface - the repository and registry paths, the build cache, "
-                                + "the API and the console. Answering not found gives 404, exactly as for a name that "
-                                + "does not exist, so nobody can learn which tenants, repositories or artifacts exist "
-                                + "by probing names and reading the status. Answering forbidden gives 403, which tells "
-                                + "a caller that their credential does not reach the name rather than that nothing is "
-                                + "there, whether or not the name exists. A request with no credential is answered 401 "
-                                + "with the challenge its client needs either way. Applies live.",
+                        "What a request for a tenant, repository or artifact the caller may not reach is answered, on "
+                                + "every surface. Not found answers 404, exactly as for a name that does not exist, so "
+                                + "nobody can learn what exists by probing names. Forbidden answers 403, telling a "
+                                + "caller that their credential does not reach the name, whether or not it exists. A "
+                                + "request with no credential is answered 401 with its challenge either way. Applies "
+                                + "live.",
                         Setting.Kind.CHOICE, List.of(AccessDenial.NOT_FOUND_VALUE, AccessDenial.FORBIDDEN_VALUE),
                         AccessDenial.DEFAULT, true).advanced());
     }

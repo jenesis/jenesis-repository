@@ -5,13 +5,13 @@
 <header th:replace="~{fragments :: nav}"></header>
 <main id="main">
     <div th:replace="~{fragments :: messages}"></div>
-    <th:block th:replace="~{base :: repositoryHeader(${title}, null, null)}"></th:block>
+    <th:block th:replace="~{base :: repositoryHeader(${title}, 'in', null, null)}"></th:block>
 
     <!--/* Only the marks this repository's clients see are explained and offered. */-->
     <p><small><th:block th:if="${deprecates}">A <strong>deprecated</strong> version still installs, and its client
-        warns whoever installs it. </th:block><th:block th:if="${yanks}">A <strong>yanked</strong> version stays for
-        whoever already pinned it, and no new resolution picks it. </th:block>Each client sees the mark in its own
-        metadata, and its own command sets the same mark this page does.</small></p>
+        warns whoever installs it. </th:block><th:block th:if="${yanks}">An <strong th:text="${yankName}">unlisted</strong> version
+        stays for whoever names it exactly, and no new resolution picks it. </th:block>Each client sees the mark in its
+        own metadata.</small></p>
 
     <article th:if="${refusal != null}" class="app-subsection-error" role="status">
         <p th:text="${refusal}">This repository shows a lifecycle mark to no client.</p>
@@ -43,7 +43,7 @@
                     <td><code th:text="${mark.version}">1.3.0</code></td>
                     <td><span class="app-badge"
                               th:classappend="${mark.state.name() == 'YANKED'} ? 'app-badge--warn' : ''"
-                              th:text="${#strings.toLowerCase(mark.state.name())}">deprecated</span></td>
+                              th:text="${labels.get(mark.state)}">deprecated</span></td>
                     <td><small th:text="${mark.message}">use something else</small></td>
                     <td th:if="${isEditor}" class="app-list__actions">
                         <form class="app-actions" method="post"
@@ -66,16 +66,16 @@
         <h2>Mark a version</h2>
         <form method="post" th:action="@{/ui/repositories/{repo}/lifecycle(repo=${repository})}">
             <div class="grid">
-                <label>Coordinate <input name="coordinate" th:value="${coordinate}" placeholder="left-pad" required></label>
-                <label>Version <input name="version" th:value="${version}" placeholder="1.3.0" required></label>
+                <label>Coordinate <input name="coordinate" th:value="${coordinate}" required></label>
+                <label>Version <input name="version" th:value="${version}" required></label>
                 <label>Mark
                     <select name="state" required>
                         <option th:each="state : ${states}" th:value="${#strings.toLowerCase(state.name())}"
-                                th:text="${#strings.toLowerCase(state.name())}">deprecated</option>
+                                th:text="${labels.get(state)}">deprecated</option>
                     </select>
                 </label>
             </div>
-            <label>Message <input name="message" placeholder="What to use instead - npm shows this to whoever installs it"></label>
+            <label>Message <input name="message" placeholder="What to use instead"></label>
             <button th:replace="~{base :: primaryButton('Mark the version')}">Mark the version</button>
         </form>
     </article>

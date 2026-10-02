@@ -34,13 +34,11 @@ public final class BatchUploadSettingsContributor implements SettingsContributor
                         Setting.Kind.INTEGER,
                         Integer.toString(RepositoryProperties.BATCH_UPLOAD_MAX_RATIO), true).advanced(),
                 new Setting("store-families", "Operations", "Count store operations by key family",
-                        "Count every store operation by the key family it touched as well as by its name, reported as "
-                                + "jenrepo.store.family.<operation>.<family> beside jenrepo.store.ops.<operation>. "
-                                + "Worth switching on only while measuring: it costs a map lookup and a string "
-                                + "concatenation on the store's hottest path. A count by operation alone cannot say "
-                                + "which keys a pass is reading - whether a walk's versioned reads are the pointers "
-                                + "it enumerates or a consumer riding it - which is the difference between a change "
-                                + "that reduces a bill and one that does nothing.",
+                        "Count every store operation by the key family it touched as well as by its operation, as "
+                                + "jenrepo.store.family.<operation>.<family>, so a measurement can say which keys a "
+                                + "pass reads - the difference between a change that reduces the bill and one that "
+                                + "does nothing. Worth switching on only while measuring: it adds work to the store's "
+                                + "hottest path.",
                         Setting.Kind.BOOLEAN, "false", false).advanced());
     }
 }

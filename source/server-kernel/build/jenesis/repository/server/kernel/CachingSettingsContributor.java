@@ -23,48 +23,33 @@ public final class CachingSettingsContributor implements SettingsContributor {
         return List.of(
                 new Setting(StoreCache.TTL_SETTING, "Caches", "Store cache ttl",
                         "How long a node serves a credential, a settings document, a ceiling or a tenant list it has "
-                                + "already read before asking the store again. On the node that made a write the cache "
-                                + "is exact regardless; across nodes this is the bound on how stale another node's "
-                                + "write may show. Zero switches caching off and every read is the store's; POST "
-                                + "/api/admin/caches/clear clears a node's caches at once. Credentials are the "
-                                + "exception: they carry a deployment epoch that every grant and revocation bumps, so "
-                                + "a revoked key stops everywhere within seconds whatever this says - see the auth "
-                                + "cache ttl.",
+                                + "already read before asking the store again. A write is exact on the node that made "
+                                + "it; across nodes this bounds how stale another node's write may show. Credentials "
+                                + "are the exception: a revoked key stops everywhere within seconds whatever this "
+                                + "says. POST /api/admin/caches/clear clears a node's caches at once. Zero switches "
+                                + "caching off.",
                         Setting.Kind.DURATION, StoreCache.DEFAULT_TTL_TEXT, false).advanced(),
                 new Setting(MissMemory.TTL_SETTING, "Caches", "Miss memory ttl",
                         "How long a node remembers that a coordinate it looked for was not there, and answers the same "
-                                + "probe from memory instead of reading the store again - a build tool asking for a "
-                                + "version range, a missing snapshot or an optional classifier asks the same question "
-                                + "of the same repositories many times in a row. Only an absence is remembered, never "
-                                + "a hit; a publish, release or delete on the node forgets the key at once, so the "
-                                + "node that wrote serves what it wrote; another node serves a fresh publish once its "
-                                + "entry expires, which is what this bounds. Node-local, held to a hundred thousand "
-                                + "keys, dropped with the caches by POST /api/admin/caches/clear. Zero switches it off "
-                                + "and every probe is the store's.",
+                                + "probe from memory - a build tool asks for a missing snapshot or an optional "
+                                + "classifier many times in a row. Only an absence is remembered, and a write on the "
+                                + "node forgets the key at once, so this bounds how long another node may still answer "
+                                + "not found for a fresh publish. POST /api/admin/caches/clear drops it. Zero switches "
+                                + "it off.",
                         Setting.Kind.DURATION, MissMemory.DEFAULT_TTL_TEXT, false).advanced(),
                 new Setting(DocumentMemory.TTL_SETTING, "Caches", "Document memory ttl",
-                        "How long a node serves a listing it has already read - a packument, a Simple page, a "
-                                + "maven-metadata.xml, a Packages file, a tag list - from memory before reading the "
-                                + "store again, so a burst of builds starting at once costs the store one read per "
-                                + "document rather than one per build. Only listings up to a megabyte are kept, never "
-                                + "an artifact's bytes and never a pointer, since a hold must land on every node at "
-                                + "once; a write on the node forgets the document, and another node serves a fresh "
-                                + "publish in its listing once its copy expires, which is what this bounds. On several "
-                                + "nodes that bound is what an operator is agreeing to: for up to this long a node can "
-                                + "serve a listing without a version a peer has already accepted, so a client that "
-                                + "publishes through one node and reads through another may not see its own release "
-                                + "yet. It is a stale read and never a lost write - the base of a listing's "
-                                + "compare-and-set is read past this memory for exactly that reason. Node-local, held "
-                                + "to sixty-four megabytes, dropped with the caches by POST /api/admin/caches/clear. "
-                                + "Zero switches it off.",
+                        "How long a node serves a listing it has already read - a packument, a Simple page, a Packages "
+                                + "file, a tag list - from memory, so a burst of builds costs the store one read per "
+                                + "document rather than one per build. A write on the node forgets the document; "
+                                + "across nodes, this is how long a client that publishes through one node may not yet "
+                                + "see its release listed by another. A stale read, never a lost write. Zero switches "
+                                + "it off.",
                         Setting.Kind.DURATION, DocumentMemory.DEFAULT_TTL_TEXT, false).advanced(),
                 new Setting(Authorization.CACHE_TTL_SETTING, "Caches", "Credential cache ttl",
                         "How long a node serves a credential's documents before asking the store again. Longer than "
-                                + "the store cache ttl on purpose: an authorization happens on every request, and "
-                                + "the auth epoch - one small document every credential mutation bumps, re-read every "
-                                + "few seconds - is what bounds how long a revocation takes to reach another node, "
-                                + "so this bounds only how often a busy node re-reads a credential it already has. "
-                                + "Applies on restart.",
+                                + "the store cache ttl on purpose: a revocation reaches every node within seconds "
+                                + "through the auth epoch whatever this says, so this bounds only how often a busy "
+                                + "node re-reads a credential it already holds. Applies on restart.",
                         Setting.Kind.DURATION, Authorization.DEFAULT_CACHE_TTL_TEXT, false).advanced(),
                 new Setting(StoredCounter.FLUSH_SETTING, "Maintenance", "Counter flush cadence",
                         "How long a node holds the quota and folder-size deltas its publishes produce before folding "

@@ -13,7 +13,7 @@
 <header th:replace="~{fragments :: nav}"></header>
 <main id="main">
     <div th:replace="~{fragments :: messages}"></div>
-    <th:block th:replace="~{base :: repositoryHeader(${detail.version}, ${detail.coordinate},
+    <th:block th:replace="~{base :: repositoryHeader(${detail.version}, 'of', ${detail.coordinate},
             @{/ui/repositories/{repo}/coordinate(repo=${repo},ecosystem=${detail.ecosystem},coordinate=${detail.coordinate})})}"></th:block>
 
     <article>

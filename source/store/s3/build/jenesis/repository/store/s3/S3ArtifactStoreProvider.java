@@ -65,6 +65,11 @@ public final class S3ArtifactStoreProvider implements ArtifactStoreProvider {
     }
 
     @Override
+    public String where() {
+        return "in S3";
+    }
+
+    @Override
     public Set<String> config() {
         return Set.of(BUCKET_KEY, ENDPOINT_KEY, ALLOW_INSECURE_KEY, PROBE_KEY, STREAMING_WRITES_KEY,
                 Features.key("s3.region"), Features.key("s3.sse-kms-key-id"), Features.key("s3.access-key-id"),

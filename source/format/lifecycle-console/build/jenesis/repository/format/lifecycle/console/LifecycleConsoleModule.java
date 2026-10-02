@@ -30,23 +30,24 @@ public final class LifecycleConsoleModule implements ConsoleModuleProvider {
 
     @Override
     public List<RepositoryPage> repositoryPages() {
-        return List.of(page(title(EnumSet.allOf(Lifecycle.State.class))));
+        return List.of(page(title(EnumSet.allOf(Lifecycle.State.class), "yanked")));
     }
 
     /** The page named for the marks a repository of {@code type} shows, and none where it shows none. */
     @Override
     public List<RepositoryPage> repositoryPages(String type) {
         Set<Lifecycle.State> shown = LifecycleMarks.states(type);
-        return shown.isEmpty() ? List.of() : List.of(page(title(shown)));
+        return shown.isEmpty() ? List.of() : List.of(page(title(shown, LifecycleMarks.yankName(type))));
     }
 
     /** What the page is called where a repository shows {@code shown}: the one name its sidebar entry and its
      *  heading share. */
-    static String title(Set<Lifecycle.State> shown) {
+    static String title(Set<Lifecycle.State> shown, String yankName) {
         if (shown.contains(Lifecycle.State.DEPRECATED) && shown.contains(Lifecycle.State.YANKED)) {
-            return "Deprecations & yanks";
+            return "Deprecated & " + yankName + " versions";
         }
-        return shown.contains(Lifecycle.State.DEPRECATED) ? "Deprecated versions" : "Yanked versions";
+        return shown.contains(Lifecycle.State.DEPRECATED) ? "Deprecated versions"
+                : Character.toUpperCase(yankName.charAt(0)) + yankName.substring(1) + " versions";
     }
 
     private static RepositoryPage page(String title) {

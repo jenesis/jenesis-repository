@@ -354,6 +354,12 @@ public interface RepositoryFormat extends IconContributor {
         return false;
     }
 
+    /** What this format's people call a yank, as a console names the mark: "yanked" where the ecosystem yanks
+     *  (Cargo, PyPI), "unlisted" where a version is left out of the listing a client resolves from (Maven, NuGet). */
+    default String yankName() {
+        return "yanked";
+    }
+
     /**
      * The coordinate this format's lifecycle marks name a version by, for the version the inventory records as
      * {@code coordinate} and serves at {@code path} - what its own client's yank or deprecate names, and what a mark

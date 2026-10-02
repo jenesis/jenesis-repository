@@ -115,7 +115,7 @@ class WizardFlowTest {
         assertThat(flow.choices()).containsExactly(
                 new WizardFlow.Choice("Name", "libs", null),
                 new WizardFlow.Choice("keep-last", "5", null),
-                new WizardFlow.Choice("max-age", "(unset)", "default"),
+                new WizardFlow.Choice("max-age", "none", "default"),
                 new WizardFlow.Choice("routing", "writable", "fixed by the deployment's operator"));
     }
 

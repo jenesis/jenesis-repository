@@ -15,15 +15,11 @@ public final class SearchModeSettingsContributor implements SettingsContributor 
     @Override
     public List<Setting> settings() {
         return List.of(new Setting(SearchMode.SETTING, "Search", "Full-text search",
-                "Keep a full-text index of this repository - package names, descriptions, keywords and authors - "
-                        + "and answer searches from it. Search can feel like an essential feature, but many "
-                        + "repositories rarely use it: people look up the artifacts they already know by name, or "
-                        + "follow up what the gate held. Off, a search looks a package up by the start of its name "
-                        + "from what the repository already keeps sorted, and nothing is built or stored. On, a "
-                        + "background pass builds the index and keeps it current, which costs its build, its "
-                        + "storage and the pass that maintains it - weigh the need against that cost, repository by "
-                        + "repository. The licence inventory is counted without it; only following a count to the "
-                        + "versions behind it needs the index.",
+                "Keep a full-text index of this repository - package names, descriptions, keywords and authors - and "
+                        + "answer searches from it. Off, a search matches a package by the start of its name and "
+                        + "nothing is built or stored. On, a background pass builds and maintains the index, at the "
+                        + "cost of that pass and its storage; many repositories are rarely searched, so weigh it per "
+                        + "repository. Following a licence count to its versions needs the index.",
                 Setting.Kind.BOOLEAN, SearchMode.DEFAULT, true, Setting.Scope.REPOSITORY).essential());
     }
 }

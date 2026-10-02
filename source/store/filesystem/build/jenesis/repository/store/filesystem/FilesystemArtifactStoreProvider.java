@@ -31,6 +31,11 @@ public final class FilesystemArtifactStoreProvider implements ArtifactStoreProvi
         return "filesystem";
     }
 
+    @Override
+    public String where() {
+        return "on the filesystem";
+    }
+
     /** The store root. Required: a store that guesses where to put bytes loses them. */
     @Override
     public Set<String> requiredConfig() {

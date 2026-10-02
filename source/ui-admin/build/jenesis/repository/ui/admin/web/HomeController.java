@@ -80,7 +80,9 @@ public class HomeController {
             return guided ? "redirect:/ui/setup" : "redirect:/ui/tenants";
         }
         List<DashboardPanel> panels = panels(new DashboardContributor.Viewer(current.name(), superadmin));
-        model.addAttribute("panels", panels);
+        // A panel with nothing to say - no figure, no line, no verdict - is left out rather than drawn empty; one still
+        // counting keeps the page asking again until it has.
+        model.addAttribute("panels", panels.stream().filter(DashboardPanel::says).toList());
         model.addAttribute("refreshing", panels.stream().anyMatch(DashboardPanel::refreshing));
         return "dashboard";
     }

@@ -353,6 +353,11 @@
         }
         var advanced = document.getElementById('setting-show-advanced');
         var settings = Array.prototype.slice.call(document.querySelectorAll('.setting'));
+        if (advanced && !document.querySelector('.setting--advanced')) {
+            // Nothing is folded away here, so there is nothing for the switch to show.
+            advanced.disabled = true;
+            advanced.closest('label').title = 'This page has no advanced settings.';
+        }
         var groups = Array.prototype.slice.call(document.querySelectorAll('.setting-group'));
         var others = Array.prototype.slice.call(document.querySelectorAll('main > article:not(.setting-group)'));
         var noMatch = document.getElementById('setting-nomatch');
@@ -957,8 +962,9 @@
     var SCREENING = [['', 'Standard screening'], ['harden', 'Hardened'], ['unscreened', 'Unscreened']];
 
     function parse(text) {
-        var routing = {writable: false, fallbacks: []};
         var tokens = (text || '').trim().split(/\s+/).filter(Boolean);
+        // An unset routing is hosted: it accepts uploads and fetches from nowhere.
+        var routing = {writable: tokens.length === 0, fallbacks: []};
         var current = null;
         for (var index = 0; index < tokens.length; index++) {
             var token = tokens[index];
@@ -1018,7 +1024,7 @@
         box.appendChild(writableRow);
         var list = element('ol', 'app-routing__fallbacks');
         box.appendChild(list);
-        var add = element('button', 'app-quiet', '+ Add a fallback');
+        var add = element('button', 'app-quiet', '+ Add a source');
         add.type = 'button';
         box.appendChild(add);
 
@@ -1241,5 +1247,57 @@
         if (event.target.matches && event.target.matches('select[data-describe]')) {
             describe(event.target);
         }
+    });
+})();
+
+/*
+ * Times in the reader's own timezone.
+ *
+ * The server writes every instant one way, to the second in UTC and saying so ("2026-10-02 12:00:00 UTC", or to the
+ * minute where a screen says "as of"), because it cannot know where its reader is. This rewrites each such time in
+ * the page - on load and in whatever a refresh swaps in - into the browser's timezone, keeping the UTC original as
+ * the element's title. Without a script the UTC form stays, which is still correct.
+ */
+(function () {
+    'use strict';
+
+    var UTC = /(\d{4})-(\d{2})-(\d{2}) (\d{2}):(\d{2})(?::(\d{2}))? UTC/g;
+
+    function local(match, year, month, day, hour, minute, second) {
+        var at = new Date(Date.UTC(+year, +month - 1, +day, +hour, +minute, second ? +second : 0));
+        var options = {year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit'};
+        if (second) {
+            options.second = '2-digit';
+        }
+        return at.toLocaleString(undefined, options);
+    }
+
+    function convert(root) {
+        if (!root || !document.createTreeWalker) {
+            return;
+        }
+        var walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT);
+        var found = [];
+        while (walker.nextNode()) {
+            UTC.lastIndex = 0;
+            if (UTC.test(walker.currentNode.nodeValue)) {
+                found.push(walker.currentNode);
+            }
+        }
+        found.forEach(function (node) {
+            var original = node.nodeValue;
+            node.nodeValue = original.replace(UTC, local);
+            var parent = node.parentNode;
+            if (parent && parent.nodeType === 1 && !parent.title) {
+                parent.title = original.trim();
+            }
+        });
+    }
+
+    document.addEventListener('DOMContentLoaded', function () {
+        convert(document.body);
+    });
+    document.addEventListener('htmx:afterSwap', function (event) {
+        convert(event.target);
     });
 })();

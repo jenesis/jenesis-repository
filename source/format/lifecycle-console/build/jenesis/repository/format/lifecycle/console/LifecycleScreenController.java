@@ -57,8 +57,11 @@ public class LifecycleScreenController {
         // offered both, as the API takes either there.
         Set<Lifecycle.State> shown = marks.states(tenant.name(), repository);
         Set<Lifecycle.State> offered = shown.isEmpty() ? EnumSet.allOf(Lifecycle.State.class) : shown;
+        String yankName = marks.yankName(tenant.name(), repository);
         model.addAttribute("states", offered);
-        model.addAttribute("title", LifecycleConsoleModule.title(offered));
+        model.addAttribute("labels", labels(yankName));
+        model.addAttribute("yankName", yankName);
+        model.addAttribute("title", LifecycleConsoleModule.title(offered, yankName));
         model.addAttribute("deprecates", offered.contains(Lifecycle.State.DEPRECATED));
         model.addAttribute("yanks", offered.contains(Lifecycle.State.YANKED));
         model.addAttribute("refusal", marks.refusal(tenant.name(), repository).orElse(null));
@@ -82,7 +85,7 @@ public class LifecycleScreenController {
                        RedirectAttributes redirect) throws IOException {
         Optional<Lifecycle.State> parsed = Lifecycle.State.parse(state);
         if (parsed.isEmpty()) {
-            redirect.addFlashAttribute("error", "Choose deprecated or yanked.");
+            redirect.addFlashAttribute("error", "Choose a mark.");
             return back(repository, coordinate);
         }
         Optional<String> refused = marks.mark(tenant.name(), repository, coordinate.trim(), version.trim(),
@@ -91,7 +94,7 @@ public class LifecycleScreenController {
             redirect.addFlashAttribute("error", refused.get());
         } else {
             redirect.addFlashAttribute("message", coordinate.trim() + " " + version.trim() + " is marked "
-                    + parsed.get().name().toLowerCase(Locale.ROOT) + ".");
+                    + labels(marks.yankName(tenant.name(), repository)).get(parsed.get()) + ".");
         }
         return back(repository, coordinate.trim());
     }
@@ -112,5 +115,10 @@ public class LifecycleScreenController {
     private static String back(String repository, String coordinate) {
         return "redirect:/ui/repositories/" + repository + "/lifecycle" + (coordinate.isBlank() ? ""
                 : "?coordinate=" + URLEncoder.encode(coordinate, StandardCharsets.UTF_8));
+    }
+
+    /** What each mark reads as on this repository: deprecated, and its formats' own word for a yank. */
+    private static Map<Lifecycle.State, String> labels(String yankName) {
+        return Map.of(Lifecycle.State.DEPRECATED, "deprecated", Lifecycle.State.YANKED, yankName);
     }
 }

@@ -32,21 +32,17 @@ public final class ScanSettingsContributor implements SettingsContributor {
                         Setting.Kind.LONG,
                         IntervalSetting.SCANS.fallbackMillis(), true).advanced(),
                 new Setting(IncrementalPasses.FULL_EVERY, "Compliance", "Full pass every",
-                        "Every Nth scheduled pass of the advisory scan, and of every other pass that re-reads "
-                                + "what the repository holds, re-reads every published version; the passes between "
-                                + "read only the versions published since the last full pass, and a catalogue that "
-                                + "changed asks for a full pass at once. A full pass reads one inventory document per published version, "
-                                + "which over an object store is a round trip per version.",
+                        "Every Nth scheduled pass of the advisory scan, and of every other pass that re-reads what the "
+                                + "repository holds, re-reads every published version; the passes between read only "
+                                + "what was published since the last full pass, and a changed catalogue asks for a "
+                                + "full pass at once. A full pass costs a store read per published version.",
                         Setting.Kind.LONG, String.valueOf(IncrementalPasses.DEFAULT_FULL_EVERY), true).advanced(),
                 new Setting(IncrementalPasses.LOOKBACK, "Compliance", "Full pass lookback",
-                        "How far before the last full pass's stamp an incremental pass still looks. A full pass "
-                                + "enumerates the published key space live and in key order, so a version whose "
-                                + "publish instant is before the pass began but whose row was written after the pass "
-                                + "had gone by its key was never visited - and the stamp says it was. Without this "
-                                + "window such a version waits for the next full pass. It is paid on every "
-                                + "incremental pass as publish-rate times window in extra scans, so a deployment "
-                                + "publishing fast turns it down and one with lagging publisher clocks turns it up; "
-                                + "zero switches it off and leaves the full pass to heal.",
+                        "How far before the last full pass's stamp an incremental pass still looks, so a version whose "
+                                + "row was written after the full pass had gone past its key is scanned rather than "
+                                + "waiting for the next full pass. It costs extra scans in proportion to the publish "
+                                + "rate: a deployment publishing fast turns it down, one with lagging publisher clocks "
+                                + "turns it up. Zero switches it off and leaves the next full pass to heal.",
                         Setting.Kind.DURATION, IncrementalPasses.DEFAULT_LOOKBACK, true).advanced()));
         if (!KNOWN_EXPLOITED) {
             return List.copyOf(settings);

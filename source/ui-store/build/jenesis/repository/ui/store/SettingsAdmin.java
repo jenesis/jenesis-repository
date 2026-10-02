@@ -865,6 +865,9 @@ public class SettingsAdmin {
                               boolean pinned, String pinnedBy, String module, boolean advanced, String form,
                               List<Setting.Choice> named) {
 
+        /** What an empty value reads as - nothing is set, and nothing applies: "none (default)" beside a default. */
+        public static final String NOTHING = "none";
+
         public SettingView {
             choices = List.copyOf(choices);
             form = form == null ? Setting.Form.LINE.name() : form;
@@ -957,7 +960,7 @@ public class SettingsAdmin {
         }
 
         /** The effective value for display: a set secret is masked (whether stored or pinned), a boolean reads as
-         *  {@code enabled} or {@code disabled}, an empty value as {@code (unset)}. */
+         *  {@code enabled} or {@code disabled}, an empty value as {@code none}. */
         public String effectiveDisplay() {
             if (secret() && (overridden || pinned)) {
                 return "••••••";
@@ -983,7 +986,7 @@ public class SettingsAdmin {
 
         private String display(String raw) {
             if (raw.isBlank()) {
-                return "(unset)";
+                return NOTHING;
             }
             if ("BOOLEAN".equals(kind)) {
                 return Boolean.parseBoolean(raw.trim()) ? "enabled" : "disabled";
@@ -1007,9 +1010,9 @@ public class SettingsAdmin {
          *  after it. */
         public String editPlaceholder() {
             if (secret()) {
-                return overridden ? "(set — re-enter to change)" : "(unset)";
+                return overridden ? "(set — re-enter to change)" : "not set";
             }
-            return defaultValue.isBlank() ? "(unset)" : display(defaultValue) + " (default)";
+            return display(defaultValue) + " (default)";
         }
     }
 }

@@ -16,7 +16,7 @@
 <header th:replace="~{fragments :: nav}"></header>
 <main id="main">
     <div th:replace="~{fragments :: messages}"></div>
-    <th:block th:replace="~{base :: repositoryHeader('Enforcement preview', null, null)}"></th:block>
+    <th:block th:replace="~{base :: repositoryHeader('Enforcement preview', 'for', null, null)}"></th:block>
 
     <p th:unless="${blast.installed()}">
         No license-policy module is installed on this deployment, so retroactive-enforcement previews are

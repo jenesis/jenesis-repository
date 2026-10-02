@@ -11,12 +11,10 @@ public final class ListingRebuildSettingsContributor implements SettingsContribu
     public List<Setting> settings() {
         return List.of(
                 new Setting(ListingRebuildConsumer.NAME, "Maintenance", "Rebuild stored listings",
-                        "Regenerate, at the end of a walk of the store, the stored listings - the packuments, Simple "
-                                + "pages, Packages files, repodata, sparse-index files, tag lists and search "
-                                + "documents a client fetches, each maintained incrementally by the write that "
-                                + "changes it and materialised on first read - so any drift an interrupted write "
-                                + "could have left is corrected by the walk (jenrepo.walks) and never by a read. A "
-                                + "listener of the one walk rather than a daily pass of its own.",
+                        "Regenerate, at the end of a walk of the store, the stored listings a client fetches - "
+                                + "packuments, Simple pages, Packages files, repodata, sparse-index files, tag lists "
+                                + "and search documents - so any drift an interrupted write left is corrected by the "
+                                + "walk and never by a read.",
                         Setting.Kind.BOOLEAN, "true", true).advanced());
     }
 }

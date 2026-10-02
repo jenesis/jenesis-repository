@@ -55,16 +55,12 @@ public final class SignatureSettingsContributor implements SettingsContributor {
                                 + "exploits.",
                         Setting.Kind.STRING, "", true, Setting.Scope.TENANT).form(Setting.Form.LINES).standard(),
                 new Setting(ConfiguredSignerTrust.SIGSTORE_ROOT, "Compliance", "Sigstore trusted root",
-                        "The Sigstore trusted root this deployment verifies bundles against - the JSON a "
-                                + "`cosign trusted-root` or the public-good TUF repository serves, naming the Fulcio "
-                                + "certificate authorities and the Rekor transparency logs to believe. Set this for a "
-                                + "self-hosted Fulcio, or to pin the public one by hand; left empty, a root is fetched "
-                                + "instead if - and only if - the trusted root URL below names one. With neither set, "
-                                + "no bundle verifies against anything, which is the shipped posture. Holding a root "
-                                + "trusts nobody by itself: a verified "
-                                + "bundle is trusted only where a pinned signer names its identity, "
-                                + "sigstore:<issuer>|<subject>, since the public-good Fulcio certifies anyone the "
-                                + "issuers know.",
+                        "The Sigstore trusted root bundles are verified against: the document naming the Fulcio "
+                                + "certificate authorities and Rekor transparency logs to believe. Set it for a "
+                                + "self-hosted Fulcio or to pin the public one by hand; empty, a root is fetched only "
+                                + "if the trusted root URL below names one, and with neither no bundle verifies. A "
+                                + "root trusts nobody by itself: a verified bundle is trusted only where a pinned "
+                                + "signer names its identity.",
                         Setting.Kind.STRING, "", true, Setting.Scope.TENANT).form(Setting.Form.JSON).advanced(),
                 new Setting(TrustedRootTask.URL, "Compliance", "Sigstore trusted root URL",
                         "Where the Sigstore trusted root is fetched from when none is pasted above. Empty fetches "
@@ -85,32 +81,19 @@ public final class SignatureSettingsContributor implements SettingsContributor {
                         Setting.Kind.STRING, TrustedRootTask.INTERVAL.fallbackText(), true).advanced(),
                 new Setting(ProvenanceTrust.ACCEPT, "Compliance", "Accept signatures by provenance",
                         "The OIDC issuers whose keyless identities are trusted by provenance - GitHub Actions' "
-                                + "https://token.actions.githubusercontent.com being the one to name first. A Sigstore "
-                                + "bundle by an identity of a listed issuer is trusted for a coordinate when the "
-                                + "signing workflow belongs to the repository the coordinate's own metadata names - a "
-                                + "POM's <scm>, a package.json's repository - as the maintainer record kept per "
-                                + "coordinate has it; a workflow of any other repository, a fork included, stays "
-                                + "untrusted. Empty admits nothing this way, and a pinned signer still decides ahead "
-                                + "of it.",
+                                + "https://token.actions.githubusercontent.com first among them. A Sigstore bundle by "
+                                + "a listed issuer's identity is trusted for a coordinate when the signing workflow "
+                                + "belongs to the repository the coordinate's own metadata names; any other "
+                                + "repository's workflow, a fork included, stays untrusted. Empty admits nothing this "
+                                + "way; a pinned signer decides first.",
                         Setting.Kind.STRING, "", true, Setting.Scope.TENANT).form(Setting.Form.LINES).standard(),
                 new Setting(KeyDiscoveryTask.SOURCES, "Compliance", "Signing-key discovery",
-                        "Sources to fetch the signing keys this deployment does not hold from, comma-separated, asked "
-                                + "in the order named; empty fetches nothing and the pass does not run, so no "
-                                + "outbound call is made until this names a source. The two public keyservers are one "
-                                + "word each: \"keyserver.ubuntu.com,keys.openpgp.org\" asks both, in that order, "
-                                + "which is the order the build tool asks them in - the first keeps every user id a "
-                                + "key carries, the second serves them only for an address its owner verified, and a "
-                                + "key often exists on one and not the other. Supported: keyserver.ubuntu.com and "
-                                + "keys.openpgp.org, asked by the signature's own key id; wkd, the Web Key Directory "
-                                + "of each e-mail address the artifact's own metadata names as a maintainer (a POM's "
-                                + "developers, a package.json's author and maintainers); github, the keys published "
-                                + "by each GitHub login that metadata names (a developer's profile, the repository's "
-                                + "owner). A discovered key verifies a signature but is not trusted: the outcome "
-                                + "stays untrusted, saying the key was discovered, until the key is added to the "
-                                + "trusted signing keys or the sources are accepted below - and a key found through a "
-                                + "maintainer is then trusted only for artifacts whose metadata names that "
-                                + "maintainer, never for the repository at large. The fetch runs on the key-discovery "
-                                + "pass, never on a publish.",
+                        "Where to fetch the signing keys this deployment does not hold, in the order named; empty "
+                                + "fetches nothing, so no outbound call is made until this names a source. "
+                                + "\"keyserver.ubuntu.com,keys.openpgp.org\" asks both public keyservers by key id; "
+                                + "wkd and github ask the maintainers the artifact's own metadata names. A discovered "
+                                + "key verifies a signature but stays untrusted until it is added to the trusted keys "
+                                + "or the sources are accepted below.",
                         Setting.Kind.STRING, "", true, Setting.Scope.TENANT).standard(),
                 new Setting(KeyDiscoveryTask.ACCEPT, "Compliance", "Accept discovered keys",
                         "Trust the keys the discovery sources served: a key looked up by its own id as if the "
@@ -132,13 +115,11 @@ public final class SignatureSettingsContributor implements SettingsContributor {
                                 + "source did not have is asked for again after a day.",
                         Setting.Kind.STRING, KeyDiscoveryTask.INTERVAL.fallbackText(), true).advanced(),
                 new Setting(SignatureSweepTask.ENABLED, "Compliance", "Retroactive signature sweep",
-                        "Apply the signature dials below to what is already published: the sweep re-judges the "
-                                + "signature outcome and grade the gate recorded for each version under the current "
-                                + "dials and holds a version they no longer admit, in the same review queue as a "
-                                + "publish-time hold. A tightened dial can hold much of a repository at once, so "
-                                + "switch it on with the change and read the queue. It judges the record, never the "
-                                + "bytes: a key admitted or withdrawn since changes nothing here, and nothing is "
-                                + "auto-released when a dial is loosened again.",
+                        "Apply the signature dials below to what is already published: the sweep re-judges each "
+                                + "version's recorded signature outcome under the current dials and holds one they no "
+                                + "longer admit, in the review queue. A tightened dial can hold much of a repository "
+                                + "at once, so read the queue after switching it on. It judges the record, not the "
+                                + "bytes, and nothing is released automatically when a dial is loosened.",
                         Setting.Kind.BOOLEAN, "false", true, Setting.Scope.TENANT).advanced(),
                 new Setting(SignatureSweepTask.INTERVAL.key(), "Compliance", "Retroactive signature sweep interval",
                         "How often the signature sweep runs while switched on; every version is judged on its first "
@@ -180,26 +161,21 @@ public final class SignatureSettingsContributor implements SettingsContributor {
                                 SignaturePolicy.CHANGED_DEFAULT, true,
                         Setting.Scope.TENANT).standard().named(Setting.Choice.VERDICTS),
                 new Setting(SignaturePolicy.MISSING, "Compliance", "Missing-signature action",
-                        "Verdict for an artifact carrying no signature where its format expects one. Unlike the other "
-                                + "signature outcomes, this is not yet a fact at screen time: a publish is several "
-                                + "requests and the signature is legitimately still in flight when the artifact it "
-                                + "covers is screened, so holding on it puts every properly signed release through the "
-                                + "review queue on its way out of it. A deployment that requires every artifact to "
-                                + "arrive signed holds or refuses it. It does not govern the proxy path, which has a "
-                                + "dial of its own: an upstream carries artifacts published long before its own "
-                                + "signing requirement existed.",
+                        "Verdict for an artifact carrying no signature where its format expects one. At screen time "
+                                + "this is often not yet a fact: a publish is several requests and the signature may "
+                                + "still be in flight, so holding on it sends every properly signed release through "
+                                + "the review queue. A deployment that requires every artifact to arrive signed holds "
+                                + "or refuses it. The proxy path has a dial of its own.",
                         Setting.Kind.CHOICE, List.of("ALLOW", "QUARANTINE", "REJECT"),
                                 SignaturePolicy.MISSING_DEFAULT, true,
                         Setting.Scope.TENANT).standard().named(Setting.Choice.VERDICTS),
                 new Setting(SignaturePolicy.MISSING_PROXY, "Compliance", "Missing-signature action on the proxy path",
                         "Verdict for a proxied artifact carrying no signature where its format expects one, whatever "
                                 + "the publish-path dial says. An upstream carries artifacts published long before its "
-                                + "own signing requirement existed, and a proxy that holds every one of them stops "
-                                + "being a proxy. The pull-through fetches what the upstream publishes beside an "
-                                + "artifact - Maven's .asc and .sigstore.json, a registry's attestations - before the "
-                                + "screen decides, so an artifact that arrives unsigned here really is unsigned "
-                                + "upstream; a deployment mirroring a registry that signs everything can hold or "
-                                + "refuse it.",
+                                + "own signing requirement existed, and a proxy that holds them all stops being a "
+                                + "proxy. The signatures an upstream publishes beside an artifact are fetched before "
+                                + "the screen decides, so a deployment mirroring a registry that signs everything can "
+                                + "hold or refuse it.",
                         Setting.Kind.CHOICE, List.of("ALLOW", "QUARANTINE", "REJECT"),
                                 SignaturePolicy.MISSING_PROXY_DEFAULT, true,
                         Setting.Scope.TENANT).advanced().named(Setting.Choice.VERDICTS),

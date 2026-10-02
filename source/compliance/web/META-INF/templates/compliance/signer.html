@@ -10,7 +10,7 @@
 <header th:replace="~{fragments :: nav}"></header>
 <main id="main">
     <div th:replace="~{fragments :: messages}"></div>
-    <th:block th:replace="~{base :: repositoryHeader('Signer', 'Signers', @{/ui/repositories/{repo}/signers(repo=${repo})})}"></th:block>
+    <th:block th:replace="~{base :: repositoryHeader('Signer', 'of', null, null)}"></th:block>
 
     <article>
         <p><strong th:text="${abbreviated}">signer</strong><br><small><code th:text="${signer}">identity</code></small></p>

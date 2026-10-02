@@ -49,6 +49,13 @@ public final class MavenFormat implements RepositoryFormat, ProxyFormat, Artifac
         return true;
     }
 
+    /** A yanked Maven version is left out of {@code maven-metadata.xml}: ranges and the newest-version lookups skip it
+     *  while a build naming it exactly still gets it, which Maven people call unlisting. */
+    @Override
+    public String yankName() {
+        return "unlisted";
+    }
+
     /** Maven's paths keep their {@code /maven/} segment inside a repository ({@code /repository/<name>/maven/...}), so
      *  a Maven repository can become a {@code java} one, serving the module layout beside it from the same blobs with
      *  every client URL unchanged. */

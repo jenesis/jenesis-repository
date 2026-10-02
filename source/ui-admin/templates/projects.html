@@ -13,7 +13,7 @@
 
     <!--/* The projects across the whole width, as the repositories are, and a filter over the rows already rendered. */-->
     <th:block th:unless="${projects.isEmpty()}">
-        <label>Search
+        <label>
             <input type="search" id="project-filter" autocomplete="off" data-filter=".project-row"
                    data-filter-empty="project-nomatch" aria-label="Filter projects by name, build tool or description"
                    placeholder="Filter by name, build tool or description">

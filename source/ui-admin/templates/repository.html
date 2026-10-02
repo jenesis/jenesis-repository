@@ -34,8 +34,8 @@
          other setting of the repository is, on its Settings page; the deployment's definitions stay on Upstreams. */-->
     <article th:if="${shape.configured() or isSuperadmin}" id="shape">
         <h2>Routing</h2>
-        <p><small>Whether this repository accepts uploads, and its ordered fallbacks with each one's copy and screening
-            policy.</small></p>
+        <p><small>Whether this repository accepts uploads, and the sources it fetches from, in order, with each one's
+            copy and screening policy.</small></p>
         <p th:if="${shape.configured()}"><span th:replace="~{fragments :: shapeBadges(${shape})}"></span></p>
         <p><small th:switch="${routing.layer().name()}">
             <span th:case="'REPOSITORY'">Set for this repository, over the deployment's definition.</span>

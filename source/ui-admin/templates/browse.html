@@ -48,7 +48,7 @@
     <search>
     <form method="get" th:action="@{/ui/repositories/{repo}/browse(repo=${repo})}">
         <!--/* The one search field every list has, across the line; Enter sends it. */-->
-        <label>Search
+        <label>
             <input th:if="${fullText}" name="q" type="search" th:value="${query}" aria-describedby="search-mode"
                    placeholder="Search names, descriptions, keywords and authors" aria-label="Search this repository">
             <input th:unless="${fullText}" name="q" type="search" th:value="${query}" aria-describedby="search-mode"

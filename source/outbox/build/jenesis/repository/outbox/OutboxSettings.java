@@ -35,12 +35,11 @@ public final class OutboxSettings implements SettingsContributor {
     public List<Setting> settings() {
         return List.of(
                 new Setting(PARKED_RETENTION.key(), "Outboxes", "Parked entry retention",
-                        "How long a terminally-failed (parked) outbox delivery, such as a webhook's, is kept "
-                                + "before its drain reclaims it. A parked entry stays visible on its status surface "
-                                + "and is recoverable through its retry endpoint, so this is how long a dead delivery "
-                                + "is worth keeping rather than how long it is retried. Blank keeps them forever, "
-                                + "which lets a target that is permanently gone accumulate one entry per delivery. "
-                                + "One dial for every outbox: the mechanism is shared, so its retention is too.",
+                        "How long a terminally failed (parked) outbox delivery, such as a webhook's, is kept before it "
+                                + "is reclaimed. A parked entry stays visible on its status surface and can be "
+                                + "retried, so this is how long a dead delivery is worth keeping, not how long it is "
+                                + "retried. Blank keeps them forever, letting a target that is gone for good "
+                                + "accumulate one entry per delivery. One dial covers every outbox.",
                         Setting.Kind.DURATION, PARKED_RETENTION.fallbackText(), false).advanced(),
                 new Setting(PARKED_CAP, "Outboxes", "Parked entry cap",
                         "A hard ceiling on a parked backlog: everything beyond the newest N is reclaimed whatever its "

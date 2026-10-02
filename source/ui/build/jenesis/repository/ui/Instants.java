@@ -4,7 +4,9 @@ import module java.base;
 
 /**
  * How a console screen shows an instant: to the second, in UTC, and saying so, rather than {@link Instant}'s nanosecond
- * {@code toString}. Screens reach it as the {@code instants} model attribute.
+ * {@code toString}. Screens reach it as the {@code instants} model attribute. The console's script rewrites every time
+ * in this form into the reader's own timezone, so this form is what a page says without a script, and the one shape
+ * the script looks for.
  */
 public final class Instants {
 

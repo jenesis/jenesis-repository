@@ -54,6 +54,11 @@ public final class AzureArtifactStoreProvider implements ArtifactStoreProvider {
     }
 
     @Override
+    public String where() {
+        return "in Azure Blob Storage";
+    }
+
+    @Override
     public Set<String> config() {
         return Set.of(CONNECTION_STRING_KEY, STREAMING_WRITES_KEY, CONTAINER_KEY, ALLOW_INSECURE_KEY, PROBE_KEY);
     }

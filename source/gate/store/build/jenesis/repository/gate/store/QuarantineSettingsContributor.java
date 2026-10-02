@@ -21,13 +21,11 @@ public final class QuarantineSettingsContributor implements SettingsContributor 
                         "Keep at most this many newest gate-decision log rows; zero sets no count cap.",
                         Setting.Kind.INTEGER, "0", true).advanced(),
                 new Setting("strict-hold-mapping", "Compliance", "Strict hold-mapping",
-                        "After an accepted publish through a blobs-namespace format, the publish-time hold-mapping "
-                                + "round-trip check verifies the format's blobKeys/servedPaths resolve the served "
-                                + "path and content hash just laid out (so a hold placed after the publish could "
-                                + "retract it). A broken mapping always alarms (jenrepo.publish.holdmapping.broken); "
-                                + "on, it also FAILS such a publish rather than only alarming. Test configurations "
-                                + "turn it on so a wiring regression fails on the first publish; production leaves it "
-                                + "off so one broken format cannot DoS publishes.",
+                        "After an accepted publish through a blobs-namespace format, check that the format maps the "
+                                + "served path and content hash just laid out back to each other, so a later hold "
+                                + "could retract the publish. A broken mapping always raises an alarm; on, it also "
+                                + "fails the publish. Test configurations turn it on so a wiring regression fails at "
+                                + "once; production leaves it off so one broken format cannot stop publishes.",
                         Setting.Kind.BOOLEAN, "false", true).advanced());
     }
 }

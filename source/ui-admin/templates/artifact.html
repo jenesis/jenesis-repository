@@ -15,7 +15,7 @@
 <header th:replace="~{fragments :: nav}"></header>
 <main id="main">
     <div th:replace="~{fragments :: messages}"></div>
-    <th:block th:replace="~{base :: repositoryHeader('Artifact', 'Browse', @{/ui/repositories/{repo}/browse(repo=${repo})})}"></th:block>
+    <th:block th:replace="~{base :: repositoryHeader('Artifact', 'in', null, null)}"></th:block>
     <p><a th:href="@{/ui/repositories/{repo}/browse(repo=${repo},prefix=${parent})}">&larr; back to folder</a></p>
 
     <article>
@@ -225,7 +225,7 @@
     <article th:if="${origin != null and !origin.isEmpty()}">
         <h2>Origin</h2>
         <p><small>Where this deployment's bytes for this coordinate version came from - uploaded locally, or fetched
-            from which fallback (stored or passed through), and how often a no-copy serve re-served them.</small></p>
+            from which source (stored or passed through), and how often a no-copy serve re-served them.</small></p>
         <figure>
             <table>
                 <thead>
@@ -243,9 +243,9 @@
                     <td>
                         <span th:if="${o.upload()}" class="app-badge" title="A hand upload through the publish path">uploaded</span>
                         <th:block th:if="${o.fallback()}">
-                            <span class="app-badge">via fallback</span>
+                            <span class="app-badge">via a source</span>
                             <code th:text="${o.repository}">frontdoor</code>
-                            <span th:if="${o.fallbackIndex >= 0}" th:text="'#' + ${o.fallbackIndex}">#0</span>
+                            <span th:if="${o.fallbackIndex >= 0}" th:text="'source #' + ${o.fallbackIndex}">source #0</span>
                             <br th:if="${!o.target.isEmpty()}"><small th:if="${!o.target.isEmpty()}"><a th:href="${o.target}" th:text="${o.target}">upstream url</a></small>
                         </th:block>
                     </td>

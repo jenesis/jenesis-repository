@@ -390,7 +390,7 @@ public final class WizardFlow {
         for (Step step : steps) {
             for (Field field : step.fields()) {
                 String value = value(field.input());
-                choices.add(new Choice(field.label(), value.isBlank() ? "(none)" : value, null));
+                choices.add(new Choice(field.label(), value.isBlank() ? SettingsAdmin.SettingView.NOTHING : value, null));
             }
             for (SettingsAdmin.SettingView setting : step.settings()) {
                 String value = value(SETTING + setting.key());

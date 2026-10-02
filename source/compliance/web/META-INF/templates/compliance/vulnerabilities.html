@@ -5,7 +5,7 @@
 <header th:replace="~{fragments :: nav}"></header>
 <main id="main">
     <div th:replace="~{fragments :: messages}"></div>
-    <th:block th:replace="~{base :: repositoryHeader('Vulnerabilities', null, null)}"></th:block>
+    <th:block th:replace="~{base :: repositoryHeader('Vulnerabilities', 'in', null, null)}"></th:block>
     <p><small>What the advisory feeds say about this repository's published artifacts now, worst first. Every row the
         scans and the gate recorded, with the reviews on each, is the
         <a th:href="@{'/ui/repositories/' + ${repo} + '/findings'}">findings ledger</a>.</small></p>

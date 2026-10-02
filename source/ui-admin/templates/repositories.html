@@ -28,7 +28,7 @@
     <!--/* The repositories across the whole width, and a filter over the rows already rendered: it matches a
          repository's name, format and description, and asks the server nothing. */-->
     <th:block th:unless="${repositories.isEmpty()}">
-        <label>Search
+        <label>
             <input type="search" id="repository-filter" autocomplete="off" data-filter="[data-repository]"
                    data-filter-empty="repository-nomatch"
                    aria-label="Filter repositories by name, format or description"

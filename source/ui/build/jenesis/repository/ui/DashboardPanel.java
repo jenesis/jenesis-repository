@@ -36,6 +36,12 @@ public record DashboardPanel(String title, String href, String figure, String ca
         this(title, href, figure, caption, tone, lines, "", false);
     }
 
+    /** Whether the panel has something to say: a figure, a line, or a verdict - all clear, or attention - in its
+     *  caption. A panel with none of them is not drawn. */
+    public boolean says() {
+        return !figure.isEmpty() || !lines.isEmpty() || (tone != Tone.NEUTRAL && !caption.isEmpty());
+    }
+
     /** Whether the figure is quiet, asks for attention, or says all is clear. */
     public enum Tone { NEUTRAL, ATTENTION, CLEAR }
 

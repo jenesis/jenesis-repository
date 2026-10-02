@@ -41,7 +41,7 @@
         th:unless="${posture.scoped()}">s</span> no known footguns. New warnings appear here as configuration
         changes.</small></p>
 
-    <label th:unless="${posture.empty()}">Search
+    <label th:unless="${posture.empty()}">
         <input type="search" id="posture-filter" autocomplete="off" data-filter=".posture-item"
                aria-label="Filter advisories by name, reason or setting"
                placeholder="Filter by title, id, reason or setting">

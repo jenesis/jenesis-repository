@@ -64,6 +64,13 @@ public final class NuGetFormat implements RepositoryFormat, ProxyLeg, BlobLayout
         return true;
     }
 
+    /** NuGet itself calls a version left out of search and resolution, and still installable by its exact version,
+     *  unlisted. */
+    @Override
+    public String yankName() {
+        return "unlisted";
+    }
+
     /** A package's marks name its id in lower case, as every path of the feed does. */
     @Override
     public String lifecycleCoordinate(String coordinate, String path) {

@@ -26,12 +26,11 @@ public final class ProxySettingsContributor implements SettingsContributor {
                         Setting.Kind.LONG, ScreenedHttpClient.THROUGHPUT_FLOOR_TEXT, true).advanced(),
                 new Setting(DEADLINE_KEY, "Proxy", "Upstream fetch deadline",
                         "The longest one upstream fetch may take, from the request to the last byte, before it is "
-                                + "abandoned; zero sets no deadline. The throughput floor stops an upstream answering "
-                                + "a byte at a time, but one trickling just above it holds the fetch - and the client "
-                                + "waiting on it - for as long as the artifact takes at that rate, and only a deadline "
-                                + "ends that. Any fixed number either cuts short a legitimate multi-gigabyte pull over "
-                                + "a slow link or is too long to protect anything, so size it for the largest artifact "
-                                + "this proxy serves over the slowest link it should tolerate. Applies live.",
+                                + "abandoned; zero sets no deadline. The throughput floor ends an upstream answering a "
+                                + "byte at a time, but only a deadline ends one trickling just above it. Too short a "
+                                + "deadline cuts off a legitimate large pull over a slow link, so size it for the "
+                                + "largest artifact this proxy serves over the slowest link it should tolerate. "
+                                + "Applies live.",
                         Setting.Kind.DURATION, ScreenedHttpClient.DEADLINE_TEXT, true).advanced());
     }
 }

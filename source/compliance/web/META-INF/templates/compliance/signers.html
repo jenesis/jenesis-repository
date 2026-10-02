@@ -10,7 +10,7 @@
 <header th:replace="~{fragments :: nav}"></header>
 <main id="main">
     <div th:replace="~{fragments :: messages}"></div>
-    <th:block th:replace="~{base :: repositoryHeader('Signers', null, null)}"></th:block>
+    <th:block th:replace="~{base :: repositoryHeader('Signers', 'of', null, null)}"></th:block>
 
     <article>
         <p><small>The identities whose trusted signatures the gate accepted on this repository's versions,

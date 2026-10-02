@@ -5,7 +5,7 @@
 <header th:replace="~{fragments :: nav}"></header>
 <main id="main">
     <div th:replace="~{fragments :: messages}"></div>
-    <th:block th:replace="~{base :: repositoryHeader(${reviewQueue} ? 'AI review' : 'Findings', null, null)}"></th:block>
+    <th:block th:replace="~{base :: repositoryHeader(${reviewQueue} ? 'AI review' : 'Findings', ${reviewQueue} ? 'of' : 'in', null, null)}"></th:block>
 
     <p th:unless="${panel.available()}">
         No findings module is installed on this deployment, so nothing durable holds what the scans and the gate

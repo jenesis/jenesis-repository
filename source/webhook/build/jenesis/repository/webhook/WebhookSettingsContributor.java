@@ -15,26 +15,20 @@ public final class WebhookSettingsContributor implements SettingsContributor {
     public List<Setting> settings() {
         return List.of(
                 new Setting("webhook", "Webhooks", "Event webhooks",
-                        "Deliver HTTP callbacks over the background drain when an artifact is published or "
-                                + "unpublished, the gate quarantines one, a hold is released or discarded, a finding "
-                                + "is recorded, or a staged set is promoted. Delivery is at-least-once, so a receiver "
-                                + "must tolerate a repeat; and an event can be lost before it is ever queued (a crash "
-                                + "between the change and the note), which no retry can heal. A subscriber that "
-                                + "cannot miss one polls the durable ledger for its event type instead - GET "
-                                + "/api/webhook lists the read for each - and treats the callback as a prompt to look "
-                                + "rather than as the record. Leave it off where there is no receiver: an enabled one "
-                                + "with no endpoint configured still writes a note per publish for the next drain to "
-                                + "delete.",
+                        "Deliver HTTP callbacks when an artifact is published or unpublished, the gate quarantines "
+                                + "one, a hold is released or discarded, a finding is recorded or a staged set is "
+                                + "promoted. Delivery is at-least-once, so a receiver must tolerate a repeat, and an "
+                                + "event can be lost before it is queued: a subscriber that cannot miss one treats a "
+                                + "callback as a prompt to read the durable ledger GET /api/webhook names. Leave it "
+                                + "off where there is no receiver.",
                         Setting.Kind.BOOLEAN, "false", false).gate().standard(),
                 new Setting("webhook-endpoints", "Webhooks", "Webhook endpoints",
-                        "The endpoints events are delivered to, each an https URL optionally followed by the events it "
-                                + "receives - publish, unpublish, quarantine, release, discard, finding, promotion - "
-                                + "and every event where it names none. Endpoints must be https: an http:// endpoint "
-                                + "is REFUSED at delivery (the refusal is recorded against the queued event and shown "
-                                + "on the webhook status surface) unless the operator sets 'webhook-allow-internal'. "
-                                + "Give every endpoint a signing secret in 'webhook-secrets', keyed by this URL: an "
-                                + "endpoint with no entry is delivered UNSIGNED, and its receiver then cannot tell a "
-                                + "genuine event from a POST anyone who learns this URL can forge.",
+                        "The endpoints events are delivered to, each an https URL, optionally with the events it "
+                                + "receives, and every event where it names none. An http endpoint is refused at "
+                                + "delivery unless webhook-allow-internal is set. Give every endpoint a signing secret "
+                                + "in webhook-secrets, keyed by its URL: an endpoint with none is delivered unsigned, "
+                                + "and its receiver cannot tell a genuine event from one forged by anyone who learns "
+                                + "the URL.",
                         Setting.Kind.STRING, "", false, Setting.Scope.TENANT).form(Setting.Form.LINES).standard(),
                 new Setting("webhook-secrets", "Webhooks", "Webhook signing secrets",
                         "Per-endpoint HMAC-SHA256 signing secrets, one '<https-url>=<secret>' per line, keyed by the "

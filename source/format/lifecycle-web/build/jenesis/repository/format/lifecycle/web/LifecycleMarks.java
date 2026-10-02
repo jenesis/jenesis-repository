@@ -106,6 +106,18 @@ public final class LifecycleMarks {
 
     private static final Map<String, Set<Lifecycle.State>> STATES = new ConcurrentHashMap<>();
 
+    /** What a repository of {@code type} calls a yank: its formats' own word, "yanked" where none says otherwise. */
+    public static String yankName(String type) {
+        return type == null ? "yanked" : RepositoryType.installed(type).stream()
+                .flatMap(installed -> installed.formats().stream()).filter(RepositoryFormat::surfacesYank)
+                .map(RepositoryFormat::yankName).findFirst().orElse("yanked");
+    }
+
+    /** What {@code repository} calls a yank, as {@link #yankName(String)} answers for its type. */
+    public String yankName(String tenant, String repository) throws IOException {
+        return yankName(type(tenant, repository).map(RepositoryType::name).orElse(null));
+    }
+
     private static Set<Lifecycle.State> states(RepositoryType type) {
         Set<Lifecycle.State> shown = EnumSet.noneOf(Lifecycle.State.class);
         for (RepositoryFormat format : type.formats()) {

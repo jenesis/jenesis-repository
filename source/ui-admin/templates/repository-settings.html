@@ -5,7 +5,7 @@
 <header th:replace="~{fragments :: nav}"></header>
 <main id="main">
     <div th:replace="~{fragments :: messages}"></div>
-    <th:block th:replace="~{base :: repositoryHeader('Settings', null, null)}"></th:block>
+    <th:block th:replace="~{base :: repositoryHeader('Settings', 'of', null, null)}"></th:block>
     <p><small>What this repository is configured with - the settings the repository wizard asks when one is created,
         edited here.</small></p>
     <p th:unless="${isEditor}"><small>You have read-only access to this [[${scopeWord}]].</small></p>

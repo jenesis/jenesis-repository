@@ -53,14 +53,12 @@ public final class CoreSettingsContributor implements SettingsContributor {
                                 + "only bites on an upstream Last-Modified date.",
                         Setting.Kind.INTEGER, "2", true).essential(),
                 new Setting("proxy-allow-internal", "Proxy", "Allow internal proxy targets",
-                        "Permit proxy upstreams, and the download URLs an upstream document advertises, that are "
-                                + "plain http or resolve to a loopback, private, link-local or cloud-metadata "
-                                + "address. A proxy fetch carries the deployment's per-host upstream credential and "
-                                + "its result is cached and re-served, so a cleartext hop hands both to any observer "
-                                + "and lets an active intermediary choose what this repository caches, while an "
-                                + "internal one lets an upstream steer the fetch into this deployment's own network "
-                                + "(SSRF). One dial for the whole deployment and every format; enable it only for a "
-                                + "trusted internal or plaintext mirror.",
+                        "Permit proxy upstreams, and the download URLs an upstream document advertises, that are plain "
+                                + "http or resolve to a loopback, private, link-local or cloud-metadata address. A "
+                                + "proxy fetch carries the upstream credential and its result is cached and re-served, "
+                                + "so cleartext exposes both on the path, and an internal address lets an upstream "
+                                + "steer fetches into this network (SSRF). Enable it only for a trusted internal or "
+                                + "plaintext mirror.",
                         Setting.Kind.BOOLEAN, "false", false).advanced(),
                 new Setting("cleanup-lease", "Operations", "Maintenance lease",
                         "How long one node holds the background-maintenance lease; keep under the task intervals.",
@@ -70,13 +68,12 @@ public final class CoreSettingsContributor implements SettingsContributor {
                                 + "when the routing and the tenants directory both take it up.",
                         Setting.Kind.STRING, Scopes.DEFAULT_TENANT, false).standard(),
                 new Setting("block-private-import-hosts", "Network", "Block private import hosts",
-                        "Reject a migration URL - an import's source or an export's target - that is plaintext http, "
-                                + "or that resolves to a loopback, link-local or private address. A migration runs "
-                                + "server-side with a credential attached, so a plaintext URL hands it to any "
-                                + "observer on the path and a private one turns the migration into a request against "
-                                + "this deployment's own network (SSRF). Enforced identically on the API and console "
-                                + "legs; set it false to migrate from or to an internal or plaintext repository - the "
-                                + "one dial, covering both, so neither can be opted out of alone.",
+                        "Reject a migration URL - an import's source or an export's target - that is plaintext http or "
+                                + "resolves to a loopback, link-local or private address. A migration runs server-side "
+                                + "with a credential attached, so a plaintext URL exposes it on the path and a private "
+                                + "one turns the migration against this deployment's own network (SSRF). Set it false "
+                                + "to migrate from or to an internal or plaintext repository; it covers the API and "
+                                + "the console alike.",
                         Setting.Kind.BOOLEAN, "true", false).advanced(),
                 new Setting("trusted-proxies", "Network", "Trusted proxies",
                         "Comma-separated CIDRs of reverse proxies whose X-Forwarded-For, X-Forwarded-Proto and "

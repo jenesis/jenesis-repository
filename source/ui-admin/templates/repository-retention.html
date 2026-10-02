@@ -5,7 +5,7 @@
 <header th:replace="~{fragments :: nav}"></header>
 <main id="main">
     <div th:replace="~{fragments :: messages}"></div>
-    <th:block th:replace="~{base :: repositoryHeader('Retention & cleanup', null, null)}"></th:block>
+    <th:block th:replace="~{base :: repositoryHeader('Retention & cleanup', 'of', null, null)}"></th:block>
     <h2>Policy</h2>
     <p><small>A version is kept only if it satisfies every rule; a pinned version is always kept, whatever the rules
         say. Each rule is a repository setting: this repository's own value, else its tenant's, else the

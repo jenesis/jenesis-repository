@@ -24,11 +24,9 @@ public final class ConsoleSettingsContributor implements SettingsContributor {
                 new Setting(SetupWizard.SETTING, "First run", "First-run setup guide",
                         "Send a super-admin who signs in with the starter key to the first-run setup screen, which "
                                 + "walks the decisions a new deployment should make: the starter credentials, the "
-                                + "compliance verdicts, the advisory feeds, retention. The operator the screen is for "
-                                + "is the one who does not know to look for it; a deployment provisioned from "
-                                + "configuration, rebuilt by CI or started for the hundredth time switches it off "
-                                + "here, once. The screen stays reachable as Setup, under Settings, either way, and "
-                                + "this is not what says setup is finished - that is whether the starter credential "
+                                + "compliance verdicts, the advisory feeds, retention. A deployment provisioned from "
+                                + "configuration switches it off here. The screen stays reachable as Setup, under "
+                                + "Settings, either way; what says setup is finished is whether the starter credential "
                                 + "is still in use. Applies live.",
                         Setting.Kind.BOOLEAN, SetupWizard.ON_BY_DEFAULT, true).standard(),
                 new Setting(GITHUB_CLIENT_ID, "Sign-in", "GitHub client id",

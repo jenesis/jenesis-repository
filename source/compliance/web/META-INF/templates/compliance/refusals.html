@@ -10,7 +10,7 @@
 <header th:replace="~{fragments :: nav}"></header>
 <main id="main">
     <div th:replace="~{fragments :: messages}"></div>
-    <th:block th:replace="~{base :: repositoryHeader('Refused', null, null)}"></th:block>
+    <th:block th:replace="~{base :: repositoryHeader('Refused', 'in', null, null)}"></th:block>
     <p><small>Uploads and upstream bodies the gate refused outright, the latest <span th:text="${pageSize}">200</span>.
         A refusal stores nothing, so there is nothing to release or discard - unlike the quarantine queue, this is a
         record, not a queue.</small></p>

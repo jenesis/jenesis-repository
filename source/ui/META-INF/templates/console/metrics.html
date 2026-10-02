@@ -25,7 +25,7 @@
         <p th:if="${empty}"><small class="setting-nomatch">No observability sources are installed, so there is nothing
             to report yet. Install a plugin that reports health, metrics or task status and it appears here.</small></p>
 
-        <label th:unless="${empty}">Search
+        <label th:unless="${empty}">
             <input type="search" id="observability-filter" autocomplete="off" data-filter=".observability-item"
                    aria-label="Filter signals by name or description"
                    placeholder="Filter by signal name or description">

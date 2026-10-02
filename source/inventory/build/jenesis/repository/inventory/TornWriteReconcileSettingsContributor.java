@@ -19,12 +19,10 @@ public final class TornWriteReconcileSettingsContributor implements SettingsCont
     public List<Setting> settings() {
         return List.of(
                 new Setting(TornWriteConsumer.NAME, "Maintenance", "Reconcile torn writes",
-                        "Judge crash-torn intermediate states whenever a walk of the store runs - a pointer whose "
-                                + "blob is missing (flagged loudly; impossible under the blob-before-pointer "
-                                + "ordering, so a signal of corruption) and a blob no pointer references (an orphan, "
-                                + "confirmed and left to garbage collection). A listener of the one walk "
-                                + "(jenrepo.walks) rather than a sweep of its own, paying no read the walk did not "
-                                + "already make; a dry run that flags and counts unless Apply is also set.",
+                        "Judge crash-torn states whenever a walk of the store runs: a pointer whose blob is missing, "
+                                + "flagged loudly as a sign of corruption, and a blob no pointer references, an orphan "
+                                + "left to garbage collection. It reads nothing the walk has not already read, and it "
+                                + "is a dry run that flags and counts unless Apply is also set.",
                         Setting.Kind.BOOLEAN, "true", true).advanced(),
                 new Setting(TornWriteConsumer.APPLY, "Maintenance", "Apply torn-write repairs",
                         "When the torn-write reconcile is on, actually remove the dangling pointers a walk finds (a "
