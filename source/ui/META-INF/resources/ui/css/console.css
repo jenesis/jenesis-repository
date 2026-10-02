@@ -657,11 +657,11 @@ hgroup.app-page-header__heading > h1.app-page-header__title {
     display: flex;
     margin-bottom: var(--app-space-2);
 }
-.app-search > [role="search"] > input {
+main .app-search > [role="search"] > input {
     flex: 1 1 auto;
     margin-bottom: 0;
 }
-.app-search > [role="search"] > button {
+main .app-search > [role="search"] > button {
     flex: 0 0 auto;
     width: auto;
     margin-bottom: 0;
@@ -680,9 +680,10 @@ hgroup.app-page-header__heading > h1.app-page-header__title {
     flex: 1 1 10rem;
     margin: 0;
 }
-.app-filter-bar > label > input,
-.app-filter-bar > label > select,
-.app-filter-bar > button {
+/* Specific enough to beat the console's own bottom margin on every field, which would leave the fields standing
+   higher than the button they are aligned with. */
+main .app-filter-bar > label > :is(input, select),
+main .app-filter-bar > button {
     margin-bottom: 0;
 }
 .app-filter-bar > button {
