@@ -1,11 +1,7 @@
 /**
- * The staging HTTP surface as a removable server feature module: it provides
- * {@link build.jenesis.repository.server.kernel.ServerModuleProvider}, so the repository server imports its
- * configuration through {@code ServiceLoader} discovery and names no staging endpoint. A thin Spring {@code web}
- * adapter over the framework-free {@link build.jenesis.repository.staging.Staging} lifecycle (resolved per
- * tenant-and-repository through {@code Repositories}); with this module absent the server carries no
- * staging routes and the console hides the staging surface. Open so Spring can reflect over the controller and its
- * configuration.
+ * The staging HTTP surface, contributed through {@link build.jenesis.repository.server.kernel.ServerModuleProvider}: a
+ * thin adapter over the {@link build.jenesis.repository.staging.Staging} lifecycle, resolved per tenant and repository
+ * through {@code Repositories}. Open so Spring can reflect over the controller and its configuration.
  *
  * @jenesis.release 25
  * @jenesis.bom pin-repository.properties

@@ -51,7 +51,7 @@ public class RepositoryAdminController {
     private static final int DETAIL_HOLDINGS = 200;
 
 
-    /** How many staging ids the staging page shows before pointing at the staging API, which pages the rest. */
+    /** How many staging ids the staging page shows before saying more exist; the staging API answers a wider window. */
     private static final int HUB_WINDOW = 50;
 
 

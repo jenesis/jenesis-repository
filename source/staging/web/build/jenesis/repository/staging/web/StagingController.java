@@ -26,19 +26,15 @@ import org.springframework.web.server.ResponseStatusException;
 
 
 /**
- * The staging HTTP surface, peeled out of the {@code RepositoryController} monolith into its own thin
- * {@code web} adapter and contributed through the {@code ServerModuleProvider} seam: a deploy lands under a staging
- * id (held, not resolvable), the ids are listed for review, and an id is promoted into the release layout or dropped.
- * A staged upload is {@code PUT /staging/<tenant>/<repository>/<id>/<path>} - the path a publish into the repository
- * would take, under the release's id - and its tenant is the one the deployment's routing decides for the URL, exactly
- * as for the repository's artifacts. Listing, promoting and dropping are operations on the repository,
- * {@code /api/repository/staging...?repo=<repository>}, whose tenant is the one the routing answers for a request that
- * names none. Both answer beside the repository rather than inside its URL space, so no artifact path of any format
- * can collide with them. The lifecycle itself is the framework-free
- * {@link Staging} implementation resolved per tenant-and-repository through {@link Repositories}; this adapter is the
- * only Spring-facing piece. With no staging module installed the endpoints answer {@code 501}, after Spring Security's
- * authorization check so a {@code 401}/{@code 403} still precedes. A repository name or tenant that is not
- * routable is the routing's {@code 400}; a promote or drop of an already-sealed id is a {@code 409}.
+ * The staging HTTP surface: a deploy lands under a staging id (held, not resolvable), the ids are listed for review,
+ * and an id is promoted into the release layout or dropped. A staged upload is
+ * {@code PUT /staging/<tenant>/<repository>/<id>/<path>} - the path a publish into the repository would take, under the
+ * release's id - with the tenant the routing decides for the URL, as for the repository's artifacts. Listing,
+ * promoting and dropping are {@code /api/repository/staging...?repo=<repository>}, with the tenant the routing answers
+ * for a request that names none. Both sit beside the repository's URL space, so no artifact path can collide with
+ * them. With no staging lifecycle installed the endpoints answer {@code 501}, after the authorization check so a
+ * {@code 401} or {@code 403} still precedes; an unroutable name is a {@code 400} and a promote or drop of a sealed id a
+ * {@code 409}.
  */
 @RestController
 public class StagingController {
@@ -53,10 +49,8 @@ public class StagingController {
         this.audit = audit;
     }
 
-    /**
-     * The tenant settings it consults come from the tenant's settings documents, read once per tenant into a cached
-     * snapshot: one object per module under a constant prefix, narrow by construction.
-     */
+    /** Stages one upload under a staging id, streamed into the store, at the path a publish into the repository would
+     *  take: {@code 201}, or {@code 404} when the repository holds no installed format. */
     @PutMapping("/staging/{tenant}/{repo}/{id}/**")
     public void stage(@PathVariable("repo") String repo, @PathVariable("id") String id,
                       @RequestHeader(value = Repositories.KEY, required = false) String key,
@@ -84,10 +78,7 @@ public class StagingController {
         response.setStatus(201);
     }
 
-    /**
-     * The tenant settings it consults come from the tenant's settings documents, read once per tenant into a cached
-     * snapshot: one object per module under a constant prefix, narrow by construction.
-     */
+    /** Promotes a staged set into the release layout, audited: {@code 200}, or {@code 409} once the id is sealed. */
     @PostMapping("/api/repository/staging/{id}/promote")
     public void promote(@RequestParam("repo") String repo, @PathVariable("id") String id,
                         @RequestHeader(value = Repositories.KEY, required = false) String key,
@@ -100,16 +91,12 @@ public class StagingController {
         }
         RepositoryRequests.rejectRawTraversal(id);
         staging.get().promote(id);
-        // A promotion releases a staged set in full - a privileged mutation, so it writes an audit event (the siblings
-        // LifecycleController / ForwardingController audit their mutations too).
+        // A promotion releases a staged set in full, so it is audited.
         audit(tenant, key, "staging.promote", repo + "/" + id);
         response.setStatus(200);
     }
 
-    /**
-     * The tenant settings it consults come from the tenant's settings documents, read once per tenant into a cached
-     * snapshot: one object per module under a constant prefix, narrow by construction.
-     */
+    /** Drops a staged set, audited: {@code 200}, or {@code 409} once the id is sealed. */
     @PostMapping("/api/repository/staging/{id}/drop")
     public void drop(@RequestParam("repo") String repo, @PathVariable("id") String id,
                      @RequestHeader(value = Repositories.KEY, required = false) String key,
@@ -122,15 +109,12 @@ public class StagingController {
         }
         RepositoryRequests.rejectRawTraversal(id);
         staging.get().drop(id);
-        // Dropping discards a staged set - a privileged mutation, audited like promote.
+        // Dropping discards a staged set, so it is audited.
         audit(tenant, key, "staging.drop", repo + "/" + id);
         response.setStatus(200);
     }
 
-    /**
-     * The tenant settings it consults come from the tenant's settings documents, read once per tenant into a cached
-     * snapshot: one object per module under a constant prefix, narrow by construction.
-     */
+    /** The first {@link #LIST_WINDOW} staging ids with their state and item count, and whether more exist. */
     @GetMapping("/api/repository/staging")
     @ResponseBody
     public StagingList stagingList(@RequestParam("repo") String repo,
@@ -141,9 +125,8 @@ public class StagingController {
             respondStagingNotInstalled(response);
             return null;
         }
-        // A window, never the whole set: the first LIST_WINDOW stagings in the store's order with whether more exist,
-        // each row's item count capped so it never drains a staging's tree. Taking every id and walking every tree
-        // for its count, on the request thread, would not answer at a million open stagings.
+        // A window in the store's order with whether more exist, each row's item count capped so a request never
+        // drains a staging's tree.
         Staging.Window window = staging.get().ids(LIST_WINDOW);
         List<StagingEntry> entries = new ArrayList<>();
         for (String id : window.ids()) {
@@ -193,8 +176,7 @@ public class StagingController {
     public record StagingEntry(String id, String state, int items) {
     }
 
-    /** The first {@link #LIST_WINDOW} stagings and whether more exist - a caller that needs the rest asks the
-     *  console's paged view; this list is the operator's glance and the CLI's, never a mirror of the whole set. */
+    /** The first {@link #LIST_WINDOW} stagings and whether more exist, so a capped answer never reads as complete. */
     public record StagingList(List<StagingEntry> repositories, boolean more) {
     }
 }
