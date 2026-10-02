@@ -209,7 +209,10 @@ public final class StoreFindings implements Findings {
         List<Located> located = new ArrayList<>();
         int[] examined = {0};
         boolean[] cut = {false};
-        walk(filter, new LocatedSink() {
+        // The coordinate level is paged wide enough to cover the whole budget in one page, as each coordinate holds at
+        // least one version: a filesystem scans the directory once per page, so at the drain width a budget twice that
+        // read a million-name level three times per call.
+        walk(filter, LEDGER.page(Math.max(BoundedChildren.DRAIN_PAGE, examinedCap + 1)), new LocatedSink() {
             @Override
             public boolean accept(Located candidate) {
                 located.add(candidate);
@@ -232,20 +235,20 @@ public final class StoreFindings implements Findings {
      *  whole-ledger pass stays bounded in heap. */
     @Override
     public void all(Filter filter, Visitor visitor) throws IOException {
-        walk(filter, candidate -> {
+        walk(filter, LEDGER, candidate -> {
             visitor.accept(candidate);
             return false;                               // a full streaming pass never stops early
         });
     }
 
     /** The walk behind {@link #collect} and {@link #all(Filter, Visitor)}: each match is offered to {@code sink}, which
-     *  returns true to stop. */
-    private void walk(Filter filter, LocatedSink sink) throws IOException {
+     *  returns true to stop, and {@code coordinates} pages the level of coordinate names under each ecosystem. */
+    private void walk(Filter filter, BoundedChildren coordinates, LocatedSink sink) throws IOException {
         // The root is spelled at the call site so the storage-namespace census, which resolves a key only there, sees
         // it.
         try {
             eachEcosystem(filter, MetadataKey.PREFIX, ecosystem ->
-                    eachCoordinate(filter, ecosystem, MetadataKey.PREFIX, encoded ->
+                    eachCoordinate(filter, ecosystem, MetadataKey.PREFIX, coordinates, encoded ->
                             LEDGER.scan(store, MetadataKey.PREFIX + "/" + ecosystem + "/" + encoded, version -> {
                                 if (version.equals(MetadataKey.COORDINATE)) {
                                     return;                      // the per-coordinate document, not a version's
@@ -325,10 +328,10 @@ public final class StoreFindings implements Findings {
     /** The encoded coordinate segments a walk visits under an ecosystem: every coordinate, or - the push-down - only
      *  the ones the coordinate filter names, probed directly. The filter value may be a bare coordinate or
      *  {@code coordinate:version}, so both the whole value and its prefix before the last colon are candidates. */
-    private void eachCoordinate(Filter filter, String ecosystem, String root, BoundedChildren.Names names)
-            throws IOException {
+    private void eachCoordinate(Filter filter, String ecosystem, String root, BoundedChildren coordinates,
+                                BoundedChildren.Names names) throws IOException {
         if (filter.coordinate() == null) {
-            LEDGER.scan(store, root + "/" + ecosystem, names);
+            coordinates.scan(store, root + "/" + ecosystem, names);
             return;
         }
         SequencedSet<String> candidates = new LinkedHashSet<>();
