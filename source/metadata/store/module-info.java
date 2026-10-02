@@ -1,18 +1,13 @@
 /**
- * The store-backed consolidated metadata store as a plugin module: it provides
- * {@link build.jenesis.repository.metadata.MetadataProvider}, keeping each coordinate version's metadata as one
- * JSON document at the {@code meta/<ecosystem>/<enc(coordinate)>/<version>} key the SPI codec fixes, mutated
- * section-by-section under the store's compare-and-set so disjoint-section concurrent writers (a publish, an
- * advisory sweep, an AI labeler) converge instead of losing an update, and a multi-section batch commits in one CAS
- * cycle. It declares the {@code meta} key-space in the storage manifest
- * ({@link build.jenesis.repository.metadata.store.MetadataStorageNamespace}) so the orphan diagnostic and operator
- * purge see it, and reports doc-size and CAS-retry signals through the registry-free
- * {@link build.jenesis.repository.observation.ObservabilitySource} seam
- * ({@link build.jenesis.repository.metadata.store.MetadataObservability}).
- *
- * <p>This is the library/foundation: no production path reads or writes the document yet, and per-version
- * reclamation (eviction collapsing to a {@code meta} document delete) lands with the eviction cutover. With
- * this module absent the metadata SPI resolves to nothing and a consumer degrades gracefully.
+ * The store-backed metadata store: it provides {@link build.jenesis.repository.metadata.MetadataProvider}, keeping
+ * each coordinate version's metadata as one JSON document at the {@code meta/<ecosystem>/<enc(coordinate)>/<version>}
+ * key the SPI fixes, mutated section by section under the store's compare-and-set so writers of disjoint sections (a
+ * publish, an advisory sweep) converge instead of losing an update, and a multi-section batch commits in one cycle. It
+ * declares the {@code meta} key-space ({@link build.jenesis.repository.metadata.store.MetadataStorageNamespace}) so the
+ * orphan diagnostic and the operator purge see it, and reports document size and retries through
+ * {@link build.jenesis.repository.observation.ObservabilitySource}
+ * ({@link build.jenesis.repository.metadata.store.MetadataObservability}). With this module absent the metadata SPI
+ * resolves to nothing and a consumer degrades.
  *
  * @jenesis.release 25
  * @jenesis.bom pin-repository.properties

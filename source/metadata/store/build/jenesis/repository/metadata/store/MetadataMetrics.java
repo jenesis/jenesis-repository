@@ -6,21 +6,17 @@ import build.jenesis.repository.observation.Metric;
 import build.jenesis.repository.observation.ObservabilitySource;
 
 /**
- * The consolidated metadata store's observability signals, accumulated registry-free and reported through the
- * discovered {@link ObservabilitySource} seam (the distribution bridges them onto Actuator and the console; this
- * module never touches Micrometer). One process-wide {@link #SHARED} instance carries the counters every
- * {@link StoreMetadata} bumps; a test injects its own instance for a deterministic assertion.
+ * The metadata store's signals, accumulated without a registry and reported through {@link ObservabilitySource}. One
+ * process-wide {@link #SHARED} instance carries the counters every {@link StoreMetadata} bumps; a test injects its own.
  *
  * <ul>
- *   <li><strong>{@code jenrepo.metadata.document.bytes}</strong> - the largest document observed on a write,
- *       measured against a soft ceiling ({@link #SOFT_SIZE_LIMIT}) past which a mutate logs a WARNING. The document
- *       rewrites whole on every CAS, so growth costs latency and CPU, never billed request-bytes - a
- *       doc-growth guard, a signal not an enforced limit.</li>
- *   <li><strong>{@code jenrepo.metadata.cas.retries}</strong> - section-scoped CAS commits re-read and retried
- *       after a concurrent writer won the token: contention on the shared per-version document, converged by
- *       re-applying the section transform.</li>
- *   <li><strong>{@code jenrepo.metadata.cas.exhausted}</strong> - mutations that lost the write race the full
- *       retry bound and failed to their caller.</li>
+ *   <li><strong>{@code jenrepo.metadata.document.bytes}</strong> - the largest document observed on a write, against a
+ *       soft ceiling ({@link #SOFT_SIZE_LIMIT}) past which a mutate logs a warning. The document is rewritten whole on
+ *       every compare-and-set, so growth costs latency and CPU; the ceiling is a signal, not a limit.</li>
+ *   <li><strong>{@code jenrepo.metadata.cas.retries}</strong> - commits re-read and retried after a concurrent writer
+ *       won the token.</li>
+ *   <li><strong>{@code jenrepo.metadata.cas.exhausted}</strong> - mutations that lost every try and failed to their
+ *       caller.</li>
  * </ul>
  */
 public final class MetadataMetrics implements ObservabilitySource {

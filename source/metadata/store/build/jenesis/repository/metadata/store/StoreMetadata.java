@@ -11,20 +11,15 @@ import build.jenesis.repository.store.ArtifactStore;
 import build.jenesis.repository.store.Retries;
 
 /**
- * The consolidated metadata store over one repository's scoped store. Each coordinate version's metadata lives in
- * one JSON document at {@link MetadataKey#version} - a version's whole record is a point lookup, and a mutation
- * re-reads, transforms only the sections it owns and commits through the store's compare-and-set with a bounded
- * retry, so disjoint-section writers (a publish, an advisory sweep, an AI labeler) converge on the union of their
- * sections instead of losing an update. This generalises {@code StoreFindings.mutate}/{@code Document} to the
- * section level: the mutation sees only the sections it names, every other section is carried through the CAS
- * commit verbatim, and a whole batch of sections commits in one CAS cycle.
+ * The metadata store over one repository's scoped store. Each coordinate version's metadata is one JSON document at
+ * {@link MetadataKey#version}, so a version's record is a point lookup. A mutation re-reads, transforms only the
+ * sections it names, carries every other section through verbatim and commits through the store's compare-and-set
+ * under {@link Retries}, so writers of disjoint sections converge on the union instead of losing an update, and a
+ * batch of sections commits in one cycle. This node's writers of one document take turns ({@link DocumentTurns}).
  *
- * <p>The retry bound is 5 (raised from the findings ledger's 3), since one CAS token now covers every
- * subsystem writing the coordinate. The read is total - a torn or foreign object reads as an empty document,
- * never throwing - and the format guard is loud: a mutation of a document a newer node wrote (a higher
- * {@code format}) fails rather than downgrade-rewriting the envelope. Doc size and CAS-retry counts are reported
- * through {@link MetadataMetrics} (registry-free), including the soft-size WARNING for a pathologically large
- * document.
+ * <p>The read is total - a torn or foreign object reads as an empty document - and the format guard is loud: mutating
+ * a document a newer node wrote (a higher {@code format}) fails rather than rewriting it in the older shape. Document
+ * size and retries are reported through {@link MetadataMetrics}.
  */
 public final class StoreMetadata implements MetadataStore {
 
@@ -36,9 +31,8 @@ public final class StoreMetadata implements MetadataStore {
         this(store, MetadataMetrics.SHARED);
     }
 
-    /** Bind the store to a caller-supplied {@link MetadataMetrics} rather than the process-wide
-     *  {@link MetadataMetrics#SHARED} sink - for a distribution that wants a scoped accumulator, or a test that
-     *  asserts on the counts deterministically. */
+    /** Binds the store to its own {@link MetadataMetrics} rather than {@link MetadataMetrics#SHARED}, for a test
+     *  that asserts on the counts. */
     public StoreMetadata(ArtifactStore store, MetadataMetrics metrics) {
         this.store = store;
         this.metrics = metrics;
@@ -89,9 +83,7 @@ public final class StoreMetadata implements MetadataStore {
         mutateKey(MetadataKey.coordinate(ecosystem, coordinate), single);
     }
 
-    /** The one read-transform-compare-and-set loop both document scopes share: the {@link MetadataKey#version} and the
-     *  {@link MetadataKey#COORDINATE} documents differ only in their key, never in their reader-tolerance, format guard
-     *  or bounded-retry mutate. */
+    /** The read-transform-compare-and-set loop the version and the {@link MetadataKey#COORDINATE} documents share. */
     private void mutateKey(String key, SequencedMap<String, SectionMutation> mutations) throws IOException {
         DocumentTurns.take(store, key, () -> {
             mutateTurn(key, mutations);
@@ -108,9 +100,7 @@ public final class StoreMetadata implements MetadataStore {
                 }
                 MetadataDocument document = current.map(versioned -> MetadataDocument.read(versioned.content()))
                         .orElseGet(MetadataDocument::empty);
-                // A newer node's format makes doc.mutate throw loudly - never a silent downgrade-rewrite. Every other
-                // section this node does not name rides the CAS commit verbatim, so a batch of section transforms
-                // lands as one atomic document write against one token.
+                // A newer node's format makes mutate throw; sections not named ride the commit verbatim.
                 byte[] serialized = document.mutate(mutations).serialize();
                 metrics.observeDocument(key, serialized.length);
                 return serialized;
