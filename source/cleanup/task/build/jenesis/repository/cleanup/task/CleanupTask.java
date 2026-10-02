@@ -3,7 +3,6 @@ package build.jenesis.repository.cleanup.task;
 import module java.base;
 import module org.slf4j;
 import module tools.jackson.databind;
-import build.jenesis.repository.cleanup.RetentionPolicy;
 import build.jenesis.repository.gc.GarbageCollector;
 import build.jenesis.repository.gc.GcPlan;
 import build.jenesis.repository.inventory.StoreRepositoryInventory;
@@ -13,7 +12,6 @@ import build.jenesis.repository.maintenance.TenantContext;
 import build.jenesis.repository.maintenance.RetentionSetting;
 import build.jenesis.repository.store.JobState;
 import build.jenesis.repository.store.ArtifactStore;
-import build.jenesis.repository.walk.ArtifactWalk;
 
 /**
  * The scheduled cleanup: finished import and export jobs past their TTL are dismissed per repository, and a quota'd
