@@ -375,13 +375,6 @@ public final class LiveConfig implements SettingsEditor.Resolution {
         return Integer.parseInt(effective("batch-upload-max-ratio", Integer.toString(defaults.getBatchUploadMaxRatio())));
     }
 
-    /** Whether demo mode is on: the runtime-stored {@code demo} over the deployment default. Read once at boot by the
-     *  seeding trigger (the seed runs post-boot against an empty space), so switching it live takes effect on the
-     *  next restart. */
-    public boolean demo() {
-        return Boolean.parseBoolean(effective("demo", Boolean.toString(defaults.isDemo())));
-    }
-
     /** A proxy upstream override for a format: the runtime-stored one ({@code format-upstream.<format>}, the live
      *  override) over the boot-time default from the per-format map ({@code jenrepo.proxy.<format>},
      *  read here through the file/env lookup), or {@code null} when neither is set - the caller then falls back to the

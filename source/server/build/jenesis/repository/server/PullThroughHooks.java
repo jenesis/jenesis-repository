@@ -17,7 +17,7 @@ import build.jenesis.repository.store.ArtifactStore;
  * <ul>
  *   <li>{@link #screenFetch} decorates the upstream fetcher for the MISS leg - the seam the screening firewall
  *       ({@code ProxyScreen}/{@code HardenedScreen}) plugs into on paths that do not pass through the routed gateway
- *       (the dispatcher loop, demo seeding, fixed-tenancy default upstreams). It is applied at the point the cache
+ *       (the dispatcher loop, fixed-tenancy default upstreams). It is applied at the point the cache
  *       hands the fetcher to {@link ProxyFormat#proxy}.</li>
  *   <li>{@link #verifyHit} closes the cache-HIT bypass: a locally cached artifact is decided <em>before</em> any hit
  *       byte is served, so an edition can refuse a now-withheld artifact or re-screen a cached blob against the current
@@ -65,7 +65,7 @@ public interface PullThroughHooks {
 
     /**
      * Decorate the upstream fetcher for one request {@code path} before the miss-fetch runs - the seam the screening
-     * firewall plugs into on the dispatcher-direct paths (the dispatcher loop, demo seeding, fixed-tenancy default
+     * firewall plugs into on the dispatcher-direct paths (the dispatcher loop, fixed-tenancy default
      * upstreams) that do not pass through the routed gateway's own {@code screening()} decoration. The default
      * returns {@code upstream} unchanged (identity), so the miss leg fetches unscreened. The decoration is
      * path-bound, so the cache applies it per request at the point it invokes {@link ProxyFormat#proxy}.

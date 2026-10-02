@@ -72,7 +72,7 @@ public final class NodeFingerprintPublisher implements AutoCloseable {
         this.consistency = Objects.requireNonNull(consistency, "consistency");
         this.store = store;
         this.tenants = Objects.requireNonNull(tenants, "tenants");
-        // Opt-in per deployment, like the other operational writers (demo seeding, batch ingestion): a single-node
+        // Opt-in per deployment, like the other operational writers (batch ingestion): a single-node
         // deployment publishes nothing, so it never writes an operational key into an otherwise-clean store layout; a
         // multi-node deployment sets jenrepo.consistency.enabled=true so its nodes publish and can be compared.
         this.enabled = "true".equalsIgnoreCase(String.valueOf(config.apply("jenrepo.consistency.enabled")));

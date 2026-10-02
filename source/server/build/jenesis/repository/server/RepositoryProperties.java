@@ -114,7 +114,6 @@ public class RepositoryProperties {
      *  before the oldest is evicted, the bound behind {@code GET /api/logs}. Sized once at startup. */
     private int logsBuffer = LogRingBuffer.DEFAULT_CAPACITY;
 
-    private boolean demo = false;
 
     private boolean readOnly = false;
 
@@ -406,19 +405,6 @@ public class RepositoryProperties {
 
     public void setLogsBuffer(int logsBuffer) {
         this.logsBuffer = logsBuffer;
-    }
-
-    /** Whether demo mode seeds a fresh, completely empty repository with real artifacts through the formats' own
-     *  pull-through paths so an evaluator has data to look at; off by default, and a no-op against a non-empty store
-     *  (a seeded or in-use repository is never re-seeded), so turning it on in production is harmless. A live
-     *  {@code demo} setting overrides it, though it takes effect on the next restart since the seed runs once at boot.
-     *  */
-    public boolean isDemo() {
-        return demo;
-    }
-
-    public void setDemo(boolean demo) {
-        this.demo = demo;
     }
 
     /** Whether the deployment runs read-only: every write - a hosted publish, staging deploy, promotion, import and

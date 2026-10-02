@@ -81,7 +81,6 @@ open module build.jenesis.repository.server.kernel {
     provides build.jenesis.repository.settings.SettingsContributor
             with build.jenesis.repository.server.kernel.BatchUploadSettingsContributor,
                     build.jenesis.repository.server.kernel.CachingSettingsContributor,
-                    build.jenesis.repository.server.kernel.DemoSettingsContributor,
                     build.jenesis.repository.server.kernel.ImmutabilitySettingsContributor,
                     build.jenesis.repository.server.kernel.ModuleTogglesSettingsContributor,
                     build.jenesis.repository.server.kernel.QuotaSettingsContributor;

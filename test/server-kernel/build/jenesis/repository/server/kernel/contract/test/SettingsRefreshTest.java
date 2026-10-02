@@ -57,11 +57,12 @@ class SettingsRefreshTest {
     @Test
     void a_second_settings_instance_converges_on_refresh() throws IOException {
         Settings other = new Settings(store);
-        other.set("demo", "true");   // another node writes
+        other.set("tenant-quota", "1024");   // another node writes
 
-        assertThat(settings.getOrDefault("demo", "false")).as("not seen before the interval fires").isEqualTo("false");
+        assertThat(settings.getOrDefault("tenant-quota", "0")).as("not seen before the interval fires").isEqualTo("0");
         settings.refresh();
-        assertThat(settings.getOrDefault("demo", "false")).as("the re-read converged this instance").isEqualTo("true");
+        assertThat(settings.getOrDefault("tenant-quota", "0")).as("the re-read converged this instance")
+                .isEqualTo("1024");
     }
 
     @Test

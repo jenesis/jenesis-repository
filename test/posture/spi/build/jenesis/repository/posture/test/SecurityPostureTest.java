@@ -82,7 +82,7 @@ final class SecurityPostureTest {
 
     @Test
     void theCoreSeederIsSilentOnTheSecureDefault() {
-        // The secure defaults (auth on, SSRF screen on, no dev profile, admins named, not a writable demo) raise nothing.
+        // The secure defaults (auth on, SSRF screen on, no dev profile, admins named) raise nothing.
         assertThat(new SecurityPosture().advise(config("jenrepo.rate-limit", "600"))).isEmpty();
     }
 
@@ -100,32 +100,15 @@ final class SecurityPostureTest {
     }
 
     @Test
-    void theWritableDemoAdvisoryStaysSilentWhenTheDemoIsReadOnly() {
-        // Seed 6 is a compound condition (demo=true AND !read-only): the both-true firing is pinned elsewhere and the
-        // demo-absent silence by the secure-default test, but the intermediate branch - demo on yet read-only on, an
-        // immutable public demo, the recommended safe configuration - must independently NOT fire. This pins the
-        // second half of the &&: a demo that is read-only is browsable-but-immutable, exactly the advisory's own fix.
-        List<String> ids = new SecurityPosture().advise(config(
-                        "jenrepo.demo", "true",
-                        "jenrepo.read-only", "true",
-                        "jenrepo.rate-limit", "600"))
-                .stream().map(SecurityAdvisory::id).toList();
-        assertThat(ids).as("a read-only demo is the safe configuration and raises no writable-demo advisory")
-                .doesNotContain("jenrepo.demo.writable");
-    }
-
-    @Test
     void theCoreSeederFlagsTheRealFootgunsOnTheirActualKeys() {
         Configuration config = config(
                 "jenrepo.auth", "false",
                 "jenrepo.block-private-import-hosts", "false",
                 "spring.profiles.active", "prod,dev",
-                "jenrepo.demo", "true",
-                "jenrepo.read-only", "false",
                 "jenrepo.rate-limit", "0");
         List<String> ids = new SecurityPosture().advise(config).stream().map(SecurityAdvisory::id).toList();
         assertThat(ids).contains("jenrepo.auth.open", "jenrepo.importer.ssrf", "jenrepo.ratelimit.unset",
-                "jenrepo.profile.dev", "jenrepo.demo.writable");
+                "jenrepo.profile.dev");
     }
 
     @Test
@@ -187,8 +170,7 @@ final class SecurityPostureTest {
         Configuration config = config(
                 "jenrepo.auth", "false",
                 "jenrepo.ui.admins", "github/SECRETVALUE",
-                "spring.profiles.active", "SECRETVALUE,dev",
-                "jenrepo.demo", "true");
+                "spring.profiles.active", "SECRETVALUE,dev");
         List<SecurityAdvisory> advisories = new SecurityPosture().advise(config);
         assertThat(advisories).as("the seeds fired, so the doesNotContain checks below are non-vacuous").isNotEmpty();
         for (SecurityAdvisory advisory : advisories) {

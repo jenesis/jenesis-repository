@@ -33,34 +33,34 @@ class SettingsStorageTest {
         Settings settings = new Settings(store);
         settings.set("vulnerability-threshold", "HIGH");   // a core dial - the neutral document
         settings.set("repositories.mirror", "writable");   // a map entry - the neutral document
-        settings.set("demo", "true");                      // a contributed key - the contributing module's document
+        settings.set("tenant-quota", "1024");   // a contributed key - the contributing module's document
 
         assertThat(SettingsDocuments.moduleOf("vulnerability-threshold")).isEqualTo(SettingsDocuments.NEUTRAL);
-        assertThat(SettingsDocuments.moduleOf("demo")).isEqualTo("build.jenesis.repository.server.kernel");
+        assertThat(SettingsDocuments.moduleOf("tenant-quota")).isEqualTo("build.jenesis.repository.server.kernel");
         assertThat(store.list(SettingsDocuments.ROOT))
                 .contains("core.json", "build.jenesis.repository.server.kernel.json");
 
         Settings reopened = new Settings(store);
         assertThat(reopened.getOrDefault("vulnerability-threshold", "NONE")).isEqualTo("HIGH");
-        assertThat(reopened.getOrDefault("demo", "false")).isEqualTo("true");
+        assertThat(reopened.getOrDefault("tenant-quota", "0")).isEqualTo("1024");
         assertThat(reopened.overrides())
                 .containsEntry("vulnerability-threshold", "HIGH")
                 .containsEntry("repositories.mirror", "writable")
-                .containsEntry("demo", "true");
+                .containsEntry("tenant-quota", "1024");
 
-        settings.set("demo", null);   // clearing removes it from its document
-        assertThat(new Settings(store).getOrDefault("demo", "false")).isEqualTo("false");
+        settings.set("tenant-quota", null);   // clearing removes it from its document
+        assertThat(new Settings(store).getOrDefault("tenant-quota", "0")).isEqualTo("0");
     }
 
     @Test
     void a_write_to_one_module_leaves_another_modules_document_untouched() throws IOException {
         Settings first = new Settings(store);
         Settings second = new Settings(store);
-        first.set("demo", "true");                      // the contributing module's document
+        first.set("tenant-quota", "1024");                      // the contributing module's document
         second.set("vulnerability-threshold", "HIGH");  // the neutral document; second's stale view of the other is moot
 
         Settings reopened = new Settings(store);
-        assertThat(reopened.getOrDefault("demo", "false")).isEqualTo("true");
+        assertThat(reopened.getOrDefault("tenant-quota", "0")).isEqualTo("1024");
         assertThat(reopened.getOrDefault("vulnerability-threshold", "NONE")).isEqualTo("HIGH");
     }
 

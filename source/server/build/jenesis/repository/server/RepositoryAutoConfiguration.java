@@ -430,23 +430,6 @@ public class RepositoryAutoConfiguration {
                 properties::getBatchUploadMaxBytes, properties::getBatchUploadMaxRatio);
     }
 
-    @Bean(initMethod = "start")
-    @ConditionalOnMissingBean
-    public DemoSeeding demoSeeding(@Qualifier("formats") List<RepositoryFormat> formats,
-                                   ProxyFormat.Fetcher fetcher,
-                                   ArtifactStore store,
-                                   RepositoryProperties properties) {
-        // Demo mode seeds empty repositories with real artifacts through the formats' own pull-through paths - a
-        // background walk after boot, never blocking it, one repository per format in the default tenant; off by
-        // default.
-        ArtifactStore scoped = store.scope(properties.getDefaultTenant());
-        // A read-only deployment runs no background job that mutates the store - the seed writes, so it is disabled
-        // here rather than left to fail against the read-only store choke point on its worker thread.
-        return new DemoSeeding(properties.isDemo() && !properties.isReadOnly(),
-                new DemoSeeder(formats, fetcher), scoped, () -> {
-        });
-    }
-
     /** The recent-logs ring: a bounded in-memory store of the most recent entries, sized from
      *  {@code jenrepo.logs-buffer} at startup - the bound behind {@code GET /api/logs}. */
     @Bean

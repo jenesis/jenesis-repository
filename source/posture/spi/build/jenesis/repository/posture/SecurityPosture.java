@@ -70,17 +70,6 @@ public final class SecurityPosture implements SafetyAdvisor {
                     "spring.profiles.active", "<remove dev>", DOCS + "#jenrepo.profile.dev"));
         }
 
-        // A writable demo: anyone who can browse it can write to it.
-        if (config.flag("jenrepo.demo", false) && !config.flag("jenrepo.read-only", false)) {
-            advisories.add(SecurityAdvisory.deployment("jenrepo.demo.writable", Severity.WARN,
-                    "The demo instance is writable",
-                    "jenrepo.demo=true seeds a public demo, but jenrepo.read-only is off, so the "
-                            + "browsable demo also accepts writes - visitors can publish to or mutate it.",
-                    "Turn on read-only mode for a demo/mirror so the seeded content is browsable but immutable; the "
-                            + "demo seeding runs before the write-gate.",
-                    "jenrepo.read-only", "true", DOCS + "#jenrepo.demo.writable"));
-        }
-
         // Anonymous rights under an enforcing deployment grant a keyless caller a defined set of rights. Read-only is a
         // WARN, write or any manage right a CRITICAL. Silent when unset, or under auth=false where jenrepo.auth.open
         // applies.

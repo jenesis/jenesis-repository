@@ -21,12 +21,12 @@ import org.springframework.scheduling.annotation.EnableScheduling;
  *       format dispatcher, batch ingestion, the {@code repositoryController} serving bean and its deploy hooks.</li>
  *   <li>{@link WorkersConfig} - download and key-usage trackers, the maintenance scheduler and the settings
  *       refresh.</li>
- *   <li>{@link DemoConfig} - demo seeding and the boot-time configuration advice.</li>
+ *   <li>{@link BootAdviceConfig} - the boot-time configuration advice.</li>
  * </ul>
  */
 @Configuration(proxyBeanMethods = false)
 @EnableConfigurationProperties(RepositoryProperties.class)
 @EnableScheduling
-@Import({StoreConfig.class, SignalsConfig.class, ServingConfig.class, WorkersConfig.class, DemoConfig.class})
+@Import({StoreConfig.class, SignalsConfig.class, ServingConfig.class, WorkersConfig.class, BootAdviceConfig.class})
 public class RepositoryConfig {
 }

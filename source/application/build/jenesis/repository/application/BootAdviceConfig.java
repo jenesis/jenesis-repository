@@ -5,20 +5,10 @@ import module org.slf4j;
 
 import build.jenesis.repository.store.ArtifactStoreProvider;
 import build.jenesis.repository.server.kernel.FirstRunHardening;
-import build.jenesis.repository.server.kernel.LiveConfig;
 import build.jenesis.repository.server.kernel.PinnedSettings;
-import build.jenesis.repository.server.kernel.Repositories;
-import build.jenesis.repository.server.RepositoryProperties;
 import build.jenesis.repository.server.kernel.Settings;
 import build.jenesis.repository.server.kernel.UnrecognisedSettings;
-import build.jenesis.repository.server.DemoSeeder;
-import build.jenesis.repository.server.DemoSeeding;
-import build.jenesis.repository.server.PullThroughHooks;
-import build.jenesis.repository.format.ProxyFormat;
-import build.jenesis.repository.store.PublishPathWiring;
 import build.jenesis.repository.settings.SettingsContributor;
-import build.jenesis.repository.gateway.ProxyScreenHooks;
-import build.jenesis.repository.store.ArtifactStore;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.boot.context.properties.ConfigurationPropertiesBean;
@@ -29,32 +19,13 @@ import org.springframework.core.env.Environment;
 import org.springframework.core.env.PropertySource;
 
 /**
- * The first-run boot behaviours: the background demo seeding and the boot-time advice on an unconfigured or
- * misconfigured deployment.
+ * The boot-time advice on an unconfigured or misconfigured deployment: the dials a fresh deployment still has to
+ * answer, and the jenrepo.* properties nothing reads.
  */
 @Configuration(proxyBeanMethods = false)
-public class DemoConfig {
+public class BootAdviceConfig {
 
-    private static final Logger LOGGER = LoggerFactory.getLogger(DemoConfig.class);
-
-    @Bean(initMethod = "start")
-    public DemoSeeding demoSeeding(LiveConfig liveConfig, Settings settings, Repositories repositories,
-                                   ProxyFormat.Fetcher upstreamFetcher, RepositoryProperties properties,
-                                   List<PublishPathWiring> publishPathWiring, Environment environment) {
-        // Off by default, and only against a completely empty artifact space: seeds the default tenant's repositories
-        // in the background through the formats' own pull-through paths. publishPathWiring is never read - asking for
-        // it makes the container arm the publish path before the seed publishes through it.
-        ArtifactStore store = repositories.tenantScope(properties.getDefaultTenant());
-        // The seeder fetches through the dispatcher, not the routed gateway, so it is handed the same DEFAULT-strength
-        // proxy screen the router's fallbacks use, over the tenant's live gate resolved lazily so the demo gate config
-        // applied just before the seed is the one that screens.
-        PullThroughHooks demoScreen = ProxyScreenHooks.perTenant(liveConfig::proxyGate, liveConfig.holdDays(), false)
-                .forTenant(properties.getDefaultTenant());
-        // The seed writes, so a read-only deployment does not seed.
-        return new DemoSeeding(liveConfig.demo() && !properties.isReadOnly(),
-                new DemoSeeder(ServingConfig.enabledFormats(environment), upstreamFetcher, demoScreen), store,
-                () -> applyDemoGateConfig(settings, liveConfig));
-    }
+    private static final Logger LOGGER = LoggerFactory.getLogger(BootAdviceConfig.class);
 
     /**
      * On a fresh deployment (no runtime configuration stored), logs once at INFO the dials that still need a
@@ -130,25 +101,5 @@ public class DemoConfig {
             LOGGER.warn(message.toString());
         }
         return report;
-    }
-
-    /** Sets the demo gate config - a version floor quarantining the old log4j-core and a deny-list rejecting
-     *  commons-collections, so the review surfaces carry examples - on each dial an operator left unset, then rebuilds
-     *  the live gate. {@link DemoSeeding} runs it only when a seed is about to happen. */
-    private static void applyDemoGateConfig(Settings settings, LiveConfig liveConfig) {
-        try {
-            setIfBlank(settings, "version-floor", "org.apache.logging.log4j:log4j-core >= 2.17.0");
-            setIfBlank(settings, "version-floor-action", "QUARANTINE");
-            setIfBlank(settings, "deny-list", "commons-collections:commons-collections");
-            liveConfig.rebuild();
-        } catch (IOException exception) {
-            LOGGER.warn("Could not apply the demo gate config", exception);
-        }
-    }
-
-    private static void setIfBlank(Settings settings, String key, String value) throws IOException {
-        if (settings.getOrDefault(key, "").isBlank()) {
-            settings.set(key, value);
-        }
     }
 }

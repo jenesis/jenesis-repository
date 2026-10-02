@@ -7,20 +7,19 @@ import build.jenesis.repository.server.PullThroughHooks;
 import build.jenesis.repository.store.ArtifactStore;
 
 /**
- * The {@link PullThroughHooks} for the dispatcher-direct proxy leg (demo seeding, the {@link
+ * The {@link PullThroughHooks} for the dispatcher-direct proxy leg (the {@link
  * build.jenesis.repository.server.FormatDispatcher} loop) whose {@code screenFetch} decorates the miss-leg fetcher with
  * the DEFAULT-strength {@link ProxyScreen} over a supplied gate and store - the SAME decorator the router's DEFAULT
- * fallbacks screen through. Without it a demo/dispatcher-direct proxy leg would pull through <em>unscreened</em>,
+ * fallbacks screen through. Without it a dispatcher-direct proxy leg would pull through <em>unscreened</em>,
  * since a format's own publish path only lays out: no screening code is added to
- * {@code DemoSeeder}/{@code FormatDispatcher}, and no per-format publish screen is embedded - the compliance gate
+ * {@code FormatDispatcher}, and no per-format publish screen is embedded - the compliance gate
  * screens the proxy leg exactly like production.
  *
- * <p>The gate is resolved lazily per request, so a gate armed just before a seed (the demo gate config the {@code demo}
- * flag layers in) is the one that screens, and on the serving dispatcher it is the requesting tenant's own ({@link
- * #perTenant}, bound per request through {@link #forTenant}); a {@code null} gate (an ungated tenant) leaves the
- * fetcher unwrapped - the honest name for what an ungated proxy already did by omission, matching the router's own
- * {@code screening()} for an ungated tenant. {@code verifyHit} is the serve-through default: a demo seed runs over a
- * freshly empty store, so there is nothing durably local to verify.
+ * <p>The gate is resolved lazily per request, so the one in force when a fetch runs is the one that screens, and on
+ * the serving dispatcher it is the requesting tenant's own ({@link #perTenant}, bound per request through
+ * {@link #forTenant}); a {@code null} gate (an ungated tenant) leaves the fetcher unwrapped - the honest name for what
+ * an ungated proxy already did by omission, matching the router's own {@code screening()} for an ungated tenant.
+ * {@code verifyHit} is the serve-through default.
  */
 public final class ProxyScreenHooks implements PullThroughHooks {
 
