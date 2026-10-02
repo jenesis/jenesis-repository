@@ -1,15 +1,11 @@
 /**
- * The event-webhook recovery HTTP surface as a removable server feature module: it provides
- * {@link build.jenesis.repository.server.kernel.ServerModuleProvider}, so the repository server imports its configuration
- * through {@code ServiceLoader} discovery and names no webhook endpoint. A thin Spring {@code web} adapter over the
- * framework-free {@link build.jenesis.repository.webhook.WebhookOutbox}: the {@code WebhookController} reports one
- * repository's queued and parked webhook deliveries ({@code GET /api/webhook}, gated {@code manage:read}) and unparks a
- * parked delivery for another drain attempt ({@code POST /api/webhook/retry}, gated {@code manage:write} and audited),
- * both under {@code /api/} so the security chain gates them by role before the request is reached. The retry drives the
- * webhook core's own {@code unpark}; the background {@link build.jenesis.repository.webhook.WebhookDeliveryTask} still
- * does the delivering, so a retry never re-implements delivery and never re-sends to an endpoint that already took the
- * event. With this module absent the server carries none of the surface. Open so Spring can reflect over the controller
- * and its configuration.
+ * The webhook recovery HTTP surface, contributed through
+ * {@link build.jenesis.repository.server.kernel.ServerModuleProvider}: a thin adapter over
+ * {@link build.jenesis.repository.webhook.WebhookOutbox} that reports one repository's queued and parked deliveries
+ * ({@code GET /api/webhook}, {@code manage:read}) and unparks a parked one ({@code POST /api/webhook/retry},
+ * {@code manage:write}, audited). The background {@link build.jenesis.repository.webhook.WebhookDeliveryTask} does the
+ * delivering, so a retry never re-sends to an endpoint that already took the event. Open so Spring can reflect over the
+ * controller and its configuration.
  *
  * @jenesis.release 25
  * @jenesis.bom pin-repository.properties

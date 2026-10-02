@@ -21,20 +21,13 @@ import org.springframework.web.bind.annotation.ResponseBody;
 import org.springframework.web.bind.annotation.RestController;
 
 /**
- * The event-webhook recovery surface, contributed through the {@code ServerModuleProvider} seam so the server names no
- * webhook endpoint and the route exists only when this module is installed. It reports the webhook outbox of one
- * repository - each queued event, how many delivery attempts it has taken, whether it is parked after a terminal
- * failure and the last error - read from the framework-free {@link WebhookOutbox} over the repository's scoped store
- * resolved through {@link Repositories}. A parked entry - one that hit its attempt cap and would otherwise sit inert
- * absent manual store surgery, skipped each drain pass by the delivery task's {@code eligible()} check - can be
- * unparked for another try through {@code POST /api/webhook/retry}, the one mutation here. The retry drives the webhook
- * core's own {@link WebhookOutbox#unpark(String)}: it clears the entry's attempt count and park while keeping its
- * already-delivered endpoint set, so the next background {@code WebhookDeliveryTask} pass re-sends only to the endpoints
- * that never took the event - a write-role, idempotent recovery that never duplicates a delivery nor loses history. The
- * GET is gated {@code manage:read} and the retry {@code manage:write} by the security chain before the request is
- * reached (a {@code /api/} management surface, not deployment-global, so scoped to the acting tenant like forwarding's
- * retry), with a traversal-unsafe repository or tenant name a {@code 400} and a retry that finds nothing parked a
- * {@code 404} rather than a {@code 500}.
+ * The webhook outbox of one repository - each queued event, its delivery attempts, whether it is parked after a
+ * terminal failure and the last error - read from {@link WebhookOutbox} over the repository's store. A parked entry has
+ * hit its attempt cap and is skipped by every drain pass; {@code POST /api/webhook/retry} unparks it through
+ * {@link WebhookOutbox#unpark(String)}, which clears the attempt count and the park but keeps the set of endpoints that
+ * already took the event, so the next delivery pass re-sends only to the others. The security chain gates the read
+ * {@code manage:read} and the retry {@code manage:write} in the acting tenant; a traversal-unsafe name answers
+ * {@code 400} and a retry that finds nothing parked {@code 404}.
  */
 @RestController
 public class WebhookController {
@@ -49,14 +42,10 @@ public class WebhookController {
         this.audit = audit;
     }
 
-    /** The webhook outbox of one repository - what is still queued, retrying with backoff or parked after a terminal
-     *  failure - so an operator can see a stuck delivery before retrying it. A read: it renders the durably-stored
-     *  entries only, with no delivery attempt on the read path.
-     *
-     *  <p>Bounded, and the bound is shown. The window is one page of the outbox ({@code after}, {@code limit}) rather
-     *  than the whole of it, because the parked backlog grows with every publish for as long as an endpoint is
-     *  failing - the repository an operator opens this screen for is the one where the unbounded read costs most. The
-     *  view carries {@code more} and the {@code next} cursor, so a capped answer cannot read as a complete one. */
+    /** One page of the repository's webhook outbox ({@code after}, {@code limit}) - queued, retrying or parked - so an
+     *  operator can see a stuck delivery before retrying it. It renders stored entries only. The page is bounded
+     *  because the parked backlog grows with every publish while an endpoint fails, and the view carries {@code more}
+     *  and the {@code next} cursor so a capped answer cannot read as complete. */
     @GetMapping("/api/webhook")
     @ResponseBody
     public WebhookView webhook(@RequestParam("repo") String repo,
@@ -68,14 +57,8 @@ public class WebhookController {
         if (tenant == null) {
             return null;
         }
-        // Served-view parity: a withheld coordinate's name/path must not be disclosed on this manage:read outbox
-        // listing, exactly as the sibling manage:read served-listings (/api/lifecycle, /api/dependents) screen through
-        // the same seam at the same scope. Each parked/queued entry's coordinate:version is routed through
-        // inventory.disclosableDisplay under HIDE_WITHHELD (the membership policy, resolving the coordinate's ecosystem
-        // by the inventory's shared bounded probe, stats no blob); a held member's coordinate and its served path are
-        // neutralised out of the view while the operational row (id, attempts, parked, last error) stays so the
-        // operator can still retry it, and a servable coordinate - or a ghost the inventory cannot place as a held
-        // member - is disclosed unchanged. A probe that throws drops the name (fail-closed).
+        // A withheld coordinate's name and path are not disclosed here, as on the other manage:read listings: a held
+        // member's coordinate and path are blanked while its operational row stays so the operator can still retry it.
         StoreRepositoryInventory inventory = new StoreRepositoryInventory(repositories.store(tenant, repo));
         List<WebhookEntryView> entries = new ArrayList<>();
         WebhookOutbox.Window<WebhookOutbox.Entry> window = new WebhookOutbox(repositories.store(tenant, repo))
@@ -101,17 +84,15 @@ public class WebhookController {
     static final int MAX_LIMIT = 500;
 
     /** The requested window clamped into range: an absent, zero or negative {@code limit} takes the default, and one
-     *  above {@link #MAX_LIMIT} is capped rather than refused - a client asking for more than it may have wants as
-     *  much as it can get, and the {@code more} flag tells it there is a next page either way. */
+     *  above {@link #MAX_LIMIT} is capped rather than refused, since the {@code more} flag says there is a next
+     *  page. */
     private static int page(Integer limit) {
         return limit == null || limit <= 0 ? DEFAULT_LIMIT : Math.min(limit, MAX_LIMIT);
     }
 
-    /** The documented reconciliation route, rendered beside the queue because this is the surface an
-     *  integrator is already on when the question arises - "an event never arrived, what do I poll instead?" The
-     *  webhook module is off the console node, so it reports its own conditions on a surface it owns rather than
-     *  through a {@code SafetyAdvisor} no screen would render. Static data derived from the {@code EventType} enum,
-     *  so the read stays pure: it renders no store state and reaches no external source. */
+    /** The documented reconciliation route, rendered beside the queue because this is the surface an integrator is
+     *  on when an event never arrived and the question is what to poll instead. Static data derived from the event
+     *  types, so the read touches neither the store nor an external source. */
     private static ReconciliationView reconciliation() {
         List<ReconciliationRoute> routes = new ArrayList<>();
         EventReconciliation.all().forEach((type, route) ->
@@ -119,10 +100,9 @@ public class WebhookController {
         return new ReconciliationView(EventReconciliation.preamble(), routes);
     }
 
-    /** Unpark a parked webhook delivery for another drain attempt - the recovery for an entry that would otherwise stay
-     *  inert. A {@code 404} when nothing parked is queued under the id (nothing to retry), otherwise {@code 200} after
-     *  the entry is reset for retry and the mutation is audited. Idempotent: a second retry of an entry already unparked
-     *  (no longer parked) is a clean {@code 404}, never a duplicate delivery or a {@code 500}. */
+    /** Unparks a parked delivery for another drain attempt and audits it: {@code 200}, or {@code 404} when nothing
+     *  parked is queued under the id - so a second retry of the same entry is a clean {@code 404}, never a duplicate
+     *  delivery. */
     @PostMapping("/api/webhook/retry")
     public void retry(@RequestParam("repo") String repo,
                       @RequestHeader(value = Repositories.KEY, required = false) String key,
@@ -146,14 +126,12 @@ public class WebhookController {
         response.setStatus(200);
     }
 
-    /** Whether a webhook entry's coordinate may be disclosed on this served listing: its {@code coordinate:version}
-     *  display form routed through the shared servable-name enumeration seam under {@code HIDE_WITHHELD} (the same seam
-     *  {@code /api/lifecycle} and {@code /api/dependents} apply), so a withheld member's name is screened out while a
-     *  servable coordinate - or a ghost the inventory cannot place as a held member - stays disclosed. Fail-closed: a
-     *  probe that throws drops the name. */
+    /** Whether an entry's coordinate may be disclosed: its {@code coordinate:version} through the servable-name seam
+     *  under {@code HIDE_WITHHELD}, so a withheld member's name is screened out while a servable coordinate, or one the
+     *  inventory cannot place as a held member, stays. A probe that throws drops the name. */
     private static boolean disclosable(StoreRepositoryInventory inventory, String coordinate, String version) {
-        // Always a coordinate:version display (the same form /api/lifecycle passes): a colon is present even when the
-        // version is empty, so this never hits the colon-less seam that would fail open on a bare name.
+        // Always coordinate:version, with the colon even for an empty version, since the seam fails open on a bare
+        // name.
         String display = coordinate + ":" + (version == null ? "" : version);
         try {
             return inventory.disclosableDisplay(display, ServableNames.Policy.HIDE_WITHHELD);
