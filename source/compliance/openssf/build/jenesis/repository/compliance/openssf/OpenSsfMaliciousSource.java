@@ -18,30 +18,23 @@ import build.jenesis.repository.feed.Osv;
 /**
  * An {@link AdvisorySource} over the curated OpenSSF malicious-packages dataset (github.com/ossf/malicious-packages,
  * Apache-2.0), consumed through the OSV.dev API that serves it. For each coordinate it queries {@code /v1/query} for
- * the package in the given ecosystem at the requested version and keeps only the dataset's own records - the
- * {@code MAL-} identifiers - mapping each to a malicious {@link Advisory} with its CVE aliases and the fixed version
- * where the record ends a compromised range. A curated malicious-package record carries no usable CVSS score, so the
- * severity is the reviewer's {@code database_specific.severity} word when present and {@link Severity#NONE} otherwise -
- * the gate acts on the malicious flag, not the severity threshold. Enabled next to the full {@code osv} feed the same
- * {@code MAL-} advisory is never double-counted ({@code AdvisorySource.combined} de-duplicates by id), so this module
- * lets a deployment screen for curated malware without adopting the whole vulnerability feed.
+ * the package in the given ecosystem at the requested version and keeps only the dataset's own {@code MAL-} records,
+ * mapping each to a malicious {@link Advisory} with its CVE aliases and the fixed version where the record ends a
+ * compromised range. A curated record carries no usable CVSS score, so the severity is the reviewer's
+ * {@code database_specific.severity} word when present and {@link Severity#NONE} otherwise - the gate acts on the
+ * malicious flag. Beside the full {@code osv} feed the same {@code MAL-} advisory is counted once
+ * ({@code AdvisorySource.combined} de-duplicates by id), so a deployment can screen for curated malware without the
+ * whole vulnerability feed.
  *
- * <p>The transport half is the {@link FeedClient}'s: the HTTP client and its timeouts, the whole-fetch deadline,
- * the non-200 branch, the response byte cap (never an unbounded {@code ofString()} body), the
- * retry schedule honouring {@code Retry-After}, the page cap and the fail-closed policy are shared with every other
- * feed rather than re-rolled here. What stays is the dataset's own half: the query URL, the request body, the
- * {@code next_page_token} cursor and the field mapping. The dataset pages a large result set behind that token - the
- * same query re-sent with the token echoed back as {@code page_token} - and the client draws every page before the
- * reader completes, so a curated record that only appears on page two of a widely-affected package is never invisible
- * to the gate; a feed that never stops handing back a token fails visibly at the page cap rather than serving a
- * bounded-but-incomplete view.
+ * <p>The transport - timeouts, deadline, status handling, byte and page caps, retries honouring {@code Retry-After} and
+ * the fail-closed policy - is the {@link FeedClient}'s; this class keeps the query URL, the body, the
+ * {@code next_page_token} cursor and the field mapping. The client draws every page before the reader completes, so a
+ * record on page two of a widely-affected package is seen, and a feed that never stops handing back a token fails at
+ * the page cap rather than answering incompletely.
  *
- * <p>The single network operation still sits behind an {@link Endpoint} seam, so the parsing is driven from recorded
- * payloads while the live query stays the default - and a recorded answer travels through the very same client, caps
- * and pagination a live one does. A failed query throws rather than silently passing, so the gate fails closed.
- *
- * <p>Unlike OSV and the GitHub Advisory Database this source holds no {@code FeedCache}: the gate's documented
- * "warm cache read" therefore does not apply to it. Adding one is a caching decision, not a transport one.
+ * <p>The network operation sits behind an {@link Endpoint} seam, so recorded payloads travel through the same client,
+ * caps and pagination as a live answer. A failed query throws, so the gate fails closed. This source holds no
+ * {@code FeedCache}, so every lookup reaches the feed.
  */
 public final class OpenSsfMaliciousSource implements AdvisorySource {
 
@@ -63,9 +56,7 @@ public final class OpenSsfMaliciousSource implements AdvisorySource {
      *  instead of parking the gate thread that asked for the lookup. */
     private static final Duration CONNECT_TIMEOUT = Duration.ofSeconds(10);
 
-    /** A malicious-package feed gates, so it takes the client's fail-closed defaults unchanged: 30 s per request, a
-     *  5 min whole-fetch deadline, 50 pages, 3 attempts with exponential backoff honouring {@code Retry-After}, a
-     *  capped response body, and a cursor that may not leave the feed's origin. */
+    /** A malicious-package feed gates, so it takes the client's fail-closed defaults unchanged. */
     private static final FeedPolicy POLICY = FeedPolicy.closed();
 
     private final FeedClient client;
@@ -106,12 +97,9 @@ public final class OpenSsfMaliciousSource implements AdvisorySource {
         }
     }
 
-    /** The reading is display-only for this feed - it fails <em>closed</em>, so an outage raises rather than
-     *  answering with a degraded value - but it is derived per coordinate exactly as every other feed's is: while a
-     *  coordinate this feed could not screen is inside its retry window the reading is not authoritative, so a
-     *  console never reads "authoritative, last consulted three days ago" over a feed whose every lookup has failed
-     *  since. It clears when that coordinate screens again or its window lapses; a
-     *  different coordinate answering says nothing about it. */
+    /** Display-only for this feed, which fails closed, but derived per coordinate as every feed's is: while a
+     *  coordinate this feed could not screen is inside its retry window the reading is not authoritative. It clears
+     *  when that coordinate screens again or its window lapses; another coordinate answering says nothing about it. */
     @Override
     public Freshness freshness() {
         return fetches.freshness();
@@ -135,8 +123,8 @@ public final class OpenSsfMaliciousSource implements AdvisorySource {
         return failure.reason().name().toLowerCase(Locale.ROOT).replace('_', '-');
     }
 
-    /** The {@link Endpoint} seam as a transport: a recorded body answered as a 200, which the client then bounds,
-     *  screens and paginates exactly as it does a live response - so a recorded suite exercises the real fetch. */
+    /** The {@link Endpoint} seam as a transport: a recorded body answered as a 200, which the client bounds, screens
+     *  and paginates as it does a live response. */
     private static FeedTransport transport(Endpoint endpoint) {
         return (request, timeout) -> FeedResponse.of(200, endpoint.query(request.body()));
     }
@@ -215,7 +203,4 @@ public final class OpenSsfMaliciousSource implements AdvisorySource {
         }
         return cves;
     }
-
-    // The version ending a compromised range for this package, read from the matching affected entry's range
-    // `fixed` events, where the record carries one (most curated records affect every version and carry none).
 }
