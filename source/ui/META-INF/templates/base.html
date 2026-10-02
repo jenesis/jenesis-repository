@@ -26,6 +26,8 @@
     cautionButton(label, confirm)   - a consequential, recoverable submit: the warn tint plus its confirmation.
     dangerButton(label, confirm)    - an irreversible submit: the danger treatment plus its confirmation, together.
     deleteButton(label, name, warning) - a deletion: the danger treatment, guarded by typing `delete <name>`.
+    phraseButton(label, phrase, question, warning) - an act reaching beyond one object: the danger treatment, guarded
+                                      by typing `phrase`.
 -->
 <html lang="en" xmlns:th="http://www.thymeleaf.org">
 
@@ -293,7 +295,8 @@
        caution   - consequential but recoverable: a release, a promotion, a rotation, an unpin, a pass run now. The warn
                    tint, and it asks before it acts.
        danger    - irreversible: a discard, a deletion, a restore over the current state. The danger tint, guarded by
-                   a question (dangerButton) or, for a deletion, by typing the name (deleteButton).
+                   a question (dangerButton), for a deletion by typing the name (deleteButton), and for an act that
+                   changes the deployment beyond one object by typing a phrase (phraseButton).
        quiet     - changes nothing by itself: going back, leaving, resetting a value to what it inherits, removing a
                    row not yet saved. Drawn as text (`app-quiet`), never as a button competing with the others.
        switch    - a state that is on or off, changed in place (`app-switch`, role=switch), never a pair of buttons.
@@ -344,6 +347,13 @@
      deletion in the console renders through this, so none of them is one reflexive click away. */-->
 <button th:fragment="deleteButton(label, name, warning)" type="submit" class="secondary outline app-danger"
         th:attr="data-delete=${name},data-delete-warning=${warning}" th:text="${label}">delete</button>
+
+<!--/* A button whose act reaches beyond one object - switching features on, reaching outside the deployment - and the
+     same dialog guarding it: pressing it asks `question` over `warning` and keeps its confirm button disabled until
+     the reader has typed `phrase`, which the form then carries as `confirm` for the route to check (console.js). */-->
+<button th:fragment="phraseButton(label, phrase, question, warning)" type="submit" class="secondary outline app-danger"
+        th:attr="data-phrase=${phrase},data-phrase-question=${question},data-phrase-warning=${warning}"
+        th:text="${label}">confirm</button>
 
 </body>
 </html>

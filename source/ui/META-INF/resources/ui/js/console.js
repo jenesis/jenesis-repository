@@ -53,13 +53,15 @@
 })();
 
 /*
- * The deletion guard.
+ * The typed-phrase guard.
  *
  * A control that deletes something carries `data-delete="<name>"` and `data-delete-warning="<what is lost>"`
  * (the `deleteButton` fragment renders both). Pressing it opens a dialog that says what is lost and that it cannot
  * be undone, and its confirm button stays disabled until the reader has typed `delete <name>` - a click can be
- * reflexive, typing the name of the thing cannot. Confirming submits the form with that phrase as `confirm`, so a
- * server that checks it refuses a request that did not come through the dialog.
+ * reflexive, typing the name of the thing cannot. A control whose act reaches beyond one object carries
+ * `data-phrase="<phrase>"` with `data-phrase-question` and `data-phrase-warning` instead (the `phraseButton`
+ * fragment), and the same dialog asks its question and waits for that phrase. Confirming submits the form with the
+ * phrase as `confirm`, so a server that checks it refuses a request that did not come through the dialog.
  *
  * Every string is set as text, never as markup: the name and the warning come from the repository.
  */
@@ -68,13 +70,12 @@
 
     var confirmed = null;
 
+    function asks(node) {
+        return node && node.dataset && (node.dataset.delete || node.dataset.phrase) ? node : null;
+    }
+
     function guarded(event) {
-        var submitter = event.submitter;
-        if (submitter && submitter.dataset && submitter.dataset.delete) {
-            return submitter;
-        }
-        var form = event.target;
-        return form && form.dataset && form.dataset.delete ? form : null;
+        return asks(event.submitter) || asks(event.target);
     }
 
     function element(tag, className, text) {
@@ -89,18 +90,22 @@
     }
 
     function open(form, submitter, source) {
-        var name = source.dataset.delete;
-        var phrase = 'delete ' + name;
-        var dialog = element('dialog', 'app-delete-dialog');
+        var deletion = !source.dataset.phrase;
+        var phrase = deletion ? 'delete ' + source.dataset.delete : source.dataset.phrase;
+        var dialog = element('dialog', 'app-phrase-dialog');
         var article = element('article');
-        var heading = element('h2', null, 'Delete ' + name + '?');
-        heading.id = 'app-delete-dialog-title';
+        var heading = element('h2', null,
+                deletion ? 'Delete ' + source.dataset.delete + '?' : source.dataset.phraseQuestion);
+        heading.id = 'app-phrase-dialog-title';
         dialog.setAttribute('aria-labelledby', heading.id);
-        var warning = element('p', 'app-delete-dialog__warning');
-        if (source.dataset.deleteWarning) {
-            warning.appendChild(document.createTextNode(source.dataset.deleteWarning + ' '));
+        var warning = element('p', 'app-phrase-dialog__warning');
+        var said = deletion ? source.dataset.deleteWarning : source.dataset.phraseWarning;
+        if (said) {
+            warning.appendChild(document.createTextNode(said + ' '));
         }
-        warning.appendChild(element('strong', null, 'This cannot be undone.'));
+        if (deletion) {
+            warning.appendChild(element('strong', null, 'This cannot be undone.'));
+        }
         var label = element('label');
         label.appendChild(document.createTextNode('Type '));
         label.appendChild(element('code', null, phrase));
@@ -114,7 +119,8 @@
         var footer = element('footer');
         var cancel = element('button', 'secondary outline app-secondary', 'Cancel');
         cancel.type = 'button';
-        var confirm = element('button', 'app-danger', (submitter && submitter.textContent.trim()) || 'Delete');
+        var confirm = element('button', 'app-danger',
+                (submitter && submitter.textContent.trim()) || (deletion ? 'Delete' : 'Confirm'));
         confirm.type = 'button';
         confirm.disabled = true;
         footer.appendChild(cancel);
@@ -169,7 +175,7 @@
         input.focus();
     }
 
-    // Capture phase, ahead of the confirmation guard above: a deletion asks this question instead of that one.
+    // Capture phase, ahead of the confirmation guard above: a typed phrase is asked instead of that question.
     document.addEventListener('submit', function (event) {
         var source = guarded(event);
         if (!source) {

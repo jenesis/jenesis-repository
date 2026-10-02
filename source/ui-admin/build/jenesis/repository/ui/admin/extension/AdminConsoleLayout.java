@@ -23,7 +23,7 @@ public final class AdminConsoleLayout implements ConsoleLayout.Extension {
                 ConsoleLayout.MESSAGES, ConsoleLayout.SUBSECTION_ERROR, ConsoleLayout.ALERT,
                 ConsoleLayout.EMPTY, ConsoleLayout.EMPTY_ACTION,
                 ConsoleLayout.PRIMARY_BUTTON, ConsoleLayout.SECONDARY_BUTTON, ConsoleLayout.CAUTION_BUTTON,
-                ConsoleLayout.DANGER_BUTTON, ConsoleLayout.DELETE_BUTTON,
+                ConsoleLayout.DANGER_BUTTON, ConsoleLayout.DELETE_BUTTON, ConsoleLayout.PHRASE_BUTTON,
                 ConsoleLayout.BROWSE_ROWS, ConsoleLayout.BROWSE_UP, ConsoleLayout.FOLDER_LINK,
                 ConsoleLayout.RUNNING,
                 ConsoleLayout.REPOSITORY_HEADER, ConsoleLayout.REPOSITORY_OVERVIEW_HEADER, ConsoleLayout.MODULE_VIEWS);

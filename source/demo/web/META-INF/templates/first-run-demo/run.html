@@ -1,0 +1,78 @@
+<!doctype html>
+<html lang="en" xmlns:th="http://www.thymeleaf.org">
+<head th:replace="~{fragments :: head('Demo')}"></head>
+<body>
+<header th:replace="~{fragments :: nav}"></header>
+<main id="main">
+    <div th:replace="~{fragments :: messages}"></div>
+    <header th:replace="~{base :: pageHeader('Demo')}"></header>
+
+    <!--/* What the tenant's demo run has done, read back from what it stored: while it runs the page refreshes itself,
+         once it is done it says what was created, what was held or refused, and what did not go through. */-->
+    <th:block th:if="${run == null}">
+        <th:block th:if="${offered}">
+            <div th:replace="~{base :: emptyAction('No demo has been loaded into this tenant. ', 'The first-run guide',
+                    '/ui/setup', ' offers one on its first page while the tenant holds no repository.')}"></div>
+        </th:block>
+        <th:block th:unless="${offered}">
+            <div th:replace="~{base :: empty('No demo has been loaded into this tenant. It is offered only while a tenant holds no repository.')}"></div>
+        </th:block>
+    </th:block>
+
+    <th:block th:if="${run != null}">
+        <th:block th:if="${run.running()}">
+            <p th:replace="~{base :: running('The demo is loading. This page shows each step as it is taken.')}"></p>
+        </th:block>
+        <th:block th:if="${run.stopped()}">
+            <p th:replace="~{base :: alert('The demo stopped before it finished: the node loading it went away. What it did is below; delete its repositories to be offered it again.', 'warn')}"></p>
+        </th:block>
+
+        <p><small>Confirmed by <strong th:text="${run.actor()}">admin</strong>, started
+            <span th:text="${instants.display(run.started())}">2026-10-02 12:00:00 UTC</span><th:block
+                    th:if="${run.finished() != null}">, finished <span
+                    th:text="${instants.display(run.finished())}">2026-10-02 12:01:00 UTC</span></th:block>.</small></p>
+
+        <p th:unless="${run.running()}"><strong th:text="${summary}">3 repositories created.</strong></p>
+
+        <th:block th:if="${!run.running() and run.nothingFetched()}">
+            <p th:replace="~{base :: alert('Nothing was read through the proxies: the public registries did not answer from this server. The proxies exist and stay empty until a client reads through them, and the vulnerability screens stay empty until something vulnerable is held.', 'warn')}"></p>
+        </th:block>
+        <p th:if="${!run.running() and run.requested()}"><small>The vulnerability scan has been asked for and runs within
+            a minute or two; a repository's Vulnerabilities page fills once it has.</small></p>
+
+        <figure>
+            <table class="app-list">
+                <thead>
+                <tr>
+                    <th scope="col">Step</th>
+                    <th scope="col">Outcome</th>
+                    <th scope="col">What the deployment said</th>
+                </tr>
+                </thead>
+                <tbody>
+                <tr th:each="step : ${run.steps()}">
+                    <td th:text="${step.what()}">Create demo-maven</td>
+                    <td><span class="app-badge"
+                              th:classappend="${step.outcome().name() == 'DONE'} ? 'app-badge--pass'
+                                      : (${step.outcome().name() == 'HELD'} ? 'app-badge--warn'
+                                      : (${step.outcome().name() == 'SKIPPED'} ? 'app-badge--muted' : 'app-badge--danger'))"
+                              th:text="${step.outcome().name() == 'DONE'} ? 'done'
+                                      : (${step.outcome().name() == 'HELD'} ? 'held for review'
+                                      : (${step.outcome().name() == 'SKIPPED'} ? 'skipped'
+                                      : (${step.outcome().name() == 'REFUSED'} ? 'refused' : 'failed')))">done</span></td>
+                    <td><small th:text="${step.detail()}">Created.</small></td>
+                </tr>
+                </tbody>
+            </table>
+        </figure>
+        <p th:if="${run.omitted() > 0}"><small th:text="|Showing the first ${run.steps().size()} steps; ${run.omitted()} more were taken.|">Showing the first steps.</small></p>
+
+        <p th:unless="${run.running()}" class="setting-values">
+            <a th:href="@{/ui/repositories}">Open the repositories</a>
+            <a th:href="@{/ui/setup}">Continue the first-run guide</a>
+            <a th:href="@{/ui/}">Go to the dashboard</a>
+        </p>
+    </th:block>
+</main>
+</body>
+</html>

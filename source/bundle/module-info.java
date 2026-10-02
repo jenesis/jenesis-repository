@@ -128,6 +128,8 @@ open module build.jenesis.repository.bundle {
     requires build.jenesis.repository.export.web;
     requires build.jenesis.repository.console.api;
     requires build.jenesis.repository.deploy.web;
+    // The demo the first-run guide offers an empty deployment, loaded only when an operator confirms it.
+    requires build.jenesis.repository.demo.web;
     // Credentials for a private upstream, and the tokens AWS registries issue in place of one.
     requires build.jenesis.repository.upstream.store;
     requires build.jenesis.repository.upstream.aws;

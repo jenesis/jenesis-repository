@@ -1,0 +1,57 @@
+package build.jenesis.repository.demo;
+
+import module java.base;
+
+/**
+ * One demo run, as a {@link DemoContributor} loads through it: the tenant it fills, and the operations a client and
+ * an operator would make - switching a setting, publishing an artifact, fetching one through a proxy, asking for a
+ * pass - each made the way they make it and each recording its own outcome on the run, so the operator is told what
+ * was created, what was held or refused, and what stayed empty.
+ *
+ * <p>Nothing here throws for an outcome a deployment can produce: a refused setting, a held or refused publish and a
+ * registry that does not answer are recorded and answered, and the load carries on. An {@link IOException} is the
+ * run's own store failing.
+ */
+public interface Demo {
+
+    /** The tenant the demo fills. */
+    String tenant();
+
+    /** The deployment's value of {@code key} in force - a pin, else the stored value - or empty when none is set. */
+    String setting(String key);
+
+    /**
+     * Set each of {@code values} deployment-wide in one change, recorded on the audit trail as the operator who
+     * confirmed the demo. Every key must be one the contributor's plan names; a refused change - an undeclared key, a
+     * value pinned by the environment, one the catalogue refuses - sets none of them.
+     *
+     * @return whether the change was made.
+     */
+    boolean settings(Map<String, String> values) throws IOException;
+
+    /**
+     * Publish {@code body} into {@code repository} at {@code path} - the path a client names after the repository's
+     * URL - through the edge a client's upload takes, screened by the deployment's gate.
+     *
+     * @return the status the edge answered: {@code 2xx} published, {@code 202} held for review, {@code 422} refused,
+     *         {@code 404} claimed by no format or no repository, {@code 503} when no repository edge runs here.
+     */
+    int publish(String repository, String path, InputStream body) throws IOException;
+
+    /**
+     * Read {@code path} from {@code repository} through the serving path a client's {@code GET} takes, so a proxy
+     * pulls it from its registry, screens it and caches it.
+     *
+     * @return the status the read answered; a registry that cannot be reached answers as the proxy answers a client.
+     */
+    int fetch(String repository, String path) throws IOException;
+
+    /**
+     * Ask for the background pass {@code pass} to run no earlier than {@code after} from now, for {@code reason} - as
+     * an operator asks for one - rather than waiting for its schedule.
+     */
+    void request(String pass, String reason, Duration after) throws IOException;
+
+    /** Record that {@code what} was left out, and why. */
+    void skipped(String what, String why) throws IOException;
+}

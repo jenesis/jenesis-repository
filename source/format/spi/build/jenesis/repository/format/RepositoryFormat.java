@@ -327,7 +327,9 @@ public interface RepositoryFormat extends IconContributor {
      * path - the normal pipeline, so the inspectors screen the proxy leg and the compliance gate populates itself; no
      * blob is embedded here. A {@code default} of nothing, so a format carries none unless it opts in and the demo
      * mode is a no-op for it; suggestions are best-effort over the public registries and never fetch actual malicious
-     * bytes. The seeder only runs against a completely empty artifact space and only when the {@code demo} flag is on.
+     * bytes. The seeder only runs against a completely empty artifact space and only when the {@code demo} flag is on;
+     * the first-run guide's demo reads the same paths through a proxy of the format's
+     * {@link ProxyFormat#defaultUpstream() default upstream}, once an operator confirms it for an empty tenant.
      */
     default List<String> demoArtifacts() {
         return List.of();

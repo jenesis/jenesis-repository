@@ -1,8 +1,11 @@
 package build.jenesis.repository.ui.admin.web;
 
 import module java.base;
+import module org.slf4j;
 
 import build.jenesis.repository.ui.AdministratorClaim;
+import build.jenesis.repository.ui.CurrentTenant;
+import build.jenesis.repository.ui.SetupOffer;
 import build.jenesis.repository.ui.OAuth2PrincipalService;
 import build.jenesis.repository.ui.admin.ConsoleSettingsContributor;
 import build.jenesis.repository.ui.identity.StarterCredential;
@@ -25,10 +28,15 @@ import build.jenesis.repository.ui.ConsoleScreen;
  * review's completion, a skip is remembered for the session, and the wizard is reachable again under Settings. The
  * starter credential's step reads the environment, where those secrets are provisioned. Every step reads only the
  * settings documents.
+ *
+ * <p>The first page also carries what installed modules offer an operator setting up ({@link SetupOffer}) - a demo
+ * for an empty deployment - each posting to a route of its own module, so the wizard's own steps are untouched.
  */
 @Controller
 @ConsoleScreen
 public class SetupController {
+
+    private static final Logger LOGGER = LoggerFactory.getLogger(SetupController.class);
 
     /** The environment variable the settings master key is provisioned in. */
     private static final String SECRETS_KEY = "JENREPO_SECRETS_KEY";
@@ -38,13 +46,18 @@ public class SetupController {
     private final SettingsAdmin settings;
     /** Present exactly while the OAuth2 sign-in module is installed in this console. */
     private final ObjectProvider<OAuth2PrincipalService> signIn;
+    private final ObjectProvider<SetupOffer> offers;
+    private final CurrentTenant tenant;
 
     public SetupController(SetupWizard wizard, Environment environment, SettingsAdmin settings,
-                           ObjectProvider<OAuth2PrincipalService> signIn) {
+                           ObjectProvider<OAuth2PrincipalService> signIn, ObjectProvider<SetupOffer> offers,
+                           CurrentTenant tenant) {
         this.wizard = wizard;
         this.environment = environment;
         this.settings = settings;
         this.signIn = signIn;
+        this.offers = offers;
+        this.tenant = tenant;
     }
 
     /** The wizard's first step, starting from what the deployment holds. */
@@ -53,7 +66,31 @@ public class SetupController {
         model.addAttribute("wizard", WizardFlow.start(wizard.definition(starter(authentication)), wizard.held(),
                 wizard.suggested()));
         model.addAttribute("github", github());
+        model.addAttribute("offers", offers());
         return "wizard";
+    }
+
+    /**
+     * What the installed modules offer on the first page, for the selected tenant, in their order; nothing while no
+     * tenant is selected. An offer that fails is left out and logged, and the guide renders without it.
+     */
+    private List<SetupOffer.Offer> offers() {
+        String selected = tenant.name();
+        if (selected == null) {
+            return List.of();
+        }
+        SetupOffer.Viewer viewer = new SetupOffer.Viewer(selected);
+        List<SetupOffer.Offer> made = new ArrayList<>();
+        offers.stream().sorted(Comparator.comparingInt(SetupOffer::order)
+                .thenComparing(offer -> offer.getClass().getName())).forEach(offer -> {
+                    try {
+                        offer.offer(viewer).ifPresent(made::add);
+                    } catch (IOException | RuntimeException failure) {
+                        LOGGER.warn("The first-run guide's offer {} could not be read",
+                                offer.getClass().getName(), failure);
+                    }
+                });
+        return made;
     }
 
     /**
@@ -143,6 +180,7 @@ public class SetupController {
         }
         model.addAttribute("wizard", flow);
         model.addAttribute("github", github());
+        model.addAttribute("offers", offers());
         return "wizard";
     }
 

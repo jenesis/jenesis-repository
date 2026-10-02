@@ -392,6 +392,49 @@ public class RepositoryController {
     }
 
     /**
+     * Read one path in process, through the serving path a {@code GET} to {@code /repository/**} takes, and discard
+     * the body.
+     *
+     * <p>It is {@link #publish}'s twin for a surface with no request behind it that needs what a read leaves behind
+     * rather than its bytes - the console's demo pulling known versions through a proxy, so they are cached,
+     * inventoried and screened as a client's pull would have them. The routing resolves the repository, a routed
+     * repository - a proxy or a group - is served across its backings, so a proxy pulls from its upstream on a local
+     * miss and screens what it fetched, and a hosted one dispatches over its own store; a withheld path stays a
+     * {@code 404}. No request carries settings, headers or a caller here, so a format reads every repository setting
+     * at its default and the read is made as nobody.
+     *
+     * @param tenant     the tenant to read from.
+     * @param repository the repository within it.
+     * @param path       the path within the repository, as a client names it after {@code /repository/<repository>}.
+     * @return the status the read answered: {@code 2xx} served, {@code 404} absent, withheld or claimed by no format
+     *         or no route, or whatever a proxy answers for an upstream that failed.
+     */
+    public int fetch(String tenant, String repository, String path) throws IOException {
+        Optional<RepositoryRouting.Route> resolved = routing.route(tenant, repository, path);
+        if (resolved.isEmpty()) {
+            return 404;
+        }
+        RepositoryRouting.Route route = resolved.get();
+        Optional<HeldFormat> held = HeldFormat.of(routing, route, dispatcher.formats());
+        if (held.isEmpty()) {
+            return 404;
+        }
+        CapturingExchange exchange = CapturingExchange.read(held.get().path());
+        if (routed.routes(route.tenant(), route.repository())) {
+            Optional<RepositoryFormat> claiming = held.get().claiming();
+            if (claiming.isEmpty()) {
+                return 404;
+            }
+            routed.serve(route.tenant(), route.repository(), claiming.get(), exchange);
+            return exchange.status();
+        }
+        if (!screened(held.get().type()).dispatch(route.tenant(), exchange, route.store())) {
+            return 404;
+        }
+        return exchange.status();
+    }
+
+    /**
      * The OCI registry's version probe, which names no tenant and no repository: the registry answers it if one is
      * installed. A URL naming a tenant and no repository is not the probe, and answers nothing.
      */

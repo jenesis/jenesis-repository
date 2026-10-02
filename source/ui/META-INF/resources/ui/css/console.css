@@ -1404,50 +1404,51 @@ main button.app-switch__reset {
     }
 }
 
-/* The deletion dialog (console.js): what is lost, that it cannot be undone, and the phrase to type. Its confirm
-   button is the one filled danger button in the console - by the time it is enabled the reader has typed the name. */
-.app-delete-dialog > article {
+/* The typed-phrase dialog (console.js): what is lost or changed, for a deletion that it cannot be undone, and the
+   phrase to type. Its confirm button is the one filled danger button in the console - by the time it is enabled the
+   reader has typed the name or the phrase. */
+.app-phrase-dialog > article {
     max-width: 32rem;
 }
-.app-delete-dialog h2 {
+.app-phrase-dialog h2 {
     margin-bottom: var(--app-space-3);
     font-size: var(--app-font-size-lg);
     overflow-wrap: anywhere;
 }
-.app-delete-dialog__warning {
+.app-phrase-dialog__warning {
     color: var(--app-status-danger-fg);
     background: var(--app-status-danger-bg);
     padding: var(--app-space-3);
     border-radius: var(--app-radius-sm);
     font-size: var(--app-font-size-sm);
 }
-.app-delete-dialog label {
+.app-phrase-dialog label {
     font-size: var(--app-font-size-sm);
 }
-.app-delete-dialog input {
+.app-phrase-dialog input {
     margin-top: var(--app-space-2);
     height: 2.375rem;
     font-size: var(--app-font-size-sm);
 }
-.app-delete-dialog footer {
+.app-phrase-dialog footer {
     display: flex;
     justify-content: flex-end;
     gap: var(--app-space-2);
 }
-.app-delete-dialog footer button {
+.app-phrase-dialog footer button {
     width: auto;
     height: 2.375rem;
     margin: 0;
     padding-block: 0;
     font-size: var(--app-font-size-sm);
 }
-.app-delete-dialog footer button.app-danger,
-.app-delete-dialog footer button.app-danger:hover {
+.app-phrase-dialog footer button.app-danger,
+.app-phrase-dialog footer button.app-danger:hover {
     background: var(--app-status-danger-fg);
     border-color: var(--app-status-danger-fg);
     color: var(--app-status-danger-bg);
 }
-.app-delete-dialog footer button.app-danger:disabled {
+.app-phrase-dialog footer button.app-danger:disabled {
     opacity: 0.45;
 }
 
@@ -1735,6 +1736,15 @@ main .app-routing__fallback > :is(.app-routing__kind, .app-routing__screening) {
 }
 
 /* The starter step's GitHub panel, set off from the step's own fields by a rule. */
+/* What the first-run guide offers on its first page, ahead of its steps: set apart by a rule beneath it. */
+.app-setup-offer {
+    margin-bottom: var(--app-space-5);
+    padding-bottom: var(--app-space-4);
+    border-bottom: 1px solid var(--pico-muted-border-color);
+}
+.app-setup-offer h2 {
+    font-size: var(--app-font-size-lg);
+}
 .app-github-setup {
     margin-top: var(--app-space-5);
     padding-top: var(--app-space-4);

@@ -7,6 +7,29 @@
     <div th:replace="~{fragments :: messages}"></div>
     <header th:replace="~{base :: pageHeader(${wizard.title()})}"></header>
 
+    <!--/* What installed modules offer on the first-run guide's first page, ahead of its steps (SetupOffer): what it is,
+         the warning, each thing it changes, and the action, confirmed by typing its phrase, or a link to where it is
+         under way. Each posts to its own module's route from a form of its own, so the wizard's run is untouched. */-->
+    <th:block th:if="${wizard.index() == 0 and offers != null}">
+        <section class="app-setup-offer" th:each="offer, at : ${offers}"
+                 th:attr="aria-labelledby=|setup-offer-${at.index}|">
+            <h2 th:id="|setup-offer-${at.index}|" th:text="${offer.title()}">Try it with a demo</h2>
+            <p th:each="paragraph : ${offer.paragraphs()}" th:text="${paragraph}">What the offer is.</p>
+            <th:block th:unless="${offer.warning().isEmpty()}">
+                <p th:replace="~{base :: alert(${offer.warning()}, 'warn')}"></p>
+            </th:block>
+            <ul th:unless="${offer.consequences().isEmpty()}">
+                <li th:each="consequence : ${offer.consequences()}" th:text="${consequence}">What it changes.</li>
+            </ul>
+            <form th:if="${offer.action() != null}" method="post" th:action="@{${offer.action().route()}}">
+                <button th:replace="~{base :: phraseButton(${offer.action().label()}, ${offer.action().phrase()},
+                        ${offer.action().question()}, ${offer.action().warning()})}">Load</button>
+            </form>
+            <p th:if="${offer.link() != null}"><a th:href="@{${offer.link().href()}}"
+                    th:text="${offer.link().label()}">See it</a></p>
+        </section>
+    </th:block>
+
     <!--/* The one wizard page: every wizard - the first boot's setup, a new repository, a new project - renders here from
          a WizardFlow. Nothing is written until the review's completion: every value rides this form as a hidden field
          from step to step, so Back loses nothing and leaving the page leaves nothing behind. */-->

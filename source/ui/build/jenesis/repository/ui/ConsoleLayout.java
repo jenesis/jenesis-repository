@@ -52,6 +52,11 @@ public final class ConsoleLayout {
      *  label, the name and what is lost. */
     public static final String DELETE_BUTTON = "deleteButton";
 
+    /** An act reaching beyond one object - switching features on, reaching outside the deployment: the danger
+     *  treatment, guarded by the same dialog with a phrase to type, taking the label, the phrase, the question and
+     *  what it warns of. */
+    public static final String PHRASE_BUTTON = "phraseButton";
+
     /** The console frame every screen renders above its {@code <main>}: the edition's notice strip, the header with
      *  the brand, the groups, the theme switch and the signed-in identity, and the sidebar listing the pages of the
      *  group - or the repository - the reader is in. It reads the published {@link Navigation}, so a page passes
@@ -100,7 +105,7 @@ public final class ConsoleLayout {
     /** Every fragment an extending console may build on. */
     public static final Set<String> FRAGMENTS = Set.of(
             PAGE_HEADER, PAGE_HEADER_CRUMBS, EMPTY, EMPTY_ACTION, ALERT, HEAD_CONTENTS, PRIMARY_BUTTON, SECONDARY_BUTTON,
-            CAUTION_BUTTON, DANGER_BUTTON, DELETE_BUTTON, SHELL, SIGN_IN_SHELL, MESSAGES, SUBSECTION_ERROR,
+            CAUTION_BUTTON, DANGER_BUTTON, DELETE_BUTTON, PHRASE_BUTTON, SHELL, SIGN_IN_SHELL, MESSAGES, SUBSECTION_ERROR,
             BROWSE_ROWS, BROWSE_UP, RUNNING, REPOSITORY_HEADER, REPOSITORY_OVERVIEW_HEADER, REPOSITORY_IDENTITY,
             MODULE_VIEWS, FOLDER_LINK);
 
