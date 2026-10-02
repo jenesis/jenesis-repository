@@ -12,26 +12,21 @@ import build.jenesis.repository.upstream.UpstreamCredentialSource;
 import build.jenesis.repository.upstream.UpstreamTokenIssuer;
 
 /**
- * The store-backed {@link UpstreamCredentialSource}: each credential is the ready-to-send header value, keyed by
- * the upstream host, stored in its own object ({@code config/upstream-auth}) rather than in {@code config/settings}
- * - so a secret never appears in the readable settings catalogue; the management surface lists only which hosts
- * have a credential, never the credential itself. {@link #headers} is read on every proxied fetch, so it serves an
- * in-memory snapshot, reloaded lazily once its refresh window (default thirty seconds) lapses - one store read per
- * window, taken on a fetch that is already doing network I/O - and eagerly on a write through this node.
+ * The store-backed {@link UpstreamCredentialSource}: each credential is the ready-to-send header, keyed by the upstream
+ * host, in its own document ({@link #PATH}) rather than among the settings, so a secret never appears in the readable
+ * settings catalogue; the management surface lists only which hosts have one. {@link #headers} is read on every
+ * proxied fetch, so it serves an in-memory snapshot, reloaded once its refresh window lapses - one store read per
+ * window, on a fetch already doing network I/O - and at once on a write through this node.
  *
- * <p><b>At-rest encryption (clean cutover).</b> An upstream credential is the ready-to-send {@code Authorization}
- * header value - a live secret - so, like a SECRET setting, the stored value is
- * envelope-encrypted with the shared {@link SecretCipher} (AES-256-GCM, {@value SecretCipher#ENV} master key) before
- * it reaches {@code config/upstream-auth}: only the {@code enc:v1:} ciphertext is ever persisted (the header
- * <em>name</em> is not a secret and stays in the clear beside it). A write with no master key configured is refused,
- * so plaintext never reaches the store; a read on the proxy-fetch path decrypts and, failing closed, throws
- * rather than send a value it could not decrypt - a stored value that is not an {@code enc:v1:} envelope (a
- * plaintext credential) is invalid and must be re-entered, never sent as the literal header.
+ * <p><b>At-rest encryption.</b> The header value is a live secret, so like a SECRET setting it is envelope-encrypted
+ * with the shared {@link SecretCipher} ({@value SecretCipher#ENV} master key) and only the {@code enc:v1:} ciphertext
+ * is stored; the header name stays in the clear. A write with no master key is refused. A read decrypts and fails
+ * closed, so a value it cannot decrypt, or one that is not an envelope, fails the fetch and must be re-entered rather
+ * than being sent as the literal header.
  */
 public final class StoreUpstreamCredentials implements UpstreamCredentialSource {
 
-    /** The single deployment-global document, under the superadmin {@code config/} root; declared shared in the
-     *  module's {@link UpstreamCredentialsStorageNamespace storage manifest}. */
+    /** The single deployment-global document, declared shared in {@link UpstreamCredentialsStorageNamespace}. */
     static final String PATH = Scopes.space(Scopes.CONFIG) + "/upstream-auth";
 
     /** The mark of an issued credential in the document: {@code @<issuer>}. A header name cannot begin with it, so a
@@ -60,9 +55,8 @@ public final class StoreUpstreamCredentials implements UpstreamCredentialSource 
         this(root, refresh, SecretCipher.fromEnvironment());
     }
 
-    /** The store-backed source with an explicit cipher - the seam a test injects a fixed master key (or an
-     *  unconfigured cipher) through without mutating the process environment. Production takes it too, its provider
-     *  building the cipher from the {@code secrets-key} configuration key ({@value SecretCipher#ENV}). */
+    /** The store-backed source with an explicit cipher, which the provider builds from the {@code secrets-key}
+     *  configuration key ({@value SecretCipher#ENV}) and a test injects without touching the environment. */
     public StoreUpstreamCredentials(ArtifactStore root, Duration refresh, SecretCipher cipher) throws IOException {
         this(root, refresh, cipher, Clock.systemUTC());
     }
@@ -95,11 +89,9 @@ public final class StoreUpstreamCredentials implements UpstreamCredentialSource 
         return Map.of(name, decrypted(value));
     }
 
-    /** The usable header value of a stored credential: decrypted when it is an {@code enc:v1:} envelope (fail-closed
-     *  through {@link SecretCipher#decrypt} - a wrong/absent key or tampered value throws rather than reading back the
-     *  ciphertext); and refused when it is not an envelope, because a plaintext or tampered credential is invalid
-     *  and must be re-entered - it is never sent as a plaintext header. Throwing here aborts the
-     *  proxied fetch, so no upstream call is ever made with a credential this node could not decrypt. */
+    /** The usable header value of a stored credential, decrypted through {@link SecretCipher#decrypt}. A wrong or
+     *  absent key, a tampered value or one that is not an envelope throws, aborting the proxied fetch, so no upstream
+     *  call goes out with a credential this node could not decrypt. */
     private String decrypted(String value) {
         if (SecretCipher.isEnvelope(value)) {
             return cipher.decrypt(value);
@@ -116,8 +108,7 @@ public final class StoreUpstreamCredentials implements UpstreamCredentialSource 
 
     @Override
     public void set(String host, String name, String value) throws IOException {
-        // Encrypt the credential before it reaches the store, refusing the write when no master key is
-        // configured so plaintext is never persisted (the header name is not secret and stays in the clear).
+        // Refused without a master key, so plaintext is never persisted.
         if (!cipher.configured()) {
             throw new IllegalStateException("setting an upstream credential for '" + host + "' requires "
                     + SecretCipher.ENV + " to be configured so the value can be encrypted at rest; set it (a "
@@ -210,11 +201,9 @@ public final class StoreUpstreamCredentials implements UpstreamCredentialSource 
         return properties;
     }
 
-    /** Apply a mutation to the deployment-global credential document under compare-and-set ({@link Retries#update}):
-     *  the document is read with its version token, changed, and written only if the token still matches, re-read
-     *  and re-applied on a conflict. Two nodes editing different hosts concurrently therefore merge rather than the
-     *  later write blindly overwriting - and so silently dropping - the earlier one, which would leave a private
-     *  upstream returning {@code 401}. Returns the document as written, to refresh this node's snapshot. */
+    /** Applies a change to the credential document under compare-and-set ({@link Retries#update}), re-applied on a
+     *  conflict, so two nodes editing different hosts at once merge rather than one dropping the other's credential.
+     *  Returns the document as written, to refresh this node's snapshot. */
     private Properties mutate(Change change) throws IOException {
         Properties[] written = new Properties[1];
         Retries.update(root, PATH, object -> {

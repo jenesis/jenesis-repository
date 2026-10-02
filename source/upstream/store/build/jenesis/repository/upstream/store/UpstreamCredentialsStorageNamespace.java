@@ -5,10 +5,8 @@ import module java.base;
 import build.jenesis.repository.maintenance.StorageNamespace;
 
 /**
- * The upstream-credentials module's storage manifest: it owns the {@code config/upstream-auth} document
- * ({@link StoreUpstreamCredentials}). The space is shared (deployment-global) by design - an upstream host's
- * credential authenticates the deployment's outbound proxy fetches, not any one tenant's data - and sits under
- * the superadmin {@code config/} root, the manifest's one legitimate shared home beside {@code auth/}.
+ * Declares the deployment-global {@code .system/config/upstream-auth} document ({@link StoreUpstreamCredentials}) as a
+ * shared space, since an upstream credential authenticates the deployment's outbound fetches, not one tenant's data.
  */
 public final class UpstreamCredentialsStorageNamespace implements StorageNamespace {
 

@@ -21,10 +21,8 @@ public final class StoreUpstreamCredentialsProvider implements UpstreamCredentia
     public Optional<UpstreamCredentialSource> create(ArtifactStore root, UnaryOperator<String> config)
             throws IOException {
         String refresh = config.apply("settings-refresh-millis");
-        // The master key(s) that envelope-encrypt an upstream credential at rest are the same deploy-time bootstrap
-        // infra the SECRET settings use: read as the allowlisted config key "secrets-key"
-        // - i.e. the env var JENREPO_SECRETS_KEY via Spring relaxed binding - so a store-read attacker
-        // recovers only ciphertext. A malformed value fails fast here (at startup), naming the variable.
+        // The same master keys the SECRET settings use (secrets-key, JENREPO_SECRETS_KEY); a malformed value fails
+        // here at start-up, naming the variable.
         return Optional.of(new StoreUpstreamCredentials(root, Duration.ofMillis(
                 refresh == null || refresh.isBlank() ? 30_000L : Long.parseLong(refresh.trim())),
                 SecretCipher.of(config.apply("secrets-key"))));

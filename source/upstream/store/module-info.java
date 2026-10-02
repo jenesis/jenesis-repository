@@ -1,11 +1,10 @@
 /**
- * The store-backed upstream credentials as a plugin module: it provides
- * {@link build.jenesis.repository.upstream.UpstreamCredentialSourceProvider} answering to {@code store}, keeping
- * each host's ready-to-send header in {@code config/upstream-auth} and serving proxied fetches from an in-memory
- * snapshot. A deployment without this module (or another credential source) proxies public upstreams only. The
- * credential document is deployment-global by design (an upstream credential serves the deployment's outbound
- * fetches, not one tenant's data), so the module's storage manifest declares it shared under the superadmin
- * {@code config/} root.
+ * The store-backed upstream credentials: it provides
+ * {@link build.jenesis.repository.upstream.UpstreamCredentialSourceProvider} answering to {@code store}, keeping each
+ * host's header, encrypted, in {@code .system/config/upstream-auth} and serving proxied fetches from an in-memory
+ * snapshot. Without this module (or another credential source) a deployment proxies public upstreams only. The
+ * document is deployment-global, since an upstream credential serves the deployment's outbound fetches rather than one
+ * tenant's data.
  *
  * @jenesis.release 25
  * @jenesis.bom pin-repository.properties
