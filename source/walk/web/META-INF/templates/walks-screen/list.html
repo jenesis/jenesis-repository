@@ -36,7 +36,7 @@
                 <span th:text="${e.cost.get().derived}">0</span> derived rows) over
                 <span th:text="${e.cost.get().repositories}">0</span> repositories</span>
         </p>
-        <form method="post" th:action="@{/ui/walks/save}" class="setting-edit">
+        <form method="post" th:action="@{/ui/walks/save}" class="setting-edit setting-edit--wide">
             <input type="hidden" name="name" th:value="${e.name}">
             <label>Cron expression (UTC; six fields, seconds first)
                 <input type="text" name="cron" required th:value="${e.cron}" th:attr="aria-label=|Cron expression of ${e.name}|">
@@ -67,7 +67,7 @@
 
     <article class="setting-group">
         <h2>Add a walk</h2>
-        <form method="post" th:action="@{/ui/walks/save}" class="setting-edit">
+        <form method="post" th:action="@{/ui/walks/save}" class="setting-edit setting-edit--wide">
             <label>Name (lower case, letters, digits and dashes)
                 <input type="text" name="name" required pattern="[a-z][a-z0-9-]*" placeholder="nightly">
             </label>
