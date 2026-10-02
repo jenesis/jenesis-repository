@@ -89,6 +89,22 @@ class StoredCounterTest {
     }
 
     @Test
+    void a_flush_forgets_the_counters_it_wrote_so_a_node_holds_only_what_is_pending() throws IOException {
+        StoredCounter.settle();
+        for (int each = 0; each < 1_000; each++) {
+            new StoredCounter(store, "downloads/" + each).addLater(1);
+        }
+        assertThat(StoredCounter.held()).as("one pending delta per counter moved").isEqualTo(1_000);
+        StoredCounter.flushNow();
+        assertThat(StoredCounter.held()).as("a node that has moved a great many counters holds none once written")
+                .isZero();
+        assertThat(new StoredCounter(store, "downloads/999").read()).isEqualTo(1);
+        new StoredCounter(store, "downloads/999").addLater(1);
+        assertThat(new StoredCounter(store, "downloads/999").read()).as("a counter moved again after its flush")
+                .isEqualTo(2);
+    }
+
+    @Test
     void a_closing_node_settles_what_it_still_holds_and_holds_nothing_afterwards() throws IOException {
         StoredCounter counter = new StoredCounter(store, "quota/settled");
         counter.set(10);

@@ -105,35 +105,54 @@ public final class StoredCounter {
             add(delta);
             return;
         }
-        DEFERRED.computeIfAbsent(deferredKey(), _ -> new Deferred(this)).pending.addAndGet(delta);
+        defer(deferredKey(), this, delta);
         startFlusher(cadence);
     }
 
-    /** Fold every deferred delta into its counter now - the shutdown hook, and what a test calls. Answers how many
-     *  counters were written. */
+    /**
+     * Hold {@code delta} for {@code counter} until the next flush. The add happens inside the map's own update of the
+     * key, as does a flush's forgetting of a key it emptied, so a delta never lands on an entry that was just
+     * forgotten.
+     */
+    private static void defer(String key, StoredCounter counter, long delta) {
+        DEFERRED.compute(key, (_, held) -> {
+            Deferred deferred = held == null ? new Deferred(counter) : held;
+            deferred.pending.addAndGet(delta);
+            return deferred;
+        });
+    }
+
+    /** Fold every deferred delta into its counter now - the shutdown hook, and what a test calls - and forget each
+     *  counter left with nothing pending, so what a node holds is what it has yet to write rather than every counter
+     *  it ever moved. Answers how many counters were written. */
     public static int flushNow() {
         int written = 0;
         for (Map.Entry<String, Deferred> entry : DEFERRED.entrySet()) {
             Deferred deferred = entry.getValue();
             long sum = deferred.pending.getAndSet(0L);
-            if (sum == 0L) {
-                continue;
-            }
-            try {
-                if (deferred.counter.add(sum)) {
-                    written++;
-                } else {
-                    deferred.pending.addAndGet(sum);   // every try lost: keep the delta for the next flush
-                    LOGGER.warn("deferred counter update of {} on {} lost every compare-and-set; kept for the next flush",
-                            sum, deferred.counter.key);
+            if (sum != 0L) {
+                try {
+                    if (deferred.counter.add(sum)) {
+                        written++;
+                    } else {
+                        defer(entry.getKey(), deferred.counter, sum);   // every try lost: kept for the next flush
+                        LOGGER.warn("deferred counter update of {} on {} lost every compare-and-set; kept for the next "
+                                + "flush", sum, deferred.counter.key);
+                    }
+                } catch (IOException | RuntimeException failure) {
+                    defer(entry.getKey(), deferred.counter, sum);
+                    LOGGER.warn("deferred counter update of {} on {} could not be written; kept for the next flush: {}",
+                            sum, deferred.counter.key, failure.toString());
                 }
-            } catch (IOException | RuntimeException failure) {
-                deferred.pending.addAndGet(sum);
-                LOGGER.warn("deferred counter update of {} on {} could not be written; kept for the next flush: {}",
-                        sum, deferred.counter.key, failure.toString());
             }
+            DEFERRED.computeIfPresent(entry.getKey(), (_, held) -> held.pending.get() == 0L ? null : held);
         }
         return written;
+    }
+
+    /** How many counters this process holds a delta for, unwritten - none once a flush has written them all. */
+    public static int held() {
+        return DEFERRED.size();
     }
 
     /**
