@@ -123,7 +123,7 @@ public class SetupWizard {
                     + "menu, and stays there as First-run setup, under Settings.");
         }
         return new WizardFlow.Definition("First-run setup", ROUTE,
-                new WizardFlow.Exit("Skip for now", ROUTE + "/skip", true), "Apply setup", "Apply now", steps, review,
+                new WizardFlow.Exit("Use defaults", ROUTE + "/skip", true), "Apply setup", "Apply now", steps, review,
                 new WizardFlow.Checks() {
                     @Override
                     public Map<String, String> identity(Map<String, String> identity) {

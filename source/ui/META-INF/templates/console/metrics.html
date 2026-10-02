@@ -60,17 +60,14 @@
                         <br><small class="setting-doc" th:text="${metric.description()}">What this metric means.</small>
                     </div>
                     <div class="module-badges">
-                        <span class="app-badge">
-                            <strong th:text="${metric.value()}">0</strong>
-                            <span th:if="${!metric.unit().isEmpty()}" th:text="${metric.unit()}">unit</span>
-                        </span>
+                        <span class="app-badge"><strong th:text="${metric.displayValue()}">0</strong></span>
                         <span class="app-badge" th:text="${metric.kind().name().toLowerCase()}">gauge</span>
                     </div>
                 </div>
                 <div th:if="${metric.limit().isPresent() and metric.usage().isPresent()}">
                     <small th:with="pct=${metric.usage().getAsDouble() * 100}">
-                        <span th:text="${metric.value()}">0</span> of
-                        <span th:text="${metric.limit().getAsDouble()}">0</span> used —
+                        <span th:text="${metric.displayValue()}">0</span> of
+                        <span th:text="${metric.displayLimit()}">0</span> used —
                         <span th:text="${#numbers.formatDecimal(pct, 1, 0)} + '%'">0%</span>
                     </small>
                     <!--/* A plain bar of the fraction of the limit occupied right now, never a time-series graph. */-->

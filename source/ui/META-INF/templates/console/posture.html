@@ -12,8 +12,8 @@
         — observing posture never changes it — and it <strong>names the risk, never a secret value</strong>. It surfaces
         the same list the <code>/api/admin/posture</code> admin API returns. A clean deployment raises nothing, so an
         empty screen is the healthy state.</small></p>
-    <p th:if="${posture.scoped()}"><small>Advisories are grouped by whose they are to fix: the ones raised against
-        <strong>this tenant's</strong> own settings, which affect no other tenant, and the
+    <p th:if="${posture.scoped() and multiTenant}"><small>Advisories are grouped by whose they are to fix: the ones
+        raised against <strong>this tenant's</strong> own settings, which affect no other tenant, and the
         <strong>deployment-wide</strong> ones, which apply to every tenant and are the operator's. Another tenant's
         advisories are never shown here, and are not in the counts.</small></p>
 
@@ -37,7 +37,7 @@
         long to appear. Your own settings changes appear immediately.</small></p>
 
     <p th:if="${posture.empty()}"><small class="setting-nomatch">No security-posture advisories — this deployment's
-        configuration<span th:if="${posture.scoped()}">, and this tenant's,</span> raise<span
+        configuration<span th:if="${posture.scoped()}">, and this [[${scopeWord}]]'s,</span> raise<span
         th:unless="${posture.scoped()}">s</span> no known footguns. New warnings appear here as configuration
         changes.</small></p>
 
@@ -51,19 +51,21 @@
          selected through PostureReport#forTenant. Shown only when the session carries a tenant; a single-tenant
          deployment always does (its one tenant is selected implicitly). */-->
     <section th:if="${posture.scoped() and !posture.empty()}">
-        <h2>This tenant — <span th:text="${posture.tenant()}">acme</span></h2>
-        <p th:if="${posture.own().isEmpty()}"><small class="setting-nomatch">This tenant's own settings raise no
-            advisories. Its admission policy and other tenant-overridable settings are at safe values.</small></p>
+        <!--/* Where the deployment serves one tenant, its advisories and the deployment's are one list. */-->
+        <h2 th:if="${multiTenant}">This tenant — <span th:text="${posture.tenant()}">acme</span></h2>
+        <p th:if="${multiTenant and posture.own().isEmpty()}"><small class="setting-nomatch">This tenant's own settings
+            raise no advisories. Its admission policy and other tenant-overridable settings are at safe values.</small></p>
         <article class="module-card posture-item" th:each="advisory : ${posture.own()}"
                  th:attr="data-search=${advisory.id() + ' ' + advisory.title() + ' ' + advisory.why() + ' ' + advisory.settingKey() + ' ' + advisory.severity().name() + ' tenant ' + advisory.tenant()}">
             <div class="module-head">
                 <div>
-                    <strong th:text="${advisory.title()}">This tenant admits packages known to be malicious</strong>
+                    <strong th:text="${advisory.title()}">Packages known to be malicious are admitted</strong>
                     <br><code class="setting-doc" th:text="${advisory.id()}">jenrepo.feature.signal</code>
-                    <small>— tenant <strong th:text="${advisory.tenant()}">acme</strong></small>
+                    <small th:if="${multiTenant}">— tenant <strong th:text="${advisory.tenant()}">acme</strong></small>
                 </div>
                 <div class="module-badges">
-                    <span class="app-badge" title="Raised against this tenant's own settings; other tenants are unaffected">tenant</span>
+                    <span th:if="${multiTenant}" class="app-badge"
+                          title="Raised against this tenant's own settings; other tenants are unaffected">tenant</span>
                     <span class="app-badge" th:text="${advisory.severity().name()}"
                           th:classappend="${advisory.severity().name() == 'CRITICAL'} ? 'app-badge--danger'
                                           : (${advisory.severity().name() == 'WARN'} ? 'app-badge--warn' : '')">WARN</span>
@@ -73,7 +75,9 @@
             <p><small><strong>Suggested fix:</strong> <span th:text="${advisory.fix()}">The safer alternative.</span></small></p>
             <p th:if="${!advisory.settingKey().isEmpty()}"><small>Set
                 <code th:text="${advisory.settingKey()} + '=' + ${advisory.settingValue()}">jenrepo.key=value</code>
-                for this tenant on the <a href="/ui/settings/tenant">tenant settings</a> screen</small></p>
+                <th:block th:if="${multiTenant}">for this tenant on the <a href="/ui/settings/tenant">tenant settings</a>
+                screen</th:block><th:block th:unless="${multiTenant}">on the <a href="/ui/settings">settings</a>
+                screen</th:block></small></p>
             <p th:if="${!advisory.docs().isEmpty()}"><small><a th:href="${advisory.docs()}" rel="noopener noreferrer"
                 target="_blank">Read more &rarr;</a></small></p>
         </article>
@@ -81,7 +85,7 @@
 
     <!--/* The deployment-wide advisories: the operator's to fix, and true for every tenant. */-->
     <section th:unless="${posture.empty()}">
-        <h2 th:if="${posture.scoped()}">Deployment-wide</h2>
+        <h2 th:if="${posture.scoped() and multiTenant}">Deployment-wide</h2>
         <p th:if="${posture.scoped() and posture.deployment().isEmpty()}"><small class="setting-nomatch">The
             deployment's own configuration raises no advisories.</small></p>
         <article class="module-card posture-item" th:each="advisory : ${posture.deployment()}"

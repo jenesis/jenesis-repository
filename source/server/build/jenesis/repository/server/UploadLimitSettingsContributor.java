@@ -14,7 +14,7 @@ public final class UploadLimitSettingsContributor implements SettingsContributor
                         "The most one request may send, in bytes: a publish declaring a larger body is refused with "
                                 + "413 before any of it is read, and one streaming without a declared length is "
                                 + "refused at the byte that crosses it, so nothing of it is kept. Per request - for a "
-                                + "registry that uploads in chunks, per chunk. 0 lifts the bound. Applies live.",
+                                + "registry that uploads in chunks, per chunk. Zero lifts the bound. Applies live.",
                         Setting.Kind.LONG, UploadLimitFilter.DEFAULT_TEXT, true).advanced());
     }
 }

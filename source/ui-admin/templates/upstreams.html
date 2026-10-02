@@ -129,7 +129,8 @@
         <p><small>How a repository answers a local miss, written in clauses: <code>writable</code> accepts uploads,
             and each <code>fallback &lt;url&gt; [nocache] [harden] [unscreened]</code> or
             <code>fallback &lt;repository&gt;</code> is consulted in order. A definition is the deployment's and is
-            keyed by name, so it routes the repository of that name in every tenant; it adds to or overrides the
+            keyed by name, so it routes the repository of that name<th:block th:if="${multiTenant}"> in every tenant</th:block>;
+            it adds to or overrides the
             file-configured repositories and routes on the next request.</small></p>
         <figure th:if="${!repositories.isEmpty()}">
         <table class="app-list">
@@ -166,9 +167,9 @@
 
     <!--/* The selected tenant's own layer over everything above: the upstreams its repositories pull through instead
          of the deployment's, and the repositories it routes itself - each edited on its own overview. */-->
-    <section th:if="${routedTenant != null}" class="app-divide" aria-labelledby="tenant-routing">
+    <section th:if="${multiTenant and routedTenant != null}" class="app-divide" aria-labelledby="tenant-routing">
         <h2 id="tenant-routing">For tenant <span th:text="${routedTenant}">acme</span></h2>
-        <p><small>What this tenant uses instead of the deployment's above. The outbound screen is the deployment's
+        <p><small>What this [[${scopeWord}]] uses instead of the deployment's above. The outbound screen is the deployment's
             either way.</small></p>
         <div class="app-panels">
             <article>
@@ -194,13 +195,13 @@
                         </tbody>
                     </table>
                 </figure>
-                <p th:if="${tenantUpstreams.isEmpty()}"><small>None: this tenant pulls through the deployment's
+                <p th:if="${tenantUpstreams.isEmpty()}"><small>None: this [[${scopeWord}]] pulls through the deployment's
                     upstreams.</small></p>
                 <form method="post" th:action="@{/ui/settings/upstreams}">
                     <input type="hidden" name="forTenant" value="true">
                     <label>Format <input name="format" required pattern="[A-Za-z0-9_-]+" placeholder="maven"></label>
                     <label>Upstream URL <input name="url" required placeholder="https://mirror.example/maven2/"></label>
-                    <button th:replace="~{base :: primaryButton('Save for this tenant')}">Save for this tenant</button>
+                    <button th:replace="~{base :: primaryButton('Save for this tenant')}">Save for this [[${scopeWord}]]</button>
                 </form>
             </article>
             <article>

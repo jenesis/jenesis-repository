@@ -75,8 +75,8 @@ public final class ModuleTogglesSettingsContributor implements SettingsContribut
         toggles.forEach((name, what) -> {
             if (!taken.contains(name)) {
                 settings.add(new Setting(name, "Modules", name,
-                        "Enable " + what + "; false removes it at the next start, degrading exactly like an "
-                                + "absent module.",
+                        "Enable " + what + "; switched off, it is removed at the next start, degrading exactly "
+                                + "like an absent module.",
                         Setting.Kind.BOOLEAN, "true", false).advanced());
             }
         });

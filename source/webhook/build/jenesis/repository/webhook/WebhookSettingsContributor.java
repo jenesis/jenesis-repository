@@ -25,18 +25,17 @@ public final class WebhookSettingsContributor implements SettingsContributor {
                                 + "rather than as the record. Leave it off where there is no receiver: an enabled one "
                                 + "with no endpoint configured still writes a note per publish for the next drain to "
                                 + "delete.",
-                        Setting.Kind.BOOLEAN, "false", false).gate().essential(),
+                        Setting.Kind.BOOLEAN, "false", false).gate().standard(),
                 new Setting("webhook-endpoints", "Webhooks", "Webhook endpoints",
-                        "One endpoint per line or semicolon: '<https-url> [events]'. 'events' is a comma-list of "
-                                + "'publish,unpublish,quarantine,release,discard,finding,promotion' or '*' (all). "
-                                + "Endpoints must be https: an "
-                                + "http:// endpoint is REFUSED at delivery (the refusal is recorded against the queued "
-                                + "event and shown on the webhook status surface) unless the operator sets "
-                                + "'webhook-allow-internal'. Give every endpoint a signing secret in "
-                                + "'webhook-secrets', keyed by this URL: an endpoint with no entry is delivered "
-                                + "UNSIGNED, and its receiver then cannot tell a genuine event from a POST anyone who "
-                                + "learns this URL can forge.",
-                        Setting.Kind.STRING, "", false, Setting.Scope.TENANT).form(Setting.Form.LINES).essential(),
+                        "The endpoints events are delivered to, each an https URL optionally followed by the events it "
+                                + "receives - publish, unpublish, quarantine, release, discard, finding, promotion - "
+                                + "and every event where it names none. Endpoints must be https: an http:// endpoint "
+                                + "is REFUSED at delivery (the refusal is recorded against the queued event and shown "
+                                + "on the webhook status surface) unless the operator sets 'webhook-allow-internal'. "
+                                + "Give every endpoint a signing secret in 'webhook-secrets', keyed by this URL: an "
+                                + "endpoint with no entry is delivered UNSIGNED, and its receiver then cannot tell a "
+                                + "genuine event from a POST anyone who learns this URL can forge.",
+                        Setting.Kind.STRING, "", false, Setting.Scope.TENANT).form(Setting.Form.LINES).standard(),
                 new Setting("webhook-secrets", "Webhooks", "Webhook signing secrets",
                         "Per-endpoint HMAC-SHA256 signing secrets, one '<https-url>=<secret>' per line, keyed by the "
                                 + "endpoint URL as it appears in 'webhook-endpoints'. When an endpoint has a matching "

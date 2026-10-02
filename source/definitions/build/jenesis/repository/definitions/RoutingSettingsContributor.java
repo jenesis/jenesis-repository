@@ -22,9 +22,9 @@ public final class RoutingSettingsContributor implements SettingsContributor {
     @Override
     public List<Setting> settings() {
         return List.of(new Setting(KEY, "Routing", "Routing",
-                "Whether this repository accepts uploads and where it fetches what it lacks, as clauses: writable, "
-                        + "fallback <url> [nocache] [harden] [unscreened], fallback <repository>. Unset, it routes as "
-                        + "the deployment's definition of its name says, else it is hosted.",
+                "Whether this repository accepts uploads, and the upstreams and other repositories it fetches what it "
+                        + "lacks from, in order. Unset, it routes as the deployment's definition of its name says, "
+                        + "else it is hosted.",
                 Setting.Kind.STRING, "", true, Setting.Scope.REPOSITORY).form(Setting.Form.ROUTING).local().operator().essential());
     }
 

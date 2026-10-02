@@ -6,8 +6,9 @@
 <main id="main">
     <div th:replace="~{fragments :: messages}"></div>
     <header th:replace="~{base :: pageHeader('Limits')}"></header>
-    <p><small>What this tenant's repositories may use together: each limit applies to all of them at once, never to
-        one. Each is a tenant setting: the deployment's value applies until this tenant sets its own.</small></p>
+    <p><small>What the repositories may use together: each limit applies to all of them at once, never to
+        one.<th:block th:if="${multiTenant}"> Each is a tenant setting: the deployment's value applies until this
+        tenant sets its own.</th:block></small></p>
     <article>
         <h2>Storage used</h2>
         <!--/* The meter runs only under a limit: without one, the store passes writes through uncounted, so a count
@@ -22,7 +23,7 @@
          them; an administrator edits them, anyone else reads them. */-->
     <th:block th:if="${isAdmin}" th:each="g : ${groups}">
         <article th:replace="~{fragments :: settingGroup(${g}, '/ui/limits/save', null,
-                'deployment', 'the deployment value', ' for this tenant')}"></article>
+                'deployment', 'the deployment value', ${' for this ' + scopeWord})}"></article>
     </th:block>
     <th:block th:unless="${isAdmin}" th:each="g : ${groups}">
         <article class="setting-group">

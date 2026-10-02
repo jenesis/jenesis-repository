@@ -64,7 +64,7 @@ public class TenantsController {
             throw new IllegalArgumentException(absent);
         }
         current.select(tenant);
-        return "redirect:/ui/repositories";
+        return "redirect:/ui/";
     }
 
     @PostMapping("/ui/tenants/create")

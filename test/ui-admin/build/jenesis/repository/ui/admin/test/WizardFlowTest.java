@@ -20,7 +20,7 @@ class WizardFlowTest {
     private static SettingsAdmin.SettingView view(String key, String kind, String inherited, boolean pinned) {
         return new SettingsAdmin.SettingView(key, "Retention", key, "What " + key + " does.", kind, List.of(),
                 inherited, inherited, false, true, false, pinned, pinned ? "the deployment's operator" : null,
-                "build.jenesis.repository.probe", false, null);
+                "build.jenesis.repository.probe", false, null, null);
     }
 
     private final WizardFlow.Checks checks = new WizardFlow.Checks() {
@@ -128,8 +128,28 @@ class WizardFlowTest {
 
         WizardFlow early = WizardFlow.resume(definition, form("step", "1", "identity.name", "libs"));
         assertThat(early.completesEarly()).isTrue();
-        assertThat(early.apply(WizardFlow.NOW)).as("the steps not seen keep their defaults").isTrue();
-        assertThat(early.chosen()).isEmpty();
+        assertThat(early.apply(WizardFlow.NOW)).as("the quicker completion confirms on the review first").isFalse();
+        assertThat(early.reviewing()).isTrue();
+        assertThat(early.chosen()).as("the steps not seen keep their defaults").isEmpty();
+        assertThat(early.apply(WizardFlow.COMPLETE)).isTrue();
+    }
+
+    @Test
+    void a_step_of_the_list_is_reached_directly_an_earlier_one_at_once_a_later_one_past_checked_steps()
+            throws IOException {
+        WizardFlow back = WizardFlow.resume(definition, form("step", "2", "identity.name", "libs"));
+        back.apply(WizardFlow.GOTO + "0");
+        assertThat(back.index()).isZero();
+
+        WizardFlow unnamed = WizardFlow.resume(definition, form("step", "0"));
+        unnamed.apply(WizardFlow.GOTO + "2");
+        assertThat(unnamed.index()).as("a later step waits on the refused one before it").isZero();
+
+        WizardFlow named = WizardFlow.resume(definition, form("step", "0", "identity.name", "libs"));
+        named.apply(WizardFlow.GOTO + "2");
+        assertThat(named.index()).isEqualTo(2);
+        named.apply(WizardFlow.GOTO + "99");
+        assertThat(named.index()).as("a step that does not exist leaves the run where it is").isEqualTo(2);
     }
 
     @Test

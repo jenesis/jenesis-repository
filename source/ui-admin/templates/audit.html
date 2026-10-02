@@ -6,7 +6,7 @@
 <main id="main">
     <div th:replace="~{fragments :: messages}"></div>
     <header th:replace="~{base :: pageHeader('Audit trail')}"></header>
-    <p><small>Security-relevant changes for this tenant, newest first.
+    <p><small>Security-relevant changes for this [[${scopeWord}]], newest first.
         <a th:href="@{/ui/admin/audit.csv(action=${action})}">Export CSV</a></small></p>
     <form method="get" th:action="@{/ui/admin/audit}">
         <div class="app-filter-bar">
@@ -33,7 +33,7 @@
         </table>
     </figure>
     <th:block th:if="${events.isEmpty()}">
-        <div th:replace="~{base :: empty('No audit events recorded for this tenant yet.')}"></div>
+        <div th:replace="~{base :: empty(${'No audit events recorded for this ' + scopeWord + ' yet.'})}"></div>
     </th:block>
     <nav th:if="${hasPrev or more}" aria-label="Audit trail pages">
         <a th:if="${hasPrev}" th:href="@{/ui/admin/audit(action=${action},limit=${limit})}">Newest</a>

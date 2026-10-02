@@ -36,6 +36,36 @@ public record Metric(String name, String description, Kind kind, double value, O
         return new Metric(name, description, Kind.GAUGE, used, OptionalDouble.of(limit), unit);
     }
 
+    /** The value as a person reads it, in its unit - see {@link #display(double)}. */
+    public String displayValue() {
+        return display(value);
+    }
+
+    /** The limit as a person reads it, in its unit, or empty without one. */
+    public String displayLimit() {
+        return limit.isPresent() ? display(limit.getAsDouble()) : "";
+    }
+
+    /** {@code amount} as a person reads it: bytes in binary units ("4.0 GiB"), any other number with its thousands
+     *  grouped and without a fraction it does not have ("4,294,967,296 s"), followed by the unit. */
+    public String display(double amount) {
+        if (unit.equals("bytes")) {
+            String[] units = {"B", "KiB", "MiB", "GiB", "TiB", "PiB"};
+            double scaled = amount;
+            int index = 0;
+            while (Math.abs(scaled) >= 1024 && index < units.length - 1) {
+                scaled /= 1024;
+                index++;
+            }
+            return index == 0 ? String.format(Locale.ROOT, "%,.0f B", scaled)
+                    : String.format(Locale.ROOT, "%.1f %s", scaled, units[index]);
+        }
+        String number = amount == Math.rint(amount) && Math.abs(amount) < 1e15
+                ? String.format(Locale.ROOT, "%,d", (long) amount)
+                : String.format(Locale.ROOT, "%,.2f", amount);
+        return unit.isEmpty() ? number : number + " " + unit;
+    }
+
     /** The fraction of the limit the value occupies ({@code 0..1+}); empty without a positive limit. */
     public OptionalDouble usage() {
         return limit.isPresent() && limit.getAsDouble() > 0

@@ -15,11 +15,10 @@ public final class PolicySettingsContributor implements SettingsContributor {
     public List<Setting> settings() {
         return List.of(
                 new Setting("policy-rules", "Compliance", "Policy rules",
-                        "Expression-based gate rules, one per line (or separated by ';'), each "
-                                + "'<verdict> <expression>' where verdict is allow, quarantine or reject - e.g. "
-                                + "'quarantine #ecosystem == \"npm\" and #advisoryCount > 0' or "
-                                + "'quarantine !#licenses.?[#this matches \"(?i).*agpl.*\"].empty'. Variables: "
-                                + "#ecosystem, #coordinate, #version, #licenses, #severity, #severityRank (0..5, UNKNOWN highest), "
+                        "Expression-based gate rules, each a verdict - allow, quarantine or reject - followed by the "
+                                + "expression that brings it to bear: quarantine #ecosystem == \"npm\" and "
+                                + "#advisoryCount > 0 holds every npm package with an advisory. Variables: #ecosystem, "
+                                + "#coordinate, #version, #licenses, #severity, #severityRank (0..5, UNKNOWN highest), "
                                 + "#reachable, #reachability, #depth, #advisories, #advisoryCount, #malicious, "
                                 + "#secretCount, #contentScan. Expressions are sandboxed (no method calls or type "
                                 + "references). Empty disables the dimension.",

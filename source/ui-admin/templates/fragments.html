@@ -1,9 +1,8 @@
 <!DOCTYPE html>
 <html lang="en" xmlns:th="http://www.thymeleaf.org">
 <head th:fragment="head(title)">
-    <!--/* The shared list of what every page loads - one place, both consoles. This was a second copy until it
-         proved the point: a script added to the shared shell was simply missing here. Only the admin-specific
-         stylesheet below is local. */-->
+    <!--/* The shared list of what every page loads - one place, both consoles. Only the format icons' rules below are
+         local. */-->
     <th:block th:replace="~{base :: headContents(${title}, ${product ?: 'Jenesis Repository'})}"></th:block>
     <style>
         code { word-break: break-all; }
@@ -12,60 +11,11 @@
         .format-icon { display: inline-block; width: 1.25rem; height: 1.25rem; vertical-align: -0.2em;
                        margin-right: 0.3rem; }
         .format-icon svg { display: block; width: 100%; height: 100%; }
-        /* A mark whose contributor is no longer installed. The DRAWING already carries that (the shared resolution
-           tiles an orphan dashed where an installed contributor is tiled solid) and so do the title/aria-label, so
-           this tint is an extra cue and never the only one - the state survives with colour off. */
+        /* A mark whose contributor is no longer installed. The drawing already says so (an orphan is tiled dashed)
+           and so do the title and aria-label, so this tint is an extra cue and never the only one. */
         .format-icon--orphaned { color: var(--pico-muted-color); }
-        /* There is no banner rule here any more. The strip it styled is the shared shell's `.app-notice`, in
-           app.css, for a reason this copy could not satisfy: the banner renders inside the shared header now, and
-           three screens of the shared shell load app.css WITHOUT this stylesheet - so a strip styled only here was
-           an unstyled band of text on exactly those pages. What moved is a notice treatment, which is a shell
-           concern; what did not is the word "licence", which appears nowhere in the shared file. The reasoning that
-           was written here is worth keeping: the tint comes from the semantic status palette rather than from a
-           colour picked locally, so it inherits the light and dark values already measured for WCAG AA. It first
-           used Pico's muted pair - deliberately low-contrast grey-on-grey for de-emphasised text - and axe failed
-           it at AA on eight screens. A strip nobody is meant to miss is the wrong place to borrow a de-emphasis
-           treatment, and the check said so before a person could. */
-        /* Config-page knob: each setting is one form-field-with-help block - label + key, doc inline,
-           effective-vs-default, a live/restart badge, the typed control and a one-click revert. */
-        /* Breaking inside a word is the shared app.css's rule, which names this row beside the module card:
-           both consoles render rows of names somebody else chose, and two statements of one rule is how they
-           come to disagree. */
-        .setting { padding: .8rem 0; border-top: 1px solid var(--pico-muted-border-color); }
-        .setting:first-of-type { border-top: 0; }
-        .setting-head { display: flex; justify-content: space-between; gap: 1rem; align-items: baseline;
-                        flex-wrap: wrap; }
-        .setting-badges { display: flex; gap: .4rem; align-items: center; flex-wrap: wrap; }
-        .setting-values { margin: .25rem 0; font-size: .82rem; display: flex; gap: 1.5rem; flex-wrap: wrap; }
-        .setting-edit { display: flex; gap: .5rem; align-items: center; margin: .3rem 0 0; max-width: 42rem;
-                        flex-wrap: wrap; }
-        .setting-edit > input, .setting-edit > select { margin: 0; }
-        .setting-edit > form { margin: 0; }
-        .setting-controls { display: flex; gap: .5rem; align-items: center; flex-wrap: wrap; margin: .3rem 0 0; }
-        .setting-controls > .setting-edit { margin: 0; }
-        .setting-controls > .setting-revert { margin: 0; }
-        .setting-revert button { margin: 0; }
-        /* A row's controls are sized as every table row's actions are - a size down - so Save and Reset to default
-           read as Release and Discard do, and the value beside them matches their height. */
-        .setting-controls button { padding: var(--app-space-1) var(--app-space-3); font-size: var(--app-font-size-sm);
-                                   line-height: 1.25; }
-        .setting-edit > input, .setting-edit > select { padding: var(--app-space-1) var(--app-space-2);
-                                                        font-size: var(--app-font-size-sm); height: auto; }
-        /* In-memory option search: a client-side filter over the config catalogue, matching a
-           knob's key and its documentation text so it is found by what it does, not just its name. */
-        .setting-filter { max-width: 42rem; }
-        .setting-filter input { margin-top: .2rem; }
-        .setting-nomatch { color: var(--pico-muted-color); }
-        /* The module-card family and the two muted provenance treatments (.setting-module, .setting-doc) are in
-           the shared app.css: both consoles render the installed-providers screen, so a copy here would be a
-           second definition of how that screen looks. Only the toggle, which is this console's own control, is
-           local. */
-        .module-toggle button { margin: 0; padding: .15rem .7rem; font-size: .72rem; }
-        /* On a touch device the compact toggle buttons grow to an adequate touch target - keyed on the
-           pointer, not the viewport width, matching the shared base's tree-toggle rule. */
-        @media (pointer: coarse) {
-            .module-toggle button { padding: .55rem .9rem; }
-        }
+        /* How a setting, its filter and its switch look is the shared stylesheet's alone (console.css), so a row
+           reads the same on every screen that renders one. */
     </style>
 </head>
 <body>
@@ -141,9 +91,10 @@
           th:classappend="${s.textArea() or s.routing()} ? 'setting-edit--wide'">
         <input type="hidden" name="key" th:value="${s.key}">
         <input type="hidden" name="return" th:value="${back}" th:if="${back != null}">
-        <select name="value" th:if="${s.dropdown()}" th:attr="aria-label=${s.label}">
+        <select name="value" th:if="${s.dropdown()}"
+                th:attr="aria-label=${s.label},data-describe=|choice-${s.key}|">
             <option th:each="o : ${s.options()}" th:value="${o}" th:text="${s.optionLabel(o)}"
-                    th:selected="${o == s.value}">option</option>
+                    th:title="${s.optionDescription(o)}" th:selected="${o == s.value}">option</option>
         </select>
         <textarea th:if="${s.textArea()}" name="value" th:rows="${s.json()} ? 8 : 4"
                   th:classappend="${s.json()} ? 'app-code'" th:text="${s.editValue()}"
@@ -154,10 +105,14 @@
                th:attr="aria-label=${s.label},data-check-key=${s.key},
                        data-duration=${s.duration()} ? (${s.durationOrNone()} ? 'or-none' : 'duration') : null,
                        data-default=${s.duration()} ? ${s.defaultValue} : null,
-                       data-routing=${s.routing()} ? 'true' : null">
-        <th:block th:if="${s.highImpact}"><button th:replace="~{base :: cautionButton('Save',
-                |Apply this high-impact policy change${scope}?|)}">Save</button></th:block>
-        <th:block th:unless="${s.highImpact}"><button th:replace="~{base :: primaryButton('Save')}">Save</button></th:block>
+                       data-routing=${s.routing()} ? 'true' : null,
+                       data-values=${s.values()} ? 'true' : null,list=${s.values()} ? |known-${s.key}| : null">
+        <datalist th:if="${s.values()}" th:id="|known-${s.key}|">
+            <option th:each="o : ${s.options()}" th:value="${o}" th:label="${s.choiceOf(o).name()}"></option>
+        </datalist>
+        <!--/* One Save on every row, the primary one; a high-impact setting asks before it changes. */-->
+        <button type="submit" class="app-primary"
+                th:attr="data-confirm=${s.highImpact} ? |Apply this high-impact policy change${scope}?| : null">Save</button>
     </form>
     <div class="setting-edit setting-pinned" th:if="${s.pinned and !s.toggle()}">
         <select th:if="${s.dropdown()}" disabled th:attr="aria-label=${s.label}">
@@ -169,7 +124,11 @@
         <p class="setting-pinned-note" th:text="|Pinned by ${s.pinnedBy} — not editable here.|">
             Pinned — not editable here.</p>
     </div>
-    <form method="post" th:action="@{${action}}" class="setting-revert" th:if="${s.overridden and !s.pinned}">
+    <!--/* What the chosen value does, in full - "Hold for review: ..." - where the drop-down has room only for names. */-->
+    <p class="setting-choice" th:if="${s.dropdown()}" th:id="|choice-${s.key}|"
+       th:text="${s.choiceDescription()}" aria-live="polite"></p>
+    <form method="post" th:action="@{${action}}" class="setting-revert"
+          th:if="${s.overridden and !s.pinned and !s.toggle()}">
         <input type="hidden" name="key" th:value="${s.key}">
         <input type="hidden" name="return" th:value="${back}" th:if="${back != null}">
         <input type="hidden" name="value" value="">
@@ -178,13 +137,10 @@
 >Reset to default</button>
     </form>
     </div>
-    <!--/* What is in force, with the value it falls back to marked after it: "enabled (default)" where nothing is set
-         here, "disabled - default: enabled" where something is. */-->
-    <p class="setting-values" th:unless="${s.toggle()}">
-        <span>In force: <strong th:text="${s.effectiveDisplay()}">value</strong></span>
-        <small th:unless="${s.overridden}" th:text="|(${baseline})|">(default)</small>
-        <small th:if="${s.overridden}" th:text="|${baseline}: ${s.defaultDisplay()}|">default: value</small>
-    </p>
+    <!--/* Where a value is set here, what it replaced - the field already shows an inherited value, marked as the
+         default, so nothing needs saying while none is set. */-->
+    <p class="setting-values" th:if="${s.overridden and !s.pinned and !s.toggle()}">Set here, over <th:block
+            th:text="${revertTo}">its default</th:block>: <strong th:text="${s.defaultDisplay()}">value</strong>.</p>
 </div>
 
 <!--/* settingGroup: one group of settings, the ones an operator decides first and its advanced ones - tuning whose
@@ -218,13 +174,13 @@
 <!--/* settingSwitch: a boolean setting as a switch showing its effective value. Pressing it flips the switch at once
      and posts the opposite value to `action` - the same save route the other kinds use - after a grace of
      `data-grace` seconds, counted down beside it, in which pressing it again takes the change back before anything is
-     written (console.js; without a script the press posts at once). A switch whose value is inherited is drawn
-     muted, with the default marked after its state. A pinned one is shown disabled with what pins it. `back` is the
-     return path, or null where the route takes none; `confirm` is the prompt a high-impact setting asks before it
-     changes. */-->
+     written (console.js; without a script the press posts at once). One slot after the switch says where its value
+     comes from, in one place and one size: "(default)" while it inherits, drawn muted, and "Reset to default" once a
+     value is set here. A pinned one is shown disabled with what pins it. `back` is the return path, or null where
+     the route takes none; `confirm` is the prompt a high-impact setting asks before it changes. */-->
 <div th:fragment="settingSwitch(s, action, back, confirm)" class="setting-edit setting-switch">
     <form method="post" th:action="@{${action}}" th:unless="${s.pinned}" data-grace="5"
-          th:attr="data-confirm=${s.highImpact} ? ${confirm} : null">
+          th:attr="data-confirm=${s.highImpact} ? ${confirm} : null,data-default=${s.defaultValue}">
         <input type="hidden" name="key" th:value="${s.key}">
         <input type="hidden" name="return" th:value="${back}" th:if="${back != null}">
         <input type="hidden" name="value" th:value="${s.flipped()}">
@@ -233,9 +189,20 @@
                 th:attr="aria-checked=${s.on()},aria-label=${s.label}">
             <span class="app-switch__track" aria-hidden="true"></span>
             <span class="app-switch__state" th:text="${s.on()} ? 'On' : 'Off'">On</span>
-            <small class="app-switch__default" th:unless="${s.overridden}">(default)</small>
         </button>
+        <span class="app-switch__slot">
+            <small th:unless="${s.overridden}" class="app-switch__default">(default)</small>
+            <button th:if="${s.overridden}" type="submit" class="app-quiet app-switch__reset"
+                    th:attr="form=|reset-${s.key}|">Reset to default</button>
+        </span>
         <small class="app-switch__pending" aria-live="polite"></small>
+    </form>
+    <!--/* The reset's own form, which the slot's button submits: it posts the empty value, which reverts the setting. */-->
+    <form method="post" th:action="@{${action}}" th:unless="${s.pinned}" th:id="|reset-${s.key}|" hidden
+          data-switch-reset th:attr="data-confirm=${s.highImpact} ? |Reset this high-impact setting to its default?| : null">
+        <input type="hidden" name="key" th:value="${s.key}">
+        <input type="hidden" name="return" th:value="${back}" th:if="${back != null}">
+        <input type="hidden" name="value" value="">
     </form>
     <th:block th:if="${s.pinned}">
         <button type="button" role="switch" class="app-switch" disabled

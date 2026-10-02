@@ -1,0 +1,37 @@
+<!DOCTYPE html>
+<html lang="en" xmlns:th="http://www.thymeleaf.org">
+<head th:replace="~{fragments :: head('Dashboard')}"></head>
+<body>
+<header th:replace="~{fragments :: nav}"></header>
+<main id="main">
+    <div th:replace="~{fragments :: messages}"></div>
+    <header th:replace="~{base :: pageHeader('Dashboard')}"></header>
+    <!--/* The panels every installed DashboardContributor draws, in its order: a figure, what it counts and a few lines,
+         each opening the screen it is about. While a count behind one is running the grid asks for itself again, and
+         stops once nothing is. */-->
+    <section id="dashboard" class="app-dashboard" aria-label="Overview"
+             th:attr="hx-get=${refreshing} ? '/ui/' : null,hx-select=${refreshing} ? '#dashboard' : null,
+                     hx-target=${refreshing} ? 'this' : null,hx-swap=${refreshing} ? 'outerHTML' : null,
+                     hx-trigger=${refreshing} ? 'every 4s' : null">
+        <article th:each="p : ${panels}" class="app-dashboard__panel"
+                 th:classappend="|app-dashboard__panel--${#strings.toLowerCase(p.tone())}|">
+            <h2><a th:href="@{${p.href()}}" th:text="${p.title()}">Repositories</a></h2>
+            <p class="app-dashboard__figure" th:if="${!p.figure().isEmpty() or !p.caption().isEmpty()}">
+                <strong th:unless="${p.figure().isEmpty()}" th:text="${p.figure()}">12</strong>
+                <span th:text="${p.caption()}">repositories</span>
+            </p>
+            <dl th:unless="${p.lines().isEmpty()}" class="app-dashboard__lines">
+                <th:block th:each="l : ${p.lines()}">
+                    <dt th:text="${l.label()}">Build-cache projects</dt>
+                    <dd><a th:if="${l.href() != null}" th:href="@{${l.href()}}" th:text="${l.value()}">3</a><span
+                            th:unless="${l.href() != null}" th:text="${l.value()}">3</span></dd>
+                </th:block>
+            </dl>
+            <p class="app-dashboard__note" th:unless="${p.note().isEmpty()}"><small th:text="${p.note()}">As of
+                12:03</small></p>
+        </article>
+        <div th:if="${panels.isEmpty()}" th:replace="~{base :: empty('Nothing to show yet.')}"></div>
+    </section>
+</main>
+</body>
+</html>

@@ -33,6 +33,9 @@ public final class WizardFlow {
     public static final String COMPLETE = "complete";
     public static final String NOW = "now";
 
+    /** The prefix of an action standing on one step, from the step list: {@code step-2} for the third. */
+    public static final String GOTO = "step-";
+
     /** The prefix of an identity field's form name. */
     public static final String IDENTITY = "identity.";
 
@@ -185,8 +188,10 @@ public final class WizardFlow {
 
     /**
      * Do what the form asks. {@link #NEXT} checks the step and moves on when nothing on it is refused; {@link #BACK}
-     * moves back and checks nothing; {@link #COMPLETE} and {@link #NOW} check every step and stand on the first one
-     * refused.
+     * moves back and checks nothing; a {@link #GOTO} step stands on that step - an earlier one at once, a later one
+     * once every step before it is accepted, else on the first refused; {@link #NOW} checks every step and stands on
+     * the review, so what the run will do is confirmed before it is done; {@link #COMPLETE} checks every step and
+     * completes, standing on the first one refused.
      *
      * @return {@code true} when the run is complete - every step accepted - and its owner writes it now.
      */
@@ -199,7 +204,19 @@ public final class WizardFlow {
                     index = Math.min(index + 1, steps.size() - 1);
                 }
             }
-            case COMPLETE, NOW -> {
+            case NOW -> {
+                for (int step = 0; step < steps.size(); step++) {
+                    Map<String, String> refused = check(step);
+                    if (!refused.isEmpty()) {
+                        errors.putAll(refused);
+                        index = step;
+                        return false;
+                    }
+                }
+                index = steps.size() - 1;
+                return false;
+            }
+            case COMPLETE -> {
                 for (int step = 0; step < steps.size(); step++) {
                     Map<String, String> refused = check(step);
                     if (!refused.isEmpty()) {
@@ -211,9 +228,35 @@ public final class WizardFlow {
                 return true;
             }
             default -> {
+                if (action != null && action.startsWith(GOTO)) {
+                    go(action.substring(GOTO.length()));
+                }
             }
         }
         return false;
+    }
+
+    /** Stand on the step {@code target} names: an earlier one at once, a later one once every step on the way is
+     *  accepted, else on the first refused. A target that names no step leaves the run where it is. */
+    private void go(String target) throws IOException {
+        int wanted;
+        try {
+            wanted = Integer.parseInt(target);
+        } catch (NumberFormatException notAStep) {
+            return;
+        }
+        if (wanted < 0 || wanted >= steps.size()) {
+            return;
+        }
+        for (int step = index; step < wanted; step++) {
+            Map<String, String> refused = check(step);
+            if (!refused.isEmpty()) {
+                errors.putAll(refused);
+                index = step;
+                return;
+            }
+        }
+        index = wanted;
     }
 
     /** Refuse the run where its owner found it could not be written after all - a name taken since it was checked -

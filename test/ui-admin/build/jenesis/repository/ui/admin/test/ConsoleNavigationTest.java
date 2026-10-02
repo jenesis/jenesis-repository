@@ -15,7 +15,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 class ConsoleNavigationTest {
 
     private static final List<NavEntry> ENTRIES = List.of(
-            new NavEntry("All repositories", "/ui/repositories", Group.REPOSITORIES),
+            new NavEntry("Current repositories", "/ui/repositories", Group.REPOSITORIES),
             new NavEntry("Limits", "/ui/limits", Group.REPOSITORIES),
             new NavEntry("Credentials", "/ui/credentials", Group.ACCESS),
             new NavEntry("Settings", "/ui/settings", Group.SETTINGS),
@@ -41,7 +41,7 @@ class ConsoleNavigationTest {
     void a_path_below_a_repository_lists_its_pages_under_their_topics() {
         Navigation navigation = resolve("/ui/repositories/releases/pins");
 
-        assertThat(navigation.sidebar().back().href()).isEqualTo("/ui/repositories");
+        assertThat(navigation.sidebar().back()).as("the header's Repositories is the way back").isNull();
         assertThat(navigation.sidebar().sections()).extracting(Navigation.Section::heading)
                 .as("the first topic is the repository in general").containsExactly("General", "Review", "Lifecycle");
         assertThat(links(navigation)).filteredOn(Navigation.Link::current)
@@ -54,7 +54,7 @@ class ConsoleNavigationTest {
 
         assertThat(links(navigation)).extracting(Navigation.Link::label)
                 .as("the repositories are the screen's table, which filters them")
-                .containsExactly("All repositories", "Limits");
+                .containsExactly("Current repositories", "Limits");
         assertThat(navigation.sidebar().sections()).extracting(Navigation.Section::heading)
                 .as("a group's sidebar is headed as a repository's topics are").containsExactly("Repositories");
     }

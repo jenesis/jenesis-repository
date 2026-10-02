@@ -1,10 +1,15 @@
 package build.jenesis.repository.ui.admin.web;
 
 import module java.base;
+import build.jenesis.repository.ui.DashboardContributor;
+import build.jenesis.repository.ui.DashboardPanel;
 import build.jenesis.repository.ui.admin.config.DomainConfig;
 import build.jenesis.repository.ui.admin.security.Memberships;
 import build.jenesis.repository.ui.admin.security.SessionCurrentTenant;
 import jakarta.servlet.http.HttpSession;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.security.authentication.AnonymousAuthenticationToken;
 import org.springframework.security.core.Authentication;
 import org.springframework.stereotype.Controller;
@@ -16,7 +21,8 @@ import build.jenesis.repository.ui.ConsoleScreen;
 /**
  * The landing routes. After sign-in a reader is routed by the tenants they can reach: a fixed deployment's one tenant,
  * or a member's only tenant, is chosen for them; a deployment administrator or a member of several picks one from the
- * tenants list.
+ * tenants list. With a tenant chosen, the landing is the dashboard: the panels every installed
+ * {@link DashboardContributor} draws for it.
  */
 @Controller
 @ConsoleScreen
@@ -25,14 +31,18 @@ public class HomeController {
     private final Memberships memberships;
     private final SessionCurrentTenant current;
     private final SetupWizard setup;
+    private static final Logger LOGGER = LoggerFactory.getLogger(HomeController.class);
+
     private final DomainConfig.Tenancy tenancy;
+    private final ObjectProvider<DashboardContributor> contributors;
 
     public HomeController(Memberships memberships, SessionCurrentTenant current, SetupWizard setup,
-                          DomainConfig.Tenancy tenancy) {
+                          DomainConfig.Tenancy tenancy, ObjectProvider<DashboardContributor> contributors) {
         this.memberships = memberships;
         this.current = current;
         this.setup = setup;
         this.tenancy = tenancy;
+        this.contributors = contributors;
     }
 
     /** The root forwards to the console, whose screens are all under {@code /ui}. */
@@ -42,17 +52,13 @@ public class HomeController {
     }
 
     /**
-     * The landing, which only redirects, handing on any flash message that arrived, since a flash lives for one request
-     * and a screen finishing here (the setup guide) said what it did in one.
+     * The landing: the dashboard of the tenant chosen, or - with none - a redirect to where one is chosen, handing on
+     * any flash message that arrived, since a flash lives for one request and a screen finishing here (the setup guide)
+     * said what it did in one.
      */
     @GetMapping({"/ui", "/ui/"})
     public String home(Authentication authentication, HttpSession session, Model model,
                        RedirectAttributes redirect) throws IOException {
-        for (String said : List.of("message", "error")) {
-            if (model.containsAttribute(said)) {
-                redirect.addFlashAttribute(said, model.getAttribute(said));
-            }
-        }
         if (!authenticated(authentication)) {
             return "redirect:/ui/login";
         }
@@ -64,10 +70,41 @@ public class HomeController {
             current.select(accessible.get(0));
         }
         // A super-admin on the starter credential is guided first (SetupWizard); decided only here, on the landing.
-        if (setup.redirects(authentication, session)) {
-            return "redirect:/ui/setup";
+        boolean guided = setup.redirects(authentication, session);
+        if (guided || current.name() == null) {
+            for (String said : List.of("message", "error")) {
+                if (model.containsAttribute(said)) {
+                    redirect.addFlashAttribute(said, model.getAttribute(said));
+                }
+            }
+            return guided ? "redirect:/ui/setup" : "redirect:/ui/tenants";
         }
-        return current.name() != null ? "redirect:/ui/repositories" : "redirect:/ui/tenants";
+        List<DashboardPanel> panels = panels(new DashboardContributor.Viewer(current.name(), superadmin));
+        model.addAttribute("panels", panels);
+        model.addAttribute("refreshing", panels.stream().anyMatch(DashboardPanel::refreshing));
+        return "dashboard";
+    }
+
+    /** Every contributor's panels in its order; one that fails is drawn as unreadable, naming it, and the rest as
+     *  usual. */
+    private List<DashboardPanel> panels(DashboardContributor.Viewer viewer) {
+        List<DashboardContributor> ordered = contributors.stream()
+                .sorted(Comparator.comparingInt(DashboardContributor::order)
+                        .thenComparing(contributor -> contributor.getClass().getName()))
+                .toList();
+        List<DashboardPanel> panels = new ArrayList<>();
+        for (DashboardContributor contributor : ordered) {
+            try {
+                panels.addAll(contributor.panels(viewer));
+            } catch (IOException | RuntimeException failure) {
+                LOGGER.warn("The dashboard contributor {} could not be read", contributor.getClass().getName(),
+                        failure);
+                panels.add(new DashboardPanel(contributor.getClass().getSimpleName(), "/ui/", "",
+                        "could not be read", DashboardPanel.Tone.ATTENTION, List.of(),
+                        String.valueOf(failure.getMessage()), false));
+            }
+        }
+        return panels;
     }
 
 

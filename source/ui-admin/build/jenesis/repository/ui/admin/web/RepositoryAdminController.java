@@ -190,6 +190,11 @@ public class RepositoryAdminController {
                            @RequestParam(name = "description", defaultValue = "") String description,
                            RedirectAttributes redirect) throws IOException {
         try {
+            // Saving what is already there writes nothing, records nothing and says nothing.
+            String line = RepositoryDocument.description(description);
+            if (repositories.document(name).map(document -> document.description().equals(line)).orElse(false)) {
+                return "redirect:/ui/repositories/" + name;
+            }
             if (lifecycle.describe(name, description)) {
                 redirect.addFlashAttribute("message", "Updated the description of '" + name + "'.");
             } else {

@@ -13,7 +13,8 @@
         Configured target: <span th:text="${minFreeBytes}">0</span> bytes /
         <span th:text="${minFreePercent}">0</span>%.
     </p>
-    <p><small>A reclaim runs a least-recently-used sweep across every tenant's projects until the target is
+    <p><small>A reclaim runs a least-recently-used sweep across every project<th:block th:if="${multiTenant}"> of every
+        tenant</th:block> until the target is
         met.</small></p>
     <form method="post" th:action="@{/ui/projects/volume-reclaim}">
         <div class="grid">
@@ -24,7 +25,7 @@
                 <input name="minFreePercent" inputmode="numeric">
             </label>
         </div>
-        <button th:replace="~{base :: cautionButton('Reclaim now', 'Evict the least recently used cache entries across every tenant until the target is met?')}">Reclaim now</button>
+        <button th:replace="~{base :: cautionButton('Reclaim now', 'Evict the least recently used cache entries across every project until the target is met?')}">Reclaim now</button>
     </form>
 </main>
 </body>

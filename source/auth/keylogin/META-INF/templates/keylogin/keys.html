@@ -10,7 +10,8 @@
     <div th:replace="~{fragments :: messages}"></div>
     <header th:replace="~{base :: pageHeader('Login keys')}"></header>
 
-    <p><small>A login key signs a person in to the console as a member of one tenant, at the role it was issued with,
+    <p><small>A login key signs a person in to the console<th:block th:if="${multiTenant}"> as a member of one
+        tenant</th:block>, at the role it was issued with,
         through the key sign-in. It is for deployments without single sign-on; once OIDC, SAML or a directory signs
         people in, revoke these and switch key sign-in off. The same keys are listed, issued and revoked by
         <code>/api/keylogin</code> and the CLI's <code>keylogin</code> commands.</small></p>
@@ -30,7 +31,7 @@
                 <tr>
                     <th scope="col">Signs in as</th>
                     <th scope="col">Shown as</th>
-                    <th scope="col">Tenant</th>
+                    <th scope="col" th:if="${multiTenant}">Tenant</th>
                     <th scope="col"><span class="app-sr-only">Actions</span></th>
                 </tr>
                 </thead>
@@ -38,7 +39,7 @@
                 <tr th:each="k : ${keys}">
                     <td><code th:text="${k.principal()}">keylogin/octocat</code></td>
                     <td th:text="${k.login()}">octocat</td>
-                    <td th:text="${k.tenant()}">releases</td>
+                    <td th:if="${multiTenant}" th:text="${k.tenant()}">releases</td>
                     <td>
                         <form method="post" th:action="@{/ui/settings/login-keys/revoke}">
                             <input type="hidden" name="id" th:value="${k.id()}">
@@ -62,8 +63,12 @@
             <label for="login">Shown as</label>
             <input type="text" id="login" name="login" aria-describedby="login-help">
             <small id="login-help">Optional: the name the console shows, the principal when left blank.</small>
-            <label for="tenant">Tenant</label>
-            <input type="text" id="tenant" name="tenant" required>
+            <!--/* The tenant the key signs into is asked only where there is more than one to choose. */-->
+            <th:block th:if="${multiTenant}">
+                <label for="tenant">Tenant</label>
+                <input type="text" id="tenant" name="tenant" required>
+            </th:block>
+            <input th:unless="${multiTenant}" type="hidden" name="tenant" th:value="${tenant}">
             <label for="role">Role</label>
             <select id="role" name="role">
                 <option value="viewer">viewer</option>

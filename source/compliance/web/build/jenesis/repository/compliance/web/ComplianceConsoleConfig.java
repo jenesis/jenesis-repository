@@ -26,6 +26,12 @@ public class ComplianceConsoleConfig {
     }
 
     @Bean
+    public ReviewDashboard reviewDashboard(ArtifactStore repositoryStore, CurrentTenant currentTenant,
+                                           ObservationRegistry observations) {
+        return new ReviewDashboard(repositoryStore, currentTenant, observations);
+    }
+
+    @Bean
     public SpringResourceTemplateResolver complianceTemplateResolver(ApplicationContext context) {
         return ConsoleTemplates.resolver(context, QUALIFIER);
     }

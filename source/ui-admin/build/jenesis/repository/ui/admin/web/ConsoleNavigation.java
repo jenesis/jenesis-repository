@@ -50,7 +50,7 @@ public final class ConsoleNavigation {
     }
 
     /** The sidebar inside one repository: its pages under their topics, the first headed General since the page's own
-     *  header names the repository, and the way back to the collection. */
+     *  header names the repository. */
     private static Navigation.Sidebar repositorySidebar(List<RepositoryPage> pages, String repository, String path) {
         String base = REPOSITORIES + "/" + repository;
         String relative = path.substring(base.length());
@@ -74,7 +74,8 @@ public final class ConsoleNavigation {
                 sections.add(new Navigation.Section(sections.isEmpty() ? GENERAL : topic.label(), links));
             }
         }
-        return new Navigation.Sidebar(new Navigation.Link("All repositories", REPOSITORIES, false), sections);
+        // No way back to the collection here: the header's Repositories is it.
+        return new Navigation.Sidebar(null, sections);
     }
 
     /** The entry the reader is on: the longest entry path that is {@code path} or one of its ancestors. */

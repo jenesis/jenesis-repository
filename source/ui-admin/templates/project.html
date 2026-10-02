@@ -5,7 +5,7 @@
 <header th:replace="~{fragments :: nav}"></header>
 <main id="main">
     <div th:replace="~{fragments :: messages}"></div>
-    <p><a href="/ui/projects">&larr; All projects</a></p>
+    <p><a href="/ui/projects">&larr; Projects</a></p>
     <header th:replace="~{base :: pageHeader(${project.name})}"></header>
     <!--/* The count is a stored figure from the last pass - a count, or an eviction, both of which walk every
            entry and so run in the background - never a sweep on the request. */-->

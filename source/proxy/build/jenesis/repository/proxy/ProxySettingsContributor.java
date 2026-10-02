@@ -18,21 +18,20 @@ public final class ProxySettingsContributor implements SettingsContributor {
     public List<Setting> settings() {
         return List.of(
                 new Setting(FLOOR_KEY, "Proxy", "Upstream throughput floor",
-                        "The least an upstream fetch must deliver over each minute spent waiting on it, in bytes, "
-                                + "or it is abandoned as the idle timeout abandons one that goes silent. The idle "
-                                + "timeout cannot end an upstream answering a byte at a time, which resets it with "
-                                + "every byte and holds the fetch for as long as it likes; this does, while a large "
-                                + "artifact on a slow but steady link still lands. 0 lifts it. Applies live.",
+                        "The least an upstream fetch must deliver over each minute spent waiting on it, in bytes, or "
+                                + "it is abandoned as the idle timeout abandons one that goes silent. The idle timeout "
+                                + "cannot end an upstream answering a byte at a time, which resets it with every byte "
+                                + "and holds the fetch for as long as it likes; this does, while a large artifact on a "
+                                + "slow but steady link still lands. Zero lifts it. Applies live.",
                         Setting.Kind.LONG, ScreenedHttpClient.THROUGHPUT_FLOOR_TEXT, true).advanced(),
                 new Setting(DEADLINE_KEY, "Proxy", "Upstream fetch deadline",
                         "The longest one upstream fetch may take, from the request to the last byte, before it is "
-                                + "abandoned; PT0S sets no deadline. The throughput floor stops an upstream answering "
+                                + "abandoned; zero sets no deadline. The throughput floor stops an upstream answering "
                                 + "a byte at a time, but one trickling just above it holds the fetch - and the client "
-                                + "waiting on it - for as long as the artifact takes at that rate, and only a "
-                                + "deadline ends that. Any fixed number either cuts short a legitimate multi-gigabyte "
-                                + "pull over a slow link or is too long to protect anything, so size it for the "
-                                + "largest artifact this proxy serves over the slowest link it should tolerate. "
-                                + "Applies live.",
+                                + "waiting on it - for as long as the artifact takes at that rate, and only a deadline "
+                                + "ends that. Any fixed number either cuts short a legitimate multi-gigabyte pull over "
+                                + "a slow link or is too long to protect anything, so size it for the largest artifact "
+                                + "this proxy serves over the slowest link it should tolerate. Applies live.",
                         Setting.Kind.DURATION, ScreenedHttpClient.DEADLINE_TEXT, true).advanced());
     }
 }

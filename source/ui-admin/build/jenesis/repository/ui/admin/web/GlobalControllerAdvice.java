@@ -175,6 +175,13 @@ public class GlobalControllerAdvice {
         return tenancy.multi();
     }
 
+    /** The word a screen names what its settings and members belong to: "tenant" where the deployment serves several,
+     *  "deployment" where it serves one, since a tenant is no concept to a reader who has only ever had one. */
+    @ModelAttribute("scopeWord")
+    public String scopeWord() {
+        return tenancy.multi() ? "tenant" : "deployment";
+    }
+
     /**
      * The console's two navigation levels for this request, resolved once to what this reader may open with the current
      * page marked. The core screens are listed here; imported modules add theirs through
@@ -191,14 +198,14 @@ public class GlobalControllerAdvice {
         boolean admin = roleAtLeast(authentication, Role.ADMIN);
         boolean superadmin = hasSuperadmin(authentication);
         List<NavEntry> entries = new ArrayList<>();
-        entries.add(new NavEntry("All repositories", "/ui/repositories", Group.REPOSITORIES));
+        entries.add(new NavEntry("Current repositories", "/ui/repositories", Group.REPOSITORIES));
         entries.add(new NavEntry("New repository", "/ui/new/repository", Access.EDITOR, Group.REPOSITORIES));
         entries.add(new NavEntry("Limits", "/ui/limits", Group.REPOSITORIES));
-        entries.add(new NavEntry("All projects", "/ui/projects", Group.BUILD_CACHE));
+        entries.add(new NavEntry("Current projects", "/ui/projects", Group.BUILD_CACHE));
         entries.add(new NavEntry("New project", "/ui/new/project", Access.EDITOR, Group.BUILD_CACHE));
         entries.add(new NavEntry("Build tools", "/ui/projects/build-tools", Group.BUILD_CACHE));
         entries.add(new NavEntry("Cache volume", "/ui/projects/cache-volume", Access.SUPERADMIN, Group.BUILD_CACHE));
-        entries.add(new NavEntry("All credentials", "/ui/credentials", Access.ADMIN, Group.ACCESS));
+        entries.add(new NavEntry("Current credentials", "/ui/credentials", Access.ADMIN, Group.ACCESS));
         entries.add(new NavEntry("New credential", "/ui/credentials/new", Access.ADMIN, Group.ACCESS));
         entries.add(new NavEntry("Credential policies", "/ui/credentials/policies", Access.ADMIN, Group.ACCESS));
         entries.add(new NavEntry("Keyless CI", "/ui/credentials/keyless", Access.ADMIN, Group.ACCESS));
@@ -210,12 +217,15 @@ public class GlobalControllerAdvice {
         // The group's header link opens its first entry, so the first-run guide comes last.
         entries.add(new NavEntry("Settings", "/ui/settings", Access.SUPERADMIN, Group.SETTINGS));
         entries.add(new NavEntry("Upstreams", "/ui/settings/upstreams", Access.SUPERADMIN, Group.SETTINGS));
-        entries.add(new NavEntry("Tenant settings", "/ui/settings/tenant", Access.SUPERADMIN, Group.SETTINGS));
+        // A tenant's own layer of settings is a concept only a deployment serving several tenants has.
+        if (tenancy.multi()) {
+            entries.add(new NavEntry("Tenant settings", "/ui/settings/tenant", Access.SUPERADMIN, Group.SETTINGS));
+        }
         entries.add(new NavEntry("Modules", "/ui/settings/modules", Access.SUPERADMIN, Group.SETTINGS));
         // A group of its own in a deployment serving several tenants, for a reader with more than one to pick; the
         // header's tenant name links here too.
         if (tenancy.multi() && showTenants(authentication)) {
-            entries.add(new NavEntry("All tenants", "/ui/tenants", Group.TENANTS));
+            entries.add(new NavEntry("Current tenants", "/ui/tenants", Group.TENANTS));
         }
         entries.add(new NavEntry("Backup & restore", "/ui/settings/backup", Access.SUPERADMIN, Group.SETTINGS));
         entries.add(new NavEntry("First-run setup", "/ui/setup", Access.SUPERADMIN, Group.SETTINGS));

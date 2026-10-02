@@ -13,9 +13,9 @@ public final class StagingSettingsContributor implements SettingsContributor {
     @Override
     public List<Setting> settings() {
         return List.of(new Setting(StagingReapTask.TTL.key(), "Record lifetimes", "Staging time-to-live",
-                "On the scheduled cleanup pass, drop open staging repositories untouched for this ISO-8601 duration "
-                        + "(their staged artifacts are unpublished and garbage-collected) and remove "
-                        + "promoted/dropped staging markers of the same age. PT0S disables the reap.",
+                "On the scheduled cleanup pass, drop open staging repositories untouched for this long (their staged "
+                        + "artifacts are unpublished and garbage-collected) and remove promoted/dropped staging "
+                        + "markers of the same age. Zero switches the reap off.",
                 Setting.Kind.DURATION, StagingReapTask.TTL.fallbackText(), true).advanced());
     }
 }

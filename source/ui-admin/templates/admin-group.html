@@ -8,7 +8,7 @@
     <header th:replace="~{base :: pageHeaderCrumbs(${name}, ${crumbs})}"></header>
     <!--/* One group of this tenant: what it grants and who is in it, each with its own action. A group name and a
          member id come from the store and are rendered as text through th:text/th:value only. */-->
-    <p>A group of tenant <strong th:text="${tenant}">default</strong>. Everyone in it holds what it grants, from their
+    <p><th:block th:if="${multiTenant}">A group of tenant <strong th:text="${tenant}">default</strong>. </th:block>Everyone in it holds what it grants, from their
         next request.</p>
 
     <article>

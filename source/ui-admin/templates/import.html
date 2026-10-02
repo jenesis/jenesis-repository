@@ -16,7 +16,7 @@
             stored.</small></p>
         <p th:unless="${capabilities.importAvailable()}"><small>No import source modules are installed on this
             deployment.</small></p>
-        <p th:unless="${isEditor}"><small>You have read-only access to this tenant.</small></p>
+        <p th:unless="${isEditor}"><small>You have read-only access to this [[${scopeWord}]].</small></p>
         <form th:if="${isEditor and capabilities.importAvailable()}" method="post"
               th:action="@{'/ui/repositories/' + ${repo} + '/import'}">
             <div class="grid">

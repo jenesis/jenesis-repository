@@ -18,6 +18,7 @@ open module build.jenesis.repository.compliance.web {
     requires build.jenesis.repository.findings;
     requires build.jenesis.repository.health;
     requires build.jenesis.repository.store;
+    requires build.jenesis.repository.scope;
     requires build.jenesis.repository.format;
     requires build.jenesis.repository.gate.spi;
     requires build.jenesis.repository.gate;

@@ -15,7 +15,7 @@
         max-age <strong th:text="${retention.maxAge.isEmpty()} ? 'none' : ${retention.maxAge}">none</strong>,
         prerelease-expiry <strong th:text="${retention.prereleaseExpiry.isEmpty()} ? 'none' : ${retention.prereleaseExpiry}">none</strong>,
         not-downloaded-for <strong th:text="${retention.notDownloadedFor.isEmpty()} ? 'none' : ${retention.notDownloadedFor}">none</strong>.</small></p>
-    <p th:unless="${isEditor}"><small>You have read-only access to this tenant.</small></p>
+    <p th:unless="${isEditor}"><small>You have read-only access to this [[${scopeWord}]].</small></p>
     <th:block th:if="${isEditor}" th:each="g : ${groups}">
         <article th:replace="~{fragments :: settingGroup(${g}, '/ui/repositories/' + ${repo} + '/settings/save',
                 '/ui/repositories/' + ${repo} + '/retention', 'inherited', 'the inherited value',

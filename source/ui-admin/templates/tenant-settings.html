@@ -26,9 +26,9 @@
 
     <article>
         <h2>Restore</h2>
-        <p><small>Restore this tenant's overridable slice from an uploaded JSON bundle (module name to that module's
+        <p><small>Restore this [[${scopeWord}]]'s overridable slice from an uploaded JSON bundle (module name to that module's
             document) — the same shape the deployment bundle carries per tenant. An import is validated first and
-            refused whole if any value would not resolve, then it replaces this tenant's stored overrides, leaving the
+            refused whole if any value would not resolve, then it replaces this [[${scopeWord}]]'s stored overrides, leaving the
             deployment settings and every other tenant untouched.</small></p>
         <!--/* The CSRF token rides in the action URL, not only in the body: this is the one multipart form in the
              console, and with Spring's multipart resolver deliberately off everywhere (it would drain an artifact

@@ -25,10 +25,9 @@ public final class TerraformSettingsContributor implements SettingsContributor {
                                 + "listed host serves a ref as an archive, which is cached and held to the digest of "
                                 + "its first fetch; a moved tag is then refused. Comma-separated hosts as a source "
                                 + "writes them, port included; a host other than github.com, gitlab.com or "
-                                + "bitbucket.org names its kind after '=' (github, gitlab or bitbucket), as in "
-                                + "git.example.com=gitlab. Each listed host is a third party this deployment then "
-                                + "reaches; to fetch from the three public hosts, set "
-                                + "github.com,gitlab.com,bitbucket.org.",
+                                + "bitbucket.org also names, after an equals sign, which of the three it runs (github, "
+                                + "gitlab or bitbucket). Each listed host is a third party this deployment then "
+                                + "reaches; to fetch from the three public hosts, name all three.",
                         Setting.Kind.STRING, "", false).advanced(),
                 new Setting("terraform.git-refuse-unlisted", "Formats", "Refuse Terraform git sources elsewhere",
                         "Whether a proxied Terraform module whose git source cannot be fetched through this "

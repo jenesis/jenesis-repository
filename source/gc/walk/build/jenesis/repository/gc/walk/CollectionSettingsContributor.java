@@ -22,7 +22,7 @@ public final class CollectionSettingsContributor implements SettingsContributor 
                                 + "reclaims only on the walks that name it in the walks setting, and a walk's cadence "
                                 + "is a cost dial - a pass over the whole store weekly costs a seventh of one that "
                                 + "runs daily.",
-                        Setting.Kind.BOOLEAN, "true", true).gate().essential(),
+                        Setting.Kind.BOOLEAN, "true", true).gate().standard(),
                 new Setting("gc", "Collection", "Collector",
                         "The collector to use, by name. A name nothing answers to fails the boot rather than "
                                 + "quietly reclaiming nothing.",
@@ -36,7 +36,7 @@ public final class CollectionSettingsContributor implements SettingsContributor 
                         "A wall-clock floor on the gap between condemning a blob and deleting it, on top of the "
                                 + "two-pass rule, so an upload whose pieces are unreferenced for a while - a push's "
                                 + "layers before its manifest - is not collected when collection runs often. It only "
-                                + "ever delays a deletion; PT0S leaves the two-pass rule alone.",
+                                + "ever delays a deletion; zero leaves the two-pass rule alone.",
                         Setting.Kind.DURATION, GarbageCollector.DEFAULT_GRACE, true).advanced());
     }
 }

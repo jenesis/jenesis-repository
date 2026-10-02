@@ -25,7 +25,8 @@ import build.jenesis.repository.store.Durations;
  */
 public record Setting(String key, String group, String label, String description,
                       Kind kind, List<String> choices, String defaultValue, boolean live, Scope scope,
-                      boolean enablement, Tier tier, boolean localOnly, boolean operatorOnly, Form form) {
+                      boolean enablement, Tier tier, boolean localOnly, boolean operatorOnly, Form form,
+                      List<Choice> named) {
 
     /** The word a {@link Kind#DURATION_OR_NONE} setting takes to switch its rule off, rather than inherit a wider
      *  level's value - which is what leaving it unset means. */
@@ -33,6 +34,13 @@ public record Setting(String key, String group, String label, String description
 
     public Setting {
         choices = List.copyOf(choices);
+        named = named == null ? List.of() : List.copyOf(named);
+        for (Choice choice : named) {
+            if (!choices.contains(choice.value())) {
+                throw new IllegalArgumentException("Setting '" + key + "' names the choice '" + choice.value()
+                        + "', which is not one of its values " + choices);
+            }
+        }
         scope = scope == null ? Scope.GLOBAL : scope;
         if (localOnly && scope != Scope.REPOSITORY && scope != Scope.PROJECT) {
             throw new IllegalArgumentException("Setting '" + key + "' is " + scope + "-scoped, so it cannot be local: "
@@ -44,7 +52,7 @@ public record Setting(String key, String group, String label, String description
     public Setting(String key, String group, String label, String description,
                    Kind kind, List<String> choices, String defaultValue, boolean live, Scope scope) {
         this(key, group, label, description, kind, choices, defaultValue, live, scope, false, null, false, false,
-                null);
+                null, List.of());
     }
 
     /** A choice-carrying setting, deployment-wide by default. */
@@ -56,7 +64,7 @@ public record Setting(String key, String group, String label, String description
     /** A copy of this setting marked as its module's enablement gate. */
     public Setting gate() {
         return new Setting(key, group, label, description, kind, choices, defaultValue, live, scope, true, tier,
-                localOnly, operatorOnly, form);
+                localOnly, operatorOnly, form, named);
     }
 
     /** This setting, declared one the wizard of its scope asks - see {@link Tier#ESSENTIAL}. */
@@ -77,24 +85,72 @@ public record Setting(String key, String group, String label, String description
     /** This repository or project setting, declared one with no wider default - see {@link #localOnly}. */
     public Setting local() {
         return new Setting(key, group, label, description, kind, choices, defaultValue, live, scope, enablement, tier,
-                true, operatorOnly, form);
+                true, operatorOnly, form, named);
     }
 
     /** This setting, declared one only the deployment's operator may set - see {@link #operatorOnly}. */
     public Setting operator() {
         return new Setting(key, group, label, description, kind, choices, defaultValue, live, scope, enablement, tier,
-                localOnly, true, form);
+                localOnly, true, form, named);
     }
 
     private Setting tiered(Tier decided) {
         return new Setting(key, group, label, description, kind, choices, defaultValue, live, scope, enablement,
-                decided, localOnly, operatorOnly, form);
+                decided, localOnly, operatorOnly, form, named);
     }
 
     /** This setting, declared one a form edits as {@code shaped} rather than as one line of text - see {@link Form}. */
     public Setting form(Form shaped) {
         return new Setting(key, group, label, description, kind, choices, defaultValue, live, scope, enablement, tier,
-                localOnly, operatorOnly, shaped);
+                localOnly, operatorOnly, shaped, named);
+    }
+
+    /** This setting, its choices given the names and short descriptions a person reads - see {@link Choice}. */
+    public Setting named(List<Choice> given) {
+        return new Setting(key, group, label, description, kind, choices, defaultValue, live, scope, enablement, tier,
+                localOnly, operatorOnly, form, given);
+    }
+
+    /**
+     * What one of a {@link Kind#CHOICE} setting's values reads as to a person: a name ("Hold for review") and a short
+     * description of what choosing it does, which a console shows as "Name: description" where there is room and as
+     * the name alone where there is not. The value stays what the API, the command line and the store use. A choice
+     * a setting does not name is named from its value ({@code QUARANTINE} reads "Quarantine").
+     */
+    public record Choice(String value, String name, String description) {
+
+        /** The gate's three verdicts, as every setting choosing one names them. */
+        public static final List<Choice> VERDICTS = List.of(
+                new Choice("ALLOW", "Allow", "the artifact is served, and what was found is recorded as a finding"),
+                new Choice("QUARANTINE", "Hold for review",
+                        "the artifact is stored but withheld until someone releases it"),
+                new Choice("REJECT", "Reject", "the artifact is refused and nothing is stored"));
+
+        public Choice {
+            Objects.requireNonNull(value, "value");
+            Objects.requireNonNull(name, "name");
+            description = description == null ? "" : description;
+        }
+
+        /** A value as words: a constant in capitals or words joined by hyphens or underscores reads as a sentence-cased
+         *  phrase ({@code QUARANTINE} as "Quarantine", {@code not-found} as "Not found"); any other value - a name,
+         *  a URL - reads as it is. */
+        public static String nameOf(String value) {
+            boolean constant = value.chars().noneMatch(Character::isLowerCase)
+                    && value.chars().anyMatch(Character::isLetter);
+            boolean joined = value.matches("[a-z0-9]+([-_][a-z0-9]+)+");
+            if (!constant && !joined) {
+                return value;
+            }
+            String words = value.replace('_', ' ').replace('-', ' ').toLowerCase(Locale.ROOT);
+            return Character.toUpperCase(words.charAt(0)) + words.substring(1);
+        }
+    }
+
+    /** The name and description {@code value} reads as: as named, else named from the value itself. */
+    public Choice choice(String value) {
+        return named.stream().filter(choice -> choice.value().equals(value)).findFirst()
+                .orElseGet(() -> new Choice(value, Choice.nameOf(value), ""));
     }
 
     /** How a form edits this setting's value: as declared, else a single line. */
@@ -118,6 +174,12 @@ public record Setting(String key, String group, String label, String description
 
         /** A list, one entry per line. */
         LINES,
+
+        /** Several values on one line, separated by commas, which a form shows as one removable entry each and adds to
+         *  from the setting's {@link #choices() choices} - the values it knows, named as {@link #named() named}. For a
+         *  kind other than {@link Kind#CHOICE} the choices suggest rather than limit: a value they do not list is
+         *  entered as it is. */
+        VALUES,
 
         /** A JSON document. */
         JSON,
@@ -173,9 +235,10 @@ public record Setting(String key, String group, String label, String description
      */
     public enum Tier {
 
-        /** Asked on creation: a decision that is easy to forget and costly to discover later - where a repository
-         *  fetches from, how long it keeps what it holds, which advisory sources the gate asks and what it does with
-         *  what they say, a tenant's ceilings, how a person signs in. */
+        /** Asked on creation: a decision a new deployment, repository or project must make before it is used, easy
+         *  to forget and costly to discover later - where a repository fetches from, how long it keeps what it holds,
+         *  which advisory sources the gate asks and what it does with what they say, how a person signs in. A ceiling
+         *  that defaults to none, a feature off until wanted or the shape of a multi-tenant routing is not one. */
         ESSENTIAL,
 
         /** Shown, not asked: a decision an operator makes when the need arises - a policy knob, an integration, a

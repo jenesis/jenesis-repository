@@ -14,12 +14,11 @@ public final class QuarantineSettingsContributor implements SettingsContributor 
     public List<Setting> settings() {
         return List.of(
                 new Setting(QuarantineRetentionTask.RETENTION.key(), "Record lifetimes", "Quarantine log retention",
-                        "Remove gate-decision log rows older than this ISO-8601 duration on the scheduled cleanup "
-                                + "pass; a still-held path keeps its verdict whatever its age. PT0S disables age "
-                                + "pruning.",
+                        "Remove gate-decision log rows older than this on the scheduled cleanup pass; a still-held "
+                                + "path keeps its verdict whatever its age. Zero switches age pruning off.",
                         Setting.Kind.DURATION, QuarantineRetentionTask.RETENTION.fallbackText(), true).advanced(),
                 new Setting("quarantine-log-cap", "Record lifetimes", "Quarantine log cap",
-                        "Keep at most this many newest gate-decision log rows; 0 disables the count cap.",
+                        "Keep at most this many newest gate-decision log rows; zero sets no count cap.",
                         Setting.Kind.INTEGER, "0", true).advanced(),
                 new Setting("strict-hold-mapping", "Compliance", "Strict hold-mapping",
                         "After an accepted publish through a blobs-namespace format, the publish-time hold-mapping "

@@ -131,6 +131,9 @@ public record RepositoryDocument(String format, Instant created, String descript
             if (current.isEmpty()) {
                 return false;
             }
+            if (current.get().description().equals(line)) {
+                return true;        // already says this: nothing to write
+            }
             RepositoryDocument described = new RepositoryDocument(current.get().format(), current.get().created(), line);
             if (repository.writeVersioned(Scopes.REPOSITORY, described.content(), stored.get().token())) {
                 return true;

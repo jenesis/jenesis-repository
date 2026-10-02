@@ -45,15 +45,15 @@
     <!--/* Two faces, one form. With the repository's full-text index off - the default - a query is the start of a
          coordinate's name, and the bar reads as that rather than as a search that finds little; with it on, the bar
          searches names, descriptions, keywords and authors. */-->
-    <form method="get" class="app-search" th:action="@{/ui/repositories/{repo}/browse(repo=${repo})}">
-        <!--/* The field and its button joined on one full-width line, and what the query means beneath them. */-->
-        <div role="search">
+    <search>
+    <form method="get" th:action="@{/ui/repositories/{repo}/browse(repo=${repo})}">
+        <!--/* The one search field every list has, across the line; Enter sends it. */-->
+        <label>Search
             <input th:if="${fullText}" name="q" type="search" th:value="${query}" aria-describedby="search-mode"
                    placeholder="Search names, descriptions, keywords and authors" aria-label="Search this repository">
             <input th:unless="${fullText}" name="q" type="search" th:value="${query}" aria-describedby="search-mode"
                    placeholder="Look up by name, e.g. org.acme:lib" aria-label="Look up by name">
-            <button th:replace="~{base :: secondaryButton(${fullText} ? 'Search' : 'Look up')}">Search</button>
-        </div>
+        </label>
         <p id="search-mode" data-search-mode="name" th:unless="${fullText}"><small>Full-text search is off for this
             repository, so a query looks a package up by the start of its name. Switch it on in the repository's
             <a th:href="@{/ui/repositories/{repo}/settings(repo=${repo})}">settings</a> to search descriptions,
@@ -62,6 +62,7 @@
             repository<th:block th:if="${searching and !indexed}">; its index is not built yet, so these matches are
             looked up by the start of their name meanwhile</th:block>.</small></p>
     </form>
+    </search>
 
     <article th:if="${searching}">
         <p><a th:href="@{/ui/repositories/{repo}/browse(repo=${repo})}">&larr; back to browse</a></p>

@@ -33,6 +33,7 @@ open module build.jenesis.repository.ui.admin.test {
     requires build.jenesis.repository.findings;
     requires build.jenesis.repository.health;
     requires build.jenesis.repository.gate.spi;
+    requires build.jenesis.repository.compliance.web;
     requires build.jenesis.repository.gateway;
     requires build.jenesis.repository.server;
     requires build.jenesis.repository.server.kernel;

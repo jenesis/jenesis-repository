@@ -194,13 +194,14 @@ public class CacheService {
         return true;
     }
 
-    /**
-     * Every project of the selected tenant with its policy and counts. The project enumeration is followed to
-     * exhaustion, since projects are provisioned by operators rather than inflated by clients; their entries are never
-     * enumerated here.
-     */
-    public List<ProjectSummary> listProjects() {
-        List<ProjectSummary> summaries = new ArrayList<>();
+    /** How many build-cache projects the signed-in tenant has: the names {@link #listProjects()} lists, without
+     *  the figures it reads per row. */
+    public int projectCount() {
+        return projectNames().size();
+    }
+
+    /** The signed-in tenant's project names, in order. */
+    private List<String> projectNames() {
         List<String> names = new ArrayList<>();
         String cursor = null;
         while (true) {
@@ -211,6 +212,17 @@ public class CacheService {
             cursor = page.cursor().orElseThrow();
         }
         names.sort(Comparator.naturalOrder());
+        return names;
+    }
+
+    /**
+     * Every project of the selected tenant with its policy and counts. The project enumeration is followed to
+     * exhaustion, since projects are provisioned by operators rather than inflated by clients; their entries are never
+     * enumerated here.
+     */
+    public List<ProjectSummary> listProjects() {
+        List<ProjectSummary> summaries = new ArrayList<>();
+        List<String> names = projectNames();
         SettingsAdmin.ProjectConfigs configs = unchecked(() -> settings.projectConfigs(current.name()));
         for (String name : names) {
             UnaryOperator<String> config = unchecked(() -> configs.of(name));

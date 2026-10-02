@@ -16,13 +16,12 @@ public final class LicenseTableSettings implements SettingsContributor {
     @Override
     public List<Setting> settings() {
         return List.of(new Setting(LicenseTable.KEY, "Compliance", "Additional licenses",
-                "Licenses to identify beyond the built-in table of SPDX licenses, one per line or separated by ';', "
-                        + "each '<identifier> | <category> | <name or URL> | ...' - e.g. 'Acme-Internal-1.0 | "
-                        + "proprietary | Acme Internal License | https://acme.example/license'. A declaration naming "
-                        + "the identifier, or carrying one of the names or URLs as a word of its own, resolves to it; "
+                "Licenses to identify beyond the built-in table of SPDX licenses, each an identifier, its category and "
+                        + "the names or URLs that declare it, separated by vertical bars. A declaration naming the "
+                        + "identifier, or carrying one of the names or URLs as a word of its own, resolves to it; "
                         + "these rows are tried before the built-in ones, so one may also recategorise a known "
-                        + "license. The category is permissive, weak-copyleft, strong-copyleft, network-copyleft or "
-                        + "a word of your own, which the allowed and denied license lists match like any other.",
+                        + "license. The category is permissive, weak-copyleft, strong-copyleft, network-copyleft or a "
+                        + "word of your own, which the allowed and denied license lists match like any other.",
                 Setting.Kind.STRING, LicenseTable.DEFAULT, true).form(Setting.Form.LINES).advanced());
     }
 

@@ -179,7 +179,8 @@ public class SettingsAdmin {
         return new SettingView(setting.key(), setting.group(), setting.label(), setting.description(),
                 setting.kind().name(), setting.choices(), effective, baseline, overridden, setting.live(),
                 highImpact(setting), pin.isPresent(), pin.map(PinnedSettings.Pin::source).orElse(""), module,
-                setting.tier() == Setting.Tier.ADVANCED, setting.editedAs().name());
+                setting.tier() == Setting.Tier.ADVANCED, setting.editedAs().name(),
+                setting.choices().stream().map(setting::choice).toList());
     }
 
     /** The JPMS module a key is attributed to - the contributor that declares it, or {@link SettingsDocuments#NEUTRAL}
@@ -861,16 +862,37 @@ public class SettingsAdmin {
     public record SettingView(String key, String group, String label, String description,
                               String kind, List<String> choices, String value, String defaultValue,
                               boolean overridden, boolean live, boolean highImpact,
-                              boolean pinned, String pinnedBy, String module, boolean advanced, String form) {
+                              boolean pinned, String pinnedBy, String module, boolean advanced, String form,
+                              List<Setting.Choice> named) {
 
         public SettingView {
             choices = List.copyOf(choices);
             form = form == null ? Setting.Form.LINE.name() : form;
+            named = named == null ? List.of() : List.copyOf(named);
+        }
+
+        /** The name and short description a choice reads as, as the setting names it or from its value. */
+        public Setting.Choice choiceOf(String option) {
+            return named.stream().filter(choice -> choice.value().equals(option)).findFirst()
+                    .orElseGet(() -> new Setting.Choice(option, Setting.Choice.nameOf(option), ""));
+        }
+
+        /** What the value in force does, as its choice describes it - "Hold for review: ...", the long form a field
+         *  shows under a drop-down - or empty where the choice has no description. */
+        public String choiceDescription() {
+            Setting.Choice choice = choiceOf(value);
+            return choice.description().isBlank() ? "" : choice.name() + ": " + choice.description();
         }
 
         /** Whether a form edits the value over several lines - free text, a list one entry per line, or JSON. */
         public boolean textArea() {
             return "TEXT".equals(form) || "LINES".equals(form) || "JSON".equals(form);
+        }
+
+        /** Whether the value is several values on one line, which a form edits as one removable entry each, added
+         *  from the {@link #options() values the setting knows}. */
+        public boolean values() {
+            return "VALUES".equals(form);
         }
 
         /** Whether the value is a JSON document, which a form edits in a fixed-width face. */
@@ -954,12 +976,20 @@ public class SettingsAdmin {
             return option.equals(defaultValue) ? display(option) + " (default)" : display(option);
         }
 
+        /** The description of {@code option}, which an option carries as its title; empty where it has none. */
+        public String optionDescription(String option) {
+            return choiceOf(option).description();
+        }
+
         private String display(String raw) {
             if (raw.isBlank()) {
                 return "(unset)";
             }
             if ("BOOLEAN".equals(kind)) {
                 return Boolean.parseBoolean(raw.trim()) ? "enabled" : "disabled";
+            }
+            if ("CHOICE".equals(kind)) {
+                return choiceOf(raw.trim()).name();
             }
             if (duration()) {
                 return DurationWords.describe(raw);

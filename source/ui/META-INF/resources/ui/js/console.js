@@ -418,8 +418,13 @@
  * written. When the count ends the form is posted in the background, so the page neither reloads nor jumps, and the
  * count disappears. A post that fails puts the switch back and says so. Without a script the press posts at once.
  *
- * A high-impact switch carries `data-confirm` on the same form, and the confirmation guard above asks it first: a
- * press it cancels never reaches this handler.
+ * One slot after the switch says where its value comes from, in one place and one size: "(default)" while it
+ * inherits, "Reset to default" once a value is set here. The reset submits a form of its own (`reset-<key>`, which
+ * posts the empty value); it too is posted in the background, after which the switch shows the default it inherits
+ * (`data-default`) again, drawn muted.
+ *
+ * A high-impact switch carries `data-confirm` on its forms, and the confirmation guard above asks it first: a press it
+ * cancels never reaches these handlers.
  */
 (function () {
     'use strict';
@@ -428,13 +433,29 @@
         return seconds === 1 ? '1 second' : seconds + ' seconds';
     }
 
+    function post(form, value) {
+        var body = new FormData(form);
+        body.set('value', value);
+        return window.fetch(form.action, {method: 'POST', body: body, credentials: 'same-origin'})
+            .then(function (answer) {
+                if (!answer.ok) {
+                    throw new Error('status ' + answer.status);
+                }
+            });
+    }
+
     function wire(form) {
         var button = form.querySelector('.app-switch');
         var state = form.querySelector('.app-switch__state');
+        var slot = form.querySelector('.app-switch__slot');
         var note = form.querySelector('.app-switch__pending');
         var field = form.querySelector('input[name=value]');
+        var key = form.querySelector('input[name=key]').value;
+        var reset = document.getElementById('reset-' + key);
         var grace = parseInt(form.getAttribute('data-grace'), 10) || 5;
+        var inheritedValue = form.getAttribute('data-default') === 'true';
         var stored = button.getAttribute('aria-checked') === 'true';
+        var inherited = button.classList.contains('app-switch--inherited');
         var wanted = stored;
         var timer = null;
         var left = 0;
@@ -442,6 +463,24 @@
         function show(on) {
             button.setAttribute('aria-checked', String(on));
             state.textContent = on ? 'On' : 'Off';
+        }
+
+        function mark() {
+            button.classList.toggle('app-switch--inherited', inherited);
+            slot.textContent = '';
+            if (inherited) {
+                var label = document.createElement('small');
+                label.className = 'app-switch__default';
+                label.textContent = '(default)';
+                slot.appendChild(label);
+            } else if (reset) {
+                var undo = document.createElement('button');
+                undo.type = 'submit';
+                undo.className = 'app-quiet app-switch__reset';
+                undo.setAttribute('form', reset.id);
+                undo.textContent = 'Reset to default';
+                slot.appendChild(undo);
+            }
         }
 
         function stop() {
@@ -454,20 +493,12 @@
 
         function commit() {
             stop();
-            var body = new FormData(form);
-            body.set('value', String(wanted));
             note.textContent = 'Saving...';
-            window.fetch(form.action, {method: 'POST', body: body, credentials: 'same-origin'}).then(function (answer) {
-                if (!answer.ok) {
-                    throw new Error('status ' + answer.status);
-                }
+            post(form, String(wanted)).then(function () {
                 stored = wanted;
+                inherited = false;
                 field.value = String(!stored);
-                button.classList.remove('app-switch--inherited');
-                var inherited = button.querySelector('.app-switch__default');
-                if (inherited) {
-                    inherited.remove();
-                }
+                mark();
                 note.textContent = '';
             }).catch(function () {
                 wanted = stored;
@@ -497,6 +528,23 @@
             note.textContent = 'Taking effect in ' + plural(left) + '...';
             timer = window.setInterval(tick, 1000);
         });
+
+        if (reset) {
+            reset.addEventListener('submit', function (event) {
+                event.preventDefault();
+                stop();
+                post(reset, '').then(function () {
+                    stored = inheritedValue;
+                    wanted = stored;
+                    inherited = true;
+                    field.value = String(!stored);
+                    show(stored);
+                    mark();
+                }).catch(function () {
+                    note.textContent = 'Not reset - try again.';
+                });
+            });
+        }
     }
 
     document.addEventListener('DOMContentLoaded', function () {
@@ -632,7 +680,7 @@
     document.addEventListener('focusout', function (event) {
         var field = event.target;
         if (field.matches && field.matches('main :is(input, select, textarea)') && field.type !== 'hidden'
-                && !field.closest('.app-duration, .app-routing')) {
+                && !field.closest('.app-duration, .app-routing, .app-values')) {
             ask(field);
         }
     });
@@ -770,6 +818,130 @@
 })();
 
 /*
+ * Several values as removable entries.
+ *
+ * A field of several values (`data-values`) carries them as the API and the command line do, on one line separated by
+ * commas. The console shows one entry per value, each with a button that removes it, and a field that adds one -
+ * offering the values the setting knows from the field's list, by name - and writes the line back as they change.
+ * Without a script the line is typed as is.
+ */
+(function () {
+    'use strict';
+
+    function wire(field) {
+        var known = {};
+        var list = field.list;
+        if (list) {
+            Array.prototype.forEach.call(list.options, function (option) {
+                known[option.value] = option.label || option.value;
+            });
+        }
+        var values = field.value.split(',').map(function (value) {
+            return value.trim();
+        }).filter(function (value) {
+            return value !== '';
+        });
+        var label = field.getAttribute('aria-label') || 'Value';
+        var box = document.createElement('div');
+        box.className = 'app-values';
+        var chosen = document.createElement('ul');
+        chosen.className = 'app-values__chosen';
+        chosen.setAttribute('aria-label', label);
+        var add = document.createElement('input');
+        add.type = 'text';
+        add.placeholder = field.placeholder && values.length === 0 ? field.placeholder : 'Add…';
+        add.setAttribute('aria-label', 'Add to ' + label);
+        if (list) {
+            add.setAttribute('list', list.id);
+        }
+
+        function write() {
+            var next = values.join(', ');
+            if (next !== field.value) {
+                field.value = next;
+                field.dispatchEvent(new Event('change', {bubbles: true}));
+            }
+        }
+
+        function render() {
+            chosen.textContent = '';
+            values.forEach(function (value, index) {
+                var entry = document.createElement('li');
+                var name = document.createElement('span');
+                name.textContent = known[value] || value;
+                name.title = value;
+                var remove = document.createElement('button');
+                remove.type = 'button';
+                remove.className = 'app-quiet';
+                remove.textContent = '×';
+                remove.setAttribute('aria-label', 'Remove ' + (known[value] || value));
+                remove.addEventListener('click', function () {
+                    values.splice(index, 1);
+                    render();
+                    write();
+                    add.focus();
+                });
+                entry.appendChild(name);
+                entry.appendChild(remove);
+                chosen.appendChild(entry);
+            });
+            chosen.hidden = values.length === 0;
+        }
+
+        function take() {
+            var value = add.value.trim();
+            add.value = '';
+            if (value === '') {
+                return false;
+            }
+            var named = Object.keys(known).filter(function (each) {
+                return known[each].toLowerCase() === value.toLowerCase();
+            });
+            value = named.length === 1 ? named[0] : value;
+            if (values.indexOf(value) < 0) {
+                values.push(value);
+                render();
+                write();
+            }
+            return true;
+        }
+
+        add.addEventListener('keydown', function (event) {
+            if ((event.key === 'Enter' || event.key === ',') && add.value.trim() !== '') {
+                event.preventDefault();
+                take();
+            } else if (event.key === 'Backspace' && add.value === '' && values.length > 0) {
+                values.pop();
+                render();
+                write();
+            }
+        });
+        // A pick from the list arrives as one input event carrying a whole known value.
+        add.addEventListener('input', function () {
+            if (Object.prototype.hasOwnProperty.call(known, add.value)) {
+                take();
+            }
+        });
+        // An entry typed but not yet taken is taken as the form leaves, so Save keeps it.
+        var form = field.form;
+        if (form) {
+            form.addEventListener('submit', take, true);
+        }
+        field.type = 'hidden';
+        field.removeAttribute('list');
+        field.parentNode.insertBefore(box, field);
+        box.appendChild(chosen);
+        box.appendChild(add);
+        box.appendChild(field);
+        render();
+    }
+
+    document.addEventListener('DOMContentLoaded', function () {
+        document.querySelectorAll('input[data-values]').forEach(wire);
+    });
+})();
+
+/*
  * A repository's routing as a form.
  *
  * The routing setting's field (`data-routing`) carries the clauses the API and the command line use: `writable`, then
@@ -831,13 +1003,19 @@
         var names = Array.prototype.map.call(
             document.querySelectorAll('#routing-repositories > option'), function (option) { return option.value; });
         var box = element('div', 'app-routing');
-        var writableLabel = element('label', 'app-routing__writable');
-        var writable = element('input');
-        writable.type = 'checkbox';
-        writable.checked = routing.writable;
-        writableLabel.appendChild(writable);
-        writableLabel.appendChild(document.createTextNode(' Accepts uploads'));
-        box.appendChild(writableLabel);
+        // Whether it accepts uploads is a state, so it is the console's switch, not a checkbox.
+        var writableRow = element('div', 'app-routing__writable setting-switch');
+        var writable = element('button', 'app-switch');
+        writable.type = 'button';
+        writable.setAttribute('role', 'switch');
+        writable.setAttribute('aria-label', 'Accepts uploads');
+        var writableTrack = element('span', 'app-switch__track');
+        writableTrack.setAttribute('aria-hidden', 'true');
+        writable.appendChild(writableTrack);
+        writable.appendChild(element('span', 'app-switch__state', 'Accepts uploads'));
+        writable.setAttribute('aria-checked', String(routing.writable));
+        writableRow.appendChild(writable);
+        box.appendChild(writableRow);
         var list = element('ol', 'app-routing__fallbacks');
         box.appendChild(list);
         var add = element('button', 'app-quiet', '+ Add a fallback');
@@ -845,7 +1023,7 @@
         box.appendChild(add);
 
         function write() {
-            var clauses = writable.checked ? ['writable'] : [];
+            var clauses = writable.getAttribute('aria-checked') === 'true' ? ['writable'] : [];
             Array.prototype.forEach.call(list.children, function (row) {
                 var kind = row.querySelector('.app-routing__kind').value;
                 var source = kind === 'repository' ? row.querySelector('.app-routing__repository').value
@@ -950,7 +1128,10 @@
         add.addEventListener('click', function () {
             list.appendChild(row({source: '', cache: true, screening: '', more: []}));
         });
-        writable.addEventListener('change', write);
+        writable.addEventListener('click', function () {
+            writable.setAttribute('aria-checked', String(writable.getAttribute('aria-checked') !== 'true'));
+            write();
+        });
         field.type = 'hidden';
         field.parentNode.insertBefore(box, field);
         box.appendChild(field);
@@ -966,9 +1147,9 @@
  *
  * A form that asks a true/false setting without saving it at once (a wizard step) carries it as a choice of the
  * default, true or false (`select[data-switch="<default>"]`). The console shows it as the same switch the settings
- * screens use: muted while it is left at its default, at full strength once it is set either way, with a quiet "Reset
- * to default" beside it while it is set. The choice stays the field the form sends; without a script it is chosen as
- * is.
+ * screens use: muted while it is left at its default, at full strength once it is set either way, and one slot after
+ * it - "(default)" while it is left, "Reset to default" once it is set - in one place and one size. The choice stays
+ * the field the form sends; without a script it is chosen as is.
  */
 (function () {
     'use strict';
@@ -995,12 +1176,14 @@
         var track = element('span', 'app-switch__track');
         track.setAttribute('aria-hidden', 'true');
         var state = element('span', 'app-switch__state');
-        var mark = element('small', 'app-switch__default', '(default)');
         button.appendChild(track);
         button.appendChild(state);
-        button.appendChild(mark);
-        var reset = element('button', 'app-quiet', 'Reset to default');
+        var slot = element('span', 'app-switch__slot');
+        var mark = element('small', 'app-switch__default', '(default)');
+        var reset = element('button', 'app-quiet app-switch__reset', 'Reset to default');
         reset.type = 'button';
+        slot.appendChild(mark);
+        slot.appendChild(reset);
 
         function show() {
             var set = select.value !== '';
@@ -1024,12 +1207,39 @@
         select.hidden = true;
         select.parentNode.insertBefore(box, select);
         box.appendChild(button);
-        box.appendChild(reset);
+        box.appendChild(slot);
         box.appendChild(select);
         show();
     }
 
     document.addEventListener('DOMContentLoaded', function () {
         document.querySelectorAll('select[data-switch]').forEach(wire);
+    });
+})();
+
+/*
+ * What a choice does, under its drop-down.
+ *
+ * A drop-down of named choices (`select[data-describe="<id>"]`) has room for the names only; each option carries its
+ * short description as its title, and the element the select names shows "Name: description" for the one chosen, as
+ * the choice changes.
+ */
+(function () {
+    'use strict';
+
+    function describe(select) {
+        var target = document.getElementById(select.getAttribute('data-describe'));
+        var option = select.options[select.selectedIndex];
+        if (!target || !option) {
+            return;
+        }
+        var name = option.textContent.replace(/ \(default\)$/, '');
+        target.textContent = option.title ? name + ': ' + option.title : '';
+    }
+
+    document.addEventListener('change', function (event) {
+        if (event.target.matches && event.target.matches('select[data-describe]')) {
+            describe(event.target);
+        }
     });
 })();

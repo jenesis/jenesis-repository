@@ -28,33 +28,31 @@ public final class SignatureSettingsContributor implements SettingsContributor {
     private static List<Setting> all() {
         return List.of(
                 new Setting(ConfiguredSignerTrust.KEYS, "Compliance", "Trusted signing keys",
-                        "The armoured OpenPGP public keys this deployment verifies publisher signatures against - one "
-                                + "or more concatenated -----BEGIN PGP PUBLIC KEY BLOCK----- sections. Empty trusts "
-                                + "nobody: a signature is still read and graded, but none is reported trusted, "
-                                + "because a deployment that has named no keys has given no grounds to believe "
-                                + "anyone.",
+                        "The armoured OpenPGP public keys this deployment verifies publisher signatures against. Empty "
+                                + "trusts nobody: a signature is still read and graded, but none is reported trusted, "
+                                + "because a deployment that has named no keys has given no grounds to believe anyone.",
                         Setting.Kind.STRING, "", true, Setting.Scope.TENANT).form(Setting.Form.TEXT).standard(),
                 new Setting(ConfiguredSignerTrust.CERTIFICATES, "Compliance", "Trusted signing certificates",
-                        "The PEM certificates a PKCS#7 (CMS) publisher signature must chain to - one or more "
-                                + "concatenated -----BEGIN CERTIFICATE----- blocks: a NuGet author or repository "
-                                + "signing root, a Swift registry's. The chain is built from the certificates the "
-                                + "signature carries, judged at its signing time and never revoked online, since an "
-                                + "OCSP fetch would make a publish depend on a third party answering. Empty trusts "
-                                + "nobody, as the keyring above does for OpenPGP.",
+                        "The PEM certificates a PKCS#7 (CMS) publisher signature must chain to: a NuGet author or "
+                                + "repository signing root, a Swift registry's. The chain is built from the "
+                                + "certificates the signature carries, judged at its signing time and never revoked "
+                                + "online, since an OCSP fetch would make a publish depend on a third party answering. "
+                                + "Empty trusts nobody, as the keyring above does for OpenPGP.",
                         Setting.Kind.STRING, "", true, Setting.Scope.TENANT).form(Setting.Form.TEXT).advanced(),
                 new Setting(ConfiguredSignerTrust.PUBLIC_KEYS, "Compliance", "Trusted signing public keys",
                         "The PEM public keys a bare RSA publisher signature is verified against - an Alpine package's "
-                                + "signature member, whose key the client keeps in /etc/apk/keys/. One or more "
-                                + "-----BEGIN PUBLIC KEY----- blocks, each optionally preceded by a line \"# <keyfile>\" "
-                                + "naming the key file the package names (a signature naming a listed key is judged by "
-                                + "that key alone; one naming none is tried against the unnamed keys). Empty trusts nobody.",
+                                + "signature member, whose key the client keeps in /etc/apk/keys/. Each key may be "
+                                + "preceded by a line starting with # that names the key file a package refers to it "
+                                + "by (a signature naming a listed key is judged by that key alone; one naming none is "
+                                + "tried against the unnamed keys). Empty trusts nobody.",
                         Setting.Kind.STRING, "", true, Setting.Scope.TENANT).form(Setting.Form.TEXT).advanced(),
                 new Setting(ConfiguredSignerTrust.PINS, "Compliance", "Pinned signers",
-                        "Per-namespace pinned signers, e.g. \"org.apache.* = openpgp:0x1234ABCD\", comma- or "
-                                + "newline-separated, a trailing * matching a whole namespace. A namespace carrying a "
-                                + "pin admits only the signers pinned to it; one without falls back to trusting any "
-                                + "key above. Scoping is the point: a key admitted for one namespace should not "
-                                + "thereby vouch for another, which is the shape a compromised-but-real key exploits.",
+                        "Per-namespace pinned signers, each pinning a signer - an OpenPGP key id, or a Sigstore issuer "
+                                + "and subject - to a namespace, a trailing * matching a whole namespace. A namespace "
+                                + "carrying a pin admits only the signers pinned to it; one without falls back to "
+                                + "trusting any key above. Scoping is the point: a key admitted for one namespace "
+                                + "should not thereby vouch for another, which is the shape a compromised-but-real key "
+                                + "exploits.",
                         Setting.Kind.STRING, "", true, Setting.Scope.TENANT).form(Setting.Form.LINES).standard(),
                 new Setting(ConfiguredSignerTrust.SIGSTORE_ROOT, "Compliance", "Sigstore trusted root",
                         "The Sigstore trusted root this deployment verifies bundles against - the JSON a "
@@ -81,19 +79,19 @@ public final class SignatureSettingsContributor implements SettingsContributor {
                                 + "re-publish - revisits that.",
                         Setting.Kind.STRING, "", true, Setting.Scope.TENANT).advanced(),
                 new Setting(TrustedRootTask.INTERVAL.key(), "Compliance", "Sigstore trusted root interval",
-                        "How often the trusted root is fetched again, as a duration. A root changes about as often "
-                                + "as a certificate authority rotates, and an unchanged document is not rewritten, "
-                                + "so a daily pass costs one read.",
+                        "How often the trusted root is fetched again. A root changes about as often as a certificate "
+                                + "authority rotates, and an unchanged document is not rewritten, so a daily pass "
+                                + "costs one read.",
                         Setting.Kind.STRING, TrustedRootTask.INTERVAL.fallbackText(), true).advanced(),
                 new Setting(ProvenanceTrust.ACCEPT, "Compliance", "Accept signatures by provenance",
-                        "The OIDC issuers whose keyless identities are trusted by provenance, comma- or "
-                                + "newline-separated - GitHub Actions' https://token.actions.githubusercontent.com "
-                                + "being the one to name first. A Sigstore bundle by an identity of a listed issuer "
-                                + "is trusted for a coordinate when the signing workflow belongs to the repository "
-                                + "the coordinate's own metadata names - a POM's <scm>, a package.json's repository - "
-                                + "as the maintainer record kept per coordinate has it; a workflow of any other "
-                                + "repository, a fork included, stays untrusted. Empty admits nothing this way, and a "
-                                + "pinned signer still decides ahead of it.",
+                        "The OIDC issuers whose keyless identities are trusted by provenance - GitHub Actions' "
+                                + "https://token.actions.githubusercontent.com being the one to name first. A Sigstore "
+                                + "bundle by an identity of a listed issuer is trusted for a coordinate when the "
+                                + "signing workflow belongs to the repository the coordinate's own metadata names - a "
+                                + "POM's <scm>, a package.json's repository - as the maintainer record kept per "
+                                + "coordinate has it; a workflow of any other repository, a fork included, stays "
+                                + "untrusted. Empty admits nothing this way, and a pinned signer still decides ahead "
+                                + "of it.",
                         Setting.Kind.STRING, "", true, Setting.Scope.TENANT).form(Setting.Form.LINES).standard(),
                 new Setting(KeyDiscoveryTask.SOURCES, "Compliance", "Signing-key discovery",
                         "Sources to fetch the signing keys this deployment does not hold from, comma-separated, asked "
@@ -130,8 +128,8 @@ public final class SignatureSettingsContributor implements SettingsContributor {
                                 + "and most internal mirrors do.",
                         Setting.Kind.STRING, KeyDiscoveryTask.DEFAULT_UBUNTU, true, Setting.Scope.TENANT).advanced(),
                 new Setting(KeyDiscoveryTask.INTERVAL.key(), "Compliance", "Key discovery interval",
-                        "How often the key-discovery pass asks the named sources for the keys still wanted, as a "
-                                + "duration; a key a source did not have is asked for again after a day.",
+                        "How often the key-discovery pass asks the named sources for the keys still wanted; a key a "
+                                + "source did not have is asked for again after a day.",
                         Setting.Kind.STRING, KeyDiscoveryTask.INTERVAL.fallbackText(), true).advanced(),
                 new Setting(SignatureSweepTask.ENABLED, "Compliance", "Retroactive signature sweep",
                         "Apply the signature dials below to what is already published: the sweep re-judges the "
@@ -143,81 +141,81 @@ public final class SignatureSettingsContributor implements SettingsContributor {
                                 + "auto-released when a dial is loosened again.",
                         Setting.Kind.BOOLEAN, "false", true, Setting.Scope.TENANT).advanced(),
                 new Setting(SignatureSweepTask.INTERVAL.key(), "Compliance", "Retroactive signature sweep interval",
-                        "How often the signature sweep runs while switched on, as a duration; every version is "
-                                + "judged on its first and every Nth pass, the versions published since between.",
+                        "How often the signature sweep runs while switched on; every version is judged on its first "
+                                + "and every Nth pass, the versions published since between.",
                         Setting.Kind.STRING, SignatureSweepTask.INTERVAL.fallbackText(), true).advanced(),
                 new Setting(AttestationLookupObserver.STORES, "Compliance", "Attestation lookup by digest",
                         "The attestation stores asked, by the artifact's digest, for the bundles they hold for an "
-                                + "artifact just published, one <ecosystem> = <url> per line; the answer is kept "
-                                + "beside the artifact and read as its evidence. Empty, nothing is asked. A Homebrew "
-                                + "mirror sets \"" + AttestationLookupObserver.HOMEBREW_STORE
-                                + "\", GitHub's store for the bottles homebrew-core's CI attests, asked "
-                                + "unauthenticated for public attestations. A store answering 404 holds nothing for "
-                                + "the digest; any other failure is logged and the publish is unaffected.",
+                                + "artifact just published, each an ecosystem and the address of the store asked "
+                                + "for it, joined by an equals sign; the answer is kept beside the artifact and "
+                                + "read as its evidence. Empty, nothing is asked. A Homebrew mirror names GitHub's "
+                                + "store for the bottles homebrew-core's CI attests - \""
+                                + AttestationLookupObserver.HOMEBREW_STORE + "\" - asked unauthenticated for public "
+                                + "attestations. A store answering 404 holds nothing for the digest; any other "
+                                + "failure is logged and the publish is unaffected.",
                         Setting.Kind.STRING, "", true, Setting.Scope.TENANT).form(Setting.Form.LINES).advanced(),
                 new Setting(SignaturePolicy.INVALID, "Compliance", "Invalid-signature action",
                         "Verdict for an artifact whose signature does not match its bytes - the artifact was altered "
                                 + "after signing, or the signature was made for different content. Of the signature "
-                                + "outcomes, this is the only one that is evidence of something actively wrong. "
-                                + "REJECT refuses it, QUARANTINE holds it for review, ALLOW lets it through with the "
-                                + "finding recorded.",
+                                + "outcomes, this is the only one that is evidence of something actively wrong. It can "
+                                + "be refused, held for review, or let through with the finding recorded.",
                         Setting.Kind.CHOICE, List.of("ALLOW", "QUARANTINE", "REJECT"),
                                 SignaturePolicy.INVALID_DEFAULT, true,
-                        Setting.Scope.TENANT).standard(),
+                        Setting.Scope.TENANT).standard().named(Setting.Choice.VERDICTS),
                 new Setting(SignaturePolicy.UNTRUSTED, "Compliance", "Untrusted-signer action",
-                        "Verdict for a well-formed signature by a signer this deployment has no reason to believe - "
-                                + "no key for it, or a key not admitted for that namespace. It is the common outcome "
-                                + "the day enforcement is switched on, and a decision waiting on a human rather than "
-                                + "something known to be wrong, which is what QUARANTINE's hold for review is for.",
+                        "Verdict for a well-formed signature by a signer this deployment has no reason to believe - no "
+                                + "key for it, or a key not admitted for that namespace. It is the common outcome the "
+                                + "day enforcement is switched on, and a decision waiting on a human rather than "
+                                + "something known to be wrong, which is what holding it for review is for.",
                         Setting.Kind.CHOICE, List.of("ALLOW", "QUARANTINE", "REJECT"),
                                 SignaturePolicy.UNTRUSTED_DEFAULT, true,
-                        Setting.Scope.TENANT).standard(),
+                        Setting.Scope.TENANT).standard().named(Setting.Choice.VERDICTS),
                 new Setting(SignaturePolicy.CHANGED, "Compliance", "Signer-changed action",
                         "Verdict for a coordinate signed by a different signer than its earlier versions carried. A "
                                 + "legitimate key rotation and a compromised account look identical here, and only a "
-                                + "person can tell them apart, which makes QUARANTINE the fitting answer rather than "
-                                + "REJECT. This is the case a single global keyring cannot see, because the signature "
-                                + "is perfectly valid.",
+                                + "person can tell them apart, which makes holding it for review the fitting answer "
+                                + "rather than refusing it. This is the case a single global keyring cannot see, "
+                                + "because the signature is perfectly valid.",
                         Setting.Kind.CHOICE, List.of("ALLOW", "QUARANTINE", "REJECT"),
                                 SignaturePolicy.CHANGED_DEFAULT, true,
-                        Setting.Scope.TENANT).standard(),
+                        Setting.Scope.TENANT).standard().named(Setting.Choice.VERDICTS),
                 new Setting(SignaturePolicy.MISSING, "Compliance", "Missing-signature action",
                         "Verdict for an artifact carrying no signature where its format expects one. Unlike the other "
                                 + "signature outcomes, this is not yet a fact at screen time: a publish is several "
                                 + "requests and the signature is legitimately still in flight when the artifact it "
-                                + "covers is screened, so holding on it puts every properly signed release through "
-                                + "the review queue on its way out of it. Set QUARANTINE or REJECT for a deployment "
-                                + "that requires every artifact to arrive signed. It does not govern the proxy path, "
-                                + "which has a dial of its own: an upstream carries artifacts published long before "
-                                + "its own signing requirement existed.",
+                                + "covers is screened, so holding on it puts every properly signed release through the "
+                                + "review queue on its way out of it. A deployment that requires every artifact to "
+                                + "arrive signed holds or refuses it. It does not govern the proxy path, which has a "
+                                + "dial of its own: an upstream carries artifacts published long before its own "
+                                + "signing requirement existed.",
                         Setting.Kind.CHOICE, List.of("ALLOW", "QUARANTINE", "REJECT"),
                                 SignaturePolicy.MISSING_DEFAULT, true,
-                        Setting.Scope.TENANT).standard(),
+                        Setting.Scope.TENANT).standard().named(Setting.Choice.VERDICTS),
                 new Setting(SignaturePolicy.MISSING_PROXY, "Compliance", "Missing-signature action on the proxy path",
                         "Verdict for a proxied artifact carrying no signature where its format expects one, whatever "
-                                + "the publish-path dial says. An upstream carries artifacts published long before "
-                                + "its own signing requirement existed, and a proxy that holds every one of them "
-                                + "stops being a proxy. The pull-through fetches what the upstream publishes beside "
-                                + "an artifact - Maven's .asc and .sigstore.json, a registry's attestations - before "
-                                + "the screen decides, so an artifact that arrives unsigned here really is unsigned "
-                                + "upstream; a deployment mirroring a registry that signs everything can set "
-                                + "QUARANTINE or REJECT.",
+                                + "the publish-path dial says. An upstream carries artifacts published long before its "
+                                + "own signing requirement existed, and a proxy that holds every one of them stops "
+                                + "being a proxy. The pull-through fetches what the upstream publishes beside an "
+                                + "artifact - Maven's .asc and .sigstore.json, a registry's attestations - before the "
+                                + "screen decides, so an artifact that arrives unsigned here really is unsigned "
+                                + "upstream; a deployment mirroring a registry that signs everything can hold or "
+                                + "refuse it.",
                         Setting.Kind.CHOICE, List.of("ALLOW", "QUARANTINE", "REJECT"),
                                 SignaturePolicy.MISSING_PROXY_DEFAULT, true,
-                        Setting.Scope.TENANT).advanced(),
+                        Setting.Scope.TENANT).advanced().named(Setting.Choice.VERDICTS),
                 new Setting(SignaturePolicy.QUALITY_FLOOR, "Compliance", "Signature quality floor",
-                        "The grade below which a signature raises a finding - none (quality is reported and never "
-                                + "gated), unusable, weak, acceptable or strong. The grade is arithmetic over the "
-                                + "signature packet and the key (algorithm, bit length, the digest the signature was "
-                                + "made over, expiry), never a judgement about the signer.",
+                        "The grade below which a signature raises a finding; with no floor, quality is reported and "
+                                + "never gated. The grade is arithmetic over the signature packet and the key "
+                                + "(algorithm, bit length, the digest the signature was made over, expiry), never a "
+                                + "judgement about the signer.",
                         Setting.Kind.CHOICE, List.of("none", "UNUSABLE", "WEAK", "ACCEPTABLE", "STRONG"), "none",
                         true, Setting.Scope.TENANT).advanced(),
                 new Setting(SignaturePolicy.QUALITY_ACTION, "Compliance", "Below-floor quality action",
                         "What a signature below the quality floor does. A weak signature is still a signature, and an "
                                 + "operator raising a floor is usually asking to be told rather than to be refused: "
-                                + "ALLOW reports it, while QUARANTINE and REJECT make the floor a gate.",
+                                + "allowing it reports it, while holding or refusing it makes the floor a gate.",
                         Setting.Kind.CHOICE, List.of("ALLOW", "QUARANTINE", "REJECT"),
                                 SignaturePolicy.QUALITY_ACTION_DEFAULT, true,
-                        Setting.Scope.TENANT).advanced());
+                        Setting.Scope.TENANT).advanced().named(Setting.Choice.VERDICTS));
     }
 }

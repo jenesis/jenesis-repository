@@ -21,11 +21,11 @@ public final class QuotaSettingsContributor implements SettingsContributor {
     @Override
     public List<Setting> settings() {
         return List.of(
-                new Setting(KEY, "Limits", "Tenant storage quota",
-                        "How many bytes of stored content a tenant's repositories may hold together; 0 is unlimited. "
-                                + "A publish past it is refused with 507. The usage is recounted by the scheduled "
-                                + "cleanup, so a lowered quota bites from the next count.",
-                        Setting.Kind.LONG, "0", true, Setting.Scope.TENANT).essential());
+                new Setting(KEY, "Limits", "Storage quota",
+                        "How many bytes of stored content a tenant's repositories may hold together; zero sets no "
+                                + "limit. A publish past it is refused with 507. The usage is recounted by the "
+                                + "scheduled cleanup, so a lowered quota bites from the next count.",
+                        Setting.Kind.LONG, "0", true, Setting.Scope.TENANT).standard());
     }
 
     /** A negative quota, which no count could be under. */

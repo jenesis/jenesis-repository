@@ -8,7 +8,7 @@
     <th:block th:replace="~{base :: repositoryHeader('Settings', null, null)}"></th:block>
     <p><small>What this repository is configured with - the settings the repository wizard asks when one is created,
         edited here.</small></p>
-    <p th:unless="${isEditor}"><small>You have read-only access to this tenant.</small></p>
+    <p th:unless="${isEditor}"><small>You have read-only access to this [[${scopeWord}]].</small></p>
 
     <th:block th:unless="${groups.isEmpty()}"><div th:replace="~{fragments :: settingFilter}"></div></th:block>
     <!--/* What the routing form offers as another repository to fall back on. */-->

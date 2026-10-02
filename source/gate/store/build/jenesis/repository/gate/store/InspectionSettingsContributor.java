@@ -22,14 +22,14 @@ public final class InspectionSettingsContributor implements SettingsContributor 
                 new Setting(QualityInspector.OVERSIZED_KEY, "Compliance", "Artifacts past the inspection bound",
                         "What to do with an artifact larger than the inspection prefix "
                                 + "(jenrepo.inspection.prefix-bytes), which is the most of one artifact an inspector "
-                                + "is ever handed in memory. STREAM screens it anyway, reading it from the store as a "
-                                + "stream so a licence, a coordinate or a signature stored at the back of a large "
-                                + "archive is still found; it costs a pass over the artifact. QUARANTINE holds it for "
-                                + "review, and REJECT refuses the publish - both of them saying the artifact was too "
-                                + "large to screen, which is a statement about its size and not about what is in it. "
-                                + "This governs what is PUBLISHED here: a proxied artifact is either streamed through "
-                                + "to the client as it is fetched, where there is no stored body to go back to, or "
-                                + "spooled whole by the hardening proxy, which already screens it whole.",
+                                + "is ever handed in memory. Streaming screens it anyway, reading it from the store as "
+                                + "a stream so a licence, a coordinate or a signature stored at the back of a large "
+                                + "archive is still found; it costs a pass over the artifact. Holding it for review "
+                                + "and refusing the publish both say the artifact was too large to screen, which is a "
+                                + "statement about its size and not about what is in it. This governs what is "
+                                + "PUBLISHED here: a proxied artifact is either streamed through to the client as it "
+                                + "is fetched, where there is no stored body to go back to, or spooled whole by the "
+                                + "hardening proxy, which already screens it whole.",
                         Setting.Kind.CHOICE, List.of("STREAM", "QUARANTINE", "REJECT"),
                         QualityInspector.OVERSIZED_DEFAULT, true).advanced());
     }

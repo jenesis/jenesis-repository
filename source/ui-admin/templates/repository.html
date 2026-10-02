@@ -7,8 +7,9 @@
     <div th:replace="~{fragments :: messages}"></div>
     <th:block th:replace="~{base :: repositoryOverviewHeader}"></th:block>
     <!--/* The description is what the repository is for, so it reads as text; an editor changes it through a pencil
-         at its end, which opens the form beneath it, rather than meeting an input field as the first thing on the
-         page. The form sits beside the disclosure rather than inside it so the pencil stays on the text's line. */-->
+         at its end, which replaces the text with a text area holding it, in the same place, rather than meeting an
+         input field as the first thing on the page. The form sits beside the disclosure rather than inside it so the
+         pencil stays on the text's line. */-->
     <div class="app-inline-edit">
         <p id="description" th:text="${description.isEmpty()} ? 'No description.' : ${description}">text</p>
         <details th:if="${isEditor}">
@@ -19,8 +20,8 @@
         </details>
         <form th:if="${isEditor}" class="setting-edit" method="post"
               th:action="@{'/ui/repositories/' + ${repo} + '/describe'}">
-            <input name="description" maxlength="280" th:value="${description}" aria-label="Description"
-                   placeholder="What this repository is for">
+            <textarea name="description" maxlength="280" rows="2" th:text="${description}" aria-label="Description"
+                      placeholder="What this repository is for"></textarea>
             <button th:replace="~{base :: primaryButton('Save')}">Save</button>
         </form>
     </div>
@@ -39,7 +40,7 @@
         <p><small th:switch="${routing.layer().name()}">
             <span th:case="'REPOSITORY'">Set for this repository, over the deployment's definition.</span>
             <span th:case="'DEPLOYMENT'">Inherited from the deployment's definition<span th:if="${isSuperadmin}">
-                on <a th:href="@{/ui/settings/upstreams}">Upstreams</a></span>, which every tenant shares.</span>
+                on <a th:href="@{/ui/settings/upstreams}">Upstreams</a></span><th:block th:if="${multiTenant}">, which every tenant shares</th:block>.</span>
             <span th:case="*"><th:block th:if="${formatUpstream == null}">Not defined: a hosted repository that
                 accepts uploads and fetches from nowhere.</th:block><th:block th:unless="${formatUpstream == null}">Not
                 defined: it accepts uploads and fetches what it lacks through its format's upstream,
@@ -132,10 +133,10 @@
     <section th:if="${isAdmin}" class="app-divide" aria-labelledby="delete-repository">
         <h2 id="delete-repository">Delete repository</h2>
         <p><small>Deletes this repository and everything it holds - every artifact, index, staged upload and pin, and
-            this tenant's own routing of it. It stops answering at once; the rest is removed in the
+            this [[${scopeWord}]]'s own routing of it. It stops answering at once; the rest is removed in the
             background.</small></p>
         <form method="post" th:action="@{'/ui/repositories/' + ${repo} + '/delete'}">
-            <button th:replace="~{base :: deleteButton('Delete repository', ${repo}, 'Everything this repository holds is deleted: every artifact, index, staged upload and pin, and the routing set for it in this tenant.')}">Delete repository</button>
+            <button th:replace="~{base :: deleteButton('Delete repository', ${repo}, 'Everything this repository holds is deleted: every artifact, index, staged upload and pin, and the routing set for it.')}">Delete repository</button>
         </form>
     </section>
 </main>

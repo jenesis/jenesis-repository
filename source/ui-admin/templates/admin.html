@@ -6,11 +6,11 @@
 <main id="main">
     <div th:replace="~{fragments :: messages}"></div>
     <header th:replace="~{base :: pageHeader('Members')}"></header>
-    <p>Console members of tenant <strong th:text="${tenant}">default</strong>.</p>
+    <p th:if="${multiTenant}">Console members of tenant <strong th:text="${tenant}">default</strong>.</p>
 
     <article>
         <h2>Console members</h2>
-        <p><small>Who may sign in to this tenant and at what role (viewer, editor or admin). Keyed by the
+        <p><small>Who may sign in to this [[${scopeWord}]] and at what role (viewer, editor or admin). Keyed by the
             provider-qualified id (e.g. <code>github/1024025</code>); the login is shown for convenience only.</small></p>
         <figure th:unless="${users.isEmpty()}">
             <table class="app-list">
@@ -31,7 +31,7 @@
                         <div class="app-actions">
                             <form method="post" th:action="@{/ui/admin/users/remove}">
                                 <input type="hidden" name="id" th:value="${u.id}">
-                                <button th:replace="~{base :: deleteButton('Remove', ${u.id}, 'The user loses their membership of this tenant and everything it granted.')}">Remove</button>
+                                <button th:replace="~{base :: deleteButton('Remove', ${u.id}, 'The user loses their membership and everything it granted.')}">Remove</button>
                             </form>
                         </div>
                     </td>
@@ -77,7 +77,7 @@
     <article>
         <h2>Groups</h2>
         <p><small>A group holds rights exactly as a person or a key does, and everyone in it holds them too — which
-            is how "everyone in <em>developers</em> may read this tenant" is said once instead of once per person.
+            is how "everyone in <em>developers</em> may read this [[${scopeWord}]]" is said once instead of once per person.
             A member holds the group's rights from their next request. A group with members and no grants confers
             nothing, so it is safe to fill one before deciding what it may do.</small></p>
         <figure th:unless="${groups.isEmpty()}">
@@ -140,9 +140,9 @@
 
     <article th:if="${isAdmin and capabilities.scim()}">
         <h2>SCIM provisioning</h2>
-        <p><small>Let this tenant's identity provider provision members automatically at
+        <p><small>Let this [[${scopeWord}]]'s identity provider provision members automatically at
             <code>POST /scim/v2/<span th:text="${tenant}">default</span>/Users</code>. Generate a token and set it as
-            the Bearer secret on the IdP's SCIM connector. The token is scoped to this tenant and shown once; only its
+            the Bearer secret on the IdP's SCIM connector. The token is scoped to this [[${scopeWord}]] and shown once; only its
             hash is stored. Status:
             <strong th:text="${scimConfigured} ? 'configured' : 'not configured'">not configured</strong>.</small></p>
         <!--/* A token is minted by the product and shown once, so neither act loses anything a new token does not
@@ -154,7 +154,7 @@
                 <th:block th:if="${scimConfigured}"><button th:replace="~{base :: cautionButton('Regenerate token', 'Mint a new SCIM token? The token the identity provider holds stops working until it is given the new one.')}">Regenerate token</button></th:block>
             </form>
             <form th:if="${scimConfigured}" method="post" th:action="@{/ui/admin/scim-token/clear}">
-                <button th:replace="~{base :: cautionButton('Clear token', 'Disable SCIM for this tenant? The identity provider can no longer provision its members.')}">Clear token</button>
+                <button th:replace="~{base :: cautionButton('Clear token', 'Disable SCIM provisioning? The identity provider can no longer provision members.')}">Clear token</button>
             </form>
         </div>
     </article>

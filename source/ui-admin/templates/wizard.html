@@ -10,13 +10,19 @@
     <!--/* The one wizard page: every wizard - the first boot's setup, a new repository, a new project - renders here from
          a WizardFlow. Nothing is written until the review's completion: every value rides this form as a hidden field
          from step to step, so Back loses nothing and leaving the page leaves nothing behind. */-->
+    <!--/* Every step is a way back to it, carrying what the run holds: an earlier step at once, a later one once the
+         steps on the way are accepted. The steps are buttons of the run's form; the hidden first one is the step's
+         own primary action, so Enter in a field still moves on rather than jumping to the first step. */-->
+    <button type="submit" form="wizard" name="action" class="app-sr-only" tabindex="-1" aria-hidden="true"
+            th:value="${wizard.reviewing()} ? 'complete' : 'next'">Next</button>
     <ol class="app-steps" aria-label="Steps">
         <li th:each="step, at : ${wizard.steps()}"
-            th:attr="aria-current=${at.index == wizard.index()} ? 'step' : null"
-            th:text="${step.title()}">Step</li>
+            th:attr="aria-current=${at.index == wizard.index()} ? 'step' : null">
+            <button type="submit" form="wizard" name="action" th:value="|step-${at.index}|" class="app-quiet"
+                    th:text="${step.title()}">Step</button></li>
     </ol>
 
-    <form method="post" th:action="@{${wizard.action()}}" class="app-wizard"
+    <form id="wizard" method="post" th:action="@{${wizard.action()}}" class="app-wizard"
           th:with="step=${wizard.current()}">
         <input type="hidden" name="step" th:value="${wizard.index()}">
         <input type="hidden" th:each="c : ${wizard.carried()}" th:name="${c.name()}" th:value="${c.value()}">
@@ -114,7 +120,12 @@
                                data-check-key=${s.key()},
                                data-duration=${s.duration()} ? (${s.durationOrNone()} ? 'or-none' : 'duration') : null,
                                data-default=${s.duration()} ? ${s.defaultValue()} : null,
-                               data-routing=${s.routing()} ? 'true' : null">
+                               data-routing=${s.routing()} ? 'true' : null,
+                               data-values=${s.values()} ? 'true' : null,
+                               list=${s.values()} ? |known-${s.key()}| : null">
+                <datalist th:if="${s.values()}" th:id="|known-${s.key()}|">
+                    <option th:each="o : ${s.options()}" th:value="${o}" th:label="${s.choiceOf(o).name()}"></option>
+                </datalist>
             </div>
             <small class="app-field__error" th:if="${wizard.error(name) != null}" role="alert"
                    th:text="${wizard.error(name)}">Refused.</small>

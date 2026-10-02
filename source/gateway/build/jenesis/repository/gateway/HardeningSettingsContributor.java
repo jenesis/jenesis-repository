@@ -26,9 +26,9 @@ public final class HardeningSettingsContributor implements SettingsContributor {
                         Setting.Kind.BOOLEAN, "false", true).gate().advanced(),
                 new Setting(MigrationRescreenTaskProvider.INTERVAL.key(), "Hardening proxy",
                         "Migration re-screen interval",
-                        "How often the migration re-screen sweep runs, as an ISO-8601 duration. Every pass lists "
-                                + "every cached artifact of every hardened repository, and a late-flipped repository "
-                                + "is verified fail-closed on every read until the sweep reaches it.",
+                        "How often the migration re-screen sweep runs. Every pass lists every cached artifact of every "
+                                + "hardened repository, and a late-flipped repository is verified fail-closed on every "
+                                + "read until the sweep reaches it.",
                         Setting.Kind.DURATION, MigrationRescreenTaskProvider.INTERVAL.fallbackText(), true).advanced());
     }
 }

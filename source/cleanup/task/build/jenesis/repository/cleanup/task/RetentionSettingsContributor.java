@@ -44,17 +44,16 @@ public final class RetentionSettingsContributor implements SettingsContributor {
                                 + "degrading to no retention.",
                         Setting.Kind.STRING, "", true).advanced(),
                 new Setting(RetentionPolicy.KEEP_LAST, "Retention", "Keep last",
-                        "Keep at most this many newest versions per coordinate; 0 disables the count cap.",
+                        "Keep at most this many newest versions per coordinate; zero sets no count cap.",
                         Setting.Kind.INTEGER, "0", true, Setting.Scope.REPOSITORY).essential(),
                 new Setting(RetentionPolicy.MAX_AGE, "Retention", "Maximum age",
-                        "Evict versions older than this duration (P30D, 30d); none switches the rule off.",
+                        "Evict versions older than this.",
                         Setting.Kind.DURATION_OR_NONE, "", true, Setting.Scope.REPOSITORY).essential(),
                 new Setting(RetentionPolicy.PRERELEASE_EXPIRY, "Retention", "Prerelease expiry",
-                        "Evict prereleases older than this duration; none switches the rule off.",
+                        "Evict prereleases older than this.",
                         Setting.Kind.DURATION_OR_NONE, "", true, Setting.Scope.REPOSITORY).essential(),
                 new Setting(RetentionPolicy.NOT_DOWNLOADED_FOR, "Retention", "Not downloaded for",
-                        "Evict versions not downloaded within this duration - it needs download tracking; none "
-                                + "switches the rule off.",
+                        "Evict versions not downloaded for this long; it needs download tracking.",
                         Setting.Kind.DURATION_OR_NONE, "", true, Setting.Scope.REPOSITORY).essential(),
                 new Setting("scheduled-cleanup", "Retention", "Scheduled cleanup",
                         "Run the scheduled reaps: finished import jobs past their time-to-live and the usage recount "
@@ -65,13 +64,13 @@ public final class RetentionSettingsContributor implements SettingsContributor {
                         "How often the scheduled reaps run.",
                         Setting.Kind.DURATION, CleanupTaskProvider.INTERVAL.fallbackText(), true).advanced(),
                 new Setting(CleanupTask.IMPORT_JOB_TTL.key(), "Record lifetimes", "Import job time-to-live",
-                        "Auto-dismiss completed or failed migration jobs (and their remembered sources) this "
-                                + "ISO-8601 duration after the sweep first sees them finished; a running job is "
-                                + "never touched. PT0S disables the auto-dismiss.",
+                        "Auto-dismiss completed or failed migration jobs (and their remembered sources) this long "
+                                + "after the sweep first sees them finished; a running job is never touched. Zero "
+                                + "switches the auto-dismiss off.",
                         Setting.Kind.DURATION, CleanupTask.IMPORT_JOB_TTL.fallbackText(), true).advanced(),
                 new Setting(CleanupTask.EXPORT_JOB_TTL.key(), "Record lifetimes", "Export job time-to-live",
-                        "How long a finished export job's status stays before the scheduled cleanup dismisses it. "
-                                + "Zero, negative or blank keeps every job until an operator dismisses it by hand.",
+                        "How long a finished export job's status stays before the scheduled cleanup dismisses it. Zero "
+                                + "keeps every job until an operator dismisses it by hand.",
                         Setting.Kind.DURATION, CleanupTask.EXPORT_JOB_TTL.fallbackText(), true).advanced());
     }
 }

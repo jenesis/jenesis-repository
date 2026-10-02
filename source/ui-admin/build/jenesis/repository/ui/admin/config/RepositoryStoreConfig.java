@@ -25,9 +25,12 @@ import org.springframework.core.env.Environment;
 @Configuration
 public class RepositoryStoreConfig {
 
+    /** The backend {@code jenrepo.store} names when it is not set. */
+    public static final String DEFAULT_BACKEND = "filesystem";
+
     @Bean
     public ArtifactStore repositoryStore(Environment environment) {
-        String backend = environment.getProperty("jenrepo.store", "filesystem");
+        String backend = environment.getProperty("jenrepo.store", DEFAULT_BACKEND);
         ArtifactStore store = ArtifactStoreProvider.resolve(backend, environment::getProperty);
         // Read-only mode refuses the console's own writes at the server's choke point.
         return environment.getProperty("jenrepo.read-only", Boolean.class, false)

@@ -35,9 +35,11 @@
     --app-space-5: 1.5rem;
     --app-space-6: 2rem;
 
-    --app-radius-sm: 0.25rem;
-    --app-radius-md: 0.5rem;
-    --app-radius-lg: 0.75rem;
+    /* Corners are square everywhere - fields, buttons, badges, cards, the switch - one shape across the console. The
+       three names stay so a component says which scale it would take, and all three are the one corner. */
+    --app-radius-sm: 0;
+    --app-radius-md: 0;
+    --app-radius-lg: 0;
 
     --app-icon-size: 1.25rem;
 
@@ -460,11 +462,17 @@ body > main article {
     border-radius: 0;
     border-top: 1px solid var(--pico-muted-border-color);
 }
-/* The first section under the page title needs no rule to set it apart: the title already does. */
+/* The first section under the page title needs no rule to set it apart: the title already does - unless text stands
+   between them, as a repository's description does, which the rule then sets the section apart from. */
 body > main > article:first-of-type {
     margin-top: 0;
     padding-top: 0;
     border-top: 0;
+}
+body > main > .app-inline-edit ~ article:first-of-type {
+    margin-top: var(--app-space-6);
+    padding-top: var(--app-space-4);
+    border-top: 1px solid var(--pico-muted-border-color);
 }
 body > main article > header,
 body > main article > footer {
@@ -620,11 +628,13 @@ hgroup.app-page-header__heading > h1.app-page-header__title {
 .app-inline-edit > details[open] > summary {
     color: var(--pico-primary);
 }
+/* Editing replaces the text in its place: the pencil opens a text area holding it where the text stood. */
 .app-inline-edit > form {
     flex-basis: 100%;
-    margin: var(--app-space-2) 0 0;
+    margin: 0;
 }
-.app-inline-edit > details:not([open]) ~ form {
+.app-inline-edit > details:not([open]) ~ form,
+.app-inline-edit:has(> details[open]) > p {
     display: none;
 }
 /* A folder link beside a heading: a small mark in the link colour, sitting on the heading's line. */
@@ -652,21 +662,6 @@ hgroup.app-page-header__heading > h1.app-page-header__title {
     color: var(--pico-muted-color);
     font-size: var(--app-font-size-sm);
 }
-/* A search over one list: the field across the line with its button joined to its end, and a note under both. */
-.app-search > [role="search"] {
-    display: flex;
-    margin-bottom: var(--app-space-2);
-}
-main .app-search > [role="search"] > input {
-    flex: 1 1 auto;
-    margin-bottom: 0;
-}
-main .app-search > [role="search"] > button {
-    flex: 0 0 auto;
-    width: auto;
-    margin-bottom: 0;
-}
-
 /* A filter bar: its fields side by side, wrapping on a narrow screen, and the button that applies them level with the
    fields rather than with their labels. */
 .app-filter-bar {
@@ -880,6 +875,58 @@ main .app-filter-bar > button {
     opacity: 0.55;
 }
 
+/* ---- Dashboard: a grid of panels, each a figure, what it counts and a few lines ------------------------------ */
+.app-dashboard {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(min(100%, 18rem), 1fr));
+    gap: var(--app-space-4);
+    align-items: start;
+}
+.app-dashboard__panel {
+    margin: 0;
+    border-top: 3px solid var(--pico-muted-border-color);
+}
+.app-dashboard__panel--attention {
+    border-top-color: var(--app-status-warn-fg);
+}
+.app-dashboard__panel--clear {
+    border-top-color: var(--app-status-pass-fg);
+}
+.app-dashboard__panel h2 {
+    margin-bottom: var(--app-space-2);
+    font-size: var(--app-font-size-base);
+}
+.app-dashboard__figure {
+    margin-bottom: var(--app-space-3);
+    color: var(--app-muted-text);
+}
+.app-dashboard__figure strong {
+    display: block;
+    color: var(--pico-color);
+    font-size: var(--app-font-size-xl);
+    line-height: 1.2;
+}
+.app-dashboard__lines {
+    display: grid;
+    grid-template-columns: 1fr max-content;
+    gap: var(--app-space-1) var(--app-space-3);
+    margin: 0;
+    font-size: var(--app-font-size-sm);
+}
+.app-dashboard__lines dt {
+    font-weight: normal;
+    color: var(--app-muted-text);
+    overflow-wrap: anywhere;
+}
+.app-dashboard__lines dd {
+    margin: 0;
+    text-align: end;
+}
+.app-dashboard__note {
+    margin: var(--app-space-3) 0 0;
+    color: var(--app-muted-text);
+}
+
 /* ---- Cards, fields, empty states -------------------------------------------------------------------------- */
 .app-card {
     margin-block: 0 var(--app-space-4);
@@ -950,6 +997,17 @@ main .app-filter-bar > button {
     color: var(--pico-color);
     font-weight: 600;
 }
+/* Each step is a quiet button back to it, read as the step's name in the list's own colour and size. */
+main .app-steps button.app-quiet {
+    height: auto;
+    color: inherit;
+    font: inherit;
+    text-decoration: none;
+}
+main .app-steps button.app-quiet:hover {
+    color: var(--pico-primary);
+    text-decoration: underline;
+}
 /* A wizard's review: each choice on a line of its own, its name beside the value that will apply. */
 .app-review {
     display: grid;
@@ -980,7 +1038,7 @@ main .app-filter-bar > button {
     align-items: center;
     gap: var(--app-space-1);
     padding: 0.1rem var(--app-space-2);
-    border-radius: 999px;
+    border-radius: var(--app-radius-sm);
     background: var(--app-status-muted-bg);
     color: var(--app-status-muted-fg);
     font-size: var(--app-font-size-xs);
@@ -1144,8 +1202,8 @@ button.app-quiet:hover {
     --pico-form-element-spacing-horizontal: 0.75rem;
     --pico-border-radius: var(--app-radius-sm);
 }
-/* One corner for every control. Pico rounds a search field into a pill through its own variable, which left the one
-   round field on a screen of square ones. */
+/* One corner for every control. Pico rounds a search field into a pill through its own variable, which would leave the
+   one round field on a screen of square ones. */
 main :is([type=search], [role=search]) {
     --pico-border-radius: var(--app-radius-sm);
 }
@@ -1229,7 +1287,7 @@ main .app-switch {
     flex: none;
     width: 2.5rem;
     height: 1.375rem;
-    border-radius: 999px;
+    border-radius: var(--app-radius-sm);
     background: var(--app-switch-off);
     transition: background-color var(--pico-transition);
 }
@@ -1240,7 +1298,7 @@ main .app-switch {
     left: 0.1875rem;
     width: 1rem;
     height: 1rem;
-    border-radius: 50%;
+    border-radius: var(--app-radius-sm);
     background: var(--app-switch-knob);
     box-shadow: 0 1px 2px rgb(0 0 0 / 0.3);
     transition: transform var(--pico-transition);
@@ -1269,9 +1327,27 @@ main .app-switch {
     font-weight: 400;
     color: var(--pico-muted-color);
 }
-.app-switch__default {
+/* The one slot after a switch: "(default)" while it inherits, "Reset to default" once it is set - the same place, the
+   same size and the same muted colour, so the row does not shift when one gives way to the other. */
+.app-switch__slot {
+    display: inline-flex;
+    align-items: center;
+    min-width: 8.5rem;
+}
+.app-switch__default,
+main button.app-switch__reset {
     color: var(--pico-muted-color);
+    font-size: var(--app-font-size-sm);
     font-weight: 400;
+    line-height: 1.2;
+}
+main button.app-switch__reset {
+    height: auto;
+    padding: 0;
+    text-decoration: underline;
+}
+.app-switch__slot > [hidden] {
+    display: none;
 }
 /* A switch a form carries rather than saves (console.js), with its quiet reset beside it. */
 .app-switch-field {
@@ -1282,9 +1358,6 @@ main .app-switch {
     --app-switch-off: var(--pico-secondary-background);
     --app-switch-on: var(--pico-primary-background);
     --app-switch-knob: #fff;
-}
-.app-switch__default[hidden] {
-    display: none;
 }
 /* The grace before a switched setting is written, counted down beside the switch. */
 .app-switch__pending {
@@ -1453,16 +1526,26 @@ main .setting-controls :is(input:not([type=checkbox], [type=radio]), select) {
     height: 2.625rem;
     padding-inline: var(--app-space-3);
 }
-main .setting-controls :is(button, [type=submit]) {
+main .setting-controls :is(button, [type=submit]):not(.app-quiet, .app-switch) {
     height: 2.625rem;
+    min-width: 7rem;
+}
+.module-toggle {
+    margin: 0;
+}
+.setting-choice {
+    flex-basis: 100%;
+    margin: 0;
+    font-size: var(--app-font-size-sm);
+    color: var(--pico-muted-color);
+}
+.setting-choice:empty {
+    display: none;
 }
 .setting-revert {
     margin: 0;
 }
 .setting-values {
-    display: flex;
-    flex-wrap: wrap;
-    gap: var(--app-space-2);
     margin: var(--app-space-2) 0 0;
     font-size: var(--app-font-size-sm);
     color: var(--pico-muted-color);
@@ -1505,13 +1588,62 @@ main .app-duration > select {
     flex: 0 1 10rem;
     margin: 0;
 }
+/* Several values as removable entries (console.js): the chosen ones, then the field that adds one. */
+.app-values {
+    display: flex;
+    flex: 1;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: var(--app-space-2);
+    min-width: 0;
+}
+.app-values__chosen {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--app-space-2);
+    margin: 0;
+    padding: 0;
+    list-style: none;
+}
+.app-values__chosen > li {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--app-space-1);
+    margin: 0;
+    padding: 0 0 0 var(--app-space-2);
+    border: 1px solid var(--pico-muted-border-color);
+    background: var(--pico-card-sectioning-background-color);
+    font-size: var(--app-font-size-sm);
+    list-style: none;
+}
+main .app-values__chosen button {
+    margin: 0;
+    padding: 0 var(--app-space-2);
+    height: auto;
+    min-width: 0;
+    line-height: 1.6;
+}
+main .app-values > input {
+    flex: 1 1 10rem;
+    margin: 0;
+}
 /* A routing as a form (console.js): whether the repository accepts uploads, then its ordered fallbacks. */
 .app-routing {
     display: flex;
     flex-direction: column;
-    gap: var(--app-space-2);
+    align-items: stretch;
+    gap: var(--app-space-3);
+    width: 100%;
 }
-.app-routing__writable, .app-routing__option {
+.app-routing__writable {
+    display: flex;
+    align-items: center;
+}
+/* No fallback yet: the empty list takes no room. */
+.app-routing__fallbacks:empty {
+    display: none;
+}
+.app-routing__option {
     display: inline-flex;
     align-items: center;
     gap: var(--app-space-2);

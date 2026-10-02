@@ -18,9 +18,9 @@ public final class DownloadSettingsContributor implements SettingsContributor {
                         Setting.Kind.BOOLEAN, "true", false).gate().advanced(),
                 new Setting("download-flush-interval", "Operations", "Download flush interval",
                         "How long download hits are held in memory before one compare-and-set adds them to the "
-                                + "version's document and refreshes its last-download instant - at most one write "
-                                + "per coordinate version per interval, and a count that lags by at most that. 0 or "
-                                + "off writes on every drain. Applies on restart.",
+                                + "version's document and refreshes its last-download instant - at most one write per "
+                                + "coordinate version per interval, and a count that lags by at most that. Zero writes "
+                                + "on every drain. Applies on restart.",
                         Setting.Kind.DURATION, "PT6H", false).advanced());
     }
 }

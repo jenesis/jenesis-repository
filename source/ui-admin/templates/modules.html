@@ -42,13 +42,20 @@
                           title="This module has no enable flag; it is active whenever it is installed.">always on</span>
                     <span class="app-badge app-badge--danger" th:if="${m.orphaned()}"
                           title="This module's declared key-spaces still hold data. Nothing is deleted automatically; purge it explicitly if the removal was intentional.">orphaned data</span>
-                    <!--/* A boolean enable flag renders as a one-click toggle, posting the opposite value through the
-                         existing settings write path. A numeric gate (a ceiling) or an ungated module has no switch. */-->
-                    <form method="post" th:action="@{/ui/settings/save}" class="module-toggle"
-                          th:if="${m.installed and m.gated and m.toggleable}">
+                    <!--/* A boolean enable flag is the same switch every setting is: it flips at once and posts the
+                         opposite value through the settings write path after the grace (console.js). A numeric gate (a
+                         ceiling) or an ungated module has no switch. */-->
+                    <form method="post" th:action="@{/ui/settings/save}" class="module-toggle setting-switch"
+                          th:if="${m.installed and m.gated and m.toggleable}" data-grace="5">
                         <input type="hidden" name="key" th:value="${m.enableKey}">
                         <input type="hidden" name="value" th:value="${m.toggleValue()}">
-                        <button th:replace="~{base :: secondaryButton(${m.enabled} ? 'Disable' : 'Enable')}">Toggle</button>
+                        <button type="submit" role="switch" class="app-switch"
+                                th:attr="aria-checked=${m.enabled},aria-label=|${m.module} enabled|">
+                            <span class="app-switch__track" aria-hidden="true"></span>
+                            <span class="app-switch__state" th:text="${m.enabled} ? 'On' : 'Off'">On</span>
+                        </button>
+                        <span class="app-switch__slot"></span>
+                        <small class="app-switch__pending" aria-live="polite"></small>
                     </form>
                 </div>
             </div>
