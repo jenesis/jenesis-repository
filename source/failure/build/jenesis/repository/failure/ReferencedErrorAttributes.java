@@ -1,6 +1,7 @@
 package build.jenesis.repository.failure;
 
 import module java.base;
+import jakarta.servlet.RequestDispatcher;
 import jakarta.servlet.http.HttpServletRequest;
 import org.springframework.boot.web.error.ErrorAttributeOptions;
 import org.springframework.boot.webmvc.error.DefaultErrorAttributes;
@@ -52,8 +53,22 @@ public class ReferencedErrorAttributes extends DefaultErrorAttributes {
         }
         String method = request instanceof NativeWebRequest web
                 && web.getNativeRequest() instanceof HttpServletRequest servlet ? servlet.getMethod() : "?";
-        String reference = Failures.record(method + " " + defaults.get("path"), getError(request));
+        Throwable error = getError(request);
+        String reference = Failures.record(method + " " + defaults.get("path")
+                + (error == null ? ", " + unexplained(request) : ""), error);
         request.setAttribute(REFERENCE, reference, RequestAttributes.SCOPE_REQUEST);
         return reference;
+    }
+
+    /**
+     * What names a failure no exception reached the error page with - a {@code sendError(500)}, or one the servlet
+     * container caught itself: the message the container recorded, or that it recorded none, so the log line still
+     * says where to look.
+     */
+    private static String unexplained(WebRequest request) {
+        Object message = request.getAttribute(RequestDispatcher.ERROR_MESSAGE, RequestAttributes.SCOPE_REQUEST);
+        return message instanceof String said && !said.isBlank()
+                ? "with no exception, the container saying: " + said
+                : "with no exception and no message from the container";
     }
 }

@@ -76,6 +76,17 @@ class FailureReferenceTest {
     }
 
     @Test
+    void a_failure_answered_with_no_exception_logs_what_the_container_recorded() {
+        HttpServletRequest request = failedRequest(500, null);
+        request.setAttribute(RequestDispatcher.ERROR_MESSAGE, "upstream answered nothing usable");
+
+        new ProblemErrorController(new ReferencedErrorAttributes(), List.of()).error(request);
+
+        assertThat(log.list).singleElement().extracting(ILoggingEvent::getFormattedMessage).asString()
+                .contains("GET /api/example").contains("the container saying: upstream answered nothing usable");
+    }
+
+    @Test
     void a_refusal_the_product_meant_carries_no_reference_and_logs_nothing() {
         HttpServletRequest request = failedRequest(404, null);
 
