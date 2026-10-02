@@ -1,16 +1,11 @@
 /**
- * Describes the JVM layouts' one runtime dial to the settings catalogue: the Maven format's
- * metadata-computation opt-in, contributed through a {@link build.jenesis.repository.settings.SettingsContributor} so
- * it surfaces exactly when an image ships this module beside the layouts.
+ * Describes the JVM layouts' one runtime dial to the settings catalogue: the Maven format's metadata-computation
+ * opt-in, contributed through a {@link build.jenesis.repository.settings.SettingsContributor}.
  *
- * <p>It deliberately {@code requires} <em>neither</em> layout implementation. The layouts themselves -
- * the Maven layout ({@code build.jenesis.repository.format.maven}) and the Jenesis module layout
- * ({@code build.jenesis.repository.format.jenesis}) - ride into an image from the distribution that names them
- * ({@code source/bundle} lists them beside every other format) and are discovered through {@code ServiceLoader}
- * exactly like the language formats; a shell (server / ui / combined) still names no format. A describing module
- * taking a compile-time edge to the described implementation is what made every Maven or module-layout commit
- * rebuild the images, so the only thing this module reads is the settings SPI and the agreed key spelling, with a
- * test - not a {@code requires} - holding that spelling to the constant.
+ * <p>It requires neither layout: the Maven and Jenesis module layouts reach an image through the bundle that names
+ * them and are discovered through {@code ServiceLoader}, and a compile-time edge from a describing module to the
+ * described implementation would rebuild every image on every change to that format. A test, not a {@code requires},
+ * holds the key's spelling to the format's constant.
  *
  * @jenesis.release 25
  * @jenesis.bom pin-repository.properties
