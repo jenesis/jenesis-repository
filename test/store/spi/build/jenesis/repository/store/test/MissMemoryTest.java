@@ -162,10 +162,25 @@ class MissMemoryTest {
     }
 
     @Test
+    void an_absence_read_before_a_write_is_not_remembered_after_it() throws IOException {
+        // A download reads the pointer and finds it absent; the publish writes it and forgets the key; only then does
+        // the download get to remember what it read. Remembered, the path would answer 404 for the whole ttl after
+        // its publish was accepted.
+        long mark = memory.mark();
+        store.writeVersioned("publish" + PATH, "pointer".getBytes(StandardCharsets.UTF_8), null);
+        memory.remember(store, "publish" + PATH, mark);
+        assertThat(memory.remembered(store, "publish" + PATH)).as("the write since the read wins").isFalse();
+
+        long later = memory.mark();
+        memory.remember(store, "publish/other", later);
+        assertThat(memory.remembered(store, "publish/other")).as("an absence no write followed is remembered").isTrue();
+    }
+
+    @Test
     void the_memory_is_bounded_whatever_is_probed() {
         MissMemory bounded = new MissMemory(Duration.ofHours(1), clock);
         for (int i = 0; i < 101_000; i++) {
-            bounded.remember(store, "publish/probe/" + i);
+            bounded.remember(store, "publish/probe/" + i, bounded.mark());
         }
         assertThat(bounded.size())
                 .as("a client probing more names than the bound evicts the oldest, never grows the heap")
@@ -178,7 +193,7 @@ class MissMemoryTest {
         MissMemory.reset();
         try {
             MissMemory node = MissMemory.node();
-            node.remember(store, "publish/anything");
+            node.remember(store, "publish/anything", node.mark());
             assertThat(node.size()).isEqualTo(1);
             assertThat(StoreCache.clearAll()).isGreaterThanOrEqualTo(1);
             assertThat(node.size()).as("POST /api/admin/caches/clear drops the memory of misses too").isZero();

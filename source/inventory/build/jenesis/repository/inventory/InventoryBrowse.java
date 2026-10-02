@@ -3,6 +3,7 @@ package build.jenesis.repository.inventory;
 import module java.base;
 
 import build.jenesis.repository.store.Publication;
+import build.jenesis.repository.store.RepositoryDocument;
 import build.jenesis.repository.blobs.BlobLayout;
 import build.jenesis.repository.store.ArtifactDescriptor;
 import build.jenesis.repository.store.ArtifactStore;
@@ -10,6 +11,7 @@ import build.jenesis.repository.store.Known;
 import build.jenesis.repository.store.ServableNames;
 import build.jenesis.repository.format.ArtifactLayout;
 import build.jenesis.repository.format.RepositoryFormat;
+import build.jenesis.repository.format.RepositoryType;
 import build.jenesis.repository.walk.BoundedChildren;
 import build.jenesis.repository.walk.ScreenedNames;
 import build.jenesis.repository.walk.Traversal;
@@ -293,10 +295,12 @@ final class InventoryBrowse {
     /** The request-path folder a coordinate version occupies - see {@link StoreRepositoryInventory#locate}. */
     String locate(String ecosystem, String coordinate, String version) {
         // A browse link is one folder, so where an ecosystem is served through several layouts this takes the first
-        // that resolves one. The order is the installed set's, which is name-ordered rather than discovery-ordered,
-        // so the link a deployment renders is stable across its nodes and restarts - the property that matters for a
-        // link. Every other seam on this class unions instead, because for them a first answer would be a wrong one.
-        for (ArtifactLayout layout : StoreRepositoryInventory.layoutsFor(ecosystem)) {
+        // that resolves one: the repository's own formats first, since a repository holds the type it was created
+        // with (an Ivy and a Maven layout both address Maven coordinates, and only one of them is this repository's),
+        // then the installed set in name order, which is stable across a deployment's nodes and restarts - the
+        // property that matters for a link. Every other seam on this class unions instead, because for them a first
+        // answer would be a wrong one.
+        for (ArtifactLayout layout : ownFirst(StoreRepositoryInventory.layoutsFor(ecosystem))) {
             List<String> paths = layout.paths(coordinate, version);
             if (!paths.isEmpty()) {
                 return paths.getFirst();
@@ -305,12 +309,33 @@ final class InventoryBrowse {
         return "";
     }
 
+    /** The names of the formats this repository's type holds, read once from its document; empty for a repository
+     *  that records no type this deployment installs, which leaves the installed order alone. */
+    private Set<String> own;
+
+    private List<ArtifactLayout> ownFirst(List<ArtifactLayout> layouts) {
+        if (own == null) {
+            try {
+                own = RepositoryDocument.read(store).flatMap(document -> RepositoryType.installed(document.format()))
+                        .map(type -> type.formats().stream().map(RepositoryFormat::name)
+                                .collect(Collectors.toUnmodifiableSet()))
+                        .orElse(Set.of());
+            } catch (IOException unreadable) {
+                own = Set.of();
+            }
+        }
+        List<ArtifactLayout> ordered = new ArrayList<>(layouts);
+        ordered.sort(Comparator.comparing(layout -> !(layout instanceof RepositoryFormat format
+                && own.contains(format.name()))));
+        return ordered;
+    }
+
     /** {@link #locate}, preferring the first layout whose folder holds something: an ecosystem several layouts serve
      *  resolves a folder in each, and only one of them holds the version in a given repository. One bounded probe per
      *  claiming layout; the first that resolves at all when none holds anything. */
     String locateHeld(String ecosystem, String coordinate, String version) {
         String resolved = "";
-        for (ArtifactLayout layout : StoreRepositoryInventory.layoutsFor(ecosystem)) {
+        for (ArtifactLayout layout : ownFirst(StoreRepositoryInventory.layoutsFor(ecosystem))) {
             for (String path : layout.paths(coordinate, version)) {
                 if (!children(path, 1).isEmpty()) {
                     return path;

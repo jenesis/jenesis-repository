@@ -66,10 +66,11 @@ public final class SearchPublicationObserver implements PublicationObserver {
         if (misses.isPresent() && misses.get().remembered(store, SearchIndex.MANIFEST)) {
             return false;
         }
+        long mark = misses.map(MissMemory::mark).orElse(0L);
         if (new SearchIndex(store).exists()) {
             return true;
         }
-        misses.ifPresent(memory -> memory.remember(store, SearchIndex.MANIFEST));
+        misses.ifPresent(memory -> memory.remember(store, SearchIndex.MANIFEST, mark));
         return false;
     }
 }

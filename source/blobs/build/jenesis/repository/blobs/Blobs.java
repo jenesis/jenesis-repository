@@ -386,9 +386,10 @@ public final class Blobs {
         if (memory.isPresent() && memory.get().remembered(store, key)) {
             return Optional.empty();
         }
+        long mark = memory.map(MissMemory::mark).orElse(0L);
         Optional<ArtifactStore.Versioned> pointer = store.readVersioned(key);
         if (pointer.isEmpty()) {
-            memory.ifPresent(remembering -> remembering.remember(store, key));
+            memory.ifPresent(remembering -> remembering.remember(store, key, mark));
             return Optional.empty();
         }
         ServableNames.Pointer parsed = ServableNames.parse(pointer.get().content());

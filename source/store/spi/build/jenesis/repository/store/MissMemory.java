@@ -52,6 +52,11 @@ public final class MissMemory {
     private final Duration ttl;
     private final Clock clock;
     private final Cache<String, Instant> misses;
+    /** When each recently forgotten key was forgotten, by {@link #sequence}: a read that began before a key's last
+     *  forget may not remember it absent, since a write landed in between. Held twice the ttl - a read slower than
+     *  that is one no memory should trust - and as bounded as the misses. */
+    private final Cache<String, Long> forgotten;
+    private final AtomicLong sequence = new AtomicLong();
     private final AtomicLong recorded = new AtomicLong();
     private final AtomicLong spared = new AtomicLong();
 
@@ -70,6 +75,8 @@ public final class MissMemory {
         }
         Duration lifetime = ttl.isZero() ? Duration.ofNanos(1) : ttl;
         this.misses = Caffeine.newBuilder().expireAfterWrite(lifetime).maximumSize(MAX_ENTRIES).build();
+        this.forgotten = Caffeine.newBuilder().expireAfterWrite(lifetime.multipliedBy(2)).maximumSize(MAX_ENTRIES)
+                .build();
     }
 
     /** The one memory of this process, built from {@link #TTL_SETTING} on first use. Process-wide, as the node's
@@ -126,12 +133,25 @@ public final class MissMemory {
         return true;
     }
 
-    /** Remember that {@code key} in {@code store} was just read and found absent. */
-    public void remember(ArtifactStore store, String key) {
+    /** Where the memory's forgets stand: taken before a read whose absence may be remembered, and handed to
+     *  {@link #remember}. */
+    public long mark() {
+        return sequence.get();
+    }
+
+    /** Remember that {@code key} in {@code store} was read and found absent by a read begun at {@code mark} - unless
+     *  the key was forgotten since, since a write that landed between the read and this call would otherwise be
+     *  answered absent for the whole ttl. */
+    public void remember(ArtifactStore store, String key, long mark) {
         if (ttl.isZero()) {
             return;
         }
-        misses.put(key(store, key), clock.instant());
+        String entry = key(store, key);
+        Long forgot = forgotten.getIfPresent(entry);
+        if (forgot != null && forgot > mark) {
+            return;
+        }
+        misses.put(entry, clock.instant());
         recorded.incrementAndGet();
     }
 
@@ -141,7 +161,9 @@ public final class MissMemory {
         if (ttl.isZero()) {
             return;
         }
-        misses.invalidate(key(store, key));
+        String entry = key(store, key);
+        forgotten.put(entry, sequence.incrementAndGet());
+        misses.invalidate(entry);
     }
 
     /** Drop every entry and answer how many went. */

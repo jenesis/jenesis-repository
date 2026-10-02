@@ -255,11 +255,11 @@ final class PublishHolds {
     }
 
     /**
-     * Verify that a blobs-namespace format resolves the publish it just laid out: the served request path is one its
-     * {@code servedPaths} maps the coordinate version back to, and the stored content hash is one its
-     * {@code blobHashes} resolves. A format whose {@code describe} emits a coordinate (so a retroactive KEV/license
-     * sweep enumerates the version) but whose {@code blobKeys}/{@code servedPaths} resolve NOTHING back would hold
-     * un-retractably; checked here, such a format fails on its first publish. On a break: emit
+     * Verify that a blobs-namespace format resolves the publish it just laid out: the stored content hash is one its
+     * {@code blobHashes} resolves for the coordinate version, which is what a hold marks. A format whose
+     * {@code describe} emits a coordinate (so a retroactive KEV/license sweep enumerates the version) but whose
+     * mapping resolves NOTHING back would hold un-retractably; checked here, such a format fails on its first
+     * publish. On a break: emit
      * {@code jenrepo.publish.holdmapping.broken{eco}} + one WARN, and {@code throw} only when
      * {@code jenrepo.strict-hold-mapping} is on (every test config sets it) - production stays alarm-not-abort, since a
      * broken format must not DoS publishes (the {@code hold.unenforceable} gauge reasoning). Scoped strictly to the
@@ -283,21 +283,24 @@ final class PublishHolds {
         }
         String coordinate = described.get().coordinate();
         String version = described.get().version();
-        // The two pointer reads: the served path just requested must be one the coordinate maps back to, and the
-        // content hash just stored must be one the coordinate resolves. Both scoped to THIS publish's path/hash.
-        boolean pathResolves = inventory.paths(ecosystem, coordinate, version).contains(artifact.path());
+        // The content hash just stored must be one the coordinate resolves, which is what a hold marks. The paths the
+        // version serves under are read for the report only: a publish may write at a push endpoint no client fetches
+        // from (a pod push, a winget manifest, a composer or swift release), and a version whose first file is not yet
+        // served - a winget manifest ahead of its installer - serves nothing to retract. That the served-path mapping
+        // is whole is held per format by the hold contract, against paths each fixture declares.
+        boolean pathResolves = !inventory.paths(ecosystem, coordinate, version).isEmpty();
         boolean hashResolves = artifact.hash() != null
                 && inventory.blobHashes(ecosystem, coordinate, version).contains(artifact.hash());
-        if (pathResolves && hashResolves) {
+        if (hashResolves) {
             return;   // the reverse mapping resolves the publish just made - the format is wired
         }
         LOGGER.warn("Repository publish of {} {}:{} through the blobs-namespace {} format resolves no reverse hold "
-                        + "mapping for the artifact just served ({}): servedPaths {} the request path, blobHashes {} "
+                        + "mapping for the artifact just published ({}): servedPaths {} for the version, blobHashes {} "
                         + "the stored content hash. A retroactive known-exploited or license hold on this version "
                         + "could mark nothing and retract no served path - the blobKeys/servedPaths mapping is unwired. "
                         + "This is caught at publish rather than in a later audit.",
                 ecosystem, coordinate, version, ecosystem, artifact.path(),
-                pathResolves ? "contains" : "is MISSING", hashResolves ? "contains" : "is MISSING");
+                pathResolves ? "resolves paths" : "resolves NOTHING", hashResolves ? "contains" : "is MISSING");
         if (meter != null) {
             meter.broken(ecosystem);
         }

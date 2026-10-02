@@ -256,12 +256,13 @@ public final class ServableNames {
             if (memory.isPresent() && memory.get().remembered(store, pointerKey)) {
                 return new Location(State.UNPUBLISHED, null, -1L);
             }
+            long mark = memory.map(MissMemory::mark).orElse(0L);
             if (publication.withheld(requestPath)) {
                 return new Location(State.WITHHELD, null, -1L);
             }
             Optional<Pointer> pointer = publication.pointer(requestPath);
             if (pointer.isEmpty()) {
-                memory.ifPresent(remembering -> remembering.remember(store, pointerKey));
+                memory.ifPresent(remembering -> remembering.remember(store, pointerKey, mark));
                 return new Location(State.UNPUBLISHED, null, -1L);
             }
             if (pointer.get().held()) {
