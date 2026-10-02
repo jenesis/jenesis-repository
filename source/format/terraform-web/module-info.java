@@ -1,15 +1,9 @@
 /**
- * The Terraform service-discovery document, as a module of its own: {@code GET /.well-known/terraform.json}, the
- * one path a Terraform or OpenTofu client fetches before it knows anything else about a registry.
- *
- * <p>It is separate from the format because it cannot live under a format's prefix. Terraform derives the discovery
- * URL from the <em>host</em> of a source address - {@code example.com/acme/random} is fetched from
- * {@code https://example.com/.well-known/terraform.json} - and a source address has no room for a path. Serving it
- * is therefore a server-level contribution, made through {@code ServerModuleProvider} like every other endpoint
- * family that is not a format's own.
- *
- * <p>Being separate is also what makes it optional: a deployment that leaves this module out still serves both
- * registry protocols to anything addressing them directly, and is simply not discoverable by {@code terraform init}.
+ * The Terraform service-discovery document, {@code GET /.well-known/terraform.json}, the one path a Terraform or
+ * OpenTofu client fetches before it knows anything else about a registry. It cannot live under a format's prefix,
+ * since Terraform derives the URL from the host of a source address, so it is a server-level contribution through
+ * {@code ServerModuleProvider}. Without this module a deployment still serves both registry protocols to a client
+ * addressing them directly, and is not discoverable by {@code terraform init}.
  *
  * @jenesis.release 25
  * @jenesis.bom pin-repository.properties

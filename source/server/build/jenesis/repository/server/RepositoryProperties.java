@@ -493,9 +493,8 @@ public class RepositoryProperties {
         return tenantHosts(tenantHosts);
     }
 
-    /** The same parse, off a raw value: {@code HostTenantRoutingProvider} reads the mapping from the routing
-     *  context's configuration rather than from this bean, and one grammar with two parsers is how the two
-     *  drift. */
+    /** The same parse, off a raw value, for a routing provider that reads the mapping from the routing context's
+     *  configuration rather than from this bean. */
     public static Map<String, String> tenantHosts(String value) {
         Map<String, String> mapping = new LinkedHashMap<>();
         for (String entry : (value == null ? "" : value).split(",")) {

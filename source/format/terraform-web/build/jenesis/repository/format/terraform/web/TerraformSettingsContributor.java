@@ -6,9 +6,8 @@ import build.jenesis.repository.settings.SettingsContributor;
 
 /**
  * Describes the Terraform registry's dials - the discovery document's path, and where a proxied module's git source
- * may be fetched from - so they appear on the settings screens and in the generated reference. They are read through
- * Spring rather than through the settings registry, which is why they need saying here: a dial no contributor
- * declares is a dial an operator cannot find.
+ * may be fetched from - so they appear on the settings screens and in the generated reference although they are read
+ * through Spring rather than the settings registry.
  */
 public final class TerraformSettingsContributor implements SettingsContributor {
 

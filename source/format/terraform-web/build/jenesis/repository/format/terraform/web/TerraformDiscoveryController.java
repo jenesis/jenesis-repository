@@ -9,28 +9,10 @@ import org.springframework.web.bind.annotation.RestController;
 
 /**
  * {@code GET /.well-known/terraform.json} - the one document a Terraform or OpenTofu client fetches before it knows
- * anything else about a registry.
- *
- * <h2>Why this is not part of the format</h2>
- *
- * <p>Every other surface this product serves lives under a format's own prefix. This one cannot: Terraform derives
- * the discovery URL from the <em>host</em> of a source address - {@code example.com/acme/random} is fetched from
- * {@code https://example.com/.well-known/terraform.json} - and a source address has no room for a path. So the
- * document is served at the server root by a module of its own, which is also what makes it optional: a deployment
- * that leaves this module out still serves both protocols to anything addressing them directly, and is simply not
- * discoverable by {@code terraform init}.
- *
- * <h2>Tenants</h2>
- *
- * <p>The host is not only how Terraform finds the registry - it is also how this product already routes tenants
- * ({@code jenrepo.tenant-hosts}). So a deployment mapping {@code acme.example.com} to tenant {@code acme} gets a
- * per-tenant Terraform registry for free: the discovery document is the same for every host, and the requests it
- * points at carry the Host that resolves the tenant. Nothing here needs to know which tenant asked.
- *
- * <p>What the host does <em>not</em> name is the repository, so that is a setting. The real constraint, which is
- * Terraform's and not this product's: <b>one Terraform registry per hostname</b>. A deployment that wants two
- * reachable by {@code terraform init} gives them two hostnames - which is exactly what the tenant mapping already
- * does.
+ * anything else about a registry. Terraform derives its URL from the host of a source address -
+ * {@code example.com/acme/random} is discovered at {@code https://example.com/.well-known/terraform.json} - so it is
+ * served at the server root, and the registry it points at is a setting rather than anything the request names. That
+ * makes one Terraform registry per hostname, which is Terraform's constraint.
  */
 @RestController
 public class TerraformDiscoveryController {
@@ -46,12 +28,9 @@ public class TerraformDiscoveryController {
     }
 
     /**
-     * The service-discovery document.
-     *
-     * <p>The values are absolute <em>paths</em> rather than absolute URLs, which the protocol allows and which is
-     * the right choice here: a path is resolved against the URL the client already used, so a deployment behind a
-     * proxy, on a non-default port or reached through any of several hostnames needs no configuration to say so,
-     * and cannot be made to point somewhere it is not.
+     * The service-discovery document. Its values are absolute paths rather than URLs, which the protocol allows, so
+     * they resolve against the URL the client used and a deployment behind a proxy, on another port or under several
+     * hostnames needs no configuration to say so.
      */
     @GetMapping(path = "/.well-known/terraform.json", produces = MediaType.APPLICATION_JSON_VALUE)
     public ResponseEntity<String> discovery() {
