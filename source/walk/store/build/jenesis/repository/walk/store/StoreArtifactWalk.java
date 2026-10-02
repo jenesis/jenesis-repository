@@ -354,8 +354,9 @@ public final class StoreArtifactWalk implements ArtifactWalk {
             try {
                 // The ordered descent is the shared Trees.descend: this walk steers it by range (seek to the start,
                 // prune and stop at the bounds, emit and checkpoint each in-range leaf), and Trees.descend runs the
-                // iterative, paged, path-ordered traversal, so no key depth can overflow the stack.
-                Trees.descend(store, range.root(), new Trees.Visitor() {
+                // iterative, paged, path-ordered traversal, so no key depth can overflow the stack. A walk drains every
+                // level it enters, so it pages at the drain width: a filesystem scans a whole directory per page.
+                Trees.descend(store, range.root(), ArtifactStore.DRAIN_PAGE, Integer.MAX_VALUE, new Trees.Visitor() {
                     @Override
                     public void visit(String leaf) throws IOException {
                         emit(ArtifactStore.Listed.of(leaf));
