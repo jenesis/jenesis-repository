@@ -211,14 +211,17 @@ public enum CacheStorageMutant {
         }
     },
 
-    /** The token's per-version identity: one constant stands for every version of the document. */
+    /** The token's per-version identity: one constant stands for every version of the document - the first token
+     *  the store handed out, so the constant is one the store can read and only the check decides against it. */
     A_VERSION_TOKEN_THAT_IS_CONSTANT("the token's per-version identity - one constant covers every version") {
         @Override
         public CacheStorage decorate(CacheStorage delegate) {
+            AtomicReference<Object> frozen = new AtomicReference<>();
             return new Forwarding(delegate, this) {
                 @Override
                 public Object fileVersion(String path) {
-                    return delegate.fileVersion(path) == null ? null : "frozen";
+                    Object version = delegate.fileVersion(path);
+                    return version == null ? null : frozen.updateAndGet(first -> first == null ? version : first);
                 }
             };
         }

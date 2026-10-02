@@ -96,7 +96,7 @@ public abstract class S3CompatibleArtifactStore implements ArtifactStore {
         try {
             var head = s3.headObject(b -> b.bucket(bucket).key(keyPrefix + key));
             return Optional.of(new Listed(key, OptionalLong.of(head.contentLength()),
-                    Optional.ofNullable(head.lastModified())));
+                    Optional.ofNullable(head.lastModified()).map(S3CompatibleArtifactStore::modified)));
         } catch (S3Exception e) {
             if (e.statusCode() == 404) {
                 return Optional.empty();
@@ -127,7 +127,14 @@ public abstract class S3CompatibleArtifactStore implements ArtifactStore {
         }
         return Listed.of(key,
                 object.size() == null ? 0L : object.size(),
-                object.lastModified() == null ? Instant.EPOCH : object.lastModified());
+                object.lastModified() == null ? Instant.EPOCH : modified(object.lastModified()));
+    }
+
+    /** An object's time as every answer here states it: to the second. A HEAD's {@code Last-Modified} header carries
+     *  whole seconds and a listing's {@code LastModified} the milliseconds too, so one precision for both is what lets
+     *  a point answer and a listing of the same object agree. */
+    private static Instant modified(Instant at) {
+        return at.truncatedTo(ChronoUnit.SECONDS);
     }
 
     public void read(String key, OutputStream out) throws IOException {
@@ -196,7 +203,7 @@ public abstract class S3CompatibleArtifactStore implements ArtifactStore {
                 // Both halves come out of the listing response, so a scanned page costs exactly its listing calls.
                 consumer.accept(Listed.of(key,
                         object.size() == null ? 0L : object.size(),
-                        object.lastModified() == null ? Instant.EPOCH : object.lastModified()));
+                        object.lastModified() == null ? Instant.EPOCH : modified(object.lastModified())));
                 delivered++;
                 last = key;
             }

@@ -581,6 +581,12 @@ public final class StoreContract {
                 "and the backend's own modification time - the one-object form of what a scan carries, so a caller "
                         + "that knows the key never lists its container to learn its age");
         isTrue(listed.modified().orElseThrow().isAfter(before), "the carried time is the object's, not a placeholder");
+        List<ArtifactStore.Listed> paged = new ArrayList<>();
+        store.pageListed("kit/listed-one", "", 10, paged::add);
+        equal(listed.modified(), paged.stream().filter(entry -> entry.key().equals(key)).findFirst()
+                        .orElseThrow(() -> failure("the object is a child of its container's listing")).modified(),
+                "and the time its container's listing carries for it, to the same precision, so a point answer and "
+                        + "a sweep over the same object agree");
         store.delete(key);
         isTrue(store.listed(key).isEmpty(), "and not once deleted");
     }
