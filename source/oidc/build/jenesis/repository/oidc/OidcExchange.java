@@ -59,17 +59,12 @@ public final class OidcExchange implements TokenExchange {
             try {
                 jwt = decoders.computeIfAbsent(trust.issuer(), OidcExchange::decoder).decode(token);
             } catch (JwtException notThisTrust) {
-                // The token itself did not verify against THIS issuer - wrong signature, wrong issuer, expired
-                // beyond the tolerated skew. That is a real answer about the token, so ask the next trust.
+                // The token did not verify against this issuer - a real answer about the token, so ask the next trust.
                 continue;
             } catch (RuntimeException broken) {
-                // Anything else is the machinery, not the token: fromIssuerLocation performs OIDC discovery and
-                // fetches a JWKS over the network, and a timeout, a 5xx or an unreachable issuer arrives here as
-                // some other RuntimeException. Swallowing it into `continue` made the method answer null, and null
-                // is what it answers for a token that is simply invalid - so "I could not verify this" and "this
-                // token is not valid" became the same answer, and the caller cannot tell a broken issuer from a
-                // forged token. Fail closed and loudly instead: the exchange is refused either way, but the reason
-                // is now legible and a monitoring surface can tell an outage from an attack.
+                // Anything else is the machinery - discovery or the JWKS fetch timing out or failing - so it fails
+                // closed with its own reason rather than answering null as for an invalid token, letting a monitoring
+                // surface tell an outage from an attack.
                 throw new IOException("could not verify the token against issuer " + trust.issuer()
                         + " (trust '" + trust.name() + "'): the decoder could not be built or applied, which is an "
                         + "infrastructure failure rather than a judgement about the token", broken);
@@ -89,11 +84,8 @@ public final class OidcExchange implements TokenExchange {
     }
 
     private static boolean audienceMatches(List<String> audiences, String required) {
-        // The trust's audience is guaranteed non-blank (enforced at OidcTrusts.Trust construction), so there is no
-        // "blank matches any audience" branch to fall through - a trust is always pinned to one explicit audience. A
-        // signed token may still legitimately omit aud (getAudience() is then null); an audience-pinned trust must not
-        // match it, but the null must not NPE either - this check runs outside the decode try/catch, so a throw here
-        // would 500 the exchange and skip every later trust that might have matched the token.
+        // A trust always names one audience (OidcTrusts.Trust refuses a blank one). A token without aud does not
+        // match it, and must not throw either, since a throw here would skip every later trust.
         return audiences != null && audiences.contains(required);
     }
 
