@@ -7,28 +7,20 @@ import build.jenesis.repository.cache.protocol.CacheProtocol;
 /**
  * The Apache Maven Build Cache Extension's own layout, adapted onto this cache.
  *
- * <p><b>What a real client asks for, not what the documentation says.</b> A real Maven 3.9.9 build with
- * {@code maven-build-cache-extension} asks for {@code <root>/v1.1/<groupId>/<artifactId>/<checksum>/<file>} -
- * five segments where the native protocol serves two - so this is an adapter rather than a second
- * implementation. The published example URL carries a UUID segment the documentation never explains; it is a
- * BUILD id, appears on {@code build-cache-report.xml} alone, and is new every run, so reading it as part of the
- * key would produce a cache that never hits.
+ * <p>A Maven build with {@code maven-build-cache-extension} asks for
+ * {@code <root>/v1.1/<groupId>/<artifactId>/<checksum>/<file>}, so this adapts that path onto the cache. A UUID segment
+ * in the documented example is a build id that appears on {@code build-cache-report.xml} alone and is new every run,
+ * so it is not part of the key.
  *
- * <p><b>The project is in the path because Maven cannot put it anywhere else.</b> The native protocol takes it
- * from a header and Gradle presents it as a Basic user name; the extension sends only what its configured
- * {@code <url>} contains, so an operator points it at {@code .../build/<tenant>/maven/<project>} and the segment carries
- * it. The credential needs nothing new: Maven Resolver sends HTTP Basic from {@code settings.xml}, and a key is
- * already accepted as the Basic password - which is why this protocol reads the presented credential but not the
- * presented project.
+ * <p><b>The project is in the path</b>, since the extension sends only what its configured {@code <url>} contains: an
+ * operator points it at {@code .../build/<tenant>/maven/<project>}. Maven Resolver sends HTTP Basic from
+ * {@code settings.xml}, and a key is accepted as the Basic password, so this reads the presented credential but not
+ * the presented project.
  *
- * <p><b>Both key components are hashed because the storage predicate requires them to be</b>: a coordinate
- * carries dots and a build id carries hyphens, and neither is hex. Hashing is what makes the mapping total
- * instead of refusing exactly the paths the client sends.
- *
- * <p>The module is the step, so one artifact's cache entries live together as one build step's do; the inputs are
- * the checksum, the file and the protocol version together. The file belongs in the key because one checksum
- * addresses several of them - the jar, the build info - and the version belongs there so a later {@code v1.2}
- * layout cannot collide with entries written under {@code v1.1}.
+ * <p><b>Both key components are hashed</b>, since a coordinate carries dots and a build id hyphens and the storage
+ * predicate admits hex only. The module is the step, so one artifact's entries live together; the inputs are the
+ * checksum, the file and the protocol version, since one checksum addresses several files and a later layout version
+ * must not collide with this one.
  */
 public final class MavenCacheProtocol implements CacheProtocol {
 
@@ -64,8 +56,7 @@ public final class MavenCacheProtocol implements CacheProtocol {
         String artifact = segments[3];
         String segment = segments[4];
         String file = segments[5];
-        // The project rides in the path; only the credential comes from the shared presentation, because the
-        // extension has nowhere but its configured URL to put the first and sends Basic for the second.
+        // The project from the path, the credential from Basic.
         return Optional.of(new Address(digest(group + "/" + artifact),
                 digest(version + "/" + segment + "/" + file),
                 project, request.presentedKey(), Existing.DEDUPE));

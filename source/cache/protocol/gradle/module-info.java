@@ -1,7 +1,7 @@
 /**
  * Gradle's HTTP build cache as its own module, so a node serves Gradle builds by carrying it and not otherwise.
- * The key is hashed into a shard and a digest, and the identity rides in Basic - the user name is the project and
- * the password is the key, which is the whole of what Gradle's client can be configured to send.
+ * The key is hashed into a shard and a digest, and the identity rides in Basic: the user name is the project and the
+ * password the key, all that Gradle's client can be configured to send.
  *
  * @jenesis.release 25
  * @jenesis.bom pin-repository.properties
