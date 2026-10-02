@@ -8,6 +8,7 @@ import build.jenesis.repository.store.ArtifactStore;
 import build.jenesis.repository.store.ArtifactStoreProvider;
 import build.jenesis.repository.store.Known;
 import build.jenesis.repository.store.Publication;
+import build.jenesis.repository.store.StoredCounter;
 import build.jenesis.repository.store.StoredListing;
 import build.jenesis.repository.store.Withheld;
 
@@ -31,6 +32,7 @@ class HeldPublishTest {
     @AfterEach
     void settle() {
         StoredListing.settle();
+        StoredCounter.settle();
     }
 
     static List<ReleaseImmutabilityTest.Format> screening() {

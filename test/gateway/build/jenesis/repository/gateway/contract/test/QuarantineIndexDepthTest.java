@@ -4,6 +4,7 @@ import module java.base;
 import module org.junit.jupiter.api;
 import build.jenesis.repository.compliance.Verdict;
 import build.jenesis.repository.gate.QuarantineLog;
+import build.jenesis.repository.store.StoredCounter;
 import build.jenesis.repository.store.StoredListing;
 import build.jenesis.repository.store.ArtifactStore;
 import build.jenesis.repository.store.ArtifactStoreProvider;
@@ -37,6 +38,7 @@ class QuarantineIndexDepthTest {
     @AfterEach
     void settleDerivations() {
         StoredListing.settle();
+        StoredCounter.settle();
     }
 
     private ArtifactStore store() {

@@ -7,6 +7,7 @@ import build.jenesis.repository.format.testkit.ContractExchange;
 import build.jenesis.repository.format.testkit.FormatFixture;
 import build.jenesis.repository.store.ArtifactStore;
 import build.jenesis.repository.store.ArtifactStoreProvider;
+import build.jenesis.repository.store.StoredCounter;
 import build.jenesis.repository.store.StoredListing;
 import build.jenesis.repository.store.Publication;
 
@@ -54,6 +55,7 @@ class ReleaseImmutabilityCensusTest {
     @AfterEach
     void settle() {
         StoredListing.settle();
+        StoredCounter.settle();
     }
 
     static List<EcosystemFormatFixture> fixtures() {

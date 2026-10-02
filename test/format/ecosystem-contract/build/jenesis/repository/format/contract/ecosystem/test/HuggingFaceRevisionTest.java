@@ -5,6 +5,7 @@ import module org.junit.jupiter.api;
 import build.jenesis.repository.format.testkit.ContractExchange;
 import build.jenesis.repository.store.ArtifactStore;
 import build.jenesis.repository.store.ArtifactStoreProvider;
+import build.jenesis.repository.store.StoredCounter;
 import build.jenesis.repository.store.StoredListing;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -25,6 +26,7 @@ class HuggingFaceRevisionTest {
     @AfterEach
     void settle() {
         StoredListing.settle();
+        StoredCounter.settle();
     }
 
     @Test

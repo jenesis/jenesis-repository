@@ -6,6 +6,7 @@ import module org.junit.jupiter.params;
 import build.jenesis.repository.format.testkit.ContractExchange;
 import build.jenesis.repository.store.ArtifactStore;
 import build.jenesis.repository.store.ArtifactStoreProvider;
+import build.jenesis.repository.store.StoredCounter;
 import build.jenesis.repository.store.StoredListing;
 import build.jenesis.repository.store.Publication;
 
@@ -39,6 +40,7 @@ class ReleaseImmutabilityTest {
     @AfterEach
     void settle() {
         StoredListing.settle();
+        StoredCounter.settle();
     }
 
     /** One format's release, uploaded through its own write path with bytes {@code variant} makes distinct, into a

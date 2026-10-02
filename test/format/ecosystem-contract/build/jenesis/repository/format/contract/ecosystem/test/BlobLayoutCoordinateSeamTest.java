@@ -3,6 +3,7 @@ package build.jenesis.repository.format.contract.ecosystem.test;
 import module java.base;
 import module org.junit.jupiter.api;
 
+import build.jenesis.repository.store.StoredCounter;
 import build.jenesis.repository.store.StoredListing;
 import build.jenesis.repository.blobs.BlobLayout;
 import build.jenesis.repository.format.ArtifactLayout;
@@ -106,6 +107,7 @@ class BlobLayoutCoordinateSeamTest {
     @AfterEach
     void settleDeferredDerivations() {
         StoredListing.settle();
+        StoredCounter.settle();
     }
 
     /**

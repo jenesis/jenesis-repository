@@ -5,6 +5,7 @@ import module org.junit.jupiter.api;
 import build.jenesis.repository.format.testkit.FormatContract;
 import build.jenesis.repository.store.ArtifactStore;
 import build.jenesis.repository.store.ArtifactStoreProvider;
+import build.jenesis.repository.store.StoredCounter;
 import build.jenesis.repository.store.StoredListing;
 
 /**
@@ -31,22 +32,21 @@ abstract class EcosystemFormatContractSuite {
     Path root;
 
     /**
-     * Finish any derivation a check queued before the {@code @TempDir} above is deleted.
+     * Finish every write a check left to a background thread before the {@code @TempDir} above is deleted.
      *
-     * <p>A format may hand a derived twin to {@link StoredListing#later} to keep it off the request path - conda's
-     * {@code repodata.json.bz2} is the one that does today. That write lands on a background thread, and a
-     * {@code @TempDir} is removed the moment the test method returns, so the two race: the derivation writes into a
-     * directory JUnit is deleting and the failure surfaces as {@code Failed to close extension context}, nowhere
-     * near the format that caused it. Reproduced exactly that way before this was added.
+     * <p>Two kinds land after the check returns: a derived twin a format hands to {@link StoredListing#later} to keep
+     * it off the request path (conda's {@code repodata.json.bz2}), and a counter delta a publication observer defers
+     * to the node's flusher (the subtree sizes every publish rolls up), which is written at the next flush tick. Either
+     * may then write into a directory JUnit is deleting, and the failure surfaces as {@code Failed to close extension
+     * context}, nowhere near the format that caused it.
      *
-     * <p>It is here rather than in the conda subclass on purpose. Any format may grow a deferred twin, and the
-     * hazard belongs to <em>owning a temp store</em>, not to conda - putting it in the one subclass that needs it
-     * today is what leaves the next one to rediscover this from a flake. Costs microseconds when nothing is
-     * pending: it submits a marker to an idle executor and returns.
+     * <p>It is here rather than in one subclass because the hazard belongs to owning a temp store, not to a format.
+     * Costs microseconds when nothing is pending.
      */
     @AfterEach
-    void settleDeferredDerivations() {
+    void settleDeferredWrites() {
         StoredListing.settle();
+        StoredCounter.settle();
     }
 
     /** The format under test. */

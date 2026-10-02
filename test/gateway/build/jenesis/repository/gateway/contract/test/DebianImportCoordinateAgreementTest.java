@@ -4,6 +4,7 @@ import module java.base;
 import module org.junit.jupiter.api;
 import build.jenesis.repository.blobs.Blobs;
 import build.jenesis.repository.format.debian.DebianImporter;
+import build.jenesis.repository.store.StoredCounter;
 import build.jenesis.repository.store.StoredListing;
 import build.jenesis.repository.store.ArtifactDescriptor;
 import build.jenesis.repository.store.ArtifactStore;
@@ -36,6 +37,7 @@ class DebianImportCoordinateAgreementTest {
     @AfterEach
     void settleDerivations() {
         StoredListing.settle();
+        StoredCounter.settle();
     }
 
     /**
