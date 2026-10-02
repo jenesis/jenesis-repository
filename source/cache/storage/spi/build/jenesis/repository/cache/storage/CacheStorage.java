@@ -2,6 +2,7 @@ package build.jenesis.repository.cache.storage;
 
 import module java.base;
 
+import build.jenesis.repository.store.RepositoryDocument;
 import build.jenesis.repository.walk.Traversal;
 
 /**
@@ -23,9 +24,10 @@ import build.jenesis.repository.walk.Traversal;
  *       state.</li>
  *   <li><b>Idempotency / replay.</b> {@link #store} is last-writer-wins and replayable; a repeated {@link #delete}
  *       converges silently, since the reaper re-runs over snapshots a concurrent pass may have drained.
- *       {@link #createProject}, {@link #deleteDir} and {@link #stamp} are idempotent too.</li>
+ *       {@link #createProject}, {@link #typeProject}, {@link #deleteDir} and {@link #stamp} are idempotent too.</li>
  *   <li><b>Absence sentinel.</b> A read never throws on absence and never returns {@code null} where a value is due:
- *       {@link #exists} and {@link #projectExists} answer {@code false}; {@link #readConfig} and {@link #readFile} an
+ *       {@link #exists} and {@link #projectExists} answer {@code false}; {@link #project} an empty {@link Optional};
+ *       {@link #readConfig} and {@link #readFile} an
  *       empty {@link Properties}; {@link #projects}, {@link #entries} and {@link #listDir} deliver nothing and answer
  *       {@linkplain Traversal.Result#exhausted() exhausted}, so an absent container is drained, not truncated.
  *       {@link #fileVersion} answers {@code null}, a version token having no absent value of its own. {@link #read} of
@@ -159,8 +161,36 @@ public interface CacheStorage {
 
     // --- Project provisioning (used by the ui) ---
 
-    /** Create a project container (a directory on the filesystem; a no-op for object stores). */
-    void createProject(String project) throws IOException;
+    /**
+     * A project's own record: the build tool it is a cache for - the name of the cache protocol it answers, such as
+     * {@code gradle} - its description, and when it was provisioned. {@code type} is {@code null} for a project nothing
+     * has typed yet: a build that pushed to a name no one provisioned creates it untyped, and its first write types
+     * it ({@link #typeProject}).
+     */
+    record Project(String type, String description, Instant created) {
+
+        public Project {
+            if (type != null && !type.matches("[a-z0-9-]+")) {
+                throw new IllegalArgumentException("Not a build tool's name: " + type);
+            }
+            description = RepositoryDocument.description(description);
+        }
+    }
+
+    /** Provision a project of {@code type} with its description, so a project nothing has pushed to yet exists. A
+     *  project already provisioned keeps what it has: provisioning never restamps or retypes. */
+    void createProject(String project, String type, String description) throws IOException;
+
+    /** A project's record, or empty when it has none - nothing provisioned it and nothing has typed it. */
+    Optional<Project> project(String project);
+
+    /** Replace a project's description, keeping its type and creation time; a project with no record gets one, untyped.
+     *  A compare-and-set, so a concurrent {@link #typeProject} is not lost. */
+    void describeProject(String project, String description) throws IOException;
+
+    /** Type a project that has no type yet, as the first write of a build tool to it does; a project that has one keeps
+     *  it, so this never changes which tool a project answers. A compare-and-set, idempotent. */
+    void typeProject(String project, String type) throws IOException;
 
     /** Atomically write a project's own file, so a reader never sees a partial write. */
     void writeConfig(String project, String file, Properties properties) throws IOException;

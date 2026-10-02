@@ -69,6 +69,10 @@ public final class CacheStorageContract {
          *  absent project or file reads as an <em>empty</em> {@code Properties}, and a rewrite replaces rather than
          *  merges. {@code createProject} is idempotent. */
         PROJECT_CONFIG_ROUND_TRIP,
+        /** A project's record round-trips: provisioning records its type and description and never retypes or
+         *  restamps on replay, {@code typeProject} types only an untyped project and keeps its description,
+         *  {@code describeProject} keeps its type, and an unprovisioned project has no record. */
+        PROJECT_RECORD,
         /** The config-tree writes refuse a path that escapes the scope or a project-config file name carrying a
          *  separator, and write nothing - the object-store half of the same screen the filesystem enforces by
          *  confining its resolved path. */
@@ -195,6 +199,9 @@ public final class CacheStorageContract {
         checks.add(new Check(Property.PROJECT_CONFIG_ROUND_TRIP,
                 "a project config round-trips and an absent one reads as empty",
                 CacheStorageContract::projectConfigRoundTrip));
+        checks.add(new Check(Property.PROJECT_RECORD,
+                "a project's record keeps its type once given and its description across a typing",
+                CacheStorageContract::projectRecord));
         checks.add(new Check(Property.CONFIG_PATH_REJECTED,
                 "the config writes refuse a path that escapes the scope and write nothing",
                 CacheStorageContract::configPathRejected));
@@ -308,6 +315,10 @@ public final class CacheStorageContract {
                 CacheStorageMutant.A_CONFIG_THAT_FORGETS_A_KEY,
                 "dropping one property is the round trip failing partially, which is the shape a check that only "
                         + "asserts 'something came back' would miss")));
+        mutations.put(Property.PROJECT_RECORD, List.of(new Mutation(
+                CacheStorageMutant.A_PROJECT_THAT_TAKES_ANY_TYPE,
+                "a typing that overwrites the type lets the first build of another tool take a project over, which "
+                        + "is the one change the record exists to refuse")));
         mutations.put(Property.CONFIG_PATH_REJECTED, List.of(new Mutation(
                 CacheStorageMutant.A_CONFIG_PATH_SCREEN_THAT_PASSES,
                 "the property is the screen; letting an escaping path through is the defect itself")));
@@ -629,11 +640,32 @@ public final class CacheStorageContract {
         equal(storage.readConfig("absent-project", "cache.properties").stringPropertyNames(), Set.of(),
                 "as does a file inside a project that does not exist");
 
-        // createProject is provisioning, not content: it converges on replay and never fails for a legal name. What
-        // it makes visible is backend-specific by contract (a directory on a filesystem, nothing on an object
-        // store), so the contract pins only that it is idempotent and silent.
-        storage.createProject("provisioned");
-        storage.createProject("provisioned");
+        // createProject is provisioning, not content: it converges on replay and never fails for a legal name.
+        storage.createProject("provisioned", "gradle", "");
+        storage.createProject("provisioned", "gradle", "");
+    }
+
+    private static void projectRecord(CacheStorage storage) throws Exception {
+        equal(storage.project("unprovisioned").isPresent(), false, "an unprovisioned project has no record");
+
+        storage.createProject("typed", "gradle", "CI agents");
+        CacheStorage.Project created = storage.project("typed").orElseThrow();
+        equal(created.type(), "gradle", "provisioning records the type");
+        equal(created.description(), "CI agents", "and the description");
+        storage.createProject("typed", "maven", "");
+        equal(storage.project("typed").orElseThrow(), created, "re-provisioning neither retypes nor restamps");
+        storage.typeProject("typed", "bazel");
+        equal(storage.project("typed").orElseThrow().type(), "gradle", "a typed project keeps its type");
+        storage.describeProject("typed", "Release agents");
+        equal(storage.project("typed").orElseThrow().type(), "gradle", "describing keeps the type");
+        equal(storage.project("typed").orElseThrow().description(), "Release agents", "and replaces the text");
+
+        storage.describeProject("built", "Made by a build");
+        equal(storage.project("built").orElseThrow().type(), null, "describing an unrecorded project leaves it "
+                + "untyped");
+        storage.typeProject("built", "maven");
+        equal(storage.project("built").orElseThrow().type(), "maven", "its first typing types it");
+        equal(storage.project("built").orElseThrow().description(), "Made by a build", "keeping its description");
     }
 
     private static void configPathRejected(CacheStorage storage) throws Exception {

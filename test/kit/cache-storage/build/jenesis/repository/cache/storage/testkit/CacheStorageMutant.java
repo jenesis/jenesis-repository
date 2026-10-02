@@ -224,6 +224,32 @@ public enum CacheStorageMutant {
         }
     },
 
+    /** The project's type: a typing overwrites whatever type the project has, so the next build of another tool takes
+     *  it over. */
+    A_PROJECT_THAT_TAKES_ANY_TYPE("the project's type - a typing overwrites the type the project has") {
+        @Override
+        public CacheStorage decorate(CacheStorage delegate) {
+            return new Forwarding(delegate, this) {
+                @Override
+                public void typeProject(String project, String type) throws IOException {
+                    CacheStorage.Project held = delegate.project(project).orElse(null);
+                    if (held == null) {
+                        delegate.typeProject(project, type);
+                        return;
+                    }
+                    // Rewrite the record over the one a project keeps, as a backend that did not check would.
+                    Properties record = new Properties();
+                    record.setProperty("created", held.created().toString());
+                    record.setProperty("type", type);
+                    if (!held.description().isEmpty()) {
+                        record.setProperty("description", held.description());
+                    }
+                    delegate.writeConfig(project, "project.properties", record);
+                }
+            };
+        }
+    },
+
     /** The enumeration's shape: a config document is enumerated as though it were an entry blob. */
     AN_ENUMERATION_THAT_INCLUDES_THE_CONFIG("the enumeration's shape - a config document is enumerated as a blob") {
         @Override
@@ -442,8 +468,23 @@ public enum CacheStorageMutant {
         }
 
         @Override
-        public void createProject(String project) throws IOException {
-            delegate.createProject(project);
+        public void createProject(String project, String type, String description) throws IOException {
+            delegate.createProject(project, type, description);
+        }
+
+        @Override
+        public Optional<CacheStorage.Project> project(String project) {
+            return delegate.project(project);
+        }
+
+        @Override
+        public void describeProject(String project, String description) throws IOException {
+            delegate.describeProject(project, description);
+        }
+
+        @Override
+        public void typeProject(String project, String type) throws IOException {
+            delegate.typeProject(project, type);
         }
 
         @Override

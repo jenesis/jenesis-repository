@@ -2,6 +2,8 @@ package build.jenesis.repository.ui.store;
 
 import module java.base;
 import build.jenesis.repository.store.Retries;
+import build.jenesis.repository.store.RepositoryDocument;
+import build.jenesis.repository.cache.protocol.CacheProtocol;
 
 import build.jenesis.repository.ui.CurrentTenant;
 import build.jenesis.repository.cache.storage.CacheStorage;
@@ -77,13 +79,20 @@ public class CacheService {
         }
     }
 
-    public record ProjectSummary(String name, long entryCount, long totalBytes, String sizeCap, String ttl,
-                                 Stats stats) {
+    /** A project in the list: its name, the build tool it caches for ({@code null} while untyped), its description,
+     *  its stored figures and its own size cap and ttl. */
+    public record ProjectSummary(String name, String type, String description, long entryCount, long totalBytes,
+                                 String sizeCap, String ttl, Stats stats) {
     }
 
-    public record ProjectDetail(String name, String size, boolean lru, String ttl,
+    /** One project's screen: as {@link ProjectSummary}, with its eviction order. */
+    public record ProjectDetail(String name, String type, String description, String size, boolean lru, String ttl,
                                 long entryCount, long totalBytes, Stats stats) {
     }
+
+    /** The build tools a project can be a cache for: the cache protocols installed, by name, in order. */
+    public static final List<String> TYPES = CacheProtocol.installed().stream().map(CacheProtocol::name).sorted()
+            .toList();
 
     /** The per-project file the passes write their outcome into. */
     static final String STATS_FILE = "stats.properties";
@@ -227,7 +236,9 @@ public class CacheService {
         for (String name : names) {
             UnaryOperator<String> config = unchecked(() -> configs.of(name));
             Stats stats = stats(name);                      // the stored figure, never a sweep per row
-            summaries.add(new ProjectSummary(name, stats.entryCount(), stats.totalBytes(),
+            Optional<CacheStorage.Project> record = storage.project(name);
+            summaries.add(new ProjectSummary(name, record.map(CacheStorage.Project::type).orElse(null),
+                    record.map(CacheStorage.Project::description).orElse(""), stats.entryCount(), stats.totalBytes(),
                     orEmpty(config.apply(ProjectPolicy.SIZE)), orEmpty(config.apply(ProjectPolicy.TTL)), stats));
         }
         return summaries;
@@ -237,7 +248,9 @@ public class CacheService {
         requireProject(name);
         UnaryOperator<String> config = unchecked(() -> settings.projectConfig(current.name(), name));
         Stats stats = stats(name);
-        return new ProjectDetail(name, orEmpty(config.apply(ProjectPolicy.SIZE)),
+        Optional<CacheStorage.Project> record = storage.project(name);
+        return new ProjectDetail(name, record.map(CacheStorage.Project::type).orElse(null),
+                record.map(CacheStorage.Project::description).orElse(""), orEmpty(config.apply(ProjectPolicy.SIZE)),
                 ProjectPolicy.lru(config.apply(ProjectPolicy.LRU)), orEmpty(config.apply(ProjectPolicy.TTL)),
                 stats.entryCount(), stats.totalBytes(), stats);
     }
@@ -260,20 +273,28 @@ public class CacheService {
         T get() throws IOException;
     }
 
-    /** Creates a project, granting no access; it inherits its policy until given its own. */
-    public void createProject(String name) throws IOException {
-        createProject(name, Map.of());
+    /** Creates a project of {@code type}, granting no access; it inherits its policy until given its own. */
+    public void createProject(String name, String type, String description) throws IOException {
+        createProject(name, type, description, Map.of());
     }
 
     /**
-     * Creates a project with {@code values} as its own settings, as the wizard and {@code POST /api/cache/projects} do.
-     * Every value is validated first; the settings are stored before the provisioning marker, so a project exists
-     * configured, and one stopped between the two lists as a build-made project does.
+     * Creates a project as one build tool's cache, described, with {@code values} as its own settings, as the wizard,
+     * {@code POST /api/cache/projects} and {@code jenrepo projects create} do. Every value is validated first; the
+     * settings are stored before the provisioning marker, so a project exists configured, and one stopped between the
+     * two lists as a build-made project does.
      *
-     * @throws IllegalArgumentException when the name or any value is refused, or the project exists already.
+     * @throws IllegalArgumentException when the name, the type, the description or any value is refused, or the project
+     *     exists already.
      */
-    public void createProject(String name, Map<String, String> values) throws IOException {
+    public void createProject(String name, String type, String description, Map<String, String> values)
+            throws IOException {
         String validated = validateName(name);
+        Optional<String> wrongType = typeRefusal(type);
+        if (wrongType.isPresent()) {
+            throw new IllegalArgumentException(wrongType.get());
+        }
+        String line = RepositoryDocument.description(description);
         SortedMap<String, String> refused = settings.refusals(Setting.Scope.PROJECT, values, true);
         if (!refused.isEmpty()) {
             throw new IllegalArgumentException(String.join(" ", refused.values()));
@@ -284,7 +305,30 @@ public class CacheService {
         if (!values.isEmpty()) {
             settings.saveProject(current.name(), validated, values);
         }
-        storage.createProject(validated);
+        storage.createProject(validated, type, line);
+    }
+
+    /** What refuses {@code type} for a new project, empty when it names a build tool this deployment serves. */
+    public static Optional<String> typeRefusal(String type) {
+        if (type == null || type.isBlank()) {
+            return Optional.of("A project is a cache for one build tool: choose one of " + String.join(", ", TYPES)
+                    + ".");
+        }
+        return TYPES.contains(type) ? Optional.empty()
+                : Optional.of("'" + type + "' is not a build tool this deployment serves: choose one of "
+                        + String.join(", ", TYPES) + ".");
+    }
+
+    /** Replace a project's description; an unchanged one writes nothing. Audited.
+     *  @throws IllegalArgumentException when it is longer than a description may be */
+    public void describeProject(String name, String description) throws IOException {
+        requireProject(name);
+        String line = RepositoryDocument.description(description);
+        if (storage.project(name).map(CacheStorage.Project::description).orElse("").equals(line)) {
+            return;
+        }
+        storage.describeProject(name, line);
+        audit("cache.project.describe", name);
     }
 
     /** What refuses a new project's name, empty when a creation would be accepted; the creation decides again. */

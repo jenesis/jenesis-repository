@@ -14,6 +14,8 @@ open module build.jenesis.repository.ui.store {
     requires org.slf4j;
     exports build.jenesis.repository.ui.store;
     requires transitive build.jenesis.repository.cache.storage;
+    // The build tools a project can be a cache for are the cache protocols installed.
+    requires build.jenesis.repository.cache.protocol;
     requires transitive build.jenesis.repository.server;
     requires transitive build.jenesis.repository.server.kernel;
     requires transitive build.jenesis.repository.audit;

@@ -51,8 +51,9 @@ public class Cache {
     public record Rejected(int status) implements Resolution {
     }
 
-    /** A project's policy as last read, and when this node read it ({@link #policyInterval}). */
-    record Project(String name, long size, boolean lru, Instant verified) {
+    /** A project's policy as last read, the build tool it is a cache for ({@code null} while untyped), and when this
+     *  node read them ({@link #policyInterval}). */
+    record Project(String name, long size, boolean lru, String type, Instant verified) {
     }
 
     /** Where a project's policy comes from: its effective settings - the project's own over its tenant's over the
@@ -201,14 +202,22 @@ public class Cache {
 
     /** Authorise a request and resolve its entry in its key's tenant, counting a denial. */
     public Resolution resolve(String project, String key, String step, String inputs, boolean write) {
-        return resolve(null, project, key, step, inputs, write);
+        return resolve(null, null, project, key, step, inputs, write);
     }
 
-    /** Authorise a request addressed to {@code named}'s cache ({@code /build/<tenant>/...}) and resolve its entry. A
-     *  key reaches its own tenant's cache and no other, the bootstrap key the default tenant's; a key naming another
-     *  tenant or lacking the project's right is refused as the deployment's {@link AccessDenial} says, decided from the
-     *  names alone so it is the same whether the project or tenant exists. {@code null} addresses the key's own. */
-    public Resolution resolve(String named, String project, String key, String step, String inputs, boolean write) {
+    /**
+     * Authorise a request addressed to {@code named}'s cache ({@code /build/<tenant>/...}) by the build tool speaking
+     * {@code protocol}, and resolve its entry. A key reaches its own tenant's cache and no other, the bootstrap key the
+     * default tenant's; a key naming another tenant or lacking the project's right is refused as the deployment's
+     * {@link AccessDenial} says, decided from the names alone so it is the same whether the project or tenant exists.
+     * {@code null} addresses the key's own.
+     *
+     * <p>A project is one build tool's cache: a request of another tool is answered {@code 404}, as for a cache this
+     * node does not have. A project nothing has typed - one a build created by pushing to it - takes the type of the
+     * first tool that writes to it. {@code protocol} {@code null} asks for no tool in particular.
+     */
+    public Resolution resolve(String named, String protocol, String project, String key, String step, String inputs,
+                              boolean write) {
         String name = project;
         if (name == null || name.isBlank()) {
             if (projectRequired) {
@@ -272,7 +281,23 @@ public class Cache {
         }
         // The tenant's view is resolved only when authorized, so a forged key cannot grow the scope map.
         CacheStorage scoped = scope(tenant);
-        return new Allowed(metric, scoped, project(metric, tenant, name), new CacheStorage.Entry(name, step, inputs));
+        Project resolved = project(metric, scoped, tenant, name);
+        if (protocol != null && resolved.type() == null && write) {
+            try {
+                scoped.typeProject(name, protocol);
+                resolved = new Project(resolved.name(), resolved.size(), resolved.lru(),
+                        scoped.project(name).map(CacheStorage.Project::type).orElse(protocol), resolved.verified());
+                projects.put(metric, resolved);
+            } catch (IOException | RuntimeException untyped) {
+                LOGGER.log(System.Logger.Level.WARNING, "cache project " + metric + " could not be typed as "
+                        + protocol + "; it stays untyped until a later write types it", untyped);
+            }
+        }
+        if (protocol != null && resolved.type() != null && !resolved.type().equals(protocol)) {
+            count(metric, Outcome.INVALID);
+            return new Rejected(404);
+        }
+        return new Allowed(metric, scoped, resolved, new CacheStorage.Entry(name, step, inputs));
     }
 
     public boolean exists(Allowed allowed) {
@@ -431,7 +456,7 @@ public class Cache {
         }
     }
 
-    private Project project(String cacheKey, String tenant, String name) {
+    private Project project(String cacheKey, CacheStorage scoped, String tenant, String name) {
         Project cached = projects.get(cacheKey);
         Instant now = clock.instant();
         Duration window = policyInterval;
@@ -440,7 +465,7 @@ public class Cache {
         }
         UnaryOperator<String> config = policy(tenant, name);
         Project loaded = new Project(name, size(config, cacheKey), ProjectPolicy.lru(config.apply(ProjectPolicy.LRU)),
-                now);
+                scoped.project(name).map(CacheStorage.Project::type).orElse(null), now);
         projects.put(cacheKey, loaded);
         return loaded;
     }
@@ -643,7 +668,7 @@ public class Cache {
                 // cap lowered, or the cache enabled over existing entries - converges on the reaper's clock.
                 long limit = size(config, name);
                 if (limit > 0) {
-                    evict(store, new Project(name, limit, ProjectPolicy.lru(config.apply(ProjectPolicy.LRU)),
+                    evict(store, new Project(name, limit, ProjectPolicy.lru(config.apply(ProjectPolicy.LRU)), null,
                             clock.instant()));
                 }
             }

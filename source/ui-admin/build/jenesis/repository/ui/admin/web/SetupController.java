@@ -88,6 +88,9 @@ public class SetupController {
      * claiming administration for the identity GitHub returns ({@link AdministratorClaim}). The claim is this
      * super-admin session's alone, good once and for minutes, so only the operator who started the guide can make
      * someone administrator through it.
+     *
+     * <p>Like every step of the guide it reads the deployment's settings, which list the settings space: one document
+     * per contributing module, narrow by construction whatever the repositories hold.
      */
     @PostMapping(SetupWizard.ROUTE + "/github")
     public String github(@RequestParam(name = "clientId", defaultValue = "") String clientId,

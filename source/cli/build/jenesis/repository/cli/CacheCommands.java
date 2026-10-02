@@ -24,6 +24,7 @@ final class CacheCommands {
         return switch (args[1]) {
             case "show" -> print(CliSupport.client(home).buildCache().cacheProject(name(args, "show <project>")));
             case "create" -> create(args, home);
+            case "describe" -> describe(args, home);
             case "evict" -> evict(args, home);
             case "recount" -> print(CliSupport.client(home).buildCache().recountCache(name(args, "recount <project>")));
             case "delete" -> delete(args, home);
@@ -75,8 +76,18 @@ final class CacheCommands {
     private static int create(String[] args, Path home) throws Exception {
         List<String> rest = new ArrayList<>(Arrays.asList(args));
         Map<String, String> settings = CliSupport.sets(rest);
-        String project = name(rest.toArray(String[]::new), "create <project> [--set <key>=<value>]...");
-        return print(CliSupport.client(home).buildCache().createCacheProject(project, settings));
+        if (rest.size() < 4) {
+            throw new IllegalArgumentException(
+                    "Usage: projects create <project> <type> [description] [--set <key>=<value>]...");
+        }
+        return print(CliSupport.client(home).buildCache().createCacheProject(rest.get(2), rest.get(3),
+                String.join(" ", rest.subList(4, rest.size())), settings));
+    }
+
+    private static int describe(String[] args, Path home) throws Exception {
+        String project = name(args, "describe <project> [description]");
+        return print(CliSupport.client(home).buildCache().describeCacheProject(project,
+                String.join(" ", Arrays.asList(args).subList(3, args.length))));
     }
 
     private static String name(String[] args, String usage) {

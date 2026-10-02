@@ -220,7 +220,7 @@ public class CliBindingTest {
         server.resetRequests();
         sent("repos", "create", "libs", "maven", "Build", "outputs", "--set", "keep-last=3", "--set",
                 "routing=fallback https://repo1.maven.org/maven2/");
-        sent("projects", "create", "agents", "--set", "project-size=1048576");
+        sent("projects", "create", "agents", "gradle", "CI", "agents", "--set", "project-size=1048576");
 
         List<LoggedRequest> requests = server.findAll(RequestPatternBuilder.allRequests());
         assertThat(requests).as("one request each").hasSize(2);
@@ -230,9 +230,10 @@ public class CliBindingTest {
         assertThat(repository.get("settings").get("keep-last").asString()).isEqualTo("3");
         assertThat(repository.get("settings").get("routing").asString())
                 .isEqualTo("fallback https://repo1.maven.org/maven2/");
-        assertThat(requests.get(1).getUrl()).isEqualTo("/api/cache/projects?name=agents");
-        assertThat(JSON.readTree(requests.get(1).getBodyAsString()).get("settings").get("project-size").asString())
-                .isEqualTo("1048576");
+        assertThat(requests.get(1).getUrl()).isEqualTo("/api/cache/projects?name=agents&type=gradle");
+        JsonNode project = JSON.readTree(requests.get(1).getBodyAsString());
+        assertThat(project.get("description").asString()).isEqualTo("CI agents");
+        assertThat(project.get("settings").get("project-size").asString()).isEqualTo("1048576");
         assertThatThrownBy(() -> run("repos", "create", "libs", "maven", "--set", "keep-last"))
                 .as("a --set with no value is refused, not read as clearing the key")
                 .isInstanceOf(IllegalArgumentException.class);

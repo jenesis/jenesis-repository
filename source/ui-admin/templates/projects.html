@@ -15,8 +15,8 @@
     <th:block th:unless="${projects.isEmpty()}">
         <label>Search
             <input type="search" id="project-filter" autocomplete="off" data-filter=".project-row"
-                   data-filter-empty="project-nomatch" aria-label="Filter projects by name"
-                   placeholder="Filter by name">
+                   data-filter-empty="project-nomatch" aria-label="Filter projects by name, build tool or description"
+                   placeholder="Filter by name, build tool or description">
         </label>
         <p class="setting-nomatch" id="project-nomatch" hidden>No project matches that filter.</p>
         <figure th:unless="${projects.isEmpty()}">
@@ -24,6 +24,7 @@
                 <thead>
                 <tr>
                     <th scope="col">Name</th>
+                    <th scope="col">Build tool</th>
                     <th scope="col" class="app-list__num">Entries</th>
                     <th scope="col" class="app-list__num">Size on disk</th>
                     <th scope="col">Counted</th>
@@ -34,8 +35,12 @@
                 <tbody>
                 <!--/* The entries and bytes are the figure the last pass stored, never a sweep of the cache per row:
                        a project that has never been counted says so, and its page offers the count. */-->
-                <tr th:each="p : ${projects}" class="project-row" th:attr="data-search=${p.name}">
-                    <td><a th:href="@{'/ui/projects/' + ${p.name}}" th:text="${p.name}">name</a></td>
+                <tr th:each="p : ${projects}" class="project-row"
+                    th:attr="data-search=${p.name + ' ' + (p.type == null ? '' : p.type) + ' ' + p.description}">
+                    <td><a th:href="@{'/ui/projects/' + ${p.name}}" th:text="${p.name}">name</a>
+                        <br th:unless="${p.description.isEmpty()}"><small th:unless="${p.description.isEmpty()}"
+                            th:text="${p.description}">description</small></td>
+                    <td th:text="${p.type == null} ? 'not yet typed' : ${p.type}">gradle</td>
                     <td class="app-list__num" th:text="${p.stats.known()} ? ${p.entryCount} : '?'">0</td>
                     <td class="app-list__num" th:text="${p.stats.known()} ? ${@format.bytes(p.totalBytes)} : '?'">0 B</td>
                     <td><small th:if="${p.stats.counting()}"

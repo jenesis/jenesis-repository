@@ -32,19 +32,25 @@ public final class BuildCacheClient extends ClientCalls {
         return response.body();
     }
 
-    public String createCacheProject(String name) throws IOException, InterruptedException {
-        return createCacheProject(name, Map.of());
+    public String createCacheProject(String name, String type) throws IOException, InterruptedException {
+        return createCacheProject(name, type, "", Map.of());
     }
 
-    /** Create a project with {@code settings} as its own, in the one request - validated by the server before
-     *  anything is written, and refused whole when any value is refused. */
-    public String createCacheProject(String name, Map<String, String> settings)
+    /** Create a project as {@code type}'s cache, described, with {@code settings} as its own, in the one request -
+     *  validated by the server before anything is written, and refused whole when any value is refused. */
+    public String createCacheProject(String name, String type, String description, Map<String, String> settings)
             throws IOException, InterruptedException {
-        HttpResponse<String> response = settings.isEmpty()
-                ? send("POST", "/api/cache/projects?name=" + enc(name), HttpRequest.BodyPublishers.noBody(), null)
-                : send("POST", "/api/cache/projects?name=" + enc(name), body(Map.of("settings", settings)),
-                        "application/json");
+        HttpResponse<String> response = send("POST", "/api/cache/projects?name=" + enc(name) + "&type=" + enc(type),
+                body(Map.of("description", description, "settings", settings)), "application/json");
         require(response, 201, "create the build-cache project");
+        return response.body();
+    }
+
+    /** Replace a project's description; an empty one clears it. */
+    public String describeCacheProject(String name, String description) throws IOException, InterruptedException {
+        HttpResponse<String> response = send("PUT", "/api/cache/projects/" + enc(name) + "/description",
+                body(Map.of("description", description)), "application/json");
+        require(response, 200, "describe the build-cache project");
         return response.body();
     }
 

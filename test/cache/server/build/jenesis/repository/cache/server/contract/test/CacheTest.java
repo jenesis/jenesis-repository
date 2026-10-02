@@ -109,6 +109,31 @@ public class CacheTest {
         assertThat(cached().resolve("acme").resolve("demo").resolve("aa").resolve("bb")).isRegularFile();
     }
 
+    /** A project is one build tool's cache: another tool's request is answered as a cache this node does not have,
+     *  and a project a build made by pushing to it is typed by that first write. */
+    @Test
+    public void a_project_answers_its_own_build_tool_and_the_first_write_types_an_untyped_one() throws Exception {
+        Cache cache = cache();
+        credential("acme", ACME_RW, "*=cache:read,cache:write");
+        CacheStorage acme = CacheStorages.filesystem(root).scope("acme");
+        acme.createProject("gradlecache", "gradle", "CI");
+
+        assertThat(cache.resolve("acme", "gradle", "gradlecache", ACME_RW, "aa", "bb", true))
+                .as("its own tool reaches it").isInstanceOf(Allowed.class);
+        assertThat(cache.resolve("acme", "maven", "gradlecache", ACME_RW, "aa", "bb", false))
+                .as("another tool's read finds no cache").isEqualTo(new Rejected(404));
+        assertThat(cache.resolve("acme", "maven", "gradlecache", ACME_RW, "aa", "bb", true))
+                .as("and another tool's write too").isEqualTo(new Rejected(404));
+
+        assertThat(cache.resolve("acme", "bazel", "built", ACME_RW, "aa", "bb", false))
+                .as("an untyped project answers any tool's read").isInstanceOf(Allowed.class);
+        assertThat(acme.project("built")).as("and a read types nothing").isEmpty();
+        assertThat(cache.resolve("acme", "bazel", "built", ACME_RW, "aa", "bb", true)).isInstanceOf(Allowed.class);
+        assertThat(acme.project("built").orElseThrow().type()).as("its first write types it").isEqualTo("bazel");
+        assertThat(cache.resolve("acme", "gradle", "built", ACME_RW, "aa", "bb", true))
+                .as("after which another tool is refused").isEqualTo(new Rejected(404));
+    }
+
     @Test
     public void a_repeated_store_is_declined_as_already_present() throws Exception {
         Cache cache = cache();
@@ -1053,8 +1078,23 @@ public class CacheTest {
         }
 
         @Override
-        public void createProject(String project) throws IOException {
-            delegate.createProject(project);
+        public void createProject(String project, String type, String description) throws IOException {
+            delegate.createProject(project, type, description);
+        }
+
+        @Override
+        public Optional<CacheStorage.Project> project(String project) {
+            return delegate.project(project);
+        }
+
+        @Override
+        public void describeProject(String project, String description) throws IOException {
+            delegate.describeProject(project, description);
+        }
+
+        @Override
+        public void typeProject(String project, String type) throws IOException {
+            delegate.typeProject(project, type);
         }
 
         @Override

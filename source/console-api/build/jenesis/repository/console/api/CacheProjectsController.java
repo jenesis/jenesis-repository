@@ -91,12 +91,14 @@ public class CacheProjectsController {
         return service == null ? List.of() : service.listProjects();
     }
 
-    /** Create a project - {@code POST /api/cache/projects?name=<project>}, optionally with a {@code {"settings":{...}}}
-     *  body creating it with its own settings in one step: every value validated first, {@code 400} naming every
-     *  refusal with nothing written, the settings stored before the project exists
-     *  ({@link CacheService#createProject(String, Map)}). {@code 400} for a project that exists. */
+    /** Create a project as one build tool's cache - {@code POST /api/cache/projects?name=<project>&type=<tool>},
+     *  optionally with a {@code {"description":"...","settings":{...}}} body describing it and creating it with its own
+     *  settings in one step: every value validated first, {@code 400} naming every refusal with nothing written, the
+     *  settings stored before the project exists ({@link CacheService#createProject(String, String, String, Map)}).
+     *  {@code 400} for a project that exists or a tool this deployment does not serve. */
     @PostMapping("/api/cache/projects")
     public Map<String, Object> create(@RequestParam("name") String name,
+                                      @RequestParam(value = "type", required = false) String type,
                                       @RequestHeader(value = Repositories.KEY, required = false) String key,
                                       @RequestBody(required = false) ProjectRequest body,
                                       HttpServletRequest request, HttpServletResponse response) throws IOException {
@@ -105,9 +107,25 @@ public class CacheProjectsController {
             return Map.of();
         }
         RepositoryRequests.rejectTraversal(name);
-        service.createProject(name, body == null || body.settings() == null ? Map.of() : body.settings());
+        service.createProject(name, type, body == null ? "" : body.description(),
+                body == null || body.settings() == null ? Map.of() : body.settings());
         response.setStatus(201);
-        return Map.of("name", name, "created", true);
+        return Map.of("name", name, "type", type, "created", true);
+    }
+
+    /** Replace a project's description - {@code PUT /api/cache/projects/<project>/description} with a
+     *  {@code {"description":"..."}} body; an empty one clears it, an unchanged one writes nothing. */
+    @PutMapping("/api/cache/projects/{name}/description")
+    public void describe(@PathVariable("name") String name, @RequestBody(required = false) Map<String, String> body,
+                         @RequestHeader(value = Repositories.KEY, required = false) String key,
+                         HttpServletRequest request, HttpServletResponse response) throws IOException {
+        CacheService service = service(key, request, response);
+        if (service == null) {
+            return;
+        }
+        RepositoryRequests.rejectTraversal(name);
+        service.describeProject(name, body == null ? "" : body.getOrDefault("description", ""));
+        response.setStatus(200);
     }
 
     /** One project's detail. */
@@ -176,8 +194,8 @@ public class CacheProjectsController {
         response.getWriter().write(refused.getMessage() == null ? "refused" : refused.getMessage());
     }
 
-    /** A project's creation: optionally the settings it is created with. */
-    public record ProjectRequest(Map<String, String> settings) {
+    /** A project's creation: optionally its description and the settings it is created with. */
+    public record ProjectRequest(String description, Map<String, String> settings) {
     }
 
     /** One project setting as the API answers it - the shape {@code GET /api/settings} lists a setting in. */

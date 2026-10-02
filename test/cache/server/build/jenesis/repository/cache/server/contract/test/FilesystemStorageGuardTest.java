@@ -45,7 +45,7 @@ public class FilesystemStorageGuardTest {
     void a_plain_project_name_is_provisioned() throws IOException {
         Path root = Files.createDirectories(base.resolve("cache"));
         CacheStorage storage = CacheStorages.filesystem(root);
-        assertThatCode(() -> storage.createProject("releases")).doesNotThrowAnyException();
+        assertThatCode(() -> storage.createProject("releases", "maven", "")).doesNotThrowAnyException();
         assertThat(storage.projectExists("releases")).isTrue();
     }
 

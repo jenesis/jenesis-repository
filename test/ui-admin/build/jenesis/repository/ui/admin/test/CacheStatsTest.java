@@ -28,7 +28,7 @@ class CacheStatsTest {
     @BeforeEach
     void setUp() throws IOException {
         storage = CacheStorages.filesystem(cacheRoot);
-        storage.createProject("libs");
+        storage.createProject("libs", "gradle", "");
         service = new CacheService(storage, AuditTrail.none(), () -> "acme", () -> "octo", settings());
     }
 
@@ -114,7 +114,7 @@ class CacheStatsTest {
     void a_deleted_project_leaves_nothing_behind_and_is_no_longer_listed() throws Exception {
         storage.store(new CacheStorage.Entry("libs", "aa", "01"),
                 new ByteArrayInputStream("abc".getBytes(StandardCharsets.UTF_8)));
-        storage.createProject("keep");
+        storage.createProject("keep", "gradle", "");
         CacheService deleting = new CacheService(storage, AuditTrail.none(), () -> "acme", () -> "octo",
                 settings(), CacheService.Passes.CALLING_THREAD);
 

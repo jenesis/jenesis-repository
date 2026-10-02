@@ -2,6 +2,8 @@ package build.jenesis.repository.ui.admin.web;
 
 import module java.base;
 
+import build.jenesis.repository.store.RepositoryDocument;
+
 import build.jenesis.repository.settings.Setting;
 import build.jenesis.repository.settings.Wizard;
 import build.jenesis.repository.ui.ConsoleScreen;
@@ -16,9 +18,10 @@ import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.servlet.mvc.support.RedirectAttributes;
 
 /**
- * The new-project wizard: a build-cache project's name, then each group of the essential project settings the
- * catalogue declares ({@link Wizard#PROJECT}), then the review - and on completion the one creation every surface
- * makes, its settings written with it ({@link CacheService#createProject(String, Map)}). Nothing is written before
+ * The new-project wizard: a build-cache project's name, its build tool and description, then each group of the
+ * essential project settings the catalogue declares ({@link Wizard#PROJECT}), then the review - and on completion the
+ * one creation every surface makes, its settings written with it
+ * ({@link CacheService#createProject(String, String, String, Map)}). Nothing is written before
  * that. Its route stands apart from the projects' own, because a project may be called "new".
  */
 @Controller
@@ -52,11 +55,13 @@ public class ProjectWizardController {
             throws IOException {
         WizardFlow flow = WizardFlow.resume(definition(), form);
         if (flow.apply(form.get(WizardFlow.ACTION))) {
-            String name = flow.identity().get("name");
+            Map<String, String> identity = flow.identity();
+            String name = identity.get("name");
+            String type = identity.get("type");
             try {
-                service.createProject(name, flow.chosen());
-                redirect.addFlashAttribute("message",
-                        "Created project '" + name + "'. Grant access by adding it to a credential.");
+                service.createProject(name, type, identity.get("description"), flow.chosen());
+                redirect.addFlashAttribute("message", "Created " + type + " project '" + name
+                        + "'. Grant access by adding it to a credential.");
                 return "redirect:/ui/projects/" + name;
             } catch (IllegalArgumentException refused) {
                 flow.refuse(WizardFlow.IDENTITY + "name", refused.getMessage());
@@ -68,9 +73,13 @@ public class ProjectWizardController {
 
     private WizardFlow.Definition definition() throws IOException {
         List<WizardFlow.Step> steps = new ArrayList<>();
-        steps.add(WizardFlow.Step.identity("Project", List.of("A project is the build cache's unit of isolation: its "
-                        + "entries are its own, and a credential is granted access to it."),
-                List.of(new WizardFlow.Field("name", "Name", "Letters, digits and underscores.", List.of(), true))));
+        steps.add(WizardFlow.Step.identity("Project", List.of("A project is the build cache's unit of isolation: one "
+                        + "build tool's cache, whose entries are its own, and a credential is granted access to it."),
+                List.of(new WizardFlow.Field("name", "Name", "Letters, digits and underscores.", List.of(), true),
+                        new WizardFlow.Field("type", "Build tool", "The tool whose cache this is; the project answers "
+                                + "that tool's endpoint and no other.", CacheService.TYPES, true),
+                        new WizardFlow.Field("description", "Description", "Optional: one line under its name in a "
+                                + "list.", List.of(), false))));
         steps.addAll(WizardFlow.settingsSteps(Wizard.PROJECT,
                 settings.wizardViews(Wizard.PROJECT, tenant.name(), true)));
         return new WizardFlow.Definition("New project", ROUTE,
@@ -80,8 +89,15 @@ public class ProjectWizardController {
                 new WizardFlow.Checks() {
                     @Override
                     public Map<String, String> identity(Map<String, String> identity) {
-                        return service.nameRefusal(identity.get("name")).map(reason -> Map.of("name", reason))
-                                .orElse(Map.of());
+                        Map<String, String> refused = new LinkedHashMap<>();
+                        service.nameRefusal(identity.get("name")).ifPresent(reason -> refused.put("name", reason));
+                        CacheService.typeRefusal(identity.get("type")).ifPresent(reason -> refused.put("type", reason));
+                        try {
+                            RepositoryDocument.description(identity.get("description"));
+                        } catch (IllegalArgumentException tooLong) {
+                            refused.put("description", tooLong.getMessage());
+                        }
+                        return refused;
                     }
 
                     @Override

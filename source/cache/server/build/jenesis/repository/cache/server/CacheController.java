@@ -37,10 +37,10 @@ public class CacheController {
         this.cache = cache;
     }
 
-    private void read(String tenant, CacheProtocol.Address address, HttpServletRequest request,
-                      HttpServletResponse response)
+    private void read(String tenant, CacheProtocol protocol, CacheProtocol.Address address,
+                      HttpServletRequest request, HttpServletResponse response)
             throws IOException {
-        Cache.Resolution resolution = cache.resolve(tenant, address.project(), address.key(),
+        Cache.Resolution resolution = cache.resolve(tenant, protocol.name(), address.project(), address.key(),
                 address.step(), address.inputs(), false);
         if (resolution instanceof Cache.Rejected rejected) {
             challenge(rejected, response);
@@ -117,9 +117,9 @@ public class CacheController {
             return;
         }
         if ("PUT".equalsIgnoreCase(request.getMethod())) {
-            store(tenant, address.get(), request, response);
+            store(tenant, protocol, address.get(), request, response);
         } else {
-            read(tenant, address.get(), request, response);
+            read(tenant, protocol, address.get(), request, response);
         }
     }
 
@@ -161,10 +161,10 @@ public class CacheController {
         }
     }
 
-    private void store(String tenant, CacheProtocol.Address address, HttpServletRequest request,
-                       HttpServletResponse response)
+    private void store(String tenant, CacheProtocol protocol, CacheProtocol.Address address,
+                       HttpServletRequest request, HttpServletResponse response)
             throws IOException {
-        Cache.Resolution resolution = cache.resolve(tenant, address.project(), address.key(),
+        Cache.Resolution resolution = cache.resolve(tenant, protocol.name(), address.project(), address.key(),
                 address.step(), address.inputs(), true);
         if (resolution instanceof Cache.Rejected rejected) {
             challenge(rejected, response);

@@ -219,9 +219,12 @@ public final class Commands {
                             CacheCommands::projects,
                             act("projects", "every project with its entry count, size and caps"),
                             act("projects show <project>", "one project's caps, counts and last pass"),
-                            act("projects create <project> [--set <key>=<value>]...",
-                                    "create a project, with its own settings if given; grant access from a "
-                                            + "credential"),
+                            act("projects create <project> <type> [description] [--set <key>=<value>]...",
+                                    "create a project as one build tool's cache - gradle, maven, bazel or jenesis "
+                                            + "as installed - described, with its own settings if given; grant "
+                                            + "access from a credential"),
+                            act("projects describe <project> [description]",
+                                    "replace a project's description, or clear it with none"),
                             act("projects evict <project> <size|ttl|clear>",
                                     "start a sweep in the background and report whether this call started it"),
                             act("projects recount <project>", "recount the project's entries and bytes"),

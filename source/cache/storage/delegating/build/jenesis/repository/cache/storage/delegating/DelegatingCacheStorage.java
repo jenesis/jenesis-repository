@@ -7,6 +7,8 @@ import build.jenesis.repository.cache.storage.Names;
 import build.jenesis.repository.cache.storage.Pages;
 import build.jenesis.repository.store.ArtifactStore;
 import build.jenesis.repository.store.Documents;
+import build.jenesis.repository.store.RepositoryDocument;
+import build.jenesis.repository.store.Retries;
 import build.jenesis.repository.walk.Traversal;
 
 /**
@@ -34,6 +36,12 @@ public final class DelegatingCacheStorage implements CacheStorage {
 
     /** When the project was provisioned, in the marker. */
     public static final String CREATED = "created";
+
+    /** The build tool the project is a cache for, in the marker; absent while nothing has typed it. */
+    public static final String TYPE = "type";
+
+    /** The project's description, in the marker; absent when it has none. */
+    public static final String DESCRIPTION = "description";
 
     private final ArtifactStore store;
 
@@ -85,7 +93,7 @@ public final class DelegatingCacheStorage implements CacheStorage {
         return project + "/" + file;
     }
 
-    private static String project(String project) {
+    private static String container(String project) {
         if (!Names.isProject(project)) {
             throw new IllegalArgumentException("Unaddressable cache project: " + project);
         }
@@ -318,21 +326,84 @@ public final class DelegatingCacheStorage implements CacheStorage {
 
     /**
      * Provision a project by writing its marker. A keyed store has no empty container, so this small document is what
-     * makes a created project that nothing has pushed to yet survive a page reload. It carries {@code created}, and
-     * whatever an operator sets later lives here too, read back through {@link #readConfig}.
+     * makes a created project that nothing has pushed to yet survive a page reload. It carries {@code created}, the
+     * project's {@code type} and its {@code description}.
      *
      * <p>Provisioning guarantees existence without defining it: {@link #projectExists} asks whether anything is under
      * the prefix, since a build pushing to an unprovisioned project creates it.
      */
     @Override
-    public void createProject(String project) throws IOException {
-        String key = project(project) + "/" + PROJECT_PROPERTIES;
-        if (store.exists(key)) {
-            return;         // idempotent: re-provisioning must not restamp a project's creation time
+    public void createProject(String project, String type, String description) throws IOException {
+        Project wanted = new Project(Objects.requireNonNull(type, "type"), description, Instant.now());
+        // Idempotent: re-provisioning must not restamp a project's creation time or retype it.
+        Retries.update(store, marker(project), current -> current.isPresent() ? null : marker(wanted));
+    }
+
+    @Override
+    public Optional<Project> project(String project) {
+        if (!Names.isProject(project)) {
+            return Optional.empty();
         }
+        try {
+            return store.readVersioned(marker(project)).map(stored -> project(stored.content()));
+        } catch (IOException | RuntimeException unreadable) {
+            return Optional.empty();
+        }
+    }
+
+    @Override
+    public void describeProject(String project, String description) throws IOException {
+        String line = RepositoryDocument.description(description);
+        Retries.update(store, marker(project), current -> {
+            Project held = current.map(stored -> project(stored.content())).orElse(null);
+            if (held != null && held.description().equals(line)) {
+                return null;
+            }
+            return marker(held == null ? new Project(null, line, Instant.now())
+                    : new Project(held.type(), line, held.created()));
+        });
+    }
+
+    @Override
+    public void typeProject(String project, String type) throws IOException {
+        Objects.requireNonNull(type, "type");
+        Retries.update(store, marker(project), current -> {
+            Project held = current.map(stored -> project(stored.content())).orElse(null);
+            if (held != null && held.type() != null) {
+                return null;        // typed already: a project never changes which tool it answers
+            }
+            return marker(held == null ? new Project(type, "", Instant.now())
+                    : new Project(type, held.description(), held.created()));
+        });
+    }
+
+    /** The marker's key, refusing a name that is not a project's. */
+    private static String marker(String project) {
+        return container(project) + "/" + PROJECT_PROPERTIES;
+    }
+
+    private static byte[] marker(Project project) throws IOException {
         Properties marker = new Properties();
-        marker.setProperty(CREATED, Instant.now().toString());
-        store.write(key, new ByteArrayInputStream(Documents.bytes(marker)));
+        marker.setProperty(CREATED, project.created().toString());
+        if (project.type() != null) {
+            marker.setProperty(TYPE, project.type());
+        }
+        if (!project.description().isEmpty()) {
+            marker.setProperty(DESCRIPTION, project.description());
+        }
+        return Documents.bytes(marker);
+    }
+
+    private static Project project(byte[] content) {
+        Properties marker = new Properties();
+        try {
+            marker.load(new ByteArrayInputStream(content));
+        } catch (IOException unreadable) {
+            throw new UncheckedIOException(unreadable);
+        }
+        String created = marker.getProperty(CREATED);
+        return new Project(marker.getProperty(TYPE), marker.getProperty(DESCRIPTION, ""),
+                created == null ? Instant.EPOCH : Instant.parse(created));
     }
 
     @Override

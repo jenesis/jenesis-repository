@@ -192,7 +192,22 @@ public class EvictionTest {
         }
 
         @Override
-        public void createProject(String project) {
+        public void createProject(String project, String type, String description) {
+            throw new UnsupportedOperationException();
+        }
+
+        @Override
+        public Optional<Project> project(String project) {
+            return Optional.empty();
+        }
+
+        @Override
+        public void describeProject(String project, String description) {
+            throw new UnsupportedOperationException();
+        }
+
+        @Override
+        public void typeProject(String project, String type) {
             throw new UnsupportedOperationException();
         }
 
@@ -337,7 +352,22 @@ public class EvictionTest {
         }
 
         @Override
-        public void createProject(String project) {
+        public void createProject(String project, String type, String description) {
+            throw new UnsupportedOperationException();
+        }
+
+        @Override
+        public Optional<Project> project(String project) {
+            return Optional.empty();
+        }
+
+        @Override
+        public void describeProject(String project, String description) {
+            throw new UnsupportedOperationException();
+        }
+
+        @Override
+        public void typeProject(String project, String type) {
             throw new UnsupportedOperationException();
         }
 

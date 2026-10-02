@@ -1,6 +1,8 @@
 package build.jenesis.repository.ui.admin.web;
 
 import module java.base;
+
+import build.jenesis.repository.store.RepositoryDocument;
 import build.jenesis.repository.store.ArtifactStore;
 import build.jenesis.repository.store.Documents;
 import build.jenesis.repository.ui.identity.UiProperties;
@@ -90,6 +92,23 @@ public class ProjectsController {
         model.addAttribute("project", service.project(name));
         model.addAttribute("groups", service.settings(name));
         return "project";
+    }
+
+    /** Give a project a description, or clear it with an empty one; saving what is already there says nothing. */
+    @PostMapping("/ui/projects/{name}/describe")
+    public String describe(@PathVariable("name") String name,
+                           @RequestParam(name = "description", defaultValue = "") String description,
+                           RedirectAttributes redirect) throws IOException {
+        try {
+            String before = service.project(name).description();
+            service.describeProject(name, description);
+            if (!before.equals(RepositoryDocument.description(description))) {
+                redirect.addFlashAttribute("message", "Updated the description of '" + name + "'.");
+            }
+        } catch (IllegalArgumentException refused) {
+            redirect.addFlashAttribute("error", refused.getMessage());
+        }
+        return "redirect:/ui/projects/" + name;
     }
 
     /** Sets or clears one of the project's settings through the catalogue. */
