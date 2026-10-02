@@ -13,7 +13,7 @@ import build.jenesis.repository.server.spi.KeyUsageTracker;
 
 /**
  * Opt-in usage tracking for credentials, off the request path on its own worker thread - started and stopped
- * through Spring's bean lifecycle (not a daemon), so {@link #close} interrupts and joins it for a clean shutdown,
+ * through Spring's bean lifecycle (not a daemon), so {@link #close} stops and joins it for a clean shutdown,
  * and {@link #alive}/{@link #dropped} let a health indicator watch it. An allowed request offers a
  * {@link Hit} (its tenant, the key's hash and the source address) to a bounded in-memory queue (non-blocking, dropped
  * if saturated - usage is an informational signal, not an audit log); the thread drains the queue into a per-credential
@@ -65,8 +65,8 @@ public final class BatchingKeyUsageTracker extends BatchingWorker<BatchingKeyUsa
 
     /**
      * The worker has terminated (or was never started), so every Pending is quiescent: nothing mutates a count
-     * concurrently and this final pass is deterministic. Drain whatever the interrupted worker left queued (its
-     * blocking poll returns without draining on interrupt) so a clean shutdown forfeits no accepted hit, then flush
+     * concurrently and this final pass is deterministic. Drain whatever the stopped worker left queued so a clean
+     * shutdown forfeits no accepted hit, then flush
      * every residual delta - including a credential already flushed once today, whose at-most-once-per-day gate
      * would otherwise strand its same-day tail until the process ends.
      *

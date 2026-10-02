@@ -8,7 +8,7 @@ import module java.base;
  * folds what accumulated into a store write on its own schedule.
  *
  * <p>The credential-usage tracker and the last-download tracker share it: the queue, the {@code poll}-then-
- * {@code drainTo} loop, the start and the interrupt-and-join close. What each keeps is what it does with a batch
+ * {@code drainTo} loop, the start and the stop-and-join close. What each keeps is what it does with a batch
  * ({@link #drain}) and what it does on the two edges this class exposes as hooks: a failing iteration
  * ({@link #onIterationFailure}) and a close that did or did not manage to stop the worker ({@link #onClosed}).
  *
@@ -16,8 +16,10 @@ import module java.base;
  * for; when the queue is full the hit is counted as dropped and the request proceeds. A tracker whose store is
  * failing therefore shows on the health surface as dropping, not as slow requests.
  *
- * <p><b>Close is a join, not a flush.</b> Interrupting the worker and joining it with a grace window is all this
- * class does; whether the un-drained tail is then flushed is the subclass's call in {@link #onClosed}, because it
+ * <p><b>Close is a join, not a flush.</b> Asking the worker to stop and joining it with a grace window is all this
+ * class does. It asks by waking the worker's poll with a stop marker rather than by interrupting it: an interrupt
+ * that lands inside a batch's store write closes the file channel under it, so a write that landed answers as
+ * failed and the tracker re-applies a delta the store already holds. Whether the un-drained tail is then flushed is the subclass's call in {@link #onClosed}, because it
  * depends on what a half-drained batch means for that tracker's counters - and only a subclass that knows the
  * worker has genuinely stopped may touch state the worker mutates.
  *
@@ -25,7 +27,11 @@ import module java.base;
  */
 public abstract class BatchingWorker<H> {
 
-    private final BlockingQueue<H> queue;
+    /** What {@link #close} queues to wake a worker waiting on an empty queue; never handed to {@link #drain}. */
+    private static final Object STOP = new Object();
+
+    /** The hits, and at most one {@link #STOP} once the worker has been asked to stop. */
+    private final BlockingQueue<Object> queue;
     private final int capacity;
     private final String threadName;
     private final boolean enabled;
@@ -79,14 +85,16 @@ public abstract class BatchingWorker<H> {
         worker.start();
     }
 
-    /** Stop the worker: interrupt it, join it for ten seconds, then hand the subclass whether it actually stopped. A
-     *  worker that did not stop within the grace window is still draining, and a subclass must not flush over it. */
+    /** Stop the worker: ask it to stop after the batch it is folding, join it for ten seconds, then hand the subclass
+     *  whether it actually stopped. A worker that did not stop within the grace window is still draining, and a
+     *  subclass must not flush over it. A full queue refuses the stop marker, which costs nothing: a worker with a
+     *  full queue is not waiting, and it reads the cleared flag after its batch. */
     public void close() {
         running = false;
         Thread worker = thread;
         boolean terminated = worker == null;
         if (worker != null) {
-            worker.interrupt();
+            queue.offer(STOP);
             try {
                 worker.join(10_000L);
                 terminated = !worker.isAlive();
@@ -115,9 +123,21 @@ public abstract class BatchingWorker<H> {
 
     /** Everything still queued, removed - for a subclass's {@link #onClosed} to fold the tail of a clean shutdown. */
     protected final List<H> drainQueue() {
-        List<H> tail = new ArrayList<>();
+        List<Object> tail = new ArrayList<>();
         queue.drainTo(tail);
-        return tail;
+        return hits(tail);
+    }
+
+    /** The hits among what was taken off the queue, without the stop marker. */
+    @SuppressWarnings("unchecked")
+    private List<H> hits(List<Object> taken) {
+        List<H> hits = new ArrayList<>(taken.size());
+        for (Object each : taken) {
+            if (each != STOP) {
+                hits.add((H) each);
+            }
+        }
+        return hits;
     }
 
     public final int queueDepth() {
@@ -134,12 +154,18 @@ public abstract class BatchingWorker<H> {
     private void loop() {
         while (running) {
             try {
-                H first = queue.poll(1, TimeUnit.SECONDS);
+                Object first = queue.poll(1, TimeUnit.SECONDS);
+                if (first == STOP) {
+                    continue;
+                }
                 if (first != null) {
-                    List<H> batch = new ArrayList<>();
-                    batch.add(first);
-                    queue.drainTo(batch);
-                    drain(batch, Instant.now());
+                    List<Object> taken = new ArrayList<>();
+                    taken.add(first);
+                    queue.drainTo(taken);
+                    List<H> batch = hits(taken);
+                    if (!batch.isEmpty()) {
+                        drain(batch, Instant.now());
+                    }
                 } else {
                     onIdle(Instant.now());
                 }

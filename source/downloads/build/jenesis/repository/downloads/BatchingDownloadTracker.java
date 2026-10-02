@@ -8,7 +8,7 @@ import build.jenesis.repository.server.spi.BatchingWorker;
 
 /**
  * Opt-in download tracking ({@code jenrepo.track-downloads}), off the request path on its own worker thread -
- * started and stopped through Spring's bean lifecycle (not a daemon), so {@link #close} interrupts and joins it for a
+ * started and stopped through Spring's bean lifecycle (not a daemon), so {@link #close} stops and joins it for a
  * clean shutdown, and {@link #alive}/{@link #dropped} let a health indicator watch it. A successful read offers a
  * {@link DownloadTracker.Hit} to a bounded in-memory queue (non-blocking, counted as dropped if saturated - a
  * download count is a retention and popularity signal, not an audit log); the thread drains the queue into one
@@ -119,7 +119,7 @@ public final class BatchingDownloadTracker extends BatchingWorker<DownloadTracke
 
     /**
      * The worker has terminated (or was never started), so every accumulator is quiescent: drain what the
-     * interrupted worker left queued and flush every residual delta, interval or not, so a clean shutdown forfeits
+     * stopped worker left queued and flush every residual delta, interval or not, so a clean shutdown forfeits
      * no accepted hit. A worker that did not stop within the grace window is still draining, and flushing now would
      * race it; its next drain flushes the tail instead.
      */

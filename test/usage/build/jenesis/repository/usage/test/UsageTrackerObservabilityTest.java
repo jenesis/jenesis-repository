@@ -11,6 +11,7 @@ import build.jenesis.repository.observation.TaskStatus;
 import build.jenesis.repository.server.spi.Authorization;
 import build.jenesis.repository.store.ArtifactStore;
 import build.jenesis.repository.store.ArtifactStoreProvider;
+import build.jenesis.repository.store.testkit.FaultInjectingStore;
 import build.jenesis.repository.usage.BatchingKeyUsageTracker;
 import static org.assertj.core.api.Assertions.assertThat;
 
@@ -176,6 +177,42 @@ class UsageTrackerObservabilityTest {
 
         assertThat(authorization.credential("acme", hash).orElseThrow().useCount())
                 .as("close flushes the same-day residual after joining the worker - no hit lost").isEqualTo(3L);
+    }
+
+    @Test
+    void close_lets_a_flush_finish_rather_than_failing_a_write_that_landed() throws Exception {
+        // The flush has written the credential's count and is still finishing - the store's next operation, standing
+        // in for the directory force after a rename - when close() is called. An interrupt landing there fails a write
+        // that landed, the tracker keeps the delta it already persisted, and the final flush writes it again.
+        AtomicBoolean armed = new AtomicBoolean();
+        AtomicBoolean written = new AtomicBoolean();
+        CountDownLatch finishing = new CountDownLatch(1);
+        FaultInjectingStore store = FaultInjectingStore.wrap(ArtifactStoreProvider.resolve(
+                "filesystem", key -> "jenrepo.filesystem.root".equals(key) ? root.toString() : null));
+        store.tracing((op, key) -> {
+            if (written.get() && finishing.getCount() > 0) {
+                finishing.countDown();
+                try {
+                    Thread.sleep(500);
+                } catch (InterruptedException interrupted) {
+                    Thread.currentThread().interrupt();
+                    throw new UncheckedIOException(new ClosedByInterruptException());
+                }
+            }
+            if (armed.get() && op == FaultInjectingStore.Op.WRITE_VERSIONED && key != null && key.contains(hash)) {
+                written.set(true);
+            }
+        });
+        BatchingKeyUsageTracker tracker = new BatchingKeyUsageTracker(Authorization.enforcing(store), true);
+        tracker.start();
+        armed.set(true);
+        tracker.record("acme", hash, "10.0.0.1");
+        assertThat(finishing.await(1, TimeUnit.MINUTES)).as("the flush wrote the count and went on").isTrue();
+
+        tracker.close();
+
+        assertThat(authorization.credential("acme", hash).orElseThrow().useCount())
+                .as("one hit, counted once").isEqualTo(1L);
     }
 
     private static Metric metric(BatchingKeyUsageTracker tracker, String name) {
