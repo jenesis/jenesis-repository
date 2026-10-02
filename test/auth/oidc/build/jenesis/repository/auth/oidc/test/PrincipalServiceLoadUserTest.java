@@ -8,7 +8,12 @@ import module org.junit.jupiter.api;
 
 import org.springframework.core.env.StandardEnvironment;
 import com.sun.net.httpserver.HttpServer;
+import build.jenesis.repository.ui.AdministratorClaim;
 import build.jenesis.repository.ui.OAuth2PrincipalService;
+import jakarta.servlet.http.HttpServletRequest;
+import jakarta.servlet.http.HttpSession;
+import org.springframework.web.context.request.RequestContextHolder;
+import org.springframework.web.context.request.ServletRequestAttributes;
 import build.jenesis.repository.ui.OidcPrincipalService;
 import build.jenesis.repository.ui.QualifiedOidcUser;
 import build.jenesis.repository.cache.storage.testkit.CacheStorages;
@@ -48,6 +53,7 @@ public class PrincipalServiceLoadUserTest {
     private Path root;
 
     private LoginAuthorization authorization;
+    private ConsoleAdministrators administrators;
     private HttpServer server;
     private URI base;
 
@@ -64,8 +70,8 @@ public class PrincipalServiceLoadUserTest {
         // so the collision-guard test below proves the service keeps them apart rather than colliding on the sub.
         directory.put("github/42", UserDirectory.Role.VIEWER, "octocat");
         directory.put("google/42", UserDirectory.Role.VIEWER, "octocat");
-        authorization = new LoginAuthorization(
-                new Superadmins(new ConsoleAdministrators(Authorization.enforcing(rootStorage.store()), Set.of())),
+        administrators = new ConsoleAdministrators(Authorization.enforcing(rootStorage.store()), Set.of());
+        authorization = new LoginAuthorization(new Superadmins(administrators),
                 new KnownPrincipals(Authorization.enforcing(rootStorage.store())));
 
         // A loopback user-info endpoint the OAuth2 provider fetches (the OIDC path needs none): one path answers as a
@@ -80,6 +86,7 @@ public class PrincipalServiceLoadUserTest {
     @AfterEach
     public void tearDown() {
         server.stop(0);
+        RequestContextHolder.resetRequestAttributes();
     }
 
     @Test
@@ -132,6 +139,57 @@ public class PrincipalServiceLoadUserTest {
         var user = new OAuth2PrincipalService(authorization).loadUser(oauth2Request("/stranger"));
         assertThat(user.getAuthorities().toString())
                 .contains("ROLE_USER").doesNotContain("ROLE_SUPERADMIN");
+    }
+
+    @Test
+    public void a_claim_the_first_run_guide_made_makes_the_identity_github_returns_administrator() {
+        Map<String, Object> session = serving();
+        AdministratorClaim.offer(session(session), Instant.now());
+
+        OAuth2User user = new OAuth2PrincipalService(authorization, administrators).loadUser(oauth2Request("/stranger"));
+
+        assertThat(administrators.is("github/99999")).as("the identity GitHub returned administers the deployment")
+                .isTrue();
+        assertThat(user.getAuthorities().toString()).as("and this very sign-in already holds it")
+                .contains("ROLE_SUPERADMIN");
+        assertThat(session).as("the claim is spent").doesNotContainKey(AdministratorClaim.ATTRIBUTE);
+        assertThat(new OAuth2PrincipalService(authorization, administrators).loadUser(oauth2Request("/member"))
+                .getAuthorities().toString()).as("so the next sign-in in the session is granted nothing by it")
+                .doesNotContain("ROLE_SUPERADMIN");
+    }
+
+    @Test
+    public void a_lapsed_claim_or_none_makes_nobody_administrator() {
+        Map<String, Object> session = serving();
+        AdministratorClaim.offer(session(session), Instant.now().minus(AdministratorClaim.WINDOW).minusSeconds(1));
+        new OAuth2PrincipalService(authorization, administrators).loadUser(oauth2Request("/stranger"));
+        assertThat(administrators.is("github/99999")).as("a claim past its window grants nothing").isFalse();
+        assertThat(session).as("and is spent all the same").doesNotContainKey(AdministratorClaim.ATTRIBUTE);
+
+        new OAuth2PrincipalService(authorization, administrators).loadUser(oauth2Request("/stranger"));
+        assertThat(administrators.is("github/99999")).as("nor does a session that made none").isFalse();
+    }
+
+    /** A request being served whose session is the map returned, as the provider's callback is served. */
+    private static Map<String, Object> serving() {
+        Map<String, Object> attributes = new HashMap<>();
+        HttpSession session = session(attributes);
+        HttpServletRequest request = (HttpServletRequest) java.lang.reflect.Proxy.newProxyInstance(
+                HttpServletRequest.class.getClassLoader(), new Class<?>[] {HttpServletRequest.class},
+                (proxy, method, args) -> method.getName().equals("getSession") ? session : null);
+        RequestContextHolder.setRequestAttributes(new ServletRequestAttributes(request));
+        return attributes;
+    }
+
+    /** A session over {@code attributes}: what a claim reads and writes, and nothing else. */
+    private static HttpSession session(Map<String, Object> attributes) {
+        return (HttpSession) java.lang.reflect.Proxy.newProxyInstance(HttpSession.class.getClassLoader(),
+                new Class<?>[] {HttpSession.class}, (proxy, method, args) -> switch (method.getName()) {
+                    case "getAttribute" -> attributes.get((String) args[0]);
+                    case "setAttribute" -> attributes.put((String) args[0], args[1]);
+                    case "removeAttribute" -> attributes.remove((String) args[0]);
+                    default -> null;
+                });
     }
 
     /** An OIDC user request whose id token carries {@code sub}; the client registration names no user-info endpoint, so

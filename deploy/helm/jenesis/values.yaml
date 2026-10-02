@@ -78,6 +78,10 @@ ui:
 # identity), leave the cloud credentials empty and annotate the service account instead.
 secrets:
   existingSecret: ""
+  # Generate the master key secret settings are sealed with (JENREPO_SECRETS_KEY) into a Secret of its own, once,
+  # kept across upgrades and on uninstall; a setting holding a secret - a sign-in provider's client secret, a feed's
+  # token - can then be stored from the console. A key in existingSecret takes precedence.
+  generateSettingsKey: true
   s3AccessKeyId: ""           # JENREPO_S3_ACCESS_KEY_ID (s3 backend; empty = the AWS chain / IRSA)
   s3SecretAccessKey: ""       # JENREPO_S3_SECRET_ACCESS_KEY
   # The JSON key of a service account with objectAdmin on the bucket (gcs backend), e.g.

@@ -20,9 +20,17 @@ public class OAuth2PrincipalService extends DefaultOAuth2UserService {
     public static final String PRINCIPAL = "principal";
 
     private final LoginAuthorities authorities;
+    private final ConsoleAdministrators administrators;
 
     public OAuth2PrincipalService(LoginAuthorities authorities) {
+        this(authorities, null);
+    }
+
+    /** With {@code administrators}, which a pending {@link AdministratorClaim} is redeemed against; {@code null} where
+     *  the console grants no administration. */
+    public OAuth2PrincipalService(LoginAuthorities authorities, ConsoleAdministrators administrators) {
         this.authorities = authorities;
+        this.administrators = administrators;
         setRestOperations(ProviderRequests.rest());
     }
 
@@ -32,6 +40,10 @@ public class OAuth2PrincipalService extends DefaultOAuth2UserService {
         String qualifiedId = ProviderPrincipal.qualifiedId(
                 request.getClientRegistration().getRegistrationId(), user.getName());
         String displayName = ProviderPrincipal.displayName(user.getAttributes());
+        // A claim the first-run guide made is granted before the rights are worked out, so this sign-in holds them.
+        if (administrators != null) {
+            AdministratorClaim.redeem(administrators, qualifiedId, Instant.now());
+        }
         Collection<GrantedAuthority> granted = authorities.authorities(qualifiedId, displayName);
         Map<String, Object> attributes = new HashMap<>(user.getAttributes());
         attributes.put(PRINCIPAL, qualifiedId);

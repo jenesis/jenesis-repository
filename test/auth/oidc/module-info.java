@@ -32,4 +32,6 @@ open module build.jenesis.repository.auth.oidc.test {
     requires org.junit.jupiter;
     requires org.assertj.core;
     requires jdk.httpserver;
+    requires jakarta.servlet;
+    requires spring.web;
 }

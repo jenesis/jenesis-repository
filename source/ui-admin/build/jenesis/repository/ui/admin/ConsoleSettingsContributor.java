@@ -30,6 +30,22 @@ public final class ConsoleSettingsContributor implements SettingsContributor {
                                 + "here, once. The screen stays reachable as Setup, under Settings, either way, and "
                                 + "this is not what says setup is finished - that is whether the starter credential "
                                 + "is still in use. Applies live.",
-                        Setting.Kind.BOOLEAN, SetupWizard.ON_BY_DEFAULT, true).standard());
+                        Setting.Kind.BOOLEAN, SetupWizard.ON_BY_DEFAULT, true).standard(),
+                new Setting(GITHUB_CLIENT_ID, "Sign-in", "GitHub client id",
+                        "The client id of the GitHub OAuth app people sign in to the console with; empty, the "
+                                + "sign-in page offers no GitHub button. Register the app on GitHub with the "
+                                + "callback <console address>/login/oauth2/code/github - the first-run guide shows "
+                                + "the exact address and saves both values for you. Applies to the next sign-in.",
+                        Setting.Kind.STRING, "", true).standard().operator(),
+                new Setting(GITHUB_CLIENT_SECRET, "Sign-in", "GitHub client secret",
+                        "The client secret of the same GitHub OAuth app, stored encrypted with the settings master "
+                                + "key (JENREPO_SECRETS_KEY). Applies to the next sign-in.",
+                        Setting.Kind.SECRET, "", true).standard().operator());
     }
+
+    /** The GitHub OAuth app's client id, the key {@code jenrepo.ui.github.client-id} binds at boot too. */
+    public static final String GITHUB_CLIENT_ID = "ui.github.client-id";
+
+    /** The GitHub OAuth app's client secret. */
+    public static final String GITHUB_CLIENT_SECRET = "ui.github.client-secret";
 }

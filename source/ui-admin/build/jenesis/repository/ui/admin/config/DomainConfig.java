@@ -2,7 +2,9 @@ package build.jenesis.repository.ui.admin.config;
 
 import module java.base;
 
+import build.jenesis.repository.ui.GithubCredentials;
 import build.jenesis.repository.ui.PostureSource;
+import build.jenesis.repository.ui.admin.ConsoleSettingsContributor;
 import build.jenesis.repository.ui.SpiCatalogSource;
 import build.jenesis.repository.store.Features;
 import build.jenesis.repository.cache.storage.CacheStorage;
@@ -148,6 +150,23 @@ public class DomainConfig {
         // the console's environment, so a credential stored through the console is sealed under the API's key.
         return new SettingsAdmin(repositoryStore, settingsEditor, tenantService::all, audit, currentTenant, actor,
                 Features.namespaced(environment::getProperty));
+    }
+
+    /** The GitHub OAuth app the console signs in with, read from the settings each time a sign-in starts - a pin
+     *  from the environment first, as every setting resolves - so one saved from the console signs in at once. */
+    @Bean
+    public GithubCredentials githubCredentials(SettingsAdmin settings) {
+        return new GithubCredentials() {
+            @Override
+            public String clientId() {
+                return settings.effective(ConsoleSettingsContributor.GITHUB_CLIENT_ID, "");
+            }
+
+            @Override
+            public String clientSecret() {
+                return settings.effective(ConsoleSettingsContributor.GITHUB_CLIENT_SECRET, "");
+            }
+        };
     }
 
     @Bean

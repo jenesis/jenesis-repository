@@ -1570,6 +1570,23 @@ main .app-routing__fallback > :is(.app-routing__kind, .app-routing__screening) {
     margin: 0;
 }
 
+/* The starter step's GitHub panel, set off from the step's own fields by a rule. */
+.app-github-setup {
+    margin-top: var(--app-space-5);
+    padding-top: var(--app-space-4);
+    border-top: 1px solid var(--pico-muted-border-color);
+}
+.app-github-setup h3 {
+    font-size: var(--app-font-size-lg);
+}
+.app-github-setup__steps > li {
+    margin-bottom: var(--app-space-3);
+}
+code.app-copy {
+    overflow-wrap: anywhere;
+    user-select: all;
+}
+
 /* The filter every settings page opens with, and the switch that shows the advanced settings beside it. */
 .setting-filter {
     display: flex;

@@ -44,6 +44,40 @@
                    th:text="${wizard.error(f.input())}">Refused.</small>
         </div>
 
+        <!--/* On the starter step, the quicker way to an administrator: register a GitHub OAuth app with the callback
+             shown, paste its two values, and sign in with it - the identity GitHub returns is made administrator. The
+             fields belong to their own form (#github-setup, after this one), since what they save is written at once
+             rather than with the run, and a secret never rides the wizard's page. */-->
+        <section class="app-github-setup" aria-labelledby="github-setup-title"
+                 th:if="${wizard.index() == 0 and github != null and github.installed()}">
+            <h3 id="github-setup-title">Or sign in with GitHub and become administrator</h3>
+            <th:block th:unless="${github.configured() or github.canStoreSecret()}">
+                <p><small>A GitHub app's client secret is stored encrypted with the settings master key, and this
+                    deployment has none. Provision it as the environment variable <code>JENREPO_SECRETS_KEY</code>
+                    (the Helm chart generates one) and restart; this value is freshly generated for it:</small></p>
+                <p><code class="app-copy" th:text="${github.suggestedKey()}">k1:...</code></p>
+            </th:block>
+            <th:block th:if="${!github.configured() and github.canStoreSecret()}">
+                <ol class="app-github-setup__steps">
+                    <li><a th:href="${github.newApp()}" target="_blank" rel="noopener">Register a new OAuth app on
+                        GitHub</a> with this authorization callback URL:
+                        <code class="app-copy" th:text="${github.callback()}">https://repo.example.com/login/oauth2/code/github</code></li>
+                    <li>Paste its client id and a client secret it generates:
+                        <div class="app-filter-bar">
+                            <label>Client id <input form="github-setup" name="clientId" autocomplete="off" required></label>
+                            <label>Client secret <input form="github-setup" name="clientSecret" type="password"
+                                                        autocomplete="off" required></label>
+                        </div></li>
+                </ol>
+            </th:block>
+            <p th:if="${github.configured()}"><small th:text="${github.pinned()} ? 'GitHub sign-in is configured by the environment.'
+                    : 'GitHub sign-in is configured.'">GitHub sign-in is configured.</small></p>
+            <button th:if="${github.configured() or github.canStoreSecret()}" type="submit" form="github-setup"
+                    class="secondary outline app-secondary"
+                    th:text="${github.configured()} ? 'Sign in with GitHub and make me administrator'
+                            : 'Save and sign in with GitHub and make me administrator'">Sign in with GitHub</button>
+        </section>
+
         <!--/* A settings step: each setting its level asks, left at its default to keep what it inherits. A setting this
              session may not set is shown with its value and who fixes it, and is not carried. A true/false setting is a
              switch (console.js turns its choice into one), muted while it is left at its default; every value is
@@ -120,6 +154,8 @@
             </span>
         </div>
     </form>
+    <form id="github-setup" method="post" th:action="@{/ui/setup/github}"
+          th:if="${wizard.index() == 0 and github != null and github.installed()}"></form>
 </main>
 </body>
 </html>
