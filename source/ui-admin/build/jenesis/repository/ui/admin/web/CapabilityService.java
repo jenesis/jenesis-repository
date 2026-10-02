@@ -45,6 +45,7 @@ public class CapabilityService {
     private final List<NavEntry> moduleNav;
 
     private final List<RepositoryPage> moduleRepositoryPages;
+    private final List<ConsoleModuleProvider> pageModules;
 
     /**
      * @param environment the console's configuration chain, so a contributed flag answers as on
@@ -95,12 +96,14 @@ public class CapabilityService {
                 CapabilityService::noPages);
         this.moduleNav = modulePages.stream().flatMap(module -> module.nav().stream()).toList();
         this.moduleRepositoryPages = modulePages.stream().flatMap(module -> module.pages().stream()).toList();
+        this.pageModules = modulePages.stream().map(Contributed::provider).filter(Objects::nonNull).toList();
     }
 
-    /** What one console module contributes to the two navigation levels. */
-    private record Contributed(List<NavEntry> nav, List<RepositoryPage> pages) {
+    /** What one console module contributes to the two navigation levels, and the module, which a repository's own
+     *  pages are asked of; none for a module whose contribution was refused. */
+    private record Contributed(List<NavEntry> nav, List<RepositoryPage> pages, ConsoleModuleProvider provider) {
 
-        static final Contributed NONE = new Contributed(List.of(), List.of());
+        static final Contributed NONE = new Contributed(List.of(), List.of(), null);
     }
 
     /**
@@ -117,7 +120,7 @@ public class CapabilityService {
                     throw new IllegalArgumentException("a page requires the capability '" + unknown
                             + "', which this console does not know; it knows " + new TreeSet<>(named.keySet()));
                 });
-        return new Contributed(nav, pages);
+        return new Contributed(nav, pages, provider);
     }
 
     /** Every capability by the name a page's {@code requires} uses. */
@@ -195,6 +198,15 @@ public class CapabilityService {
     /** The pages the imported console modules add to every repository, on the same terms as {@link #moduleNav()}. */
     public List<RepositoryPage> moduleRepositoryPages() {
         return moduleRepositoryPages;
+    }
+
+    /** The pages the imported console modules add to one repository of type {@code type} ({@code null} for one
+     *  holding none), as {@link ConsoleModuleProvider#repositoryPages(String)} answers; a page requiring a capability
+     *  this console does not know is left out, as a module's every-repository pages would have been refused. */
+    public List<RepositoryPage> moduleRepositoryPages(String type) {
+        return pageModules.stream().flatMap(module -> module.repositoryPages(type).stream())
+                .filter(page -> page.requires().isEmpty() || named.containsKey(page.requires()))
+                .toList();
     }
 
     /** Whether the capability a page {@code requires} is present; the empty requirement always is. */

@@ -12,12 +12,7 @@
         <strong>live</strong> (a node's next scheduled re-read) or only <strong>on restart</strong>. A blank value
         reverts to the default.</small></p>
 
-    <label class="setting-filter">
-        <input type="search" id="setting-filter" autocomplete="off"
-               placeholder="Filter by name or what a setting does&hellip;"
-               aria-label="Filter settings by name or description">
-    </label>
-    <p class="setting-nomatch" id="setting-nomatch" hidden>No setting matches that filter.</p>
+    <div th:replace="~{fragments :: settingFilter}"></div>
 
     <th:block th:each="g : ${groups}">
         <article th:replace="~{fragments :: settingGroup(${g}, '/ui/settings/save', '/settings', 'default',

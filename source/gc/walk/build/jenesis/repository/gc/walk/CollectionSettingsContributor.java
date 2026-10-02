@@ -15,18 +15,18 @@ public final class CollectionSettingsContributor implements SettingsContributor 
     public List<Setting> settings() {
         return List.of(
                 new Setting("collect", "Collection", "Reclaim unreferenced content",
-                        "Run the collector at the end of a walk, so the storage of content no live pointer names "
-                                + "any more is freed. A blob is condemned on one pass and deleted on the next, and "
-                                + "a pointer linking it in between clears the mark, so nothing is deleted that was "
+                        "Run the collector at the end of a walk, so the storage of content no live pointer names any "
+                                + "more is freed. A blob is condemned on one pass and deleted on the next, and a "
+                                + "pointer linking it in between clears the mark, so nothing is deleted that was "
                                 + "referenced within two whole passes. Arming the collector is not scheduling it: it "
-                                + "reclaims on the walks that name it in the walks setting, weekly by default, and a "
-                                + "walk's cadence is a cost dial - a pass over the whole store weekly costs a seventh "
-                                + "of one that runs daily.",
+                                + "reclaims only on the walks that name it in the walks setting, and a walk's cadence "
+                                + "is a cost dial - a pass over the whole store weekly costs a seventh of one that "
+                                + "runs daily.",
                         Setting.Kind.BOOLEAN, "true", true).gate().essential(),
                 new Setting("gc", "Collection", "Collector",
                         "The collector to use, by name. A name nothing answers to fails the boot rather than "
                                 + "quietly reclaiming nothing.",
-                        Setting.Kind.STRING, "mark-sweep", false).essential(),
+                        Setting.Kind.STRING, "mark-sweep", false).advanced(),
                 new Setting("gc.stride", "Collection", "Collector stride",
                         "Items the collector handles between checkpoints: the reference batch it holds in memory, "
                                 + "the re-work a crash costs, and how often it renews a segment claim. Keep the "

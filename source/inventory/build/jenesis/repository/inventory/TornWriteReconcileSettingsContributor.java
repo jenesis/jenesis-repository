@@ -20,17 +20,17 @@ public final class TornWriteReconcileSettingsContributor implements SettingsCont
         return List.of(
                 new Setting(TornWriteConsumer.NAME, "Maintenance", "Reconcile torn writes",
                         "Judge crash-torn intermediate states whenever a walk of the store runs - a pointer whose "
-                                + "blob is missing (flagged loudly; impossible under the blob-before-pointer ordering, "
-                                + "so a signal of corruption) and a blob no pointer references (an orphan, confirmed "
-                                + "and left to garbage collection). A listener of the one walk (jenrepo.walks) rather "
-                                + "than a sweep of its own, paying no read the walk did not already make; on by "
-                                + "default, and a dry run that flags and counts unless Apply is also set.",
+                                + "blob is missing (flagged loudly; impossible under the blob-before-pointer "
+                                + "ordering, so a signal of corruption) and a blob no pointer references (an orphan, "
+                                + "confirmed and left to garbage collection). A listener of the one walk "
+                                + "(jenrepo.walks) rather than a sweep of its own, paying no read the walk did not "
+                                + "already make; a dry run that flags and counts unless Apply is also set.",
                         Setting.Kind.BOOLEAN, "true", true).advanced(),
                 new Setting(TornWriteConsumer.APPLY, "Maintenance", "Apply torn-write repairs",
                         "When the torn-write reconcile is on, actually remove the dangling pointers a walk finds (a "
-                                + "pointer that serves nothing because its blob is gone) rather than only flagging and "
-                                + "counting them. Orphan blobs are always left to garbage collection; a referenced "
-                                + "object is never removed. Off by default, so removal is a deliberate opt-in.",
+                                + "pointer that serves nothing because its blob is gone) rather than only flagging "
+                                + "and counting them. Orphan blobs are always left to garbage collection; a "
+                                + "referenced object is never removed.",
                         Setting.Kind.BOOLEAN, "false", true).advanced());
     }
 }

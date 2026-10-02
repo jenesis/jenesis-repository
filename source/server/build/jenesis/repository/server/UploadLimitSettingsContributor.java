@@ -15,6 +15,6 @@ public final class UploadLimitSettingsContributor implements SettingsContributor
                                 + "413 before any of it is read, and one streaming without a declared length is "
                                 + "refused at the byte that crosses it, so nothing of it is kept. Per request - for a "
                                 + "registry that uploads in chunks, per chunk. 0 lifts the bound. Applies live.",
-                        Setting.Kind.LONG, UploadLimitFilter.DEFAULT_TEXT, true).standard());
+                        Setting.Kind.LONG, UploadLimitFilter.DEFAULT_TEXT, true).advanced());
     }
 }

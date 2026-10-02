@@ -47,7 +47,8 @@ import build.jenesis.repository.ui.ConsoleScreen;
 @ConsoleScreen
 public class RepositoryAdminController {
 
-    /** How many recent holdings the overview renders; the full, paged list is the browse page's. */
+    /** How many recent holdings the browse root lists for a format with no folder tree; the full, paged list is the
+     *  browse page's search. */
     private static final int DETAIL_HOLDINGS = 200;
 
 
@@ -210,6 +211,9 @@ public class RepositoryAdminController {
             throws IOException {
         model.addAttribute("repo", repo);
         model.addAttribute("groups", settings.repositoryGroups(tenant.name(), repo, superadmin(authentication)));
+        // The tenant's other repositories, which the routing form offers as fallbacks.
+        model.addAttribute("routingRepositories", repositories.repositories().stream()
+                .filter(name -> !name.equals(repo)).toList());
         return "repository-settings";
     }
 
@@ -280,17 +284,14 @@ public class RepositoryAdminController {
     }
 
     /**
-     * A repository's overview: its routing, whether it hardens its proxy, what stands between it and its collector, its
-     * published index and the versions it most recently took in. Every read is a bounded window or a stored result.
+     * A repository's overview: its routing, whether it hardens its proxy, what stands between it and its collector and
+     * its published index. Every read is a point read or a stored result.
      */
     @GetMapping("/ui/repositories/{repo}")
     public String detail(@PathVariable("repo") String repo, Model model) throws IOException {
         model.addAttribute("repo", repo);
         Optional<RepositoryDocument> document = repositories.document(repo);
         model.addAttribute("description", document.map(RepositoryDocument::description).orElse(""));
-        RepositoryAdmin.Held holdings = repositories.recentHoldings(repo, DETAIL_HOLDINGS);
-        model.addAttribute("holdings", holdings.shown());
-        model.addAttribute("holdingsMore", holdings.more());
         // The routing in force for this tenant, its own or the deployment's, and which, so the overview can say whether
         // editing it changes this tenant alone.
         SettingsAdmin.Routing routing = settings.routing(tenant.name(), repo);

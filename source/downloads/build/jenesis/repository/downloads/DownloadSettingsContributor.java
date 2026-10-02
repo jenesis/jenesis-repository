@@ -15,7 +15,7 @@ public final class DownloadSettingsContributor implements SettingsContributor {
         return List.of(
                 new Setting("track-downloads", "Operations", "Track downloads",
                         "Run the download-tracking worker; needed for the not-downloaded-for criterion.",
-                        Setting.Kind.BOOLEAN, "true", false).gate().standard(),
+                        Setting.Kind.BOOLEAN, "true", false).gate().advanced(),
                 new Setting("download-flush-interval", "Operations", "Download flush interval",
                         "How long download hits are held in memory before one compare-and-set adds them to the "
                                 + "version's document and refreshes its last-download instant - at most one write "

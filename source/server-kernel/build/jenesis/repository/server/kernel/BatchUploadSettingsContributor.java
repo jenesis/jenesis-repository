@@ -17,8 +17,8 @@ public final class BatchUploadSettingsContributor implements SettingsContributor
         return List.of(
                 new Setting("batch-upload", "Uploads", "Batch archive upload",
                         "Explode a single PUT carrying the Jenesis-Explode: zip header into one publish per archive "
-                                + "entry, each screened by the compliance gate. Off by default.",
-                        Setting.Kind.BOOLEAN, "false", true).standard(),
+                                + "entry, each screened by the compliance gate.",
+                        Setting.Kind.BOOLEAN, "false", true).advanced(),
                 new Setting("batch-upload-max-entries", "Uploads", "Batch upload entry cap",
                         "The most members one exploded archive may publish; the walk stops at this cap.",
                         Setting.Kind.INTEGER, "10000", true).advanced(),
@@ -34,13 +34,13 @@ public final class BatchUploadSettingsContributor implements SettingsContributor
                         Setting.Kind.INTEGER,
                         Integer.toString(RepositoryProperties.BATCH_UPLOAD_MAX_RATIO), true).advanced(),
                 new Setting("store-families", "Operations", "Count store operations by key family",
-                        "Count every store operation by the key family it touched as well as by its name, reported "
-                                + "as jenrepo.store.family.<operation>.<family> beside jenrepo.store.ops.<operation>. "
-                                + "Off by default, and worth switching on only while measuring: it costs a map "
-                                + "lookup and a string concatenation on the store's hottest path. A count by "
-                                + "operation alone cannot say which keys a pass is reading - whether a walk's "
-                                + "versioned reads are the pointers it enumerates or a consumer riding it - which "
-                                + "is the difference between a change that reduces a bill and one that does nothing.",
+                        "Count every store operation by the key family it touched as well as by its name, reported as "
+                                + "jenrepo.store.family.<operation>.<family> beside jenrepo.store.ops.<operation>. "
+                                + "Worth switching on only while measuring: it costs a map lookup and a string "
+                                + "concatenation on the store's hottest path. A count by operation alone cannot say "
+                                + "which keys a pass is reading - whether a walk's versioned reads are the pointers "
+                                + "it enumerates or a consumer riding it - which is the difference between a change "
+                                + "that reduces a bill and one that does nothing.",
                         Setting.Kind.BOOLEAN, "false", false).advanced());
     }
 }

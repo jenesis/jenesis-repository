@@ -89,9 +89,9 @@ public final class RpmFormat implements RepositoryFormat, ArtifactLayout, ProxyL
         return "rpm";
     }
 
-    /** A lifecycle mark surfaces in the metadata this format's clients read, so marks are accepted here. */
+    /** A yank surfaces in the metadata this format's clients read, so one is accepted here. */
     @Override
-    public boolean surfacesLifecycleMarks() {
+    public boolean surfacesYank() {
         return true;
     }
 

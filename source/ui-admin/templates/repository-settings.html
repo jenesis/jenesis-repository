@@ -10,12 +10,11 @@
         edited here.</small></p>
     <p th:unless="${isEditor}"><small>You have read-only access to this tenant.</small></p>
 
-    <label class="setting-filter" th:unless="${groups.isEmpty()}">
-        <input type="search" id="setting-filter" autocomplete="off"
-               placeholder="Filter by name or what a setting does&hellip;"
-               aria-label="Filter settings by name or description">
-    </label>
-    <p class="setting-nomatch" id="setting-nomatch" hidden>No setting matches that filter.</p>
+    <th:block th:unless="${groups.isEmpty()}"><div th:replace="~{fragments :: settingFilter}"></div></th:block>
+    <!--/* What the routing form offers as another repository to fall back on. */-->
+    <datalist id="routing-repositories">
+        <option th:each="name : ${routingRepositories}" th:value="${name}"></option>
+    </datalist>
     <th:block th:if="${groups.isEmpty()}">
         <div th:replace="~{base :: empty('No module installed here declares a repository setting.')}"></div>
     </th:block>

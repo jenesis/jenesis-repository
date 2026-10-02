@@ -19,49 +19,46 @@ public final class CoreSettingsContributor implements SettingsContributor {
     public List<Setting> settings() {
         return List.of(
                 new Setting("vulnerability-threshold", "Compliance", "Vulnerability threshold",
-                        "Reject vulnerabilities at or above this CVSS band; NONE disables the check. Defaults to "
-                                + "CRITICAL (the secure floor); an operator sets NONE to opt out.",
+                        "The CVSS band at or above which a vulnerability brings the vulnerability action to bear; "
+                                + "NONE disables the check.",
                         Setting.Kind.CHOICE, SEVERITIES, CoreDefaults.VULNERABILITY_THRESHOLD, true).essential(),
                 new Setting("malware-action", "Compliance", "Malware action",
-                        "Verdict for a package the feed marks malicious. Defaults to REJECT, as the vulnerability "
-                                + "and deny-list dimensions do: a curated malicious-package record is a more certain "
-                                + "signal than a severity score, so it should not refuse less. An operator softens "
-                                + "it to QUARANTINE to hold such a package for review instead.",
+                        "Verdict for a package a feed marks malicious. A curated malicious-package record is a more "
+                                + "certain signal than a severity score, so it should not refuse less than the "
+                                + "vulnerability and deny-list dimensions do. REJECT refuses the package; QUARANTINE "
+                                + "holds it for review instead.",
                         Setting.Kind.CHOICE, VERDICTS, CoreDefaults.MALWARE_ACTION, true).essential(),
                 new Setting("vulnerability-action", "Compliance", "Vulnerability action",
-                        "Verdict for an artifact whose advisories reach the threshold above. Defaults to REJECT "
-                                + "(the secure floor); an operator softens it to QUARANTINE to review such artifacts "
-                                + "rather than refuse them outright, which is what the malicious-package dimension "
-                                + "has always allowed. REJECT refuses the publish and stores nothing; QUARANTINE "
-                                + "stores the bytes and withholds them until a reviewer releases or discards them.",
+                        "Verdict for an artifact whose advisories reach the threshold above. REJECT refuses the "
+                                + "publish and stores nothing; QUARANTINE stores the bytes and withholds them until a "
+                                + "reviewer releases or discards them.",
                         Setting.Kind.CHOICE, VERDICTS, CoreDefaults.VULNERABILITY_ACTION, true).essential(),
                 new Setting("deny-list", "Compliance", "Deny list",
                         "Comma-separated coordinates an operator forbids; always refused.",
                         Setting.Kind.STRING, "", true).standard(),
                 new Setting("deny-list-action", "Compliance", "Deny list action",
-                        "Verdict for a coordinate the deny list names. Defaults to REJECT (the secure floor); an "
-                                + "operator softens it to QUARANTINE to hold such coordinates for review.",
+                        "Verdict for a coordinate the deny list names. REJECT, the secure floor, refuses it; "
+                                + "QUARANTINE holds such coordinates for review instead.",
                         Setting.Kind.CHOICE, VERDICTS, CoreDefaults.DENY_LIST_ACTION, true).standard(),
                 new Setting("proxy-enabled", "Proxy", "Pull-through proxy",
                         "Proxy reads that miss locally from the upstreams, caching and bridging them.",
                         Setting.Kind.BOOLEAN, CoreDefaults.PROXY_ENABLED, true).standard(),
                 new Setting("immaturity-hold-days", "Proxy", "Immaturity hold",
-                        "Quarantine proxied artifacts the upstream published within this many days; 0 disables. "
-                                + "Defaults to 2 (the secure floor): a brand-new upstream version is held for review "
-                                + "over the highest-risk window in which a typosquat or compromised release is usually "
-                                + "yanked. Fail-open (only bites on an upstream Last-Modified date); an operator raises "
-                                + "it or sets 0 to disable.",
+                        "Quarantine proxied artifacts the upstream published within this many days; 0 disables. A "
+                                + "brand-new upstream version is held for review over the highest-risk window in "
+                                + "which a typosquat or compromised release is usually yanked. Fail-open: it only "
+                                + "bites on an upstream Last-Modified date.",
                         Setting.Kind.INTEGER, "2", true).essential(),
                 new Setting("proxy-allow-internal", "Proxy", "Allow internal proxy targets",
                         "Permit proxy upstreams, and the download URLs an upstream document advertises, that are "
-                                + "plain http or resolve to a loopback, private, link-local or cloud-metadata address. "
-                                + "Off by default: a proxy fetch carries the deployment's per-host upstream credential "
-                                + "and its result is cached and re-served, so a cleartext hop hands both to any "
-                                + "observer and lets an active intermediary choose what this repository caches, while "
-                                + "an internal one lets an upstream steer the fetch into this deployment's own network "
-                                + "(SSRF). A deployment-global operator dial - one question, one answer, for every "
-                                + "format - enable only for a trusted internal or plaintext mirror.",
-                        Setting.Kind.BOOLEAN, "false", false).standard(),
+                                + "plain http or resolve to a loopback, private, link-local or cloud-metadata "
+                                + "address. A proxy fetch carries the deployment's per-host upstream credential and "
+                                + "its result is cached and re-served, so a cleartext hop hands both to any observer "
+                                + "and lets an active intermediary choose what this repository caches, while an "
+                                + "internal one lets an upstream steer the fetch into this deployment's own network "
+                                + "(SSRF). One dial for the whole deployment and every format; enable it only for a "
+                                + "trusted internal or plaintext mirror.",
+                        Setting.Kind.BOOLEAN, "false", false).advanced(),
                 new Setting("cleanup-lease", "Operations", "Maintenance lease",
                         "How long one node holds the background-maintenance lease; keep under the task intervals.",
                         Setting.Kind.DURATION, "PT10M", false).advanced(),
@@ -74,11 +71,10 @@ public final class CoreSettingsContributor implements SettingsContributor {
                                 + "or that resolves to a loopback, link-local or private address. A migration runs "
                                 + "server-side with a credential attached, so a plaintext URL hands it to any "
                                 + "observer on the path and a private one turns the migration into a request against "
-                                + "this deployment's own network (SSRF). On by default for every edition, enforced "
-                                + "identically on the API and console legs; an operator sets it false to migrate from "
-                                + "or to an internal or plaintext repository - the one dial, covering both, so "
-                                + "neither can be opted out of alone.",
-                        Setting.Kind.BOOLEAN, "true", false).standard(),
+                                + "this deployment's own network (SSRF). Enforced identically on the API and console "
+                                + "legs; set it false to migrate from or to an internal or plaintext repository - the "
+                                + "one dial, covering both, so neither can be opted out of alone.",
+                        Setting.Kind.BOOLEAN, "true", false).advanced(),
                 new Setting("trusted-proxies", "Network", "Trusted proxies",
                         "Comma-separated CIDRs of reverse proxies whose X-Forwarded-For, X-Forwarded-Proto and "
                                 + "X-Forwarded-Host are believed.",

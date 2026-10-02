@@ -14,10 +14,9 @@ public final class FolderListingSettingsContributor implements SettingsContribut
     public List<Setting> settings() {
         return List.of(new Setting(FolderListing.SETTING, "Serving", "Folder listings",
                 "Answer a folder URL of a Maven repository - a path ending in / - with a page listing what it serves, "
-                        + "a thousand names at a time, for the clients that list a folder where maven-metadata.xml "
-                        + "is missing (Coursier, sbt) and for people browsing. Off by default: a page costs a store "
-                        + "listing per name it shows, which a repository whose clients read the metadata never "
-                        + "needs.",
+                        + "a thousand names at a time, for the clients that list a folder where maven-metadata.xml is "
+                        + "missing (Coursier, sbt) and for people browsing. A page costs a store listing per name it "
+                        + "shows, which a repository whose clients read the metadata never needs.",
                 Setting.Kind.BOOLEAN, FolderListing.DEFAULT, true, Setting.Scope.REPOSITORY).advanced());
     }
 }

@@ -69,17 +69,11 @@
     </style>
 </head>
 <body>
-<!--/* The shell nav: the skip link is the page's first focusable element (the accessibility baseline), the nav
-     wraps on a narrow viewport (.app-nav) and carries the shared theme switch. */-->
 <!--/* The shared console header. All of it - the edition's notice strip, the brand and theme switch, the tenant,
      the posture count, the signed-in identity and the module links - is the base module's, so both consoles render
-     one shell and a screen moved between them changes nothing around it.
-
-     This used to pass the edition badges in as an argument and render the banner beside the shell, which put the
-     strip below the header and left it out of the three shared screens that call the shell directly. Both slots are
-     read from the model inside the shell now, so this fragment is the shell, and every screen gets them. It is kept
-     as a fragment rather than inlined at its thirty call sites because it is where this console's own name for the
-     product is stated. */-->
+     one shell and a screen moved between them changes nothing around it. The notice strip is read from the model
+     inside the shell, so every screen gets it. This is kept as a fragment rather than inlined at its call sites
+     because it is where this console's own name for the product is stated. */-->
 <th:block th:fragment="nav">
     <th:block th:replace="~{base :: shell}"></th:block>
 </th:block>
@@ -109,16 +103,19 @@
      differ only in where a value is saved and what it falls back to, so the one row takes those as parameters rather
      than being drawn twice: `action` is the save route, `back` the return path (null where the route takes none),
      `baseline` what the value falls back to, `revertTo` the same in a sentence, and `scope` what a confirmation adds
-     (" for this tenant", or nothing). A value set here is marked overridden, the same word at every layer. */-->
+     (" for this tenant", or nothing). A value set here is marked overridden, the same word at every layer. An advanced
+     setting carries a class the page's "Show advanced settings" switch hides it by, unless a value is set here: a
+     value of its own is never out of sight. */-->
 <div th:fragment="settingRowFor(s, action, back, baseline, revertTo, scope)" class="setting"
+     th:classappend="${s.advanced and !s.overridden} ? 'setting--advanced'"
      th:attr="data-search=|${s.key} ${s.label} ${s.description} ${s.module}|">
     <div class="setting-head">
-        <div>
+        <div class="setting-name">
             <strong th:text="${s.label}">Label</strong>
             <code th:text="${s.key}">key</code>
-            <small class="setting-module" th:text="${s.module}">module</small>
         </div>
         <div class="setting-badges">
+            <span class="app-badge app-badge--muted" th:if="${s.advanced}">advanced</span>
             <span class="app-badge app-badge--pass" th:if="${s.live}">live</span>
             <span class="app-badge" th:unless="${s.live}">↻ restart</span>
             <span class="app-badge app-badge--info" th:if="${s.overridden and !s.pinned}">overridden</span>
@@ -130,37 +127,41 @@
         </div>
     </div>
     <p class="setting-doc" th:text="${s.description}">What this setting does.</p>
-    <p class="setting-values">
-        <span>effective: <strong th:text="${s.effectiveDisplay()}">value</strong></span>
-        <span><th:block th:text="${baseline}">default</th:block>: <span
-                th:text="${s.defaultDisplay()}">default</span></span>
-    </p>
-    <!--/* The row's controls on one line: the value and its Save, then Reset to default beside it while the value is
-         set here. Save is what the row is for, so it is the filled button; the reset drops the value set here, so it
-         is the caution. On a high-impact setting either can start rejecting or admitting packages, so both are the
-         caution and ask first. */-->
+    <!--/* The row's controls on one line across the row: the value and its Save, then the quiet Reset to default
+         while a value is set here. On a high-impact setting either asks first. */-->
     <div class="setting-controls">
     <th:block th:if="${s.toggle()}">
         <div th:replace="~{fragments :: settingSwitch(${s}, ${action}, ${back},
                 |Apply this high-impact policy change${scope}?|)}"></div>
     </th:block>
-    <form method="post" th:action="@{${action}}" class="setting-edit" th:unless="${s.pinned or s.toggle()}">
+    <!--/* The value's control follows its kind and declared form: a choice, a text area for several lines or JSON,
+         a duration the script turns into an amount and a unit, the routing editor the script builds over its clauses,
+         or one line. Each is checked against the catalogue as soon as the field is left (data-check-key). */-->
+    <form method="post" th:action="@{${action}}" class="setting-edit" th:unless="${s.pinned or s.toggle()}"
+          th:classappend="${s.textArea() or s.routing()} ? 'setting-edit--wide'">
         <input type="hidden" name="key" th:value="${s.key}">
         <input type="hidden" name="return" th:value="${back}" th:if="${back != null}">
         <select name="value" th:if="${s.dropdown()}" th:attr="aria-label=${s.label}">
-            <option th:each="o : ${s.options()}" th:value="${o}" th:text="${o}"
+            <option th:each="o : ${s.options()}" th:value="${o}" th:text="${s.optionLabel(o)}"
                     th:selected="${o == s.value}">option</option>
         </select>
-        <input th:unless="${s.dropdown()}" name="value" th:type="${s.inputType()}"
-               th:value="${s.editValue()}" th:attr="aria-label=${s.label}"
-               th:placeholder="${s.editPlaceholder()}">
+        <textarea th:if="${s.textArea()}" name="value" th:rows="${s.json()} ? 8 : 4"
+                  th:classappend="${s.json()} ? 'app-code'" th:text="${s.editValue()}"
+                  th:placeholder="${s.editPlaceholder()}"
+                  th:attr="aria-label=${s.label},data-check-key=${s.key}"></textarea>
+        <input th:unless="${s.dropdown() or s.textArea()}" name="value" th:type="${s.inputType()}"
+               th:value="${s.editValue()}" th:placeholder="${s.editPlaceholder()}"
+               th:attr="aria-label=${s.label},data-check-key=${s.key},
+                       data-duration=${s.duration()} ? (${s.durationOrNone()} ? 'or-none' : 'duration') : null,
+                       data-default=${s.duration()} ? ${s.defaultValue} : null,
+                       data-routing=${s.routing()} ? 'true' : null">
         <th:block th:if="${s.highImpact}"><button th:replace="~{base :: cautionButton('Save',
                 |Apply this high-impact policy change${scope}?|)}">Save</button></th:block>
         <th:block th:unless="${s.highImpact}"><button th:replace="~{base :: primaryButton('Save')}">Save</button></th:block>
     </form>
     <div class="setting-edit setting-pinned" th:if="${s.pinned and !s.toggle()}">
         <select th:if="${s.dropdown()}" disabled th:attr="aria-label=${s.label}">
-            <option th:each="o : ${s.options()}" th:value="${o}" th:text="${o}"
+            <option th:each="o : ${s.options()}" th:value="${o}" th:text="${s.optionLabel(o)}"
                     th:selected="${o == s.value}">option</option>
         </select>
         <input th:unless="${s.dropdown()}" th:type="${s.inputType()}" disabled
@@ -172,48 +173,69 @@
         <input type="hidden" name="key" th:value="${s.key}">
         <input type="hidden" name="return" th:value="${back}" th:if="${back != null}">
         <input type="hidden" name="value" value="">
-        <th:block th:if="${s.highImpact}"><button th:replace="~{base :: cautionButton('Reset to default',
-                |Reset this high-impact setting to ${revertTo}?|)}">Reset to default</button></th:block>
-        <button th:unless="${s.highImpact}" type="submit" class="secondary outline app-caution">Reset to default</button>
+        <button type="submit" class="app-quiet"
+                th:attr="data-confirm=${s.highImpact} ? |Reset this high-impact setting to ${revertTo}?| : null"
+>Reset to default</button>
     </form>
     </div>
+    <!--/* What is in force, with the value it falls back to marked after it: "enabled (default)" where nothing is set
+         here, "disabled - default: enabled" where something is. */-->
+    <p class="setting-values" th:unless="${s.toggle()}">
+        <span>In force: <strong th:text="${s.effectiveDisplay()}">value</strong></span>
+        <small th:unless="${s.overridden}" th:text="|(${baseline})|">(default)</small>
+        <small th:if="${s.overridden}" th:text="|${baseline}: ${s.defaultDisplay()}|">default: value</small>
+    </p>
 </div>
 
-<!--/* settingGroup: one group of settings, its essential ones shown and its advanced ones - tuning whose default nearly
-     every deployment keeps - folded behind a disclosure that says how many it holds and how many of those have been
-     overridden, so an overridden value is never out of sight without a word. The settings filter opens the disclosure when
-     it matches inside it. The parameters after `g` are settingRowFor's. */-->
+<!--/* settingGroup: one group of settings, the ones an operator decides first and its advanced ones - tuning whose
+     default nearly every deployment keeps - after them, hidden by the page's "Show advanced settings" switch until it
+     is on. A group holding only hidden advanced settings steps aside with them. The parameters after `g` are
+     settingRowFor's. */-->
 <article th:fragment="settingGroup(g, action, back, baseline, revertTo, scope)" class="setting-group">
     <h2 th:text="${g.name}">Group</h2>
     <th:block th:each="s : ${g.essentials()}">
         <div th:replace="~{fragments :: settingRowFor(${s}, ${action}, ${back}, ${baseline}, ${revertTo},
                 ${scope})}"></div>
     </th:block>
-    <details class="setting-advanced" th:unless="${g.tuning().isEmpty()}">
-        <summary><th:block th:text="|Advanced (${g.tuning().size()})|">Advanced</th:block><small
-                th:if="${g.tuningChanged() > 0}" th:text="| · ${g.tuningChanged()} overridden|"></small></summary>
-        <th:block th:each="s : ${g.tuning()}">
-            <div th:replace="~{fragments :: settingRowFor(${s}, ${action}, ${back}, ${baseline},
-                    ${revertTo}, ${scope})}"></div>
-        </th:block>
-    </details>
+    <th:block th:each="s : ${g.tuning()}">
+        <div th:replace="~{fragments :: settingRowFor(${s}, ${action}, ${back}, ${baseline}, ${revertTo},
+                ${scope})}"></div>
+    </th:block>
 </article>
 
-<!--/* settingSwitch: a boolean setting as a switch showing its effective value. Pressing it posts the opposite value
-     to `action` - the same save route the other kinds use, so a switch saves through one path - and a pinned one is
-     shown disabled with what pins it. `back` is the return path, or null where the route takes none; `confirm` is the
-     prompt a high-impact setting asks before it changes. */-->
+<!--/* settingFilter: the one filter every settings page opens with - a search over the rows already rendered, and the
+     switch that shows the advanced settings, which the filter turns on by itself when what was typed matches only an
+     advanced one. */-->
+<div th:fragment="settingFilter" class="setting-filter">
+    <input type="search" id="setting-filter" autocomplete="off"
+           placeholder="Filter by name or what a setting does&hellip;"
+           aria-label="Filter settings by name or description">
+    <label class="setting-filter__advanced"><input type="checkbox" id="setting-show-advanced"> Show advanced
+        settings</label>
+    <p class="setting-nomatch" id="setting-nomatch" hidden>No setting matches that filter.</p>
+</div>
+
+<!--/* settingSwitch: a boolean setting as a switch showing its effective value. Pressing it flips the switch at once
+     and posts the opposite value to `action` - the same save route the other kinds use - after a grace of
+     `data-grace` seconds, counted down beside it, in which pressing it again takes the change back before anything is
+     written (console.js; without a script the press posts at once). A switch whose value is inherited is drawn
+     muted, with the default marked after its state. A pinned one is shown disabled with what pins it. `back` is the
+     return path, or null where the route takes none; `confirm` is the prompt a high-impact setting asks before it
+     changes. */-->
 <div th:fragment="settingSwitch(s, action, back, confirm)" class="setting-edit setting-switch">
-    <form method="post" th:action="@{${action}}" th:unless="${s.pinned}"
+    <form method="post" th:action="@{${action}}" th:unless="${s.pinned}" data-grace="5"
           th:attr="data-confirm=${s.highImpact} ? ${confirm} : null">
         <input type="hidden" name="key" th:value="${s.key}">
         <input type="hidden" name="return" th:value="${back}" th:if="${back != null}">
         <input type="hidden" name="value" th:value="${s.flipped()}">
         <button type="submit" role="switch" class="app-switch"
+                th:classappend="${!s.overridden} ? 'app-switch--inherited'"
                 th:attr="aria-checked=${s.on()},aria-label=${s.label}">
             <span class="app-switch__track" aria-hidden="true"></span>
             <span class="app-switch__state" th:text="${s.on()} ? 'On' : 'Off'">On</span>
+            <small class="app-switch__default" th:unless="${s.overridden}">(default)</small>
         </button>
+        <small class="app-switch__pending" aria-live="polite"></small>
     </form>
     <th:block th:if="${s.pinned}">
         <button type="button" role="switch" class="app-switch" disabled

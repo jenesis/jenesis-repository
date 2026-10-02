@@ -334,13 +334,23 @@ public interface RepositoryFormat extends IconContributor {
     }
 
     /**
-     * Whether a lifecycle mark - deprecated, yanked - on a version of this format surfaces in the metadata its clients
-     * read: npm's {@code deprecated}, a yanked flag in a Cargo index line, a PyPI {@code data-yanked}. A format that
-     * shows one declares it; one that has nowhere a client would see a mark leaves this {@code false}, and a mark on
-     * a repository of that format is refused rather than stored, since an accepted mark nobody sees reads as done.
-     * Off by default, so a new format refuses marks until it shows them.
+     * Whether a deprecation mark on a version of this format surfaces in the metadata its clients read: npm's
+     * {@code deprecated}, Composer's {@code abandoned}, a Helm chart's {@code deprecated}. A format whose clients have
+     * no deprecation signal leaves this {@code false}, and a deprecation on a repository of that format is refused
+     * rather than stored, since an accepted mark nobody sees reads as done. Off by default, so a new format refuses
+     * a deprecation until it shows one.
      */
-    default boolean surfacesLifecycleMarks() {
+    default boolean surfacesDeprecation() {
+        return false;
+    }
+
+    /**
+     * Whether a yank on a version of this format surfaces in the metadata its clients read: a yanked flag in a Cargo
+     * index line, a PyPI {@code data-yanked}, a Maven version left out of {@code maven-metadata.xml}. A format whose
+     * clients have nowhere to see a yank leaves this {@code false}, and a yank on a repository of that format is
+     * refused rather than stored. Off by default, as {@link #surfacesDeprecation()} is.
+     */
+    default boolean surfacesYank() {
         return false;
     }
 

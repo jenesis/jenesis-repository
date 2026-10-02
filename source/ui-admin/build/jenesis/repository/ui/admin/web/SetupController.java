@@ -48,8 +48,11 @@ public class SetupController {
         if (flow.apply(form.get(WizardFlow.ACTION))) {
             int changed = wizard.complete(flow);
             SetupWizard.skip(session);
-            redirect.addFlashAttribute("message", changed == 0 ? "Setup applied; nothing needed changing."
-                    : "Setup applied: " + changed + (changed == 1 ? " setting" : " settings") + " saved.");
+            String administrator = flow.identity().getOrDefault(SetupWizard.ADMINISTRATOR, "");
+            redirect.addFlashAttribute("message", (changed == 0 ? "Setup applied; no setting needed changing."
+                    : "Setup applied: " + changed + (changed == 1 ? " setting" : " settings") + " saved.")
+                    + (administrator.isBlank() ? "" : " " + administrator + " administers the deployment.")
+                    + " Next, give each build its own credential under Access, New credential.");
             return "redirect:/ui/";
         }
         model.addAttribute("wizard", flow);

@@ -15,10 +15,10 @@ public final class RubyGemsSettingsContributor implements SettingsContributor {
         return List.of(
                 new Setting(RubyGemsFormat.ATTESTATIONS_URL, "RubyGems", "Attestations API base",
                         "Where the Sigstore attestations of a proxied gem are fetched from, the base of an API "
-                                + "answering <base>/<name>-<version>.json with an array of bundles. Empty by "
-                                + "default, which reads /api/v1/attestations/ under the proxied upstream - what "
-                                + "rubygems.org serves. A mirror without the API answers 404, which is absence "
-                                + "rather than a failure. Applies on the next restart.",
+                                + "answering <base>/<name>-<version>.json with an array of bundles. Empty reads "
+                                + "/api/v1/attestations/ under the proxied upstream - what rubygems.org serves. A "
+                                + "mirror without the API answers 404, which is absence rather than a failure. "
+                                + "Applies on the next restart.",
                         Setting.Kind.STRING, "", false).advanced());
     }
 }

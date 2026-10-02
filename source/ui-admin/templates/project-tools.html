@@ -1,0 +1,29 @@
+<!DOCTYPE html>
+<html lang="en" xmlns:th="http://www.thymeleaf.org">
+<head th:replace="~{fragments :: head('Build tools')}"></head>
+<body>
+<header th:replace="~{fragments :: nav}"></header>
+<main id="main">
+    <div th:replace="~{fragments :: messages}"></div>
+    <header th:replace="~{base :: pageHeader('Build tools')}"></header>
+    <!--/* The build tools this node's cache serves and where each is pointed, as the cache reports them on
+         /api/capabilities - so the page, the API and `jenrepo capabilities` name one set. */-->
+    <p><small>A build reaches its project at its tool's endpoint on this server, presenting a key granted the
+        project.</small></p>
+    <figure th:unless="${capabilities.cacheProtocols().isEmpty()}">
+        <table class="app-list">
+            <thead><tr><th scope="col">Tool</th><th scope="col">Endpoint</th></tr></thead>
+            <tbody>
+            <tr th:each="protocol : ${capabilities.cacheProtocols()}">
+                <td th:text="${protocol.name()}">gradle</td>
+                <td><code th:text="${protocol.endpointFor(tenant)}">/build/default/gradle/</code></td>
+            </tr>
+            </tbody>
+        </table>
+    </figure>
+    <th:block th:if="${capabilities.cacheProtocols().isEmpty()}">
+        <div th:replace="~{base :: empty('This node serves no build tool: the build cache is not installed here.')}"></div>
+    </th:block>
+</main>
+</body>
+</html>

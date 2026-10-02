@@ -14,12 +14,7 @@
         value follows <em>tenant override, then the deployment value, then the default</em>; a blank value clears the
         tenant override and falls back to the <strong>deployment</strong> value.</small></p>
 
-    <label class="setting-filter">
-        <input type="search" id="setting-filter" autocomplete="off"
-               placeholder="Filter by name or what a setting does&hellip;"
-               aria-label="Filter settings by name or description">
-    </label>
-    <p class="setting-nomatch" id="setting-nomatch" hidden>No setting matches that filter.</p>
+    <div th:replace="~{fragments :: settingFilter}"></div>
 
     <p th:if="${groups.isEmpty()}"><small>No tenant-overridable settings are installed on this deployment. A tenant
         may override the compliance gate policy and forward targets when those modules are present.</small></p>

@@ -1,0 +1,31 @@
+<!DOCTYPE html>
+<html lang="en" xmlns:th="http://www.thymeleaf.org">
+<head th:replace="~{fragments :: head('Cache volume')}"></head>
+<body>
+<header th:replace="~{fragments :: nav}"></header>
+<main id="main">
+    <div th:replace="~{fragments :: messages}"></div>
+    <header th:replace="~{base :: pageHeader('Cache volume')}"></header>
+    <!--/* The volume every tenant's projects share: a super-admin's, since what it reclaims crosses every tenant. */-->
+    <p>
+        <strong th:text="${@format.bytes(usableSpace)}">0 B</strong> free of
+        <strong th:text="${@format.bytes(totalSpace)}">0 B</strong>.
+        Configured target: <span th:text="${minFreeBytes}">0</span> bytes /
+        <span th:text="${minFreePercent}">0</span>%.
+    </p>
+    <p><small>A reclaim runs a least-recently-used sweep across every tenant's projects until the target is
+        met.</small></p>
+    <form method="post" th:action="@{/ui/projects/volume-reclaim}">
+        <div class="grid">
+            <label>Min free bytes <small>(blank = configured)</small>
+                <input name="minFreeBytes" inputmode="numeric">
+            </label>
+            <label>Min free percent <small>(blank = configured)</small>
+                <input name="minFreePercent" inputmode="numeric">
+            </label>
+        </div>
+        <button th:replace="~{base :: cautionButton('Reclaim now', 'Evict the least recently used cache entries across every tenant until the target is met?')}">Reclaim now</button>
+    </form>
+</main>
+</body>
+</html>

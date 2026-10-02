@@ -15,10 +15,10 @@ public final class AttestationSettingsContributor implements SettingsContributor
     public List<Setting> settings() {
         return List.of(
                 new Setting("provenance-admission-key", "Compliance", "Provenance trust anchor",
-                        "PEM public key(s) an inbound attestation's DSSE signature must verify against - the builder "
-                                + "keys the tenant trusts. One or more RSA or EC -----BEGIN PUBLIC KEY----- blocks. "
-                                + "Empty disables inbound attestation admission: there is no anchor to verify a "
-                                + "signature against, so an artifact's builder / source claims would be self-asserted.",
+                        "PEM public key(s) an inbound attestation's DSSE signature must verify against - the trusted "
+                                + "builder keys. One or more RSA or EC -----BEGIN PUBLIC KEY----- blocks. Empty "
+                                + "disables inbound attestation admission: there is no anchor to verify a signature "
+                                + "against, so an artifact's builder / source claims would be self-asserted.",
                         Setting.Kind.SECRET, "", true, Setting.Scope.TENANT).standard(),
                 new Setting("provenance-admission-builder", "Compliance", "Expected builder",
                         "Comma-separated builder identities an inbound attestation must name, e.g. "

@@ -6,10 +6,19 @@
 <main id="main">
     <div th:replace="~{fragments :: messages}"></div>
     <header th:replace="~{base :: pageHeader('Projects')}"></header>
-    <!--/* The projects and the way to add one, side by side like the repositories. */-->
-    <div class="app-panels app-panels--lead">
-    <article>
-        <h2>Current projects</h2>
+    <p><small>Build-cache projects, each the unit a build's cache entries are kept and evicted in. Open one to see its
+        settings and who may use it<th:block th:if="${isEditor}">, or <a th:href="@{/ui/new/project}">create a new
+        project</a> - its name, its size cap and how long an unused entry is kept, a step at a time, with nothing
+        written until the last</th:block>.</small></p>
+
+    <!--/* The projects across the whole width, as the repositories are, and a filter over the rows already rendered. */-->
+    <th:block th:unless="${projects.isEmpty()}">
+        <label>Search
+            <input type="search" id="project-filter" autocomplete="off" data-filter=".project-row"
+                   data-filter-empty="project-nomatch" aria-label="Filter projects by name"
+                   placeholder="Filter by name">
+        </label>
+        <p class="setting-nomatch" id="project-nomatch" hidden>No project matches that filter.</p>
         <figure th:unless="${projects.isEmpty()}">
             <table class="app-list">
                 <thead>
@@ -25,7 +34,7 @@
                 <tbody>
                 <!--/* The entries and bytes are the figure the last pass stored, never a sweep of the cache per row:
                        a project that has never been counted says so, and its page offers the count. */-->
-                <tr th:each="p : ${projects}">
+                <tr th:each="p : ${projects}" class="project-row" th:attr="data-search=${p.name}">
                     <td><a th:href="@{'/ui/projects/' + ${p.name}}" th:text="${p.name}">name</a></td>
                     <td class="app-list__num" th:text="${p.stats.known()} ? ${p.entryCount} : '?'">0</td>
                     <td class="app-list__num" th:text="${p.stats.known()} ? ${@format.bytes(p.totalBytes)} : '?'">0 B</td>
@@ -34,66 +43,19 @@
                         <small th:if="${!p.stats.counting() and p.stats.known()}" th:text="${instants.display(p.stats.countedAt())}">time</small>
                         <small th:if="${!p.stats.counting() and !p.stats.known()}">never</small></td>
                     <td th:text="${#strings.isEmpty(p.sizeCap)} ? '-' : ${p.sizeCap}">-</td>
-                    <td th:text="${#strings.isEmpty(p.ttl)} ? '-' : ${p.ttl}">-</td>
+                    <td th:text="${@format.duration(p.ttl)}">-</td>
                 </tr>
                 </tbody>
             </table>
         </figure>
-        <th:block th:if="${projects.isEmpty()}">
-            <div th:replace="~{base :: empty('No projects yet. Create one to start caching builds.')}"></div>
-        </th:block>
-    </article>
-    <article th:if="${isEditor}">
-        <h2>New project</h2>
-        <p><small>A project is created with its name and the settings it needs from the start - its size cap and
-            how long an unused entry is kept - asked a step at a time, and nothing is written until the last.</small></p>
-        <a th:href="@{/ui/new/project}" role="button" class="app-primary">New project</a>
-    </article>
-    </div>
-
-    <!--/* The build tools this node's cache serves and where each is pointed, as the cache reports them on
-         /api/capabilities - so the page, the API and `jenrepo capabilities` name one set. */-->
-    <section class="app-divide" th:unless="${capabilities.cacheProtocols().isEmpty()}" aria-labelledby="build-tools">
-        <h2 id="build-tools">Build tools</h2>
-        <p><small>A build reaches its project at its tool's endpoint on this server, presenting a key granted the
-            project.</small></p>
-        <figure>
-            <table class="app-list">
-                <thead><tr><th scope="col">Tool</th><th scope="col">Endpoint</th></tr></thead>
-                <tbody>
-                <tr th:each="protocol : ${capabilities.cacheProtocols()}">
-                    <td th:text="${protocol.name()}">gradle</td>
-                    <td><code th:text="${protocol.endpointFor(tenant)}">/build/default/gradle/</code></td>
-                </tr>
-                </tbody>
-            </table>
-        </figure>
-    </section>
-
-    <!--/* The volume every tenant's projects share: a super-admin's, set apart under a rule of its own because what it
-         reclaims crosses every tenant rather than belonging to the projects listed above. */-->
-    <section class="app-divide" th:if="${superadmin}" aria-labelledby="volume">
-        <h2 id="volume">Cache volume</h2>
-        <p>
-            <strong th:text="${@format.bytes(usableSpace)}">0 B</strong> free of
-            <strong th:text="${@format.bytes(totalSpace)}">0 B</strong>.
-            Configured target: <span th:text="${minFreeBytes}">0</span> bytes /
-            <span th:text="${minFreePercent}">0</span>%.
-        </p>
-        <p><small>A reclaim runs a least-recently-used sweep across every tenant's projects until the target is
-            met.</small></p>
-        <form method="post" th:action="@{/ui/projects/volume-reclaim}">
-            <div class="grid">
-                <label>Min free bytes <small>(blank = configured)</small>
-                    <input name="minFreeBytes" inputmode="numeric">
-                </label>
-                <label>Min free percent <small>(blank = configured)</small>
-                    <input name="minFreePercent" inputmode="numeric">
-                </label>
-            </div>
-            <button th:replace="~{base :: cautionButton('Reclaim now', 'Evict the least recently used cache entries across every tenant until the target is met?')}">Reclaim now</button>
-        </form>
-    </section>
+    </th:block>
+    <th:block th:if="${projects.isEmpty() and isEditor}">
+        <div th:replace="~{base :: emptyAction('No projects yet. ', 'Create one', '/ui/new/project',
+                ' to start caching builds.')}"></div>
+    </th:block>
+    <th:block th:if="${projects.isEmpty() and !isEditor}">
+        <div th:replace="~{base :: empty('No projects yet.')}"></div>
+    </th:block>
 </main>
 </body>
 </html>

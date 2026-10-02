@@ -18,6 +18,7 @@
     pageHeaderCrumbs(title, crumbs) - a page header with a breadcrumb (crumbs: List<Map{href,label}>, last is current,
                                       and the title stands in for it as the trail's last step).
     empty(message)                  - the one empty-state treatment.
+    emptyAction(before, action, href, after) - the same, with the words naming the way out as its link.
     field(label, name, value, help) - a labelled text input with inline help text.
     alert(message, kind)            - a flash/outcome banner; kind in {pass,warn,danger} or null for info.
     primaryButton(label)            - the main action of a page or of a section: filled, and the only filled button.
@@ -107,7 +108,6 @@
                    th:attr="aria-current=${group.current()} ? 'true' : null">Group</a>
             </nav>
             <div class="app-header__session">
-                <th:block th:replace="~{__${editionBadges ?: ''}__}"></th:block>
                 <a th:if="${postureBadge != null and postureBadge.visible()}" class="app-posture app-badge app-badge--warn"
                    th:href="@{/ui/posture}" th:title="${postureBadge.title()}" th:text="${postureBadge.label()}">posture</a>
                 <button th:replace="~{base :: themeToggle}"></button>
@@ -159,7 +159,6 @@
         <div class="app-header__inner">
             <a th:replace="~{base :: brand}"></a>
             <div class="app-header__session">
-                <th:block th:replace="~{__${editionBadges ?: ''}__}"></th:block>
                 <button th:replace="~{base :: themeToggle}"></button>
             </div>
         </div>
@@ -190,8 +189,9 @@
     </hgroup>
 </header>
 
-<!--/* The header every page about one repository opens with: the trail back to the repository, ended by the page's
-     title. The repository's identity - its format and its URL - is its overview's to say, once. The console resolves
+<!--/* The header every page about one repository opens with: the repository it is about, leading back to its overview,
+     then the page's title - the console's own Repositories link is in the header already, so the trail starts at the
+     repository. The repository's identity - its format and its URL - is its overview's to say, once. The console resolves
      `repositoryHeader` from the request path, so a page contributed by any module opens the same way. `parent` and
      `parentHref` name a page between the repository and this one (a signer's page sits under Signers), or are null. */-->
 <th:block th:fragment="repositoryHeader(title, parent, parentHref)">
@@ -199,7 +199,6 @@
         <hgroup class="app-page-header__heading">
             <nav aria-label="Breadcrumb" th:if="${repositoryHeader != null}">
                 <ol class="app-breadcrumb">
-                    <li><a th:href="@{/ui/repositories}">Repositories</a></li>
                     <li><a th:href="@{/ui/repositories/{r}(r=${repositoryHeader.name()})}"
                            th:text="${repositoryHeader.name()}">releases</a></li>
                     <li th:if="${parent != null}"><a th:href="${parentHref}" th:text="${parent}">Parent</a></li>
@@ -210,15 +209,10 @@
     </header>
 </th:block>
 
-<!--/* The repository overview's header: the repository is the page, so the trail ends at it. */-->
+<!--/* The repository overview's header: the repository is the page, so it needs no trail. */-->
 <th:block th:fragment="repositoryOverviewHeader">
     <header class="app-page-header">
         <hgroup class="app-page-header__heading">
-            <nav aria-label="Breadcrumb" th:if="${repositoryHeader != null}">
-                <ol class="app-breadcrumb">
-                    <li><a th:href="@{/ui/repositories}">Repositories</a></li>
-                </ol>
-            </nav>
             <h1 class="app-page-header__title" th:text="${repositoryHeader?.name()}">releases</h1>
         </hgroup>
     </header>
@@ -248,6 +242,14 @@
 <div th:fragment="empty(message)" class="app-empty" role="status">
     <div class="app-empty__icon" aria-hidden="true">∅</div>
     <p th:text="${message}" style="margin:0">Nothing here yet.</p>
+</div>
+
+<!--/* The same state where the way out of it is an action: the words that name it are its link, inside the sentence,
+     as in "No repositories yet. Create one, then publish into it." `before` and `after` surround the linked words. */-->
+<div th:fragment="emptyAction(before, action, href, after)" class="app-empty" role="status">
+    <div class="app-empty__icon" aria-hidden="true">∅</div>
+    <p style="margin:0"><th:block th:text="${before}">Nothing here yet. </th:block><a th:href="@{${href}}"
+            th:text="${action}">Create one</a><th:block th:text="${after}">.</th:block></p>
 </div>
 
 <!--/* There is no badge fragment. A status pill is the `.app-badge` class plus one of `--pass`, `--warn`,
@@ -285,8 +287,8 @@
    th:classappend="${kind} != null ? 'app-alert--' + ${kind} : ''"
    th:attr="role=${kind == 'danger'} ? 'alert' : 'status'" th:text="${message}">message</p>
 
-<!--/* The weight of an action: four, so a reader tells from a button's colour what it does before reading it, and which
-     button on a screen loses data.
+<!--/* The weight of an action, so a reader tells from a button's look what it does before reading it, and which button
+     on a screen loses data. One meaning, one look, on every screen:
 
        primary   - the main action of a page, or of a section standing on its own: the submit of the form it exists
                    for (create, save, publish, start). The one filled weight, and never in a row.
@@ -295,6 +297,12 @@
                    tint, and it asks before it acts.
        danger    - irreversible: a discard, a deletion, a restore over the current state. The danger tint, guarded by
                    a question (dangerButton) or, for a deletion, by typing the name (deleteButton).
+       quiet     - changes nothing by itself: going back, leaving, resetting a value to what it inherits, removing a
+                   row not yet saved. Drawn as text (`app-quiet`), never as a button competing with the others.
+       switch    - a state that is on or off, changed in place (`app-switch`, role=switch), never a pair of buttons.
+
+     A link that only goes somewhere is drawn as a link; a button acts. Where a form moves forward (a wizard), the
+     forward actions stand on the right, the primary rightmost, and going back and leaving stand on the left.
 
      Among a row's or a section's actions the caution or primary one comes first and the danger one last, set apart
      (console.css: app-actions, app-actions__danger).

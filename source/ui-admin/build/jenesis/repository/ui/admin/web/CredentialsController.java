@@ -36,11 +36,29 @@ public class CredentialsController {
         model.addAttribute("credentials", page.credentials());
         model.addAttribute("next", page.next());
         model.addAttribute("paged", !after.isBlank());
+        return "credentials";
+    }
+
+    /** The form a new credential is created with; its key is shown on the credential's page, once. */
+    @GetMapping("/ui/credentials/new")
+    public String create() {
+        return "credential-new";
+    }
+
+    /** What governs every credential of the tenant: the lifetime policy, leak detection and the roles. */
+    @GetMapping("/ui/credentials/policies")
+    public String policies(Model model) throws IOException {
         model.addAttribute("policy", credentials.policy());
-        model.addAttribute("trusts", credentials.trusts());
         model.addAttribute("roles", credentials.roles());
         model.addAttribute("rights", credentials.availableRights());
-        return "credentials";
+        return "credential-policies";
+    }
+
+    /** The OIDC trusts a CI job exchanges its platform's token through for a short-lived key. */
+    @GetMapping("/ui/credentials/keyless")
+    public String keyless(Model model) throws IOException {
+        model.addAttribute("trusts", credentials.trusts());
+        return "credential-keyless";
     }
 
     @PostMapping("/ui/credentials/roles")
@@ -49,14 +67,14 @@ public class CredentialsController {
                           RedirectAttributes redirect) throws IOException {
         credentials.setRole(name, tokens);
         redirect.addFlashAttribute("message", "Saved role '" + name + "'.");
-        return "redirect:/ui/credentials";
+        return "redirect:/ui/credentials/policies";
     }
 
     @PostMapping("/ui/credentials/roles/{name}/remove")
     public String removeRole(@PathVariable("name") String name, RedirectAttributes redirect) throws IOException {
         credentials.removeRole(name);
         redirect.addFlashAttribute("message", "Removed role '" + name + "'.");
-        return "redirect:/ui/credentials";
+        return "redirect:/ui/credentials/policies";
     }
 
     @PostMapping("/ui/credentials/trusts")
@@ -70,14 +88,14 @@ public class CredentialsController {
                            RedirectAttributes redirect) throws IOException {
         credentials.setTrust(name, issuer, audience, subject, scope, rights, CredentialLifetimes.lifetime(ttl));
         redirect.addFlashAttribute("message", "Saved OIDC trust '" + name + "'.");
-        return "redirect:/ui/credentials";
+        return "redirect:/ui/credentials/keyless";
     }
 
     @PostMapping("/ui/credentials/trusts/{name}/remove")
     public String removeTrust(@PathVariable("name") String name, RedirectAttributes redirect) throws IOException {
         credentials.removeTrust(name);
         redirect.addFlashAttribute("message", "Removed OIDC trust '" + name + "'.");
-        return "redirect:/ui/credentials";
+        return "redirect:/ui/credentials/keyless";
     }
 
     @PostMapping("/ui/credentials/policy")
@@ -86,7 +104,7 @@ public class CredentialsController {
                             RedirectAttributes redirect) throws IOException {
         credentials.setPolicy(CredentialLifetimes.lifetime(defaultLifetime), CredentialLifetimes.lifetime(max));
         redirect.addFlashAttribute("message", "Updated the credential-lifetime policy.");
-        return "redirect:/ui/credentials";
+        return "redirect:/ui/credentials/policies";
     }
 
     @PostMapping("/ui/credentials")

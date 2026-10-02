@@ -16,9 +16,9 @@ public final class ProvenanceSweepSettingsContributor implements SettingsContrib
                         "Reclaim provenance attestations whose artifact is gone. The event-driven reaper already "
                                 + "removes one as its artifact is deleted; this converging pass reaches what a "
                                 + "notification could not - a delete that failed transiently, a descriptor with no "
-                                + "blob identity, and everything written before the reaper was installed. Off by "
-                                + "default: it walks the attestation space.",
-                        Setting.Kind.BOOLEAN, "false", true).standard(),
+                                + "blob identity, and everything written before the reaper was installed. It walks "
+                                + "the attestation space.",
+                        Setting.Kind.BOOLEAN, "false", true).advanced(),
                 new Setting(ProvenanceAttestationSweepProvider.INTERVAL.key(), "Compliance",
                         "Provenance attestation sweep interval",
                         "How often the attestation sweep runs.",

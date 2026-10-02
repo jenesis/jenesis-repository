@@ -252,22 +252,6 @@ body:not(:has(.app-sidebar)) > main {
     font-style: italic;
 }
 
-/* The edition, in the session corner: a small pill that leads to the licence page. */
-.app-edition-badge {
-    display: inline-block;
-    padding: 0.05rem var(--app-space-2);
-    border: 1px solid var(--pico-muted-border-color);
-    border-radius: 999px;
-    font-size: var(--app-font-size-xs);
-    color: var(--pico-muted-color);
-    text-decoration: none;
-    white-space: nowrap;
-}
-.app-edition-badge:hover {
-    color: var(--pico-primary);
-    border-color: var(--pico-primary);
-}
-
 /* The first navigation level: one link per group, muted until it is the one a reader is in. */
 .app-groups {
     display: flex;
@@ -668,8 +652,53 @@ hgroup.app-page-header__heading > h1.app-page-header__title {
     color: var(--pico-muted-color);
     font-size: var(--app-font-size-sm);
 }
+/* A search over one list: the field across the line with its button joined to its end, and a note under both. */
+.app-search > [role="search"] {
+    display: flex;
+    margin-bottom: var(--app-space-2);
+}
+.app-search > [role="search"] > input {
+    flex: 1 1 auto;
+    margin-bottom: 0;
+}
+.app-search > [role="search"] > button {
+    flex: 0 0 auto;
+    width: auto;
+    margin-bottom: 0;
+}
+
+/* A filter bar: its fields side by side, wrapping on a narrow screen, and the button that applies them level with the
+   fields rather than with their labels. */
+.app-filter-bar {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: flex-end;
+    gap: var(--app-space-3) var(--app-space-4);
+    margin-bottom: var(--app-space-4);
+}
+.app-filter-bar > label {
+    flex: 1 1 10rem;
+    margin: 0;
+}
+.app-filter-bar > label > input,
+.app-filter-bar > label > select,
+.app-filter-bar > button {
+    margin-bottom: 0;
+}
+.app-filter-bar > button {
+    flex: 0 0 auto;
+    width: auto;
+}
+
+/* Pico pads a navigation's items as menu entries; a trail's steps sit tight on one small line. */
 .app-breadcrumb li {
     list-style: none;
+    margin: 0;
+    padding: 0;
+}
+.app-page-header__heading > nav {
+    margin: 0;
+    padding: 0;
 }
 .app-breadcrumb li + li::before {
     content: "/";
@@ -713,13 +742,23 @@ hgroup.app-page-header__heading > h1.app-page-header__title {
 .app-list__name > * + * {
     margin-left: var(--app-space-2);
 }
-/* A repository's description, on its own line under the name. */
+/* A repository's description, on its own row under the whole line it describes, read as part of that line: the
+   row above drops its rule and this one carries no top padding. */
+.repository-row--described > td {
+    border-bottom: none;
+}
+.app-list__description-row > td {
+    padding-top: 0;
+}
+.app-list__description {
+    color: var(--pico-muted-color);
+    font-size: var(--app-font-size-xs);
+}
+/* A note set under a name inside its own cell, as a module's kept namespaces are. */
 .app-list__name > .app-list__description {
     display: block;
     margin-left: 0;
     margin-top: var(--app-space-1);
-    color: var(--pico-muted-color);
-    font-size: var(--app-font-size-xs);
 }
 .app-list__date {
     white-space: nowrap;
@@ -881,6 +920,9 @@ hgroup.app-page-header__heading > h1.app-page-header__title {
     margin-top: var(--app-space-1);
     color: var(--app-status-danger-fg);
     font-size: var(--app-font-size-sm);
+}
+.app-field__error[hidden] {
+    display: none;
 }
 
 /* A wizard's steps: where a run stands among them, numbered, the step it is on marked by weight as well as by
@@ -1135,18 +1177,19 @@ main :is(button, [type=submit], [type=button], [type=reset], [role=button]) {
     width: auto;
     --pico-form-element-spacing-horizontal: 1rem;
 }
-/* A setting's edit is one line: the field, then its Save. */
+/* A setting's edit is one line across the row: the field, taking what the line leaves, then its Save. */
 .setting-edit {
     display: flex;
     gap: var(--app-space-2);
     align-items: center;
-    max-width: 40rem;
+    flex: 1 1 auto;
 }
 main .setting-edit > :is(input, select, button) {
     margin: 0;
 }
 main .setting-edit > :is(input, select) {
     flex: 1;
+    min-width: 0;
 }
 /* The switch's colours are taken here, outside the button: Pico redefines its own colour variables inside every
    button, which painted the label white on white and the knob in the button's blue. */
@@ -1160,6 +1203,9 @@ main .setting-edit > :is(input, select) {
     --app-switch-knob: #fff;
 }
 .setting-switch > form {
+    display: flex;
+    align-items: center;
+    gap: var(--app-space-3);
     margin: 0;
 }
 
@@ -1212,6 +1258,40 @@ main .app-switch {
     min-width: 2rem;
     text-align: left;
     font-weight: 600;
+}
+/* A switch nobody has set shows the value it inherits, muted, with the default marked after it; setting it, even to
+   the same value, draws it at full strength. */
+.app-switch--inherited .app-switch__track {
+    opacity: 0.55;
+}
+.app-switch--inherited .app-switch__state {
+    font-weight: 400;
+    color: var(--pico-muted-color);
+}
+.app-switch__default {
+    color: var(--pico-muted-color);
+    font-weight: 400;
+}
+/* A switch a form carries rather than saves (console.js), with its quiet reset beside it. */
+.app-switch-field {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--app-space-3);
+    --app-switch-label: var(--pico-color);
+    --app-switch-off: var(--pico-secondary-background);
+    --app-switch-on: var(--pico-primary-background);
+    --app-switch-knob: #fff;
+}
+.app-switch__default[hidden] {
+    display: none;
+}
+/* The grace before a switched setting is written, counted down beside the switch. */
+.app-switch__pending {
+    color: var(--pico-muted-color);
+    font-size: var(--app-font-size-sm);
+}
+.app-switch__pending:empty {
+    display: none;
 }
 @media (prefers-reduced-motion: reduce) {
     .app-switch__track, .app-switch__track::after {
@@ -1323,15 +1403,203 @@ main .app-switch {
 .setting, .setting-doc, .module-card {
     overflow-wrap: anywhere;
 }
-/* A group's advanced settings, folded under the ones an operator decides: the fold is set off by a rule above it,
-   and its count reads as a note rather than as a heading. */
-.setting-advanced {
-    margin: 1rem 0 0;
-    padding-top: .75rem;
+/* One setting: its name and badges on a line, what it does under them, then its controls across the row and what is in
+   force. Rows are parted by a hairline. */
+.setting {
+    padding: var(--app-space-4) 0;
     border-top: 1px solid var(--pico-muted-border-color);
 }
-.setting-advanced > summary small {
-    color: var(--app-muted-text);
+.setting-group > h2 + .setting {
+    border-top: 0;
+    padding-top: 0;
+}
+.setting-head {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: var(--app-space-2) var(--app-space-4);
+}
+.setting-name {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: baseline;
+    gap: var(--app-space-2);
+}
+.setting-name code {
+    font-size: var(--app-font-size-xs);
+    color: var(--pico-muted-color);
+    background: none;
+    padding: 0;
+}
+.setting-badges {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--app-space-1);
+}
+.setting > .setting-doc {
+    margin: var(--app-space-2) 0 var(--app-space-3);
+    color: var(--pico-muted-color);
+    font-size: var(--app-font-size-sm);
+}
+.setting-controls {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: var(--app-space-2) var(--app-space-3);
+}
+main .setting-controls :is(input:not([type=checkbox], [type=radio]), select) {
+    height: 2.625rem;
+    padding-inline: var(--app-space-3);
+}
+main .setting-controls :is(button, [type=submit]) {
+    height: 2.625rem;
+}
+.setting-revert {
+    margin: 0;
+}
+.setting-values {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--app-space-2);
+    margin: var(--app-space-2) 0 0;
+    font-size: var(--app-font-size-sm);
+    color: var(--pico-muted-color);
+}
+.setting-pinned-note {
+    margin: 0;
+    font-size: var(--app-font-size-sm);
+    color: var(--pico-muted-color);
+}
+/* A value over several lines, or a routing, takes the row's whole width with its Save beneath it. */
+.setting-edit--wide {
+    flex-direction: column;
+    align-items: stretch;
+    flex-basis: 100%;
+}
+.setting-edit--wide > button {
+    align-self: flex-start;
+}
+main .setting-edit > textarea {
+    margin: 0;
+    min-height: 6rem;
+    resize: vertical;
+}
+textarea.app-code {
+    font-family: var(--pico-font-family-monospace);
+    font-size: var(--app-font-size-sm);
+}
+/* A duration as an amount and a unit (console.js), side by side in the field's place. */
+.app-duration {
+    display: inline-flex;
+    flex: 1;
+    gap: var(--app-space-2);
+    min-width: 0;
+}
+main .app-duration > input[type=number] {
+    flex: 1 1 6rem;
+    margin: 0;
+}
+main .app-duration > select {
+    flex: 0 1 10rem;
+    margin: 0;
+}
+/* A routing as a form (console.js): whether the repository accepts uploads, then its ordered fallbacks. */
+.app-routing {
+    display: flex;
+    flex-direction: column;
+    gap: var(--app-space-2);
+}
+.app-routing__writable, .app-routing__option {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--app-space-2);
+    margin: 0;
+    white-space: nowrap;
+}
+.app-routing__fallbacks {
+    margin: 0;
+    padding-left: 1.25rem;
+}
+.app-routing__fallback {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: var(--app-space-2);
+    margin-bottom: var(--app-space-2);
+}
+main .app-routing__fallback > :is(input, select) {
+    margin: 0;
+}
+main .app-routing__fallback > .app-routing__url,
+main .app-routing__fallback > .app-routing__repository {
+    flex: 1 1 16rem;
+}
+main .app-routing__fallback > :is(.app-routing__kind, .app-routing__screening) {
+    flex: 0 1 12rem;
+}
+.app-routing > .app-quiet {
+    align-self: flex-start;
+}
+
+/* A wizard's actions: forward on the right (the primary rightmost), back and leave quiet on the left. The page carries
+   the primary first, so Enter moves on; the row is drawn reversed. */
+.app-wizard-actions {
+    display: flex;
+    flex-direction: row-reverse;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: var(--app-space-3);
+    margin-top: var(--app-space-5);
+}
+.app-wizard-actions__quiet {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--app-space-4);
+    margin-right: auto;
+}
+
+/* A checkbox and its words on one line, its help beneath. */
+.app-check {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--app-space-2);
+    margin: 0;
+}
+.app-check > input {
+    margin: 0;
+}
+
+/* The filter every settings page opens with, and the switch that shows the advanced settings beside it. */
+.setting-filter {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: var(--app-space-2) var(--app-space-4);
+    margin-bottom: var(--app-space-4);
+}
+main .setting-filter > input[type=search] {
+    flex: 1 1 20rem;
+    margin: 0;
+}
+.setting-filter__advanced {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--app-space-2);
+    margin: 0;
+    white-space: nowrap;
+}
+.setting-filter__advanced > input {
+    margin: 0;
+}
+.setting-filter > .setting-nomatch {
+    flex-basis: 100%;
+    margin: 0;
+}
+/* The advanced settings stand aside until the page's switch shows them, and a group holding nothing else with them. */
+main:has(#setting-show-advanced:not(:checked)) .setting--advanced,
+main:has(#setting-show-advanced:not(:checked)) .setting-group:not(:has(.setting:not(.setting--advanced))) {
+    display: none;
 }
 
 /* ---- Narrow screens --------------------------------------------------------------------------------------- */

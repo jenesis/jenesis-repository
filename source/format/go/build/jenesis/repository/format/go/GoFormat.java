@@ -71,9 +71,9 @@ public final class GoFormat implements RepositoryFormat, ProxyLeg, BlobLayout, R
         return "go";
     }
 
-    /** A lifecycle mark surfaces in the metadata this format's clients read, so marks are accepted here. */
+    /** A yank surfaces in the metadata this format's clients read, so one is accepted here. */
     @Override
-    public boolean surfacesLifecycleMarks() {
+    public boolean surfacesYank() {
         return true;
     }
 

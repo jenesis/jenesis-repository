@@ -52,6 +52,9 @@ public record NavEntry(String label, String path, Access access, Group group, St
         /** Who may do what: credentials, members, and the record of what they did. */
         ACCESS("Access"),
 
+        /** The tenants a deployment serving several of them holds, and the one being worked in. */
+        TENANTS("Tenants"),
+
         /** What the deployment is doing: its background passes, its metrics, its posture, a manual upload. */
         OPERATIONS("Operations"),
 

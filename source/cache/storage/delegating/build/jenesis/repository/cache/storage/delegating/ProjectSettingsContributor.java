@@ -26,8 +26,8 @@ public final class ProjectSettingsContributor implements SettingsContributor {
                                 + "30d); none keeps entries for ever.",
                         Setting.Kind.DURATION_OR_NONE, "", true, Setting.Scope.PROJECT).essential(),
                 new Setting(ProjectPolicy.LRU, "Build cache project", "Evict least recently used first",
-                        "Which entries a size-cap sweep evicts first: the least recently used (the default), or the "
-                                + "most recently used when switched off.",
+                        "Which entries a size-cap sweep evicts first: the least recently used when on, or the most "
+                                + "recently used when switched off.",
                         Setting.Kind.BOOLEAN, "true", true, Setting.Scope.PROJECT).advanced());
     }
 

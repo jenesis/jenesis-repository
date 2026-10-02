@@ -54,7 +54,7 @@ public record RepositoryPage(String label, String path, NavEntry.Access access, 
         /** Where what it holds came from and what depends on it. */
         PROVENANCE("Provenance"),
 
-        /** How long it keeps what it holds, and where it sends it. */
+        /** How long it keeps what it holds, what it brings in from elsewhere, and where it sends it. */
         LIFECYCLE("Lifecycle");
 
         private final String label;

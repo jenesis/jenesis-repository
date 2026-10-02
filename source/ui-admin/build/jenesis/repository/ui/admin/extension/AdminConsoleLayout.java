@@ -21,7 +21,7 @@ public final class AdminConsoleLayout implements ConsoleLayout.Extension {
         return Set.of(ConsoleLayout.HEAD_CONTENTS, ConsoleLayout.SHELL, ConsoleLayout.PAGE_HEADER,
                 ConsoleLayout.PAGE_HEADER_CRUMBS,
                 ConsoleLayout.MESSAGES, ConsoleLayout.SUBSECTION_ERROR, ConsoleLayout.ALERT,
-                ConsoleLayout.EMPTY,
+                ConsoleLayout.EMPTY, ConsoleLayout.EMPTY_ACTION,
                 ConsoleLayout.PRIMARY_BUTTON, ConsoleLayout.SECONDARY_BUTTON, ConsoleLayout.CAUTION_BUTTON,
                 ConsoleLayout.DANGER_BUTTON, ConsoleLayout.DELETE_BUTTON,
                 ConsoleLayout.BROWSE_ROWS, ConsoleLayout.BROWSE_UP, ConsoleLayout.FOLDER_LINK,

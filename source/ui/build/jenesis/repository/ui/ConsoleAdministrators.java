@@ -78,6 +78,31 @@ public class ConsoleAdministrators {
     }
 
     /**
+     * Grant {@code id} administration of the deployment - every right at the deployment scope, as a seeded id holds it.
+     *
+     * @throws IllegalArgumentException if {@code id} names no subject a grant can be made to
+     */
+    public void grant(String id) throws IOException {
+        authorization.setGrant(Authorization.DEPLOYMENT, Authorization.Subject.principal(id), EVERYTHING, EVERYTHING);
+    }
+
+    /** Why {@code id} cannot be granted administration, or empty when it can: a person is named as their sign-in
+     *  method names them, method and name with a slash between and no spaces, and a grant refuses what names no
+     *  subject. */
+    public static Optional<String> refusal(String id) {
+        if (id.indexOf('/') < 0 || id.chars().anyMatch(Character::isWhitespace)) {
+            return Optional.of("Name the sign-in method and the name there, with a slash between and no spaces: "
+                    + "github/alice, oidc/<subject> or keylogin/<name>.");
+        }
+        try {
+            Authorization.Subject.principal(id);
+            return Optional.empty();
+        } catch (IllegalArgumentException refused) {
+            return Optional.of(refused.getMessage());
+        }
+    }
+
+    /**
      * Whether this provider-qualified id administers the deployment: a point read of its deployment-wide grant, which
      * sees a grant made through the API since boot.
      */

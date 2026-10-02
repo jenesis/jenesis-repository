@@ -1,16 +1,17 @@
 <!doctype html>
 <html lang="en" xmlns:th="http://www.thymeleaf.org">
-<head th:replace="~{fragments :: head('Deprecations & yanks')}"></head>
+<head th:replace="~{fragments :: head(${title})}"></head>
 <body>
 <header th:replace="~{fragments :: nav}"></header>
 <main id="main">
     <div th:replace="~{fragments :: messages}"></div>
-    <th:block th:replace="~{base :: repositoryHeader('Deprecations & yanks', null, null)}"></th:block>
+    <th:block th:replace="~{base :: repositoryHeader(${title}, null, null)}"></th:block>
 
-    <p><small>A <strong>deprecated</strong> version still installs, and its client warns whoever installs it; a
-        <strong>yanked</strong> one stays for whoever already pinned it, and no new resolution picks it. Each client
-        sees the mark in its own metadata - npm's deprecation message, Cargo's and RubyGems' yank, NuGet's unlisting -
-        and its own command sets the same mark this page does.</small></p>
+    <!--/* Only the marks this repository's clients see are explained and offered. */-->
+    <p><small><th:block th:if="${deprecates}">A <strong>deprecated</strong> version still installs, and its client
+        warns whoever installs it. </th:block><th:block th:if="${yanks}">A <strong>yanked</strong> version stays for
+        whoever already pinned it, and no new resolution picks it. </th:block>Each client sees the mark in its own
+        metadata, and its own command sets the same mark this page does.</small></p>
 
     <article th:if="${refusal != null}" class="app-subsection-error" role="status">
         <p th:text="${refusal}">This repository shows a lifecycle mark to no client.</p>
@@ -22,7 +23,7 @@
         <p th:unless="${coordinate.isEmpty()}"><a th:href="@{/ui/repositories/{repo}/lifecycle(repo=${repository})}">Every
             marked version &rarr;</a></p>
         <th:block th:if="${marks.isEmpty()}">
-            <div th:replace="~{base :: empty('No version of this repository is deprecated or yanked.')}"></div>
+            <div th:replace="~{base :: empty('No version of this repository is marked.')}"></div>
         </th:block>
         <figure th:unless="${marks.isEmpty()}">
             <table class="app-list">

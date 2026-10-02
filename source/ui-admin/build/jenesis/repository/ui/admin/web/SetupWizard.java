@@ -4,6 +4,7 @@ import module java.base;
 
 import build.jenesis.repository.settings.Setting;
 import build.jenesis.repository.settings.Wizard;
+import build.jenesis.repository.ui.ConsoleAdministrators;
 import build.jenesis.repository.ui.identity.StarterCredential;
 import build.jenesis.repository.ui.store.SettingsAdmin;
 import jakarta.servlet.http.HttpSession;
@@ -36,10 +37,15 @@ public class SetupWizard {
     /** The session attribute a skip sets; a new session on the starter credential is sent there again. */
     public static final String SKIPPED = "jenesis.setup.skipped";
 
-    private final SettingsAdmin settings;
+    /** The starter step's field naming who administers the deployment from now on. */
+    static final String ADMINISTRATOR = "administrator";
 
-    public SetupWizard(SettingsAdmin settings) {
+    private final SettingsAdmin settings;
+    private final ConsoleAdministrators administrators;
+
+    public SetupWizard(SettingsAdmin settings, ConsoleAdministrators administrators) {
         this.settings = settings;
+        this.administrators = administrators;
     }
 
     /** Whether the guide is on where nothing has said otherwise - the default the code applies. */
@@ -92,14 +98,26 @@ public class SetupWizard {
                         + "non-expiring credential holding every right, re-provisioned on every boot until the variable "
                         + "is unset." : "The API's bootstrap key (jenrepo.bootstrap-key) is not set.");
             }
-            steps.add(WizardFlow.Step.information(information.title(), paragraphs,
-                    List.of(new WizardFlow.Link("Grant a real administrator", "/ui/admin"),
-                            new WizardFlow.Link("Issue a real credential", "/ui/credentials"))));
+            if (information.equals(Wizard.STARTER_CREDENTIAL)) {
+                // The administrator is named here and granted with the rest of the run, so the step that says to
+                // stop using the starter key is also where its replacement is made; it offers no early completion.
+                paragraphs.add("Name the person who administers this deployment from now on: applying the setup "
+                        + "grants them administration, and they sign in as themselves - through single sign-on or a "
+                        + "login key - instead of with the starter key.");
+                steps.add(WizardFlow.Step.identity(information.title(), paragraphs, List.of(new WizardFlow.Field(
+                        ADMINISTRATOR, "Administrator", "Their sign-in id, as the console names them: the sign-in "
+                        + "method, a slash and their name there, e.g. github/alice. Leave it empty to grant one "
+                        + "later under Access.", List.of(), false))));
+            } else {
+                steps.add(WizardFlow.Step.information(information.title(), paragraphs, List.of()));
+            }
         }
         steps.addAll(WizardFlow.settingsSteps(Wizard.SETUP, views()));
         List<String> review = new ArrayList<>(List.of("Nothing has been saved yet. Applying saves every value changed "
                 + "here in one step; a value left at its default is the deployment's until it is set - here again, or "
-                + "on the settings screen, whenever it is wanted."));
+                + "on the settings screen, whenever it is wanted.", "Once repositories exist, give each build or "
+                + "automation its own credential under Access, New credential, granted only the repositories it "
+                + "publishes to or reads from - then the API's bootstrap key can be unset."));
         if (!on()) {
             review.add("The first-run redirect is switched off for this deployment; this wizard was opened from the "
                     + "menu, and stays there as First-run setup, under Settings.");
@@ -109,7 +127,9 @@ public class SetupWizard {
                 new WizardFlow.Checks() {
                     @Override
                     public Map<String, String> identity(Map<String, String> identity) {
-                        return Map.of();
+                        String administrator = identity.getOrDefault(ADMINISTRATOR, "");
+                        return administrator.isBlank() ? Map.of() : ConsoleAdministrators.refusal(administrator)
+                                .map(refused -> Map.of(ADMINISTRATOR, refused)).orElse(Map.of());
                     }
 
                     @Override
@@ -135,6 +155,10 @@ public class SetupWizard {
      * value saves none. Returns how many values changed.
      */
     public int complete(WizardFlow flow) throws IOException {
+        String administrator = flow.identity().getOrDefault(ADMINISTRATOR, "");
+        if (!administrator.isBlank()) {
+            administrators.grant(administrator);
+        }
         Map<String, String> held = held();
         Map<String, String> changed = new LinkedHashMap<>();
         flow.settings().forEach((key, value) -> {

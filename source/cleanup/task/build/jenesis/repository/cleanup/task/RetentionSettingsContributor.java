@@ -42,7 +42,7 @@ public final class RetentionSettingsContributor implements SettingsContributor {
                                 + "than one enabled engine needs this setting to disambiguate them. A named "
                                 + "selection that no installed engine answers to fails fast rather than silently "
                                 + "degrading to no retention.",
-                        Setting.Kind.STRING, "", true).standard(),
+                        Setting.Kind.STRING, "", true).advanced(),
                 new Setting(RetentionPolicy.KEEP_LAST, "Retention", "Keep last",
                         "Keep at most this many newest versions per coordinate; 0 disables the count cap.",
                         Setting.Kind.INTEGER, "0", true, Setting.Scope.REPOSITORY).essential(),
@@ -57,10 +57,10 @@ public final class RetentionSettingsContributor implements SettingsContributor {
                                 + "switches the rule off.",
                         Setting.Kind.DURATION_OR_NONE, "", true, Setting.Scope.REPOSITORY).essential(),
                 new Setting("scheduled-cleanup", "Retention", "Scheduled cleanup",
-                        "Run the scheduled reaps: finished import jobs past their time-to-live and a quota'd "
-                                + "tenant's usage recount. Retention, garbage collection and the folder-size "
-                                + "roll-up ride the walks setting's retention entry instead.",
-                        Setting.Kind.BOOLEAN, "true", true).gate().standard(),
+                        "Run the scheduled reaps: finished import jobs past their time-to-live and the usage recount "
+                                + "the storage quota is held against. Retention, garbage collection and the "
+                                + "folder-size roll-up ride the walks setting's retention entry instead.",
+                        Setting.Kind.BOOLEAN, "true", true).gate().advanced(),
                 new Setting(CleanupTaskProvider.INTERVAL.key(), "Retention", "Cleanup interval",
                         "How often the scheduled reaps run.",
                         Setting.Kind.DURATION, CleanupTaskProvider.INTERVAL.fallbackText(), true).advanced(),

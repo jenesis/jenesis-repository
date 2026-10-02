@@ -338,9 +338,10 @@
  * A settings screen carries `#setting-filter`; typing in it keeps the `.setting` rows whose `data-search` (key,
  * label, description and module) contains what was typed, so a setting is found by what it does and not only by its
  * name. It works over the rows already rendered and asks the server nothing. A group none of whose rows match steps
- * aside, and so does any other panel of the page, so the result is only what matched. A match inside a group's
- * folded advanced settings opens the fold, and clearing the filter puts every fold back as the reader left it. A
- * `q` query parameter fills the filter, so a link from another screen lands on the setting it names.
+ * aside, and so does any other panel of the page, so the result is only what matched. The advanced settings stand
+ * aside while `#setting-show-advanced` is off (the stylesheet hides them); when what was typed matches only advanced
+ * settings, the switch turns itself on so the match is never hidden, and clearing the filter puts it back as the
+ * reader left it. A `q` query parameter fills the filter, so a link from another screen lands on the setting it names.
  */
 (function () {
     'use strict';
@@ -350,36 +351,38 @@
         if (!input) {
             return;
         }
+        var advanced = document.getElementById('setting-show-advanced');
         var settings = Array.prototype.slice.call(document.querySelectorAll('.setting'));
         var groups = Array.prototype.slice.call(document.querySelectorAll('.setting-group'));
-        var folds = Array.prototype.slice.call(document.querySelectorAll('.setting-advanced'));
         var others = Array.prototype.slice.call(document.querySelectorAll('main > article:not(.setting-group)'));
         var noMatch = document.getElementById('setting-nomatch');
-        var left = null;
+        var chosen = null;
 
         function apply() {
             var query = input.value.trim().toLowerCase();
-            if (query !== '' && left === null) {
-                left = folds.map(function (fold) { return fold.open; });
-            }
-            var anyVisible = false;
+            var plain = false;
+            var any = false;
             settings.forEach(function (setting) {
                 var haystack = (setting.getAttribute('data-search') || '').toLowerCase();
                 var show = query === '' || haystack.indexOf(query) !== -1;
                 setting.hidden = !show;
                 if (show) {
-                    anyVisible = true;
+                    any = true;
+                    if (!setting.classList.contains('setting--advanced')) {
+                        plain = true;
+                    }
                 }
             });
-            folds.forEach(function (fold, index) {
-                if (query === '') {
-                    fold.open = left === null ? fold.open : left[index];
-                } else {
-                    fold.open = fold.querySelector('.setting:not([hidden])') !== null;
+            if (advanced) {
+                if (query !== '' && any && !plain) {
+                    if (chosen === null) {
+                        chosen = advanced.checked;
+                    }
+                    advanced.checked = true;
+                } else if (query === '' && chosen !== null) {
+                    advanced.checked = chosen;
+                    chosen = null;
                 }
-            });
-            if (query === '') {
-                left = null;
             }
             groups.forEach(function (group) {
                 group.hidden = !group.querySelector('.setting:not([hidden])');
@@ -388,16 +391,116 @@
                 panel.hidden = query !== '';
             });
             if (noMatch) {
-                noMatch.hidden = query === '' || anyVisible;
+                noMatch.hidden = query === '' || any;
             }
         }
 
         input.addEventListener('input', apply);
+        if (advanced) {
+            // A reader who sets the switch by hand has chosen; the filter no longer puts it back.
+            advanced.addEventListener('change', function () {
+                chosen = null;
+            });
+        }
         var named = new URLSearchParams(window.location.search).get('q');
         if (named) {
             input.value = named;
             apply();
         }
+    });
+})();
+
+/*
+ * A setting's switch, with a grace before it is written.
+ *
+ * A switch's form carries `data-grace="<seconds>"`. Pressing it flips the switch at once and counts the grace down
+ * beside it ("Taking effect in 5 seconds..."); pressing it again inside the grace takes the change back and nothing is
+ * written. When the count ends the form is posted in the background, so the page neither reloads nor jumps, and the
+ * count disappears. A post that fails puts the switch back and says so. Without a script the press posts at once.
+ *
+ * A high-impact switch carries `data-confirm` on the same form, and the confirmation guard above asks it first: a
+ * press it cancels never reaches this handler.
+ */
+(function () {
+    'use strict';
+
+    function plural(seconds) {
+        return seconds === 1 ? '1 second' : seconds + ' seconds';
+    }
+
+    function wire(form) {
+        var button = form.querySelector('.app-switch');
+        var state = form.querySelector('.app-switch__state');
+        var note = form.querySelector('.app-switch__pending');
+        var field = form.querySelector('input[name=value]');
+        var grace = parseInt(form.getAttribute('data-grace'), 10) || 5;
+        var stored = button.getAttribute('aria-checked') === 'true';
+        var wanted = stored;
+        var timer = null;
+        var left = 0;
+
+        function show(on) {
+            button.setAttribute('aria-checked', String(on));
+            state.textContent = on ? 'On' : 'Off';
+        }
+
+        function stop() {
+            if (timer !== null) {
+                window.clearInterval(timer);
+                timer = null;
+            }
+            note.textContent = '';
+        }
+
+        function commit() {
+            stop();
+            var body = new FormData(form);
+            body.set('value', String(wanted));
+            note.textContent = 'Saving...';
+            window.fetch(form.action, {method: 'POST', body: body, credentials: 'same-origin'}).then(function (answer) {
+                if (!answer.ok) {
+                    throw new Error('status ' + answer.status);
+                }
+                stored = wanted;
+                field.value = String(!stored);
+                button.classList.remove('app-switch--inherited');
+                var inherited = button.querySelector('.app-switch__default');
+                if (inherited) {
+                    inherited.remove();
+                }
+                note.textContent = '';
+            }).catch(function () {
+                wanted = stored;
+                show(stored);
+                note.textContent = 'Not saved - try again.';
+            });
+        }
+
+        function tick() {
+            left -= 1;
+            if (left <= 0) {
+                commit();
+            } else {
+                note.textContent = 'Taking effect in ' + plural(left) + '...';
+            }
+        }
+
+        form.addEventListener('submit', function (event) {
+            event.preventDefault();
+            wanted = !wanted;
+            show(wanted);
+            stop();
+            if (wanted === stored) {
+                return;
+            }
+            left = grace;
+            note.textContent = 'Taking effect in ' + plural(left) + '...';
+            timer = window.setInterval(tick, 1000);
+        });
+    }
+
+    document.addEventListener('DOMContentLoaded', function () {
+        document.querySelectorAll('form[data-grace]').forEach(wire);
     });
 })();
 
@@ -441,5 +544,492 @@
                 apply();
             }
         });
+    });
+})();
+
+/*
+ * Checking a field as soon as it is left.
+ *
+ * Every console input is checked when focus leaves it, not only when its form is sent: its own constraints (a number,
+ * an address, a required field) at once, and a setting's value (`data-check-key`) against the catalogue by asking
+ * `/ui/check/setting`, which answers the refusal a save would make, or nothing. A refused field is marked invalid with
+ * the reason beside it, and its form refuses to be sent until it is fixed; the server still judges what arrives, so
+ * this only says sooner what it would say.
+ */
+(function () {
+    'use strict';
+
+    function csrf() {
+        var token = document.querySelector('meta[name=_csrf]');
+        var header = document.querySelector('meta[name=_csrf_header]');
+        return token && header && header.content ? {name: header.content, value: token.content} : null;
+    }
+
+    function holder(field) {
+        return field.closest('.app-field, .setting, .app-duration, .app-routing') || field.parentElement;
+    }
+
+    function message(field) {
+        var place = holder(field);
+        var shown = place.querySelector(':scope > .app-field__error[data-checked]');
+        if (!shown) {
+            shown = document.createElement('small');
+            shown.className = 'app-field__error';
+            shown.setAttribute('data-checked', '');
+            shown.setAttribute('role', 'alert');
+            shown.id = 'check-' + Math.random().toString(36).slice(2);
+            place.appendChild(shown);
+        }
+        return shown;
+    }
+
+    function mark(field, refusal) {
+        var targets = field.type === 'hidden' ? holder(field).querySelectorAll('input:not([type=hidden]), select')
+            : [field];
+        var note = message(field);
+        note.textContent = refusal || '';
+        note.hidden = !refusal;
+        Array.prototype.forEach.call(targets, function (target) {
+            if (refusal) {
+                target.setAttribute('aria-invalid', 'true');
+                target.setAttribute('aria-describedby', note.id);
+            } else if (target.getAttribute('aria-describedby') === note.id) {
+                target.removeAttribute('aria-invalid');
+                target.removeAttribute('aria-describedby');
+            }
+        });
+        field.toggleAttribute('data-refused', Boolean(refusal));
+    }
+
+    function ask(field) {
+        if (!field.checkValidity()) {
+            mark(field, field.validationMessage);
+            return;
+        }
+        var key = field.getAttribute('data-check-key');
+        if (!key) {
+            mark(field, null);
+            return;
+        }
+        var body = new URLSearchParams();
+        body.set('key', key);
+        body.set('value', field.value);
+        var headers = {'Content-Type': 'application/x-www-form-urlencoded'};
+        var token = csrf();
+        if (token) {
+            headers[token.name] = token.value;
+        }
+        window.fetch('/ui/check/setting', {method: 'POST', body: body, headers: headers, credentials: 'same-origin'})
+            .then(function (answer) {
+                return answer.ok ? answer.text() : '';
+            }).then(function (refusal) {
+                mark(field, refusal.trim() || null);
+            }).catch(function () {
+                // Unanswered, the form's own submit is the check.
+            });
+    }
+
+    document.addEventListener('focusout', function (event) {
+        var field = event.target;
+        if (field.matches && field.matches('main :is(input, select, textarea)') && field.type !== 'hidden'
+                && !field.closest('.app-duration, .app-routing')) {
+            ask(field);
+        }
+    });
+
+    // A composed control (a duration, a routing) says it changed on its hidden field.
+    document.addEventListener('change', function (event) {
+        var field = event.target;
+        if (field.type === 'hidden' && field.hasAttribute('data-check-key')) {
+            ask(field);
+        }
+    });
+
+    document.addEventListener('submit', function (event) {
+        var refused = event.target.querySelector('[data-refused]');
+        if (refused) {
+            event.preventDefault();
+            event.stopImmediatePropagation();
+            var visible = refused.type === 'hidden'
+                ? holder(refused).querySelector('input:not([type=hidden]), select') : refused;
+            if (visible) {
+                visible.focus();
+            }
+        }
+    }, true);
+})();
+
+/*
+ * A duration as an amount and a unit.
+ *
+ * A duration setting's field (`data-duration`) carries the machine form the API and the command line use - `P30D`,
+ * `6h`, `none`. The console shows it as an amount and a unit instead, with "never" among the units where the rule may
+ * be switched off (`data-duration="or-none"`), and writes the field back in the suffixed form ("30d") as either
+ * changes. An amount left empty leaves the field empty, which inherits. Without a script the field is typed as is.
+ */
+(function () {
+    'use strict';
+
+    var UNITS = [['s', 'seconds', 1], ['m', 'minutes', 60], ['h', 'hours', 3600], ['d', 'days', 86400]];
+
+    function seconds(text) {
+        var value = (text || '').trim();
+        var suffixed = /^(\d+)(ms|s|m|h|d)$/i.exec(value);
+        if (suffixed) {
+            var amount = parseInt(suffixed[1], 10);
+            switch (suffixed[2].toLowerCase()) {
+                case 'ms': return amount / 1000;
+                case 's': return amount;
+                case 'm': return amount * 60;
+                case 'h': return amount * 3600;
+                default: return amount * 86400;
+            }
+        }
+        var iso = /^P(?:(\d+)W)?(?:(\d+)D)?(?:T(?:(\d+)H)?(?:(\d+)M)?(?:(\d+(?:\.\d+)?)S)?)?$/i.exec(value);
+        if (iso && value.length > 1) {
+            return (parseInt(iso[1] || '0', 10) * 7 + parseInt(iso[2] || '0', 10)) * 86400
+                + parseInt(iso[3] || '0', 10) * 3600 + parseInt(iso[4] || '0', 10) * 60 + parseFloat(iso[5] || '0');
+        }
+        return null;
+    }
+
+    function split(total) {
+        for (var index = UNITS.length - 1; index >= 0; index--) {
+            if (total % UNITS[index][2] === 0) {
+                return [total / UNITS[index][2], UNITS[index][0]];
+            }
+        }
+        return [total, 's'];
+    }
+
+    function wire(field) {
+        var orNone = field.getAttribute('data-duration') === 'or-none';
+        var stored = field.value.trim();
+        var parsed = seconds(stored);
+        if (stored !== '' && stored !== 'none' && parsed === null) {
+            return;   // a value this control cannot say; the field stays as typed
+        }
+        var box = document.createElement('span');
+        box.className = 'app-duration';
+        var amount = document.createElement('input');
+        amount.type = 'number';
+        amount.min = '0';
+        amount.step = '1';
+        amount.setAttribute('aria-label', (field.getAttribute('aria-label') || 'Duration') + ' amount');
+        var unit = document.createElement('select');
+        unit.setAttribute('aria-label', (field.getAttribute('aria-label') || 'Duration') + ' unit');
+        UNITS.forEach(function (entry) {
+            var option = document.createElement('option');
+            option.value = entry[0];
+            option.textContent = entry[1];
+            unit.appendChild(option);
+        });
+        if (orNone) {
+            var never = document.createElement('option');
+            never.value = 'none';
+            never.textContent = 'never';
+            unit.appendChild(never);
+        }
+        var inherited = seconds(field.getAttribute('data-default'));
+        if (stored === 'none') {
+            unit.value = 'none';
+            amount.disabled = true;
+        } else if (parsed !== null) {
+            var shown = split(parsed);
+            amount.value = String(shown[0]);
+            unit.value = shown[1];
+        } else if (inherited !== null) {
+            var fallback = split(inherited);
+            amount.placeholder = fallback[0] + ' (default)';
+            unit.value = fallback[1];
+        } else {
+            unit.value = 'd';
+        }
+
+        function write() {
+            amount.disabled = unit.value === 'none';
+            var next = unit.value === 'none' ? 'none' : amount.value.trim() === '' ? '' : amount.value.trim() + unit.value;
+            if (next !== field.value) {
+                field.value = next;
+                field.dispatchEvent(new Event('change', {bubbles: true}));
+            }
+        }
+
+        amount.addEventListener('change', write);
+        unit.addEventListener('change', write);
+        field.type = 'hidden';
+        field.parentNode.insertBefore(box, field);
+        box.appendChild(amount);
+        box.appendChild(unit);
+        box.appendChild(field);
+    }
+
+    document.addEventListener('DOMContentLoaded', function () {
+        document.querySelectorAll('input[data-duration]').forEach(wire);
+    });
+})();
+
+/*
+ * A repository's routing as a form.
+ *
+ * The routing setting's field (`data-routing`) carries the clauses the API and the command line use: `writable`, then
+ * `fallback <source>` clauses with their options. The console edits it as whether the repository accepts uploads and
+ * an ordered list of fallbacks, each an upstream address - cached or passed through, screened as standard, hardened
+ * or not at all - or another repository picked from the page's `#routing-repositories` list, and writes the clauses
+ * back as it changes. An option the form has no control for (match=, redirect) is kept on its fallback as written.
+ * The server parses and judges the clauses; this only writes them. Without a script the clauses are typed as is.
+ */
+(function () {
+    'use strict';
+
+    var SCREENING = [['', 'Standard screening'], ['harden', 'Hardened'], ['unscreened', 'Unscreened']];
+
+    function parse(text) {
+        var routing = {writable: false, fallbacks: []};
+        var tokens = (text || '').trim().split(/\s+/).filter(Boolean);
+        var current = null;
+        for (var index = 0; index < tokens.length; index++) {
+            var token = tokens[index];
+            if (token === 'writable') {
+                routing.writable = true;
+            } else if (token === 'fallback' && index + 1 < tokens.length) {
+                current = {source: tokens[++index], cache: true, screening: '', more: []};
+                routing.fallbacks.push(current);
+            } else if (current && token === 'nocache') {
+                current.cache = false;
+            } else if (current && (token === 'harden' || token === 'unscreened')) {
+                current.screening = token;
+            } else if (current) {
+                current.more.push(token);
+            } else {
+                return null;   // not clauses this form can show
+            }
+        }
+        return routing;
+    }
+
+    function upstream(source) {
+        return /^[a-z][a-z0-9+.-]*:\/\//i.test(source);
+    }
+
+    function element(tag, className, text) {
+        var node = document.createElement(tag);
+        if (className) {
+            node.className = className;
+        }
+        if (text) {
+            node.textContent = text;
+        }
+        return node;
+    }
+
+    function wire(field) {
+        var routing = parse(field.value);
+        if (routing === null) {
+            return;
+        }
+        var names = Array.prototype.map.call(
+            document.querySelectorAll('#routing-repositories > option'), function (option) { return option.value; });
+        var box = element('div', 'app-routing');
+        var writableLabel = element('label', 'app-routing__writable');
+        var writable = element('input');
+        writable.type = 'checkbox';
+        writable.checked = routing.writable;
+        writableLabel.appendChild(writable);
+        writableLabel.appendChild(document.createTextNode(' Accepts uploads'));
+        box.appendChild(writableLabel);
+        var list = element('ol', 'app-routing__fallbacks');
+        box.appendChild(list);
+        var add = element('button', 'app-quiet', '+ Add a fallback');
+        add.type = 'button';
+        box.appendChild(add);
+
+        function write() {
+            var clauses = writable.checked ? ['writable'] : [];
+            Array.prototype.forEach.call(list.children, function (row) {
+                var kind = row.querySelector('.app-routing__kind').value;
+                var source = kind === 'repository' ? row.querySelector('.app-routing__repository').value
+                    : row.querySelector('.app-routing__url').value.trim();
+                if (!source) {
+                    return;
+                }
+                var clause = ['fallback', source];
+                if (kind === 'upstream') {
+                    if (!row.querySelector('.app-routing__cache').checked) {
+                        clause.push('nocache');
+                    }
+                    var screening = row.querySelector('.app-routing__screening').value;
+                    if (screening) {
+                        clause.push(screening);
+                    }
+                }
+                clause = clause.concat(row.more);
+                clauses.push(clause.join(' '));
+            });
+            var next = clauses.join(' ');
+            if (next !== field.value) {
+                field.value = next;
+                field.dispatchEvent(new Event('change', {bubbles: true}));
+            }
+        }
+
+        function row(fallback) {
+            var item = element('li', 'app-routing__fallback');
+            item.more = fallback.more || [];
+            var kind = element('select', 'app-routing__kind');
+            kind.setAttribute('aria-label', 'Fetch from');
+            [['upstream', 'An upstream address'], ['repository', 'Another repository']].forEach(function (entry) {
+                var option = element('option', null, entry[1]);
+                option.value = entry[0];
+                kind.appendChild(option);
+            });
+            var url = element('input', 'app-routing__url');
+            url.type = 'url';
+            url.placeholder = 'https://repo1.maven.org/maven2/';
+            url.setAttribute('aria-label', 'Upstream address');
+            var repository = element('select', 'app-routing__repository');
+            repository.setAttribute('aria-label', 'Repository');
+            names.concat(upstream(fallback.source) || !fallback.source || names.indexOf(fallback.source) >= 0
+                ? [] : [fallback.source]).forEach(function (name) {
+                var option = element('option', null, name);
+                option.value = name;
+                repository.appendChild(option);
+            });
+            var cacheLabel = element('label', 'app-routing__option');
+            var cache = element('input', 'app-routing__cache');
+            cache.type = 'checkbox';
+            cache.checked = fallback.cache !== false;
+            cacheLabel.appendChild(cache);
+            cacheLabel.appendChild(document.createTextNode(' Keep a copy'));
+            var screening = element('select', 'app-routing__screening');
+            screening.setAttribute('aria-label', 'Screening');
+            SCREENING.forEach(function (entry) {
+                var option = element('option', null, entry[1]);
+                option.value = entry[0];
+                screening.appendChild(option);
+            });
+            screening.value = fallback.screening || '';
+            var remove = element('button', 'app-quiet', 'Remove');
+            remove.type = 'button';
+            var isRepository = fallback.source && !upstream(fallback.source);
+            kind.value = isRepository ? 'repository' : 'upstream';
+            if (isRepository) {
+                repository.value = fallback.source;
+            } else {
+                url.value = fallback.source || '';
+            }
+
+            function show() {
+                var up = kind.value === 'upstream';
+                url.hidden = !up;
+                cacheLabel.hidden = !up;
+                screening.hidden = !up;
+                repository.hidden = up;
+            }
+
+            [kind, url, repository, cache, screening].forEach(function (control) {
+                control.addEventListener('change', function () {
+                    show();
+                    write();
+                });
+            });
+            remove.addEventListener('click', function () {
+                item.remove();
+                write();
+            });
+            [kind, url, repository, cacheLabel, screening, remove].forEach(function (part) {
+                item.appendChild(part);
+            });
+            show();
+            return item;
+        }
+
+        routing.fallbacks.forEach(function (fallback) {
+            list.appendChild(row(fallback));
+        });
+        add.addEventListener('click', function () {
+            list.appendChild(row({source: '', cache: true, screening: '', more: []}));
+        });
+        writable.addEventListener('change', write);
+        field.type = 'hidden';
+        field.parentNode.insertBefore(box, field);
+        box.appendChild(field);
+    }
+
+    document.addEventListener('DOMContentLoaded', function () {
+        document.querySelectorAll('input[data-routing]').forEach(wire);
+    });
+})();
+
+/*
+ * A true/false choice as a switch.
+ *
+ * A form that asks a true/false setting without saving it at once (a wizard step) carries it as a choice of the
+ * default, true or false (`select[data-switch="<default>"]`). The console shows it as the same switch the settings
+ * screens use: muted while it is left at its default, at full strength once it is set either way, with a quiet "Reset
+ * to default" beside it while it is set. The choice stays the field the form sends; without a script it is chosen as
+ * is.
+ */
+(function () {
+    'use strict';
+
+    function element(tag, className, text) {
+        var node = document.createElement(tag);
+        if (className) {
+            node.className = className;
+        }
+        if (text) {
+            node.textContent = text;
+        }
+        return node;
+    }
+
+    function wire(select) {
+        var inherited = select.getAttribute('data-switch') === 'true';
+        var box = element('span', 'app-switch-field');
+        var button = element('button', 'app-switch');
+        button.type = 'button';
+        button.setAttribute('role', 'switch');
+        var label = document.querySelector('label[for="' + select.id + '"]');
+        button.setAttribute('aria-label', label ? label.textContent.trim() : select.name);
+        var track = element('span', 'app-switch__track');
+        track.setAttribute('aria-hidden', 'true');
+        var state = element('span', 'app-switch__state');
+        var mark = element('small', 'app-switch__default', '(default)');
+        button.appendChild(track);
+        button.appendChild(state);
+        button.appendChild(mark);
+        var reset = element('button', 'app-quiet', 'Reset to default');
+        reset.type = 'button';
+
+        function show() {
+            var set = select.value !== '';
+            var on = set ? select.value === 'true' : inherited;
+            button.setAttribute('aria-checked', String(on));
+            button.classList.toggle('app-switch--inherited', !set);
+            state.textContent = on ? 'On' : 'Off';
+            mark.hidden = set;
+            reset.hidden = !set;
+        }
+
+        button.addEventListener('click', function () {
+            var on = button.getAttribute('aria-checked') === 'true';
+            select.value = String(!on);
+            show();
+        });
+        reset.addEventListener('click', function () {
+            select.value = '';
+            show();
+        });
+        select.hidden = true;
+        select.parentNode.insertBefore(box, select);
+        box.appendChild(button);
+        box.appendChild(reset);
+        box.appendChild(select);
+        show();
+    }
+
+    document.addEventListener('DOMContentLoaded', function () {
+        document.querySelectorAll('select[data-switch]').forEach(wire);
     });
 })();

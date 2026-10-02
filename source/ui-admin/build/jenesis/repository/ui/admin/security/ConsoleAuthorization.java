@@ -32,6 +32,7 @@ final class ConsoleAuthorization {
                 .requestMatchers("/ui/no-access").authenticated()
                 .requestMatchers("/ui/tenants/create", "/ui/tenants/delete").hasRole("SUPERADMIN")
                 // The reclaim sweeps every tenant's projects.
+                .requestMatchers("/ui/projects/cache-volume").hasRole("SUPERADMIN")
                 .requestMatchers(HttpMethod.POST, "/ui/projects/volume-reclaim").hasRole("SUPERADMIN")
                 // The picker needs no selected tenant but does need the floor, which a rule ahead of anyRequest() does
                 // not inherit.

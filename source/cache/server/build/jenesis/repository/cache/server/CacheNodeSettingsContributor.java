@@ -15,9 +15,9 @@ public final class CacheNodeSettingsContributor implements SettingsContributor {
     @Override
     public List<Setting> settings() {
         return List.of(new Setting(CacheNode.GATE, "Build cache", "Build cache",
-                "Whether this deployment serves the remote build cache. On by default: an image carrying the cache "
-                        + "meant to serve it. Switched off, the cache's endpoint and the chain that permits it are "
-                        + "not registered, so the node serves artifacts only. Applies on restart.",
+                "Whether this deployment serves the remote build cache. Switched off, the cache's endpoint and the "
+                        + "chain that permits it are not registered, so the node serves artifacts only. Applies on "
+                        + "restart.",
                 Setting.Kind.BOOLEAN, "true", false).gate().standard());
     }
 }

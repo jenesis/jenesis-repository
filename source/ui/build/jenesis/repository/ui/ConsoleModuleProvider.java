@@ -13,11 +13,12 @@ import build.jenesis.repository.icon.IconContributor;
  *
  * <h2>Contract</h2>
  * <ol>
- * <li><b>Thread-safety.</b> {@link #name()}, {@link #configuration()}, {@link #navEntries()} and
- *     {@link #repositoryPages()} are pure declarations, callable concurrently. A provider holds no mutable state and
+ * <li><b>Thread-safety.</b> {@link #name()}, {@link #configuration()}, {@link #navEntries()} and both
+ *     {@code repositoryPages} are pure declarations, callable concurrently. A provider holds no mutable state and
  *     opens nothing: it is constructed during context refresh, before its beans exist.</li>
- * <li><b>Idempotency / replay.</b> All four are constant functions of what is installed, since the nav is discovered
- *     once and rendered per request.</li>
+ * <li><b>Idempotency / replay.</b> All are constant functions of what is installed - the typed
+ *     {@code repositoryPages} of what is installed and the type it is asked about - since the nav is discovered once
+ *     and rendered per request.</li>
  * <li><b>Absence sentinel.</b> {@code null} is never legal. A module with no screen (a sign-in mechanism, the SCIM
  *     API) returns empty lists, never a placeholder.</li>
  * <li><b>Selection failure.</b> An {@code ALL} SPI with nothing to select, but two providers on one {@link #name()},
@@ -27,9 +28,9 @@ import build.jenesis.repository.icon.IconContributor;
  * <li><b>Tenant scoping.</b> A provider carries no tenant and declares the deployment's console surface. Its
  *     {@link NavEntry#access()} floor is a coarse role gate the shell resolves per request against the current tenant;
  *     a finer capability is the screen's own concern.</li>
- * <li><b>Error visibility.</b> An exception from any of the four, or a {@link #configuration()} class that cannot be
+ * <li><b>Error visibility.</b> An exception from any of them, or a {@link #configuration()} class that cannot be
  *     loaded, fails the context refresh rather than dropping one module quietly.</li>
- * <li><b>Read purity.</b> None of the four performs I/O, so the rendered shell depends on nothing else being up.</li>
+ * <li><b>Read purity.</b> None of them performs I/O, so the rendered shell depends on nothing else being up.</li>
  * <li><b>Lifecycle / ownership.</b> {@link #installed()} and {@link #enabled} re-instantiate every provider per call;
  *     a provider is cheap to build, owns nothing and is never closed. The shell discovers the nav once at startup. The
  *     {@link #configuration()} class is Spring's to instantiate.</li>
@@ -65,6 +66,13 @@ public interface ConsoleModuleProvider extends IconContributor {
      *  page's {@code requires} allow. */
     default List<RepositoryPage> repositoryPages() {
         return List.of();
+    }
+
+    /** The pages this module adds to one repository of type {@code type}, or {@code null} for a repository that holds
+     *  none: {@link #repositoryPages()}, unless what a page offers - or whether it is offered at all - depends on what
+     *  the repository holds, in which case the page is named for it or left out. */
+    default List<RepositoryPage> repositoryPages(String type) {
+        return repositoryPages();
     }
 
     /**

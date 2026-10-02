@@ -21,6 +21,6 @@ public final class AccessDenialSettingsContributor implements SettingsContributo
                                 + "whether or not the name exists. A request with no credential is answered 401 with "
                                 + "the challenge its client needs either way. Applies live.",
                         Setting.Kind.CHOICE, List.of(AccessDenial.NOT_FOUND_VALUE, AccessDenial.FORBIDDEN_VALUE),
-                        AccessDenial.DEFAULT, true).standard());
+                        AccessDenial.DEFAULT, true).advanced());
     }
 }

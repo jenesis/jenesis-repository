@@ -27,7 +27,7 @@ public final class MavenMetadataSettingsContributor implements SettingsContribut
                                 + "stored document verbatim: reconcile only its <versions> list against the stored "
                                 + "version folders (every other field preserved), and derive a document for a "
                                 + "coordinate no client ever uploaded one for (an imported or batch-ingested "
-                                + "repository). Off by default; applies on the next restart.",
+                                + "repository). Applies on the next restart.",
                         Setting.Kind.BOOLEAN, "false", false).advanced());
     }
 }

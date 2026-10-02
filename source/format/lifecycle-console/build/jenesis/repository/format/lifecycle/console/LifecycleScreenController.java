@@ -53,7 +53,14 @@ public class LifecycleScreenController {
         model.addAttribute("repository", repository);
         model.addAttribute("coordinate", coordinate);
         model.addAttribute("version", version);
-        model.addAttribute("states", Lifecycle.State.values());
+        // The marks this repository's clients see, the only ones offered; a repository of no installed type is
+        // offered both, as the API takes either there.
+        Set<Lifecycle.State> shown = marks.states(tenant.name(), repository);
+        Set<Lifecycle.State> offered = shown.isEmpty() ? EnumSet.allOf(Lifecycle.State.class) : shown;
+        model.addAttribute("states", offered);
+        model.addAttribute("title", LifecycleConsoleModule.title(offered));
+        model.addAttribute("deprecates", offered.contains(Lifecycle.State.DEPRECATED));
+        model.addAttribute("yanks", offered.contains(Lifecycle.State.YANKED));
         model.addAttribute("refusal", marks.refusal(tenant.name(), repository).orElse(null));
         if (coordinate.isBlank()) {
             LifecycleMarks.Page page = marks.page(tenant.name(), repository, after.isBlank() ? null : after, null);

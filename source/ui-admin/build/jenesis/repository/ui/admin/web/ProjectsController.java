@@ -8,7 +8,6 @@ import build.jenesis.repository.ui.store.CacheService;
 import build.jenesis.repository.ui.store.Eviction;
 import build.jenesis.repository.ui.store.VolumeReclaim;
 import org.springframework.beans.factory.annotation.Qualifier;
-import org.springframework.security.core.Authentication;
 import org.springframework.stereotype.Controller;
 import org.springframework.ui.Model;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -43,22 +42,30 @@ public class ProjectsController {
         this.volumeReclaim = volumeReclaim;
     }
 
-    /** The tenant's projects, and for a super-admin the shared volume. */
+    /** The tenant's projects. */
     @GetMapping("/ui/projects")
-    public String list(Authentication authentication, Model model) throws IOException {
+    public String list(Model model) throws IOException {
         model.addAttribute("projects", service.listProjects());
-        boolean superadmin = authentication != null && authentication.getAuthorities().stream()
-                .anyMatch(authority -> authority.getAuthority().equals("ROLE_SUPERADMIN"));
-        model.addAttribute("superadmin", superadmin);
-        if (superadmin) {
-            // The store's volume: usable unbounded and total zero when the backend reports none.
-            Optional<ArtifactStore.Capacity> capacity = rootStorage.store().capacity();
-            model.addAttribute("usableSpace", capacity.map(ArtifactStore.Capacity::usable).orElse(Long.MAX_VALUE));
-            model.addAttribute("totalSpace", capacity.map(ArtifactStore.Capacity::total).orElse(0L));
-            model.addAttribute("minFreeBytes", properties.getMinFreeBytes());
-            model.addAttribute("minFreePercent", properties.getMinFreePercent());
-        }
         return "projects";
+    }
+
+    /** The build tools this node's cache serves and where each is pointed. A hyphen cannot occur in a project name,
+     *  so the route cannot be read as a project's. */
+    @GetMapping("/ui/projects/build-tools")
+    public String buildTools() {
+        return "project-tools";
+    }
+
+    /** The volume every tenant's projects share, and the reclaim across them: a super-admin's. */
+    @GetMapping("/ui/projects/cache-volume")
+    public String cacheVolume(Model model) throws IOException {
+        // The store's volume: usable unbounded and total zero when the backend reports none.
+        Optional<ArtifactStore.Capacity> capacity = rootStorage.store().capacity();
+        model.addAttribute("usableSpace", capacity.map(ArtifactStore.Capacity::usable).orElse(Long.MAX_VALUE));
+        model.addAttribute("totalSpace", capacity.map(ArtifactStore.Capacity::total).orElse(0L));
+        model.addAttribute("minFreeBytes", properties.getMinFreeBytes());
+        model.addAttribute("minFreePercent", properties.getMinFreePercent());
+        return "cache-volume";
     }
 
     /** The reclaim across every tenant's projects. A hyphen cannot occur in a project name, so the route cannot be
@@ -74,7 +81,7 @@ public class ProjectsController {
         String suffix = result.entriesDeleted() == 0 ? " (target already met or no thresholds set)" : "";
         redirect.addFlashAttribute("message", "Volume reclaim: deleted " + result.entriesDeleted()
                 + " entries, freed " + format.bytes(result.bytesFreed()) + suffix + ".");
-        return "redirect:/ui/projects";
+        return "redirect:/ui/projects/cache-volume";
     }
 
     /** One project's page and settings. */

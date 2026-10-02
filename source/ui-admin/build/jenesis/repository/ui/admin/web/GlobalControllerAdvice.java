@@ -183,7 +183,7 @@ public class GlobalControllerAdvice {
      * role clears its floor and its required capability is present.
      */
     @ModelAttribute("navigation")
-    public Navigation navigation(Authentication authentication, HttpServletRequest request) {
+    public Navigation navigation(Authentication authentication, HttpServletRequest request) throws IOException {
         if (authentication == null) {
             return Navigation.NONE;
         }
@@ -194,8 +194,14 @@ public class GlobalControllerAdvice {
         entries.add(new NavEntry("All repositories", "/ui/repositories", Group.REPOSITORIES));
         entries.add(new NavEntry("New repository", "/ui/new/repository", Access.EDITOR, Group.REPOSITORIES));
         entries.add(new NavEntry("Limits", "/ui/limits", Group.REPOSITORIES));
-        entries.add(new NavEntry("Projects", "/ui/projects", Group.BUILD_CACHE));
-        entries.add(new NavEntry("Credentials", "/ui/credentials", Access.ADMIN, Group.ACCESS));
+        entries.add(new NavEntry("All projects", "/ui/projects", Group.BUILD_CACHE));
+        entries.add(new NavEntry("New project", "/ui/new/project", Access.EDITOR, Group.BUILD_CACHE));
+        entries.add(new NavEntry("Build tools", "/ui/projects/build-tools", Group.BUILD_CACHE));
+        entries.add(new NavEntry("Cache volume", "/ui/projects/cache-volume", Access.SUPERADMIN, Group.BUILD_CACHE));
+        entries.add(new NavEntry("All credentials", "/ui/credentials", Access.ADMIN, Group.ACCESS));
+        entries.add(new NavEntry("New credential", "/ui/credentials/new", Access.ADMIN, Group.ACCESS));
+        entries.add(new NavEntry("Credential policies", "/ui/credentials/policies", Access.ADMIN, Group.ACCESS));
+        entries.add(new NavEntry("Keyless CI", "/ui/credentials/keyless", Access.ADMIN, Group.ACCESS));
         entries.add(new NavEntry("Members", "/ui/admin", Access.ADMIN, Group.ACCESS));
         entries.add(new NavEntry("Audit trail", "/ui/admin/audit", Access.ADMIN, Group.ACCESS, "audit"));
         entries.add(new NavEntry("Metrics", "/ui/metrics", Access.SUPERADMIN, Group.OPERATIONS));
@@ -206,9 +212,10 @@ public class GlobalControllerAdvice {
         entries.add(new NavEntry("Upstreams", "/ui/settings/upstreams", Access.SUPERADMIN, Group.SETTINGS));
         entries.add(new NavEntry("Tenant settings", "/ui/settings/tenant", Access.SUPERADMIN, Group.SETTINGS));
         entries.add(new NavEntry("Modules", "/ui/settings/modules", Access.SUPERADMIN, Group.SETTINGS));
-        // Only where there is more than one tenant to pick; the header's tenant name links here too.
-        if (showTenants(authentication)) {
-            entries.add(new NavEntry("Tenants", "/ui/tenants", Group.SETTINGS));
+        // A group of its own in a deployment serving several tenants, for a reader with more than one to pick; the
+        // header's tenant name links here too.
+        if (tenancy.multi() && showTenants(authentication)) {
+            entries.add(new NavEntry("All tenants", "/ui/tenants", Group.TENANTS));
         }
         entries.add(new NavEntry("Backup & restore", "/ui/settings/backup", Access.SUPERADMIN, Group.SETTINGS));
         entries.add(new NavEntry("First-run setup", "/ui/setup", Access.SUPERADMIN, Group.SETTINGS));
@@ -217,11 +224,14 @@ public class GlobalControllerAdvice {
         pages.add(new RepositoryPage("Overview", "", Topic.CONTENTS));
         pages.add(new RepositoryPage("Browse & search", "/browse", Topic.CONTENTS));
         pages.add(new RepositoryPage("Staging", "/staging", Topic.CONTENTS, "staging"));
-        pages.add(new RepositoryPage("Import", "/import", Topic.CONTENTS, "import"));
         pages.add(new RepositoryPage("Retention & cleanup", "/retention", Topic.LIFECYCLE, "retention"));
         pages.add(new RepositoryPage("Pins", "/pins", Topic.LIFECYCLE));
+        // Import ends the core pages so it sits beside Export, the other end of moving a repository's content.
+        pages.add(new RepositoryPage("Import", "/import", Topic.LIFECYCLE, "import"));
+        RepositoryHeader open = repositoryHeader(request);
+        pages.addAll(capabilities.moduleRepositoryPages(open == null ? null : open.format()));
+        // A repository's own settings close its sidebar, after every page a module adds.
         pages.add(new RepositoryPage("Settings", "/settings", Topic.LIFECYCLE));
-        pages.addAll(capabilities.moduleRepositoryPages());
         String path = request.getRequestURI().substring(request.getContextPath().length());
         // Until a tenant is chosen, only the deployment's own pages are offered.
         if (current.name() == null) {
@@ -244,15 +254,24 @@ public class GlobalControllerAdvice {
      */
     @ModelAttribute("repositoryHeader")
     public RepositoryHeader repositoryHeader(HttpServletRequest request) throws IOException {
+        // Resolved once per request: the sidebar reads the repository's type from it too.
+        if (request.getAttribute(HEADER) instanceof RepositoryHeader resolved) {
+            return resolved;
+        }
         String repository = ConsoleNavigation.repository(
                 request.getRequestURI().substring(request.getContextPath().length()));
         if (repository == null || !Scopes.valid(repository) || current.name() == null) {
             return null;
         }
-        return repositories.identity(repository)
+        RepositoryHeader header = repositories.identity(repository)
                 .map(identity -> new RepositoryHeader(repository, identity.format(), identity.url()))
                 .orElseGet(() -> new RepositoryHeader(repository, null, null));
+        request.setAttribute(HEADER, header);
+        return header;
     }
+
+    /** The request attribute {@link #repositoryHeader} keeps its answer under. */
+    private static final String HEADER = GlobalControllerAdvice.class.getName() + ".repositoryHeader";
 
     /** Whether a page's access floor is cleared by the current user's role. */
     private static boolean visibleTo(NavEntry.Access access, boolean editor, boolean admin, boolean superadmin) {

@@ -27,7 +27,7 @@
             from publish-time screening and reviews only.</small></p>
 
         <form method="get" th:action="@{'/ui/repositories/' + ${repo} + '/findings'}">
-            <div class="grid">
+            <div class="app-filter-bar">
                 <label>Coordinate
                     <input type="text" name="coordinate" th:value="${coordinate}"
                            placeholder="group:artifact or group:artifact:version">
@@ -60,7 +60,7 @@
                                 th:text="${entry}" th:selected="${entry == severity}">CRITICAL</option>
                     </select>
                 </label>
-                <label>&nbsp;<button th:replace="~{base :: secondaryButton('Filter')}">Filter</button></label>
+                <button th:replace="~{base :: secondaryButton('Filter')}">Filter</button>
             </div>
         </form>
 

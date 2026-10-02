@@ -16,21 +16,20 @@ public final class ConsoleSettingsContributor implements SettingsContributor {
     @Override
     public List<Setting> settings() {
         return List.of(new Setting(AdminConsoleNode.GATE, "Console", "Admin console",
-                "Whether this deployment serves the admin console. On by default: an image carrying the console "
-                        + "meant to serve it. Switched off, the console's screens and its sign-in chain are not "
-                        + "registered at all and the node answers only the repository's own surfaces - which is the "
-                        + "posture for a deployment that is operated through the API and the CLI, or one that runs "
-                        + "its console elsewhere. Applies on restart.",
+                "Whether this deployment serves the admin console. Switched off, the console's screens and its "
+                        + "sign-in chain are not registered at all and the node answers only the repository's own "
+                        + "surfaces - which is the posture for a deployment that is operated through the API and the "
+                        + "CLI, or one that runs its console elsewhere. Applies on restart.",
                 Setting.Kind.BOOLEAN, "true", false).gate().standard(),
                 new Setting(SetupWizard.SETTING, "First run", "First-run setup guide",
                         "Send a super-admin who signs in with the starter key to the first-run setup screen, which "
                                 + "walks the decisions a new deployment should make: the starter credentials, the "
-                                + "compliance verdicts, the advisory feeds, retention. On by default, because the "
-                                + "operator the screen is for is the one who does not know to look for it; a "
-                                + "deployment provisioned from configuration, rebuilt by CI or started for the "
-                                + "hundredth time switches it off here, once. The screen stays reachable as Setup, "
-                                + "under Settings, either way, and this is not what says setup is finished - "
-                                + "that is whether the starter credential is still in use. Applies live.",
-                        Setting.Kind.BOOLEAN, SetupWizard.ON_BY_DEFAULT, true).essential());
+                                + "compliance verdicts, the advisory feeds, retention. The operator the screen is for "
+                                + "is the one who does not know to look for it; a deployment provisioned from "
+                                + "configuration, rebuilt by CI or started for the hundredth time switches it off "
+                                + "here, once. The screen stays reachable as Setup, under Settings, either way, and "
+                                + "this is not what says setup is finished - that is whether the starter credential "
+                                + "is still in use. Applies live.",
+                        Setting.Kind.BOOLEAN, SetupWizard.ON_BY_DEFAULT, true).standard());
     }
 }

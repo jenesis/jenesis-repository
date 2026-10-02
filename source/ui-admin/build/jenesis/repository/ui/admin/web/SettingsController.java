@@ -14,6 +14,7 @@ import org.springframework.ui.Model;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestParam;
+import org.springframework.web.bind.annotation.ResponseBody;
 import org.springframework.web.servlet.mvc.support.RedirectAttributes;
 import build.jenesis.repository.ui.ConsoleScreen;
 
@@ -92,6 +93,16 @@ public class SettingsController {
         return "redirect:/ui/settings/modules";
     }
 
+
+    /** Why a value would be refused for a setting, as plain text, or nothing when it would be taken: what every
+     *  settings form asks as a field is left, so a refusal shows before the form is sent. It reads the catalogue and
+     *  writes nothing, so any member signed in to the console may ask it. */
+    @PostMapping(value = "/ui/check/setting", produces = "text/plain;charset=UTF-8")
+    @ResponseBody
+    public String check(@RequestParam("key") String key,
+                        @RequestParam(name = "value", defaultValue = "") String value) {
+        return settings.check(key, value).orElse("");
+    }
 
     /** The screens a save may return to; any other {@code return} lands on the first. */
     private static final Set<String> RETURNS = Set.of("/ui/settings");

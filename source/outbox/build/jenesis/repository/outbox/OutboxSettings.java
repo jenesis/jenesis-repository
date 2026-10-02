@@ -43,8 +43,8 @@ public final class OutboxSettings implements SettingsContributor {
                                 + "One dial for every outbox: the mechanism is shared, so its retention is too.",
                         Setting.Kind.DURATION, PARKED_RETENTION.fallbackText(), false).advanced(),
                 new Setting(PARKED_CAP, "Outboxes", "Parked entry cap",
-                        "A hard ceiling on a parked backlog: everything beyond the newest N is reclaimed whatever "
-                                + "its age. Off by default, since the retention above already bounds it by time; set "
+                        "A hard ceiling on a parked backlog: everything beyond the newest N is reclaimed whatever its "
+                                + "age; 0 sets no ceiling and leaves the retention above to bound it by time. Set "
                                 + "this where a burst of failures could outgrow the space before the age bound "
                                 + "reaches it.",
                         Setting.Kind.INTEGER, "0", false).advanced());

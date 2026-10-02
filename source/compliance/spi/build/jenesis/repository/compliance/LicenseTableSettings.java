@@ -23,7 +23,7 @@ public final class LicenseTableSettings implements SettingsContributor {
                         + "these rows are tried before the built-in ones, so one may also recategorise a known "
                         + "license. The category is permissive, weak-copyleft, strong-copyleft, network-copyleft or "
                         + "a word of your own, which the allowed and denied license lists match like any other.",
-                Setting.Kind.STRING, LicenseTable.DEFAULT, true).advanced());
+                Setting.Kind.STRING, LicenseTable.DEFAULT, true).form(Setting.Form.LINES).advanced());
     }
 
     @Override

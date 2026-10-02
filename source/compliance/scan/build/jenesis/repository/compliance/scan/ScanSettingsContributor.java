@@ -43,10 +43,10 @@ public final class ScanSettingsContributor implements SettingsContributor {
                                 + "enumerates the published key space live and in key order, so a version whose "
                                 + "publish instant is before the pass began but whose row was written after the pass "
                                 + "had gone by its key was never visited - and the stamp says it was. Without this "
-                                + "window such a version waits for the next full pass, up to a day at the defaults. "
-                                + "It is paid on every incremental pass as publish-rate times window in extra scans, "
-                                + "so a deployment publishing fast turns it down and one with lagging publisher "
-                                + "clocks turns it up; zero switches it off and leaves the full pass to heal.",
+                                + "window such a version waits for the next full pass. It is paid on every "
+                                + "incremental pass as publish-rate times window in extra scans, so a deployment "
+                                + "publishing fast turns it down and one with lagging publisher clocks turns it up; "
+                                + "zero switches it off and leaves the full pass to heal.",
                         Setting.Kind.DURATION, IncrementalPasses.DEFAULT_LOOKBACK, true).advanced()));
         if (!KNOWN_EXPLOITED) {
             return List.copyOf(settings);
@@ -65,7 +65,7 @@ public final class ScanSettingsContributor implements SettingsContributor {
                                 + "catalogue, quarantine it for review (the same hold the gate writes). Only the "
                                 + "narrow, actively-exploited set is held; everything below it stays report-only. An "
                                 + "operator's release of a held artifact sticks. Applies on the next scan.",
-                        Setting.Kind.BOOLEAN, "true", false).standard(),
+                        Setting.Kind.BOOLEAN, "true", false).advanced(),
                 new Setting("kev-auto-release", "Compliance", "KEV auto-release",
                         "When a scheduled scan finds a retroactively KEV-held artifact whose CVE is no longer on any "
                                 + "known-exploited catalogue (delisted, or the advisory retracted), automatically "

@@ -22,7 +22,7 @@ public final class WithheldReconcileSettingsContributor implements SettingsContr
                                 + "or a pre-existing orphan. A marker is lifted only when a live published coordinate "
                                 + "still claims the bytes AND no /quarantine review pointer or holds/ record covers "
                                 + "them, so a rejected (marker-only) manifest stays withheld. A listener of the one "
-                                + "walk (jenrepo.walks) rather than a sweep of its own; on by default.",
+                                + "walk (jenrepo.walks) rather than a sweep of its own.",
                         Setting.Kind.BOOLEAN, "true", true).advanced());
     }
 }

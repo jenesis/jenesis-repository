@@ -44,14 +44,15 @@
                    th:text="${wizard.error(f.input())}">Refused.</small>
         </div>
 
-        <!--/* A settings step: each setting its level asks, left blank to keep what it inherits. A setting this session
-             may not set is shown with its value and who fixes it, and is not carried. */-->
+        <!--/* A settings step: each setting its level asks, left at its default to keep what it inherits. A setting this
+             session may not set is shown with its value and who fixes it, and is not carried. A true/false setting is a
+             switch (console.js turns its choice into one), muted while it is left at its default; every value is
+             checked as soon as its field is left. */-->
         <div th:each="s : ${step.settings()}" class="setting"
              th:with="name=|setting.${s.key()}|, help=|setting.${s.key()}-help|">
             <div class="setting-head">
-                <div>
+                <div class="setting-name">
                     <label th:for="${name}"><strong th:text="${s.label()}">Label</strong></label>
-                    <code th:text="${s.key()}">key</code>
                 </div>
             </div>
             <p class="setting-doc" th:id="${help}" th:text="${s.description()}">What this setting does.</p>
@@ -59,20 +60,30 @@
                 <p class="setting-values"><span>value: <strong th:text="${s.effectiveDisplay()}">value</strong></span>
                     <span th:text="|fixed by ${s.pinnedBy()}|">fixed by the operator</span></p>
             </th:block>
-            <th:block th:unless="${s.pinned()}">
+            <div class="setting-controls" th:unless="${s.pinned()}">
                 <select th:if="${s.dropdown() or s.toggle()}" th:id="${name}" th:name="${name}"
-                        th:attr="aria-describedby=${help},aria-invalid=${wizard.error(name) != null} ? 'true' : null">
-                    <option value="" th:text="|Default: ${s.defaultDisplay()}|">Default</option>
-                    <option th:each="o : ${s.options()}" th:value="${o}" th:text="${o}"
-                            th:selected="${o == wizard.value(name)}">option</option>
+                        th:attr="aria-describedby=${help},aria-invalid=${wizard.error(name) != null} ? 'true' : null,
+                                data-switch=${s.toggle()} ? ${s.defaultValue()} : null,data-check-key=${s.key()}">
+                    <option value="" th:text="|${s.defaultDisplay()} (default)|">Default</option>
+                    <option th:each="o : ${s.options()}" th:unless="${o == s.defaultValue() and !s.toggle()}" th:value="${o}"
+                            th:text="${s.optionLabel(o)}" th:selected="${o == wizard.value(name)}">option</option>
                 </select>
-                <input th:unless="${s.dropdown() or s.toggle()}" th:id="${name}" th:name="${name}"
+                <textarea th:if="${s.textArea()}" th:id="${name}" th:name="${name}" th:rows="${s.json()} ? 8 : 4"
+                          th:classappend="${s.json()} ? 'app-code'" th:text="${wizard.value(name)}"
+                          th:placeholder="|${s.defaultDisplay()} (default)|"
+                          th:attr="aria-describedby=${help},aria-invalid=${wizard.error(name) != null} ? 'true' : null,
+                                  data-check-key=${s.key()}"></textarea>
+                <input th:unless="${s.dropdown() or s.toggle() or s.textArea()}" th:id="${name}" th:name="${name}"
                        th:type="${s.inputType()}" th:value="${wizard.value(name)}"
-                       th:placeholder="|Default: ${s.defaultDisplay()}|"
-                       th:attr="aria-describedby=${help},aria-invalid=${wizard.error(name) != null} ? 'true' : null">
-                <small class="app-field__error" th:if="${wizard.error(name) != null}" role="alert"
-                       th:text="${wizard.error(name)}">Refused.</small>
-            </th:block>
+                       th:placeholder="|${s.defaultDisplay()} (default)|"
+                       th:attr="aria-describedby=${help},aria-invalid=${wizard.error(name) != null} ? 'true' : null,
+                               data-check-key=${s.key()},
+                               data-duration=${s.duration()} ? (${s.durationOrNone()} ? 'or-none' : 'duration') : null,
+                               data-default=${s.duration()} ? ${s.defaultValue()} : null,
+                               data-routing=${s.routing()} ? 'true' : null">
+            </div>
+            <small class="app-field__error" th:if="${wizard.error(name) != null}" role="alert"
+                   th:text="${wizard.error(name)}">Refused.</small>
         </div>
 
         <!--/* A step that informs: what it says, and where the thing it talks about is done. */-->
@@ -89,17 +100,17 @@
             </th:block>
         </dl>
 
-        <!--/* Next or Complete is the step's one primary action and comes first, so Enter moves on; the quicker
-             completion, which takes what the steps not yet seen would have defaulted, is the one outlined beside it.
-             Going back and leaving change nothing, so they are quiet links at the far end rather than two more
-             buttons that look like the completion. */-->
-        <div class="app-actions">
+        <!--/* The step's actions, by their weight: Next or the completion is the one primary, and the quicker completion
+             the secondary beside it, both on the right where the run moves forward; going back and leaving change
+             nothing, so they are quiet text on the left. Next comes first in the page, so Enter moves on; the
+             stylesheet reverses the row. */-->
+        <div class="app-wizard-actions">
             <button type="submit" name="action" value="complete" class="app-primary" th:if="${wizard.reviewing()}"
                     th:text="${wizard.completeLabel()}">Create</button>
             <button type="submit" name="action" value="next" class="app-primary" th:unless="${wizard.reviewing()}">Next</button>
             <button type="submit" name="action" value="now" class="secondary outline app-secondary"
                     th:if="${wizard.completesEarly()}" th:text="${wizard.nowLabel()}">Create now</button>
-            <span class="app-actions__quiet">
+            <span class="app-wizard-actions__quiet">
                 <button type="submit" name="action" value="back" class="app-quiet"
                         th:if="${wizard.index() > 0}">&larr; Back</button>
                 <a th:unless="${wizard.exit().posts()}" th:href="@{${wizard.exit().href()}}"

@@ -14,11 +14,11 @@ public final class PyPiSettingsContributor implements SettingsContributor {
     public List<Setting> settings() {
         return List.of(
                 new Setting(PyPiFormat.PROVENANCE_URL, "PyPI", "Provenance API base",
-                        "Where the provenance document (PEP 740) of a proxied distribution is fetched from, the "
-                                + "base of an integrity API answering <base>/<project>/<version>/<file>/provenance. "
-                                + "Empty by default, which reads the proxied index's own origin - pypi.org serves "
-                                + "it at https://pypi.org/integrity/. A mirror without an integrity API answers "
-                                + "404, which is absence rather than a failure. Applies on the next restart.",
+                        "Where the provenance document (PEP 740) of a proxied distribution is fetched from, the base "
+                                + "of an integrity API answering <base>/<project>/<version>/<file>/provenance. Empty "
+                                + "reads the proxied index's own origin - pypi.org serves it at "
+                                + "https://pypi.org/integrity/. A mirror without an integrity API answers 404, which "
+                                + "is absence rather than a failure. Applies on the next restart.",
                         Setting.Kind.STRING, "", false).advanced());
     }
 }

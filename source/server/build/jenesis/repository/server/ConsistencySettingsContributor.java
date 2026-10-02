@@ -64,10 +64,9 @@ public final class ConsistencySettingsContributor implements SettingsContributor
                                 + "decommissioned node leaves the report rather than sitting in it for good.",
                         Setting.Kind.DURATION, ConsistencyReport.Settings.DEFAULT_FORGET_AFTER, false).advanced(),
                 new Setting("consistency.heartbeat", GROUP, "Fingerprint publish interval",
-                        "How often this node publishes its own fingerprint for the fleet to compare. Left unset it "
-                                + "follows the sweep interval above, which is why it has no default of its own; set "
-                                + "it only to publish more often than the fleet compares. Never shorter than one "
-                                + "second, whatever is asked for.",
+                        "How often this node publishes its own fingerprint for the fleet to compare. Unset, it "
+                                + "follows the sweep interval above; set it only to publish more often than the fleet "
+                                + "compares. Never shorter than one second, whatever is asked for.",
                         Setting.Kind.DURATION, "", false).advanced());
     }
 

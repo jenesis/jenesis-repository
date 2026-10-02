@@ -20,7 +20,7 @@ class WizardFlowTest {
     private static SettingsAdmin.SettingView view(String key, String kind, String inherited, boolean pinned) {
         return new SettingsAdmin.SettingView(key, "Retention", key, "What " + key + " does.", kind, List.of(),
                 inherited, inherited, false, true, false, pinned, pinned ? "the deployment's operator" : null,
-                "build.jenesis.repository.probe", false);
+                "build.jenesis.repository.probe", false, null);
     }
 
     private final WizardFlow.Checks checks = new WizardFlow.Checks() {

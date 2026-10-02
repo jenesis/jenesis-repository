@@ -25,7 +25,7 @@ import build.jenesis.repository.store.Durations;
  */
 public record Setting(String key, String group, String label, String description,
                       Kind kind, List<String> choices, String defaultValue, boolean live, Scope scope,
-                      boolean enablement, Tier tier, boolean localOnly, boolean operatorOnly) {
+                      boolean enablement, Tier tier, boolean localOnly, boolean operatorOnly, Form form) {
 
     /** The word a {@link Kind#DURATION_OR_NONE} setting takes to switch its rule off, rather than inherit a wider
      *  level's value - which is what leaving it unset means. */
@@ -43,7 +43,8 @@ public record Setting(String key, String group, String label, String description
     /** A setting at an explicit {@link Scope} that is not its module's enablement gate (the common case). */
     public Setting(String key, String group, String label, String description,
                    Kind kind, List<String> choices, String defaultValue, boolean live, Scope scope) {
-        this(key, group, label, description, kind, choices, defaultValue, live, scope, false, null, false, false);
+        this(key, group, label, description, kind, choices, defaultValue, live, scope, false, null, false, false,
+                null);
     }
 
     /** A choice-carrying setting, deployment-wide by default. */
@@ -55,7 +56,7 @@ public record Setting(String key, String group, String label, String description
     /** A copy of this setting marked as its module's enablement gate. */
     public Setting gate() {
         return new Setting(key, group, label, description, kind, choices, defaultValue, live, scope, true, tier,
-                localOnly, operatorOnly);
+                localOnly, operatorOnly, form);
     }
 
     /** This setting, declared one the wizard of its scope asks - see {@link Tier#ESSENTIAL}. */
@@ -76,18 +77,54 @@ public record Setting(String key, String group, String label, String description
     /** This repository or project setting, declared one with no wider default - see {@link #localOnly}. */
     public Setting local() {
         return new Setting(key, group, label, description, kind, choices, defaultValue, live, scope, enablement, tier,
-                true, operatorOnly);
+                true, operatorOnly, form);
     }
 
     /** This setting, declared one only the deployment's operator may set - see {@link #operatorOnly}. */
     public Setting operator() {
         return new Setting(key, group, label, description, kind, choices, defaultValue, live, scope, enablement, tier,
-                localOnly, true);
+                localOnly, true, form);
     }
 
     private Setting tiered(Tier decided) {
         return new Setting(key, group, label, description, kind, choices, defaultValue, live, scope, enablement,
-                decided, localOnly, operatorOnly);
+                decided, localOnly, operatorOnly, form);
+    }
+
+    /** This setting, declared one a form edits as {@code shaped} rather than as one line of text - see {@link Form}. */
+    public Setting form(Form shaped) {
+        return new Setting(key, group, label, description, kind, choices, defaultValue, live, scope, enablement, tier,
+                localOnly, operatorOnly, shaped);
+    }
+
+    /** How a form edits this setting's value: as declared, else a single line. */
+    public Form editedAs() {
+        return form == null ? Form.LINE : form;
+    }
+
+    /**
+     * How a graphical form edits a value whose {@link Kind} alone does not say: the shape of the text, never its
+     * meaning. The value stays the one text the API and the command line read and write; a console renders the shape
+     * and turns what was entered back into that text. A kind that implies its own control - a switch for a
+     * {@link Kind#BOOLEAN}, a choice for a {@link Kind#CHOICE}, an amount and a unit for a duration - needs none.
+     */
+    public enum Form {
+
+        /** One line of text, the default. */
+        LINE,
+
+        /** Free text over several lines, such as a PEM block. */
+        TEXT,
+
+        /** A list, one entry per line. */
+        LINES,
+
+        /** A JSON document. */
+        JSON,
+
+        /** A repository's routing: whether it accepts uploads, and its ordered fallbacks, each an upstream address with
+         *  its caching and screening or another repository of the same deployment. */
+        ROUTING
     }
 
     /** A setting whose kind carries no choice list (every kind but {@link Kind#CHOICE}), deployment-wide by default. */

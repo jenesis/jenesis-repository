@@ -23,13 +23,13 @@ public final class CachingSettingsContributor implements SettingsContributor {
         return List.of(
                 new Setting(StoreCache.TTL_SETTING, "Caches", "Store cache ttl",
                         "How long a node serves a credential, a settings document, a ceiling or a tenant list it has "
-                                + "already read before asking the store again. On the node that made a write the cache "
-                                + "is exact regardless; across nodes this is the bound on how stale another node's "
-                                + "write may show. 0 switches caching off and every read is the store's; clear a "
-                                + "node's caches at once with POST /api/admin/caches/clear, which clears that node. "
-                                + "Credentials are the exception and no longer need this turned down: they carry a "
-                                + "deployment epoch that every grant and revocation bumps, so a revoked key stops "
-                                + "everywhere within seconds whatever this says - see the auth cache ttl.",
+                                + "already read before asking the store again. On the node that made a write the "
+                                + "cache is exact regardless; across nodes this is the bound on how stale another "
+                                + "node's write may show. 0 switches caching off and every read is the store's; POST "
+                                + "/api/admin/caches/clear clears a node's caches at once. Credentials are the "
+                                + "exception: they carry a deployment epoch that every grant and revocation bumps, so "
+                                + "a revoked key stops everywhere within seconds whatever this says - see the auth "
+                                + "cache ttl.",
                         Setting.Kind.DURATION, StoreCache.DEFAULT_TTL_TEXT, false).advanced(),
                 new Setting(MissMemory.TTL_SETTING, "Caches", "Miss memory ttl",
                         "How long a node remembers that a coordinate it looked for was not there, and answers the "

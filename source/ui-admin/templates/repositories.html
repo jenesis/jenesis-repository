@@ -29,7 +29,7 @@
          repository's name, format and description, and asks the server nothing. */-->
     <th:block th:unless="${repositories.isEmpty()}">
         <label>Search
-            <input type="search" id="repository-filter" autocomplete="off" data-filter=".repository-row"
+            <input type="search" id="repository-filter" autocomplete="off" data-filter="[data-repository]"
                    data-filter-empty="repository-nomatch"
                    aria-label="Filter repositories by name, format or description"
                    placeholder="Filter by name, format or description">
@@ -45,8 +45,10 @@
                 </tr>
                 </thead>
                 <tbody>
-                <tr th:each="r : ${repositories}" class="repository-row"
-                    th:attr="data-search=${r.name + ' ' + (r.format == null ? '' : r.format) + ' ' + r.description}">
+                <th:block th:each="r : ${repositories}"
+                          th:with="search=${r.name + ' ' + (r.format == null ? '' : r.format) + ' ' + r.description}">
+                <tr class="repository-row" th:classappend="${!r.description.isEmpty()} ? 'repository-row--described'"
+                    th:attr="data-search=${search},data-repository=${r.name}">
                     <td class="app-list__name">
                         <!--/* The marks of the formats this repository holds, rendered inline so each mark's
                              stroke="currentColor" inherits the text colour and inverts with the theme; sized uniformly by
@@ -70,8 +72,6 @@
                         <span th:replace="~{fragments :: shapeBadges(${r.shape})}"></span>
                         <span th:if="${r.removing}" class="app-badge app-badge--warn"
                               title="It answers no request; it leaves this list once everything it held is gone">being deleted</span>
-                        <small th:if="${!r.description.isEmpty()}" class="app-list__description"
-                               th:text="${r.description}">description</small>
                     </td>
                     <td>
                         <code th:if="${r.format != null}" th:text="${r.format}">maven</code>
@@ -91,12 +91,23 @@
                     </td>
                     <td class="app-list__date"><small th:text="${r.created}">2026-09-25</small></td>
                 </tr>
+                <!--/* The description runs under the whole row rather than inside its first cell, and the filter
+                     shows and hides it with the row it describes. */-->
+                <tr th:if="${!r.description.isEmpty()}" class="app-list__description-row"
+                    th:attr="data-search=${search},data-repository=${r.name}">
+                    <td colspan="3"><small class="app-list__description" th:text="${r.description}">description</small></td>
+                </tr>
+                </th:block>
                 </tbody>
             </table>
         </figure>
     </th:block>
-    <th:block th:if="${repositories.isEmpty()}">
-        <div th:replace="~{base :: empty('No repositories yet. Create one, then publish into it.')}"></div>
+    <th:block th:if="${repositories.isEmpty() and isEditor}">
+        <div th:replace="~{base :: emptyAction('No repositories yet. ', 'Create one', '/ui/new/repository',
+                ', then publish into it.')}"></div>
+    </th:block>
+    <th:block th:if="${repositories.isEmpty() and !isEditor}">
+        <div th:replace="~{base :: empty('No repositories yet.')}"></div>
     </th:block>
 </main>
 </body>

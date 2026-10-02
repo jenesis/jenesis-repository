@@ -23,6 +23,6 @@ public final class PolicySettingsContributor implements SettingsContributor {
                                 + "#reachable, #reachability, #depth, #advisories, #advisoryCount, #malicious, "
                                 + "#secretCount, #contentScan. Expressions are sandboxed (no method calls or type "
                                 + "references). Empty disables the dimension.",
-                        Setting.Kind.STRING, "", true, Setting.Scope.TENANT).standard());
+                        Setting.Kind.STRING, "", true, Setting.Scope.TENANT).form(Setting.Form.LINES).standard());
     }
 }

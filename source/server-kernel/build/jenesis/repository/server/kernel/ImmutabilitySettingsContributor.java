@@ -23,11 +23,10 @@ public final class ImmutabilitySettingsContributor implements SettingsContributo
     public List<Setting> settings() {
         return List.of(
                 new Setting("allow-redeploy", "Compliance", "Allow release re-deploy",
-                        "Off by default: release-version immutability refuses re-pointing an already-published "
-                                + "immutable release coordinate at different bytes (a 409), a supply-chain / "
-                                + "dependency-confusion guard. Turn it on to let a release version be overwritten with "
-                                + "different content. Snapshots and mutable channels are always re-deployable and are "
-                                + "unaffected.",
+                        "Let a release version be overwritten with different content. Off, release-version "
+                                + "immutability refuses re-pointing an already-published immutable release coordinate "
+                                + "at different bytes (a 409), a supply-chain / dependency-confusion guard. Snapshots "
+                                + "and mutable channels are always re-deployable and are unaffected.",
                         Setting.Kind.BOOLEAN, "false", true, Setting.Scope.TENANT).standard());
     }
 }

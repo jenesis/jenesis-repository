@@ -25,7 +25,7 @@ public final class RoutingSettingsContributor implements SettingsContributor {
                 "Whether this repository accepts uploads and where it fetches what it lacks, as clauses: writable, "
                         + "fallback <url> [nocache] [harden] [unscreened], fallback <repository>. Unset, it routes as "
                         + "the deployment's definition of its name says, else it is hosted.",
-                Setting.Kind.STRING, "", true, Setting.Scope.REPOSITORY).local().operator().essential());
+                Setting.Kind.STRING, "", true, Setting.Scope.REPOSITORY).form(Setting.Form.ROUTING).local().operator().essential());
     }
 
     /** A definition the parser refuses, or one naming an upstream this deployment must not pull from - the refusals the

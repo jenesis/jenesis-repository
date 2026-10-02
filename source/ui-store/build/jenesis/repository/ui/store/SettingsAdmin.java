@@ -179,7 +179,7 @@ public class SettingsAdmin {
         return new SettingView(setting.key(), setting.group(), setting.label(), setting.description(),
                 setting.kind().name(), setting.choices(), effective, baseline, overridden, setting.live(),
                 highImpact(setting), pin.isPresent(), pin.map(PinnedSettings.Pin::source).orElse(""), module,
-                setting.tier() == Setting.Tier.ADVANCED);
+                setting.tier() == Setting.Tier.ADVANCED, setting.editedAs().name());
     }
 
     /** The JPMS module a key is attributed to - the contributor that declares it, or {@link SettingsDocuments#NEUTRAL}
@@ -679,6 +679,22 @@ public class SettingsAdmin {
     }
 
     /**
+     * Why {@code value} would be refused for the setting {@code key}, judged at the setting's own level by the same
+     * refusals a save makes, or empty when it would be taken - what a form asks as soon as a field is left. An empty
+     * value is taken: it inherits.
+     */
+    public Optional<String> check(String key, String value) {
+        Optional<Setting> setting = catalogue().stream().filter(declared -> declared.key().equals(key)).findFirst();
+        if (setting.isEmpty()) {
+            return Optional.of("No setting is called '" + key + "'.");
+        }
+        if (value.isBlank()) {
+            return Optional.empty();
+        }
+        return Optional.ofNullable(editor.refusals(setting.get().scope(), Map.of(key, value), true).get(key));
+    }
+
+    /**
      * A repository's effective configuration ({@link SettingsEditor#config}), the chain the server resolves, so a preview
      * judges by a sweep's policy.
      */
@@ -845,10 +861,36 @@ public class SettingsAdmin {
     public record SettingView(String key, String group, String label, String description,
                               String kind, List<String> choices, String value, String defaultValue,
                               boolean overridden, boolean live, boolean highImpact,
-                              boolean pinned, String pinnedBy, String module, boolean advanced) {
+                              boolean pinned, String pinnedBy, String module, boolean advanced, String form) {
 
         public SettingView {
             choices = List.copyOf(choices);
+            form = form == null ? Setting.Form.LINE.name() : form;
+        }
+
+        /** Whether a form edits the value over several lines - free text, a list one entry per line, or JSON. */
+        public boolean textArea() {
+            return "TEXT".equals(form) || "LINES".equals(form) || "JSON".equals(form);
+        }
+
+        /** Whether the value is a JSON document, which a form edits in a fixed-width face. */
+        public boolean json() {
+            return "JSON".equals(form);
+        }
+
+        /** Whether the value is a repository's routing, which a form edits as its clauses. */
+        public boolean routing() {
+            return "ROUTING".equals(form);
+        }
+
+        /** Whether the value is a duration, which a form edits as an amount and a unit. */
+        public boolean duration() {
+            return "DURATION".equals(kind) || "DURATION_OR_NONE".equals(kind);
+        }
+
+        /** Whether a duration may be switched off ({@link Setting#NONE}), which a form offers as "never". */
+        public boolean durationOrNone() {
+            return "DURATION_OR_NONE".equals(kind);
         }
 
         /** A CHOICE renders as a select of its catalogued options; a BOOLEAN as a {@link #toggle() switch}; every
@@ -892,18 +934,37 @@ public class SettingsAdmin {
             return "SECRET".equals(kind);
         }
 
-        /** The effective value for display: a set secret is masked (whether stored or pinned), an empty value reads as
-         *  {@code (unset)}. */
+        /** The effective value for display: a set secret is masked (whether stored or pinned), a boolean reads as
+         *  {@code enabled} or {@code disabled}, an empty value as {@code (unset)}. */
         public String effectiveDisplay() {
             if (secret() && (overridden || pinned)) {
                 return "••••••";
             }
-            return value.isBlank() ? "(unset)" : value;
+            return display(value);
         }
 
-        /** The default for display, an empty default reading as {@code (unset)}. */
+        /** The default for display, as {@link #effectiveDisplay()} reads a value. */
         public String defaultDisplay() {
-            return defaultValue.isBlank() ? "(unset)" : defaultValue;
+            return display(defaultValue);
+        }
+
+        /** What a {@link #dropdown()} option reads as: the value as {@link #effectiveDisplay()} would show it, marked
+         *  {@code (default)} after it where it is the default - "enabled (default)". */
+        public String optionLabel(String option) {
+            return option.equals(defaultValue) ? display(option) + " (default)" : display(option);
+        }
+
+        private String display(String raw) {
+            if (raw.isBlank()) {
+                return "(unset)";
+            }
+            if ("BOOLEAN".equals(kind)) {
+                return Boolean.parseBoolean(raw.trim()) ? "enabled" : "disabled";
+            }
+            if (duration()) {
+                return DurationWords.describe(raw);
+            }
+            return raw;
         }
 
         /** The edit control's prefill: the current override, but never a secret's, which a masked field would still
@@ -912,12 +973,13 @@ public class SettingsAdmin {
             return secret() || !overridden ? "" : value;
         }
 
-        /** The edit control's placeholder: for a secret only whether it is set, otherwise the default. */
+        /** The edit control's placeholder: for a secret only whether it is set, otherwise the default, marked as one
+         *  after it. */
         public String editPlaceholder() {
             if (secret()) {
                 return overridden ? "(set — re-enter to change)" : "(unset)";
             }
-            return defaultValue.isBlank() ? "(unset default)" : defaultValue;
+            return defaultValue.isBlank() ? "(unset)" : display(defaultValue) + " (default)";
         }
     }
 }

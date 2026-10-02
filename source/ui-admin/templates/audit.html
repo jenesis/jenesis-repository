@@ -9,12 +9,12 @@
     <p><small>Security-relevant changes for this tenant, newest first.
         <a th:href="@{/ui/admin/audit.csv(action=${action})}">Export CSV</a></small></p>
     <form method="get" th:action="@{/ui/admin/audit}">
-        <div class="grid">
-            <label>Action filter <small>(optional, exact - e.g. credential.mint)</small>
+        <div class="app-filter-bar">
+            <label>Action <small>(exact, e.g. credential.mint)</small>
                 <input name="action" th:value="${action}" placeholder="credential.mint">
             </label>
+            <button th:replace="~{base :: secondaryButton('Filter')}">Filter</button>
         </div>
-        <button th:replace="~{base :: secondaryButton('Filter')}">Filter</button>
     </form>
     <figure th:unless="${events.isEmpty()}">
         <table class="app-list">

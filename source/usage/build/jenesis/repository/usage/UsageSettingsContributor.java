@@ -15,6 +15,6 @@ public final class UsageSettingsContributor implements SettingsContributor {
         return List.of(
                 new Setting("track-key-usage", "Operations", "Track key usage",
                         "Stamp each credential's last use, at most once per day.",
-                        Setting.Kind.BOOLEAN, "true", false).gate().standard());
+                        Setting.Kind.BOOLEAN, "true", false).gate().advanced());
     }
 }

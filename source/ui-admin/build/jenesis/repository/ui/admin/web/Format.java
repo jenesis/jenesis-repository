@@ -1,6 +1,7 @@
 package build.jenesis.repository.ui.admin.web;
 
 import module java.base;
+import build.jenesis.repository.ui.store.DurationWords;
 import org.springframework.stereotype.Component;
 
 /**
@@ -25,5 +26,10 @@ public class Format {
         }
         double scaled = value / Math.pow(1024, unit);
         return String.format(Locale.ROOT, "%.1f %s", scaled, UNITS[unit]);
+    }
+
+    /** A stored duration in words, as every setting's is shown: "30 days", "never"; an empty one as a dash. */
+    public String duration(String value) {
+        return value == null || value.isBlank() ? "-" : DurationWords.describe(value);
     }
 }

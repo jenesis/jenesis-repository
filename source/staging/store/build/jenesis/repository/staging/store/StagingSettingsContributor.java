@@ -16,6 +16,6 @@ public final class StagingSettingsContributor implements SettingsContributor {
                 "On the scheduled cleanup pass, drop open staging repositories untouched for this ISO-8601 duration "
                         + "(their staged artifacts are unpublished and garbage-collected) and remove "
                         + "promoted/dropped staging markers of the same age. PT0S disables the reap.",
-                Setting.Kind.DURATION, StagingReapTask.TTL.fallbackText(), true).standard());
+                Setting.Kind.DURATION, StagingReapTask.TTL.fallbackText(), true).advanced());
     }
 }

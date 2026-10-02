@@ -17,18 +17,18 @@ public final class QuarantineSettingsContributor implements SettingsContributor 
                         "Remove gate-decision log rows older than this ISO-8601 duration on the scheduled cleanup "
                                 + "pass; a still-held path keeps its verdict whatever its age. PT0S disables age "
                                 + "pruning.",
-                        Setting.Kind.DURATION, QuarantineRetentionTask.RETENTION.fallbackText(), true).standard(),
+                        Setting.Kind.DURATION, QuarantineRetentionTask.RETENTION.fallbackText(), true).advanced(),
                 new Setting("quarantine-log-cap", "Record lifetimes", "Quarantine log cap",
                         "Keep at most this many newest gate-decision log rows; 0 disables the count cap.",
                         Setting.Kind.INTEGER, "0", true).advanced(),
                 new Setting("strict-hold-mapping", "Compliance", "Strict hold-mapping",
-                        "Off by default: after an accepted publish through a blobs-namespace format, the publish-time "
-                                + "hold-mapping round-trip check verifies the format's blobKeys/servedPaths resolve the "
-                                + "served path and content hash just laid out (so a hold placed after the publish could "
-                                + "retract it). A broken mapping always alarms (jenrepo.publish.holdmapping.broken). "
-                                + "Turn it on to also FAIL such a publish rather than only alarm - on in every test "
-                                + "config so a wiring regression fails on the first publish; off in production so one "
-                                + "broken format cannot DoS publishes.",
+                        "After an accepted publish through a blobs-namespace format, the publish-time hold-mapping "
+                                + "round-trip check verifies the format's blobKeys/servedPaths resolve the served "
+                                + "path and content hash just laid out (so a hold placed after the publish could "
+                                + "retract it). A broken mapping always alarms (jenrepo.publish.holdmapping.broken); "
+                                + "on, it also FAILS such a publish rather than only alarming. Test configurations "
+                                + "turn it on so a wiring regression fails on the first publish; production leaves it "
+                                + "off so one broken format cannot DoS publishes.",
                         Setting.Kind.BOOLEAN, "false", true).advanced());
     }
 }

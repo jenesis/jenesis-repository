@@ -73,10 +73,6 @@ public final class Commands {
                     noun("deploy", "publish a file into a repository", AdminCommands::deploy,
                             act("deploy <repo> <path> <file> [--explode zip]",
                                     "deploy a file, or explode an archive entry by entry")),
-                    noun("import", "import from another repository manager", AdminCommands::importRepo,
-                            act("import <repo> --source S --url U --source-repo R [--format F]"
-                                    + " [--user U --password P] [--resume JOB]", "start an import"),
-                            act("import status <repo> <job>", "the state and counts of an import job")),
                     noun("staging", "the staging repositories", 
                             LifecycleCommands::staging,
                             act("staging <repo>", "the open and sealed staging ids"),
@@ -205,6 +201,10 @@ public final class Commands {
                             OperationsCommands::webhook,
                             act("webhook <repo>", "recent deliveries and their state"),
                             act("webhook retry <repo> <id>", "redeliver a failed webhook")),
+                    noun("import", "import from another repository manager", AdminCommands::importRepo,
+                            act("import <repo> --source S --url U --source-repo R [--format F]"
+                                    + " [--user U --password P] [--resume JOB]", "start an import"),
+                            act("import status <repo> <job>", "the state and counts of an import job")),
                     noun("export", "publish a whole repository to another one", 
                             AdminCommands::exportRepo,
                             act("export <repo> --url U [--token T | --user U --password P] [--resume JOB]",
@@ -297,6 +297,14 @@ public final class Commands {
                                     "issue a key and print it once; only its hash is stored"),
                             act("keylogin revoke <id>", "withdraw an issued key")))),
 
+            new Section("Tenants", List.of(
+                    noun("tenants", "the deployment's tenants (an operator key's)", 
+                            AdminCommands::tenants,
+                            act("tenants", "list the tenants"),
+                            act("tenants create <name>", "create a tenant"),
+                            act("tenants delete <name> [--yes]", "delete a tenant and everything it owns, after "
+                                    + "typing 'delete <name>' - or --yes, for a script")))),
+
             new Section("Operations", List.of(
                     noun("metrics", "every metric, health state and background-task status this deployment reports",
                             OperationsCommands::metrics,
@@ -341,12 +349,6 @@ public final class Commands {
                             act("setup", "what a new deployment should decide: the starter credential, then each "
                                     + "essential setting with its documentation and current value"),
                             act("setup set <key> <value>", "decide one of them")),
-                    noun("tenants", "the deployment's tenants (an operator key's)", 
-                            AdminCommands::tenants,
-                            act("tenants", "list the tenants"),
-                            act("tenants create <name>", "create a tenant"),
-                            act("tenants delete <name> [--yes]", "delete a tenant and everything it owns, after "
-                                    + "typing 'delete <name>' - or --yes, for a script")),
                     noun("repos", "the repositories and their runtime definitions", AdminCommands::repos,
                             act("repos", "list the deployment's definitions, which a repository of each name routes by "
                                     + "unless it sets its own routing"),

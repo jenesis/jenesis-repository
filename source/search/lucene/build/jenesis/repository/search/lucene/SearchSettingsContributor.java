@@ -32,9 +32,9 @@ public final class SearchSettingsContributor implements SettingsContributor {
                         Setting.Kind.BOOLEAN, "true", false).advanced(),
                 new Setting(SearchIndexTask.RECONCILE, "Search", "Search reconcile interval",
                         "How long after its last full reconcile the pass rebuilds a repository's index from truth by "
-                                + "itself, healing whatever the change feed missed; unset, the default, leaves the "
-                                + "reconcile to the walk: the search-rebuild consumer rebuilds from truth and "
-                                + "compacts the feed when a walk carrying it runs (jenrepo.walks).",
+                                + "itself, healing whatever the change feed missed; unset leaves the reconcile to the "
+                                + "walk: the search-rebuild consumer rebuilds from truth and compacts the feed when a "
+                                + "walk carrying it runs (jenrepo.walks).",
                         Setting.Kind.DURATION, "", false).advanced(),
                 new Setting(SearchRebuildConsumer.NAME, "Search", "Search rebuild on the walk",
                         "Rebuild the search index of each repository with full-text search on from truth, and "
