@@ -110,4 +110,20 @@ class RequestsTest {
         assertThat(Requests.pending(store, "probe").orElseThrow().due(Instant.now()))
                 .as("a plain request is due at once and supersedes the retry").isTrue();
     }
+
+    @Test
+    void a_request_made_while_its_work_ran_survives_the_clear_of_the_one_acted_on() throws IOException {
+        Requests.request(store, Requests.WALK, "asked for a walk");
+        Requests.Request acted = Requests.pending(store, Requests.WALK).orElseThrow();
+        Requests.request(store, Requests.WALK, "asked again while that walk ran");
+
+        Requests.clear(store, acted);
+        assertThat(Requests.pending(store, Requests.WALK)).as("the later request asks for another walk")
+                .hasValueSatisfying(request -> assertThat(request.reason())
+                        .isEqualTo("asked again while that walk ran"));
+
+        Requests.clear(store, Requests.pending(store, Requests.WALK).orElseThrow());
+        assertThat(Requests.pending(store, Requests.WALK)).as("acted on, it is cleared").isEmpty();
+        assertThat(Requests.pending(store)).as("and a cleared request stands for none").isEmpty();
+    }
 }

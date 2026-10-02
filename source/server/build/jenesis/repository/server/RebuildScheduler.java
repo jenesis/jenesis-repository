@@ -155,6 +155,7 @@ public final class RebuildScheduler implements AutoCloseable, ObservabilitySourc
         }
         Instant started = Instant.now();
         try {
+            Optional<Requests.Request> asked = Requests.pending(root, Requests.WALK);
             Optional<WalkPass> pass = walk.isEmpty() || consumers.isEmpty() ? Optional.empty()
                     : RebuildPass.run(walk.get(), store, roots(), consumers);
             // The stored listings are repaired after the walk: every document regenerated through the format that
@@ -164,7 +165,9 @@ public final class RebuildScheduler implements AutoCloseable, ObservabilitySourc
                     .orElse("nothing to walk") + (rebuilt > 0 ? ", " + rebuilt + " listing(s) regenerated" : "");
             lastFailed = false;
             if (pass.map(WalkPass::complete).orElse(false)) {
-                Requests.clear(root, Requests.WALK);    // the work a standing request asked for is done
+                if (asked.isPresent()) {
+                    Requests.clear(root, asked.get());   // done; a request made meanwhile asks for another pass
+                }
             }
             return pass;
         } catch (IOException | RuntimeException failure) {

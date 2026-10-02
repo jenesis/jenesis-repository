@@ -77,9 +77,11 @@ public final class Requests {
                         .encoded()));
     }
 
-    /** The standing request for {@code subject}, if any. */
+    /** The standing request for {@code subject}, if any. A cleared one is an empty body ({@link #clear(ArtifactStore,
+     *  Request)}), which stands for none. */
     public static Optional<Request> pending(ArtifactStore root, String subject) throws IOException {
-        return root.readVersioned(key(subject)).map(versioned -> Request.decode(subject, versioned.content()));
+        return root.readVersioned(key(subject)).filter(versioned -> versioned.content().length > 0)
+                .map(versioned -> Request.decode(subject, versioned.content()));
     }
 
     /** The most standing requests one read answers: a request is one object per subject and a subject is a task or
@@ -99,9 +101,27 @@ public final class Requests {
         return requests;
     }
 
-    /** The work was done: drop the standing request for {@code subject}. */
+    /** The work was done: drop the standing request for {@code subject}, whatever it is. */
     public static void clear(ArtifactStore root, String subject) throws IOException {
         root.delete(key(subject));
+    }
+
+    /**
+     * The work {@code acted} asked for was done: drop it, and only it. A request made while the work ran replaced it
+     * and asks for the work again, so it stands. The store has no versioned delete, so the clear is a compare-and-set
+     * of an empty body against the token the acted-on request still holds - a replacement moves the token and the
+     * clear does not land.
+     */
+    public static void clear(ArtifactStore root, Request acted) throws IOException {
+        String key = key(acted.subject());
+        Optional<ArtifactStore.Versioned> current = root.readVersioned(key);
+        if (current.isEmpty() || current.get().content().length == 0) {
+            return;
+        }
+        if (!Arrays.equals(current.get().content(), acted.encoded())) {
+            return;   // replaced while the work ran
+        }
+        var _ = root.writeVersioned(key, new byte[0], current.get().token());
     }
 
     /** Install the deployment's root store for {@link #requestOnRoot}; {@code null} uninstalls it. The node's

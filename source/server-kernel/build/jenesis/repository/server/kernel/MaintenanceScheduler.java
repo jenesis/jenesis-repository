@@ -405,7 +405,8 @@ public final class MaintenanceScheduler implements AutoCloseable {
         iterated();                     // the loop is up: an idle deployment reads as running, not as never having run
         try {
             while (running) {
-                // A standing request runs its task now, whatever the clock says, and is cleared when the pass ran:
+                // A standing request runs its task now, whatever the clock says, and is cleared when the pass ran -
+                // that request only, since one made while the pass ran asks for another:
                 // the reason a walk of the store needs no cadence to happen when a crash made it necessary. Looked
                 // for before the sleep, so a request standing when the worker starts - an unclean boot's - runs
                 // first, and a later one within one idle poll.
@@ -415,7 +416,7 @@ public final class MaintenanceScheduler implements AutoCloseable {
                     Requests.Request request = requested.getValue();
                     contain(task.name(), "on request (" + request.reason() + ")", Escalation.OPERATOR, () -> {
                         pass(task, asked);
-                        Requests.clear(root, request.subject());
+                        Requests.clear(root, request);
                     });
                 }
                 // Neither call reaches a task: TaskSchedule works off the name and cadence ScheduledTask
