@@ -13,12 +13,11 @@ import build.jenesis.repository.walk.WalkConsumer;
 import build.jenesis.repository.walk.WalkPass;
 
 /**
- * Runs the collector at the end of a walk, which is what makes a deployment reclaim the storage of content nothing
- * points at any more.
+ * Runs the collector at the end of a walk, reclaiming the storage of content nothing points at.
  *
  * <p>It rides the walk rather than scheduling itself, so a deployment pays for one enumeration rather than two, and
- * it runs only over a store whose pass it actually saw. With no collector installed or selected it does nothing and
- * the capability surfaces say so - absence never deletes.
+ * it runs only over a store whose pass it saw. With no collector installed or selected it does nothing and the
+ * capability surfaces say so - absence never deletes.
  */
 public final class GcConsumer implements WalkConsumer {
 
@@ -55,31 +54,24 @@ public final class GcConsumer implements WalkConsumer {
     }
 
     /**
-     * It listens on nothing at all: the mark reads the pointers itself, over its own pass, so a member handed to it
-     * here would be read a second time for nothing.
-     *
-     * <p>Declaring no family is what makes an entry naming only this consumer walk nothing rather than walk the
-     * pointers for it - the driving pass then costs a manifest and a generation, and the enumeration a collection
-     * pays is its own mark. On an entry it shares with other consumers this changes nothing: their families give the
-     * pass its roots and this one simply takes no delivery.
+     * None: the mark reads the pointers itself over its own pass, so a member handed to it here would be read twice.
+     * An entry naming only this consumer therefore walks nothing - the driving pass costs a manifest and a generation
+     * - and on a shared entry the other consumers' families give the pass its roots and this one takes no delivery.
      */
     @Override
     public Set<WalkConsumer.Family> families() {
         return Set.of();
     }
 
-    /** Kept for the same reason, and redundant while {@link #families()} is empty: a consumer listening on no family
-     *  is handed no pointer to decline. It stays declared so that re-declaring a family - a future consumer of this
-     *  class, or a deployment that wants the collector on a pointer walk - does not silently start paying for bodies
-     *  the collector has never read. */
+    /** Redundant while {@link #families()} is empty, and declared so that a family added later does not start paying
+     *  for pointer bodies the collector never reads. */
     @Override
     public boolean needsPointers() {
         return false;
     }
 
-    /** Nor whether it is withheld. A held artifact's blob is referenced - that is the whole reason the mark reads
-     *  the pointers itself rather than taking the walk's screened view - so the distinction changes nothing here
-     *  and costs two reads per pointer per pass to draw. */
+    /** A held artifact's blob is referenced as much as a served one's, which is why the mark reads the pointers
+     *  itself rather than the walk's screened view, so the distinction would cost two reads per pointer for nothing. */
     @Override
     public boolean needsWithheldStatus() {
         return false;

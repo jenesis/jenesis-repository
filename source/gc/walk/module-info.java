@@ -1,16 +1,11 @@
 /**
- * The collection pass as a walk consumer: it is what turns an installed collector into storage actually being
- * reclaimed, by running it at the end of a walk the deployment already pays for.
+ * The collection pass as a walk consumer: it runs the installed collector at the end of a walk the deployment already
+ * pays for. It is separate from the collector, whose strategy configuration chooses, and from the walk, which a
+ * deployment that does not collect still uses.
  *
- * <p>Separate from the collector itself for the reason every plugin here is separate: the strategy is chosen by
- * configuration, and the thing that drives it should not decide which one that is. Separate from the walk for the
- * same reason in reverse - a walk that had to know about collection could not be used by a deployment that does not
- * collect.
- *
- * <p>The pointer roots it hands the collector are {@code publish} plus what each installed format lends, and a
- * deployment that keeps a durable record of the ecosystems it has seen contributes a {@code GcRoots} that can
- * additionally refuse: the case a plain union cannot see is content stored for a format nobody has installed any
- * more, where a sweep would delete a live blob.
+ * <p>The pointer roots it hands the collector are {@code publish} plus what each installed format lends; a deployment
+ * that keeps a durable record of the ecosystems it has seen contributes a {@code GcRoots} that can also refuse, for
+ * content a format stored that this deployment does not install, where a plain union would delete a live blob.
  *
  * @jenesis.release 25
  * @jenesis.bom pin-repository.properties

@@ -10,12 +10,10 @@ import build.jenesis.repository.store.Known;
  * Where a store's serving pointers live, as the collector must be told them: every namespace a live pointer can sit
  * in, or an unknown answer that stops the sweep.
  *
- * <p><b>Why this is a seam rather than a constant.</b> {@link #declared} has all the layout knowledge there is -
- * {@code publish}, plus whatever each installed format lends through {@link BlobReferences}. What it cannot do is
- * notice that a store holds content for a format nobody has installed any more, which is the one case where a
- * complete-looking root list is wrong and a sweep would delete a live blob. Answering that needs a durable record
- * of the ecosystems the store has seen, which a deployment may or may not keep, so it is contributed rather than
- * assumed: a deployment that keeps one refuses instead of guessing, and one that does not is not made to invent it.
+ * <p>{@link #declared} has all the layout knowledge there is - {@code publish}, plus whatever each installed format
+ * lends through {@link BlobReferences}. It cannot notice that a store holds content for a format this deployment does
+ * not install, where a complete-looking root list is wrong and a sweep would delete a live blob. Answering that needs
+ * a durable record of the ecosystems the store has seen, which a deployment may keep, so it is a contributed seam.
  *
  * <h2>Contract</h2>
  *
@@ -25,8 +23,7 @@ import build.jenesis.repository.store.Known;
  * everything the store holds. An implementation that is unsure answers unknown - guessing here deletes a live
  * blob, and there is nothing to undo it with.</li>
  * <li><b>Known means complete, not best-effort.</b> A returned list must name every namespace a live pointer can
- * sit in, including those of a format this deployment no longer installs. A list that is merely everything the
- * caller could think of is an unknown answer wearing a known answer's clothes.</li>
+ * sit in, including those of a format this deployment does not install.</li>
  * <li><b>Thread-safety.</b> One instance per deployment, discovered once and called from the collector's own
  * threads; implementations are stateless or safely shared, as every SPI here is.</li>
  * <li><b>Failure is unknown, never empty.</b> A read that cannot complete - a store that will not answer, a
