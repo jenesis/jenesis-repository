@@ -10,23 +10,14 @@ import module java.base;
  * lives under {@link #SYSTEM} at the level it belongs to - {@code .system/auth/}, {@code .system/audit/} and the
  * rest beside the tenant scopes, {@code .system/quota} inside a tenant beside its repositories.
  *
- * <p><strong>Why a space of its own, and why that name.</strong> Beside the scopes a user names, nothing in the store
- * could tell the two apart - only a list of forbidden words could, consulted in both directions: refusing a reserved
- * name on the way in (creating a tenant, routing a publish) and excluding one on the way out (every enumeration that
- * derives tenants or repositories from store names). A place that consults it in one direction only renders
- * {@code audit} in the console as a tenant with working Open and Delete controls.
+ * <p><strong>Why a space of its own.</strong> A list of reserved names would have to be consulted in both directions -
+ * refused on creation and excluded from every enumeration that derives tenants from store names - and a place that
+ * consulted it in one direction only would offer a product space as a tenant. {@code .system} is a position no user
+ * name can reach: a scope name is {@code [A-Za-z0-9_-]+} (see {@link #valid}), which cannot contain a dot. So the
+ * separation is a property of the grammar, it holds at every level, and a new product-owned space needs no entry
+ * anywhere. A tenant or a repository may legitimately be called {@code audit}, {@code cache} or {@code quota}.
  *
- * <p>A list of forbidden words only works while everyone remembers to extend it, and forgetting fails silently - the
- * new space is simply offered as a tenant. Giving the product's data a position of its own removes the question
- * instead of answering it, and {@code .system} is a position no user name can reach: a scope name is
- * {@code [A-Za-z0-9_-]+} (see {@link #valid}), which cannot contain a dot. So the separation is a property of the
- * grammar rather than of anyone's memory, it holds at every level with the same name, and a new product-owned space
- * needs no entry anywhere - it is safe the moment it is written under {@link #SYSTEM}. A tenant or a repository may
- * legitimately be called {@code audit}, {@code cache} or {@code quota}.
- *
- * <p>{@link #valid} is consequently only what it says: the shape a name must have to be a single traversal-free
- * segment. That still matters - a name carrying a separator or a {@code ..} would escape its scope wherever it sat -
- * but it is not what keeps the product's data and a user's data apart.
+ * <p>{@link #valid} is the shape of a single traversal-free segment, so that a name cannot escape its scope.
  */
 public final class Scopes {
 
@@ -38,9 +29,8 @@ public final class Scopes {
 
     /**
      * The tenant a deployment serves when its configuration names none, and so the first segment of every URL a
-     * single-tenant deployment answers: {@code /repository/releases/<repository>/}. Defined here once, because the
-     * server, the console, the key mint and the command line all fall back to it and a second copy is a deployment
-     * whose surfaces disagree about where its repositories are.
+     * single-tenant deployment answers: {@code /repository/releases/<repository>/}. The server, the console, the key
+     * mint and the command line all fall back to this one definition.
      */
     public static final String DEFAULT_TENANT = "releases";
 
@@ -75,10 +65,9 @@ public final class Scopes {
     public static final String REPOSITORY = ".repository";
 
     /**
-     * The product's own spaces, sorted. An inventory, not a denylist: nothing consults it to decide whether a name
-     * is allowed, because nothing has to. It exists so a surface that must name them - the storage-namespace purge
-     * reporting what it deliberately cannot reach, an error message describing the layout - reads them from here
-     * rather than restating the set.
+     * The product's own spaces. An inventory, not a denylist: nothing consults it to decide whether a name is allowed.
+     * A surface that must name them - the storage-namespace purge reporting what it cannot reach, a message describing
+     * the layout - reads them from here.
      */
     public static final Set<String> SPACES = Set.of(AUTH, CONFIG, AUDIT, LOCKS, CACHE, QUOTA, REQUESTS, NODES);
 
@@ -97,10 +86,7 @@ public final class Scopes {
         return SYSTEM + "/" + space;
     }
 
-    /**
-     * Whether {@code name} is usable as a tenant or repository scope: a single traversal-free segment. There is no
-     * second condition - a well-shaped name is usable, because where the product writes already keeps it apart.
-     */
+    /** Whether {@code name} is usable as a tenant or repository scope: a single traversal-free segment. */
     public static boolean valid(String name) {
         return name != null && NAME.matcher(name).matches();
     }
