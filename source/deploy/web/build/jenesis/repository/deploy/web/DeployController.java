@@ -17,26 +17,19 @@ import org.springframework.web.servlet.mvc.support.RedirectAttributes;
 import build.jenesis.repository.ui.ConsoleScreen;
 
 /**
- * Publish one artifact from the console.
+ * Publishes one artifact from the console.
  *
- * <p>The screen is a page of the repository it publishes into; it takes a path and a file, and the publish goes through
- * {@link RepositoryController#publish}, which is the same ingress edge a {@code PUT} to {@code /repository/**}
- * takes. So the routing decides the store and whether the target accepts a write, the discovered interceptor chain
- * screens the body once, and an accepted blob is laid out by the claiming format. Nothing here opens a store or
- * writes a blob, and there is deliberately no way to: an upload screen that did would be a hole in the compliance
- * gate rather than a feature.
+ * <p>The screen takes a path and a file, and the publish goes through {@link RepositoryController#publish}, the ingress
+ * edge a {@code PUT} to {@code /repository/**} takes: the routing decides the store and whether the target accepts a
+ * write, the interceptor chain screens the body once, and the claiming format lays out what is accepted. Nothing here
+ * opens a store or writes a blob, so the screen is no way around the compliance gate.
  *
- * <p><b>The body is streamed, and it has to be.</b> No application in this product runs a {@code MultipartResolver}
- * - it would drain an artifact upload before the format read it, which is how twine and {@code dotnet nuget push}
- * publish - so the upload is read with the shared bounded multipart reader and handed to the edge as a stream. An
- * artifact is not metadata: unlike the settings-bundle import beside it, this deliberately imposes no size cap of
- * its own, because the caps that belong to a publish are the tenant's quota and the format's, and they are applied
- * where a client's publish meets them.
+ * <p>The body is streamed through the shared bounded multipart reader, since a {@code MultipartResolver} would drain
+ * an upload before the format read it. It takes no size cap of its own: a publish's caps are the tenant's quota and the
+ * format's, applied where any client's publish meets them.
  *
- * <p>The tenant is the console session's, bound around the publish so the compliance gate resolves that tenant's
- * own policy - the same binding the request filter opens for a publish arriving over the wire. Without it a
- * console publish would be screened by the deployment-wide policy while an identical {@code mvn deploy} was
- * screened by the tenant's.
+ * <p>The console session's tenant is bound around the publish, as the request filter binds it for a publish over the
+ * wire, so the compliance gate resolves that tenant's policy exactly as for an identical {@code mvn deploy}.
  */
 @Controller
 @ConsoleScreen
@@ -58,11 +51,8 @@ public class DeployController {
     }
 
     /**
-     * Read the upload and publish it, then report what the edge answered.
-     *
-     * <p>Every outcome is reported as itself. A held artifact is not a failure and must not read as one - the gate
-     * quarantined it and a reviewer decides - and a refusal is not an error page, it is the gate working. Reporting
-     * both as "upload failed" is how an operator learns to distrust the screen.
+     * Reads the upload, publishes it and reports what the edge answered, each outcome as itself: a held artifact is
+     * awaiting a reviewer rather than failed, and a refusal is the gate's verdict rather than an error.
      */
     @PostMapping("/ui/repositories/{repo}/deploy")
     public String deploy(@PathVariable("repo") String target,

@@ -8,11 +8,8 @@ import org.springframework.context.annotation.Import;
 import org.thymeleaf.spring6.templateresolver.SpringResourceTemplateResolver;
 
 /**
- * The deploy module's beans: its screen, and the resolver that finds the screen's template.
- *
- * <p>The controller is imported by name rather than component-scanned, for the reason every console screen is: a
- * console composed from another package picks up a scanned class only by accident of where its own scan reaches,
- * and the accident is silent when it stops happening.
+ * The deploy module's beans: its screen, imported by name rather than scanned so it does not depend on where a
+ * composing console's scan reaches, and the resolver that finds the screen's template.
  */
 @Configuration(proxyBeanMethods = false)
 @Import(DeployController.class)
