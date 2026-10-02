@@ -43,8 +43,8 @@ public final class DemoOffer implements SetupOffer {
         if (plans.isEmpty()) {
             return Optional.empty();
         }
-        return Optional.of(new Offer("Try Jenesis with a demo", List.of("This tenant holds no repository yet. A demo "
-                + "fills it with sample content, so every screen has something to show: repositories, packages "
+        return Optional.of(new Offer("Try Jenesis with a demo", List.of("No repository exists here yet. A demo "
+                + "adds sample content, so every screen has something to show: repositories, packages "
                 + "published into them, one held for review, and versions with known vulnerabilities read through "
                 + "proxies of public registries. Loading runs in the background, and its page shows each step as it "
                 + "is taken. The repositories can be deleted afterwards like any other."),
@@ -52,7 +52,7 @@ public final class DemoOffer implements SetupOffer {
                         + "and loads code with known vulnerabilities into this deployment. Load it only into a "
                         + "deployment you are trying out, never into one that serves builds.",
                 consequences(plans),
-                new Action(DemoController.ROUTE, "Load the demo", DemoRun.PHRASE, "Load the demo into this tenant?",
+                new Action(DemoController.ROUTE, "Load the demo", DemoRun.PHRASE, "Load the demo?",
                         "It switches the listed features on for the whole deployment, reaches the listed public "
                                 + "registries, and loads code with known vulnerabilities."),
                 null));

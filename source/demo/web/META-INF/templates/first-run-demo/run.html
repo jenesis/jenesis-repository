@@ -11,11 +11,11 @@
          once it is done it says what was created, what was held or refused, and what did not go through. */-->
     <th:block th:if="${run == null}">
         <th:block th:if="${offered}">
-            <div th:replace="~{base :: emptyAction('No demo has been loaded into this tenant. ', 'The first-run guide',
-                    '/ui/setup', ' offers one on its first page while the tenant holds no repository.')}"></div>
+            <div th:replace="~{base :: emptyAction('No demo has been loaded here. ', 'The first-run guide',
+                    '/ui/setup', ' offers one on its first page while no repository exists.')}"></div>
         </th:block>
         <th:block th:unless="${offered}">
-            <div th:replace="~{base :: empty('No demo has been loaded into this tenant. It is offered only while a tenant holds no repository.')}"></div>
+            <div th:replace="~{base :: empty('No demo has been loaded here. It is offered only while no repository exists.')}"></div>
         </th:block>
     </th:block>
 

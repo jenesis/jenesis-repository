@@ -218,7 +218,7 @@ class DemoRunTest {
         assertThat(new DemoOffer(run).offer(new SetupOffer.Viewer(TENANT))).isEmpty();
         DemoRun.Started again = run.start(TENANT, OPERATOR);
         assertThat(again.started()).isFalse();
-        assertThat(again.reason()).contains("holds a repository");
+        assertThat(again.reason()).contains("A repository exists here already");
         assertThat(run.runNow(TENANT, OPERATOR)).isEmpty();
     }
 

@@ -80,7 +80,8 @@ public final class StarterDemo implements DemoContributor {
             repositories.add(new Repository(HOSTED_MAVEN, MAVEN, "Demo: first-party Java libraries, published here.",
                     ""));
             settings.put(DENY_LIST, HELD.coordinate() + " added, so its publish is held for review");
-            settings.put(DENY_LIST_ACTION, "QUARANTINE, so a denied coordinate is held for review, not refused");
+            settings.put(DENY_LIST_ACTION, "Hold for review, so a denied coordinate waits for a decision rather than "
+                    + "being refused");
         }
         if (offerable.contains(NPM)) {
             repositories.add(new Repository(HOSTED_NPM, NPM, "Demo: first-party npm packages, published here.", ""));
@@ -93,7 +94,7 @@ public final class StarterDemo implements DemoContributor {
                     + proxied.registry());
         }
         if (Labels.catalogued(OSV) && !PROXIED.isEmpty()) {
-            settings.put(OSV, "true once something was read through the proxies, so the advisory database is asked "
+            settings.put(OSV, "on, once something was read through the proxies, so the advisory database is asked "
                     + "about every version held");
             reaches.add("the OSV vulnerability database (the endpoint the osv-endpoint setting names, "
                     + "api.osv.dev by default)");

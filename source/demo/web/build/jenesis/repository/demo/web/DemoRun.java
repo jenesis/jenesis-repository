@@ -270,8 +270,8 @@ public final class DemoRun {
 
     private Started refusal(String tenant) {
         return new Started(false, holdsRepository(tenant)
-                ? "The tenant holds a repository already; the demo fills only an empty one."
-                : "A demo is loading into this tenant already.");
+                ? "A repository exists here already; the demo loads only into an empty start."
+                : "A demo is loading here already.");
     }
 
     /** Take the run's lease and record it as running, unless the tenant holds a repository or another run holds the
