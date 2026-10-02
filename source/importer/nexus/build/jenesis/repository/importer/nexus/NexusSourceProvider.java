@@ -6,9 +6,8 @@ import build.jenesis.repository.importer.ImportSource;
 import build.jenesis.repository.importer.ImportSourceProvider;
 
 /**
- * Builds a {@link NexusSource} for a {@code "nexus"} migration. Discovered by the server through {@code ServiceLoader}
- * over {@link ImportSourceProvider}, so the server supports Nexus by having this module on the path and knows nothing
- * of it otherwise. Nexus needs no ecosystem format up front (it reports one per asset) and can resume from a cursor.
+ * Builds a {@link NexusSource} for a {@code "nexus"} migration. Nexus needs no format up front, since it reports one
+ * per asset, and the walk resumes from a cursor.
  */
 public final class NexusSourceProvider implements ImportSourceProvider {
 

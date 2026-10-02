@@ -6,11 +6,9 @@ import build.jenesis.repository.importer.ImportSource;
 import build.jenesis.repository.importer.ImportSourceProvider;
 
 /**
- * Discovers the jenesis-to-jenesis import source: {@code handles("jenesis")} (the default name match) and builds a
- * {@link JenesisSource} over the request's base URL and repository. Reports a format per asset, so - like the Nexus
- * connector and unlike Artifactory - it needs no up-front format ({@code requiresFormat()} stays {@code false}). The
- * jenesis API key, when present, is taken from the request's password (falling back to its username), since jenesis
- * auth is a single opaque key rather than a username/password pair.
+ * Builds a {@link JenesisSource} over the request's base URL and repository for a {@code "jenesis"} migration. It
+ * reports a format per asset, so it needs none up front. The API key is the request's password, else its username,
+ * since this product's credential is a single opaque key.
  */
 public final class JenesisSourceProvider implements ImportSourceProvider {
 

@@ -19,11 +19,10 @@ import tools.jackson.databind.json.JsonMapper;
  * pass and each asset reaches the importer for its ecosystem. The network sits behind the same
  * {@link ProxyFormat.Fetcher} the proxy uses, so the walk is tested without a Nexus.
  *
- * <p>Each {@code downloadUrl} is a semi-trusted absolute URL the listing chooses - a remote party describing where to
- * fetch from - so it is screened before it is fetched. That screen is not here: it is {@link ImportScreen}, wrapped
- * around the {@link ProxyFormat.Fetcher} this source is handed, so the rule is stated once for every connector instead
- * of once per connector. What <em>is</em> here is the credential decision, which is this source's own: the operator's
- * basic credentials travel only to the base origin, so a cross-origin download goes out unauthenticated.
+ * <p>Each {@code downloadUrl} is a semi-trusted absolute URL the listing chooses, screened before it is fetched by the
+ * {@link ImportScreen} wrapped around this source's fetcher, the one rule for every connector. The credential decision
+ * is this source's: the operator's basic credentials travel only to the base origin, so a cross-origin download goes
+ * out unauthenticated.
  */
 public final class NexusSource implements ImportSource {
 
@@ -78,16 +77,14 @@ public final class NexusSource implements ImportSource {
                     String path = asset.path("path").asString(null);
                     String downloadUrl = asset.path("downloadUrl").asString(null);
                     if (path != null && path.startsWith("/")) {
-                        // Nexus 3.71+ (the H2/PostgreSQL datastore that replaced OrientDB) reports asset paths
-                        // absolute, with a leading slash; the repository-relative path a store write needs - and the
-                        // shape the OrientDB-era listing and the fixtures use - drops it. Normalise before safePath,
-                        // whose empty-first-segment check would otherwise reject the whole asset (its traversal
-                        // intent - ./ .. backslash - is untouched).
+                        // Nexus on the H2 or PostgreSQL datastore reports asset paths with a leading slash, which the
+                        // repository-relative path drops before safePath, whose empty-first-segment check would
+                        // otherwise reject the asset.
                         path = path.substring(1);
                     }
                     if (path == null || downloadUrl == null || !ImportSource.safePath(path)) {
-                        // The two are different operational facts: a missing field is a broken listing, a laced path
-                        // is a hostile one, and only the second is an attack indicator.
+                        // A missing field is a broken listing, a laced path a hostile one; only the second is an
+                        // attack indicator.
                         consumer.dropped(path == null ? "<no path>" : path,
                                 path == null || downloadUrl == null
                                         ? ImportSource.Reason.INCOMPLETE_ENTRY
@@ -100,12 +97,8 @@ public final class NexusSource implements ImportSource {
                     } catch (IllegalArgumentException malformed) {
                         continue;   // a download URL that is not even a URI is a broken listing entry, not an asset
                     }
-                    // The download URL is not screened here. It comes straight off the (semi-trusted) listing and is
-                    // fetched as an INITIAL request - not a redirect - so the fetcher's redirect-only SSRF screen never
-                    // sees it, and the import trigger only vetted the operator's base URL. That screen is ImportScreen,
-                    // riding on the fetcher this source was handed (ImportSourceProvider.open), so it judges the URL
-                    // for every connector in one place and in one order rather than once per connector - which is how
-                    // this leg came to screen the host but never the transport.
+                    // Screened by the ImportScreen wrapped around this source's fetcher, since the URL comes off the
+                    // listing as an initial request rather than a redirect.
                     consumer.accept(format, path, () -> open(download));
                 }
             }
@@ -115,9 +108,8 @@ public final class NexusSource implements ImportSource {
     }
 
     private InputStream open(URI url) throws IOException {
-        // The download URL comes off the listing, so the credentials travel only to the Nexus they belong to: a
-        // cross-origin URL (a compromised or misconfigured instance) downloads unauthenticated instead of leaking
-        // the operator's basic credentials to a third host - and a 401 then fails the import loudly.
+        // Credentials travel only to the Nexus they belong to: a cross-origin URL downloads unauthenticated, and a 401
+        // then fails the import.
         Map<String, String> headers = authorization == null || !Origins.same(base, url)
                 ? Map.of()
                 : Map.of("Authorization", authorization);

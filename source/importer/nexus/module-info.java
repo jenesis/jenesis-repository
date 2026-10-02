@@ -1,12 +1,8 @@
 /**
- * The Sonatype Nexus 3 import connector as a plugin module: it {@code provides} an
- * {@link build.jenesis.repository.importer.ImportSourceProvider} that builds a {@code NexusSource} over the components
- * REST API, reading the listing responses with Jackson. Depends on the import SPI, the format SPI (for the shared
- * fetcher) and Jackson; the server discovers it with {@code ServiceLoader}, so Nexus support is present exactly when
- * this module is on the path.
+ * The Sonatype Nexus 3 import connector: an {@link build.jenesis.repository.importer.ImportSourceProvider} that builds
+ * a {@code NexusSource} over the components REST API, fetching through the format SPI's shared fetcher.
  *
  * @jenesis.release 25
- *
  * @jenesis.bom pin-repository.properties
  * @jenesis.signature signature-repository.properties
  */

@@ -1,16 +1,12 @@
 /**
- * The format-native enumeration import connector as a plugin module: it {@code provides} an
- * {@link build.jenesis.repository.importer.ImportSourceProvider} answering to {@code index} that walks the
- * <em>format's own</em> published mirror-style index - the PEP 503 project list, an OCI registry's
- * {@code /v2/_catalog}, a {@code repodata}/{@code Packages} index - through the
- * {@link build.jenesis.repository.format.ProxyFormat#enumerate} seam, so migration-in is vendor-neutral for every
- * installed format that can enumerate, not just Maven. The requested ecosystem format is named up front; the
- * provider resolves it among the installed {@link build.jenesis.repository.format.RepositoryFormat}s and streams
- * each enumerated coordinate lazily to the orchestrator, which routes it to that format's own importer - so the
- * connector itself knows no ecosystem, and a new format's repositories become importable the moment its module
- * implements {@code enumerate}. Because jenesis emits these same standard indexes to serve native clients, a
- * jenesis repository is walkable by this connector too: migration off jenesis works over plain format protocols,
- * in both directions. Depends only on the import SPI and the format SPI.
+ * The format-native import connector: an {@link build.jenesis.repository.importer.ImportSourceProvider} answering to
+ * {@code index} that walks the format's own published mirror-style index - the PEP 503 project list, an OCI registry's
+ * {@code /v2/_catalog}, a {@code repodata} or {@code Packages} index - through
+ * {@link build.jenesis.repository.format.ProxyFormat#enumerate}, so migration in is vendor-neutral for every installed
+ * format that can enumerate. The format is named up front, resolved among the installed
+ * {@link build.jenesis.repository.format.RepositoryFormat}s, and each enumerated coordinate streams lazily to the
+ * orchestrator, which routes it to that format's importer; the connector knows no ecosystem. This product serves the
+ * same standard indexes, so it can be walked by this connector too.
  *
  * @jenesis.release 25
  * @jenesis.bom pin-repository.properties

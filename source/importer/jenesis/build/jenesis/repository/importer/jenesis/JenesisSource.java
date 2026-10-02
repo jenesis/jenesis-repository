@@ -8,16 +8,13 @@ import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.json.JsonMapper;
 
 /**
- * Walks another jenesis instance through its {@code GET /api/assets} enumeration - the outbound mirror of the
- * importers, so jenesis-to-jenesis migration joins the framework symmetrically with the Nexus and Artifactory
- * connectors. Each page lists the source repository's published assets with their serving path, format,
- * SHA-256 and size (metadata only, straight from the publication pointer - the source opens no blob to answer);
- * the walk reports each asset with its format and the layout-relative path the matching {@code RepositoryImporter}
- * expects (the source's {@code /<format>/} serving prefix stripped, which that importer re-applies), streams the
- * bytes lazily from the URL path the listing says each asset is served at, and resumes from the opaque {@code cursor} the
- * response carries - checkpointing it after each page and a terminal {@code null}, exactly as the Nexus walk
- * checkpoints its continuation token. The optional jenesis API key travels in the {@code Jenesis-Repository-Key}
- * header on both the listing and the downloads, since a source that enforces auth gates its reads.
+ * Walks another instance of this product through its {@code GET /api/assets} enumeration. Each page lists the source
+ * repository's published assets with their serving path, format, SHA-256 and size, read from the publication pointers
+ * without opening a blob. The walk reports each asset with its format and the layout-relative path the matching
+ * {@code RepositoryImporter} expects (the {@code /<format>/} serving prefix stripped, which that importer re-applies),
+ * streams the bytes lazily from the path the listing says the asset is served at, and resumes from the opaque
+ * {@code cursor} the response carries, checkpointing it after each page and a terminal {@code null}. The optional API
+ * key travels in the {@code Jenesis-Repository-Key} header on the listing and the downloads.
  */
 public final class JenesisSource implements ImportSource {
 
@@ -74,8 +71,7 @@ public final class JenesisSource implements ImportSource {
                 String format = asset.path("format").asString(null);
                 String layout = layoutPath(format, path);
                 if (!ImportSource.safePath(layout)) {
-                    // Reported, not merely skipped: a laced path is the one signal that a source is hostile, and a
-                    // walk that drops every row silently finishes indistinguishable from an empty source.
+                    // Reported rather than skipped silently: a laced path is the signal that a source is hostile.
                     consumer.dropped(layout, ImportSource.Reason.UNSAFE_PATH);
                     continue;   // a traversal-laced listing path no store write should see
                 }

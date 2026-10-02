@@ -1,15 +1,9 @@
 /**
- * The jenesis-to-jenesis import connector as a plugin module: it {@code provides} an
- * {@link build.jenesis.repository.importer.ImportSourceProvider} that builds a {@code JenesisSource} over another
- * jenesis instance's {@code GET /api/assets} enumeration, reading the listing pages with Jackson. It is the read
- * half of the exit story - the outbound mirror of the export endpoint the server serves - so a jenesis
- * repository migrates into another jenesis (or is drained by a forwarder) symmetrically with the Nexus and
- * Artifactory connectors. Depends on the import SPI, the format SPI (for the shared fetcher) and Jackson; the
- * server discovers it with {@code ServiceLoader}, so jenesis-source support is present exactly when this module is
- * on the path.
+ * The Jenesis-to-Jenesis import connector: an {@link build.jenesis.repository.importer.ImportSourceProvider} that
+ * builds a {@code JenesisSource} over another instance's {@code GET /api/assets} enumeration, so a repository migrates
+ * between two deployments of this product as it does from Nexus or Artifactory.
  *
  * @jenesis.release 25
- *
  * @jenesis.bom pin-repository.properties
  * @jenesis.signature signature-repository.properties
  */

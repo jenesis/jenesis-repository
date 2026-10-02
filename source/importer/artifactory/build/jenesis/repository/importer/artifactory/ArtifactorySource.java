@@ -12,14 +12,12 @@ import tools.jackson.databind.json.JsonMapper;
 /**
  * An {@link ImportSource} over a JFrog Artifactory instance, the read half of an Artifactory migration. It lists a
  * repository's files with the deep File List storage API ({@code GET /api/storage/<repo>?list&deep=1&listFolders=0}),
- * then downloads each from {@code <base>/<repo><uri>}. That API is an Artifactory Pro feature; against a free (OSS)
- * instance - which refuses it with {@code 400} - the walk falls back seamlessly to the OSS-available per-folder
- * Folder Info API ({@code GET /api/storage/<repo>/<path>}), recursed for the same file set and checkpointing after
- * each top-level subtree so an interrupted OSS migration resumes without re-walking it. Unlike the Nexus
- * components API, the Artifactory listing does not carry a per-file format - a repository has a single package type -
- * so the format ({@code maven}, {@code docker}, {@code npm}, {@code pypi}, {@code nuget}, {@code gems}) is supplied
- * for the repository and reported for every asset. The network sits behind the same {@link ProxyFormat.Fetcher} the
- * proxy uses, so the walk is tested without an Artifactory.
+ * then downloads each from {@code <base>/<repo><uri>}. That API is an Artifactory Pro feature; a free instance refuses
+ * it with {@code 400}, and the walk falls back to the per-folder Folder Info API
+ * ({@code GET /api/storage/<repo>/<path>}), recursed for the same files and checkpointing after each top-level subtree
+ * so an interrupted migration resumes without re-walking it. The listing carries no per-file format - a repository has
+ * a single package type - so the format is supplied for the repository and reported for every asset. The network sits
+ * behind the proxy's {@link ProxyFormat.Fetcher}, so the walk is tested without an Artifactory.
  */
 public final class ArtifactorySource implements ImportSource {
 
@@ -67,20 +65,16 @@ public final class ArtifactorySource implements ImportSource {
         String root = base.toString();
         String prefix = root.endsWith("/") ? root : root + "/";
         URI listing = URI.create(prefix + "api/storage/" + encode(repository) + "?list&deep=1&listFolders=0");
-        // The deep File List is one JSON document over EVERY file in the repository - potentially enormous - so it is
-        // streamed and pull-parsed, each file emitted as the parser reaches it, rather than buffered whole as a
-        // byte[]/String/JsonNode tree of the entire catalogue (the Folder Info fallback below stays a per-folder fetch,
-        // each a bounded page). The download stays open across the emitted assets' own lazy downloads, exactly as the
-        // Maven index walk streams its index while assets download.
+        // The deep File List is one JSON document over every file in the repository, so it is pull-parsed and each
+        // file emitted as the parser reaches it, the download staying open across the assets' own lazy downloads.
         try (ProxyFormat.Download page = fetcher.download(listing, headers())
                 .orElseThrow(() -> ImportFailure.unreachable(listing))) {
             if (page.status() == 200) {
                 streamDeepList(consumer, prefix, page.body());
-                // the deep listing is a single response, so there is no mid-walk resume point (the cursor is ignored).
+                // A single response, so there is no mid-walk resume point.
                 checkpoint.reached(null);
             } else if (proGated(page)) {
-                // A free (OSS) Artifactory gates the deep File List API behind Pro; the per-folder Folder Info API is
-                // available, so walk it recursively for the same files - N requests instead of one.
+                // A free Artifactory gates the deep File List behind Pro, so walk the Folder Info API instead.
                 crawlRepository(consumer, checkpoint, prefix);
             } else {
                 throw ImportFailure.status(page.status(), listing, "Artifactory listing");
@@ -88,9 +82,8 @@ public final class ArtifactorySource implements ImportSource {
         }
     }
 
-    /** Pull-parse the deep File List's {@code files} array, emitting each non-folder file as it is read. The walk is
-     *  scoped to that one array (every other top-level field's subtree is skipped) and holds only the current token, so
-     *  the whole-repository listing is consumed in the parser's bounded read buffer, never a materialised tree of it. */
+    /** Pull-parses the deep File List's {@code files} array, emitting each non-folder file as it is read and skipping
+     *  every other field, so the listing is consumed in the parser's bounded buffer. */
     private void streamDeepList(Asset consumer, String prefix, InputStream body) throws IOException {
         try (JsonParser parser = JSON.createParser(body)) {
             if (parser.nextToken() != JsonToken.START_OBJECT) {
@@ -153,10 +146,9 @@ public final class ArtifactorySource implements ImportSource {
         return new String(body, StandardCharsets.UTF_8).contains("available only in Artifactory Pro");
     }
 
-    /** Walk the repository over the OSS-available Folder Info API, importing each top-level entry's subtree in turn and
-     *  reporting a checkpoint once it is fully consumed - so {@link #from(String)} resumes after the last completed
-     *  top-level entry. The top-level entries are sorted, so the resume skip is deterministic regardless of the order
-     *  Artifactory returns them (a finer, per-folder cursor is unnecessary for the small free repos this serves). */
+    /** Walks the repository over the Folder Info API, importing each top-level entry's subtree in turn and reporting a
+     *  checkpoint once it is consumed, so {@link #from(String)} resumes after the last completed entry. The entries are
+     *  sorted, so the resume skip does not depend on the order Artifactory returns them. */
     private void crawlRepository(Asset consumer, Checkpoint checkpoint, String prefix) throws IOException {
         URI rootFolder = URI.create(prefix + "api/storage/" + encode(repository));
         ProxyFormat.Fetched page = get(rootFolder);
@@ -168,9 +160,8 @@ public final class ArtifactorySource implements ImportSource {
             if (name(child) != null) {
                 children.add(child);
             } else {
-                // name() folds two refusals into one null - an entry carrying no uri at all, and one whose uri is not
-                // a single traversal-free segment - so they are separated here rather than there: the first is a
-                // broken listing, the second is a hostile one, and only the second is an attack indicator.
+                // name() answers null for an entry with no uri (a broken listing) and for one that is not a single
+                // traversal-free segment (a hostile one); only the second is an attack indicator.
                 String uri = child.path("uri").asString(null);
                 consumer.dropped(uri == null ? "<no uri>" : uri,
                         uri == null ? ImportSource.Reason.INCOMPLETE_ENTRY : ImportSource.Reason.UNSAFE_PATH);

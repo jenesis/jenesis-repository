@@ -10,14 +10,11 @@ import build.jenesis.repository.importer.ImportSource;
 import build.jenesis.repository.importer.ImportSourceProvider;
 
 /**
- * Builds an {@link IndexSource} for an {@code "index"} migration - any server that publishes the requested
- * format's own mirror-style index, including another jenrepo. Discovered by the server through
- * {@code ServiceLoader} over {@link ImportSourceProvider}. The ecosystem format is required up front (it names
- * whose index to walk); the provider resolves it among the installed formats through
- * {@link RepositoryFormat#installed(String)} and builds no source when the format is absent or does not proxy -
- * which the caller reports as a bad request, exactly like an unreachable host. Credentials ride as HTTP basic
- * auth on every index read and download, injected around the shared fetcher so the format's enumeration stays
- * credential-blind.
+ * Builds an {@link IndexSource} for an {@code "index"} migration from any server that publishes the requested format's
+ * mirror-style index. The format is required; it is resolved through {@link RepositoryFormat#installed(String)}, and
+ * no source is built when it is absent or does not proxy, or when the host does not answer - which the caller reports
+ * as a bad request. Credentials ride as HTTP basic auth, injected around the shared fetcher so the format's
+ * enumeration stays credential-blind.
  */
 public final class IndexSourceProvider implements ImportSourceProvider {
 
@@ -75,13 +72,9 @@ public final class IndexSourceProvider implements ImportSourceProvider {
         return URI.create(url.append('/').toString());
     }
 
-    /** The shared fetcher with HTTP basic credentials injected on every SAME-ORIGIN fetch and download (unless a
-     *  request already carries its own {@code Authorization}), so one wrapper authenticates whatever the format reads
-     *  from the operator's own server. A cross-origin URL - a download the foreign index aimed at a third host - is
-     *  never given the operator's credential: it must not travel off the origin the operator pointed the importer at
-     *  (the same scoping NexusSource applies, and the same reason HttpFetcher drops credentials on a cross-origin
-     *  redirect). The reads the format's enumerate issues are same-origin index pages under {@code root}, so they
-     *  stay authenticated. */
+    /** The shared fetcher with HTTP basic credentials on every same-origin request that carries no
+     *  {@code Authorization} of its own. A cross-origin URL - a download the foreign index aimed at a third host - is
+     *  never given the operator's credential, which must not leave the origin the operator named. */
     private static ProxyFormat.Fetcher authorized(ProxyFormat.Fetcher fetcher, String username, String password,
                                                   URI root) {
         String token = Base64.getEncoder().encodeToString((username + ":" + password).getBytes(StandardCharsets.UTF_8));
@@ -99,9 +92,8 @@ public final class IndexSourceProvider implements ImportSourceProvider {
 
             @Override
             public Optional<ProxyFormat.Head> head(URI url, Map<String, String> requestHeaders) throws IOException {
-                // Delegated like the other two legs, never derived: a credential wrapper that let head fall back to
-                // download would open (though never read) the body of an artifact whose size was all the caller
-                // wanted, discarding the real HTTP HEAD of the transport it wraps.
+                // Delegated rather than derived from download, which would open the body when only the size is
+                // wanted.
                 return fetcher.head(url, merged(url, requestHeaders));
             }
 
