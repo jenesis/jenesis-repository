@@ -1,13 +1,11 @@
 /**
  * The walks screen: an operator schedules the walks of the store and sees what each one costs.
  *
- * <p>A console module rather than part of the console, through the one GUI extension seam: it registers its screen
- * and its menu entry through {@code ConsoleModuleProvider} and renders through the shared layout. The screen edits
- * the {@code walks} document - any number of entries, each a cron expression and the consumers that ride it - and
- * says, before an operator schedules one, that a walk reads every object in the store and what the last run of each
- * entry measured. It reaches the same implementation the admin endpoint reaches, {@code WalkRuns}, so the console,
- * the API and the CLI are one capability; the document itself is the {@code walks} setting the settings screen,
- * {@code /api/settings} and the CLI edit.
+ * <p>It registers its screen and menu entry through {@code ConsoleModuleProvider}. The screen edits the {@code walks}
+ * document - entries of a cron expression and the consumers that ride it - and says, before an operator schedules one,
+ * that a walk reads every object in the store and what the last run of each entry measured. It reaches
+ * {@code WalkRuns}, as the admin endpoint does, so the console, the API and the CLI are one capability; the document
+ * itself is the {@code walks} setting.
  * @jenesis.bom pin-repository.properties
  * @jenesis.signature signature-repository.properties
  */

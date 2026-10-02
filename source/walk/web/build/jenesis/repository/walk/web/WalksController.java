@@ -28,7 +28,7 @@ import build.jenesis.repository.ui.ConsoleScreen;
  * requests - and edits the {@code walks} document one entry at a time: an entry is saved with its cron expression,
  * its switch and the consumers that ride it, or removed. A document that would not read back - a malformed cron
  * expression, a consumer nothing installs - is refused with the entry and the field named and nothing is written.
- * A walk now goes through the same request the admin endpoint records.
+ * Asking for a walk out of schedule records the same request the admin endpoint does.
  */
 @Controller
 @ConsoleScreen

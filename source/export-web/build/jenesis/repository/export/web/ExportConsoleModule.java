@@ -29,7 +29,7 @@ public final class ExportConsoleModule implements ConsoleModuleProvider {
 
     @Override
     public List<RepositoryPage> repositoryPages() {
-        // Where a repository's content is sent, beside the forwarding that sends it continuously.
+        // Under the Lifecycle topic: where a repository's content is sent.
         return List.of(new RepositoryPage("Export", "/export", NavEntry.Access.ADMIN,
                 RepositoryPage.Topic.LIFECYCLE, ""));
     }
